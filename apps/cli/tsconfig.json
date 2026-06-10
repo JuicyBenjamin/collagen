@@ -1,0 +1,7 @@
+{
+  "extends": "@collagen/typescript-config/base.json",
+  "compilerOptions": {
+    "types": ["bun-types"]
+  },
+  "include": ["src/**/*.ts"]
+}
