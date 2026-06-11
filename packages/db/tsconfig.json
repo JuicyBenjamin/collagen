@@ -1,0 +1,14 @@
+{
+  "extends": "@collagen/typescript-config/base.json",
+  "compilerOptions": {
+    "types": [
+      "bun-types",
+      "node"
+    ],
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/generated/**"]
+}

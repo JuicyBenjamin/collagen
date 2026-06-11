@@ -23,6 +23,11 @@
   "pnpm": {
     "overrides": {
       "exact-mirror": "^0.2.7"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "prisma",
+      "@prisma/engines",
+      "@prisma/dev"
+    ]
   }
 }

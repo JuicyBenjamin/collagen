@@ -4,20 +4,25 @@
   "private": true,
   "type": "module",
   "bin": {
-    "collagen": "src/index.ts"
+    "collagen": "src/index.tsx"
   },
   "scripts": {
-    "dev": "bun src/index.ts",
-    "start": "bun src/index.ts",
+    "dev": "bun src/index.tsx",
+    "start": "bun src/index.tsx",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo node_modules"
   },
   "dependencies": {
     "@collagen/server": "workspace:*",
-    "@elysiajs/eden": "catalog:"
+    "@elysiajs/eden": "catalog:",
+    "@opentui/core": "catalog:",
+    "@opentui/react": "catalog:",
+    "better-auth": "catalog:",
+    "react": "catalog:"
   },
   "devDependencies": {
     "@collagen/typescript-config": "workspace:*",
+    "@types/react": "catalog:",
     "bun-types": "catalog:",
     "typescript": "catalog:"
   }

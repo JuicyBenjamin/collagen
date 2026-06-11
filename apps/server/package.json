@@ -14,10 +14,14 @@
   },
   "dependencies": {
     "@sinclair/typebox": "catalog:",
-    "elysia": "catalog:"
+    "better-auth": "catalog:",
+    "elysia": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
+    "@better-auth/cli": "catalog:",
     "@collagen/typescript-config": "workspace:*",
+    "@types/pg": "catalog:",
     "bun-types": "catalog:",
     "typescript": "catalog:"
   }
