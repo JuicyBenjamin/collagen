@@ -18,6 +18,20 @@ export function getToken(): string | null {
   return token;
 }
 
+// Dev-only seeded users for `--user` login bypass (see scripts/seed in server).
+const DEV_USERS: Record<string, { email: string; password: string }> = {
+  alice: { email: "alice@collagen.dev", password: "devpass123" },
+  bob: { email: "bob@collagen.dev", password: "devpass123" },
+};
+
+/** Auto sign-in as a seeded dev user (bypasses the login screen). */
+export async function devLogin(user: string): Promise<boolean> {
+  const creds = DEV_USERS[user];
+  if (!creds) return false;
+  const r = await authClient.signIn.email(creds);
+  return !r.error;
+}
+
 /** Sign out server-side, then drop the in-memory + persisted token. */
 export async function logout(): Promise<void> {
   try {
