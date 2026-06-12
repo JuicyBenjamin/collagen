@@ -1,121 +1,148 @@
-import type { ReactNode } from "react";
-import { TextAttributes } from "@opentui/core";
+import { useMemo, useState, type ReactNode } from "react";
+import { readdirSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { Box, Text, useInput, useStdin } from "ink";
 import { theme } from "./theme";
 
-/** Full-screen container that centers its child. */
-export function Screen({ children }: { children: ReactNode }) {
-  return (
-    <box
-      style={{
-        width: "100%",
-        height: "100%",
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      {children}
-    </box>
-  );
+interface Entry {
+  name: string;
+  path: string;
 }
 
-/** Bordered, titled card. */
-export function Card({
-  title,
-  children,
-  width = 48,
+function listDirs(dir: string): Entry[] {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.startsWith("."))
+      .map((d) => ({ name: d.name, path: join(dir, d.name) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
+/** Filesystem folder picker — browse and select a directory (no typing).
+ *  Name auto-derives from the folder; path is exact. */
+export function FsPicker({
+  start,
+  onPick,
+  onCancel,
 }: {
-  title: string;
-  children: ReactNode;
-  width?: number;
+  start: string;
+  onPick: (name: string, path: string) => void;
+  onCancel: () => void;
 }) {
+  const { isRawModeSupported } = useStdin();
+  const [dir, setDir] = useState(start);
+  const [cursor, setCursor] = useState(0);
+  const entries = useMemo(() => listDirs(dir), [dir]);
+
+  useInput(
+    (input, key) => {
+      if (key.escape) return onCancel();
+      if (key.upArrow || input === "k") return setCursor((i) => Math.max(0, i - 1));
+      if (key.downArrow || input === "j") return setCursor((i) => Math.min(entries.length - 1, i + 1));
+      if (key.leftArrow || key.backspace) {
+        setDir((d) => dirname(d));
+        setCursor(0);
+        return;
+      }
+      const e = entries[cursor];
+      if (key.rightArrow || key.return) {
+        if (e) {
+          setDir(e.path);
+          setCursor(0);
+        }
+        return;
+      }
+      if (input === " ") {
+        // select the folder you're currently in
+        onPick(basename(dir), dir);
+      }
+    },
+    { isActive: isRawModeSupported },
+  );
+
+  // window the list so a big folder doesn't overflow the viewport
+  const VIS = 8;
+  const top = Math.max(0, Math.min(cursor - 3, entries.length - VIS));
+  const shown = entries.slice(top, top + VIS);
+
   return (
-    <box
-      title={` ${title} `}
-      titleAlignment="center"
-      style={{
-        border: true,
-        borderStyle: "rounded",
-        borderColor: theme.border,
-        titleColor: theme.accent,
-        padding: 1,
-        flexDirection: "column",
-        width,
-      }}
-    >
-      {children}
-    </box>
+    <Box flexDirection="column">
+      <Text color={theme.accent} wrap="truncate-start">
+        {dir}
+      </Text>
+      {entries.length === 0 ? (
+        <Text color={theme.dim}>(no subfolders)</Text>
+      ) : (
+        shown.map((e) => {
+          const i = top + shown.indexOf(e);
+          return (
+            <Text key={e.path} color={i === cursor ? theme.accent : theme.fg}>
+              {i === cursor ? "› " : "  "}
+              {e.name}/
+            </Text>
+          );
+        })
+      )}
+      <Text color={theme.dim} wrap="truncate">
+        ↑↓ move · → enter · ← up · space select this folder · esc cancel
+      </Text>
+    </Box>
   );
 }
 
-/** A labeled, focus-aware text field wrapper. Pass the <input> (or masked
- *  display) as children; the border turns accent when `focused`. */
-export function Field({
-  label,
-  focused,
-  children,
+/** Minimal controlled text input (no extra deps). */
+export function TextInput({
+  value,
+  onChange,
+  onSubmit,
+  focus,
+  placeholder,
 }: {
-  label: string;
-  focused: boolean;
-  children: ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit?: () => void;
+  focus: boolean;
+  placeholder?: string;
 }) {
+  const { isRawModeSupported } = useStdin();
+  useInput(
+    (input, key) => {
+      if (key.return) return onSubmit?.();
+      if (key.backspace || key.delete) return onChange(value.slice(0, -1));
+      if (key.ctrl || key.meta) return;
+      if (input) onChange(value + input);
+    },
+    { isActive: focus && isRawModeSupported },
+  );
   return (
-    <box style={{ flexDirection: "column", marginTop: 1 }}>
-      <text style={{ fg: focused ? theme.accent : theme.dim }}>{label}</text>
-      <box
-        style={{
-          border: true,
-          borderStyle: "rounded",
-          borderColor: focused ? theme.accent : theme.border,
-          paddingLeft: 1,
-          paddingRight: 1,
-        }}
-      >
-        {children}
-      </box>
-    </box>
+    <Text>
+      {value.length ? <Text color={theme.fg}>{value}</Text> : <Text dimColor>{placeholder ?? ""}</Text>}
+      {focus ? <Text color={theme.accent}>▏</Text> : null}
+    </Text>
   );
 }
 
-/** A bordered panel that grows to fill space — for the dashboard grid. */
+/** Rounded, titled panel. Ink has no border title, so the title is a bold
+ *  label as the panel's first line. */
 export function Panel({
   title,
-  grow,
-  focused,
+  color = theme.accent,
+  minWidth,
   children,
 }: {
   title: string;
-  grow?: number;
-  focused?: boolean;
+  color?: string;
+  minWidth?: number;
   children: ReactNode;
 }) {
   return (
-    <box
-      title={` ${title} `}
-      titleAlignment="left"
-      style={{
-        border: true,
-        borderStyle: focused ? "heavy" : "rounded",
-        borderColor: focused ? theme.accent : theme.border,
-        titleColor: focused ? theme.accent : theme.dim,
-        padding: 1,
-        flexDirection: "column",
-        flexGrow: grow ?? 0,
-      }}
-    >
+    <Box flexDirection="column" borderStyle="round" borderColor={color} paddingX={1} minWidth={minWidth}>
+      <Text bold color={color}>
+        {title}
+      </Text>
       {children}
-    </box>
+    </Box>
   );
 }
-
-/** Dim helper / hint text. */
-export function Hint({ children }: { children: ReactNode }) {
-  return <text style={{ fg: theme.dim, marginTop: 1 }}>{children}</text>;
-}
-
-/** Status line: error (red), ok (green), or dim hint. */
-export function Status({ kind, children }: { kind: "error" | "ok" | "dim"; children: ReactNode }) {
-  const fg = kind === "error" ? theme.error : kind === "ok" ? theme.ok : theme.dim;
-  return <text style={{ fg, marginTop: 1 }}>{children}</text>;
-}
-
-export const attrs = TextAttributes;

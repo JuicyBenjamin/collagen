@@ -1,9 +1,11 @@
 {
   "extends": "@collagen/typescript-config/base.json",
   "compilerOptions": {
-    "types": ["bun-types"],
+    "types": ["node"],
     "jsx": "react-jsx",
-    "jsxImportSource": "@opentui/react"
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "verbatimModuleSyntax": false
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

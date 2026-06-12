@@ -7,23 +7,25 @@
     "collagen": "src/index.tsx"
   },
   "scripts": {
-    "dev": "bun src/index.tsx",
-    "start": "bun src/index.tsx",
+    "dev": "tsx src/index.tsx",
+    "dev:net": "tsx src/dev-testnet.ts",
+    "start": "tsx src/index.tsx",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo node_modules"
   },
   "dependencies": {
-    "@collagen/server": "workspace:*",
-    "@elysiajs/eden": "catalog:",
-    "@opentui/core": "catalog:",
-    "@opentui/react": "catalog:",
-    "better-auth": "catalog:",
+    "b4a": "^1.8.1",
+    "hypercore-crypto": "^3.7.0",
+    "hyperswarm": "^4.17.0",
+    "ink": "^7.0.5",
     "react": "catalog:"
   },
   "devDependencies": {
     "@collagen/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
     "@types/react": "catalog:",
-    "bun-types": "catalog:",
+    "hyperdht": "^6.32.0",
+    "tsx": "^4.22.4",
     "typescript": "catalog:"
   }
 }

@@ -1,23 +1,21 @@
-import { parseArgs } from "node:util";
-import { createCliRenderer } from "@opentui/core";
-import { createRoot } from "@opentui/react";
-import { devLogin, getToken, initToken } from "./auth/client";
-import { setProfile } from "./auth/store";
+import { render } from "ink";
+import { loadIdentity } from "./identity";
+import { loadDevBootstrap } from "./peers";
 import { App } from "./ui/App";
 
-const { values } = parseArgs({
-  args: Bun.argv.slice(2),
-  options: {
-    // Dev: act as a seeded user (alice|bob). Namespaces the token file and
-    // auto-logs-in, so two terminals can run as two users at once.
-    user: { type: "string", short: "u" },
-  },
-  allowPositionals: true,
-});
+const identity = loadIdentity(process.argv);
+const bootstrap = loadDevBootstrap();
 
-if (values.user) setProfile(values.user);
-await initToken();
-if (values.user && !getToken()) await devLogin(values.user);
+// Use the terminal's alternate screen so Ink owns a bounded viewport — frames
+// redraw in place instead of stacking into scrollback. Restore on exit.
+const ALT_ENTER = "\x1b[?1049h";
+const ALT_EXIT = "\x1b[?1049l";
+const isTty = Boolean(process.stdout.isTTY);
+if (isTty) process.stdout.write(ALT_ENTER);
+const restore = () => {
+  if (isTty) process.stdout.write(ALT_EXIT);
+};
 
-const renderer = await createCliRenderer();
-createRoot(renderer).render(<App />);
+const { waitUntilExit } = render(<App identity={identity} bootstrap={bootstrap} />);
+process.on("exit", restore);
+waitUntilExit().then(restore, restore);
