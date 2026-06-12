@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdin } from "ink";
-import type { Identity } from "../identity";
-import { joinRoom, type Bootstrap, type Peer, type PresenceHandle, type SharedProfile } from "../peers";
+import { homedir } from "node:os";
 import {
   AI_OPTIONS,
-  loadState,
+  joinRoom,
   newProject,
   roomProjects,
-  saveState,
+  type Bootstrap,
+  type Identity,
   type LocalState,
-} from "../store";
-import { homedir } from "node:os";
+  type Peer,
+  type PresenceHandle,
+  type SharedProfile,
+} from "@collagen/p2p";
+import { loadState, saveState } from "../store";
 import { FsPicker, Panel } from "./components";
 import { theme } from "./theme";
 
@@ -212,7 +215,8 @@ function PeerLine({
         <Text>
           {" "}
           {projects.map((p, i) => (
-            <Text key={`${p}-${i}`} color={mine.has(p) ? theme.accent : theme.dim}>
+            // all projects are real; accent just flags ones you also have (shared)
+            <Text key={`${p}-${i}`} color={mine.has(p) ? theme.accent : theme.fg} bold={mine.has(p)}>
               {p}
               {i < projects.length - 1 ? " " : ""}
             </Text>

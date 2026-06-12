@@ -2,21 +2,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import crypto from "hypercore-crypto";
-import b4a from "b4a";
+import { keyPairFromSeed, pubkeyHex, randomSeedHex, type Identity } from "@collagen/p2p";
 
-export interface Identity {
-  name: string;
-  profile: string;
-  keyPair: { publicKey: Buffer; secretKey: Buffer };
-  pubkey: string;
-}
-
-// P2P identity = a persisted keypair (no server, no accounts). `--profile`
-// namespaces the keypair file so two peers can run on one machine.
+// CLI-specific: parse flags + persist the seed/name, then build the identity
+// via @collagen/p2p's keypair core. `--profile` namespaces the keypair file.
 export function loadIdentity(argv: string[]): Identity {
   const { values } = parseArgs({
-    // pnpm forwards a literal "--" separator; drop it so flags parse.
     args: argv.slice(2).filter((a) => a !== "--"),
     options: {
       name: { type: "string", short: "n" },
@@ -37,12 +28,12 @@ export function loadIdentity(argv: string[]): Identity {
     seedHex = j.seed;
     name = j.name;
   }
-  if (!seedHex) seedHex = b4a.toString(crypto.randomBytes(32), "hex");
+  if (!seedHex) seedHex = randomSeedHex();
   if (values.name) name = values.name;
   if (!name) name = "anon";
 
   writeFileSync(file, JSON.stringify({ seed: seedHex, name }, null, 2));
 
-  const keyPair = crypto.keyPair(b4a.from(seedHex, "hex"));
-  return { name, profile, keyPair, pubkey: b4a.toString(keyPair.publicKey, "hex") };
+  const keyPair = keyPairFromSeed(seedHex);
+  return { name, profile, keyPair, pubkey: pubkeyHex(keyPair.publicKey) };
 }

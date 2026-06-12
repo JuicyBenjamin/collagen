@@ -44,15 +44,9 @@ importers:
 
   apps/cli:
     dependencies:
-      b4a:
-        specifier: ^1.8.1
-        version: 1.8.1
-      hypercore-crypto:
-        specifier: ^3.7.0
-        version: 3.7.0(bare-events@2.9.1)(bare-url@2.4.5)
-      hyperswarm:
-        specifier: ^4.17.0
-        version: 4.17.0(bare-url@2.4.5)
+      '@collagen/p2p':
+        specifier: workspace:*
+        version: link:../../packages/p2p
       ink:
         specifier: ^7.0.5
         version: 7.0.5(@types/react@19.2.17)(react-devtools-core@7.0.1)(react@19.2.7)
@@ -75,6 +69,28 @@ importers:
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/p2p:
+    dependencies:
+      b4a:
+        specifier: ^1.8.1
+        version: 1.8.1
+      hypercore-crypto:
+        specifier: ^3.7.0
+        version: 3.7.0(bare-events@2.9.1)(bare-url@2.4.5)
+      hyperswarm:
+        specifier: ^4.17.0
+        version: 4.17.0(bare-url@2.4.5)
+    devDependencies:
+      '@collagen/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.19.20
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

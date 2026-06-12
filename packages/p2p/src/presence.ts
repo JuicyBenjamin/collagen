@@ -1,17 +1,14 @@
-import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 import Hyperswarm from "hyperswarm";
 import b4a from "b4a";
-import type { Identity } from "./identity";
+import { roomTopic } from "./topic";
+import type { Bootstrap, Identity, Peer, SharedProfile } from "./types";
 
-export type Bootstrap = { host: string; port: number }[];
-
-// In dev, `pnpm --filter @collagen/cli dev:net` writes a local testnet's
-// bootstrap here so same-machine peers connect reliably (no public-DHT
-// hairpinning). Absent in production → real DHT.
-const bootstrapFile = join(homedir(), ".config", "collagen", "dev-bootstrap.json");
+// In dev, the testnet writes its bootstrap here so same-machine peers connect
+// reliably (the public DHT hairpins on localhost). Absent → real DHT.
+export const bootstrapFile = join(homedir(), ".config", "collagen", "dev-bootstrap.json");
 
 export function loadDevBootstrap(): Bootstrap | undefined {
   try {
@@ -20,29 +17,6 @@ export function loadDevBootstrap(): Bootstrap | undefined {
   } catch {
     return undefined;
   }
-}
-
-export { bootstrapFile };
-
-export interface SharedProject {
-  name: string;
-  path: string;
-}
-
-/** What each peer broadcasts about itself in a room. */
-export interface SharedProfile {
-  name: string;
-  ai: string | null;
-  projects: SharedProject[];
-}
-
-export interface Peer extends SharedProfile {
-  key: string;
-}
-
-/** Derive a 32-byte swarm topic from a room name. */
-export function roomTopic(roomName: string): Buffer {
-  return createHash("sha256").update(`collagen:${roomName}`).digest();
 }
 
 export interface PresenceHandle {
@@ -54,16 +28,15 @@ export interface PresenceHandle {
 
 /**
  * Join a room's Hyperswarm topic and track who's present. No server: peers
- * discover each other via the DHT and exchange their profile (name + preferred
- * AI + enabled projects) directly. `getProfile` is read live so `update()` can
- * re-broadcast after the user changes settings. `bootstrap` is for tests.
+ * discover via the DHT and exchange their profile directly. `getProfile` is
+ * read live so `update()` can re-broadcast after settings change.
  */
 export function joinRoom(
   identity: Identity,
   roomName: string,
   getProfile: () => SharedProfile,
   onRoster: (peers: Peer[]) => void,
-  opts: { bootstrap?: { host: string; port: number }[] } = {},
+  opts: { bootstrap?: Bootstrap } = {},
 ): PresenceHandle {
   const swarm = new Hyperswarm({ keyPair: identity.keyPair, bootstrap: opts.bootstrap });
   const conns = new Set<any>();

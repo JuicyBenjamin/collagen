@@ -1,6 +1,6 @@
 import { render } from "ink";
+import { loadDevBootstrap } from "@collagen/p2p";
 import { loadIdentity } from "./identity";
-import { loadDevBootstrap } from "./peers";
 import { App } from "./ui/App";
 
 const identity = loadIdentity(process.argv);

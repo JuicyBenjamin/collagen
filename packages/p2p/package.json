@@ -1,0 +1,24 @@
+{
+  "name": "@collagen/p2p",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo node_modules"
+  },
+  "dependencies": {
+    "b4a": "^1.8.1",
+    "hypercore-crypto": "^3.7.0",
+    "hyperswarm": "^4.17.0"
+  },
+  "devDependencies": {
+    "@collagen/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

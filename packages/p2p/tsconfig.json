@@ -1,0 +1,10 @@
+{
+  "extends": "@collagen/typescript-config/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "moduleResolution": "bundler",
+    "module": "preserve",
+    "verbatimModuleSyntax": false
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -14,9 +14,7 @@
     "clean": "rm -rf .turbo node_modules"
   },
   "dependencies": {
-    "b4a": "^1.8.1",
-    "hypercore-crypto": "^3.7.0",
-    "hyperswarm": "^4.17.0",
+    "@collagen/p2p": "workspace:*",
     "ink": "^7.0.5",
     "react": "catalog:"
   },
