@@ -76,7 +76,7 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
       yield* Effect.forEach([...connByKey.values()], (conn) => writeFrame(conn, frame), {
         discard: true,
       });
-    });
+    }).pipe(Effect.withSpan("Room.broadcastProfile"));
 
     const handleFrame = (key: string, frame: Frame) =>
       frame.kind === "profile"
@@ -115,27 +115,26 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
       Effect.forkScoped,
     );
 
-    const sendTo = (
+    const sendTo = Effect.fn("Room.sendTo")(function* (
       peerKey: string,
       payload: { project: string; intent: string; findings: string },
-    ): Effect.Effect<RoomMessage, PeerNotConnected> =>
-      Effect.gen(function* () {
-        const conn = connByKey.get(peerKey);
-        if (!conn) return yield* new PeerNotConnected({ peerKey });
-        const ts = yield* Clock.currentTimeMillis;
-        const msg: RoomMessage = {
-          id: yield* Effect.sync(() => randomUUID()),
-          threadId: deriveThreadId(config.identity.pubkey, peerKey, payload.project),
-          from: config.identity.pubkey,
-          fromName: config.identity.name,
-          project: payload.project,
-          intent: payload.intent,
-          findings: payload.findings,
-          ts,
-        };
-        yield* writeFrame(conn, { kind: "msg", msg });
-        return msg;
-      });
+    ) {
+      const conn = connByKey.get(peerKey);
+      if (!conn) return yield* new PeerNotConnected({ peerKey });
+      const ts = yield* Clock.currentTimeMillis;
+      const msg: RoomMessage = {
+        id: yield* Effect.sync(() => randomUUID()),
+        threadId: deriveThreadId(config.identity.pubkey, peerKey, payload.project),
+        from: config.identity.pubkey,
+        fromName: config.identity.name,
+        project: payload.project,
+        intent: payload.intent,
+        findings: payload.findings,
+        ts,
+      };
+      yield* writeFrame(conn, { kind: "msg", msg });
+      return msg;
+    });
 
     return {
       /** Current peers + changes (emits current value on subscribe). */

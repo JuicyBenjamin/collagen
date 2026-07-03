@@ -50,24 +50,35 @@ export const ToolHandlers = CollagenToolkit.toLayer(
   Effect.gen(function* () {
     const room = yield* Room;
     const inbox = yield* Inbox;
+
+    const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
+      peer: string;
+      project: string;
+      intent: string;
+      findings: string;
+    }) {
+      const peers = yield* SubscriptionRef.get(room.roster);
+      const target = peers.find((p) => p.name === input.peer);
+      if (!target) return `failed: no peer named ${input.peer}`;
+      return yield* room
+        .sendTo(target.key, { project: input.project, intent: input.intent, findings: input.findings })
+        .pipe(
+          Effect.map(() => `sent to ${input.peer}`),
+          Effect.catchTag("PeerNotConnected", () => Effect.succeed("failed: peer not connected")),
+        );
+    });
+
     return {
       "list-room": () =>
         SubscriptionRef.get(room.roster).pipe(
           Effect.map((peers) =>
             peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
           ),
+          Effect.withSpan("Mcp.listRoom"),
         ),
-      "send-to-peer": ({ peer, project, intent, findings }) =>
-        Effect.gen(function* () {
-          const peers = yield* SubscriptionRef.get(room.roster);
-          const target = peers.find((p) => p.name === peer);
-          if (!target) return `failed: no peer named ${peer}`;
-          return yield* room.sendTo(target.key, { project, intent, findings }).pipe(
-            Effect.map(() => `sent to ${peer}`),
-            Effect.catchTag("PeerNotConnected", () => Effect.succeed("failed: peer not connected")),
-          );
-        }),
-      "get-messages": ({ threadId }) => inbox.take(threadId),
+      "send-to-peer": sendToPeer,
+      "get-messages": ({ threadId }) =>
+        inbox.take(threadId).pipe(Effect.withSpan("Mcp.getMessages")),
     };
   }),
 );
