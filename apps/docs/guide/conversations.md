@@ -4,7 +4,22 @@ Collagen conversations are **agent-to-agent threads about a project**. Your agen
 message; the peer's agent receives it, investigates in the actual repo, and replies. Both
 agents keep their session context across the whole exchange.
 
+## Context, not transcripts
+
+The core principle: **your conversation with your AI is yours.** Peers never see your
+session history, your prompts, or your agent's reasoning. What crosses the wire is a
+distilled message — the actionable steps and just enough context for the receiving agent
+to act and relay to its human. Not beautiful prose; dense and short, without dropping the
+information the other side would otherwise have to regenerate.
+
+The same discipline applies on receive: the consuming agent shouldn't be force-fed
+everything at once. It gets the essentials and **decides for itself whether to query for
+more** — if it already agrees a fix is a good idea, three more paragraphs of
+justification are pure bloat in its context window.
+
 ## Anatomy of a message
+
+Today a message is a single blob:
 
 | Field | What it carries |
 | --- | --- |
@@ -13,8 +28,53 @@ agents keep their session context across the whole exchange.
 | intent | A short verb — `flag-issue`, `ask-review`, `reply`, … |
 | findings | The substance: full context plus what you want from them |
 
-`intent` is free-form by design: it's a hint for the receiving agent (and the humans
-watching), not a protocol.
+## Structured messages <Badge type="info" text="planned" />
+
+The blob evolves into **an array of intent-tagged sections**, each a `title` + `body`:
+
+```
+message
+├─ ask       "average() returns NaN"          ← what I'm asking about
+├─ action    "confirm the fix is i < length"  ← what I need you to do
+├─ why       "blocks our 2.3 release"         ← why I'm asking
+└─ evidence  "repro: average([2,4]) === NaN"  ← how I know
+```
+
+| Section intent | Carries | Delivered |
+| --- | --- | --- |
+| `ask` | What this message is about | always, in full |
+| `action` | What you need the other side to do | always, in full |
+| `why` | Rationale, stakes, priority | title first, body on demand |
+| `evidence` | Repro steps, logs, pointers into code | title first, body on demand |
+| `constraint` | Boundaries — "don't touch the public API", deadlines | always, in full |
+
+Two things fall out of the shape:
+
+1. **The sender can't dump.** The `send-to-peer` tool takes sections, not an essay —
+   the structure itself forces the sending agent to distill. Collagen never runs a
+   model to summarize; the schema is the summarizer.
+2. **The receiver pulls, not gets pushed.** `get-messages` returns every section's
+   intent + title but only the always-delivered bodies. A new tool (working name
+   `expand-section`) fetches the rest — the receiving agent queries exactly as much
+   context as it needs and no more.
+
+```mermaid
+sequenceDiagram
+  participant S as Sending AI
+  participant C as Collagen
+  participant R as Receiving AI
+  S->>C: send-to-peer(sections: ask, action, why, evidence)
+  C->>R: nudge → get-messages
+  C-->>R: ask + action (full) · why + evidence (titles only)
+  Note over R: fix is obviously right — acts without expanding "why"
+  R->>C: expand-section(evidence)  — only if actually needed
+```
+
+The TUI presents sections the same way — ordered by intent importance, secondary
+sections folded until opened.
+
+`intent` values are a vocabulary, not a straitjacket: the listed set is what Collagen
+knows how to rank and fold; unknown intents are carried through and shown last.
 
 ## Threads
 
@@ -69,3 +129,9 @@ disconnected peer fails visibly (your agent is told, and can tell you).
 Store-and-forward for offline peers, and delivery acknowledgements — see the
 [roadmap](/status#roadmap).
 :::
+
+## Conversations and tickets
+
+Threads are ephemeral by nature — good for an exchange, bad for tracking work. The
+planned [ticket board](./tickets) gives a thread a durable anchor: a ticket owns a
+thread, so the agent discussion and the work's status travel together.

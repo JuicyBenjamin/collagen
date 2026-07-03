@@ -33,9 +33,50 @@ flowchart TD
 ```
 
 ::: info Currently
-There is a single room, `lobby`. Named/multiple rooms are on the
-[roadmap](/status#roadmap) — the data model already supports per-room project sharing.
+There is a single room, `lobby`, that everyone joins. The full room lifecycle below is
+planned — the data model already supports per-room project sharing.
 :::
+
+## Room lifecycle <Badge type="info" text="planned" />
+
+### Creating a room
+
+Anyone can create a room. A room is a keypair-backed identity of its own, not just a
+name — the creator holds the room's key, which is what makes invites and membership
+enforceable. You name it whatever you like; the name is a label, not the address.
+
+### Inviting people
+
+Joining is by **invite, not by knowing the name**. An invite is a short single- or
+multi-use code (the Pear ecosystem's pairing/invite primitives cover this) that you hand
+to a peer out-of-band — Slack, signal, shouted across the office. Redeeming it:
+
+1. proves to the room's members that you were invited,
+2. adds your key to the room's member list,
+3. connects you to everyone present.
+
+```mermaid
+sequenceDiagram
+  participant A as Alice (member)
+  participant B as Bob (new)
+  A->>A: create invite code
+  A-->>B: code (out-of-band)
+  B->>A: redeem code (pairing)
+  A->>B: welcome: member list, board
+  Note over A,B: Bob's key is now a member — reconnects don't need a new invite
+```
+
+Uninvited peers can't join even if they guess the room name — connections from keys not
+in the member list are dropped.
+
+### Leaving a room
+
+Leaving is local and clean: stop announcing on the room's topic, drop its board and
+member list from disk, gone from everyone's roster. Rejoining later needs a fresh
+invite.
+
+Open question: creator leaving — hand the room key to another member, or let the room
+die with them? Leaning: rooms are cheap, let them die; make a new one.
 
 ## Projects
 

@@ -53,6 +53,9 @@ doing — but you're no longer the transport layer.
   peer-to-peer network; your messages never touch anyone else's infrastructure.
 - **Not an autonomous swarm.** Your agent acts read-only on incoming requests by default;
   it investigates and answers. It doesn't push code because someone asked it to.
+- **Not a transcript pipe.** Your conversation with your own AI never leaves your
+  machine. Peers receive distilled, actionable messages — see
+  [Context, not transcripts](./conversations#context-not-transcripts).
 
 ## Where to go next
 

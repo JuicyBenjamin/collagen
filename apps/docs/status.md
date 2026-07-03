@@ -3,7 +3,7 @@
 A living snapshot of what works, what's in flight, and what's next. Update this as we go —
 it's the "where did we leave off" page.
 
-_Last updated: 2026-07-03._
+_Last updated: 2026-07-04._
 
 ## Working today
 
@@ -20,15 +20,14 @@ _Last updated: 2026-07-03._
   `~/.codex/config.toml` (with `default_tools_approval_mode = "approve"` for Codex).
 - **TUI** — Ink UI on `@effect-atom/atom-react`; roster, projects, AI cycling, activity
   log, folder picker. Headless-safe.
-- **Verified end-to-end** — a full round trip (Bob → Alice → reply) with the **Codex**
-  path: message delivered, agent auto-spawned, read via `get-messages`, diagnosed the
-  planted bug, replied on the same thread.
+- **Verified end-to-end, both agents, both directions** (2026-07-04) — a full
+  bidirectional conversation: Claude Code read the thread, diagnosed the planted bug and
+  replied via `send-to-peer`; Codex picked the reply up on the same thread and confirmed
+  the finding. Three strict-client interop fixes landed on the way (singleton JSON-RPC
+  batches, 202 for notifications, object-rooted `structuredContent`).
 
 ## Known issues
 
-- **Claude CLI headless auth** — on the current dev machine `claude -p` returns `401` even
-  standalone, which blocks the `claude-code` spawn path. Needs a CLI re-auth; not a
-  Collagen bug.
 - **Concurrent MCP registration race** — two instances registering at the same time can
   hit a one-off `claude mcp add exited 1`. Idempotent, self-heals; worth a retry/serialize.
 - **Dev sandbox project path** — the e2e "sandbox" project pointed into a temp dir; use a
@@ -36,18 +35,56 @@ _Last updated: 2026-07-03._
 
 ## Roadmap
 
-Rough order, not committed:
+Rough order, not committed. The three feature clusters have fleshed-out product specs on
+their pages.
 
-- [ ] **Offline / store-and-forward messaging** — today delivery is live-only; queue
-  messages for disconnected peers.
+### 1. Rooms lifecycle — [spec](/guide/rooms#room-lifecycle)
+
+- [ ] Create named rooms (room = its own keypair, name is a label)
+- [ ] Invite peers via single/multi-use codes (Pear pairing primitives); membership
+  enforced at connection time
+- [ ] Leave a room (local forget; rejoin needs a fresh invite)
+- [ ] TUI: room list, switch, create, invite, leave
+
+### 2. Tickets — [spec](/guide/tickets)
+
+- [ ] Per-room board in the TUI; statuses `todo / doing / review / done / blocked /
+  wont-do`
+- [ ] Ticket ↔ thread linkage (a ticket owns its agent conversation)
+- [ ] MCP tools: `list-tickets`, `create-ticket`, `update-ticket` — agents pick up and
+  close their own work
+- [ ] Agent-close guardrail: agents move tickets to `review` by default, `done` needs a
+  human (configurable per room)
+- [ ] Replicated ticket log (append-only cores / Autobase) — same machinery as offline
+  messaging, lands together
+
+### 3. Structured messages — [spec](/guide/conversations#structured-messages)
+
+- [ ] Message = array of intent-tagged sections (`ask / action / why / evidence /
+  constraint`), each title + body — the schema forces distillation, no transcript
+  dumping
+- [ ] Progressive disclosure: `get-messages` delivers primary sections in full,
+  secondary as titles; `expand-section` tool pulls bodies on demand
+- [ ] TUI renders sections ranked by intent, secondary folded
+
+### 4. Identity & devices — [spec](/guide/identity)
+
+- [ ] Log out (forget seed locally, leave rooms, stop announcing)
+- [ ] Log in as the same user via recovery phrase (mnemonic-encoded seed)
+- [ ] Second device: phrase-based first, then Keet-style device pairing (identity key
+  signs device keys; per-device revocation)
+
+### Infrastructure
+
+- [ ] **Offline / store-and-forward messaging** — live-only today; shares its sync
+  machinery with the ticket log.
 - [ ] **Delivery acks / retries** — currently at-most-once at the Collagen layer.
 - [ ] **Harden registration** — serialize concurrent writes to `~/.claude.json`.
 - [ ] **More AI adapters** — beyond `claude-code` / `codex`.
-- [ ] **Multiple rooms** — the model supports per-room project enables; the UI is
-  single-room (`lobby`).
 - [ ] **Tracing sink** — spans exist (`Effect.fn` / `withSpan`); wire an exporter for real
   observability.
-- [ ] **Tests** — no automated tests yet; the p2p + inbox + thread logic is the priority.
+- [ ] **Tests** — none yet; p2p + inbox + thread serialization logic first.
+- [ ] **Packaging** — a `collagen` binary instead of running from the monorepo.
 
 ## Decisions log
 

@@ -21,6 +21,8 @@ export default withMermaid({
             { text: "What is Collagen?", link: "/guide/overview" },
             { text: "Rooms & presence", link: "/guide/rooms" },
             { text: "Conversations", link: "/guide/conversations" },
+            { text: "Tickets", link: "/guide/tickets" },
+            { text: "Identity & devices", link: "/guide/identity" },
             { text: "Using the CLI", link: "/guide/using-the-cli" },
           ],
         },
