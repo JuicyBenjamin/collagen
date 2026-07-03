@@ -1,8 +1,9 @@
 import { createServer } from "node:http";
 import { Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpServer, Tool, Toolkit } from "@effect/ai";
-import { HttpRouter, HttpServer } from "@effect/platform";
+import { HttpApp, HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse } from "@effect/platform";
 import { NodeHttpServer } from "@effect/platform-node";
+import { RpcSerialization, RpcServer } from "@effect/rpc";
 import { Room, RoomMessage } from "@collagen/p2p";
 import { portForProfile } from "../util";
 import { CliArgs } from "./CliArgs";
@@ -71,6 +72,48 @@ export const ToolHandlers = CollagenToolkit.toLayer(
   }),
 );
 
+/** Strict JSON-RPC serialization: the stock jsonRpc encoder batch-frames every
+ *  HTTP response, so a single request gets a one-element ARRAY back — valid for
+ *  @effect/rpc's own clients but a spec violation that strict MCP clients
+ *  (codex's rmcp) reject at initialize. Unwrap singleton batches. */
+const JsonRpcUnbatched = Layer.succeed(
+  RpcSerialization.RpcSerialization,
+  RpcSerialization.RpcSerialization.of({
+    contentType: "application/json",
+    includesFraming: false,
+    unsafeMake: () => {
+      const parser = RpcSerialization.jsonRpc().unsafeMake();
+      return {
+        decode: parser.decode,
+        encode: (response) => {
+          if (Array.isArray(response) && response.length === 0) return ""; // notification-only POST
+          return parser.encode(Array.isArray(response) && response.length === 1 ? response[0] : response);
+        },
+      };
+    },
+  }),
+);
+
+/** Streamable HTTP: a POST carrying only notifications gets 202 Accepted with
+ *  no body. The rpc protocol answers 200 + empty body, which strict clients
+ *  fail to parse as JSON. Must be a pre-response handler — by the time plain
+ *  middleware sees the response, HttpApp.toHandled has already written it. */
+const NotificationsAccepted = HttpMiddleware.make((app) =>
+  Effect.zipRight(
+    HttpApp.appendPreResponseHandler((_req, res) => {
+      const body = res.body;
+      const empty =
+        body._tag === "Empty" ||
+        (body._tag === "Uint8Array" && body.body.length === 0) ||
+        ("text" in body && (body as { text?: string }).text === "");
+      return Effect.succeed(
+        res.status === 200 && empty ? HttpServerResponse.empty({ status: 202 }) : res,
+      );
+    }),
+    app,
+  ),
+);
+
 /** MCP server over Streamable HTTP on the profile's deterministic port
  *  (ephemeral fallback if taken). Publishes the resolved URL to McpInfo. */
 export const McpLive = Layer.unwrapEffect(
@@ -89,12 +132,17 @@ export const McpLive = Layer.unwrapEffect(
       }),
     );
 
+    // layerHttp minus its baked-in serialization (see JsonRpcUnbatched above).
     const serve = (port: number) =>
-      Layer.mergeAll(McpServer.toolkit(CollagenToolkit), HttpRouter.Default.serve(), announce).pipe(
+      Layer.mergeAll(
+        McpServer.toolkit(CollagenToolkit),
+        HttpRouter.Default.serve(NotificationsAccepted),
+        announce,
+      ).pipe(
         Layer.provide(ToolHandlers),
-        Layer.provide(
-          McpServer.layerHttp({ name: "collagen", version: "0.0.0", path: "/mcp" }),
-        ),
+        Layer.provide(McpServer.layer({ name: "collagen", version: "0.0.0" })),
+        Layer.provide(RpcServer.layerProtocolHttp({ path: "/mcp" })),
+        Layer.provide(JsonRpcUnbatched),
         Layer.provide(NodeHttpServer.layer(createServer, { port })),
       );
 

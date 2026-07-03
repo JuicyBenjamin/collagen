@@ -67,7 +67,15 @@ const ADAPTERS: Record<string, Adapter> = {
   codex: {
     cmd: "codex",
     args: (o) => {
-      const flags = ["--json", "--sandbox", "read-only", "--skip-git-repo-check"];
+      const flags = [
+        "--json",
+        "--sandbox",
+        "read-only",
+        "--skip-git-repo-check",
+        // pre-trust our MCP tools — exec mode auto-cancels approval prompts
+        "-c",
+        `mcp_servers.${o.serverName}.default_tools_approval_mode="approve"`,
+      ];
       return Option.isSome(o.sessionId)
         ? ["exec", "resume", o.sessionId.value, ...flags, nudgePrompt(o)]
         : ["exec", ...flags, nudgePrompt(o)];

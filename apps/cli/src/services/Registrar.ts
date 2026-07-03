@@ -34,7 +34,9 @@ const registerCodex = (name: string, url: string) =>
       yield* Effect.log("codex config not found, skipping");
       return;
     }
-    const block = `[mcp_servers.${name}]\nurl = "${url}"\n`;
+    // approval_mode: codex ≥0.14x requires per-tool approval for MCP calls;
+    // "approve" pre-trusts our tools so headless `codex exec` can use them.
+    const block = `[mcp_servers.${name}]\nurl = "${url}"\ndefault_tools_approval_mode = "approve"\n`;
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`\\[mcp_servers\\.${escaped}\\][^[]*`, "m");
     const toml = yield* fs.readFileString(file);
