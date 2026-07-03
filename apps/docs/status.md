@@ -65,6 +65,9 @@ their pages.
   dumping
 - [ ] Progressive disclosure: `get-messages` delivers primary sections in full,
   secondary as titles; `expand-section` tool pulls bodies on demand
+- [ ] Message kinds (`question / bug-report / feature-request / review-request /
+  reply`) — work kinds become tickets whose thread starts or continues a conversation;
+  receiver-side dispatch policy decides direct-run vs queued per kind/peer
 - [ ] TUI renders sections ranked by intent, secondary folded
 
 ### 4. Identity & devices — [spec](/guide/identity)

@@ -77,6 +77,27 @@ a human (or requesting peer) confirmation. Configurable per room for people who 
 fully autonomous closes. `wont-do` from an agent always requires a stated reason, which
 lands in the history.
 
+## Tickets from messages
+
+Work-kind [messages](./conversations#message-kinds) (`feature-request`, `bug-report`)
+land as tickets with the message's sections attached (the `ask` becomes the title, the
+rest is the description). Every ticket **starts or continues a conversation** — that's
+the point of the board; the ticket's thread is where the work happens.
+
+What you control is **dispatch** — when that conversation runs:
+
+- **direct**: your agent spawns on arrival, the ticket opens in `doing` with the thread
+  already live.
+- **queued**: the ticket waits in `todo`; the thread kicks off on pickup — you move it
+  to `doing`, or your agent pulls the next queued ticket.
+
+Dispatch is your policy (per room or per peer): e.g. bug reports direct, feature
+requests queued. Senders can hint urgency; your policy wins.
+
+Triage on queued tickets is the usual moves: assign and pick up, or close `wont-do` with
+a reason — which flows back to the requesting peer on the ticket's thread. Their agent
+checks progress with `list-tickets` instead of asking "is it done yet" in chat.
+
 ## Sync model
 
 The board is shared state, which is new — presence and messages today are ephemeral.

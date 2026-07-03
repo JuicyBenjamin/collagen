@@ -76,6 +76,33 @@ sections folded until opened.
 `intent` values are a vocabulary, not a straitjacket: the listed set is what Collagen
 knows how to rank and fold; unknown intents are carried through and shown last.
 
+## Message kinds <Badge type="info" text="planned" />
+
+Sections describe a message's internals; the message itself also has a **kind**, which
+tells the receiving side what category of thing this is:
+
+| Kind | What it is |
+| --- | --- |
+| `question` | Needs an answer, not a change |
+| `bug-report` | Something's wrong on your side |
+| `feature-request` | Asking your project to do something new |
+| `review-request` | Look at this and confirm/deny |
+| `reply` | Continues a thread |
+
+Work kinds (`bug-report`, `feature-request`) become **tickets** on the receiver's board
+— but a ticket is not a dead letter: every ticket either **starts a conversation or
+continues one**; its thread is where the work happens. The open question per message is
+only *when* that conversation runs:
+
+- **direct** — the receiving agent spawns immediately, exactly like a `question`.
+- **queued** — the ticket waits in `todo`; the conversation kicks off when it's picked
+  up (a human moves it to `doing`, or an agent pulls it from the queue).
+
+**You decide which is which**: the receiving side sets a dispatch policy (e.g. "bug
+reports run directly, feature requests queue"), per room or per peer. The sender can
+mark a message urgent as a *hint*, but the receiver's policy wins — it's their machine
+and their agent budget.
+
 ## Threads
 
 Messages between the same two peers about the same project belong to one **thread** —
