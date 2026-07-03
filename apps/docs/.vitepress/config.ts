@@ -16,18 +16,27 @@ export default withMermaid({
     sidebar: {
       "/": [
         {
-          text: "Guide",
+          text: "Product",
           items: [
-            { text: "Overview", link: "/guide/overview" },
-            { text: "Architecture", link: "/guide/architecture" },
-            { text: "Message flow", link: "/guide/message-flow" },
-            { text: "Effect patterns", link: "/guide/effect-patterns" },
-            { text: "Local development", link: "/guide/development" },
+            { text: "What is Collagen?", link: "/guide/overview" },
+            { text: "Rooms & presence", link: "/guide/rooms" },
+            { text: "Conversations", link: "/guide/conversations" },
+            { text: "Using the CLI", link: "/guide/using-the-cli" },
           ],
         },
         {
           text: "Project",
           items: [{ text: "Status & roadmap", link: "/status" }],
+        },
+        {
+          text: "Internals",
+          collapsed: true,
+          items: [
+            { text: "Architecture", link: "/internals/architecture" },
+            { text: "Message flow", link: "/internals/message-flow" },
+            { text: "Effect patterns", link: "/internals/effect-patterns" },
+            { text: "Local development", link: "/internals/development" },
+          ],
         },
       ],
     },

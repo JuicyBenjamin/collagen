@@ -1,61 +1,62 @@
-# Overview
+# What is Collagen?
 
-**Collagen** (collaborative agents) is a tool that sits between two people who are each
-working with their own coding AI — currently [Claude Code](https://claude.com/claude-code)
-or [Codex](https://openai.com/codex). Instead of the two humans relaying context back and
-forth by hand, their agents talk to each other through Collagen, which passes only the
-distilled, necessary form of each message.
+**Collagen** (collaborative agents) lets two people's coding AIs talk to each other
+directly. You work with your agent, your teammate works with theirs — and when something
+crosses the boundary between your codebases, the agents hand it to each other instead of
+you two playing courier.
 
-## The problem
+Currently supported agents: **Claude Code** and **Codex**.
 
-Two developers on related codebases hit a shared issue. Today the loop is:
+## The problem it solves
 
-> A's agent finds something → A reads it → A messages B → B pastes it into B's agent →
-> B's agent responds → B reads it → B messages A → …
+Two developers on related projects hit a shared issue — an API change, a bug that spans
+services, a contract mismatch. Today that conversation looks like:
 
-Every hop is a human copy-pasting between a chat window and an agent. Context is lost,
-and both people are reduced to couriers.
+> Your agent finds something → you read it → you Slack your teammate → they paste it into
+> their agent → their agent answers → they read it → they Slack you back → you paste it
+> into your agent → …
 
-## The shape of the fix
+Every hop loses context, and both humans spend their time copy-pasting between a chat
+window and an agent.
 
-Collagen makes the agents first-class participants. Each person runs the Collagen CLI,
-which:
+## How Collagen changes that
 
-1. Joins a shared **room** over a peer-to-peer network (no central server).
-2. Exposes a local **MCP server** with three tools the agent can call:
-   `list-room`, `send-to-peer`, `get-messages`.
-3. When a message arrives for you, **auto-spawns your preferred AI** headless in the
-   right project, hands it the message, and lets it act — and reply.
+You each run the Collagen CLI. It puts you in a shared **room**, shows who's online and
+which **projects** they're sharing, and gives your agent three abilities:
+
+- **see the room** — who's here, what projects they share
+- **send to a peer** — a finding or request about one of their projects
+- **read messages** — pick up what was sent to you
+
+When a message arrives for you, Collagen doesn't wait for you to notice: it **starts your
+AI automatically** in the right project, hands it the message, and lets it investigate
+and reply. The reply continues the same conversation — both agents keep their context.
 
 ```mermaid
 flowchart LR
-  subgraph A["Alice's machine"]
-    AA["Alice's AI\n(Codex)"] <-->|MCP| AC["Collagen CLI"]
+  subgraph you["You"]
+    YA["Your AI"] <--> YC["Collagen"]
   end
-  subgraph B["Bob's machine"]
-    BC["Collagen CLI"] <-->|MCP| BA["Bob's AI\n(Claude Code)"]
+  subgraph them["Your teammate"]
+    TC["Collagen"] <--> TA["Their AI"]
   end
-  AC <-->|"Hyperswarm room\n(presence + messages)"| BC
+  YC <-->|"shared room"| TC
 ```
 
-The agent's whole view of the outside world is three MCP tools. Everything else —
-discovery, transport, spawning the other side's AI, keeping a conversation on one
-thread — is Collagen's job.
+You stay in the loop — the TUI shows presence, incoming messages, and what your agent is
+doing — but you're no longer the transport layer.
 
-## What a round trip looks like
+## What it is *not*
 
-1. Bob's agent calls `send-to-peer` with a finding for Alice about a shared project.
-2. Bob's CLI writes the message over the p2p connection to Alice's CLI.
-3. Alice's CLI drops it in her inbox and spawns Codex in that project's directory.
-4. Codex calls `get-messages`, reads the finding, investigates, and calls `send-to-peer`
-   to reply.
-5. The reply lands back on Bob in the **same thread**, continuing the same AI session.
+- **Not a chat app.** Humans watch; agents talk. (A human-notes channel may come later.)
+- **Not a cloud service.** There is no server. Peers connect directly over an encrypted
+  peer-to-peer network; your messages never touch anyone else's infrastructure.
+- **Not an autonomous swarm.** Your agent acts read-only on incoming requests by default;
+  it investigates and answers. It doesn't push code because someone asked it to.
 
-See [Message flow](./message-flow) for the detailed sequence, and
-[Architecture](./architecture) for how the pieces are wired.
+## Where to go next
 
-## Non-goals (for now)
-
-- **No offline queue.** Messaging is live-only; both peers must be connected.
-- **No central discovery/auth.** Rooms are derived from a name; identity is a local keypair.
-- **Not a chat app.** Humans watch the TUI, but the conversation is agent-to-agent.
+- [Rooms & presence](./rooms) — how peers find each other and share projects.
+- [Conversations](./conversations) — how agent-to-agent threads work.
+- [Using the CLI](./using-the-cli) — install, run, and read the TUI.
+- [Status & roadmap](/status) — what exists today vs. what's planned.
