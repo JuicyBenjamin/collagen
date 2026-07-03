@@ -1,29 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Box, Text, useApp, useInput, useStdin } from "ink";
 import { homedir } from "node:os";
-import { appendFileSync } from "node:fs";
+import { Option } from "effect";
+import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
+import { AI_OPTIONS, newProject, roomProjects, type LocalState } from "@collagen/p2p";
+import { ROOM } from "../services/AppLayer";
 import {
-  AI_OPTIONS,
-  joinRoom,
-  newProject,
-  roomProjects,
-  type Bootstrap,
-  type Identity,
-  type LocalState,
-  type Peer,
-  type RoomHandle,
-  type RoomMessage,
-  type SharedProfile,
-} from "@collagen/p2p";
-import { loadState, saveState } from "../store";
-import { startMcpServer, type McpHandle } from "../mcp";
-import { spawnAgent } from "../spawn";
-import { mcpServerName, portForProfile, registerCodexMcp, registerMcpGlobally } from "../mcpconfig";
+  identityAtom,
+  logsAtom,
+  mcpUrlAtom,
+  recentMessagesAtom,
+  rosterAtom,
+  stateAtom,
+  updateStateAtom,
+} from "./atoms";
 import { FsPicker, Panel } from "./components";
 import { theme } from "./theme";
 
-const ROOM = "lobby";
 type Mode = "room" | "projects" | "pick";
+
+const emptyState: LocalState = { preferredAi: null, pool: [], rooms: {} };
 
 function nextAi(current: string | null): string | null {
   // null -> claude-code -> codex -> null …
@@ -32,174 +28,57 @@ function nextAi(current: string | null): string | null {
   return cycle[(i + 1) % cycle.length] ?? null;
 }
 
-export function App({ identity, bootstrap }: { identity: Identity; bootstrap?: Bootstrap }) {
+export function App() {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
-  const [state, setState] = useState<LocalState>(() => loadState(identity.profile));
-  const [peers, setPeers] = useState<Peer[]>([]);
-  const [messages, setMessages] = useState<RoomMessage[]>([]);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [mcpUrl, setMcpUrl] = useState("");
   const [mode, setMode] = useState<Mode>("room");
   const [cursor, setCursor] = useState(0);
 
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const handleRef = useRef<RoomHandle | null>(null);
-  const peersRef = useRef<Peer[]>([]);
-  peersRef.current = peers;
-  const queueRef = useRef<RoomMessage[]>([]); // incoming, drained by get-messages
-  const mcpUrlRef = useRef("");
-  mcpUrlRef.current = mcpUrl;
-  const threadSessions = useRef(new Map<string, string>()); // threadId -> ai sessionId
-  const threadBusy = useRef(new Set<string>()); // serialize spawns per thread
-
-  const log = (line: string) => {
-    setLogs((prev) => [...prev.slice(-20), line]);
-    // Headless debugging: the ink UI is invisible on non-TTY stdout, so mirror
-    // activity to a file when COLLAGEN_LOG is set.
-    if (process.env.COLLAGEN_LOG) {
-      try {
-        appendFileSync(process.env.COLLAGEN_LOG, `${new Date().toISOString()} ${line}\n`);
-      } catch {
-        // best-effort
-      }
-    }
-  };
-
-  // Run (or continue) the recipient AI for a thread, serialized so we never
-  // resume one AI session concurrently (that corrupts the transcript).
-  function runThread(threadId: string) {
-    if (threadBusy.current.has(threadId)) return; // re-checked on close
-    const sample = queueRef.current.find((m) => m.threadId === threadId);
-    if (!sample) return;
-    if (!mcpUrlRef.current) return log("message before MCP ready");
-    threadBusy.current.add(threadId);
-    const before = new Set(queueRef.current.filter((m) => m.threadId === threadId).map((m) => m.id));
-    const proj = stateRef.current.pool.find((p) => p.name === sample.project);
-    const sessionId = threadSessions.current.get(threadId);
-    const ai = stateRef.current.preferredAi ?? "claude-code";
-    log(`${sessionId ? "continue" : "start"} ${ai} · ${sample.fromName}/${sample.project}`);
-    spawnAgent({
-      ai: stateRef.current.preferredAi,
-      cwd: proj?.path ?? homedir(),
-      mcpUrl: mcpUrlRef.current,
-      serverName: mcpServerName(identity.profile),
-      msg: sample,
-      sessionId,
-      onSession: (sid) => threadSessions.current.set(threadId, sid),
-      onLog: log,
-      onClose: () => {
-        threadBusy.current.delete(threadId);
-        // a message that arrived DURING the run (new id) → run again
-        if (queueRef.current.some((m) => m.threadId === threadId && !before.has(m.id))) {
-          runThread(threadId);
-        }
-      },
-    });
-  }
-
-  // Local MCP server: lets the user's AI list the room, send to peers, and read
-  // incoming messages. Started once; reads live state via refs.
-  useEffect(() => {
-    let handle: McpHandle | null = null;
-    void startMcpServer({
-      listRoom: () =>
-        peersRef.current.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
-      sendToPeer: (peer, project, intent, findings) => {
-        const target = peersRef.current.find((p) => p.name === peer);
-        if (!target) return { ok: false, error: `no peer named ${peer}` };
-        const ok = handleRef.current?.sendTo(target.key, { project, intent, findings }) ?? false;
-        return ok ? { ok: true } : { ok: false, error: "peer not connected" };
-      },
-      takeMessages: (threadId?: string) => {
-        if (!threadId) {
-          const m = queueRef.current;
-          queueRef.current = [];
-          return m;
-        }
-        const mine = queueRef.current.filter((m) => m.threadId === threadId);
-        queueRef.current = queueRef.current.filter((m) => m.threadId !== threadId);
-        return mine;
-      },
-    }, portForProfile(identity.profile)).then((h) => {
-      handle = h;
-      setMcpUrl(h.url);
-      // Register in both supported AIs' user configs → available in every repo,
-      // nothing written into the user's projects.
-      const name = mcpServerName(identity.profile);
-      registerMcpGlobally(name, h.url, log); // claude
-      registerCodexMcp(name, h.url, log); // codex
-    });
-    return () => {
-      void handle?.close();
-    };
-  }, []);
-
-  useEffect(() => {
-    const getProfile = (): SharedProfile => ({
-      name: identity.name,
-      ai: stateRef.current.preferredAi,
-      projects: roomProjects(stateRef.current, ROOM).map((p) => ({ name: p.name, path: p.path })),
-    });
-    const h = joinRoom(
-      identity,
-      ROOM,
-      getProfile,
-      {
-        onRoster: setPeers,
-        onMessage: (m) => {
-          setMessages((prev) => [...prev, m]);
-          queueRef.current.push(m); // available to get-messages
-          runThread(m.threadId); // start or continue this thread's AI session
-        },
-      },
-      { bootstrap },
-    );
-    handleRef.current = h;
-    return () => {
-      void h.destroy();
-    };
-  }, [identity, bootstrap]);
-
-  function persist(next: LocalState) {
-    setState(next);
-    stateRef.current = next;
-    saveState(identity.profile, next);
-    handleRef.current?.update();
-  }
+  const identity = Result.getOrElse(useAtomValue(identityAtom), () => null);
+  const peers = Result.getOrElse(useAtomValue(rosterAtom), () => [] as const);
+  const state = Result.getOrElse(useAtomValue(stateAtom), () => emptyState);
+  const messages = Result.getOrElse(useAtomValue(recentMessagesAtom), () => [] as const);
+  const logs = Result.getOrElse(useAtomValue(logsAtom), () => [] as const);
+  const mcpUrl = Result.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
+  const updateState = useAtomSet(updateStateAtom);
 
   const enabled = roomProjects(state, ROOM);
-  const enabledIds = new Set((state.rooms[ROOM] ?? []));
+  const enabledIds = new Set(state.rooms[ROOM] ?? []);
   const myProjectNames = new Set(enabled.map((p) => p.name));
 
-  function toggleProject(id: string) {
-    const ids = new Set(state.rooms[ROOM] ?? []);
-    if (ids.has(id)) ids.delete(id);
-    else ids.add(id);
-    persist({ ...state, rooms: { ...state.rooms, [ROOM]: [...ids] } });
-  }
-  function deleteProject(id: string) {
-    const rooms: Record<string, string[]> = {};
-    for (const [r, ids] of Object.entries(state.rooms)) rooms[r] = ids.filter((x) => x !== id);
-    persist({ ...state, pool: state.pool.filter((p) => p.id !== id), rooms });
-  }
+  const toggleProject = (id: string) =>
+    updateState((s: LocalState) => {
+      const ids = new Set(s.rooms[ROOM] ?? []);
+      if (ids.has(id)) ids.delete(id);
+      else ids.add(id);
+      return { ...s, rooms: { ...s.rooms, [ROOM]: [...ids] } };
+    });
+
+  const deleteProject = (id: string) =>
+    updateState((s: LocalState) => {
+      const rooms: Record<string, string[]> = {};
+      for (const [r, ids] of Object.entries(s.rooms)) rooms[r] = ids.filter((x) => x !== id);
+      return { ...s, pool: s.pool.filter((p) => p.id !== id), rooms };
+    });
+
   // Picked a folder: add to pool (dedupe by path) and enable it in this room.
-  function addFolder(name: string, path: string) {
-    const existing = state.pool.find((p) => p.path === path);
-    const proj = existing ?? newProject(name, path);
-    const pool = existing ? state.pool : [...state.pool, proj];
-    const ids = new Set(state.rooms[ROOM] ?? []);
-    ids.add(proj.id);
-    persist({ ...state, pool, rooms: { ...state.rooms, [ROOM]: [...ids] } });
+  const addFolder = (name: string, path: string) => {
+    updateState((s: LocalState) => {
+      const existing = s.pool.find((p) => p.path === path);
+      const proj = existing ?? newProject(name, path);
+      const pool = existing ? s.pool : [...s.pool, proj];
+      const ids = new Set(s.rooms[ROOM] ?? []);
+      ids.add(proj.id);
+      return { ...s, pool, rooms: { ...s.rooms, [ROOM]: [...ids] } };
+    });
     setMode("projects");
-  }
+  };
 
   // ── room-mode keys ──
   useInput(
     (input) => {
       if (input === "q") return exit();
-      if (input === "a") return persist({ ...state, preferredAi: nextAi(state.preferredAi) });
+      if (input === "a") return updateState((s: LocalState) => ({ ...s, preferredAi: nextAi(s.preferredAi) }));
       if (input === "p") {
         setCursor(0);
         setMode("projects");
@@ -234,7 +113,7 @@ export function App({ identity, bootstrap }: { identity: Identity; bootstrap?: B
       </Box>
       <Box>
         <Text color={theme.dim}>you </Text>
-        <Text color={theme.fg}>{identity.name}</Text>
+        <Text color={theme.fg}>{identity?.name ?? "…"}</Text>
         <Text color={theme.dim}> · ai </Text>
         <Text color={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</Text>
       </Box>
@@ -244,7 +123,12 @@ export function App({ identity, bootstrap }: { identity: Identity; bootstrap?: B
         <Panel title={`room · ${ROOM}`}>
           <Text color={theme.dim}>{peers.length + 1} online</Text>
           <Box flexDirection="column" marginTop={1}>
-            <PeerLine name={`${identity.name} (you)`} ai={state.preferredAi} projects={enabled.map((p) => p.name)} mine={myProjectNames} />
+            <PeerLine
+              name={`${identity?.name ?? "…"} (you)`}
+              ai={state.preferredAi}
+              projects={enabled.map((p) => p.name)}
+              mine={myProjectNames}
+            />
             {peers.map((p) => (
               <PeerLine key={p.key} name={p.name} ai={p.ai} projects={p.projects.map((x) => x.name)} mine={myProjectNames} />
             ))}
@@ -321,7 +205,7 @@ export function App({ identity, bootstrap }: { identity: Identity; bootstrap?: B
 
       <Box marginTop={1} flexDirection="column">
         <Text color={theme.dim} wrap="truncate-end">
-          mcp: {mcpUrl || "starting…"}
+          mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </Text>
         <Text color={theme.dim}>
           {mode === "room" ? "a cycle ai · p projects · q quit" : "esc back to room"}
@@ -339,7 +223,7 @@ function PeerLine({
 }: {
   name: string;
   ai: string | null;
-  projects: string[];
+  projects: ReadonlyArray<string>;
   mine: Set<string>;
 }) {
   return (
