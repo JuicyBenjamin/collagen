@@ -22,11 +22,9 @@
     "@effect/platform": "0.96.2",
     "@effect/platform-node": "0.107.0",
     "@effect/rpc": "^0.75.1",
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "effect": "3.21.4",
     "ink": "^7.0.5",
-    "react": "catalog:",
-    "zod": "^4.4.3"
+    "react": "catalog:"
   },
   "devDependencies": {
     "@collagen/typescript-config": "workspace:*",
