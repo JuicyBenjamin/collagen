@@ -36,6 +36,18 @@ export default withMermaid({
     socialLinks: [{ icon: "github", link: "https://github.com/" }],
   },
 
-  // Slightly larger default mermaid text; theme follows the page (light/dark).
+  // Theme follows the page (light/dark).
   mermaid: {},
+
+  // Mermaid pulls in CJS deps (dayjs, etc.); pre-bundle them so their ESM
+  // default imports resolve in dev — otherwise the client app fails to mount
+  // ("does not provide an export named 'default'") and pages render blank.
+  vite: {
+    optimizeDeps: {
+      include: ["mermaid", "dayjs"],
+    },
+    ssr: {
+      noExternal: ["mermaid"],
+    },
+  },
 });
