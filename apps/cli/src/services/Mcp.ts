@@ -16,11 +16,13 @@ const RoomView = Schema.Struct({
   projects: Schema.Array(Schema.String),
 });
 
+// NOTE: tool results must be OBJECT-rooted — the MCP spec types
+// `structuredContent` as an object, and Claude Code rejects array roots.
 const ListRoom = Tool.make("list-room", {
   description:
     "List the peers currently in your collagen room and the projects each shares. Call this first to discover who you can contact and about which project.",
   parameters: {},
-  success: Schema.Array(RoomView),
+  success: Schema.Struct({ peers: Schema.Array(RoomView) }),
 });
 
 const SendToPeer = Tool.make("send-to-peer", {
@@ -41,7 +43,7 @@ const GetMessages = Tool.make("get-messages", {
   parameters: {
     threadId: Schema.optional(Schema.String),
   },
-  success: Schema.Array(RoomMessage),
+  success: Schema.Struct({ messages: Schema.Array(RoomMessage) }),
 });
 
 export const CollagenToolkit = Toolkit.make(ListRoom, SendToPeer, GetMessages);
@@ -71,14 +73,17 @@ export const ToolHandlers = CollagenToolkit.toLayer(
     return {
       "list-room": () =>
         SubscriptionRef.get(room.roster).pipe(
-          Effect.map((peers) =>
-            peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
-          ),
+          Effect.map((peers) => ({
+            peers: peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
+          })),
           Effect.withSpan("Mcp.listRoom"),
         ),
       "send-to-peer": sendToPeer,
       "get-messages": ({ threadId }) =>
-        inbox.take(threadId).pipe(Effect.withSpan("Mcp.getMessages")),
+        inbox.take(threadId).pipe(
+          Effect.map((messages) => ({ messages })),
+          Effect.withSpan("Mcp.getMessages"),
+        ),
     };
   }),
 );
