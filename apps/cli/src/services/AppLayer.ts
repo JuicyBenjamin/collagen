@@ -1,6 +1,7 @@
 import { Effect, Layer, Option, Stream } from "effect";
 import { NodeContext } from "@effect/platform-node";
-import { Room, RoomConfig, loadDevBootstrap, roomProjects } from "@collagen/p2p";
+import { Room, RoomConfig, roomProjects } from "@collagen/p2p";
+import { loadDevBootstrap } from "./DevBootstrap";
 import { AgentRunner } from "./AgentRunner";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";

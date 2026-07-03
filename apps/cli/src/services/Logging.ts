@@ -1,5 +1,5 @@
 import { appendFileSync } from "node:fs";
-import { Effect, Layer, Logger, Runtime, SubscriptionRef } from "effect";
+import { Config, Effect, Layer, Logger, Option, Runtime, SubscriptionRef } from "effect";
 
 /** In-memory ring of recent log lines for the UI activity panel. */
 export class LogBuffer extends Effect.Service<LogBuffer>()("cli/LogBuffer", {
@@ -19,13 +19,15 @@ export class LogBuffer extends Effect.Service<LogBuffer>()("cli/LogBuffer", {
 export const LoggerLive = Layer.unwrapEffect(
   Effect.gen(function* () {
     const buffer = yield* LogBuffer;
-    const file = process.env["COLLAGEN_LOG"];
+    const file = Option.getOrUndefined(yield* Config.option(Config.string("COLLAGEN_LOG")));
     const logger = Logger.make(({ date, logLevel, message }) => {
       const text = Array.isArray(message) ? message.map(String).join(" ") : String(message);
       const line = `${date.toISOString()} [${logLevel.label}] ${text}`;
       buffer.appendSync(line);
       if (file) {
         try {
+          // sync on purpose: loggers must not suspend, and interleaved async
+          // appends would reorder lines
           appendFileSync(file, line + "\n");
         } catch {
           // best-effort

@@ -1,28 +1,17 @@
-import { Layer, Option } from "effect";
-import { NodeRuntime } from "@effect/platform-node";
-import { parseArgs } from "node:util";
+import { Command } from "@effect/cli";
+import { NodeContext, NodeRuntime } from "@effect/platform-node";
+import { Effect, Layer } from "effect";
+import { nameOption, profileOption } from "./args";
 import { AppLayer } from "./services/AppLayer";
 import { cliArgsLayer } from "./services/CliArgs";
 
 // Headless mode: the full app (room, MCP server, agent spawner) without the
 // TUI. For development and for running collagen on machines with no terminal
 // attached. Observe via COLLAGEN_LOG=<file>.
-const { values } = parseArgs({
-  args: process.argv.slice(2).filter((a) => a !== "--"),
-  options: {
-    name: { type: "string", short: "n" },
-    profile: { type: "string", short: "p" },
-  },
-  allowPositionals: true,
-});
-
-const layer = AppLayer.pipe(
-  Layer.provide(
-    cliArgsLayer({
-      profile: values.profile ?? "default",
-      name: Option.fromNullable(values.name),
-    }),
-  ),
+const command = Command.make("collagen-headless", { profile: profileOption, name: nameOption }, (args) =>
+  Layer.launch(AppLayer.pipe(Layer.provide(cliArgsLayer(args)))),
 );
 
-NodeRuntime.runMain(Layer.launch(layer));
+const cli = Command.run(command, { name: "collagen (headless)", version: "0.0.0" });
+
+cli(process.argv).pipe(Effect.provide(NodeContext.layer), NodeRuntime.runMain);

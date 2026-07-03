@@ -28,6 +28,13 @@ export class RoomConfig extends Context.Tag("p2p/RoomConfig")<
 const decodeFrame = Schema.decodeUnknown(FrameFromJson);
 const encodeFrame = Schema.encode(FrameFromJson);
 
+/** Minimal structural view of a hyperswarm connection (the lib ships no types). */
+interface SwarmConnection {
+  write(data: Uint8Array): void;
+  on(event: "data", cb: (data: Uint8Array) => void): SwarmConnection;
+  on(event: "error" | "close", cb: () => void): SwarmConnection;
+}
+
 /**
  * A room on the swarm: exchanges presence profiles AND carries directed
  * messages over the same connections. Live-only (no offline queue yet).
@@ -46,7 +53,7 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
 
     // Mutable connection/peer books — only touched from swarm callbacks and
     // effects, never exposed.
-    const connByKey = new Map<string, any>();
+    const connByKey = new Map<string, SwarmConnection>();
     const peers = new Map<string, Peer>();
     const publishRoster = Effect.suspend(() => SubscriptionRef.set(roster, [...peers.values()]));
 
@@ -57,7 +64,7 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
 
     // Serialize + write one frame to one connection; failures are logged, not fatal
     // (peer mid-teardown behaves like a lost packet, same as before).
-    const writeFrame = (conn: any, frame: Frame) =>
+    const writeFrame = (conn: SwarmConnection, frame: Frame) =>
       encodeFrame(frame).pipe(
         Effect.flatMap((json) => Effect.try(() => void conn.write(b4a.from(json)))),
         Effect.catchAll((e) => Effect.logDebug(`frame write failed: ${String(e)}`)),
@@ -78,7 +85,7 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
           }).pipe(Effect.andThen(publishRoster))
         : PubSub.publish(inbound, frame.msg);
 
-    const onData = (key: string, data: Buffer) =>
+    const onData = (key: string, data: Uint8Array) =>
       decodeFrame(b4a.toString(data)).pipe(
         Effect.flatMap((frame) => handleFrame(key, frame)),
         Effect.catchTag("ParseError", (e) =>
@@ -86,11 +93,11 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
         ),
       );
 
-    swarm.on("connection", (conn: any, info: { publicKey: Buffer }) => {
+    swarm.on("connection", (conn: SwarmConnection, info: { publicKey: Buffer }) => {
       const key = b4a.toString(info.publicKey, "hex");
       connByKey.set(key, conn);
       conn.on("error", () => {});
-      conn.on("data", (d: Buffer) => runFork(onData(key, d)));
+      conn.on("data", (d) => runFork(onData(key, d)));
       conn.on("close", () => {
         connByKey.delete(key);
         peers.delete(key);
