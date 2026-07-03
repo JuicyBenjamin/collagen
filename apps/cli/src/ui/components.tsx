@@ -59,7 +59,9 @@ export function FsPicker({
         onPick(basename(dir), dir);
       }
     },
-    { isActive: isRawModeSupported },
+    // Boolean(): ink reports undefined (not false) on non-TTY stdin, and
+    // useInput only skips on a strict === false — undefined would crash headless.
+    { isActive: Boolean(isRawModeSupported) },
   );
 
   // window the list so a big folder doesn't overflow the viewport
@@ -114,7 +116,7 @@ export function TextInput({
       if (key.ctrl || key.meta) return;
       if (input) onChange(value + input);
     },
-    { isActive: focus && isRawModeSupported },
+    { isActive: Boolean(focus && isRawModeSupported) },
   );
   return (
     <Text>
