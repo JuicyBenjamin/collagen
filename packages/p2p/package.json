@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "b4a": "^1.8.1",
+    "effect": "3.21.4",
     "hypercore-crypto": "^3.7.0",
     "hyperswarm": "^4.17.0"
   },
