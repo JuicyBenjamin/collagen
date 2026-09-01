@@ -1,8 +1,9 @@
 import { Effect, Layer, Option, Stream } from "effect";
 import { NodeContext } from "@effect/platform-node";
 import { Room, RoomConfig, roomProjects } from "@collagen/p2p";
-import { loadDevBootstrap } from "./DevBootstrap";
+import { AdaptersLive } from "./Adapters";
 import { AgentRunner } from "./AgentRunner";
+import { loadDevBootstrap } from "./DevBootstrap";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
@@ -67,6 +68,7 @@ const Daemons = Layer.scopedDiscard(
 /** The whole app apart from the UI. Requires CliArgs. */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(AgentRunner.Default),
+  Layer.provideMerge(AdaptersLive),
   Layer.provideMerge(Room.Default),
   Layer.provideMerge(RoomConfigLive),
   Layer.provideMerge(Inbox.Default),

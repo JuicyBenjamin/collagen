@@ -1,0 +1,110 @@
+import { Context, Layer, Option } from "effect";
+import type { RoomMessage } from "@collagen/p2p";
+
+export interface SpawnCtx {
+  cwd: string;
+  mcpUrl: string;
+  serverName: string;
+  msg: RoomMessage;
+  sessionId: Option.Option<string>;
+}
+
+export interface Adapter {
+  cmd: string;
+  args: (o: SpawnCtx) => string[];
+  parse: (out: string) => { sessionId?: string; result?: string };
+}
+
+export function nudgePrompt(o: SpawnCtx): string {
+  const verb = Option.isSome(o.sessionId)
+    ? "a new message arrived in this conversation"
+    : "a new conversation was started";
+  return `Collagen: ${verb} from ${o.msg.fromName} about "${o.msg.project}" (intent: ${o.msg.intent}). Use the ${o.serverName} get-messages tool with threadId "${o.msg.threadId}" to read it, then act on the findings in this repo.`;
+}
+
+// Claude: MCP passed inline + strict so the spawn is isolated to this cli's
+// server even if others are registered. session_id in the single JSON object.
+export const claudeAdapter: Adapter = {
+  cmd: "claude",
+  args: (o) => {
+    const mcp = JSON.stringify({ mcpServers: { [o.serverName]: { type: "http", url: o.mcpUrl } } });
+    const base = [
+      "-p",
+      nudgePrompt(o),
+      "--mcp-config",
+      mcp,
+      "--strict-mcp-config",
+      "--allowedTools",
+      `mcp__${o.serverName}__*,Read,Grep,Glob`,
+      "--permission-mode",
+      "dontAsk",
+      "--output-format",
+      "json",
+    ];
+    return Option.isSome(o.sessionId) ? ["--resume", o.sessionId.value, ...base] : base;
+  },
+  parse: (out) => {
+    try {
+      const j = JSON.parse(out) as { session_id?: string; result?: string };
+      return { sessionId: j.session_id, result: j.result };
+    } catch {
+      return {};
+    }
+  },
+};
+
+// Codex: MCP comes from ~/.codex/config.toml (registered at launch). `exec` is
+// non-interactive (no approvals) by design; read-only sandbox so it can only
+// observe. --json streams events; scan for the resumable thread_id.
+export const codexAdapter: Adapter = {
+  cmd: "codex",
+  args: (o) => {
+    const flags = [
+      "--json",
+      // -c form, not --sandbox: `exec resume` (codex ≥0.152) has no --sandbox
+      // flag, but both subcommands accept the config override.
+      "-c",
+      'sandbox_mode="read-only"',
+      "--skip-git-repo-check",
+      // pre-trust our MCP tools — exec mode auto-cancels approval prompts
+      "-c",
+      `mcp_servers.${o.serverName}.default_tools_approval_mode="approve"`,
+    ];
+    return Option.isSome(o.sessionId)
+      ? ["exec", "resume", o.sessionId.value, ...flags, nudgePrompt(o)]
+      : ["exec", ...flags, nudgePrompt(o)];
+  },
+  parse: (out) => {
+    let sessionId: string | undefined;
+    let result: string | undefined;
+    for (const line of out.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const ev = JSON.parse(line) as {
+          type?: string;
+          thread_id?: string;
+          item?: { type?: string; text?: string };
+        };
+        if (ev.type === "thread.started" && ev.thread_id) sessionId = ev.thread_id;
+        if (ev.type === "item.completed" && ev.item?.type === "agent_message" && ev.item.text) {
+          result = ev.item.text;
+        }
+      } catch {
+        // non-JSON line
+      }
+    }
+    return { sessionId, result };
+  },
+};
+
+/** Injectable spawn-adapter registry, keyed by the `preferredAi` value.
+ *  Tests provide fakes here instead of spawning real agent CLIs. */
+export class Adapters extends Context.Tag("cli/Adapters")<
+  Adapters,
+  Readonly<Record<string, Adapter>>
+>() {}
+
+export const AdaptersLive = Layer.succeed(Adapters, {
+  "claude-code": claudeAdapter,
+  codex: codexAdapter,
+});
