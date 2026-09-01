@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Clock, Context, Effect, PubSub, Runtime, Schedule, Schema, Stream, SubscriptionRef } from "effect";
+import { Clock, Context, Effect, Layer, PubSub, Schedule, Schema, Stream, SubscriptionRef } from "effect";
 import Hyperswarm from "hyperswarm";
 import b4a from "b4a";
 import { FrameFromJson, type Bootstrap, type Frame, type Peer, type RoomMessage, type SharedProfile } from "./schema";
@@ -14,19 +14,16 @@ export function deriveThreadId(a: string, b: string, project: string): string {
   return createHash("sha256").update(`${lo}|${hi}|${project}`).digest("hex").slice(0, 16);
 }
 
-export class RoomConfig extends Context.Tag("p2p/RoomConfig")<
-  RoomConfig,
-  {
-    readonly identity: Identity;
-    readonly roomName: string;
-    /** Re-evaluated on every broadcast, so profile changes are picked up live. */
-    readonly getProfile: Effect.Effect<SharedProfile>;
-    readonly bootstrap?: Bootstrap;
-  }
->() {}
+export class RoomConfig extends Context.Service<RoomConfig, {
+  readonly identity: Identity;
+  readonly roomName: string;
+  /** Re-evaluated on every broadcast, so profile changes are picked up live. */
+  readonly getProfile: Effect.Effect<SharedProfile>;
+  readonly bootstrap?: Bootstrap;
+}>()("p2p/RoomConfig") {}
 
-const decodeFrame = Schema.decodeUnknown(FrameFromJson);
-const encodeFrame = Schema.encode(FrameFromJson);
+const decodeFrame = Schema.decodeUnknownEffect(FrameFromJson);
+const encodeFrame = Schema.encodeEffect(FrameFromJson);
 
 /** Minimal structural view of a hyperswarm connection (the lib ships no types). */
 interface SwarmConnection {
@@ -39,11 +36,13 @@ interface SwarmConnection {
  * A room on the swarm: exchanges presence profiles AND carries directed
  * messages over the same connections. Live-only (no offline queue yet).
  */
-export class Room extends Effect.Service<Room>()("p2p/Room", {
-  scoped: Effect.gen(function* () {
+export class Room extends Context.Service<Room>()("p2p/Room", {
+  make: Effect.gen(function* () {
     const config = yield* RoomConfig;
-    const runtime = yield* Effect.runtime<never>();
-    const runFork = Runtime.runFork(runtime);
+    // Captures the full service map (loggers included) so swarm callbacks
+    // fork effects into the same environment.
+    const services = yield* Effect.context<never>();
+    const runFork = Effect.runForkWith(services);
 
     const roster = yield* SubscriptionRef.make<ReadonlyArray<Peer>>([]);
     const inbound = yield* Effect.acquireRelease(
@@ -66,8 +65,8 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
     // (peer mid-teardown behaves like a lost packet, same as before).
     const writeFrame = (conn: SwarmConnection, frame: Frame) =>
       encodeFrame(frame).pipe(
-        Effect.flatMap((json) => Effect.try(() => void conn.write(b4a.from(json)))),
-        Effect.catchAll((e) => Effect.logDebug(`frame write failed: ${String(e)}`)),
+        Effect.flatMap((json) => Effect.sync(() => void conn.write(b4a.from(json)))),
+        Effect.catch((e) => Effect.logDebug(`frame write failed: ${String(e)}`)),
       );
 
     const broadcastProfile = Effect.gen(function* () {
@@ -88,8 +87,8 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
     const onData = (key: string, data: Uint8Array) =>
       decodeFrame(b4a.toString(data)).pipe(
         Effect.flatMap((frame) => handleFrame(key, frame)),
-        Effect.catchTag("ParseError", (e) =>
-          Effect.logWarning(`dropped invalid frame from ${key.slice(0, 8)}: ${e.message.slice(0, 120)}`),
+        Effect.catchTag("SchemaError", (e) =>
+          Effect.logWarning(`dropped invalid frame from ${key.slice(0, 8)}: ${String(e.issue).slice(0, 120)}`),
         ),
       );
 
@@ -157,4 +156,6 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
       updateProfile: broadcastProfile,
     } as const;
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make);
+}

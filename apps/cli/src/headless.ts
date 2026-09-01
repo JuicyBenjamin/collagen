@@ -1,6 +1,6 @@
-import { Command } from "@effect/cli";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Effect, Layer } from "effect";
+import { Command } from "effect/unstable/cli";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { nameOption, profileOption } from "./args";
 import { AppLayer } from "./services/AppLayer";
 import { cliArgsLayer } from "./services/CliArgs";
@@ -13,6 +13,7 @@ const command = Command.make("collagen-headless", { profile: profileOption, name
   Layer.launch(AppLayer.pipe(Layer.provide(cliArgsLayer(args)))),
 );
 
-const cli = Command.run(command, { name: "collagen (headless)", version: "0.0.0" });
-
-cli(stripArgSeparator(process.argv)).pipe(Effect.provide(NodeContext.layer), NodeRuntime.runMain);
+Command.runWith(command, { version: "0.0.0" })(stripArgSeparator(process.argv.slice(2))).pipe(
+  Effect.provide(NodeServices.layer),
+  NodeRuntime.runMain,
+);

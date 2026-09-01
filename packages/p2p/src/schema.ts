@@ -46,11 +46,11 @@ export const MessageFrame = Schema.Struct({
   kind: Schema.Literal("msg"),
   msg: RoomMessage,
 });
-export const Frame = Schema.Union(ProfileFrame, MessageFrame);
+export const Frame = Schema.Union([ProfileFrame, MessageFrame]);
 export type Frame = typeof Frame.Type;
 
 /** Wire codec: JSON string <-> validated Frame. */
-export const FrameFromJson = Schema.parseJson(Frame);
+export const FrameFromJson = Schema.fromJsonString(Frame);
 
 export const Bootstrap = Schema.Array(
   Schema.Struct({ host: Schema.String, port: Schema.Number }),
@@ -69,6 +69,6 @@ export type Project = typeof Project.Type;
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
   pool: Schema.Array(Project),
-  rooms: Schema.Record({ key: Schema.String, value: Schema.Array(Schema.String) }),
+  rooms: Schema.Record(Schema.String, Schema.Array(Schema.String)),
 });
 export type LocalState = typeof LocalState.Type;

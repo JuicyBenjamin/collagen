@@ -1,5 +1,5 @@
-import { Effect, Layer, Option, Stream } from "effect";
-import { NodeContext } from "@effect/platform-node";
+import { Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
+import { NodeServices } from "@effect/platform-node";
 import { Room, RoomConfig, roomProjects } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
 import { AgentRunner } from "./AgentRunner";
@@ -38,7 +38,7 @@ const RoomConfigLive = Layer.effect(
 
 /** Background rules that make the app *behave*: incoming message → inbox +
  *  agent run; state change → profile re-broadcast; MCP up → register in AIs. */
-const Daemons = Layer.scopedDiscard(
+const Daemons = Layer.effectDiscard(
   Effect.gen(function* () {
     const room = yield* Room;
     const inbox = yield* Inbox;
@@ -49,12 +49,12 @@ const Daemons = Layer.scopedDiscard(
       Stream.tap((m) => Effect.log(`← ${m.fromName} [${m.project}/${m.intent}]`)),
       Stream.tap((m) => inbox.push(m)),
       // fork: a running agent must not block message intake
-      Stream.tap((m) => Effect.fork(runner.runThread(m.threadId))),
+      Stream.tap((m) => Effect.forkChild(runner.runThread(m.threadId))),
       Stream.runDrain,
       Effect.forkScoped,
     );
 
-    yield* store.state.changes.pipe(
+    yield* SubscriptionRef.changes(store.state).pipe(
       Stream.drop(1), // skip the initial value — peers got it on connect
       Stream.tap(() => room.updateProfile),
       Stream.runDrain,
@@ -67,15 +67,15 @@ const Daemons = Layer.scopedDiscard(
 
 /** The whole app apart from the UI. Requires CliArgs. */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
-  Layer.provideMerge(AgentRunner.Default),
+  Layer.provideMerge(AgentRunner.layer),
   Layer.provideMerge(AdaptersLive),
-  Layer.provideMerge(Room.Default),
+  Layer.provideMerge(Room.layer),
   Layer.provideMerge(RoomConfigLive),
-  Layer.provideMerge(Inbox.Default),
-  Layer.provideMerge(McpInfo.Default),
-  Layer.provideMerge(StateStore.Default),
-  Layer.provideMerge(IdentityService.Default),
+  Layer.provideMerge(Inbox.layer),
+  Layer.provideMerge(McpInfo.layer),
+  Layer.provideMerge(StateStore.layer),
+  Layer.provideMerge(IdentityService.layer),
   Layer.provideMerge(LoggerLive),
-  Layer.provideMerge(LogBuffer.Default),
-  Layer.provideMerge(NodeContext.layer),
+  Layer.provideMerge(LogBuffer.layer),
+  Layer.provideMerge(NodeServices.layer),
 );

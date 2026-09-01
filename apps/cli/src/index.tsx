@@ -1,6 +1,6 @@
-import { Command } from "@effect/cli";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { Deferred, Effect } from "effect";
+import { Command } from "effect/unstable/cli";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { nameOption, profileOption } from "./args";
@@ -27,7 +27,7 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         const root = createRoot(renderer);
-        root.render(<App onExit={() => Deferred.unsafeDone(done, Effect.void)} />);
+        root.render(<App onExit={() => Deferred.doneUnsafe(done, Effect.void)} />);
         return root;
       }),
       (root) => Effect.sync(() => root.unmount()),
@@ -37,6 +37,7 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
   }).pipe(Effect.scoped),
 );
 
-const cli = Command.run(command, { name: "collagen", version: "0.0.0" });
-
-cli(stripArgSeparator(process.argv)).pipe(Effect.provide(NodeContext.layer), NodeRuntime.runMain);
+Command.runWith(command, { version: "0.0.0" })(stripArgSeparator(process.argv.slice(2))).pipe(
+  Effect.provide(NodeServices.layer),
+  NodeRuntime.runMain,
+);

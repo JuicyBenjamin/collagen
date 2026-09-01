@@ -1,7 +1,8 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { Command, FileSystem } from "@effect/platform";
+import { FileSystem } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { mcpServerName } from "../util";
 import { CliArgs } from "./CliArgs";
 import { McpInfo } from "./McpInfo";
@@ -11,17 +12,18 @@ import { McpInfo } from "./McpInfo";
  *  Idempotent: remove any existing entry first, then re-add with the current url. */
 const registerClaude = Effect.fn("Registrar.claude")(
   function* (name: string, url: string) {
-    yield* Command.exitCode(Command.make("claude", "mcp", "remove", "-s", "user", name)).pipe(
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    yield* spawner.exitCode(ChildProcess.make("claude", ["mcp", "remove", "-s", "user", name])).pipe(
       Effect.ignore, // may not exist yet
     );
-    const code = yield* Command.exitCode(
-      Command.make("claude", "mcp", "add", "-s", "user", "-t", "http", name, url),
+    const code = yield* spawner.exitCode(
+      ChildProcess.make("claude", ["mcp", "add", "-s", "user", "-t", "http", name, url]),
     );
     yield* code === 0
       ? Effect.log(`registered claude MCP ${name}`)
       : Effect.logWarning(`claude mcp add exited ${code}`);
   },
-  Effect.catchAll((e) => Effect.logWarning(`claude register failed: ${String(e)}`)),
+  Effect.catch((e) => Effect.logWarning(`claude register failed: ${String(e)}`)),
 );
 
 /** Registers in codex's user config (`~/.codex/config.toml`). codex's CLI may
@@ -46,7 +48,7 @@ const registerCodex = Effect.fn("Registrar.codex")(
     yield* fs.writeFileString(file, next);
     yield* Effect.log(`registered codex MCP ${name}`);
   },
-  Effect.catchAll((e) => Effect.logWarning(`codex register failed: ${String(e)}`)),
+  Effect.catch((e) => Effect.logWarning(`codex register failed: ${String(e)}`)),
 );
 
 /** Waits for the MCP server URL, then registers it with both supported AIs. */

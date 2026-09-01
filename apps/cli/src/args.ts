@@ -1,14 +1,14 @@
-import { Options } from "@effect/cli";
+import { Flag } from "effect/unstable/cli";
 
 // Shared flag definitions for both entrypoints (TUI + headless).
-export const profileOption = Options.text("profile").pipe(
-  Options.withAlias("p"),
-  Options.withDescription("Config profile (separate identity/state; used for local dev pairs)"),
-  Options.withDefault("default"),
+export const profileOption = Flag.string("profile").pipe(
+  Flag.withAlias("p"),
+  Flag.withDescription("Config profile (separate identity/state; used for local dev pairs)"),
+  Flag.withDefault("default"),
 );
 
-export const nameOption = Options.text("name").pipe(
-  Options.withAlias("n"),
-  Options.withDescription("Display name shown to peers (persisted per profile)"),
-  Options.optional,
+export const nameOption = Flag.string("name").pipe(
+  Flag.withAlias("n"),
+  Flag.withDescription("Display name shown to peers (persisted per profile)"),
+  Flag.optional,
 );

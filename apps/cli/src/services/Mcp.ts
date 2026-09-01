@@ -1,9 +1,8 @@
 import { createServer } from "node:http";
 import { Effect, Layer, Schema, SubscriptionRef } from "effect";
-import { McpServer, Tool, Toolkit } from "@effect/ai";
-import { HttpApp, HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse } from "@effect/platform";
+import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
+import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { RpcSerialization, RpcServer } from "@effect/rpc";
 import { Room, RoomMessage } from "@collagen/p2p";
 import { portForProfile } from "../util";
 import { CliArgs } from "./CliArgs";
@@ -21,28 +20,29 @@ const RoomView = Schema.Struct({
 const ListRoom = Tool.make("list-room", {
   description:
     "List the peers currently in your collagen room and the projects each shares. Call this first to discover who you can contact and about which project.",
-  parameters: {},
+  // no `parameters`: an empty Schema.Struct({}) produces a JSON schema without
+  // "type", which the MCP tool codec rejects at registration
   success: Schema.Struct({ peers: Schema.Array(RoomView) }),
 });
 
 const SendToPeer = Tool.make("send-to-peer", {
   description:
     "Send a finding or request to a peer in the room about a specific project. The peer's AI will be triggered with your message. Use a 'peer' name and 'project' from list-room. 'intent' is a short verb like 'flag-issue' or 'ask-review'. 'findings' is the full context plus what you want from them.",
-  parameters: {
+  parameters: Schema.Struct({
     peer: Schema.String,
     project: Schema.String,
     intent: Schema.String,
     findings: Schema.String,
-  },
+  }),
   success: Schema.String,
 });
 
 const GetMessages = Tool.make("get-messages", {
   description:
     "Retrieve and clear messages sent to you. Pass the threadId you were given to get just this conversation's messages. Each includes the sender, project, intent, and findings — use them to pick up the conversation and act on the request.",
-  parameters: {
+  parameters: Schema.Struct({
     threadId: Schema.optional(Schema.String),
-  },
+  }),
   success: Schema.Struct({ messages: Schema.Array(RoomMessage) }),
 });
 
@@ -79,7 +79,7 @@ export const ToolHandlers = CollagenToolkit.toLayer(
           Effect.withSpan("Mcp.listRoom"),
         ),
       "send-to-peer": sendToPeer,
-      "get-messages": ({ threadId }) =>
+      "get-messages": ({ threadId }: { threadId?: string }) =>
         inbox.take(threadId).pipe(
           Effect.map((messages) => ({ messages })),
           Effect.withSpan("Mcp.getMessages"),
@@ -88,51 +88,14 @@ export const ToolHandlers = CollagenToolkit.toLayer(
   }),
 );
 
-/** Strict JSON-RPC serialization: the stock jsonRpc encoder batch-frames every
- *  HTTP response, so a single request gets a one-element ARRAY back — valid for
- *  @effect/rpc's own clients but a spec violation that strict MCP clients
- *  (codex's rmcp) reject at initialize. Unwrap singleton batches. */
-const JsonRpcUnbatched = Layer.succeed(
-  RpcSerialization.RpcSerialization,
-  RpcSerialization.RpcSerialization.of({
-    contentType: "application/json",
-    includesFraming: false,
-    unsafeMake: () => {
-      const parser = RpcSerialization.jsonRpc().unsafeMake();
-      return {
-        decode: parser.decode,
-        encode: (response) => {
-          if (Array.isArray(response) && response.length === 0) return ""; // notification-only POST
-          return parser.encode(Array.isArray(response) && response.length === 1 ? response[0] : response);
-        },
-      };
-    },
-  }),
-);
-
-/** Streamable HTTP: a POST carrying only notifications gets 202 Accepted with
- *  no body. The rpc protocol answers 200 + empty body, which strict clients
- *  fail to parse as JSON. Must be a pre-response handler — by the time plain
- *  middleware sees the response, HttpApp.toHandled has already written it. */
-const NotificationsAccepted = HttpMiddleware.make((app) =>
-  Effect.zipRight(
-    HttpApp.appendPreResponseHandler((_req, res) => {
-      const body = res.body;
-      const empty =
-        body._tag === "Empty" ||
-        (body._tag === "Uint8Array" && body.body.length === 0) ||
-        ("text" in body && (body as { text?: string }).text === "");
-      return Effect.succeed(
-        res.status === 200 && empty ? HttpServerResponse.empty({ status: 202 }) : res,
-      );
-    }),
-    app,
-  ),
-);
-
 /** MCP server over Streamable HTTP on the profile's deterministic port
- *  (ephemeral fallback if taken). Publishes the resolved URL to McpInfo. */
-export const McpLive = Layer.unwrapEffect(
+ *  (ephemeral fallback if taken). Publishes the resolved URL to McpInfo.
+ *
+ *  v4's protocol adapters own JSON-RPC framing and notification responses,
+ *  so the v3-era workarounds (singleton-batch unwrapping, 202-on-empty) are
+ *  gone. Newer spec revisions (e.g. stateless 2026-07-28) slot in by adding
+ *  their adapter to `protocols` once effect ships it. */
+export const McpLive = Layer.unwrap(
   Effect.gen(function* () {
     const { profile } = yield* CliArgs;
     const mcpInfo = yield* McpInfo;
@@ -148,20 +111,24 @@ export const McpLive = Layer.unwrapEffect(
       }),
     );
 
-    // layerHttp minus its baked-in serialization (see JsonRpcUnbatched above).
     const serve = (port: number) =>
-      Layer.mergeAll(
-        McpServer.toolkit(CollagenToolkit),
-        HttpRouter.Default.serve(NotificationsAccepted),
-        announce,
-      ).pipe(
-        Layer.provide(ToolHandlers),
-        Layer.provide(McpServer.layer({ name: "collagen", version: "0.0.0" })),
-        Layer.provide(RpcServer.layerProtocolHttp({ path: "/mcp" })),
-        Layer.provide(JsonRpcUnbatched),
-        Layer.provide(NodeHttpServer.layer(createServer, { port })),
-      );
+      HttpRouter.serve(
+        Layer.mergeAll(
+          McpServer.toolkit(CollagenToolkit).pipe(Layer.provide(ToolHandlers)),
+          announce,
+        ).pipe(
+          Layer.provideMerge(
+            McpServer.layerHttp({
+              name: "collagen",
+              version: "0.0.0",
+              path: "/mcp",
+              protocols: [McpProtocol.v2025_11_25, McpProtocol.v2025_06_18, McpProtocol.v2025_03_26],
+            }),
+          ),
+        ),
+        { disableListenLog: true },
+      ).pipe(Layer.provide(NodeHttpServer.layer(() => createServer(), { port })));
 
-    return serve(portForProfile(profile)).pipe(Layer.orElse(() => serve(0)));
+    return serve(portForProfile(profile)).pipe(Layer.catch(() => serve(0)));
   }),
 );

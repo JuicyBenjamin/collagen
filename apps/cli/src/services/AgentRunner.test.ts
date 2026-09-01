@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
-import { Command, CommandExecutor } from "@effect/platform";
+import { Effect, Layer, Option, Sink, Stream, SubscriptionRef } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import type { LocalState, RoomMessage } from "@collagen/p2p";
 import { Adapters, type Adapter } from "./Adapters";
 import { AgentRunner } from "./AgentRunner";
@@ -10,35 +10,39 @@ import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
 
-/** One recorded subprocess spawn: what AgentRunner asked the executor to run. */
+/** One recorded subprocess spawn: what AgentRunner asked the spawner to run. */
 interface SpawnCall {
   cmd: string;
   args: ReadonlyArray<string>;
-  cwd: Option.Option<string>;
+  cwd: string | undefined;
 }
 
-/** In-memory CommandExecutor: records each spawn and replies with scripted
+/** In-memory ChildProcessSpawner: records each spawn and replies with scripted
  *  stdout instead of exec'ing anything. The AI boundary in this app is process
  *  spawn, so this is the seam tests mock. */
-const mockExecutor = (respond: (call: SpawnCall) => { stdout: string; exitCode?: number }) => {
+const mockSpawner = (respond: (call: SpawnCall) => { stdout: string; exitCode?: number }) => {
   const calls: SpawnCall[] = [];
   const layer = Layer.succeed(
-    CommandExecutor.CommandExecutor,
-    CommandExecutor.makeExecutor((command) =>
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) =>
       Effect.sync(() => {
-        const [std] = Command.flatten(command);
-        const call: SpawnCall = { cmd: std.command, args: std.args, cwd: std.cwd };
+        const std = command as ChildProcess.StandardCommand;
+        const call: SpawnCall = { cmd: std.command, args: std.args, cwd: std.options.cwd };
         calls.push(call);
         const res = respond(call);
-        return {
-          pid: CommandExecutor.ProcessId(1),
-          exitCode: Effect.succeed(CommandExecutor.ExitCode(res.exitCode ?? 0)),
+        return ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(res.exitCode ?? 0)),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stderr: Stream.empty,
-          stdin: { pipe() {} },
+          stdin: Sink.drain,
           stdout: Stream.make(new TextEncoder().encode(res.stdout)),
-        } as unknown as CommandExecutor.Process;
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.die("unref unused in tests") as never,
+        });
       }),
     ),
   );
@@ -56,7 +60,7 @@ const stateStoreStub = (initial: LocalState) =>
         update: (f: (s: LocalState) => LocalState) =>
           SubscriptionRef.update(state, f).pipe(Effect.asVoid),
         get: SubscriptionRef.get(state),
-      } as unknown as StateStore;
+      };
     }),
   );
 
@@ -102,9 +106,9 @@ const testLayer = (opts: {
   state?: LocalState;
   respond?: (call: SpawnCall) => { stdout: string; exitCode?: number };
 }) => {
-  const exec = mockExecutor(opts.respond ?? (() => ({ stdout: "{}" })));
-  const layer = AgentRunner.Default.pipe(
-    Layer.provideMerge(Layer.mergeAll(Inbox.Default, McpInfo.Default)),
+  const exec = mockSpawner(opts.respond ?? (() => ({ stdout: "{}" })));
+  const layer = AgentRunner.layer.pipe(
+    Layer.provideMerge(Layer.mergeAll(Inbox.layer, McpInfo.layer)),
     Layer.provideMerge(Layer.succeed(Adapters, { "fake-ai": fakeAdapter })),
     Layer.provideMerge(stateStoreStub(opts.state ?? baseState)),
     Layer.provideMerge(exec.layer),
@@ -113,8 +117,10 @@ const testLayer = (opts: {
   return { layer, calls: exec.calls };
 };
 
-const run = <A>(layer: Layer.Layer<AgentRunner | Inbox | McpInfo>, body: Effect.Effect<A, unknown, AgentRunner | Inbox | McpInfo>) =>
-  Effect.runPromise(body.pipe(Effect.provide(layer)) as Effect.Effect<A>);
+const run = <A>(
+  layer: Layer.Layer<AgentRunner | Inbox | McpInfo>,
+  body: Effect.Effect<A, unknown, unknown>,
+) => Effect.runPromise(body.pipe(Effect.provide(layer as Layer.Layer<never>)) as Effect.Effect<A>);
 
 const setup = Effect.gen(function* () {
   const inbox = yield* Inbox;
@@ -142,7 +148,7 @@ describe("AgentRunner", () => {
       "http://127.0.0.1:9/mcp",
       "collagen-testprof",
     ]);
-    expect(calls[0]!.cwd).toEqual(Option.some("/tmp/fake-project"));
+    expect(calls[0]!.cwd).toBe("/tmp/fake-project");
   });
 
   it("records the session id and resumes the thread on the next run", async () => {
@@ -208,7 +214,7 @@ describe("AgentRunner", () => {
         yield* runner.runThread("thread-1");
       }),
     );
-    expect(calls[0]!.cwd).toEqual(Option.some(homedir()));
+    expect(calls[0]!.cwd).toBe(homedir());
   });
 
   it("does nothing for a thread with no queued messages", async () => {

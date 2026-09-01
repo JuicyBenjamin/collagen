@@ -2,7 +2,8 @@ import { useState } from "react";
 import { homedir } from "node:os";
 import { useKeyboard } from "@opentui/react";
 import { Option } from "effect";
-import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { AsyncResult } from "effect/unstable/reactivity";
 import { AI_OPTIONS, newProject, roomProjects, type LocalState } from "@collagen/p2p";
 import { ROOM } from "../services/AppLayer";
 import {
@@ -32,12 +33,12 @@ export function App({ onExit }: { onExit: () => void }) {
   const [mode, setMode] = useState<Mode>("room");
   const [cursor, setCursor] = useState(0);
 
-  const identity = Result.getOrElse(useAtomValue(identityAtom), () => null);
-  const peers = Result.getOrElse(useAtomValue(rosterAtom), () => [] as const);
-  const state = Result.getOrElse(useAtomValue(stateAtom), () => emptyState);
-  const messages = Result.getOrElse(useAtomValue(recentMessagesAtom), () => [] as const);
-  const logs = Result.getOrElse(useAtomValue(logsAtom), () => [] as const);
-  const mcpUrl = Result.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
+  const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
+  const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
+  const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => emptyState);
+  const messages = AsyncResult.getOrElse(useAtomValue(recentMessagesAtom), () => [] as const);
+  const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
+  const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const updateState = useAtomSet(updateStateAtom);
 
   const enabled = roomProjects(state, ROOM);

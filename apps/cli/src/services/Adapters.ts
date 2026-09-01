@@ -99,10 +99,7 @@ export const codexAdapter: Adapter = {
 
 /** Injectable spawn-adapter registry, keyed by the `preferredAi` value.
  *  Tests provide fakes here instead of spawning real agent CLIs. */
-export class Adapters extends Context.Tag("cli/Adapters")<
-  Adapters,
-  Readonly<Record<string, Adapter>>
->() {}
+export class Adapters extends Context.Service<Adapters, Readonly<Record<string, Adapter>>>()("cli/Adapters") {}
 
 export const AdaptersLive = Layer.succeed(Adapters, {
   "claude-code": claudeAdapter,

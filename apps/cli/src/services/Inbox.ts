@@ -1,10 +1,10 @@
-import { Effect, Ref, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Ref, SubscriptionRef } from "effect";
 import type { RoomMessage } from "@collagen/p2p";
 
 /** Buffer of incoming messages awaiting pickup by the recipient's AI via the
  *  `get-messages` MCP tool, plus a small recent-messages ring for the UI. */
-export class Inbox extends Effect.Service<Inbox>()("cli/Inbox", {
-  effect: Effect.gen(function* () {
+export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
+  make: Effect.gen(function* () {
     const buffer = yield* Ref.make<ReadonlyArray<RoomMessage>>([]);
     const recent = yield* SubscriptionRef.make<ReadonlyArray<RoomMessage>>([]);
 
@@ -27,4 +27,6 @@ export class Inbox extends Effect.Service<Inbox>()("cli/Inbox", {
 
     return { push, take, peekThread, recent } as const;
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make);
+}
