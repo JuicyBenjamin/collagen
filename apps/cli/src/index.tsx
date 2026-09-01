@@ -1,18 +1,65 @@
-import { Deferred, Effect } from "effect";
+import { useState } from "react";
+import { Deferred, Effect, Option } from "effect";
 import { Command } from "effect/unstable/cli";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { nameOption, profileOption, roomOption } from "./args";
+import { readProfileFile, writeProfileFile } from "./profileFile";
 import { App } from "./ui/App";
-import { setCliArgs } from "./ui/atoms";
+import { SetupForm } from "./ui/Setup";
+import { setCliArgs, setResolvedRoom } from "./ui/atoms";
 import { stripArgSeparator } from "./util";
+
+/** Setup gate: until name+room are known (flags, stored profile, or the
+ *  first-run form) nothing subscribes to the app atoms, so the swarm/MCP
+ *  runtime only builds once the user is configured. */
+function Root({
+  profile,
+  initialName,
+  initialRoom,
+  needsSetup,
+  onExit,
+}: {
+  profile: string;
+  initialName: string;
+  initialRoom: string;
+  needsSetup: boolean;
+  onExit: () => void;
+}) {
+  const [phase, setPhase] = useState<"setup" | "app">(needsSetup ? "setup" : "app");
+  if (phase === "setup") {
+    return (
+      <SetupForm
+        title="welcome — who are you, and which room?"
+        initialName={initialName}
+        initialRoom={initialRoom}
+        onDone={(name, room) => {
+          writeProfileFile(profile, { name, room });
+          setCliArgs({ profile, name: Option.some(name), room: Option.some(room) });
+          setResolvedRoom(room);
+          setPhase("app");
+        }}
+      />
+    );
+  }
+  return <App onExit={onExit} />;
+}
 
 const command = Command.make("collagen", { profile: profileOption, name: nameOption, room: roomOption }, (args) =>
   Effect.gen(function* () {
-    // The app's Effect runtime is owned by the atom registry (ui/atoms.ts);
-    // args must be in place before the first atom builds it.
-    setCliArgs(args);
+    // Resolve config before anything renders: flags override the stored
+    // profile; missing pieces trigger the setup form.
+    const stored = readProfileFile(args.profile);
+    const name = Option.getOrUndefined(args.name) ?? stored.name;
+    const room = Option.getOrUndefined(args.room) ?? stored.room;
+    const needsSetup = name === undefined || room === undefined;
+    setCliArgs({
+      profile: args.profile,
+      name: name === undefined ? Option.none() : Option.some(name),
+      room: room === undefined ? Option.none() : Option.some(room),
+    });
+    if (room !== undefined) setResolvedRoom(room);
 
     // Resolved when the UI asks to quit (q); the scope then tears down the
     // React root and the renderer (which restores the terminal).
@@ -27,7 +74,15 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         const root = createRoot(renderer);
-        root.render(<App onExit={() => Deferred.doneUnsafe(done, Effect.void)} />);
+        root.render(
+          <Root
+            profile={args.profile}
+            initialName={name ?? ""}
+            initialRoom={room ?? ""}
+            needsSetup={needsSetup}
+            onExit={() => Deferred.doneUnsafe(done, Effect.void)}
+          />,
+        );
         return root;
       }),
       (root) => Effect.sync(() => root.unmount()),

@@ -2,6 +2,7 @@ import { Atom } from "effect/unstable/reactivity";
 import { Effect, Option, Stream, SubscriptionRef } from "effect";
 import { Layer } from "effect";
 import { Room, type LocalState } from "@collagen/p2p";
+import { AiStatus } from "../services/AiStatus";
 import { AppLayer } from "../services/AppLayer";
 import { cliArgsLayer } from "../services/CliArgs";
 import { IdentityService } from "../services/Identity";
@@ -13,17 +14,27 @@ import { StateStore } from "../services/StateStore";
 // The entry sets parsed CLI args before the first render; the lazy runtime
 // factory defers reading them until the runtime actually builds (first atom
 // subscription).
-let cliArgs: { profile: string; name: Option.Option<string>; room: string } = {
+let cliArgs: { profile: string; name: Option.Option<string>; room: Option.Option<string> } = {
   profile: "default",
   name: Option.none(),
-  room: "lobby",
+  room: Option.none(),
 };
 export function setCliArgs(args: typeof cliArgs): void {
   cliArgs = args;
 }
+
+// The entry resolves flag/stored/setup-form into a concrete room before the
+// runtime builds; the UI reads it here.
+let resolvedRoom = "lobby";
+export function setResolvedRoom(room: string): void {
+  resolvedRoom = room;
+}
 /** The room this process joined — fixed for the process lifetime. */
 export function currentRoom(): string {
-  return cliArgs.room;
+  return resolvedRoom;
+}
+export function currentProfile(): string {
+  return cliArgs.profile;
 }
 
 /** The whole app (swarm, MCP server, spawner, daemons) lives behind this atom.
@@ -65,6 +76,12 @@ export const logsAtom = runtimeAtom.atom(
 export const mcpUrlAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     return SubscriptionRef.changes((yield* McpInfo).url);
+  })),
+);
+
+export const aiStatusAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return SubscriptionRef.changes((yield* AiStatus).current);
   })),
 );
 

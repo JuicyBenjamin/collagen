@@ -2,6 +2,7 @@ import { Clock, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Room, RoomConfig, actionableSteps, roomProjects, type RoomMessage } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
+import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
@@ -18,20 +19,23 @@ import { StateStore } from "./StateStore";
 const RoomConfigLive = Layer.effect(
   RoomConfig,
   Effect.gen(function* () {
-    const { identity } = yield* IdentityService;
-    const { room: roomName } = yield* CliArgs;
+    const { identity, room: roomName } = yield* IdentityService;
     const store = yield* StateStore;
+    const aiStatus = yield* AiStatus;
     const bootstrap = yield* loadDevBootstrap;
     return {
       identity,
       roomName,
-      getProfile: store.get.pipe(
-        Effect.map((s) => ({
+      getProfile: Effect.gen(function* () {
+        const s = yield* store.get;
+        const status = yield* SubscriptionRef.get(aiStatus.current);
+        return {
           name: identity.name,
           ai: s.preferredAi,
+          aiStatus: status,
           projects: roomProjects(s, roomName).map((p) => ({ name: p.name, path: p.path })),
-        })),
-      ),
+        };
+      }),
       bootstrap: Option.getOrUndefined(bootstrap),
     };
   }),
@@ -55,6 +59,22 @@ const Daemons = Layer.effectDiscard(
       Effect.forkScoped,
     );
 
+    const aiStatus = yield* AiStatus;
+    // Startup probe + re-probe whenever the preferred AI changes; profile
+    // re-broadcasts on state AND status changes, so peers see (un)auth live.
+    yield* SubscriptionRef.changes(store.state).pipe(
+      Stream.map((s) => s.preferredAi),
+      Stream.changes,
+      Stream.tap((ai) => aiStatus.refresh(ai)),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
+    yield* SubscriptionRef.changes(aiStatus.current).pipe(
+      Stream.drop(1),
+      Stream.tap(() => room.updateProfile),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
     yield* SubscriptionRef.changes(store.state).pipe(
       Stream.drop(1), // skip the initial value — peers got it on connect
       Stream.tap(() => room.updateProfile),
@@ -117,9 +137,10 @@ const Daemons = Layer.effectDiscard(
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(AgentRunner.layer),
   Layer.provideMerge(Scripting.layer),
-  Layer.provideMerge(AdaptersLive),
   Layer.provideMerge(Room.layer),
   Layer.provideMerge(RoomConfigLive),
+  Layer.provideMerge(AiStatus.layer),
+  Layer.provideMerge(AdaptersLive),
   Layer.provideMerge(Inbox.layer),
   Layer.provideMerge(McpInfo.layer),
   Layer.provideMerge(StateStore.layer),

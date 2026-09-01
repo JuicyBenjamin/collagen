@@ -168,7 +168,12 @@ export const ToolHandlers = CollagenToolkit.toLayer(
         SubscriptionRef.get(room.roster).pipe(
           Effect.map((peers) =>
             toToon({
-              peers: peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
+              peers: peers.map((p) => ({
+                name: p.name,
+                ai: p.ai,
+                aiStatus: p.aiStatus ?? "unknown",
+                projects: p.projects.map((x) => x.name),
+              })),
             }),
           ),
           Effect.withSpan("Mcp.listRoom"),

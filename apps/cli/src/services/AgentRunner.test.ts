@@ -68,6 +68,7 @@ const stateStoreStub = (initial: LocalState) =>
  *  session lifecycle; stdout is parsed as the {sessionId, result} JSON. */
 const fakeAdapter: Adapter = {
   cmd: "fake-agent",
+  auth: { args: ["status"], loggedIn: () => true },
   args: (o) => [
     Option.match(o.sessionId, { onNone: () => "fresh", onSome: (id) => `resume:${id}` }),
     o.msg.threadId,
@@ -112,7 +113,7 @@ const testLayer = (opts: {
     Layer.provideMerge(Layer.succeed(Adapters, { "fake-ai": fakeAdapter })),
     Layer.provideMerge(stateStoreStub(opts.state ?? baseState)),
     Layer.provideMerge(exec.layer),
-    Layer.provideMerge(cliArgsLayer({ profile: "testprof", name: Option.none(), room: "testroom" })),
+    Layer.provideMerge(cliArgsLayer({ profile: "testprof", name: Option.none(), room: Option.none() })),
   );
   return { layer, calls: exec.calls };
 };

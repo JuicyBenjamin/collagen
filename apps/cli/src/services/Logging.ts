@@ -25,7 +25,8 @@ export const LoggerLive = Layer.unwrap(
     const file = Option.getOrUndefined(yield* Config.option(Config.string("COLLAGEN_LOG")));
     const logger = Logger.make(({ date, logLevel, message, cause }) => {
       const text = Array.isArray(message) ? message.map(String).join(" ") : String(message);
-      const failure = cause !== undefined && String(cause) !== "" ? ` ${String(cause).slice(0, 400)}` : "";
+      const rendered = cause === undefined ? "" : String(cause);
+      const failure = rendered === "" || rendered === "Cause([])" ? "" : ` ${rendered.slice(0, 400)}`;
       const line = `${date.toISOString()} [${logLevel.toUpperCase()}] ${text}${failure}`;
       buffer.appendSync(line);
       if (file) {

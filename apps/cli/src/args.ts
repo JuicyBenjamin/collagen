@@ -15,6 +15,6 @@ export const nameOption = Flag.string("name").pipe(
 
 export const roomOption = Flag.string("room").pipe(
   Flag.withAlias("r"),
-  Flag.withDescription("Room to join — peers meet by using the same room name (treat it as a shared secret)"),
-  Flag.withDefault("lobby"),
+  Flag.withDescription("Room to join — peers meet by using the same room name (treat it as a shared secret). Overrides the room stored in the profile; the TUI asks on first run."),
+  Flag.optional,
 );

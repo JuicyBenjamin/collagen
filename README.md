@@ -21,14 +21,22 @@ git clone https://github.com/JuicyBenjamin/collagen.git
 cd collagen
 nvm use
 pnpm install
-pnpm --filter @collagen/cli dev -- --name <yourname> --room <shared-room-name>
+pnpm --filter @collagen/cli dev
 ```
 
-Everyone who should meet uses the **same `--room` value** — treat it as a shared
-secret between you (the default room `lobby` is public: anyone running collagen
-with defaults lands there). Different machines find each other over the public
-DHT; nothing to configure, no server. macOS will ask once to allow incoming
-connections for node — accept.
+On first start the TUI asks for your **name** and a **room**; both persist per
+profile (change them later with `s`, applies on restart). Everyone who should
+meet uses the **same room name** — treat it as a shared secret between you (the
+default room `lobby` is public: anyone running collagen with defaults lands
+there). Different machines find each other over the public DHT; nothing to
+configure, no server. macOS will ask once to allow incoming connections for
+node — accept. Flags (`--name`, `--room`, `--profile`) still exist as
+overrides for scripting and same-machine testing.
+
+Collagen probes whether your selected agent CLI is installed and logged in
+(`a` to cycle agents) and broadcasts that with your presence — an
+unauthenticated or missing CLI shows next to your name for everyone in the
+room, so a silent agent is never a mystery.
 
 In the TUI:
 
@@ -69,7 +77,7 @@ then use separate `--profile`s — see
 - **You don't see each other**: same `--room` on both sides? Give it ~30s
   (discovery refreshes every 15s). Corporate networks that block UDP can
   prevent holepunching — try a hotspot.
-- **Peer's agent never answers**: their agent CLI must be authenticated
-  (`claude` needs a completed `/login`; `codex` must be logged in) and their
-  preferred AI (the `a` key) must match a CLI they actually have.
+- **Peer's agent never answers**: check the room list — an `(unauthed)` or
+  `(cli not found)` badge next to their name means their agent CLI needs
+  `claude /login` / `codex login`, or isn't installed.
 - Headless mode (no TUI): `COLLAGEN_LOG=/tmp/collagen.log pnpm --filter @collagen/cli exec tsx src/headless.ts --name <you> --room <room>`

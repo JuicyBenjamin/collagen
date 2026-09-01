@@ -13,6 +13,12 @@ export interface Adapter {
   cmd: string;
   args: (o: SpawnCtx) => string[];
   parse: (out: string) => { sessionId?: string; result?: string };
+  /** Cheap auth probe: command + how to read "logged in" from its output. */
+  auth: {
+    args: string[];
+    /** exitCode/out from running `cmd auth.args` */
+    loggedIn: (out: string, exitCode: number) => boolean;
+  };
 }
 
 export function nudgePrompt(o: SpawnCtx): string {
@@ -26,6 +32,16 @@ export function nudgePrompt(o: SpawnCtx): string {
 // server even if others are registered. session_id in the single JSON object.
 export const claudeAdapter: Adapter = {
   cmd: "claude",
+  auth: {
+    args: ["auth", "status"],
+    loggedIn: (out) => {
+      try {
+        return (JSON.parse(out) as { loggedIn?: boolean }).loggedIn === true;
+      } catch {
+        return false;
+      }
+    },
+  },
   args: (o) => {
     const mcp = JSON.stringify({ mcpServers: { [o.serverName]: { type: "http", url: o.mcpUrl } } });
     const base = [
@@ -58,6 +74,10 @@ export const claudeAdapter: Adapter = {
 // observe. --json streams events; scan for the resumable thread_id.
 export const codexAdapter: Adapter = {
   cmd: "codex",
+  auth: {
+    args: ["login", "status"],
+    loggedIn: (out, exitCode) => exitCode === 0 && !/not logged in/i.test(out),
+  },
   args: (o) => {
     const flags = [
       "--json",

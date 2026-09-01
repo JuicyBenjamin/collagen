@@ -11,9 +11,15 @@ export const SharedProject = Schema.Struct({
 export type SharedProject = typeof SharedProject.Type;
 
 /** What each peer broadcasts about itself in a room. */
+export const AiStatus = Schema.Literals(["ok", "unauthenticated", "missing", "unknown"]);
+export type AiStatus = typeof AiStatus.Type;
+
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
   ai: Schema.NullOr(Schema.String),
+  /** Whether the peer's preferred agent CLI is actually usable — visible to
+   *  the whole room so "claude-code (unauthenticated)" is no surprise. */
+  aiStatus: Schema.optional(AiStatus),
   projects: Schema.Array(SharedProject),
 });
 export type SharedProfile = typeof SharedProfile.Type;

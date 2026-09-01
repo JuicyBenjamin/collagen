@@ -5,7 +5,11 @@ import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { AI_OPTIONS, newProject, roomProjects, type LocalState } from "@collagen/p2p";
+import { writeProfileFile } from "../profileFile";
+import { SetupForm } from "./Setup";
 import {
+  aiStatusAtom,
+  currentProfile,
   currentRoom,
   identityAtom,
   logsAtom,
@@ -18,7 +22,7 @@ import {
 import { FsPicker, isSpace, Panel } from "./components";
 import { theme } from "./theme";
 
-type Mode = "room" | "projects" | "pick";
+type Mode = "room" | "projects" | "pick" | "settings";
 
 const emptyState: LocalState = { preferredAi: null, pool: [], rooms: {} };
 
@@ -40,6 +44,8 @@ export function App({ onExit }: { onExit: () => void }) {
   const messages = AsyncResult.getOrElse(useAtomValue(recentMessagesAtom), () => [] as const);
   const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
+  const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
+  const [settingsSaved, setSettingsSaved] = useState(false);
   const updateState = useAtomSet(updateStateAtom);
 
   const enabled = roomProjects(state, ROOM);
@@ -84,6 +90,14 @@ export function App({ onExit }: { onExit: () => void }) {
         setCursor(0);
         setMode("projects");
       }
+      if (key.name === "s") {
+        setSettingsSaved(false);
+        setMode("settings");
+      }
+      return;
+    }
+    if (mode === "settings") {
+      if (key.name === "escape") return setMode("room");
       return;
     }
     if (mode === "projects") {
@@ -100,6 +114,23 @@ export function App({ onExit }: { onExit: () => void }) {
     }
   });
 
+  if (mode === "settings") {
+    return (
+      <box flexDirection="column">
+        <SetupForm
+          title={`settings — profile "${currentProfile()}"`}
+          initialName={identity?.name ?? ""}
+          initialRoom={ROOM}
+          note={settingsSaved ? "saved — restart collagen to apply" : "changes apply on next start · esc back"}
+          onDone={(name, room) => {
+            writeProfileFile(currentProfile(), { name, room });
+            setSettingsSaved(true);
+          }}
+        />
+      </box>
+    );
+  }
+
   return (
     <box flexDirection="column" padding={1}>
       <ascii-font text="collagen" font="tiny" color={theme.accent} />
@@ -109,6 +140,9 @@ export function App({ onExit }: { onExit: () => void }) {
         <span fg={theme.fg}>{identity?.name ?? "…"}</span>
         <span fg={theme.dim}> · ai </span>
         <span fg={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</span>
+        {state.preferredAi && aiStatus !== "ok" && aiStatus !== "unknown" ? (
+          <span fg={theme.warn}> ({aiStatus === "missing" ? "cli not found" : "unauthenticated"})</span>
+        ) : null}
       </text>
 
       <box marginTop={1} flexDirection="column" gap={1}>
@@ -119,11 +153,12 @@ export function App({ onExit }: { onExit: () => void }) {
             <PeerLine
               name={`${identity?.name ?? "…"} (you)`}
               ai={state.preferredAi}
+              aiStatus={aiStatus}
               projects={enabled.map((p) => p.name)}
               mine={myProjectNames}
             />
             {peers.map((p) => (
-              <PeerLine key={p.key} name={p.name} ai={p.ai} projects={p.projects.map((x) => x.name)} mine={myProjectNames} />
+              <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} projects={p.projects.map((x) => x.name)} mine={myProjectNames} />
             ))}
           </box>
           {messages.length > 0 ? (
@@ -201,7 +236,7 @@ export function App({ onExit }: { onExit: () => void }) {
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>
         <text fg={theme.dim}>
-          {mode === "room" ? "a cycle ai · p projects · q quit" : "esc back to room"}
+          {mode === "room" ? "a cycle ai · p projects · s settings · q quit" : "esc back to room"}
         </text>
       </box>
     </box>
@@ -211,19 +246,23 @@ export function App({ onExit }: { onExit: () => void }) {
 function PeerLine({
   name,
   ai,
+  aiStatus,
   projects,
   mine,
 }: {
   name: string;
   ai: string | null;
+  aiStatus?: string;
   projects: ReadonlyArray<string>;
   mine: Set<string>;
 }) {
+  const bad = ai !== null && aiStatus !== undefined && aiStatus !== "ok" && aiStatus !== "unknown";
   return (
     <text>
-      <span fg={theme.ok}>● </span>
+      <span fg={bad ? theme.warn : theme.ok}>● </span>
       <span fg={theme.fg}>{name}</span>
       <span fg={theme.dim}> {ai ?? "—"}</span>
+      {bad ? <span fg={theme.warn}> ({aiStatus === "missing" ? "cli not found" : "unauthed"})</span> : null}
       {projects.length > 0 ? (
         <span>
           {" "}
