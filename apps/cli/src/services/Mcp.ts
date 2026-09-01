@@ -3,7 +3,8 @@ import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Room, RoomMessage, Ticket, deriveThreadId } from "@collagen/p2p";
+import { encode as toToon } from "@toon-format/toon";
+import { Room, type Ticket } from "@collagen/p2p";
 import { portForProfile } from "../util";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
@@ -11,20 +12,33 @@ import { Inbox } from "./Inbox";
 import { Scripting } from "./Scripting";
 import { McpInfo } from "./McpInfo";
 
-const RoomView = Schema.Struct({
-  name: Schema.String,
-  ai: Schema.NullOr(Schema.String),
-  projects: Schema.Array(Schema.String),
-});
-
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
 // `structuredContent` as an object, and Claude Code rejects array roots.
+/** Agent-facing ticket view: pubkeys resolved to peer names, uniform step
+ *  rows (so TOON renders them as one compact table), threadId dropped (it
+ *  equals the ticket id). */
+const ticketView = (ticket: Ticket, nameFor: (key: string) => string) => ({
+  id: ticket.id,
+  project: ticket.project,
+  goal: ticket.goal,
+  createdBy: nameFor(ticket.createdBy),
+  steps: ticket.steps.map((s) => ({
+    id: s.id,
+    owner: nameFor(s.owner),
+    intent: s.intent,
+    status: s.status,
+    needs: s.needs.join("+"),
+    description: s.description,
+    result: s.result ?? "",
+  })),
+});
+
 const ListRoom = Tool.make("list-room", {
   description:
-    "List the peers currently in your collagen room and the projects each shares. Call this first to discover who you can contact and about which project.",
+    "List the peers currently in your collagen room and the projects each shares. Call this first to discover who you can contact and about which project. Returns TOON (compact YAML/CSV-style) text.",
   // no `parameters`: an empty Schema.Struct({}) produces a JSON schema without
   // "type", which the MCP tool codec rejects at registration
-  success: Schema.Struct({ peers: Schema.Array(RoomView) }),
+  success: Schema.String,
 });
 
 const SendToPeer = Tool.make("send-to-peer", {
@@ -45,7 +59,7 @@ const GetMessages = Tool.make("get-messages", {
   parameters: Schema.Struct({
     threadId: Schema.optional(Schema.String),
   }),
-  success: Schema.Struct({ messages: Schema.Array(RoomMessage) }),
+  success: Schema.String,
 });
 
 const ExecuteScript = Tool.make("execute", {
@@ -86,7 +100,7 @@ const CreateTicket = Tool.make("create-ticket", {
       }),
     ),
   }),
-  success: Schema.Struct({ ticket: Ticket }),
+  success: Schema.String,
 });
 
 const SettleStep = Tool.make("settle-step", {
@@ -98,13 +112,13 @@ const SettleStep = Tool.make("settle-step", {
     result: Schema.String,
     failed: Schema.optional(Schema.Boolean),
   }),
-  success: Schema.Struct({ ticket: Ticket }),
+  success: Schema.String,
 });
 
 const GetTickets = Tool.make("get-tickets", {
   description:
-    "All shared tickets this instance knows, merged from the room. Includes step ownership, status, dependencies, and settled results.",
-  success: Schema.Struct({ tickets: Schema.Array(Ticket) }),
+    "All shared tickets this instance knows, merged from the room. Includes step ownership, status, dependencies, and settled results. Returns TOON (compact YAML/CSV-style) text.",
+  success: Schema.String,
 });
 
 export const CollagenToolkit = Toolkit.make(
@@ -125,6 +139,12 @@ export const ToolHandlers = CollagenToolkit.toLayer(
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
     const { identity } = yield* IdentityService;
+    const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
+      const peers = yield* SubscriptionRef.get(room.roster);
+      const lookup = (key: string) =>
+        key === identity.pubkey ? identity.name : (peers.find((p) => p.key === key)?.name ?? key.slice(0, 12));
+      return ticketView(ticket, lookup);
+    });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
       peer: string;
@@ -146,15 +166,17 @@ export const ToolHandlers = CollagenToolkit.toLayer(
     return {
       "list-room": () =>
         SubscriptionRef.get(room.roster).pipe(
-          Effect.map((peers) => ({
-            peers: peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
-          })),
+          Effect.map((peers) =>
+            toToon({
+              peers: peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
+            }),
+          ),
           Effect.withSpan("Mcp.listRoom"),
         ),
       "send-to-peer": sendToPeer,
       "get-messages": ({ threadId }: { threadId?: string }) =>
         inbox.take(threadId).pipe(
-          Effect.map((messages) => ({ messages })),
+          Effect.map((messages) => toToon({ messages })),
           Effect.withSpan("Mcp.getMessages"),
         ),
       execute: ({ script, input }: { script: string; input?: unknown }) =>
@@ -207,7 +229,7 @@ export const ToolHandlers = CollagenToolkit.toLayer(
             })),
           };
           const merged = yield* room.shareTicket(ticket);
-          return { ticket: merged };
+          return toToon({ ticket: yield* renderTicket(merged) });
       }),
       "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {
           const all = yield* SubscriptionRef.get(room.tickets);
@@ -227,11 +249,12 @@ export const ToolHandlers = CollagenToolkit.toLayer(
             ),
           };
           const merged = yield* room.shareTicket(updated);
-          return { ticket: merged };
+          return toToon({ ticket: yield* renderTicket(merged) });
       }),
       "get-tickets": () =>
         SubscriptionRef.get(room.tickets).pipe(
-          Effect.map((m) => ({ tickets: [...m.values()] })),
+          Effect.flatMap((m) => Effect.forEach([...m.values()], renderTicket)),
+          Effect.map((tickets) => toToon({ tickets })),
           Effect.withSpan("Mcp.getTickets"),
         ),
     };
