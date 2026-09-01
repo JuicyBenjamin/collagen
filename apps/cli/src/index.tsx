@@ -1,10 +1,12 @@
 import { Command } from "@effect/cli";
 import { NodeContext, NodeRuntime } from "@effect/platform-node";
-import { Effect } from "effect";
-import { render } from "ink";
+import { Deferred, Effect } from "effect";
+import { createCliRenderer } from "@opentui/core";
+import { createRoot } from "@opentui/react";
 import { nameOption, profileOption } from "./args";
 import { App } from "./ui/App";
 import { setCliArgs } from "./ui/atoms";
+import { stripArgSeparator } from "./util";
 
 const command = Command.make("collagen", { profile: profileOption, name: nameOption }, (args) =>
   Effect.gen(function* () {
@@ -12,27 +14,29 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
     // args must be in place before the first atom builds it.
     setCliArgs(args);
 
-    // Use the terminal's alternate screen so Ink owns a bounded viewport —
-    // frames redraw in place instead of stacking into scrollback.
-    const isTty = Boolean(process.stdout.isTTY);
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        if (isTty) process.stdout.write("\x1b[?1049h");
-      }),
-      () =>
-        Effect.sync(() => {
-          if (isTty) process.stdout.write("\x1b[?1049l");
-        }),
+    // Resolved when the UI asks to quit (q); the scope then tears down the
+    // React root and the renderer (which restores the terminal).
+    const done = yield* Deferred.make<void>();
+
+    // OpenTUI owns the terminal: alternate screen, raw input, in-place redraw.
+    const renderer = yield* Effect.acquireRelease(
+      Effect.promise(() => createCliRenderer({ screenMode: "alternate-screen", exitOnCtrlC: true })),
+      (r) => Effect.sync(() => r.destroy()),
     );
 
-    const instance = yield* Effect.acquireRelease(
-      Effect.sync(() => render(<App />)),
-      (i) => Effect.sync(() => i.unmount()),
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const root = createRoot(renderer);
+        root.render(<App onExit={() => Deferred.unsafeDone(done, Effect.void)} />);
+        return root;
+      }),
+      (root) => Effect.sync(() => root.unmount()),
     );
-    yield* Effect.promise(() => instance.waitUntilExit());
+
+    yield* Deferred.await(done);
   }).pipe(Effect.scoped),
 );
 
 const cli = Command.run(command, { name: "collagen", version: "0.0.0" });
 
-cli(process.argv).pipe(Effect.provide(NodeContext.layer), NodeRuntime.runMain);
+cli(stripArgSeparator(process.argv)).pipe(Effect.provide(NodeContext.layer), NodeRuntime.runMain);

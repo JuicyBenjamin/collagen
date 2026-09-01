@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "engines": {
-    "node": ">=20",
+    "node": ">=26.4",
     "pnpm": ">=10"
   },
   "scripts": {
@@ -12,6 +12,7 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },

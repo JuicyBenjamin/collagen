@@ -3,6 +3,7 @@
   "compilerOptions": {
     "types": ["node"],
     "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/react",
     "moduleResolution": "bundler",
     "module": "preserve",
     "verbatimModuleSyntax": false

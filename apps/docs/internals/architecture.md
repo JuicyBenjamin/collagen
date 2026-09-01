@@ -5,7 +5,7 @@ Collagen is a pnpm + Turborepo monorepo. Two workspaces matter:
 - **`packages/p2p`** — the peer-to-peer core: wire schema, the `Room` service, identity
   and topic helpers. No UI, no process spawning.
 - **`apps/cli`** — the CLI: Effect services that wrap the OS (files, child processes, HTTP),
-  the MCP server, the agent spawner, and the Ink TUI.
+  the MCP server, the agent spawner, and the OpenTUI-based TUI.
 
 Everything runs on [Effect](https://effect.website): services are `Effect.Service`
 classes, wired together as layers, with typed errors and scoped resource lifecycles.
@@ -54,7 +54,7 @@ flowchart TD
 All of these are merged into a single **`AppLayer`** (`apps/cli/src/services/AppLayer.ts`),
 which requires only `CliArgs`. Both entrypoints provide `CliArgs` and launch it:
 
-- **`index.tsx`** — the Ink TUI (via `@effect/cli` + `NodeRuntime.runMain`).
+- **`index.tsx`** — the OpenTUI TUI (via `@effect/cli` + `NodeRuntime.runMain`; needs `--experimental-ffi`).
 - **`headless.ts`** — the same app without a terminal, for dev and headless hosts.
 
 ## The p2p core: `Room`

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Box, Text, useApp, useInput, useStdin } from "ink";
 import { homedir } from "node:os";
+import { useKeyboard } from "@opentui/react";
 import { Option } from "effect";
 import { Result, useAtomSet, useAtomValue } from "@effect-atom/atom-react";
 import { AI_OPTIONS, newProject, roomProjects, type LocalState } from "@collagen/p2p";
@@ -14,7 +14,7 @@ import {
   stateAtom,
   updateStateAtom,
 } from "./atoms";
-import { FsPicker, Panel } from "./components";
+import { FsPicker, isSpace, Panel } from "./components";
 import { theme } from "./theme";
 
 type Mode = "room" | "projects" | "pick";
@@ -28,9 +28,7 @@ function nextAi(current: string | null): string | null {
   return cycle[(i + 1) % cycle.length] ?? null;
 }
 
-export function App() {
-  const { exit } = useApp();
-  const { isRawModeSupported } = useStdin();
+export function App({ onExit }: { onExit: () => void }) {
   const [mode, setMode] = useState<Mode>("room");
   const [cursor, setCursor] = useState(0);
 
@@ -74,55 +72,48 @@ export function App() {
     setMode("projects");
   };
 
-  // ── room-mode keys ──
-  useInput(
-    (input) => {
-      if (input === "q") return exit();
-      if (input === "a") return updateState((s: LocalState) => ({ ...s, preferredAi: nextAi(s.preferredAi) }));
-      if (input === "p") {
+  // One handler, gated by mode; pick mode is handled by FsPicker's own hook.
+  useKeyboard((key) => {
+    if (mode === "room") {
+      if (key.name === "q") return onExit();
+      if (key.name === "a")
+        return updateState((s: LocalState) => ({ ...s, preferredAi: nextAi(s.preferredAi) }));
+      if (key.name === "p") {
         setCursor(0);
         setMode("projects");
       }
-    },
-    { isActive: Boolean(mode === "room" && isRawModeSupported) },
-  );
-
-  // ── projects-mode keys ──
-  useInput(
-    (input, key) => {
-      if (key.escape) return setMode("room");
-      if (input === "n") return setMode("pick");
+      return;
+    }
+    if (mode === "projects") {
+      if (key.name === "escape") return setMode("room");
+      if (key.name === "n") return setMode("pick");
       if (state.pool.length === 0) return;
-      if (key.upArrow || input === "k") return setCursor((i) => Math.max(0, i - 1));
-      if (key.downArrow || input === "j") return setCursor((i) => Math.min(state.pool.length - 1, i + 1));
+      if (key.name === "up" || key.name === "k") return setCursor((i) => Math.max(0, i - 1));
+      if (key.name === "down" || key.name === "j")
+        return setCursor((i) => Math.min(state.pool.length - 1, i + 1));
       const p = state.pool[Math.min(cursor, state.pool.length - 1)];
       if (!p) return;
-      if (input === " " || key.return) return toggleProject(p.id);
-      if (input === "d") return deleteProject(p.id);
-    },
-    { isActive: Boolean(mode === "projects" && isRawModeSupported) },
-  );
+      if (isSpace(key) || key.name === "return") return toggleProject(p.id);
+      if (key.name === "d") return deleteProject(p.id);
+    }
+  });
 
   return (
-    <Box flexDirection="column" padding={1}>
-      <Box>
-        <Text bold color={theme.accent}>
-          ◇ collagen
-        </Text>
-        <Text color={theme.dim}> peer-to-peer</Text>
-      </Box>
-      <Box>
-        <Text color={theme.dim}>you </Text>
-        <Text color={theme.fg}>{identity?.name ?? "…"}</Text>
-        <Text color={theme.dim}> · ai </Text>
-        <Text color={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</Text>
-      </Box>
+    <box flexDirection="column" padding={1}>
+      <ascii-font text="collagen" font="tiny" color={theme.accent} />
+      <text fg={theme.dim}>peer-to-peer</text>
+      <text>
+        <span fg={theme.dim}>you </span>
+        <span fg={theme.fg}>{identity?.name ?? "…"}</span>
+        <span fg={theme.dim}> · ai </span>
+        <span fg={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</span>
+      </text>
 
-      <Box marginTop={1} flexDirection="column" gap={1}>
+      <box marginTop={1} flexDirection="column" gap={1}>
         {/* room / presence */}
         <Panel title={`room · ${ROOM}`}>
-          <Text color={theme.dim}>{peers.length + 1} online</Text>
-          <Box flexDirection="column" marginTop={1}>
+          <text fg={theme.dim}>{peers.length + 1} online</text>
+          <box flexDirection="column" marginTop={1}>
             <PeerLine
               name={`${identity?.name ?? "…"} (you)`}
               ai={state.preferredAi}
@@ -132,18 +123,18 @@ export function App() {
             {peers.map((p) => (
               <PeerLine key={p.key} name={p.name} ai={p.ai} projects={p.projects.map((x) => x.name)} mine={myProjectNames} />
             ))}
-          </Box>
+          </box>
           {messages.length > 0 ? (
-            <Box flexDirection="column" marginTop={1}>
-              <Text color={theme.dim}>messages</Text>
+            <box flexDirection="column" marginTop={1}>
+              <text fg={theme.dim}>messages</text>
               {messages.slice(-5).map((m) => (
-                <Text key={m.id} color={theme.fg} wrap="truncate-end">
-                  <Text color={theme.warn}>← {m.fromName}</Text>
-                  <Text color={theme.dim}> [{m.project}/{m.intent}] </Text>
+                <text key={m.id} fg={theme.fg} truncate>
+                  <span fg={theme.warn}>← {m.fromName}</span>
+                  <span fg={theme.dim}> [{m.project}/{m.intent}] </span>
                   {m.findings}
-                </Text>
+                </text>
               ))}
-            </Box>
+            </box>
           ) : null}
         </Panel>
 
@@ -152,66 +143,66 @@ export function App() {
           {mode === "pick" ? (
             <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
           ) : mode === "projects" ? (
-            <Box flexDirection="column">
+            <box flexDirection="column">
               {state.pool.length === 0 ? (
-                <Text color={theme.dim}>no projects — n to add</Text>
+                <text fg={theme.dim}>no projects — n to add</text>
               ) : (
                 state.pool.map((p, i) => {
                   const on = enabledIds.has(p.id);
                   return (
-                    <Text key={p.id} color={i === cursor ? theme.accent : theme.fg}>
+                    <text key={p.id} fg={i === cursor ? theme.accent : theme.fg}>
                       {i === cursor ? "› " : "  "}
-                      <Text color={on ? theme.ok : theme.dim}>{on ? "[x] " : "[ ] "}</Text>
-                      {p.name} <Text color={theme.dim}>{p.path}</Text>
-                    </Text>
+                      <span fg={on ? theme.ok : theme.dim}>{on ? "[x] " : "[ ] "}</span>
+                      {p.name} <span fg={theme.dim}>{p.path}</span>
+                    </text>
                   );
                 })
               )}
-              <Text color={theme.dim} wrap="truncate">
+              <text fg={theme.dim} truncate>
                 ↑↓ move · space toggle · n add · d delete · esc back
-              </Text>
-            </Box>
+              </text>
+            </box>
           ) : (
-            <Box flexDirection="column">
-              <Text color={theme.dim}>preferred ai</Text>
-              <Text color={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</Text>
-              <Box marginTop={1}>
-                <Text color={theme.dim}>projects in room</Text>
-              </Box>
+            <box flexDirection="column">
+              <text fg={theme.dim}>preferred ai</text>
+              <text fg={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</text>
+              <box marginTop={1}>
+                <text fg={theme.dim}>projects in room</text>
+              </box>
               {enabled.length === 0 ? (
-                <Text color={theme.dim}>none</Text>
+                <text fg={theme.dim}>none</text>
               ) : (
                 enabled.map((p) => (
-                  <Text key={p.id} color={theme.fg}>
+                  <text key={p.id} fg={theme.fg}>
                     ◆ {p.name}
-                  </Text>
+                  </text>
                 ))
               )}
-            </Box>
+            </box>
           )}
         </Panel>
-      </Box>
+      </box>
 
       {logs.length > 0 ? (
-        <Box marginTop={1} flexDirection="column">
-          <Text color={theme.dim}>activity</Text>
+        <box marginTop={1} flexDirection="column">
+          <text fg={theme.dim}>activity</text>
           {logs.slice(-3).map((l, i) => (
-            <Text key={i} color={theme.dim} wrap="truncate-end">
+            <text key={i} fg={theme.dim} truncate>
               {l}
-            </Text>
+            </text>
           ))}
-        </Box>
+        </box>
       ) : null}
 
-      <Box marginTop={1} flexDirection="column">
-        <Text color={theme.dim} wrap="truncate-end">
+      <box marginTop={1} flexDirection="column">
+        <text fg={theme.dim} truncate>
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
-        </Text>
-        <Text color={theme.dim}>
+        </text>
+        <text fg={theme.dim}>
           {mode === "room" ? "a cycle ai · p projects · q quit" : "esc back to room"}
-        </Text>
-      </Box>
-    </Box>
+        </text>
+      </box>
+    </box>
   );
 }
 
@@ -227,22 +218,29 @@ function PeerLine({
   mine: Set<string>;
 }) {
   return (
-    <Box flexDirection="row">
-      <Text color={theme.ok}>● </Text>
-      <Text color={theme.fg}>{name}</Text>
-      <Text color={theme.dim}> {ai ?? "—"}</Text>
+    <text>
+      <span fg={theme.ok}>● </span>
+      <span fg={theme.fg}>{name}</span>
+      <span fg={theme.dim}> {ai ?? "—"}</span>
       {projects.length > 0 ? (
-        <Text>
+        <span>
           {" "}
-          {projects.map((p, i) => (
+          {projects.map((p, i) => {
             // all projects are real; accent just flags ones you also have (shared)
-            <Text key={`${p}-${i}`} color={mine.has(p) ? theme.accent : theme.fg} bold={mine.has(p)}>
-              {p}
-              {i < projects.length - 1 ? " " : ""}
-            </Text>
-          ))}
-        </Text>
+            const shared = mine.has(p);
+            const label = `${p}${i < projects.length - 1 ? " " : ""}`;
+            return shared ? (
+              <b key={`${p}-${i}`} fg={theme.accent}>
+                {label}
+              </b>
+            ) : (
+              <span key={`${p}-${i}`} fg={theme.fg}>
+                {label}
+              </span>
+            );
+          })}
+        </span>
       ) : null}
-    </Box>
+    </text>
   );
 }

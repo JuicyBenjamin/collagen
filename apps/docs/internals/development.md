@@ -2,17 +2,42 @@
 
 ## Prerequisites
 
-- **Node ≥ 20.** The p2p stack (Hyperswarm/hyperdht) needs modern Node; some shells here
-  default to an old version, so confirm with `node -v`.
+- **Node ≥ 26.4.** Needed by OpenTUI's FFI bindings. `.nvmrc` pins 26 — run
+  `nvm use` (or your version manager's equivalent) in the repo.
 - **pnpm ≥ 10.**
 - For the agent-spawn paths: the `claude` and/or `codex` CLIs installed and authenticated.
+
+> **Why not Bun?** The p2p stack (hyperdht → udx-native) calls libuv functions Bun
+> hasn't polyfilled on macOS/Linux (`uv_interface_addresses` panics as of Bun 1.4.0 —
+> see [oven-sh/bun#18546](https://github.com/oven-sh/bun/issues/18546)). Stock Node runs
+> it fine, and OpenTUI ≥ 0.5.7 no longer requires Bun.
 
 ## Install & typecheck
 
 ```sh
 pnpm install
-pnpm -r typecheck
+pnpm typecheck
 ```
+
+## Tests
+
+```sh
+pnpm test                                  # all workspaces (turbo)
+pnpm --filter @collagen/cli test:watch     # vitest watch mode
+```
+
+Tests never call real AI APIs or spawn real agent CLIs. The AI boundary in this
+app is **process spawn**, and both sides of it are injectable:
+
+- **`Adapters`** (`services/Adapters.ts`) — the spawn-adapter registry
+  (`claude-code`, `codex`) is a `Context.Tag`, so tests provide a fake adapter
+  instead of a real CLI.
+- **`CommandExecutor`** — AgentRunner takes Effect's executor from context;
+  tests provide an in-memory one that records each spawn and replies with
+  scripted stdout (see `AgentRunner.test.ts`).
+
+`Adapters.test.ts` pins the real CLIs' argument shapes (e.g. codex ≥0.152
+rejecting `--sandbox` on `exec resume`) and output parsing.
 
 ## Running the docs
 
@@ -44,8 +69,9 @@ pnpm --filter @collagen/cli dev -- --profile alice --name alice
 pnpm --filter @collagen/cli dev -- --profile bob   --name bob
 ```
 
-Each opens the Ink TUI. For headless runs (no terminal), use `src/headless.ts` and watch
-the log file:
+Each opens the OpenTUI TUI (the `dev` script passes `--experimental-ffi`, which OpenTUI
+needs on Node). For headless runs (no terminal), use `src/headless.ts` and watch the log
+file:
 
 ```sh
 COLLAGEN_LOG=/tmp/alice.log pnpm --filter @collagen/cli exec tsx src/headless.ts --profile alice --name alice
@@ -78,8 +104,8 @@ curl -s -X POST http://127.0.0.1:<port>/mcp \
 - **Harness env leaks into spawned agents.** If you spawn from inside another agent
   session, variables like `ANTHROPIC_BASE_URL` are inherited and can 401 the child. Strip
   them when testing spawns.
-- **Non-TTY runs.** Ink's `isRawModeSupported` is `undefined` (not `false`) on non-TTY
-  stdin; input handlers guard with `Boolean(...)` so headless runs don't crash.
+- **`--experimental-ffi` is only for the TUI.** OpenTUI loads its native renderer over
+  Node's experimental FFI; headless and testnet entries run plain `tsx` without it.
 - **Concurrent registration.** Two instances registering at once can race on
   `~/.claude.json` (a one-off `claude mcp add exited 1`); it's idempotent and self-heals
   next start.

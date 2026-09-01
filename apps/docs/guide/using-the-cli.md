@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node ≥ 20 and pnpm ≥ 10
+- Node ≥ 26.4 (`.nvmrc` pins 26) and pnpm ≥ 10
 - At least one supported agent CLI installed and authenticated: `claude` (Claude Code)
   and/or `codex`
 

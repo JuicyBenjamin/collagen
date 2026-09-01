@@ -5,8 +5,8 @@ packages:
 catalog:
   '@better-auth/cli': ^1.4.21
   '@elysiajs/eden': ^1.2.0
-  '@opentui/core': ^0.4.0
-  '@opentui/react': ^0.4.0
+  '@opentui/core': ^0.5.7
+  '@opentui/react': ^0.5.7
   '@sinclair/typebox': ^0.34.49
   '@types/node': ^22.19.20
   '@types/pg': ^8.20.0
@@ -19,3 +19,4 @@ catalog:
   react: ^19.2.7
   turbo: ^2.3.3
   typescript: ^5.7.3
+  vitest: ^4.1.0
