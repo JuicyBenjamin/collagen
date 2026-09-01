@@ -11,3 +11,11 @@ export function portForProfile(profile: string): number {
 export function mcpServerName(profile: string): string {
   return profile === "default" ? "collagen" : `collagen-${profile}`;
 }
+
+/** pnpm ≥7 forwards the `--` separator into argv verbatim (`pnpm dev -- --profile x`
+ *  reaches us as [..., "--", "--profile", "x"]), and @effect/cli rejects the bare
+ *  `--`. Drop the first one so both `pnpm dev -- --flag` and `pnpm dev --flag` work. */
+export function stripArgSeparator(argv: ReadonlyArray<string>): string[] {
+  const i = argv.indexOf("--");
+  return i === -1 ? [...argv] : [...argv.slice(0, i), ...argv.slice(i + 1)];
+}
