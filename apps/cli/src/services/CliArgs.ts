@@ -4,7 +4,8 @@ import { Context, Layer, Option } from "effect";
 export class CliArgs extends Context.Service<CliArgs, {
   readonly profile: string;
   readonly name: Option.Option<string>;
+  readonly room: string;
 }>()("cli/CliArgs") {}
 
-export const cliArgsLayer = (args: { profile: string; name: Option.Option<string> }) =>
+export const cliArgsLayer = (args: { profile: string; name: Option.Option<string>; room: string }) =>
   Layer.succeed(CliArgs, args);

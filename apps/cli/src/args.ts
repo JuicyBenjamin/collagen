@@ -12,3 +12,9 @@ export const nameOption = Flag.string("name").pipe(
   Flag.withDescription("Display name shown to peers (persisted per profile)"),
   Flag.optional,
 );
+
+export const roomOption = Flag.string("room").pipe(
+  Flag.withAlias("r"),
+  Flag.withDescription("Room to join — peers meet by using the same room name (treat it as a shared secret)"),
+  Flag.withDefault("lobby"),
+);

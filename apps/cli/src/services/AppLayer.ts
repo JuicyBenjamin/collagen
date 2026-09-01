@@ -2,6 +2,7 @@ import { Clock, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Room, RoomConfig, actionableSteps, roomProjects, type RoomMessage } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
+import { CliArgs } from "./CliArgs";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
 import { IdentityService } from "./Identity";
@@ -13,23 +14,22 @@ import { registerAll } from "./Registrar";
 import { Scripting } from "./Scripting";
 import { StateStore } from "./StateStore";
 
-export const ROOM = "lobby";
-
 /** Room wiring: identity + live profile (re-read from state on every broadcast). */
 const RoomConfigLive = Layer.effect(
   RoomConfig,
   Effect.gen(function* () {
     const { identity } = yield* IdentityService;
+    const { room: roomName } = yield* CliArgs;
     const store = yield* StateStore;
     const bootstrap = yield* loadDevBootstrap;
     return {
       identity,
-      roomName: ROOM,
+      roomName,
       getProfile: store.get.pipe(
         Effect.map((s) => ({
           name: identity.name,
           ai: s.preferredAi,
-          projects: roomProjects(s, ROOM).map((p) => ({ name: p.name, path: p.path })),
+          projects: roomProjects(s, roomName).map((p) => ({ name: p.name, path: p.path })),
         })),
       ),
       bootstrap: Option.getOrUndefined(bootstrap),

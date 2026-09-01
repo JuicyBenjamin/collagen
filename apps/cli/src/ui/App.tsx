@@ -5,8 +5,8 @@ import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { AI_OPTIONS, newProject, roomProjects, type LocalState } from "@collagen/p2p";
-import { ROOM } from "../services/AppLayer";
 import {
+  currentRoom,
   identityAtom,
   logsAtom,
   mcpUrlAtom,
@@ -30,6 +30,7 @@ function nextAi(current: string | null): string | null {
 }
 
 export function App({ onExit }: { onExit: () => void }) {
+  const ROOM = currentRoom();
   const [mode, setMode] = useState<Mode>("room");
   const [cursor, setCursor] = useState(0);
 

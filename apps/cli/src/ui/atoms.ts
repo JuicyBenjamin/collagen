@@ -13,12 +13,17 @@ import { StateStore } from "../services/StateStore";
 // The entry sets parsed CLI args before the first render; the lazy runtime
 // factory defers reading them until the runtime actually builds (first atom
 // subscription).
-let cliArgs: { profile: string; name: Option.Option<string> } = {
+let cliArgs: { profile: string; name: Option.Option<string>; room: string } = {
   profile: "default",
   name: Option.none(),
+  room: "lobby",
 };
 export function setCliArgs(args: typeof cliArgs): void {
   cliArgs = args;
+}
+/** The room this process joined — fixed for the process lifetime. */
+export function currentRoom(): string {
+  return cliArgs.room;
 }
 
 /** The whole app (swarm, MCP server, spawner, daemons) lives behind this atom.

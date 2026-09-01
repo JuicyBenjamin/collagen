@@ -112,7 +112,7 @@ const testLayer = (opts: {
     Layer.provideMerge(Layer.succeed(Adapters, { "fake-ai": fakeAdapter })),
     Layer.provideMerge(stateStoreStub(opts.state ?? baseState)),
     Layer.provideMerge(exec.layer),
-    Layer.provideMerge(cliArgsLayer({ profile: "testprof", name: Option.none() })),
+    Layer.provideMerge(cliArgsLayer({ profile: "testprof", name: Option.none(), room: "testroom" })),
   );
   return { layer, calls: exec.calls };
 };

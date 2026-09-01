@@ -3,12 +3,12 @@ import { Command } from "effect/unstable/cli";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { nameOption, profileOption } from "./args";
+import { nameOption, profileOption, roomOption } from "./args";
 import { App } from "./ui/App";
 import { setCliArgs } from "./ui/atoms";
 import { stripArgSeparator } from "./util";
 
-const command = Command.make("collagen", { profile: profileOption, name: nameOption }, (args) =>
+const command = Command.make("collagen", { profile: profileOption, name: nameOption, room: roomOption }, (args) =>
   Effect.gen(function* () {
     // The app's Effect runtime is owned by the atom registry (ui/atoms.ts);
     // args must be in place before the first atom builds it.
