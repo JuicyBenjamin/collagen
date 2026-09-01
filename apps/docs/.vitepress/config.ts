@@ -1,4 +1,7 @@
 import { withMermaid } from "vitepress-plugin-mermaid";
+// no types shipped — tiny markdown-it plugin
+// @ts-expect-error
+import taskLists from "markdown-it-task-lists";
 
 // withMermaid wraps defineConfig and registers the client-side mermaid renderer
 // so ```mermaid fenced blocks render as diagrams.
@@ -7,6 +10,13 @@ export default withMermaid({
   description: "Collaborative agents — a p2p middleman between two people's coding AIs.",
   cleanUrls: true,
   lastUpdated: true,
+
+  markdown: {
+    config(md) {
+      // renders "- [ ]" / "- [x]" as real checkboxes (roadmap on /status)
+      md.use(taskLists);
+    },
+  },
 
   themeConfig: {
     nav: [
