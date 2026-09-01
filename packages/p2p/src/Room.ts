@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Clock, Context, Effect, PubSub, Runtime, Schema, Stream, SubscriptionRef } from "effect";
+import { Clock, Context, Effect, PubSub, Runtime, Schedule, Schema, Stream, SubscriptionRef } from "effect";
 import Hyperswarm from "hyperswarm";
 import b4a from "b4a";
 import { FrameFromJson, type Bootstrap, type Frame, type Peer, type RoomMessage, type SharedProfile } from "./schema";
@@ -95,6 +95,7 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
 
     swarm.on("connection", (conn: SwarmConnection, info: { publicKey: Buffer }) => {
       const key = b4a.toString(info.publicKey, "hex");
+      runFork(Effect.log(`swarm connection: ${key.slice(0, 12)}`));
       connByKey.set(key, conn);
       conn.on("error", () => {});
       conn.on("data", (d) => runFork(onData(key, d)));
@@ -112,6 +113,15 @@ export class Room extends Effect.Service<Room>()("p2p/Room", {
     yield* Effect.promise(() => discovery.flushed() as Promise<void>).pipe(
       Effect.timeout("10 seconds"),
       Effect.ignore,
+      Effect.forkScoped,
+    );
+    // Peers that join in the same instant can miss each other: each side's
+    // topic lookup can run before the other side's announce lands, and
+    // hyperswarm's own re-lookup is too infrequent to recover quickly.
+    // Periodically re-running announce+lookup makes the room converge.
+    yield* Effect.promise(() => discovery.refresh({ client: true, server: true }) as Promise<void>).pipe(
+      Effect.ignore,
+      Effect.schedule(Schedule.spaced("15 seconds")),
       Effect.forkScoped,
     );
 
