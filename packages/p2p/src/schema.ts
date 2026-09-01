@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { Ticket } from "./ticket";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
 // (swarm frames, state files) is Schema-validated at the edge.
@@ -46,7 +47,11 @@ export const MessageFrame = Schema.Struct({
   kind: Schema.Literal("msg"),
   msg: RoomMessage,
 });
-export const Frame = Schema.Union([ProfileFrame, MessageFrame]);
+export const TicketFrame = Schema.Struct({
+  kind: Schema.Literal("ticket"),
+  ticket: Ticket,
+});
+export const Frame = Schema.Union([ProfileFrame, MessageFrame, TicketFrame]);
 export type Frame = typeof Frame.Type;
 
 /** Wire codec: JSON string <-> validated Frame. */

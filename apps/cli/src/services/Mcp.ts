@@ -1,11 +1,12 @@
 import { createServer } from "node:http";
-import { Effect, Layer, Schema, SubscriptionRef } from "effect";
+import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
-import { Room, RoomMessage } from "@collagen/p2p";
+import { Room, RoomMessage, Ticket, deriveThreadId } from "@collagen/p2p";
 import { portForProfile } from "../util";
 import { CliArgs } from "./CliArgs";
+import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { Scripting } from "./Scripting";
 import { McpInfo } from "./McpInfo";
@@ -69,6 +70,43 @@ const DescribeScripting = Tool.make("describe-scripting", {
   success: Schema.Struct({ card: Schema.String }),
 });
 
+const CreateTicket = Tool.make("create-ticket", {
+  description:
+    "Create a shared ticket: a structured, serialized record of a cross-peer task. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). The ticket is gossiped to the room; each owner's agent is triggered when its steps become actionable, and settles them with settle-step. Prefer this over send-to-peer for multi-step work — the intermediate state stays inspectable and survives restarts.",
+  parameters: Schema.Struct({
+    goal: Schema.String,
+    project: Schema.String,
+    steps: Schema.Array(
+      Schema.Struct({
+        id: Schema.optional(Schema.String),
+        owner: Schema.String,
+        intent: Schema.String,
+        description: Schema.String,
+        needs: Schema.optional(Schema.Array(Schema.String)),
+      }),
+    ),
+  }),
+  success: Schema.Struct({ ticket: Ticket }),
+});
+
+const SettleStep = Tool.make("settle-step", {
+  description:
+    "Settle (or fail) a ticket step you own, with your findings as the result. The updated ticket is gossiped to the room; steps waiting on this one become actionable on their owners' side.",
+  parameters: Schema.Struct({
+    ticketId: Schema.String,
+    stepId: Schema.String,
+    result: Schema.String,
+    failed: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.Struct({ ticket: Ticket }),
+});
+
+const GetTickets = Tool.make("get-tickets", {
+  description:
+    "All shared tickets this instance knows, merged from the room. Includes step ownership, status, dependencies, and settled results.",
+  success: Schema.Struct({ tickets: Schema.Array(Ticket) }),
+});
+
 export const CollagenToolkit = Toolkit.make(
   ListRoom,
   SendToPeer,
@@ -76,6 +114,9 @@ export const CollagenToolkit = Toolkit.make(
   ExecuteScript,
   SearchTools,
   DescribeScripting,
+  CreateTicket,
+  SettleStep,
+  GetTickets,
 );
 
 export const ToolHandlers = CollagenToolkit.toLayer(
@@ -83,6 +124,7 @@ export const ToolHandlers = CollagenToolkit.toLayer(
     const room = yield* Room;
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
+    const { identity } = yield* IdentityService;
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
       peer: string;
@@ -127,6 +169,71 @@ export const ToolHandlers = CollagenToolkit.toLayer(
         ),
       "describe-scripting": () =>
         Effect.sync(() => ({ card: scripting.describe() })).pipe(Effect.withSpan("Mcp.describeScripting")),
+      "create-ticket": Effect.fn("Mcp.createTicket")(function* (input: {
+        goal: string;
+        project: string;
+        steps: ReadonlyArray<{
+          id?: string;
+          owner: string;
+          intent: string;
+          description: string;
+          needs?: ReadonlyArray<string>;
+        }>;
+      }) {
+          const peers = yield* SubscriptionRef.get(room.roster);
+          const keyFor = (name: string) =>
+            name === identity.name ? identity.pubkey : peers.find((p) => p.name === name)?.key;
+          const now = yield* Clock.currentTimeMillis;
+          const unknown = input.steps.map((s) => s.owner).filter((o) => keyFor(o) === undefined);
+          if (unknown.length > 0) {
+            return yield* Effect.die(`unknown step owners: ${unknown.join(", ")} — use names from list-room`);
+          }
+          const id = crypto.randomUUID();
+          const ticket: Ticket = {
+            id,
+            threadId: id,
+            project: input.project,
+            goal: input.goal,
+            createdBy: identity.pubkey,
+            updatedAt: now,
+            steps: input.steps.map((s, i) => ({
+              id: s.id ?? `s${i + 1}`,
+              owner: keyFor(s.owner)!,
+              intent: s.intent,
+              description: s.description,
+              needs: s.needs ?? [],
+              status: "pending" as const,
+              updatedAt: now,
+            })),
+          };
+          const merged = yield* room.shareTicket(ticket);
+          return { ticket: merged };
+      }),
+      "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {
+          const all = yield* SubscriptionRef.get(room.tickets);
+          const ticket = all.get(input.ticketId);
+          if (!ticket) return yield* Effect.die(`no ticket ${input.ticketId} — check get-tickets`);
+          if (!ticket.steps.some((s) => s.id === input.stepId)) {
+            return yield* Effect.die(`no step ${input.stepId} on ticket ${input.ticketId}`);
+          }
+          const now = yield* Clock.currentTimeMillis;
+          const updated: Ticket = {
+            ...ticket,
+            updatedAt: now,
+            steps: ticket.steps.map((s) =>
+              s.id === input.stepId
+                ? { ...s, status: input.failed ? ("failed" as const) : ("settled" as const), result: input.result, updatedAt: now }
+                : s,
+            ),
+          };
+          const merged = yield* room.shareTicket(updated);
+          return { ticket: merged };
+      }),
+      "get-tickets": () =>
+        SubscriptionRef.get(room.tickets).pipe(
+          Effect.map((m) => ({ tickets: [...m.values()] })),
+          Effect.withSpan("Mcp.getTickets"),
+        ),
     };
   }),
 );

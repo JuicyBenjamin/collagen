@@ -1,4 +1,5 @@
 export * from "./schema";
+export * from "./ticket";
 export * from "./errors";
 export * from "./types";
 export * from "./domain";

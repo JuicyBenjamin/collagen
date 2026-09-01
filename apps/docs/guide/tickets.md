@@ -1,7 +1,13 @@
 # Tickets
 
-::: info Planned
-This whole page is planned work — not implemented yet. See [Status](/status).
+::: info Partially implemented
+The ticket **data layer** is live: tickets are CallScript-inspired inert records —
+goal, steps with owners and dependencies, per-step status and settled results — gossiped
+to the room, merged deterministically on every peer, and synced to late joiners. Agents
+drive them over MCP (`create-ticket`, `settle-step`, `get-tickets`); when a step you own
+becomes actionable (its dependencies settled), your agent is triggered automatically
+with the settled inputs, and its `settle-step` wakes the next owner in the chain.
+The TUI board below is still planned — see [Status](/status).
 :::
 
 The TUI grows a lightweight ticket board — a mini-Jira scoped to a room. Tickets are how

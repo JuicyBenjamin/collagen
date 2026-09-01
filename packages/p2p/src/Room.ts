@@ -4,6 +4,7 @@ import Hyperswarm from "hyperswarm";
 import b4a from "b4a";
 import { FrameFromJson, type Bootstrap, type Frame, type Peer, type RoomMessage, type SharedProfile } from "./schema";
 import { PeerNotConnected } from "./errors";
+import { mergeTicket, type Ticket } from "./ticket";
 import { roomTopic } from "./topic";
 import type { Identity } from "./types";
 
@@ -45,6 +46,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const runFork = Effect.runForkWith(services);
 
     const roster = yield* SubscriptionRef.make<ReadonlyArray<Peer>>([]);
+    const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
     const inbound = yield* Effect.acquireRelease(
       PubSub.unbounded<RoomMessage>(),
       (p) => PubSub.shutdown(p),
@@ -77,12 +79,22 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       });
     }).pipe(Effect.withSpan("Room.broadcastProfile"));
 
+    const absorbTicket = (incoming: Ticket) =>
+      SubscriptionRef.update(tickets, (m) => {
+        const next = new Map(m);
+        const mine = next.get(incoming.id);
+        next.set(incoming.id, mine ? mergeTicket(mine, incoming) : incoming);
+        return next;
+      });
+
     const handleFrame = (key: string, frame: Frame) =>
       frame.kind === "profile"
         ? Effect.sync(() => {
             peers.set(key, { key, ...frame.profile });
           }).pipe(Effect.andThen(publishRoster))
-        : PubSub.publish(inbound, frame.msg);
+        : frame.kind === "msg"
+          ? PubSub.publish(inbound, frame.msg)
+          : absorbTicket(frame.ticket);
 
     const onData = (key: string, data: Uint8Array) =>
       decodeFrame(b4a.toString(data)).pipe(
@@ -103,8 +115,18 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         peers.delete(key);
         runFork(publishRoster);
       });
-      // greet with our current profile
+      // greet with our current profile and every ticket we know, so a
+      // late joiner reconstructs the shared state from any one peer
       runFork(config.getProfile.pipe(Effect.flatMap((p) => writeFrame(conn, { kind: "profile", profile: p }))));
+      runFork(
+        SubscriptionRef.get(tickets).pipe(
+          Effect.flatMap((m) =>
+            Effect.forEach([...m.values()], (ticket) => writeFrame(conn, { kind: "ticket", ticket }), {
+              discard: true,
+            }),
+          ),
+        ),
+      );
     });
 
     const discovery = swarm.join(roomTopic(config.roomName), { server: true, client: true });
@@ -145,9 +167,23 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       return msg;
     });
 
+    /** Merge a ticket locally and broadcast the merged copy to the room. */
+    const shareTicket = Effect.fn("Room.shareTicket")(function* (ticket: Ticket) {
+      yield* absorbTicket(ticket);
+      const merged = (yield* SubscriptionRef.get(tickets)).get(ticket.id) ?? ticket;
+      const frame: Frame = { kind: "ticket", ticket: merged };
+      yield* Effect.forEach([...connByKey.values()], (conn) => writeFrame(conn, frame), {
+        discard: true,
+      });
+      return merged;
+    });
+
     return {
       /** Current peers + changes (emits current value on subscribe). */
       roster,
+      /** Shared tickets by id (merged copies) + changes. */
+      tickets,
+      shareTicket,
       /** Every directed message addressed to us. Each subscription sees all. */
       messages: Stream.fromPubSub(inbound),
       /** Send a directed message; fails typed if the peer isn't connected. */

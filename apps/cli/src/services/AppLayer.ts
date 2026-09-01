@@ -1,6 +1,6 @@
-import { Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
+import { Clock, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { Room, RoomConfig, roomProjects } from "@collagen/p2p";
+import { Room, RoomConfig, actionableSteps, roomProjects, type RoomMessage } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
@@ -58,6 +58,53 @@ const Daemons = Layer.effectDiscard(
     yield* SubscriptionRef.changes(store.state).pipe(
       Stream.drop(1), // skip the initial value — peers got it on connect
       Stream.tap(() => room.updateProfile),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
+
+    // Ticket steps becoming actionable for THIS peer wake the local agent:
+    // the ticket record is the suspended state, the nudge resumes it. Only
+    // pending steps are nudged — the nudge itself marks them suspended (and
+    // gossips that), so repeated merges don't re-trigger a running agent.
+    const { identity } = yield* IdentityService;
+    yield* SubscriptionRef.changes(room.tickets).pipe(
+      Stream.mapEffect(
+        Effect.fnUntraced(function* (all) {
+          const now = yield* Clock.currentTimeMillis;
+          for (const ticket of all.values()) {
+            const mine = actionableSteps(ticket, identity.pubkey).filter((s) => s.status === "pending");
+            if (mine.length === 0) continue;
+            yield* room.shareTicket({
+              ...ticket,
+              updatedAt: now,
+              steps: ticket.steps.map((s) =>
+                mine.some((m) => m.id === s.id) ? { ...s, status: "suspended" as const, updatedAt: now } : s,
+              ),
+            });
+            for (const s of mine) {
+              const settled = ticket.steps
+                .filter((x) => x.status === "settled" && s.needs.includes(x.id))
+                .map((x) => `- ${x.id} (${x.intent}): ${x.result ?? ""}`)
+                .join("\n");
+              const msg: RoomMessage = {
+                id: crypto.randomUUID(),
+                threadId: ticket.threadId,
+                from: ticket.createdBy,
+                fromName: "ticket",
+                project: ticket.project,
+                intent: `ticket-step:${s.intent}`,
+                findings: `Ticket "${ticket.goal}" (${ticket.id}) — you own step ${s.id}: ${s.description}${
+                  settled ? `\nSettled inputs:\n${settled}` : ""
+                }\nWhen done, call settle-step with ticketId "${ticket.id}", stepId "${s.id}", and your findings.`,
+                ts: now,
+              };
+              yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${s.id} actionable`);
+              yield* inbox.push(msg);
+              yield* Effect.forkChild(runner.runThread(ticket.threadId));
+            }
+          }
+        }),
+      ),
       Stream.runDrain,
       Effect.forkScoped,
     );

@@ -23,9 +23,10 @@ export const LoggerLive = Layer.unwrap(
   Effect.gen(function* () {
     const buffer = yield* LogBuffer;
     const file = Option.getOrUndefined(yield* Config.option(Config.string("COLLAGEN_LOG")));
-    const logger = Logger.make(({ date, logLevel, message }) => {
+    const logger = Logger.make(({ date, logLevel, message, cause }) => {
       const text = Array.isArray(message) ? message.map(String).join(" ") : String(message);
-      const line = `${date.toISOString()} [${logLevel.toUpperCase()}] ${text}`;
+      const failure = cause !== undefined && String(cause) !== "" ? ` ${String(cause).slice(0, 400)}` : "";
+      const line = `${date.toISOString()} [${logLevel.toUpperCase()}] ${text}${failure}`;
       buffer.appendSync(line);
       if (file) {
         try {
