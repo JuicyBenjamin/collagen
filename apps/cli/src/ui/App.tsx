@@ -4,7 +4,7 @@ import { useKeyboard } from "@opentui/react";
 import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { AI_OPTIONS, newProject, roomProjects, type LocalState } from "@collagen/p2p";
+import { AI_OPTIONS, newProject, roomProjects, shortRoomId, type LocalState } from "@collagen/p2p";
 import { writeProfileFile } from "../profileFile";
 import { SetupForm } from "./Setup";
 import {
@@ -238,7 +238,7 @@ export function App({ onExit }: { onExit: () => void }) {
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>
         <text fg={theme.dim} truncate>
-          room id (share to invite): <span fg={theme.fg}>{room.id}</span>
+          room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] · invite id: <span fg={theme.fg}>{room.id}</span>
         </text>
         <text fg={theme.dim}>
           {mode === "room" ? "a cycle ai · p projects · s settings · q quit" : "esc back to room"}

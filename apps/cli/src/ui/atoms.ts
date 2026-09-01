@@ -25,7 +25,7 @@ export function setCliArgs(args: typeof cliArgs): void {
 
 // The entry resolves flag/stored/setup-form into a concrete room before the
 // runtime builds; the UI reads it here.
-let resolvedRoom: { id: string; name: string } = { id: "lobby", name: "lobby" };
+let resolvedRoom: { id: string; name: string } = { id: "", name: "" };
 export function setResolvedRoom(room: { id: string; name: string }): void {
   resolvedRoom = room;
 }

@@ -76,3 +76,13 @@ describe("actionableSteps", () => {
     expect(actionableSteps(t, "me").map((s) => s.id)).toEqual(["b"]);
   });
 });
+
+describe("shortRoomId", () => {
+  it("is stable, label-independent, and 8 hex chars", async () => {
+    const { shortRoomId } = await import("./topic");
+    const a = shortRoomId("01a05f59-9427-7498-a36c-523ab2309b4a");
+    expect(a).toMatch(/^[0-9a-f]{8}$/);
+    expect(shortRoomId("01a05f59-9427-7498-a36c-523ab2309b4a")).toBe(a);
+    expect(shortRoomId("другой")).not.toBe(a);
+  });
+});

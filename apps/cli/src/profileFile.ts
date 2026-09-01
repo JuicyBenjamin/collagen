@@ -9,8 +9,6 @@ import { configDir } from "./services/Identity";
 export interface ProfileFile {
   seed?: string;
   name?: string;
-  /** Legacy: room-as-string (the string doubled as the topic secret). */
-  room?: string;
   /** The room's identity — an unguessable id (uuid v7); the topic derives
    *  from this, so knowing the id IS the invite. */
   roomId?: string;
@@ -18,11 +16,9 @@ export interface ProfileFile {
   roomName?: string;
 }
 
-/** Resolve the stored room, migrating the legacy string form (id = name). */
 export function storedRoom(f: ProfileFile): { id: string; name: string } | undefined {
-  if (f.roomId !== undefined) return { id: f.roomId, name: f.roomName ?? f.roomId.slice(0, 8) };
-  if (f.room !== undefined) return { id: f.room, name: f.room };
-  return undefined;
+  if (f.roomId === undefined) return undefined;
+  return { id: f.roomId, name: f.roomName ?? f.roomId.slice(0, 8) };
 }
 
 export function profilePath(profile: string): string {
