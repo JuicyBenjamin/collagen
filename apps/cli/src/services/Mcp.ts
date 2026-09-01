@@ -7,6 +7,7 @@ import { Room, RoomMessage } from "@collagen/p2p";
 import { portForProfile } from "../util";
 import { CliArgs } from "./CliArgs";
 import { Inbox } from "./Inbox";
+import { Scripting } from "./Scripting";
 import { McpInfo } from "./McpInfo";
 
 const RoomView = Schema.Struct({
@@ -46,12 +47,42 @@ const GetMessages = Tool.make("get-messages", {
   success: Schema.Struct({ messages: Schema.Array(RoomMessage) }),
 });
 
-export const CollagenToolkit = Toolkit.make(ListRoom, SendToPeer, GetMessages);
+const ExecuteScript = Tool.make("execute", {
+  description:
+    "Run a CallScript program against collagen's tools (collagen.listRoom, collagen.sendToPeer, collagen.getMessages). Write a small JS program — it is compiled to an inert plan, never executed as code — to compose several collagen calls in one shot (e.g. list the room, then fan a message out to every peer sharing a project). Call describe-scripting first for the language card and tool signatures.",
+  parameters: Schema.Struct({
+    script: Schema.String,
+    input: Schema.optional(Schema.Unknown),
+  }),
+  success: Schema.Record(Schema.String, Schema.Unknown),
+});
+
+const SearchTools = Tool.make("search-tools", {
+  description: "Search the tools mounted on the CallScript engine by keyword.",
+  parameters: Schema.Struct({ query: Schema.String }),
+  success: Schema.Struct({ matches: Schema.String }),
+});
+
+const DescribeScripting = Tool.make("describe-scripting", {
+  description:
+    "The CallScript language card plus the signatures of every mounted collagen tool. Read this before writing a script for the execute tool.",
+  success: Schema.Struct({ card: Schema.String }),
+});
+
+export const CollagenToolkit = Toolkit.make(
+  ListRoom,
+  SendToPeer,
+  GetMessages,
+  ExecuteScript,
+  SearchTools,
+  DescribeScripting,
+);
 
 export const ToolHandlers = CollagenToolkit.toLayer(
   Effect.gen(function* () {
     const room = yield* Room;
     const inbox = yield* Inbox;
+    const scripting = yield* Scripting;
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
       peer: string;
@@ -84,6 +115,18 @@ export const ToolHandlers = CollagenToolkit.toLayer(
           Effect.map((messages) => ({ messages })),
           Effect.withSpan("Mcp.getMessages"),
         ),
+      execute: ({ script, input }: { script: string; input?: unknown }) =>
+        Effect.promise(() => scripting.execute(script, input)).pipe(
+          Effect.map((result) => ({ ...result }) as Record<string, unknown>),
+          Effect.withSpan("Mcp.execute"),
+        ),
+      "search-tools": ({ query }: { query: string }) =>
+        Effect.promise(() => scripting.search(query)).pipe(
+          Effect.map((matches) => ({ matches })),
+          Effect.withSpan("Mcp.searchTools"),
+        ),
+      "describe-scripting": () =>
+        Effect.sync(() => ({ card: scripting.describe() })).pipe(Effect.withSpan("Mcp.describeScripting")),
     };
   }),
 );

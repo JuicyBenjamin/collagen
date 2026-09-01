@@ -10,6 +10,7 @@ import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";
 import { McpLive } from "./Mcp";
 import { registerAll } from "./Registrar";
+import { Scripting } from "./Scripting";
 import { StateStore } from "./StateStore";
 
 export const ROOM = "lobby";
@@ -68,6 +69,7 @@ const Daemons = Layer.effectDiscard(
 /** The whole app apart from the UI. Requires CliArgs. */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(AgentRunner.layer),
+  Layer.provideMerge(Scripting.layer),
   Layer.provideMerge(AdaptersLive),
   Layer.provideMerge(Room.layer),
   Layer.provideMerge(RoomConfigLive),

@@ -21,6 +21,7 @@
     "@effect/platform-node": "4.0.0-rc.112",
     "@opentui/core": "catalog:",
     "@opentui/react": "catalog:",
+    "callscript": "^0.1.0",
     "effect": "4.0.0-rc.112",
     "react": "catalog:"
   },
