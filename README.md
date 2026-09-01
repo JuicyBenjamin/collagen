@@ -24,14 +24,22 @@ pnpm install
 pnpm --filter @collagen/cli dev
 ```
 
-On first start the TUI asks for your **name** and a **room**; both persist per
-profile (change them later with `s`, applies on restart). Everyone who should
-meet uses the **same room name** — treat it as a shared secret between you (the
-default room `lobby` is public: anyone running collagen with defaults lands
-there). Different machines find each other over the public DHT; nothing to
-configure, no server. macOS will ask once to allow incoming connections for
-node — accept. Flags (`--name`, `--room`, `--profile`) still exist as
-overrides for scripting and same-machine testing.
+On first start the TUI asks for your **name** and a **room**. A room has two
+parts:
+
+- **room id** — an unguessable uuid (v7, so it also carries its creation time).
+  The swarm topic derives from the id, so *the id is the invite and the
+  secret*: leave the field empty to create a fresh room, or paste a friend's
+  id to join theirs. The running TUI shows your room id at the bottom — send
+  that to whoever should join. (Nobody lands in your room by guessing a cute
+  name.)
+- **room label** — your local nickname for it, any string, change it whenever.
+
+Both persist per profile (edit later with `s`, applies on restart). Different
+machines find each other over the public DHT; nothing to configure, no server.
+macOS will ask once to allow incoming connections for node — accept. Flags
+(`--name`, `--room <id>`, `--profile`) still exist as overrides for scripting
+and same-machine testing.
 
 Collagen probes whether your selected agent CLI is installed and logged in
 (`a` to cycle agents) and broadcasts that with your presence — an
@@ -74,7 +82,7 @@ then use separate `--profile`s — see
 
 ## Troubleshooting
 
-- **You don't see each other**: same `--room` on both sides? Give it ~30s
+- **You don't see each other**: exactly the same room id on both sides? Give it ~30s
   (discovery refreshes every 15s). Corporate networks that block UDP can
   prevent holepunching — try a hotspot.
 - **Peer's agent never answers**: check the room list — an `(unauthed)` or

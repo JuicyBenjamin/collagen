@@ -9,7 +9,9 @@ const IdentityFile = Schema.fromJsonString(
   Schema.Struct({
     seed: Schema.optional(Schema.String),
     name: Schema.optional(Schema.String),
-    room: Schema.optional(Schema.String),
+    room: Schema.optional(Schema.String), // legacy string form
+    roomId: Schema.optional(Schema.String),
+    roomName: Schema.optional(Schema.String),
   }),
 );
 
@@ -34,18 +36,24 @@ export class IdentityService extends Context.Service<IdentityService>()("cli/Ide
     const name = Option.orElse(nameFlag, () => Option.flatMapNullishOr(stored, (s) => s.name)).pipe(
       Option.getOrElse(() => "anon"),
     );
-    const room = Option.orElse(roomFlag, () => Option.flatMapNullishOr(stored, (s) => s.room)).pipe(
-      Option.getOrElse(() => "lobby"),
+    // Room: flag (id) > stored {roomId, roomName} > legacy stored string >
+    // public lobby. The id keys the swarm topic; the name is a local label.
+    const storedId = Option.flatMapNullishOr(stored, (s) => s.roomId).pipe(
+      Option.orElse(() => Option.flatMapNullishOr(stored, (s) => s.room)),
+    );
+    const roomId = Option.orElse(roomFlag, () => storedId).pipe(Option.getOrElse(() => "lobby"));
+    const roomName = Option.flatMapNullishOr(stored, (s) => s.roomName).pipe(
+      Option.getOrElse(() => (roomId === "lobby" ? "lobby" : roomId.slice(0, 8))),
     );
 
     yield* fs.makeDirectory(configDir, { recursive: true });
-    yield* Schema.encodeEffect(IdentityFile)({ seed, name, room }).pipe(
+    yield* Schema.encodeEffect(IdentityFile)({ seed, name, roomId, roomName }).pipe(
       Effect.flatMap((json) => fs.writeFileString(file, json)),
     );
 
     const keyPair = keyPairFromSeed(seed);
     const identity: Identity = { name, profile, keyPair, pubkey: pubkeyHex(keyPair.publicKey) };
-    return { identity, room } as const;
+    return { identity, room: { id: roomId, name: roomName } } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

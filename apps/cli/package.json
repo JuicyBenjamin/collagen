@@ -24,7 +24,8 @@
     "@toon-format/toon": "^4.1.1",
     "callscript": "^0.1.0",
     "effect": "4.0.0-rc.112",
-    "react": "catalog:"
+    "react": "catalog:",
+    "uuid": "^14.0.2"
   },
   "devDependencies": {
     "@collagen/typescript-config": "workspace:*",

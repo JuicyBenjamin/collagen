@@ -25,12 +25,12 @@ export function setCliArgs(args: typeof cliArgs): void {
 
 // The entry resolves flag/stored/setup-form into a concrete room before the
 // runtime builds; the UI reads it here.
-let resolvedRoom = "lobby";
-export function setResolvedRoom(room: string): void {
+let resolvedRoom: { id: string; name: string } = { id: "lobby", name: "lobby" };
+export function setResolvedRoom(room: { id: string; name: string }): void {
   resolvedRoom = room;
 }
 /** The room this process joined — fixed for the process lifetime. */
-export function currentRoom(): string {
+export function currentRoom(): { id: string; name: string } {
   return resolvedRoom;
 }
 export function currentProfile(): string {

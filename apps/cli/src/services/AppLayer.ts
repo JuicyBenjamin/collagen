@@ -19,13 +19,13 @@ import { StateStore } from "./StateStore";
 const RoomConfigLive = Layer.effect(
   RoomConfig,
   Effect.gen(function* () {
-    const { identity, room: roomName } = yield* IdentityService;
+    const { identity, room } = yield* IdentityService;
     const store = yield* StateStore;
     const aiStatus = yield* AiStatus;
     const bootstrap = yield* loadDevBootstrap;
     return {
       identity,
-      roomName,
+      roomName: room.id,
       getProfile: Effect.gen(function* () {
         const s = yield* store.get;
         const status = yield* SubscriptionRef.get(aiStatus.current);
@@ -33,7 +33,7 @@ const RoomConfigLive = Layer.effect(
           name: identity.name,
           ai: s.preferredAi,
           aiStatus: status,
-          projects: roomProjects(s, roomName).map((p) => ({ name: p.name, path: p.path })),
+          projects: roomProjects(s, room.id).map((p) => ({ name: p.name, path: p.path })),
         };
       }),
       bootstrap: Option.getOrUndefined(bootstrap),

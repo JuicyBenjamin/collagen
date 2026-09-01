@@ -34,7 +34,8 @@ function nextAi(current: string | null): string | null {
 }
 
 export function App({ onExit }: { onExit: () => void }) {
-  const ROOM = currentRoom();
+  const room = currentRoom();
+  const ROOM = room.id;
   const [mode, setMode] = useState<Mode>("room");
   const [cursor, setCursor] = useState(0);
 
@@ -120,10 +121,11 @@ export function App({ onExit }: { onExit: () => void }) {
         <SetupForm
           title={`settings — profile "${currentProfile()}"`}
           initialName={identity?.name ?? ""}
-          initialRoom={ROOM}
+          initialRoomName={room.name}
+          initialRoomId={room.id}
           note={settingsSaved ? "saved — restart collagen to apply" : "changes apply on next start · esc back"}
-          onDone={(name, room) => {
-            writeProfileFile(currentProfile(), { name, room });
+          onDone={({ name, roomName, roomId }) => {
+            writeProfileFile(currentProfile(), { name, roomId: roomId.length > 0 ? roomId : room.id, roomName });
             setSettingsSaved(true);
           }}
         />
@@ -147,7 +149,7 @@ export function App({ onExit }: { onExit: () => void }) {
 
       <box marginTop={1} flexDirection="column" gap={1}>
         {/* room / presence */}
-        <Panel title={`room · ${ROOM}`}>
+        <Panel title={`room · ${room.name}`}>
           <text fg={theme.dim}>{peers.length + 1} online</text>
           <box flexDirection="column" marginTop={1}>
             <PeerLine
@@ -234,6 +236,9 @@ export function App({ onExit }: { onExit: () => void }) {
       <box marginTop={1} flexDirection="column">
         <text fg={theme.dim} truncate>
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
+        </text>
+        <text fg={theme.dim} truncate>
+          room id (share to invite): <span fg={theme.fg}>{room.id}</span>
         </text>
         <text fg={theme.dim}>
           {mode === "room" ? "a cycle ai · p projects · s settings · q quit" : "esc back to room"}

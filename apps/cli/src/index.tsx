@@ -5,7 +5,8 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { nameOption, profileOption, roomOption } from "./args";
-import { readProfileFile, writeProfileFile } from "./profileFile";
+import { v7 as uuidv7 } from "uuid";
+import { readProfileFile, storedRoom, writeProfileFile } from "./profileFile";
 import { App } from "./ui/App";
 import { SetupForm } from "./ui/Setup";
 import { setCliArgs, setResolvedRoom } from "./ui/atoms";
@@ -17,13 +18,15 @@ import { stripArgSeparator } from "./util";
 function Root({
   profile,
   initialName,
-  initialRoom,
+  initialRoomName,
+  initialRoomId,
   needsSetup,
   onExit,
 }: {
   profile: string;
   initialName: string;
-  initialRoom: string;
+  initialRoomName: string;
+  initialRoomId: string;
   needsSetup: boolean;
   onExit: () => void;
 }) {
@@ -33,11 +36,13 @@ function Root({
       <SetupForm
         title="welcome — who are you, and which room?"
         initialName={initialName}
-        initialRoom={initialRoom}
-        onDone={(name, room) => {
-          writeProfileFile(profile, { name, room });
-          setCliArgs({ profile, name: Option.some(name), room: Option.some(room) });
-          setResolvedRoom(room);
+        initialRoomName={initialRoomName}
+        initialRoomId={initialRoomId}
+        onDone={({ name, roomName, roomId }) => {
+          const id = roomId.length > 0 ? roomId : uuidv7();
+          writeProfileFile(profile, { name, roomId: id, roomName });
+          setCliArgs({ profile, name: Option.some(name), room: Option.some(id) });
+          setResolvedRoom({ id, name: roomName });
           setPhase("app");
         }}
       />
@@ -52,12 +57,16 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
     // profile; missing pieces trigger the setup form.
     const stored = readProfileFile(args.profile);
     const name = Option.getOrUndefined(args.name) ?? stored.name;
-    const room = Option.getOrUndefined(args.room) ?? stored.room;
+    const flagRoomId = Option.getOrUndefined(args.room);
+    const room =
+      flagRoomId !== undefined
+        ? { id: flagRoomId, name: storedRoom(stored)?.id === flagRoomId ? storedRoom(stored)!.name : flagRoomId.slice(0, 8) }
+        : storedRoom(stored);
     const needsSetup = name === undefined || room === undefined;
     setCliArgs({
       profile: args.profile,
       name: name === undefined ? Option.none() : Option.some(name),
-      room: room === undefined ? Option.none() : Option.some(room),
+      room: room === undefined ? Option.none() : Option.some(room.id),
     });
     if (room !== undefined) setResolvedRoom(room);
 
@@ -78,7 +87,8 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
           <Root
             profile={args.profile}
             initialName={name ?? ""}
-            initialRoom={room ?? ""}
+            initialRoomName={room?.name ?? ""}
+            initialRoomId={room?.id ?? ""}
             needsSetup={needsSetup}
             onExit={() => Deferred.doneUnsafe(done, Effect.void)}
           />,
