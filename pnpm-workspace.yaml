@@ -3,6 +3,7 @@ packages:
   - packages/*
 
 catalog:
+  '@effect/tsgo': 0.39.0
   '@opentui/core': ^0.5.10
   '@opentui/react': ^0.5.10
   '@types/node': ^26.4.0
@@ -10,5 +11,5 @@ catalog:
   prettier: ^3.9.6
   react: ^19.2.8
   turbo: ^2.10.12
-  typescript: ^7.0.2
+  typescript: 7.0.2
   vitest: ^4.1.0

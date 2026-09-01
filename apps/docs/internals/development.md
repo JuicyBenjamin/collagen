@@ -19,6 +19,13 @@ pnpm install
 pnpm typecheck
 ```
 
+`pnpm install` also patches the local TypeScript with the
+[Effect language service](https://github.com/effect-ts/tsgo) (the root `prepare`
+script), so `tsc` reports Effect-specific diagnostics (floating effects, missing
+context, outdated v4 APIs, …) alongside type errors, and editors using the
+workspace TypeScript get the same hints inline (VS Code: accept the "use
+workspace version" prompt; `.vscode/settings.json` opts into tsgo).
+
 ## Tests
 
 ```sh

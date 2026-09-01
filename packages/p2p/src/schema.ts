@@ -34,7 +34,7 @@ export const RoomMessage = Schema.Struct({
   project: Schema.String,
   intent: Schema.String,
   findings: Schema.String,
-  ts: Schema.Number,
+  ts: Schema.Finite,
 });
 export type RoomMessage = typeof RoomMessage.Type;
 
@@ -53,7 +53,7 @@ export type Frame = typeof Frame.Type;
 export const FrameFromJson = Schema.fromJsonString(Frame);
 
 export const Bootstrap = Schema.Array(
-  Schema.Struct({ host: Schema.String, port: Schema.Number }),
+  Schema.Struct({ host: Schema.String, port: Schema.Finite }),
 );
 export type Bootstrap = typeof Bootstrap.Type;
 

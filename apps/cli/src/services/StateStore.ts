@@ -17,7 +17,7 @@ export class StateStore extends Context.Service<StateStore>()("cli/StateStore", 
 
     const initial = yield* fs.readFileString(file).pipe(
       Effect.flatMap(Schema.decodeEffect(StateFile)),
-      Effect.catch(() => Effect.succeed(emptyState)),
+      Effect.orElseSucceed(() => emptyState),
     );
     const state = yield* SubscriptionRef.make<LocalState>(initial);
 
