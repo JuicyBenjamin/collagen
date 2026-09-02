@@ -77,7 +77,7 @@ export function FsPicker({
 
   return (
     <box flexDirection="column">
-      <text fg={theme.accent} truncate>{tail(dir, 100)}</text>
+      <text fg={theme.accent} truncate>{tail(dir, 30)}</text>
       {entries.length === 0 ? (
         <text fg={theme.dim}>(no subfolders)</text>
       ) : (
