@@ -4,7 +4,7 @@ import { useKeyboard } from "@opentui/react";
 import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { AI_OPTIONS, newProject, roomProjects, shortRoomId, type LocalState } from "@collagen/p2p";
+import { AI_OPTIONS, newProject, roomProjects, shortRoomId, type LocalState, type Project } from "@collagen/p2p";
 import { upsertActiveRoom, writeProfileFile } from "../profileFile";
 import { SetupForm } from "./Setup";
 import {
@@ -19,7 +19,7 @@ import {
   stateAtom,
   updateStateAtom,
 } from "./atoms";
-import { FsPicker, isSpace, Panel } from "./components";
+import { FsPicker, Panel } from "./components";
 import { theme } from "./theme";
 
 type Mode = "room" | "projects" | "pick" | "settings";
@@ -31,6 +31,15 @@ function nextAi(current: string | null): string | null {
   const cycle: (string | null)[] = [null, ...AI_OPTIONS];
   const i = cycle.indexOf(current);
   return cycle[(i + 1) % cycle.length] ?? null;
+}
+
+/** One row in the room's project list: the union of everyone's projects.
+ *  Active (white) when 2+ participants share the name — that's where
+ *  cross-agent work can happen; single-holder projects are greyed out. */
+interface ProjectRow {
+  name: string;
+  mine: Project | undefined;
+  holders: string[];
 }
 
 export function App({ onExit }: { onExit: () => void }) {
@@ -49,8 +58,22 @@ export function App({ onExit }: { onExit: () => void }) {
   const [settingsSaved, setSettingsSaved] = useState(false);
   const updateState = useAtomSet(updateStateAtom);
 
-  const enabled = roomProjects(state, ROOM);
-  const myProjectNames = new Set(enabled.map((p) => p.name));
+  const myProjects = roomProjects(state, ROOM);
+
+  // Union of the room's projects by name, with who holds each.
+  const rows: ProjectRow[] = (() => {
+    const byName = new Map<string, ProjectRow>();
+    for (const p of myProjects) byName.set(p.name, { name: p.name, mine: p, holders: ["you"] });
+    for (const peer of peers) {
+      for (const pp of peer.projects) {
+        const row = byName.get(pp.name) ?? { name: pp.name, mine: undefined, holders: [] };
+        row.holders.push(peer.name);
+        byName.set(pp.name, row);
+      }
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
+  const sharedCount = rows.filter((r) => r.holders.length >= 2).length;
 
   // Projects belong to the room they were added in (Keet-style).
   const deleteProject = (id: string) =>
@@ -92,13 +115,14 @@ export function App({ onExit }: { onExit: () => void }) {
     if (mode === "projects") {
       if (key.name === "escape") return setMode("room");
       if (key.name === "n") return setMode("pick");
-      if (enabled.length === 0) return;
+      if (rows.length === 0) return;
       if (key.name === "up" || key.name === "k") return setCursor((i) => Math.max(0, i - 1));
       if (key.name === "down" || key.name === "j")
-        return setCursor((i) => Math.min(enabled.length - 1, i + 1));
-      const p = enabled[Math.min(cursor, enabled.length - 1)];
-      if (!p) return;
-      if (key.name === "d") return deleteProject(p.id);
+        return setCursor((i) => Math.min(rows.length - 1, i + 1));
+      const row = rows[Math.min(cursor, rows.length - 1)];
+      if (!row) return;
+      // only your own projects can be removed
+      if (key.name === "d" && row.mine) return deleteProject(row.mine.id);
     }
   });
 
@@ -135,22 +159,61 @@ export function App({ onExit }: { onExit: () => void }) {
         ) : null}
       </text>
 
-      <box marginTop={1} flexDirection="column" gap={1}>
-        {/* room / presence */}
+      {/* the room IS the container: everything in it — peers, projects,
+          messages — lives inside this box */}
+      <box marginTop={1} flexDirection="column">
         <Panel title={`room · ${room.name}`}>
-          <text fg={theme.dim}>{peers.length + 1} online</text>
+          <text>
+            <span fg={theme.fg}>{peers.length + 1} online</span>
+            <span fg={theme.dim}> · </span>
+            <span fg={theme.fg}>{sharedCount} shared</span>
+            <span fg={theme.dim}> {sharedCount === 1 ? "project" : "projects"}</span>
+          </text>
           <box flexDirection="column" marginTop={1}>
-            <PeerLine
-              name={`${identity?.name ?? "…"} (you)`}
-              ai={state.preferredAi}
-              aiStatus={aiStatus}
-              projects={enabled.map((p) => p.name)}
-              mine={myProjectNames}
-            />
+            <PeerLine name={`${identity?.name ?? "…"} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
             {peers.map((p) => (
-              <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} projects={p.projects.map((x) => x.name)} mine={myProjectNames} />
+              <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} />
             ))}
           </box>
+
+          <box flexDirection="column" marginTop={1}>
+            <Panel
+              title={mode === "pick" ? "pick a folder" : "projects"}
+              color={mode === "projects" || mode === "pick" ? theme.accent : theme.dim}
+            >
+              {mode === "pick" ? (
+                <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
+              ) : (
+                <box flexDirection="column">
+                  {rows.length === 0 ? (
+                    <text fg={theme.dim}>no projects — p then n to add</text>
+                  ) : (
+                    rows.map((row, i) => {
+                      const active = row.holders.length >= 2;
+                      const selected = mode === "projects" && i === cursor;
+                      return (
+                        <text key={row.name} fg={selected ? theme.accent : active ? theme.fg : theme.dim} truncate>
+                          {selected ? "› " : "  "}
+                          {row.name}
+                          <span fg={theme.dim}>
+                            {" — "}
+                            {row.holders.join(", ")}
+                            {row.mine ? ` · ${row.mine.path}` : ""}
+                          </span>
+                        </text>
+                      );
+                    })
+                  )}
+                  {mode === "projects" ? (
+                    <text fg={theme.dim} truncate>
+                      ↑↓ move · n add · d remove yours · esc back
+                    </text>
+                  ) : null}
+                </box>
+              )}
+            </Panel>
+          </box>
+
           {messages.length > 0 ? (
             <box flexDirection="column" marginTop={1}>
               <text fg={theme.dim}>messages</text>
@@ -163,46 +226,6 @@ export function App({ onExit }: { onExit: () => void }) {
               ))}
             </box>
           ) : null}
-        </Panel>
-
-        {/* config / projects */}
-        <Panel title={mode === "projects" ? "projects (this room)" : mode === "pick" ? "pick a folder" : "you"} color={mode === "room" ? theme.dim : theme.accent}>
-          {mode === "pick" ? (
-            <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
-          ) : mode === "projects" ? (
-            <box flexDirection="column">
-              {enabled.length === 0 ? (
-                <text fg={theme.dim}>no projects in this room — n to add</text>
-              ) : (
-                enabled.map((p, i) => (
-                  <text key={p.id} fg={i === cursor ? theme.accent : theme.fg}>
-                    {i === cursor ? "› " : "  "}
-                    {p.name} <span fg={theme.dim}>{p.path}</span>
-                  </text>
-                ))
-              )}
-              <text fg={theme.dim} truncate>
-                ↑↓ move · n add · d delete · esc back
-              </text>
-            </box>
-          ) : (
-            <box flexDirection="column">
-              <text fg={theme.dim}>preferred ai</text>
-              <text fg={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</text>
-              <box marginTop={1}>
-                <text fg={theme.dim}>projects in room</text>
-              </box>
-              {enabled.length === 0 ? (
-                <text fg={theme.dim}>none</text>
-              ) : (
-                enabled.map((p) => (
-                  <text key={p.id} fg={theme.fg}>
-                    ◆ {p.name}
-                  </text>
-                ))
-              )}
-            </box>
-          )}
         </Panel>
       </box>
 
@@ -232,19 +255,7 @@ export function App({ onExit }: { onExit: () => void }) {
   );
 }
 
-function PeerLine({
-  name,
-  ai,
-  aiStatus,
-  projects,
-  mine,
-}: {
-  name: string;
-  ai: string | null;
-  aiStatus?: string;
-  projects: ReadonlyArray<string>;
-  mine: Set<string>;
-}) {
+function PeerLine({ name, ai, aiStatus }: { name: string; ai: string | null; aiStatus?: string }) {
   const bad = ai !== null && aiStatus !== undefined && aiStatus !== "ok" && aiStatus !== "unknown";
   return (
     <text>
@@ -252,25 +263,6 @@ function PeerLine({
       <span fg={theme.fg}>{name}</span>
       <span fg={theme.dim}> {ai ?? "—"}</span>
       {bad ? <span fg={theme.warn}> ({aiStatus === "missing" ? "cli not found" : "unauthed"})</span> : null}
-      {projects.length > 0 ? (
-        <span>
-          {" "}
-          {projects.map((p, i) => {
-            // all projects are real; accent just flags ones you also have (shared)
-            const shared = mine.has(p);
-            const label = `${p}${i < projects.length - 1 ? " " : ""}`;
-            return shared ? (
-              <b key={`${p}-${i}`} fg={theme.accent}>
-                {label}
-              </b>
-            ) : (
-              <span key={`${p}-${i}`} fg={theme.fg}>
-                {label}
-              </span>
-            );
-          })}
-        </span>
-      ) : null}
     </text>
   );
 }
