@@ -92,15 +92,20 @@ export function App({ onExit }: { onExit: () => void }) {
     setMode("projects");
   };
 
-  // One handler, gated by mode; pick mode is handled by FsPicker's own hook.
+  // The sidebar's last row is always "+ add project", so adding is just
+  // arrows + enter — no chorded keys to remember.
+  const itemCount = rows.length + 1;
+
+  // One handler, gated by focus; pick mode is handled by FsPicker's own hook.
   useKeyboard((key) => {
     if (mode === "room") {
       if (key.name === "q") return onExit();
       if (key.name === "a")
         return updateState((s: LocalState) => ({ ...s, preferredAi: nextAi(s.preferredAi) }));
-      if (key.name === "p") {
+      if (key.name === "right" || key.name === "tab" || key.name === "p") {
         setCursor(0);
         setMode("projects");
+        return;
       }
       if (key.name === "s") {
         setSettingsSaved(false);
@@ -113,13 +118,14 @@ export function App({ onExit }: { onExit: () => void }) {
       return;
     }
     if (mode === "projects") {
-      if (key.name === "escape") return setMode("room");
+      if (key.name === "escape" || key.name === "left" || key.name === "tab") return setMode("room");
       if (key.name === "n") return setMode("pick");
-      if (rows.length === 0) return;
       if (key.name === "up" || key.name === "k") return setCursor((i) => Math.max(0, i - 1));
       if (key.name === "down" || key.name === "j")
-        return setCursor((i) => Math.min(rows.length - 1, i + 1));
-      const row = rows[Math.min(cursor, rows.length - 1)];
+        return setCursor((i) => Math.min(itemCount - 1, i + 1));
+      const i = Math.min(cursor, itemCount - 1);
+      if (key.name === "return" && i === rows.length) return setMode("pick");
+      const row = rows[i];
       if (!row) return;
       // only your own projects can be removed
       if (key.name === "d" && row.mine) return deleteProject(row.mine.id);
@@ -203,24 +209,26 @@ export function App({ onExit }: { onExit: () => void }) {
                   <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
                 ) : (
                   <box flexDirection="column">
-                    {rows.length === 0 ? (
-                      <text fg={theme.dim}>none — p, n to add</text>
-                    ) : (
-                      rows.map((row, i) => {
-                        const active = row.holders.length >= 2;
-                        const selected = mode === "projects" && i === cursor;
-                        return (
-                          <text key={row.name} fg={selected ? theme.accent : active ? theme.fg : theme.dim} truncate>
-                            {selected ? "› " : "  "}
-                            {row.name}
-                            <span fg={theme.dim}> — {row.holders.join(", ")}</span>
-                          </text>
-                        );
-                      })
-                    )}
-                    {mode === "projects" ? (
+                    {rows.map((row, i) => {
+                      const active = row.holders.length >= 2;
+                      const selected = mode === "projects" && i === cursor;
+                      return (
+                        <text key={row.name} fg={selected ? theme.accent : active ? theme.fg : theme.dim} truncate>
+                          {selected ? "› " : "  "}
+                          {row.name}
+                          <span fg={theme.dim}> — {row.holders.join(", ")}</span>
+                        </text>
+                      );
+                    })}
+                    <text
+                      fg={mode === "projects" && Math.min(cursor, itemCount - 1) === rows.length ? theme.accent : theme.dim}
+                      truncate
+                    >
+                      {mode === "projects" && Math.min(cursor, itemCount - 1) === rows.length ? "› " : "  "}+ add project
+                    </text>
+                    {mode !== "projects" && rows.length === 0 ? (
                       <text fg={theme.dim} truncate>
-                        ↑↓ · n add · d remove · esc
+                        press → to get started
                       </text>
                     ) : null}
                   </box>
@@ -251,7 +259,11 @@ export function App({ onExit }: { onExit: () => void }) {
           room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] · invite id: <span fg={theme.fg}>{room.id}</span>
         </text>
         <text fg={theme.dim}>
-          {mode === "room" ? "a cycle ai · p projects · s settings · q quit" : "esc back to room"}
+          {mode === "room"
+            ? "→ projects · a cycle ai · s settings · q quit"
+            : mode === "projects"
+              ? "↑↓ select · enter add · d remove yours · ← back"
+              : "esc back"}
         </text>
       </box>
     </box>
