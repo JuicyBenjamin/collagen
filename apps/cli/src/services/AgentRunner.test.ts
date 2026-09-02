@@ -8,6 +8,7 @@ import { AgentRunner } from "./AgentRunner";
 import { cliArgsLayer } from "./CliArgs";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
+import { IdentityService } from "./Identity";
 import { StateStore } from "./StateStore";
 
 /** One recorded subprocess spawn: what AgentRunner asked the spawner to run. */
@@ -98,9 +99,19 @@ const message = (over: Partial<RoomMessage> = {}): RoomMessage => ({
 
 const baseState: LocalState = {
   preferredAi: "fake-ai",
-  pool: [{ id: "p1", name: "sandbox", path: "/tmp/fake-project" }],
-  rooms: {},
+  rooms: { testroom: [{ id: "p1", name: "sandbox", path: "/tmp/fake-project" }] },
 };
+
+const identityStub = Layer.succeed(IdentityService, {
+  identity: {
+    name: "tester",
+    profile: "testprof",
+    keyPair: { publicKey: Buffer.alloc(32), secretKey: Buffer.alloc(64) },
+    pubkey: "aa".repeat(32),
+  },
+  room: { id: "testroom", name: "test room" },
+  knownRooms: [{ id: "testroom", name: "test room" }],
+});
 
 /** Wire AgentRunner with in-memory everything. */
 const testLayer = (opts: {
@@ -112,6 +123,7 @@ const testLayer = (opts: {
     Layer.provideMerge(Layer.mergeAll(Inbox.layer, McpInfo.layer)),
     Layer.provideMerge(Layer.succeed(Adapters, { "fake-ai": fakeAdapter })),
     Layer.provideMerge(stateStoreStub(opts.state ?? baseState)),
+    Layer.provideMerge(identityStub),
     Layer.provideMerge(exec.layer),
     Layer.provideMerge(cliArgsLayer({ profile: "testprof", name: Option.none(), room: Option.none() })),
   );

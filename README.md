@@ -49,8 +49,9 @@ room, so a silent agent is never a mystery.
 In the TUI:
 
 - `a` — cycle your preferred AI (claude-code / codex)
-- `p` — manage projects, `n` — add a project folder (this is the repo your
-  agent will investigate when peers send you work)
+- `p` — manage this room's projects, `n` — add a project folder (the repo your
+  agent investigates when peers send you work). Projects are per-room,
+  Keet-style: what you add in your work room never shows in another room.
 - `q` — quit
 
 On first start collagen registers its MCP server with your `claude` and `codex`

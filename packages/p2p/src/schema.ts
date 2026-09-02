@@ -76,10 +76,11 @@ export const Project = Schema.Struct({
 });
 export type Project = typeof Project.Type;
 
-/** Local, per-user state (preferred AI + project pool + per-room enables). */
+/** Local, per-user state: preferred AI + per-room projects. A project
+ *  belongs to the room it was added in (Keet-style) — the same repo shared
+ *  into two rooms is two entries. */
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
-  pool: Schema.Array(Project),
-  rooms: Schema.Record(Schema.String, Schema.Array(Schema.String)),
+  rooms: Schema.Record(Schema.String, Schema.Array(Project)),
 });
 export type LocalState = typeof LocalState.Type;

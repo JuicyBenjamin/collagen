@@ -6,7 +6,7 @@ import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { nameOption, profileOption, roomOption } from "./args";
 import { v7 as uuidv7 } from "uuid";
-import { readProfileFile, storedRoom, writeProfileFile } from "./profileFile";
+import { readProfileFile, storedRoom, upsertActiveRoom, writeProfileFile } from "./profileFile";
 import { App } from "./ui/App";
 import { SetupForm } from "./ui/Setup";
 import { setCliArgs, setResolvedRoom } from "./ui/atoms";
@@ -40,7 +40,8 @@ function Root({
         initialRoomId={initialRoomId}
         onDone={({ name, roomName, roomId }) => {
           const id = roomId.length > 0 ? roomId : uuidv7();
-          writeProfileFile(profile, { name, roomId: id, roomName });
+          writeProfileFile(profile, { name });
+          upsertActiveRoom(profile, { id, name: roomName });
           setCliArgs({ profile, name: Option.some(name), room: Option.some(id) });
           setResolvedRoom({ id, name: roomName });
           setPhase("app");

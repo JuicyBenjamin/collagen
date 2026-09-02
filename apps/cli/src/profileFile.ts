@@ -6,19 +6,32 @@ import { configDir } from "./services/Identity";
  *  reads it before the Effect runtime exists (to decide whether to show the
  *  first-run setup) and writes it from the setup form; the Identity service
  *  remains the runtime-side reader/writer of the same file. */
+export interface RoomEntry {
+  /** The room's identity — an unguessable id (uuid v7); the topic derives
+   *  from this, so knowing the id IS the invite. */
+  id: string;
+  /** Local display label — cosmetic, changeable anytime. */
+  name: string;
+}
+
 export interface ProfileFile {
   seed?: string;
   name?: string;
-  /** The room's identity — an unguessable id (uuid v7); the topic derives
-   *  from this, so knowing the id IS the invite. */
-  roomId?: string;
-  /** Local display label for the room — cosmetic, changeable anytime. */
-  roomName?: string;
+  /** Every room this profile has joined; the process runs in one at a time. */
+  rooms?: RoomEntry[];
+  activeRoomId?: string;
 }
 
-export function storedRoom(f: ProfileFile): { id: string; name: string } | undefined {
-  if (f.roomId === undefined) return undefined;
-  return { id: f.roomId, name: f.roomName ?? f.roomId.slice(0, 8) };
+export function storedRoom(f: ProfileFile): RoomEntry | undefined {
+  const rooms = f.rooms ?? [];
+  return rooms.find((r) => r.id === f.activeRoomId) ?? rooms[0];
+}
+
+/** Add-or-relabel a room and make it active. */
+export function upsertActiveRoom(profile: string, room: RoomEntry): void {
+  const f = readProfileFile(profile);
+  const rooms = (f.rooms ?? []).filter((r) => r.id !== room.id);
+  writeProfileFile(profile, { rooms: [...rooms, room], activeRoomId: room.id });
 }
 
 export function profilePath(profile: string): string {

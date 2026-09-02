@@ -4,6 +4,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { mcpServerName } from "../util";
 import { Adapters, type Adapter, type SpawnCtx } from "./Adapters";
 import { CliArgs } from "./CliArgs";
+import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
@@ -13,6 +14,7 @@ import { StateStore } from "./StateStore";
 export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner", {
   make: Effect.gen(function* () {
     const { profile } = yield* CliArgs;
+    const { room } = yield* IdentityService;
     const inbox = yield* Inbox;
     const store = yield* StateStore;
     const mcpInfo = yield* McpInfo;
@@ -81,7 +83,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         return null;
       }
 
-      const proj = state.pool.find((p) => p.name === sample.project);
+      const proj = (state.rooms[room.id] ?? []).find((p) => p.name === sample.project);
       const sessionId = Option.fromNullishOr((yield* Ref.get(sessions)).get(threadId));
       const ctx: SpawnCtx = {
         cwd: proj?.path ?? homedir(),

@@ -5,7 +5,7 @@ import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { AI_OPTIONS, newProject, roomProjects, shortRoomId, type LocalState } from "@collagen/p2p";
-import { writeProfileFile } from "../profileFile";
+import { upsertActiveRoom, writeProfileFile } from "../profileFile";
 import { SetupForm } from "./Setup";
 import {
   aiStatusAtom,
@@ -24,7 +24,7 @@ import { theme } from "./theme";
 
 type Mode = "room" | "projects" | "pick" | "settings";
 
-const emptyState: LocalState = { preferredAi: null, pool: [], rooms: {} };
+const emptyState: LocalState = { preferredAi: null, rooms: {} };
 
 function nextAi(current: string | null): string | null {
   // null -> claude-code -> codex -> null …
@@ -50,33 +50,21 @@ export function App({ onExit }: { onExit: () => void }) {
   const updateState = useAtomSet(updateStateAtom);
 
   const enabled = roomProjects(state, ROOM);
-  const enabledIds = new Set(state.rooms[ROOM] ?? []);
   const myProjectNames = new Set(enabled.map((p) => p.name));
 
-  const toggleProject = (id: string) =>
-    updateState((s: LocalState) => {
-      const ids = new Set(s.rooms[ROOM] ?? []);
-      if (ids.has(id)) ids.delete(id);
-      else ids.add(id);
-      return { ...s, rooms: { ...s.rooms, [ROOM]: [...ids] } };
-    });
-
+  // Projects belong to the room they were added in (Keet-style).
   const deleteProject = (id: string) =>
-    updateState((s: LocalState) => {
-      const rooms: Record<string, string[]> = {};
-      for (const [r, ids] of Object.entries(s.rooms)) rooms[r] = ids.filter((x) => x !== id);
-      return { ...s, pool: s.pool.filter((p) => p.id !== id), rooms };
-    });
+    updateState((s: LocalState) => ({
+      ...s,
+      rooms: { ...s.rooms, [ROOM]: (s.rooms[ROOM] ?? []).filter((p) => p.id !== id) },
+    }));
 
-  // Picked a folder: add to pool (dedupe by path) and enable it in this room.
+  // Picked a folder: add to this room (dedupe by path within the room).
   const addFolder = (name: string, path: string) => {
     updateState((s: LocalState) => {
-      const existing = s.pool.find((p) => p.path === path);
-      const proj = existing ?? newProject(name, path);
-      const pool = existing ? s.pool : [...s.pool, proj];
-      const ids = new Set(s.rooms[ROOM] ?? []);
-      ids.add(proj.id);
-      return { ...s, pool, rooms: { ...s.rooms, [ROOM]: [...ids] } };
+      const here = s.rooms[ROOM] ?? [];
+      if (here.some((p) => p.path === path)) return s;
+      return { ...s, rooms: { ...s.rooms, [ROOM]: [...here, newProject(name, path)] } };
     });
     setMode("projects");
   };
@@ -104,13 +92,12 @@ export function App({ onExit }: { onExit: () => void }) {
     if (mode === "projects") {
       if (key.name === "escape") return setMode("room");
       if (key.name === "n") return setMode("pick");
-      if (state.pool.length === 0) return;
+      if (enabled.length === 0) return;
       if (key.name === "up" || key.name === "k") return setCursor((i) => Math.max(0, i - 1));
       if (key.name === "down" || key.name === "j")
-        return setCursor((i) => Math.min(state.pool.length - 1, i + 1));
-      const p = state.pool[Math.min(cursor, state.pool.length - 1)];
+        return setCursor((i) => Math.min(enabled.length - 1, i + 1));
+      const p = enabled[Math.min(cursor, enabled.length - 1)];
       if (!p) return;
-      if (isSpace(key) || key.name === "return") return toggleProject(p.id);
       if (key.name === "d") return deleteProject(p.id);
     }
   });
@@ -125,7 +112,8 @@ export function App({ onExit }: { onExit: () => void }) {
           initialRoomId={room.id}
           note={settingsSaved ? "saved — restart collagen to apply" : "changes apply on next start · esc back"}
           onDone={({ name, roomName, roomId }) => {
-            writeProfileFile(currentProfile(), { name, roomId: roomId.length > 0 ? roomId : room.id, roomName });
+            writeProfileFile(currentProfile(), { name });
+            upsertActiveRoom(currentProfile(), { id: roomId.length > 0 ? roomId : room.id, name: roomName });
             setSettingsSaved(true);
           }}
         />
@@ -183,22 +171,18 @@ export function App({ onExit }: { onExit: () => void }) {
             <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
           ) : mode === "projects" ? (
             <box flexDirection="column">
-              {state.pool.length === 0 ? (
-                <text fg={theme.dim}>no projects — n to add</text>
+              {enabled.length === 0 ? (
+                <text fg={theme.dim}>no projects in this room — n to add</text>
               ) : (
-                state.pool.map((p, i) => {
-                  const on = enabledIds.has(p.id);
-                  return (
-                    <text key={p.id} fg={i === cursor ? theme.accent : theme.fg}>
-                      {i === cursor ? "› " : "  "}
-                      <span fg={on ? theme.ok : theme.dim}>{on ? "[x] " : "[ ] "}</span>
-                      {p.name} <span fg={theme.dim}>{p.path}</span>
-                    </text>
-                  );
-                })
+                enabled.map((p, i) => (
+                  <text key={p.id} fg={i === cursor ? theme.accent : theme.fg}>
+                    {i === cursor ? "› " : "  "}
+                    {p.name} <span fg={theme.dim}>{p.path}</span>
+                  </text>
+                ))
               )}
               <text fg={theme.dim} truncate>
-                ↑↓ move · space toggle · n add · d delete · esc back
+                ↑↓ move · n add · d delete · esc back
               </text>
             </box>
           ) : (

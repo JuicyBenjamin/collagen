@@ -35,7 +35,7 @@ const ticketView = (ticket: Ticket, nameFor: (key: string) => string) => ({
 
 const ListRoom = Tool.make("list-room", {
   description:
-    "List your current room (a stable short id plus its local label — the label can change, the short id never does) and the peers in it with the projects each shares. Call this first to discover who you can contact and about which project. Returns TOON (compact YAML/CSV-style) text.",
+    "List your current room (a stable short id plus its local label — the label can change, the short id never does) and the peers in it with the projects each shares. Call this first to discover who you can contact and about which project. otherRooms lists rooms this user has but is NOT currently in: peers, messages and tickets there are unreachable until the user switches rooms — if a request concerns one of those, say so instead of acting in the wrong room. Returns TOON (compact YAML/CSV-style) text.",
   // no `parameters`: an empty Schema.Struct({}) produces a JSON schema without
   // "type", which the MCP tool codec rejects at registration
   success: Schema.String,
@@ -138,7 +138,7 @@ export const ToolHandlers = CollagenToolkit.toLayer(
     const room = yield* Room;
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
-    const { identity, room: roomInfo } = yield* IdentityService;
+    const { identity, room: roomInfo, knownRooms } = yield* IdentityService;
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
       const peers = yield* SubscriptionRef.get(room.roster);
       const lookup = (key: string) =>
@@ -169,6 +169,9 @@ export const ToolHandlers = CollagenToolkit.toLayer(
           Effect.map((peers) =>
             toToon({
               room: { shortId: shortRoomId(roomInfo.id), name: roomInfo.name },
+              otherRooms: knownRooms
+                .filter((r) => r.id !== roomInfo.id)
+                .map((r) => ({ shortId: shortRoomId(r.id), name: r.name })),
               peers: peers.map((p) => ({
                 name: p.name,
                 ai: p.ai,

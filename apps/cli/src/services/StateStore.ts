@@ -6,7 +6,7 @@ import { CliArgs } from "./CliArgs";
 import { configDir } from "./Identity";
 
 const StateFile = Schema.fromJsonString(LocalState);
-const emptyState: LocalState = { preferredAi: null, pool: [], rooms: {} };
+const emptyState: LocalState = { preferredAi: null, rooms: {} };
 
 /** Per-profile LocalState in a SubscriptionRef, persisted on every update. */
 export class StateStore extends Context.Service<StateStore>()("cli/StateStore", {
