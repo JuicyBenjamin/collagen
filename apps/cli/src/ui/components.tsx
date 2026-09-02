@@ -29,6 +29,11 @@ export function isSpace(key: { name: string; sequence: string }): boolean {
   return key.name === "space" || key.sequence === " ";
 }
 
+/** The kitty keyboard protocol names it "enter", the legacy parser "return". */
+export function isEnter(key: { name: string; sequence: string }): boolean {
+  return key.name === "return" || key.name === "enter" || key.sequence === "\r";
+}
+
 /** Filesystem folder picker — browse and select a directory (no typing).
  *  Name auto-derives from the folder; path is exact.
  *  Only mounted in pick mode, so its keyboard hook is naturally scoped. */
@@ -64,7 +69,7 @@ export function FsPicker({
       }
       return;
     }
-    if (key.name === "return") {
+    if (isEnter(key)) {
       // enter picks the highlighted folder; in an empty dir it picks the
       // folder you're standing in
       const e = entries[cursor];

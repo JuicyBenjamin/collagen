@@ -19,7 +19,7 @@ import {
   stateAtom,
   updateStateAtom,
 } from "./atoms";
-import { FsPicker, Panel } from "./components";
+import { FsPicker, Panel, isEnter } from "./components";
 import { theme } from "./theme";
 
 type Mode = "room" | "projects" | "pick" | "settings";
@@ -124,7 +124,7 @@ export function App({ onExit }: { onExit: () => void }) {
       if (key.name === "down" || key.name === "j")
         return setCursor((i) => Math.min(itemCount - 1, i + 1));
       const i = Math.min(cursor, itemCount - 1);
-      if (key.name === "return" && i === rows.length) return setMode("pick");
+      if (isEnter(key) && i === rows.length) return setMode("pick");
       const row = rows[i];
       if (!row) return;
       // only your own projects can be removed
