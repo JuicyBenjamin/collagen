@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { readdirSync } from "node:fs";
+import { appendFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { theme } from "./theme";
@@ -29,9 +29,24 @@ export function isSpace(key: { name: string; sequence: string }): boolean {
   return key.name === "space" || key.sequence === " ";
 }
 
+/** Appends key events to COLLAGEN_LOG's sibling key log when set — so "this
+ *  key does nothing" reports come back with data instead of guesses. */
+export function keyDebug(where: string, key: { name: string; sequence: string }, extra?: string): void {
+  const base = process.env.COLLAGEN_LOG;
+  if (!base) return;
+  try {
+    appendFileSync(
+      base + ".keys",
+      `${new Date().toISOString()} ${where} name=${JSON.stringify(key.name)} seq=${JSON.stringify(key.sequence)}${extra ? " " + extra : ""}\n`,
+    );
+  } catch {
+    // best-effort
+  }
+}
+
 /** The kitty keyboard protocol names it "enter", the legacy parser "return". */
 export function isEnter(key: { name: string; sequence: string }): boolean {
-  return key.name === "return" || key.name === "enter" || key.sequence === "\r";
+  return key.name === "return" || key.name === "enter" || key.name === "linefeed" || key.sequence === "\r" || key.sequence === "\n";
 }
 
 /** Filesystem folder picker — browse and select a directory (no typing).
@@ -52,6 +67,7 @@ export function FsPicker({
   const { height } = useTerminalDimensions();
 
   useKeyboard((key) => {
+    keyDebug("picker", key);
     if (key.name === "escape") return onCancel();
     if (key.name === "up" || key.name === "k") return setCursor((i) => Math.max(0, i - 1));
     if (key.name === "down" || key.name === "j") return setCursor((i) => Math.min(entries.length - 1, i + 1));
@@ -73,6 +89,7 @@ export function FsPicker({
       // enter picks the highlighted folder; in an empty dir it picks the
       // folder you're standing in
       const e = entries[cursor];
+      keyDebug("picker:enter", key, e ? `pick ${e.path}` : `pick-current ${dir}`);
       if (e) return onPick(e.name, e.path);
       return onPick(basename(dir), dir);
     }

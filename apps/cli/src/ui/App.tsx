@@ -19,7 +19,7 @@ import {
   stateAtom,
   updateStateAtom,
 } from "./atoms";
-import { FsPicker, Panel, isEnter } from "./components";
+import { FsPicker, Panel, isEnter, keyDebug } from "./components";
 import { theme } from "./theme";
 
 type Mode = "room" | "projects" | "pick" | "settings";
@@ -84,6 +84,7 @@ export function App({ onExit }: { onExit: () => void }) {
 
   // Picked a folder: add to this room (dedupe by path within the room).
   const addFolder = (name: string, path: string) => {
+    keyDebug("addFolder", { name, sequence: path });
     updateState((s: LocalState) => {
       const here = s.rooms[ROOM] ?? [];
       if (here.some((p) => p.path === path)) return s;
@@ -98,6 +99,7 @@ export function App({ onExit }: { onExit: () => void }) {
 
   // One handler, gated by focus; pick mode is handled by FsPicker's own hook.
   useKeyboard((key) => {
+    keyDebug(`app:${mode}`, key);
     if (mode === "room") {
       if (key.name === "q") return onExit();
       if (key.name === "a")
