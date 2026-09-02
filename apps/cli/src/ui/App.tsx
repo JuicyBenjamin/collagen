@@ -170,8 +170,10 @@ export function App({ onExit }: { onExit: () => void }) {
             <span fg={theme.fg}>{sharedCount} shared</span>
             <span fg={theme.dim}> {sharedCount === 1 ? "project" : "projects"}</span>
           </text>
-          {/* main content left, projects as a slim metadata sidebar right */}
-          <box flexDirection="row" gap={2} marginTop={1}>
+          {/* main content left, projects as a slim metadata sidebar right;
+              the row absorbs the panel's free height so the sidebar is
+              full-height and never resizes with content */}
+          <box flexDirection="row" gap={2} marginTop={1} flexGrow={1} flexShrink={1}>
             <box flexDirection="column" flexGrow={1} flexShrink={1}>
               <PeerLine name={`${identity?.name ?? "…"} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
               {peers.map((p) => (
@@ -195,6 +197,7 @@ export function App({ onExit }: { onExit: () => void }) {
               <Panel
                 title={mode === "pick" ? "pick a folder" : "projects"}
                 color={mode === "projects" || mode === "pick" ? theme.accent : theme.dim}
+                grow
               >
                 {mode === "pick" ? (
                   <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
