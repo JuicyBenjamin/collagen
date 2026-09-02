@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { execFile } from "node:child_process";
 import { homedir } from "node:os";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useRenderer } from "@opentui/react";
 import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -56,7 +57,26 @@ export function App({ onExit }: { onExit: () => void }) {
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const renderer = useRenderer();
   const updateState = useAtomSet(updateStateAtom);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copyInvite = () => {
+    // OSC 52 puts it on the terminal's clipboard (works over ssh); pbcopy is
+    // the local fallback for terminals that block OSC 52.
+    renderer.copyToClipboardOSC52(room.id);
+    if (process.platform === "darwin") {
+      const child = execFile("pbcopy");
+      child.stdin?.end(room.id);
+    }
+    setCopied(true);
+  };
 
   const myProjects = roomProjects(state, ROOM);
 
@@ -116,6 +136,7 @@ export function App({ onExit }: { onExit: () => void }) {
         setSettingsSaved(false);
         setMode("settings");
       }
+      if (key.name === "c") return copyInvite();
       return;
     }
     if (mode === "settings") {
@@ -258,11 +279,13 @@ export function App({ onExit }: { onExit: () => void }) {
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>
         <text fg={theme.dim} truncate>
-          room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] · invite id: <span fg={theme.fg}>{room.id}</span>
+          room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] · invite id:{" "}
+          <span fg={theme.fg}>{room.id}</span>
+          {copied ? <span fg={theme.ok}>  ✓ copied</span> : <span fg={theme.dim}>  (c to copy)</span>}
         </text>
         <text fg={theme.dim}>
           {mode === "room"
-            ? "→ projects · a cycle ai · s settings · q quit"
+            ? "→ projects · a cycle ai · c copy invite · s settings · q quit"
             : mode === "projects"
               ? "↑↓ select · enter add · d remove yours · ← back"
               : "esc back"}
