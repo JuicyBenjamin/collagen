@@ -146,7 +146,7 @@ export function App({ onExit }: { onExit: () => void }) {
   }
 
   return (
-    <box flexDirection="column" padding={1}>
+    <box flexDirection="column" padding={1} height="100%">
       <ascii-font text="collagen" font="tiny" color={theme.accent} />
       <text fg={theme.dim}>peer-to-peer</text>
       <text>
@@ -160,9 +160,10 @@ export function App({ onExit }: { onExit: () => void }) {
       </text>
 
       {/* the room IS the container: everything in it — peers, projects,
-          messages — lives inside this box */}
-      <box marginTop={1} flexDirection="column">
-        <Panel title={`room · ${room.name}`}>
+          messages — lives inside this box. It absorbs all free vertical
+          space so the footer stays pinned and resizes don't reflow. */}
+      <box marginTop={1} flexDirection="column" flexGrow={1} flexShrink={1}>
+        <Panel title={`room · ${room.name}`} grow>
           <text>
             <span fg={theme.fg}>{peers.length + 1} online</span>
             <span fg={theme.dim}> · </span>
@@ -227,18 +228,19 @@ export function App({ onExit }: { onExit: () => void }) {
         </Panel>
       </box>
 
-      {logs.length > 0 ? (
-        <box marginTop={1} flexDirection="column">
-          <text fg={theme.dim}>activity</text>
-          {logs.slice(-3).map((l, i) => (
+      <box marginTop={1} flexDirection="column" flexShrink={0}>
+        <text fg={theme.dim}>activity</text>
+        {[0, 1, 2].map((i) => {
+          const line = logs.slice(-3)[i] ?? " ";
+          return (
             <text key={i} fg={theme.dim} truncate>
-              {l}
+              {line}
             </text>
-          ))}
-        </box>
-      ) : null}
+          );
+        })}
+      </box>
 
-      <box marginTop={1} flexDirection="column">
+      <box flexDirection="column" flexShrink={0}>
         <text fg={theme.dim} truncate>
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>

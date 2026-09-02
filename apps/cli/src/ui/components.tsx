@@ -101,11 +101,14 @@ export function Panel({
   title,
   color = theme.accent,
   minWidth,
+  grow = false,
   children,
 }: {
   title: string;
   color?: string;
   minWidth?: number;
+  /** Stretch to absorb the parent's free space (keeps the layout stable). */
+  grow?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -118,6 +121,8 @@ export function Panel({
       titleColor={color}
       paddingX={1}
       minWidth={minWidth}
+      flexGrow={grow ? 1 : 0}
+      flexShrink={grow ? 1 : 0}
     >
       {children}
     </box>
