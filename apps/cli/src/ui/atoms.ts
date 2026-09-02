@@ -86,10 +86,13 @@ export const aiStatusAtom = runtimeAtom.atom(
 );
 
 /** All state mutations funnel through here: pass a reducer, StateStore
- *  persists and the daemons re-broadcast the profile. */
+ *  persists and the daemons re-broadcast the profile.
+ *  The reducer is WRAPPED in an object: atom-react treats a bare function
+ *  argument to a setter as an updater of the atom's own value (which is an
+ *  AsyncResult, not our state) — that ambiguity silently ate every update. */
 export const updateStateAtom = runtimeAtom.fn(
-  Effect.fnUntraced(function* (f: (s: LocalState) => LocalState) {
+  Effect.fnUntraced(function* ({ update }: { update: (s: LocalState) => LocalState }) {
     const store = yield* StateStore;
-    yield* store.update(f);
+    yield* store.update(update);
   }),
 );

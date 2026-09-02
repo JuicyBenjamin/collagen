@@ -77,18 +77,21 @@ export function App({ onExit }: { onExit: () => void }) {
 
   // Projects belong to the room they were added in (Keet-style).
   const deleteProject = (id: string) =>
-    updateState((s: LocalState) => ({
-      ...s,
-      rooms: { ...s.rooms, [ROOM]: (s.rooms[ROOM] ?? []).filter((p) => p.id !== id) },
-    }));
+    updateState({
+      update: (s) => ({
+        ...s,
+        rooms: { ...s.rooms, [ROOM]: (s.rooms[ROOM] ?? []).filter((p) => p.id !== id) },
+      }),
+    });
 
   // Picked a folder: add to this room (dedupe by path within the room).
   const addFolder = (name: string, path: string) => {
-    keyDebug("addFolder", { name, sequence: path });
-    updateState((s: LocalState) => {
-      const here = s.rooms[ROOM] ?? [];
-      if (here.some((p) => p.path === path)) return s;
-      return { ...s, rooms: { ...s.rooms, [ROOM]: [...here, newProject(name, path)] } };
+    updateState({
+      update: (s) => {
+        const here = s.rooms[ROOM] ?? [];
+        if (here.some((p) => p.path === path)) return s;
+        return { ...s, rooms: { ...s.rooms, [ROOM]: [...here, newProject(name, path)] } };
+      },
     });
     setMode("projects");
   };
@@ -103,7 +106,7 @@ export function App({ onExit }: { onExit: () => void }) {
     if (mode === "room") {
       if (key.name === "q") return onExit();
       if (key.name === "a")
-        return updateState((s: LocalState) => ({ ...s, preferredAi: nextAi(s.preferredAi) }));
+        return updateState({ update: (s) => ({ ...s, preferredAi: nextAi(s.preferredAi) }) });
       if (key.name === "right" || key.name === "tab" || key.name === "p") {
         setCursor(0);
         setMode("projects");
