@@ -169,63 +169,61 @@ export function App({ onExit }: { onExit: () => void }) {
             <span fg={theme.fg}>{sharedCount} shared</span>
             <span fg={theme.dim}> {sharedCount === 1 ? "project" : "projects"}</span>
           </text>
-          <box flexDirection="column" marginTop={1}>
-            <PeerLine name={`${identity?.name ?? "…"} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
-            {peers.map((p) => (
-              <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} />
-            ))}
-          </box>
-
-          <box flexDirection="column" marginTop={1}>
-            <Panel
-              title={mode === "pick" ? "pick a folder" : "projects"}
-              color={mode === "projects" || mode === "pick" ? theme.accent : theme.dim}
-            >
-              {mode === "pick" ? (
-                <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
-              ) : (
-                <box flexDirection="column">
-                  {rows.length === 0 ? (
-                    <text fg={theme.dim}>no projects — p then n to add</text>
-                  ) : (
-                    rows.map((row, i) => {
-                      const active = row.holders.length >= 2;
-                      const selected = mode === "projects" && i === cursor;
-                      return (
-                        <text key={row.name} fg={selected ? theme.accent : active ? theme.fg : theme.dim} truncate>
-                          {selected ? "› " : "  "}
-                          {row.name}
-                          <span fg={theme.dim}>
-                            {" — "}
-                            {row.holders.join(", ")}
-                            {row.mine ? ` · ${row.mine.path}` : ""}
-                          </span>
-                        </text>
-                      );
-                    })
-                  )}
-                  {mode === "projects" ? (
-                    <text fg={theme.dim} truncate>
-                      ↑↓ move · n add · d remove yours · esc back
-                    </text>
-                  ) : null}
-                </box>
-              )}
-            </Panel>
-          </box>
-
-          {messages.length > 0 ? (
-            <box flexDirection="column" marginTop={1}>
-              <text fg={theme.dim}>messages</text>
-              {messages.slice(-5).map((m) => (
-                <text key={m.id} fg={theme.fg} truncate>
-                  <span fg={theme.warn}>← {m.fromName}</span>
-                  <span fg={theme.dim}> [{m.project}/{m.intent}] </span>
-                  {m.findings}
-                </text>
+          {/* main content left, projects as a slim metadata sidebar right */}
+          <box flexDirection="row" gap={2} marginTop={1}>
+            <box flexDirection="column" flexGrow={1} flexShrink={1}>
+              <PeerLine name={`${identity?.name ?? "…"} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
+              {peers.map((p) => (
+                <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} />
               ))}
+              {messages.length > 0 ? (
+                <box flexDirection="column" marginTop={1}>
+                  <text fg={theme.dim}>messages</text>
+                  {messages.slice(-5).map((m) => (
+                    <text key={m.id} fg={theme.fg} truncate>
+                      <span fg={theme.warn}>← {m.fromName}</span>
+                      <span fg={theme.dim}> [{m.project}/{m.intent}] </span>
+                      {m.findings}
+                    </text>
+                  ))}
+                </box>
+              ) : null}
             </box>
-          ) : null}
+
+            <box flexDirection="column" width={34} flexShrink={0}>
+              <Panel
+                title={mode === "pick" ? "pick a folder" : "projects"}
+                color={mode === "projects" || mode === "pick" ? theme.accent : theme.dim}
+              >
+                {mode === "pick" ? (
+                  <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
+                ) : (
+                  <box flexDirection="column">
+                    {rows.length === 0 ? (
+                      <text fg={theme.dim}>none — p, n to add</text>
+                    ) : (
+                      rows.map((row, i) => {
+                        const active = row.holders.length >= 2;
+                        const selected = mode === "projects" && i === cursor;
+                        return (
+                          <text key={row.name} fg={selected ? theme.accent : active ? theme.fg : theme.dim} truncate>
+                            {selected ? "› " : "  "}
+                            {row.name}
+                            <span fg={theme.dim}> — {row.holders.join(", ")}</span>
+                          </text>
+                        );
+                      })
+                    )}
+                    {mode === "projects" ? (
+                      <text fg={theme.dim} truncate>
+                        ↑↓ · n add · d remove · esc
+                      </text>
+                    ) : null}
+                  </box>
+                )}
+              </Panel>
+            </box>
+          </box>
         </Panel>
       </box>
 
