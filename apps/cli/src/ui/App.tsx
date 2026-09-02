@@ -176,9 +176,14 @@ export function App({ onExit }: { onExit: () => void }) {
             <span fg={theme.fg}>{sharedCount} shared</span>
             <span fg={theme.dim}> {sharedCount === 1 ? "project" : "projects"}</span>
           </text>
-          {/* main content left, projects as a slim metadata sidebar right;
-              the row absorbs the panel's free height so the sidebar is
-              full-height and never resizes with content */}
+          {mode === "pick" ? (
+            /* the picker earns the whole room area — folder trees are wide */
+            <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1}>
+              <Panel title="pick a folder" color={theme.accent} grow>
+                <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
+              </Panel>
+            </box>
+          ) : (
           <box flexDirection="row" gap={2} marginTop={1} flexGrow={1} flexShrink={1}>
             <box flexDirection="column" flexGrow={1} flexShrink={1}>
               <PeerLine name={`${identity?.name ?? "…"} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
@@ -201,14 +206,11 @@ export function App({ onExit }: { onExit: () => void }) {
 
             <box flexDirection="column" width={34} flexShrink={0}>
               <Panel
-                title={mode === "pick" ? "pick a folder" : "projects"}
-                color={mode === "projects" || mode === "pick" ? theme.accent : theme.dim}
+                title="projects"
+                color={mode === "projects" ? theme.accent : theme.dim}
                 grow
               >
-                {mode === "pick" ? (
-                  <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
-                ) : (
-                  <box flexDirection="column">
+                <box flexDirection="column">
                     {rows.map((row, i) => {
                       const active = row.holders.length >= 2;
                       const selected = mode === "projects" && i === cursor;
@@ -231,11 +233,11 @@ export function App({ onExit }: { onExit: () => void }) {
                         press → to get started
                       </text>
                     ) : null}
-                  </box>
-                )}
+                </box>
               </Panel>
             </box>
           </box>
+          )}
         </Panel>
       </box>
 

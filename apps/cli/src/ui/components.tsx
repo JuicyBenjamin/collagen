@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { readdirSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { useKeyboard } from "@opentui/react";
+import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { theme } from "./theme";
 
 interface Entry {
@@ -44,6 +44,7 @@ export function FsPicker({
   const [dir, setDir] = useState(start);
   const [cursor, setCursor] = useState(0);
   const entries = useMemo(() => listDirs(dir), [dir]);
+  const { height } = useTerminalDimensions();
 
   useKeyboard((key) => {
     if (key.name === "escape") return onCancel();
@@ -68,14 +69,15 @@ export function FsPicker({
     }
   });
 
-  // window the list so a big folder doesn't overflow the viewport
-  const VIS = 8;
-  const top = Math.max(0, Math.min(cursor - 3, entries.length - VIS));
+  // window the list so a big folder doesn't overflow the viewport; use as
+  // many rows as the terminal allows (header/footer chrome ≈ 12 lines)
+  const VIS = Math.max(8, height - 12);
+  const top = Math.max(0, Math.min(cursor - Math.floor(VIS / 2), entries.length - VIS));
   const shown = entries.slice(top, top + VIS);
 
   return (
     <box flexDirection="column">
-      <text fg={theme.accent}>{tail(dir, 60)}</text>
+      <text fg={theme.accent} truncate>{tail(dir, 100)}</text>
       {entries.length === 0 ? (
         <text fg={theme.dim}>(no subfolders)</text>
       ) : (
