@@ -55,13 +55,21 @@ export function FsPicker({
       setCursor(0);
       return;
     }
-    if (key.name === "right" || key.name === "return") {
+    if (key.name === "right") {
+      // descend into the highlighted folder
       const e = entries[cursor];
       if (e) {
         setDir(e.path);
         setCursor(0);
       }
       return;
+    }
+    if (key.name === "return") {
+      // enter picks the highlighted folder; in an empty dir it picks the
+      // folder you're standing in
+      const e = entries[cursor];
+      if (e) return onPick(e.name, e.path);
+      return onPick(basename(dir), dir);
     }
     if (isSpace(key)) {
       // select the folder you're currently in
@@ -92,7 +100,7 @@ export function FsPicker({
         })
       )}
       <text fg={theme.dim} truncate>
-        ↑↓ move · → enter · ← up · space select this folder · esc cancel
+        ↑↓ · enter pick · → open · ← up · space pick this dir · esc
       </text>
     </box>
   );
