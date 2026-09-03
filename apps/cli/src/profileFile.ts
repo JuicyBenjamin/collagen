@@ -10,8 +10,11 @@ export interface RoomEntry {
   /** The room's identity — an unguessable id (uuid v7); the topic derives
    *  from this, so knowing the id IS the invite. */
   id: string;
-  /** Local display label — cosmetic, changeable anytime. */
+  /** The room's shared display name (gossiped, last-writer-wins). */
   name: string;
+  /** When `name` was last set; 0/absent = local default, any peer's named
+   *  version wins over it. */
+  nameTs?: number;
 }
 
 export interface ProfileFile {

@@ -18,10 +18,18 @@ export function deriveThreadId(a: string, b: string, project: string): string {
 export class RoomConfig extends Context.Service<RoomConfig, {
   readonly identity: Identity;
   readonly roomName: string;
+  /** The room's shared display name + when it was last set (0 = never shared:
+   *  a local default that any gossiped name overrides). */
+  readonly roomLabel: RoomMeta;
   /** Re-evaluated on every broadcast, so profile changes are picked up live. */
   readonly getProfile: Effect.Effect<SharedProfile>;
   readonly bootstrap?: Bootstrap;
 }>()("p2p/RoomConfig") {}
+
+export interface RoomMeta {
+  readonly name: string;
+  readonly ts: number;
+}
 
 const decodeFrame = Schema.decodeUnknownEffect(FrameFromJson);
 const encodeFrame = Schema.encodeEffect(FrameFromJson);
@@ -47,6 +55,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     const roster = yield* SubscriptionRef.make<ReadonlyArray<Peer>>([]);
     const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
+    const meta = yield* SubscriptionRef.make<RoomMeta>(config.roomLabel);
     const inbound = yield* Effect.acquireRelease(
       PubSub.unbounded<RoomMessage>(),
       (p) => PubSub.shutdown(p),
@@ -87,6 +96,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         return next;
       });
 
+    // Last-writer-wins: a newer ts replaces the name everywhere.
+    const absorbMeta = (incoming: RoomMeta) =>
+      SubscriptionRef.update(meta, (cur) => (incoming.ts > cur.ts ? incoming : cur));
+
     const handleFrame = (key: string, frame: Frame) =>
       frame.kind === "profile"
         ? Effect.sync(() => {
@@ -94,7 +107,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           }).pipe(Effect.andThen(publishRoster))
         : frame.kind === "msg"
           ? PubSub.publish(inbound, frame.msg)
-          : absorbTicket(frame.ticket);
+          : frame.kind === "room-meta"
+            ? absorbMeta({ name: frame.name, ts: frame.ts })
+            : absorbTicket(frame.ticket);
 
     const onData = (key: string, data: Uint8Array) =>
       decodeFrame(b4a.toString(data)).pipe(
@@ -115,9 +130,17 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         peers.delete(key);
         runFork(publishRoster);
       });
-      // greet with our current profile and every ticket we know, so a
-      // late joiner reconstructs the shared state from any one peer
+      // greet with our current profile, the room's shared name, and every
+      // ticket we know, so a late joiner reconstructs the shared state from
+      // any one peer
       runFork(config.getProfile.pipe(Effect.flatMap((p) => writeFrame(conn, { kind: "profile", profile: p }))));
+      runFork(
+        SubscriptionRef.get(meta).pipe(
+          Effect.flatMap((m) =>
+            m.ts > 0 ? writeFrame(conn, { kind: "room-meta", name: m.name, ts: m.ts }) : Effect.void,
+          ),
+        ),
+      );
       runFork(
         SubscriptionRef.get(tickets).pipe(
           Effect.flatMap((m) =>
@@ -167,6 +190,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       return msg;
     });
 
+    /** Rename the room for everyone: stamp now, set locally, gossip. */
+    const rename = Effect.fn("Room.rename")(function* (name: string) {
+      const ts = yield* Clock.currentTimeMillis;
+      yield* SubscriptionRef.set(meta, { name, ts });
+      const frame: Frame = { kind: "room-meta", name, ts };
+      yield* Effect.forEach([...connByKey.values()], (conn) => writeFrame(conn, frame), {
+        discard: true,
+      });
+    });
+
     /** Merge a ticket locally and broadcast the merged copy to the room. */
     const shareTicket = Effect.fn("Room.shareTicket")(function* (ticket: Ticket) {
       yield* absorbTicket(ticket);
@@ -181,6 +214,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     return {
       /** Current peers + changes (emits current value on subscribe). */
       roster,
+      /** The room's shared display name (last-writer-wins across peers). */
+      meta,
+      rename,
       /** Shared tickets by id (merged copies) + changes. */
       tickets,
       shareTicket,

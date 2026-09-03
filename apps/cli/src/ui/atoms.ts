@@ -85,6 +85,21 @@ export const aiStatusAtom = runtimeAtom.atom(
   })),
 );
 
+/** The room's shared display name — updates live when any peer renames it. */
+export const roomMetaAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return SubscriptionRef.changes((yield* Room).meta);
+  })),
+);
+
+/** Rename the room for everyone in it (gossiped, last-writer-wins). */
+export const renameRoomAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ name }: { name: string }) {
+    const room = yield* Room;
+    yield* room.rename(name);
+  }),
+);
+
 /** All state mutations funnel through here: pass a reducer, StateStore
  *  persists and the daemons re-broadcast the profile.
  *  The reducer is WRAPPED in an object: atom-react treats a bare function

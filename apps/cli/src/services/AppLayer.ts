@@ -7,6 +7,7 @@ import { CliArgs } from "./CliArgs";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
 import { IdentityService } from "./Identity";
+import { readProfileFile, upsertActiveRoom } from "../profileFile";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";
@@ -19,13 +20,16 @@ import { StateStore } from "./StateStore";
 const RoomConfigLive = Layer.effect(
   RoomConfig,
   Effect.gen(function* () {
+    const { profile } = yield* CliArgs;
     const { identity, room } = yield* IdentityService;
     const store = yield* StateStore;
     const aiStatus = yield* AiStatus;
     const bootstrap = yield* loadDevBootstrap;
+    const stored = readProfileFile(profile).rooms?.find((r) => r.id === room.id);
     return {
       identity,
       roomName: room.id,
+      roomLabel: { name: room.name, ts: stored?.nameTs ?? 0 },
       getProfile: Effect.gen(function* () {
         const s = yield* store.get;
         const status = yield* SubscriptionRef.get(aiStatus.current);
@@ -124,6 +128,19 @@ const Daemons = Layer.effectDiscard(
             }
           }
         }),
+      ),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
+
+    // A shared room name (local rename OR gossiped from a peer) is persisted
+    // so it survives restarts.
+    const { profile } = yield* CliArgs;
+    const { room: roomInfo } = yield* IdentityService;
+    yield* SubscriptionRef.changes(room.meta).pipe(
+      Stream.drop(1),
+      Stream.tap((m) =>
+        Effect.sync(() => upsertActiveRoom(profile, { id: roomInfo.id, name: m.name, nameTs: m.ts })),
       ),
       Stream.runDrain,
       Effect.forkScoped,

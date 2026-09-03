@@ -5,7 +5,12 @@ import { FileSystem } from "effect";
 import { keyPairFromSeed, pubkeyHex, randomSeedHex, type Identity } from "@collagen/p2p";
 import { CliArgs } from "./CliArgs";
 
-const RoomEntry = Schema.Struct({ id: Schema.String, name: Schema.String });
+const RoomEntry = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  /** when the shared room name was last set — 0/absent loses to any gossip */
+  nameTs: Schema.optional(Schema.Finite),
+});
 
 const IdentityFile = Schema.fromJsonString(
   Schema.Struct({

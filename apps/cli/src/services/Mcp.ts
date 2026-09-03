@@ -165,10 +165,10 @@ export const ToolHandlers = CollagenToolkit.toLayer(
 
     return {
       "list-room": () =>
-        SubscriptionRef.get(room.roster).pipe(
-          Effect.map((peers) =>
+        Effect.all([SubscriptionRef.get(room.roster), SubscriptionRef.get(room.meta)]).pipe(
+          Effect.map(([peers, meta]) =>
             toToon({
-              room: { shortId: shortRoomId(roomInfo.id), name: roomInfo.name },
+              room: { shortId: shortRoomId(roomInfo.id), name: meta.name },
               otherRooms: knownRooms
                 .filter((r) => r.id !== roomInfo.id)
                 .map((r) => ({ shortId: shortRoomId(r.id), name: r.name })),

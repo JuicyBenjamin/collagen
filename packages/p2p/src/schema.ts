@@ -57,7 +57,13 @@ export const TicketFrame = Schema.Struct({
   kind: Schema.Literal("ticket"),
   ticket: Ticket,
 });
-export const Frame = Schema.Union([ProfileFrame, MessageFrame, TicketFrame]);
+/** The room's shared display name — gossiped, last-writer-wins by ts. */
+export const RoomMetaFrame = Schema.Struct({
+  kind: Schema.Literal("room-meta"),
+  name: Schema.String,
+  ts: Schema.Finite,
+});
+export const Frame = Schema.Union([ProfileFrame, MessageFrame, TicketFrame, RoomMetaFrame]);
 export type Frame = typeof Frame.Type;
 
 /** Wire codec: JSON string <-> validated Frame. */

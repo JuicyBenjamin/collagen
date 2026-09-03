@@ -17,6 +17,8 @@ import {
   logsAtom,
   mcpUrlAtom,
   recentMessagesAtom,
+  renameRoomAtom,
+  roomMetaAtom,
   rosterAtom,
   stateAtom,
   updateStateAtom,
@@ -59,10 +61,13 @@ export function App({ onExit }: { onExit: () => void }) {
   const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
+  // shared name: live view of what the room agreed on (gossiped LWW)
+  const roomName = AsyncResult.getOrElse(useAtomValue(roomMetaAtom), () => ({ name: room.name, ts: 0 })).name;
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [copied, setCopied] = useState(false);
   const renderer = useRenderer();
   const updateState = useAtomSet(updateStateAtom);
+  const renameRoom = useAtomSet(renameRoomAtom);
 
   useEffect(() => {
     if (!copied) return;
@@ -167,12 +172,20 @@ export function App({ onExit }: { onExit: () => void }) {
         <SetupForm
           title={`settings — profile "${currentProfile()}"`}
           initialName={identity?.name ?? ""}
-          initialRoomName={room.name}
+          initialRoomName={roomName}
           initialRoomId={room.id}
-          note={settingsSaved ? "saved — restart collagen to apply" : "changes apply on next start · esc back"}
-          onDone={({ name, roomName, roomId }) => {
+          note={
+            settingsSaved
+              ? "saved — room name applies now, the rest on restart"
+              : "room name applies live (for everyone) · other changes on next start · esc back"
+          }
+          onDone={({ name, roomName: newRoomName, roomId }) => {
             writeProfileFile(currentProfile(), { name });
-            upsertActiveRoom(currentProfile(), { id: roomId.length > 0 ? roomId : room.id, name: roomName });
+            // renaming is shared state — gossip it; switching rooms is local
+            if (newRoomName !== roomName) renameRoom({ name: newRoomName });
+            if (roomId.length > 0 && roomId !== room.id) {
+              upsertActiveRoom(currentProfile(), { id: roomId, name: roomId.slice(0, 8) });
+            }
             setSettingsSaved(true);
           }}
         />
@@ -198,7 +211,7 @@ export function App({ onExit }: { onExit: () => void }) {
           messages — lives inside this box. It absorbs all free vertical
           space so the footer stays pinned and resizes don't reflow. */}
       <box marginTop={1} flexDirection="column" flexGrow={1} flexShrink={1}>
-        <Panel title={`room · ${room.name}`} grow>
+        <Panel title={`room · ${roomName}`} grow>
           <text>
             <span fg={theme.fg}>{peers.length + 1} online</span>
             <span fg={theme.dim}> · </span>
@@ -282,7 +295,7 @@ export function App({ onExit }: { onExit: () => void }) {
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>
         <text fg={theme.dim} truncate>
-          room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] · invite id:{" "}
+          room: <span fg={theme.fg}>{roomName}</span> [{shortRoomId(room.id)}] · invite id:{" "}
           <span fg={theme.fg}>{room.id}</span>
           {copied ? <span fg={theme.ok}>  ✓ copied</span> : <span fg={theme.dim}>  (c to copy)</span>}
         </text>

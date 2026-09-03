@@ -38,8 +38,11 @@ const roomStub = (sent: Array<{ peerKey: string; intent: string; findings: strin
               return msg;
             });
       const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
+      const meta = yield* SubscriptionRef.make({ name: "test room", ts: 0 });
       return {
         roster,
+        meta,
+        rename: (_name: string) => Effect.void,
         tickets,
         shareTicket: (ticket: Ticket) => Effect.succeed(ticket),
         messages: Stream.fromPubSub(inbound),
