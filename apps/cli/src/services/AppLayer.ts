@@ -1,7 +1,7 @@
 import { Clock, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Room, RoomConfig, actionableSteps, roomProjects, type RoomMessage } from "@collagen/p2p";
-import { AdaptersLive, AdaptersWithMock } from "./Adapters";
+import { AdaptersLive } from "./Adapters";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
 import { AgentRunner } from "./AgentRunner";
@@ -140,9 +140,7 @@ export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(Room.layer),
   Layer.provideMerge(RoomConfigLive),
   Layer.provideMerge(AiStatus.layer),
-  // COLLAGEN_MOCK_AI=1 injects the mocked agents (mock:claude-code /
-  // mock:codex) via the same DI seam tests use — nothing else changes.
-  Layer.provideMerge(process.env.COLLAGEN_MOCK_AI ? AdaptersWithMock : AdaptersLive),
+  Layer.provideMerge(AdaptersLive),
   Layer.provideMerge(Inbox.layer),
   Layer.provideMerge(McpInfo.layer),
   Layer.provideMerge(StateStore.layer),

@@ -122,7 +122,7 @@ export const codexAdapter: Adapter = {
 // (MCP handshake → get-messages → send-to-peer ack) with canned "thinking".
 // Lets a machine without any LLM CLI be a complete peer in a cross-network
 // test — everything downstream of the adapter (AgentRunner, MCP, swarm) is
-// exercised for real. Selected via COLLAGEN_MOCK_AI=1.
+// exercised for real.
 const mockAgentPath = fileURLToPath(new URL("../mock-agent.mjs", import.meta.url));
 
 export const mockAdapter: Adapter = {
@@ -157,18 +157,12 @@ export class Adapters extends Context.Service<Adapters, Readonly<Record<string, 
 export const AdaptersLive = Layer.succeed(Adapters, {
   "claude-code": claudeAdapter,
   codex: codexAdapter,
-});
-
-/** The mocked options dev mode adds to the cycle. Two names, one behavior —
- *  the point is the label: peers see "mock:claude-code" in the room and know
- *  no real AI sits behind this peer. */
-export const MOCK_AI_OPTIONS = ["mock:claude-code", "mock:codex"] as const;
-
-/** AdaptersLive plus the mocks — the DI seam for LLM-less machines: swap the
- *  layer, change nothing else. */
-export const AdaptersWithMock = Layer.succeed(Adapters, {
-  "claude-code": claudeAdapter,
-  codex: codexAdapter,
   "mock:claude-code": mockAdapter,
   "mock:codex": mockAdapter,
 });
+
+/** The mocked options in the ai cycle. Two names, one behavior — the point
+ *  is the label: peers see "mock:claude-code" in the room and know no real
+ *  AI sits behind this peer. Always available, so a machine without any LLM
+ *  subscription can be a full peer out of the box. */
+export const MOCK_AI_OPTIONS = ["mock:claude-code", "mock:codex"] as const;

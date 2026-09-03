@@ -29,13 +29,10 @@ type Mode = "room" | "projects" | "pick" | "settings";
 const emptyState: LocalState = { preferredAi: null, rooms: {} };
 
 function nextAi(current: string | null): string | null {
-  // null -> claude-code -> codex -> null … dev mode (COLLAGEN_MOCK_AI=1)
-  // extends the cycle with the mocked agents.
-  const cycle: (string | null)[] = [
-    null,
-    ...AI_OPTIONS,
-    ...(process.env.COLLAGEN_MOCK_AI ? MOCK_AI_OPTIONS : []),
-  ];
+  // null -> claude-code -> codex -> mock:claude-code -> mock:codex -> null …
+  // the mocks let a machine without an LLM CLI participate; the mock: prefix
+  // is broadcast so peers see there's no real AI behind it.
+  const cycle: (string | null)[] = [null, ...AI_OPTIONS, ...MOCK_AI_OPTIONS];
   const i = cycle.indexOf(current);
   return cycle[(i + 1) % cycle.length] ?? null;
 }
