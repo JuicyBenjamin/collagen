@@ -19,3 +19,9 @@ export function stripArgSeparator(argv: ReadonlyArray<string>): string[] {
   const i = argv.indexOf("--");
   return i === -1 ? [...argv] : [...argv.slice(0, i), ...argv.slice(i + 1)];
 }
+
+/** A room invite id is a uuid (v7 in practice). The setup wizard rejects
+ *  anything else so a botched paste can't silently become a brand-new room. */
+export function isRoomInviteId(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}

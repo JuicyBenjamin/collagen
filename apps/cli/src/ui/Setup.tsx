@@ -1,11 +1,133 @@
 import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
+import { isRoomInviteId } from "../util";
+import { isEnter } from "./components";
 import { theme } from "./theme";
 
-/** First-run (and settings) form: display name + room label + room id.
- *  The room id is the invite AND the secret — leave it empty to create a
- *  fresh room (an unguessable uuid v7); paste a friend's id to join theirs.
- *  The label is a local nickname, changeable anytime. */
+/** What the first-run wizard produces. `roomId` is only set when joining;
+ *  creating leaves id generation (uuid v7) to the caller. */
+export interface SetupResult {
+  name: string;
+  mode: "create" | "join";
+  roomName: string;
+  roomId: string;
+}
+
+type Step = "name" | "choice" | "create" | "join";
+
+/** First-run wizard. One question per screen so joining a friend's room and
+ *  creating a fresh one are explicit, separate paths — you can't end up in a
+ *  new room by accident when you meant to paste an invite. */
+export function SetupWizard({
+  initialName,
+  onDone,
+}: {
+  initialName: string;
+  onDone: (values: SetupResult) => void;
+}) {
+  const [step, setStep] = useState<Step>("name");
+  const [name, setName] = useState(initialName);
+  const [choice, setChoice] = useState(0); // 0 create · 1 join
+  const [roomName, setRoomName] = useState("");
+  const [roomId, setRoomId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const submitName = () => {
+    if (name.trim().length === 0) return;
+    setStep("choice");
+  };
+
+  const submitCreate = () => {
+    if (roomName.trim().length === 0) return;
+    onDone({ name: name.trim(), mode: "create", roomName: roomName.trim(), roomId: "" });
+  };
+
+  const submitJoin = () => {
+    const id = roomId.trim();
+    if (!isRoomInviteId(id)) {
+      setError("that doesn't look like a room id — it should be a uuid like 019904c3-…-…");
+      return;
+    }
+    onDone({ name: name.trim(), mode: "join", roomName: "", roomId: id });
+  };
+
+  useKeyboard((key) => {
+    if (step === "choice") {
+      if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right")
+        return setChoice((c) => (c === 0 ? 1 : 0));
+      if (isEnter(key)) return setStep(choice === 0 ? "create" : "join");
+      if (key.name === "escape") return setStep("name");
+      return;
+    }
+    if ((step === "create" || step === "join") && key.name === "escape") {
+      setError(null);
+      return setStep("choice");
+    }
+  });
+
+  return (
+    <box flexDirection="column" padding={1} gap={1}>
+      <ascii-font text="collagen" font="tiny" color={theme.accent} />
+
+      {step === "name" ? (
+        <>
+          <text fg={theme.fg}>step 1 of 2 — who are you?</text>
+          <box border borderStyle="rounded" borderColor={theme.accent} paddingX={1} title=" your name ">
+            <input focused value={name} onInput={setName} onSubmit={submitName} placeholder="how peers see you" />
+          </box>
+          <text fg={theme.dim}>enter continue</text>
+        </>
+      ) : null}
+
+      {step === "choice" ? (
+        <>
+          <text fg={theme.fg}>step 2 of 2 — join or create a room?</text>
+          <box flexDirection="column">
+            <text fg={choice === 0 ? theme.accent : theme.fg}>{choice === 0 ? "› " : "  "}create a new room</text>
+            <text fg={theme.dim}>    start fresh — you get an invite id to share with friends</text>
+            <text fg={choice === 1 ? theme.accent : theme.fg}>{choice === 1 ? "› " : "  "}join a friend's room</text>
+            <text fg={theme.dim}>    paste the invite id they sent you</text>
+          </box>
+          <text fg={theme.dim}>↑↓ select · enter confirm · esc back</text>
+        </>
+      ) : null}
+
+      {step === "create" ? (
+        <>
+          <text fg={theme.fg}>create a room</text>
+          <box border borderStyle="rounded" borderColor={theme.accent} paddingX={1} title=" room name ">
+            <input focused value={roomName} onInput={setRoomName} onSubmit={submitCreate} placeholder="what to call it — changeable anytime" />
+          </box>
+          <text fg={theme.dim}>enter create · esc back</text>
+        </>
+      ) : null}
+
+      {step === "join" ? (
+        <>
+          <text fg={theme.fg}>join a room</text>
+          <box border borderStyle="rounded" borderColor={theme.accent} paddingX={1} title=" invite id ">
+            <input
+              focused
+              value={roomId}
+              onInput={(v: string) => {
+                setError(null);
+                setRoomId(v);
+              }}
+              onSubmit={submitJoin}
+              placeholder="paste the invite id your friend copied with c"
+            />
+          </box>
+          {error ? <text fg={theme.warn}>{error}</text> : null}
+          <text fg={theme.dim}>enter join · esc back</text>
+        </>
+      ) : null}
+    </box>
+  );
+}
+
+/** Settings form: edit everything on one screen (you already have a room —
+ *  this is for tweaking, not onboarding). The room id field still accepts a
+ *  pasted invite to switch rooms. */
 export function SetupForm({
   initialName,
   initialRoomName,
@@ -49,7 +171,7 @@ export function SetupForm({
         <input focused={field === "roomName"} value={roomName} onInput={setRoomName} onSubmit={next} placeholder="what YOU call this room — just a nickname" />
       </box>
       <box flexDirection="column" border borderStyle="rounded" borderColor={field === "roomId" ? theme.accent : theme.dim} paddingX={1} title=" room id (the invite) ">
-        <input focused={field === "roomId"} value={roomId} onInput={setRoomId} onSubmit={submit} placeholder="paste a friend's room id — or leave empty to create a new room" />
+        <input focused={field === "roomId"} value={roomId} onInput={setRoomId} onSubmit={submit} placeholder="paste a friend's room id to switch rooms" />
       </box>
       <text fg={theme.dim}>tab switch field · enter next/confirm</text>
       {note ? <text fg={theme.warn}>{note}</text> : null}

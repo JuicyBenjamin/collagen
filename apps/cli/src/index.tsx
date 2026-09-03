@@ -8,7 +8,7 @@ import { nameOption, profileOption, roomOption } from "./args";
 import { v7 as uuidv7 } from "uuid";
 import { readProfileFile, storedRoom, upsertActiveRoom, writeProfileFile } from "./profileFile";
 import { App } from "./ui/App";
-import { SetupForm } from "./ui/Setup";
+import { SetupWizard } from "./ui/Setup";
 import { setCliArgs, setResolvedRoom } from "./ui/atoms";
 import { stripArgSeparator } from "./util";
 
@@ -18,32 +18,28 @@ import { stripArgSeparator } from "./util";
 function Root({
   profile,
   initialName,
-  initialRoomName,
-  initialRoomId,
   needsSetup,
   onExit,
 }: {
   profile: string;
   initialName: string;
-  initialRoomName: string;
-  initialRoomId: string;
   needsSetup: boolean;
   onExit: () => void;
 }) {
   const [phase, setPhase] = useState<"setup" | "app">(needsSetup ? "setup" : "app");
   if (phase === "setup") {
     return (
-      <SetupForm
-        title="welcome — who are you, and which room?"
+      <SetupWizard
         initialName={initialName}
-        initialRoomName={initialRoomName}
-        initialRoomId={initialRoomId}
-        onDone={({ name, roomName, roomId }) => {
-          const id = roomId.length > 0 ? roomId : uuidv7();
+        onDone={({ name, mode, roomName, roomId }) => {
+          // create: fresh unguessable id; join: the pasted invite IS the id,
+          // labeled by its short prefix until the user renames it in settings.
+          const id = mode === "create" ? uuidv7() : roomId;
+          const label = mode === "create" ? roomName : roomId.slice(0, 8);
           writeProfileFile(profile, { name });
-          upsertActiveRoom(profile, { id, name: roomName });
+          upsertActiveRoom(profile, { id, name: label });
           setCliArgs({ profile, name: Option.some(name), room: Option.some(id) });
-          setResolvedRoom({ id, name: roomName });
+          setResolvedRoom({ id, name: label });
           setPhase("app");
         }}
       />
@@ -88,8 +84,6 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
           <Root
             profile={args.profile}
             initialName={name ?? ""}
-            initialRoomName={room?.name ?? ""}
-            initialRoomId={room?.id ?? ""}
             needsSetup={needsSetup}
             onExit={() => Deferred.doneUnsafe(done, Effect.void)}
           />,
