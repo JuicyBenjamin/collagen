@@ -115,8 +115,8 @@ describe("mockAdapter", () => {
     ]);
   });
 
-  it("marks resumed runs so the script only acks once per thread", () => {
-    expect(mockAdapter.args(ctx(Option.some("mock-thread-1"))).at(-1)).toBe("resumed");
+  it("passes the stored session id through — it carries the thread's ack count", () => {
+    expect(mockAdapter.args(ctx(Option.some("mock#2"))).at(-1)).toBe("mock#2");
   });
 
   it("parse: claude-shaped single JSON object", () => {

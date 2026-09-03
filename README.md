@@ -93,8 +93,8 @@ which spawns a tiny script that does everything a real agent CLI does (MCP
 handshake, `get-messages`, `send-to-peer` ack), just with canned "thinking".
 Message a mocked peer and you get a `mock-ack` reply back within seconds,
 which proves the whole pipeline: swarm connection, message delivery, agent
-trigger, MCP server, and the reply crossing back. One ack per thread — mocks
-don't answer other mocks, so two mocked machines can't ping-pong.
+trigger, MCP server, and the reply crossing back. Acks are capped at 3 per
+thread and mocks never answer other mocks, so nothing can ping-pong.
 
 ## Troubleshooting
 

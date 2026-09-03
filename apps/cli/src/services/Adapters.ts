@@ -138,7 +138,9 @@ export const mockAdapter: Adapter = {
     o.msg.fromName,
     o.msg.project,
     o.msg.intent,
-    Option.isSome(o.sessionId) ? "resumed" : "fresh",
+    // the stored session id doubles as the mock's memory: it encodes how many
+    // acks this thread got ("mock#N"), so the cap survives across spawns
+    Option.getOrElse(o.sessionId, () => "fresh"),
   ],
   parse: (out) => {
     try {

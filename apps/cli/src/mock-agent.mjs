@@ -3,8 +3,10 @@
 // second device can be a full peer in a real cross-network test. It walks the
 // exact path a real agent would — MCP handshake, get-messages, send-to-peer —
 // only the "thinking" is canned. Spawned by the `mock` adapter; argv:
-//   mcpUrl threadId fromName project intent freshOrResumed
-const [mcpUrl, threadId, fromName, project, intent, run] = process.argv.slice(2);
+//   mcpUrl threadId fromName project intent session
+// `session` is the runner's stored session id for this thread — ours encode
+// the ack count as "mock#N", which is the only state the mock needs.
+const [mcpUrl, threadId, fromName, project, intent, session] = process.argv.slice(2);
 
 const PROTOCOL = "2025-06-18";
 const baseHeaders = {
@@ -42,17 +44,20 @@ async function main() {
       clientInfo: { name: "collagen-mock-agent", version: "0.0.0" },
     },
   });
-  const session = init.sid ?? undefined;
-  await rpc({ jsonrpc: "2.0", method: "notifications/initialized" }, session);
+  // NOT named `session` — that would shadow the argv ack-count carrier
+  const mcpSession = init.sid ?? undefined;
+  await rpc({ jsonrpc: "2.0", method: "notifications/initialized" }, mcpSession);
   const call = (id, name, args) =>
-    rpc({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } }, session);
+    rpc({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } }, mcpSession);
 
   const messages = toolText(await call(2, "get-messages", { threadId }));
 
-  // Reply once per thread, and never to another mock's ack — otherwise two
-  // mocks (or a polite real agent) ping-pong forever.
+  // Reply to pings, but capped per thread and never to another mock's ack —
+  // otherwise two mocks (or a polite real agent) ping-pong forever.
+  const MAX_ACKS = 3;
+  const acked = session?.startsWith("mock#") ? Number(session.slice(5)) || 0 : 0;
   let replied = false;
-  if (run === "fresh" && !intent.startsWith("mock")) {
+  if (acked < MAX_ACKS && !intent.startsWith("mock")) {
     const r = toolText(
       await call(3, "send-to-peer", {
         peer: fromName,
@@ -67,8 +72,14 @@ async function main() {
 
   console.log(
     JSON.stringify({
-      session_id: `mock-${threadId}`,
-      result: `mock agent: read thread${replied ? ", replied via send-to-peer" : ""}`,
+      session_id: `mock#${replied ? acked + 1 : acked}`,
+      result: `mock agent: read thread${
+        replied
+          ? `, replied via send-to-peer (ack ${acked + 1}/${MAX_ACKS})`
+          : acked >= MAX_ACKS
+            ? `, ack cap reached (${MAX_ACKS})`
+            : ", not acking a mock message"
+      }`,
     }),
   );
 }
