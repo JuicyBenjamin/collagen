@@ -7,14 +7,14 @@
     "collagen": "src/index.tsx"
   },
   "scripts": {
-    "dev": "node --experimental-ffi --import tsx src/index.tsx",
+    "dev": "COLLAGEN_DEV=1 node --experimental-ffi --import tsx src/index.tsx",
     "dev:net": "tsx src/dev-testnet.ts",
     "start": "node --experimental-ffi --import tsx src/index.tsx",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo node_modules",
-    "dev:watch": "node --experimental-ffi --import tsx --watch-preserve-output --watch src/index.tsx"
+    "dev:watch": "COLLAGEN_DEV=1 node --experimental-ffi --import tsx --watch-preserve-output --watch src/index.tsx"
   },
   "dependencies": {
     "@collagen/p2p": "workspace:*",

@@ -115,6 +115,32 @@ const SettleStep = Tool.make("settle-step", {
   success: Schema.String,
 });
 
+const DrivePeer = Tool.make("drive-peer", {
+  description:
+    "TESTING ONLY: remote-control a mock peer (one whose ai starts with 'mock:') so a single machine can exercise the full cross-peer flow. The driven peer performs the action as itself, so everything arrives back through the real pipeline. Actions: 'send-message' (peer sends YOU a message — needs project/intent/findings; reusing a project continues the same thread), 'create-ticket' (peer creates a shared ticket — needs project/goal/steps, each step {intent, description, mine}; mine=true → the mock owns it, mine=false → you own it and your agent is triggered), 'settle-step' (peer settles a step it owns — needs ticketId/stepId/result). Real peers ignore drive requests.",
+  parameters: Schema.Struct({
+    peer: Schema.String,
+    action: Schema.Literals(["send-message", "create-ticket", "settle-step"]),
+    project: Schema.optional(Schema.String),
+    intent: Schema.optional(Schema.String),
+    findings: Schema.optional(Schema.String),
+    goal: Schema.optional(Schema.String),
+    steps: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          intent: Schema.String,
+          description: Schema.String,
+          mine: Schema.optional(Schema.Boolean),
+        }),
+      ),
+    ),
+    ticketId: Schema.optional(Schema.String),
+    stepId: Schema.optional(Schema.String),
+    result: Schema.optional(Schema.String),
+  }),
+  success: Schema.String,
+});
+
 const GetTickets = Tool.make("get-tickets", {
   description:
     "All shared tickets this instance knows, merged from the room. Includes step ownership, status, dependencies, and settled results. Returns TOON (compact YAML/CSV-style) text.",
@@ -133,8 +159,22 @@ export const CollagenToolkit = Toolkit.make(
   GetTickets,
 );
 
-export const ToolHandlers = CollagenToolkit.toLayer(
-  Effect.gen(function* () {
+/** Dev-only surface: everything plus the drive-peer test tool. A prod run
+ *  never registers it — the tool doesn't exist there, it isn't just refused. */
+export const DevCollagenToolkit = Toolkit.make(
+  ListRoom,
+  SendToPeer,
+  GetMessages,
+  ExecuteScript,
+  SearchTools,
+  DescribeScripting,
+  CreateTicket,
+  SettleStep,
+  GetTickets,
+  DrivePeer,
+);
+
+const makeHandlers = Effect.gen(function* () {
     const room = yield* Room;
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
@@ -262,6 +302,48 @@ export const ToolHandlers = CollagenToolkit.toLayer(
           const merged = yield* room.shareTicket(updated);
           return toToon({ ticket: yield* renderTicket(merged) });
       }),
+      "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: {
+        peer: string;
+        action: "send-message" | "create-ticket" | "settle-step";
+        project?: string;
+        intent?: string;
+        findings?: string;
+        goal?: string;
+        steps?: ReadonlyArray<{ intent: string; description: string; mine?: boolean }>;
+        ticketId?: string;
+        stepId?: string;
+        result?: string;
+      }) {
+        const peers = yield* SubscriptionRef.get(room.roster);
+        const target = peers.find((p) => p.name === input.peer);
+        if (!target) return `failed: no peer named ${input.peer}`;
+        if (!(target.ai ?? "").startsWith("mock")) {
+          return `failed: ${input.peer} runs "${target.ai ?? "no ai"}", not a mock — real peers can't be driven`;
+        }
+        const need = (field: string, v: string | undefined): v is string => v !== undefined && v.length > 0;
+        const action =
+          input.action === "send-message"
+            ? need("project", input.project) && need("intent", input.intent) && need("findings", input.findings)
+              ? ({ kind: "send-message" as const, project: input.project, intent: input.intent, findings: input.findings })
+              : null
+            : input.action === "create-ticket"
+              ? need("project", input.project) && need("goal", input.goal) && (input.steps?.length ?? 0) > 0
+                ? ({
+                    kind: "create-ticket" as const,
+                    project: input.project!,
+                    goal: input.goal!,
+                    steps: input.steps!.map((s) => ({ intent: s.intent, description: s.description, mine: s.mine ?? false })),
+                  })
+                : null
+              : need("ticketId", input.ticketId) && need("stepId", input.stepId) && need("result", input.result)
+                ? ({ kind: "settle-step" as const, ticketId: input.ticketId, stepId: input.stepId, result: input.result })
+                : null;
+        if (action === null) return `failed: missing fields for action "${input.action}" — see the tool description`;
+        return yield* room.sendDrive(target.key, action).pipe(
+          Effect.map(() => `drive sent — ${input.peer} will ${input.action} as itself`),
+          Effect.catchTag("PeerNotConnected", () => Effect.succeed("failed: peer not connected")),
+        );
+      }),
       "get-tickets": () =>
         SubscriptionRef.get(room.tickets).pipe(
           Effect.flatMap((m) => Effect.forEach([...m.values()], renderTicket)),
@@ -269,8 +351,12 @@ export const ToolHandlers = CollagenToolkit.toLayer(
           Effect.withSpan("Mcp.getTickets"),
         ),
     };
-  }),
+  });
+
+export const ToolHandlers = CollagenToolkit.toLayer(
+  makeHandlers.pipe(Effect.map(({ "drive-peer": _drive, ...handlers }) => handlers)),
 );
+export const DevToolHandlers = DevCollagenToolkit.toLayer(makeHandlers);
 
 /** MCP server over Streamable HTTP on the profile's deterministic port
  *  (ephemeral fallback if taken). Publishes the resolved URL to McpInfo.
@@ -295,10 +381,17 @@ export const McpLive = Layer.unwrap(
       }),
     );
 
+    // dev runs (pnpm dev sets COLLAGEN_DEV=1) expose the drive-peer test
+    // tool; anything else serves the plain toolkit — the tool doesn't exist.
+    const toolkitLayer =
+      process.env.COLLAGEN_DEV === "1"
+        ? McpServer.toolkit(DevCollagenToolkit).pipe(Layer.provide(DevToolHandlers))
+        : McpServer.toolkit(CollagenToolkit).pipe(Layer.provide(ToolHandlers));
+
     const serve = (port: number) =>
       HttpRouter.serve(
         Layer.mergeAll(
-          McpServer.toolkit(CollagenToolkit).pipe(Layer.provide(ToolHandlers)),
+          toolkitLayer,
           announce,
         ).pipe(
           Layer.provideMerge(

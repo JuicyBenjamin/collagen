@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Clock, Context, Effect, Layer, PubSub, Schedule, Schema, Stream, SubscriptionRef } from "effect";
 import Hyperswarm from "hyperswarm";
 import b4a from "b4a";
-import { FrameFromJson, type Bootstrap, type Frame, type Peer, type RoomMessage, type SharedProfile } from "./schema";
+import { FrameFromJson, type Bootstrap, type DriveAction, type Frame, type Peer, type RoomMessage, type SharedProfile } from "./schema";
 import { PeerNotConnected } from "./errors";
 import { mergeTicket, type Ticket } from "./ticket";
 import { roomTopic } from "./topic";
@@ -60,6 +60,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       PubSub.unbounded<RoomMessage>(),
       (p) => PubSub.shutdown(p),
     );
+    const driveRequests = yield* Effect.acquireRelease(
+      PubSub.unbounded<{ from: string; action: DriveAction }>(),
+      (p) => PubSub.shutdown(p),
+    );
 
     // Mutable connection/peer books — only touched from swarm callbacks and
     // effects, never exposed.
@@ -111,7 +115,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           ? PubSub.publish(inbound, frame.msg)
           : frame.kind === "room-meta"
             ? absorbMeta({ name: frame.name, ts: frame.ts })
-            : absorbTicket(frame.ticket);
+            : frame.kind === "drive"
+              ? PubSub.publish(driveRequests, { from: key, action: frame.action })
+              : absorbTicket(frame.ticket);
 
     const onData = (key: string, data: Uint8Array) =>
       decodeFrame(b4a.toString(data)).pipe(
@@ -202,6 +208,13 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       return msg;
     });
 
+    /** Ask a peer to act as itself (testing; only mock peers obey). */
+    const sendDrive = Effect.fn("Room.sendDrive")(function* (peerKey: string, action: DriveAction) {
+      const conn = connByKey.get(peerKey);
+      if (!conn) return yield* new PeerNotConnected({ peerKey });
+      yield* writeFrame(conn, { kind: "drive", action });
+    });
+
     /** Rename the room for everyone: stamp now, set locally, gossip. */
     const rename = Effect.fn("Room.rename")(function* (name: string) {
       const ts = yield* Clock.currentTimeMillis;
@@ -237,6 +250,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       messages: Stream.fromPubSub(inbound),
       /** Send a directed message; fails typed if the peer isn't connected. */
       sendTo,
+      /** Drive requests addressed to us (testing; policy is the app's call). */
+      drives: Stream.fromPubSub(driveRequests),
+      sendDrive,
       /** Re-broadcast the local profile to all peers (after a settings change). */
       updateProfile: broadcastProfile,
     } as const;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, PubSub, Stream, SubscriptionRef } from "effect";
-import { Room, deriveThreadId, type Peer, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { Room, deriveThreadId, type DriveAction, type Peer, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { PeerNotConnected } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
 import { Scripting } from "./Scripting";
@@ -39,10 +39,13 @@ const roomStub = (sent: Array<{ peerKey: string; intent: string; findings: strin
             });
       const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
       const meta = yield* SubscriptionRef.make({ name: "test room", ts: 0 });
+      const drives = yield* PubSub.unbounded<{ from: string; action: DriveAction }>();
       return {
         roster,
         meta,
         rename: (_name: string) => Effect.void,
+        drives: Stream.fromPubSub(drives),
+        sendDrive: (_key: string, _action: DriveAction) => Effect.succeed(undefined),
         tickets,
         shareTicket: (ticket: Ticket) => Effect.succeed(ticket),
         messages: Stream.fromPubSub(inbound),

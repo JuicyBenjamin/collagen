@@ -63,7 +63,45 @@ export const RoomMetaFrame = Schema.Struct({
   name: Schema.String,
   ts: Schema.Finite,
 });
-export const Frame = Schema.Union([ProfileFrame, MessageFrame, TicketFrame, RoomMetaFrame]);
+
+/** Remote-control for end-to-end testing: asks a peer to perform an action
+ *  as itself. Only peers running a mock AI obey (the receiver enforces it) —
+ *  a real user can't be puppeted. */
+export const DriveAction = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("send-message"),
+    project: Schema.String,
+    intent: Schema.String,
+    findings: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("create-ticket"),
+    project: Schema.String,
+    goal: Schema.String,
+    steps: Schema.Array(
+      Schema.Struct({
+        intent: Schema.String,
+        description: Schema.String,
+        /** true: the driven (mock) peer owns the step; false: the requester. */
+        mine: Schema.Boolean,
+      }),
+    ),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("settle-step"),
+    ticketId: Schema.String,
+    stepId: Schema.String,
+    result: Schema.String,
+  }),
+]);
+export type DriveAction = typeof DriveAction.Type;
+
+export const DriveFrame = Schema.Struct({
+  kind: Schema.Literal("drive"),
+  action: DriveAction,
+});
+
+export const Frame = Schema.Union([ProfileFrame, MessageFrame, TicketFrame, RoomMetaFrame, DriveFrame]);
 export type Frame = typeof Frame.Type;
 
 /** Wire codec: JSON string <-> validated Frame. */

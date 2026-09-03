@@ -133,6 +133,65 @@ const Daemons = Layer.effectDiscard(
       Effect.forkScoped,
     );
 
+    // Drive requests: a peer remote-controls us for e2e testing — but ONLY
+    // when we're running a mock AI. A real user's instance ignores them.
+    yield* room.drives.pipe(
+      Stream.tap(({ from, action }) =>
+        Effect.gen(function* () {
+          const s = yield* store.get;
+          if (!(s.preferredAi ?? "").startsWith("mock")) {
+            return yield* Effect.logWarning(`drive request ignored (not a mock peer): ${action.kind}`);
+          }
+          yield* Effect.log(`driven by ${from.slice(0, 8)}: ${action.kind}`);
+          const now = yield* Clock.currentTimeMillis;
+          switch (action.kind) {
+            case "send-message":
+              return yield* room
+                .sendTo(from, { project: action.project, intent: action.intent, findings: action.findings })
+                .pipe(Effect.catchTag("PeerNotConnected", () => Effect.logWarning("drive reply: peer gone")));
+            case "create-ticket": {
+              const id = crypto.randomUUID();
+              yield* room.shareTicket({
+                id,
+                threadId: id,
+                project: action.project,
+                goal: action.goal,
+                createdBy: identity.pubkey,
+                updatedAt: now,
+                steps: action.steps.map((st, i) => ({
+                  id: `s${i + 1}`,
+                  owner: st.mine ? identity.pubkey : from,
+                  intent: st.intent,
+                  description: st.description,
+                  needs: [],
+                  status: "pending" as const,
+                  updatedAt: now,
+                })),
+              });
+              return;
+            }
+            case "settle-step": {
+              const all = yield* SubscriptionRef.get(room.tickets);
+              const ticket = all.get(action.ticketId);
+              if (!ticket) return yield* Effect.logWarning(`drive settle: no ticket ${action.ticketId}`);
+              yield* room.shareTicket({
+                ...ticket,
+                updatedAt: now,
+                steps: ticket.steps.map((st) =>
+                  st.id === action.stepId
+                    ? { ...st, status: "settled" as const, result: action.result, updatedAt: now }
+                    : st,
+                ),
+              });
+              return;
+            }
+          }
+        }),
+      ),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
+
     // A shared room name (local rename OR gossiped from a peer) is persisted
     // so it survives restarts.
     const { profile } = yield* CliArgs;

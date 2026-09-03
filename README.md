@@ -96,6 +96,14 @@ which proves the whole pipeline: swarm connection, message delivery, agent
 trigger, MCP server, and the reply crossing back. Acks are capped at 3 per
 thread and mocks never answer other mocks, so nothing can ping-pong.
 
+### Driving a mock peer from your side
+
+To test the full flow without touching the other machine, your agent can
+remote-control a mock peer with the `drive-peer` MCP tool: ask it to send you
+a message, create a shared ticket, or settle a step — the mock performs the
+action as itself, so everything arrives back through the real pipeline.
+Only peers whose AI is a `mock:*` obey; real peers ignore drive requests.
+
 ## Troubleshooting
 
 - **You don't see each other**: exactly the same room id on both sides? Give it ~30s
