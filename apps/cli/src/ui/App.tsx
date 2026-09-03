@@ -6,7 +6,7 @@ import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { AI_OPTIONS, newProject, roomProjects, shortRoomId, type LocalState, type Project } from "@collagen/p2p";
-import { upsertActiveRoom, writeProfileFile } from "../profileFile";
+import { writeProfileFile } from "../profileFile";
 import { MOCK_AI_OPTIONS } from "../services/Adapters";
 import { SetupForm } from "./Setup";
 import {
@@ -17,8 +17,10 @@ import {
   logsAtom,
   mcpUrlAtom,
   recentMessagesAtom,
+  myNameAtom,
   renameRoomAtom,
   roomMetaAtom,
+  setMyNameAtom,
   rosterAtom,
   stateAtom,
   updateStateAtom,
@@ -68,6 +70,8 @@ export function App({ onExit }: { onExit: () => void }) {
   const renderer = useRenderer();
   const updateState = useAtomSet(updateStateAtom);
   const renameRoom = useAtomSet(renameRoomAtom);
+  const setMyName = useAtomSet(setMyNameAtom);
+  const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => identity?.name ?? "…");
 
   useEffect(() => {
     if (!copied) return;
@@ -171,21 +175,15 @@ export function App({ onExit }: { onExit: () => void }) {
       <box flexDirection="column">
         <SetupForm
           title={`settings — profile "${currentProfile()}"`}
-          initialName={identity?.name ?? ""}
+          initialName={myName}
           initialRoomName={roomName}
-          initialRoomId={room.id}
-          note={
-            settingsSaved
-              ? "saved — room name applies now, the rest on restart"
-              : "room name applies live (for everyone) · other changes on next start · esc back"
-          }
-          onDone={({ name, roomName: newRoomName, roomId }) => {
+          roomId={room.id}
+          note={settingsSaved ? "saved — applies now" : "changes apply live · esc back"}
+          onDone={({ name, roomName: newRoomName }) => {
             writeProfileFile(currentProfile(), { name });
-            // renaming is shared state — gossip it; switching rooms is local
+            if (name !== myName) setMyName({ name });
+            // renaming is shared state — gossiped to the whole room
             if (newRoomName !== roomName) renameRoom({ name: newRoomName });
-            if (roomId.length > 0 && roomId !== room.id) {
-              upsertActiveRoom(currentProfile(), { id: roomId, name: roomId.slice(0, 8) });
-            }
             setSettingsSaved(true);
           }}
         />
@@ -199,7 +197,7 @@ export function App({ onExit }: { onExit: () => void }) {
       <text fg={theme.dim}>peer-to-peer</text>
       <text>
         <span fg={theme.dim}>you </span>
-        <span fg={theme.fg}>{identity?.name ?? "…"}</span>
+        <span fg={theme.fg}>{myName}</span>
         <span fg={theme.dim}> · ai </span>
         <span fg={state.preferredAi ? theme.warn : theme.dim}>{state.preferredAi ?? "not set"}</span>
         {state.preferredAi && aiStatus !== "ok" && aiStatus !== "unknown" ? (
@@ -220,7 +218,7 @@ export function App({ onExit }: { onExit: () => void }) {
           </text>
           <box flexDirection="row" gap={2} marginTop={1} flexGrow={1} flexShrink={1}>
             <box flexDirection="column" flexGrow={1} flexShrink={1}>
-              <PeerLine name={`${identity?.name ?? "…"} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
+              <PeerLine name={`${myName} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
               {peers.map((p) => (
                 <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} />
               ))}

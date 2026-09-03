@@ -98,7 +98,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     // Last-writer-wins: a newer ts replaces the name everywhere.
     const absorbMeta = (incoming: RoomMeta) =>
-      SubscriptionRef.update(meta, (cur) => (incoming.ts > cur.ts ? incoming : cur));
+      Effect.logDebug(`room-meta received: "${incoming.name}" ts=${incoming.ts}`).pipe(
+        Effect.andThen(SubscriptionRef.update(meta, (cur) => (incoming.ts > cur.ts ? incoming : cur))),
+      );
 
     const handleFrame = (key: string, frame: Frame) =>
       frame.kind === "profile"
@@ -126,9 +128,14 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       conn.on("error", () => {});
       conn.on("data", (d) => runFork(onData(key, d)));
       conn.on("close", () => {
-        connByKey.delete(key);
-        peers.delete(key);
-        runFork(publishRoster);
+        // A replacement connection for the same peer may already be in the
+        // book (hyperswarm reconnects overlap) — only forget the peer if the
+        // closing connection is still the current one.
+        if (connByKey.get(key) === conn) {
+          connByKey.delete(key);
+          peers.delete(key);
+          runFork(publishRoster);
+        }
       });
       // greet with our current profile, the room's shared name, and every
       // ticket we know, so a late joiner reconstructs the shared state from
@@ -137,7 +144,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       runFork(
         SubscriptionRef.get(meta).pipe(
           Effect.flatMap((m) =>
-            m.ts > 0 ? writeFrame(conn, { kind: "room-meta", name: m.name, ts: m.ts }) : Effect.void,
+            m.ts > 0
+              ? Effect.logDebug(`greeting with room-meta "${m.name}"`).pipe(
+                  Effect.andThen(writeFrame(conn, { kind: "room-meta", name: m.name, ts: m.ts })),
+                )
+              : Effect.void,
           ),
         ),
       );
@@ -180,7 +191,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         id: yield* Effect.sync(() => randomUUID()),
         threadId: deriveThreadId(config.identity.pubkey, peerKey, payload.project),
         from: config.identity.pubkey,
-        fromName: config.identity.name,
+        // live profile name, not the startup snapshot — renames apply mid-run
+        fromName: (yield* config.getProfile).name,
         project: payload.project,
         intent: payload.intent,
         findings: payload.findings,
@@ -195,6 +207,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       const ts = yield* Clock.currentTimeMillis;
       yield* SubscriptionRef.set(meta, { name, ts });
       const frame: Frame = { kind: "room-meta", name, ts };
+      yield* Effect.log(`rename → "${name}", broadcasting to ${connByKey.size} conn(s)`);
       yield* Effect.forEach([...connByKey.values()], (conn) => writeFrame(conn, frame), {
         discard: true,
       });

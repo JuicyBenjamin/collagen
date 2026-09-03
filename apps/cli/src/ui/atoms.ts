@@ -100,6 +100,21 @@ export const renameRoomAtom = runtimeAtom.fn(
   }),
 );
 
+/** Your display name, live (settings change it without a restart). */
+export const myNameAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return SubscriptionRef.changes((yield* IdentityService).nameRef);
+  })),
+);
+
+/** Change your display name now — peers see it on the next profile gossip. */
+export const setMyNameAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ name }: { name: string }) {
+    const ident = yield* IdentityService;
+    yield* ident.setName(name);
+  }),
+);
+
 /** All state mutations funnel through here: pass a reducer, StateStore
  *  persists and the daemons re-broadcast the profile.
  *  The reducer is WRAPPED in an object: atom-react treats a bare function

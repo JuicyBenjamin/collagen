@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema, SubscriptionRef } from "effect";
 import { FileSystem } from "effect";
 import { keyPairFromSeed, pubkeyHex, randomSeedHex, type Identity } from "@collagen/p2p";
 import { CliArgs } from "./CliArgs";
@@ -71,7 +71,11 @@ export class IdentityService extends Context.Service<IdentityService>()("cli/Ide
 
     const keyPair = keyPairFromSeed(seed);
     const identity: Identity = { name, profile, keyPair, pubkey: pubkeyHex(keyPair.publicKey) };
-    return { identity, room, knownRooms: rooms } as const;
+    // Live display name: settings change it without a restart. Persistence is
+    // the caller's job (the settings screen writes the profile file).
+    const nameRef = yield* SubscriptionRef.make(name);
+    const setName = (newName: string) => SubscriptionRef.set(nameRef, newName);
+    return { identity, room, knownRooms: rooms, nameRef, setName } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

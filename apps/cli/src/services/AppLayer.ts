@@ -21,7 +21,7 @@ const RoomConfigLive = Layer.effect(
   RoomConfig,
   Effect.gen(function* () {
     const { profile } = yield* CliArgs;
-    const { identity, room } = yield* IdentityService;
+    const { identity, room, nameRef } = yield* IdentityService;
     const store = yield* StateStore;
     const aiStatus = yield* AiStatus;
     const bootstrap = yield* loadDevBootstrap;
@@ -34,7 +34,7 @@ const RoomConfigLive = Layer.effect(
         const s = yield* store.get;
         const status = yield* SubscriptionRef.get(aiStatus.current);
         return {
-          name: identity.name,
+          name: yield* SubscriptionRef.get(nameRef),
           ai: s.preferredAi,
           aiStatus: status,
           projects: roomProjects(s, room.id).map((p) => ({ name: p.name, path: p.path })),
@@ -136,7 +136,14 @@ const Daemons = Layer.effectDiscard(
     // A shared room name (local rename OR gossiped from a peer) is persisted
     // so it survives restarts.
     const { profile } = yield* CliArgs;
-    const { room: roomInfo } = yield* IdentityService;
+    const { room: roomInfo, nameRef } = yield* IdentityService;
+    // display-name change → peers see it live
+    yield* SubscriptionRef.changes(nameRef).pipe(
+      Stream.drop(1),
+      Stream.tap(() => room.updateProfile),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
     yield* SubscriptionRef.changes(room.meta).pipe(
       Stream.drop(1),
       Stream.tap((m) =>

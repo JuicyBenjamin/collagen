@@ -125,35 +125,33 @@ export function SetupWizard({
   );
 }
 
-/** Settings form: edit everything on one screen (you already have a room —
- *  this is for tweaking, not onboarding). The room id field still accepts a
- *  pasted invite to switch rooms. */
+/** Settings form: your name + the room's shared name. Both apply live. The
+ *  room id is shown for reference only — it's the invite, never editable. */
 export function SetupForm({
   initialName,
   initialRoomName,
-  initialRoomId,
+  roomId,
   title,
   note,
   onDone,
 }: {
   initialName: string;
   initialRoomName: string;
-  initialRoomId: string;
+  roomId: string;
   title: string;
   note?: string;
-  onDone: (values: { name: string; roomName: string; roomId: string }) => void;
+  onDone: (values: { name: string; roomName: string }) => void;
 }) {
   const [name, setName] = useState(initialName);
   const [roomName, setRoomName] = useState(initialRoomName);
-  const [roomId, setRoomId] = useState(initialRoomId);
-  const fields = ["name", "roomName", "roomId"] as const;
+  const fields = ["name", "roomName"] as const;
   const [field, setField] = useState<(typeof fields)[number]>("name");
 
   const next = () => setField((f) => fields[(fields.indexOf(f) + 1) % fields.length]!);
 
   const submit = () => {
     if (name.trim().length === 0 || roomName.trim().length === 0) return;
-    onDone({ name: name.trim(), roomName: roomName.trim(), roomId: roomId.trim() });
+    onDone({ name: name.trim(), roomName: roomName.trim() });
   };
 
   useKeyboard((key) => {
@@ -167,12 +165,12 @@ export function SetupForm({
       <box flexDirection="column" border borderStyle="rounded" borderColor={field === "name" ? theme.accent : theme.dim} paddingX={1} title=" your name ">
         <input focused={field === "name"} value={name} onInput={setName} onSubmit={next} placeholder="how peers see you" />
       </box>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={field === "roomName" ? theme.accent : theme.dim} paddingX={1} title=" room label ">
-        <input focused={field === "roomName"} value={roomName} onInput={setRoomName} onSubmit={next} placeholder="what YOU call this room — just a nickname" />
+      <box flexDirection="column" border borderStyle="rounded" borderColor={field === "roomName" ? theme.accent : theme.dim} paddingX={1} title=" room name (shared with everyone) ">
+        <input focused={field === "roomName"} value={roomName} onInput={setRoomName} onSubmit={submit} placeholder="renames the room for the whole room" />
       </box>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={field === "roomId" ? theme.accent : theme.dim} paddingX={1} title=" room id (the invite) ">
-        <input focused={field === "roomId"} value={roomId} onInput={setRoomId} onSubmit={submit} placeholder="paste a friend's room id to switch rooms" />
-      </box>
+      <text fg={theme.dim}>
+        invite id: <span fg={theme.fg}>{roomId}</span> (fixed — press c in the room to copy)
+      </text>
       <text fg={theme.dim}>tab switch field · enter next/confirm</text>
       {note ? <text fg={theme.warn}>{note}</text> : null}
     </box>

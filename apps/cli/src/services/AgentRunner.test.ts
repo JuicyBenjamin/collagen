@@ -102,16 +102,24 @@ const baseState: LocalState = {
   rooms: { testroom: [{ id: "p1", name: "sandbox", path: "/tmp/fake-project" }] },
 };
 
-const identityStub = Layer.succeed(IdentityService, {
-  identity: {
-    name: "tester",
-    profile: "testprof",
-    keyPair: { publicKey: Buffer.alloc(32), secretKey: Buffer.alloc(64) },
-    pubkey: "aa".repeat(32),
-  },
-  room: { id: "testroom", name: "test room" },
-  knownRooms: [{ id: "testroom", name: "test room" }],
-});
+const identityStub = Layer.effect(
+  IdentityService,
+  Effect.gen(function* () {
+    const nameRef = yield* SubscriptionRef.make("tester");
+    return {
+      identity: {
+        name: "tester",
+        profile: "testprof",
+        keyPair: { publicKey: Buffer.alloc(32), secretKey: Buffer.alloc(64) },
+        pubkey: "aa".repeat(32),
+      },
+      room: { id: "testroom", name: "test room" },
+      knownRooms: [{ id: "testroom", name: "test room" }],
+      nameRef,
+      setName: (name: string) => SubscriptionRef.set(nameRef, name),
+    };
+  }),
+);
 
 /** Wire AgentRunner with in-memory everything. */
 const testLayer = (opts: {

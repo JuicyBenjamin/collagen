@@ -138,11 +138,12 @@ export const ToolHandlers = CollagenToolkit.toLayer(
     const room = yield* Room;
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
-    const { identity, room: roomInfo, knownRooms } = yield* IdentityService;
+    const { identity, room: roomInfo, knownRooms, nameRef } = yield* IdentityService;
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
       const peers = yield* SubscriptionRef.get(room.roster);
+      const myName = yield* SubscriptionRef.get(nameRef);
       const lookup = (key: string) =>
-        key === identity.pubkey ? identity.name : (peers.find((p) => p.key === key)?.name ?? key.slice(0, 12));
+        key === identity.pubkey ? myName : (peers.find((p) => p.key === key)?.name ?? key.slice(0, 12));
       return ticketView(ticket, lookup);
     });
 
@@ -212,8 +213,9 @@ export const ToolHandlers = CollagenToolkit.toLayer(
         }>;
       }) {
           const peers = yield* SubscriptionRef.get(room.roster);
+          const myName = yield* SubscriptionRef.get(nameRef);
           const keyFor = (name: string) =>
-            name === identity.name ? identity.pubkey : peers.find((p) => p.name === name)?.key;
+            name === myName ? identity.pubkey : peers.find((p) => p.name === name)?.key;
           const now = yield* Clock.currentTimeMillis;
           const unknown = input.steps.map((s) => s.owner).filter((o) => keyFor(o) === undefined);
           if (unknown.length > 0) {
