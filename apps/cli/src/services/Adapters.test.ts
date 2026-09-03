@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Option } from "effect";
 import type { RoomMessage } from "@collagen/p2p";
-import { claudeAdapter, codexAdapter, nudgePrompt, type SpawnCtx } from "./Adapters";
+import { claudeAdapter, codexAdapter, mockAdapter, nudgePrompt, type SpawnCtx } from "./Adapters";
 
 const msg: RoomMessage = {
   id: "m1",
@@ -97,5 +97,38 @@ describe("codex adapter", () => {
 
   it("parse: no events → empty", () => {
     expect(codexAdapter.parse("")).toEqual({ sessionId: undefined, result: undefined });
+  });
+});
+
+describe("mockAdapter", () => {
+  it("spawns node on the mock-agent script with the message context", () => {
+    const args = mockAdapter.args(ctx());
+    expect(mockAdapter.cmd).toBe(process.execPath);
+    expect(args[0]).toMatch(/mock-agent\.mjs$/);
+    expect(args.slice(1)).toEqual([
+      "http://127.0.0.1:44040/mcp",
+      "thread-1",
+      "alice",
+      "sandbox",
+      "question",
+      "fresh",
+    ]);
+  });
+
+  it("marks resumed runs so the script only acks once per thread", () => {
+    expect(mockAdapter.args(ctx(Option.some("mock-thread-1"))).at(-1)).toBe("resumed");
+  });
+
+  it("parse: claude-shaped single JSON object", () => {
+    expect(mockAdapter.parse('{"session_id":"mock-thread-1","result":"mock agent: read thread"}\n')).toEqual({
+      sessionId: "mock-thread-1",
+      result: "mock agent: read thread",
+    });
+    expect(mockAdapter.parse("garbage")).toEqual({});
+  });
+
+  it("auth: logged in iff node exits 0", () => {
+    expect(mockAdapter.auth.loggedIn("v26.8.1", 0)).toBe(true);
+    expect(mockAdapter.auth.loggedIn("", 1)).toBe(false);
   });
 });

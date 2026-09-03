@@ -81,6 +81,25 @@ The public DHT can't hairpin two peers on one host. Run a local testnet first,
 then use separate `--profile`s — see
 [docs](apps/docs/internals/development.md).
 
+## Testing without a second brain (mocked agents)
+
+A second computer with no Claude/Codex subscription can still be a full peer:
+start it with `COLLAGEN_MOCK_AI=1` and cycle the AI (`a`) past the real
+options to **mock:claude-code** / **mock:codex**. Everyone in the room sees
+the `mock:` prefix, so it's obvious no real AI sits behind that peer.
+
+The mock is not a stub — the incoming message triggers the real agent runner,
+which spawns a tiny script that does everything a real agent CLI does (MCP
+handshake, `get-messages`, `send-to-peer` ack), just with canned "thinking".
+Message a mocked peer and you get a `mock-ack` reply back within seconds,
+which proves the whole pipeline: swarm connection, message delivery, agent
+trigger, MCP server, and the reply crossing back. One ack per thread — mocks
+don't answer other mocks, so two mocked machines can't ping-pong.
+
+```bash
+COLLAGEN_MOCK_AI=1 pnpm --filter @collagen/cli dev
+```
+
 ## Troubleshooting
 
 - **You don't see each other**: exactly the same room id on both sides? Give it ~30s

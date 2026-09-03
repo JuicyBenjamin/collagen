@@ -7,6 +7,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { AI_OPTIONS, newProject, roomProjects, shortRoomId, type LocalState, type Project } from "@collagen/p2p";
 import { upsertActiveRoom, writeProfileFile } from "../profileFile";
+import { MOCK_AI_OPTIONS } from "../services/Adapters";
 import { SetupForm } from "./Setup";
 import {
   aiStatusAtom,
@@ -28,8 +29,13 @@ type Mode = "room" | "projects" | "pick" | "settings";
 const emptyState: LocalState = { preferredAi: null, rooms: {} };
 
 function nextAi(current: string | null): string | null {
-  // null -> claude-code -> codex -> null …
-  const cycle: (string | null)[] = [null, ...AI_OPTIONS];
+  // null -> claude-code -> codex -> null … dev mode (COLLAGEN_MOCK_AI=1)
+  // extends the cycle with the mocked agents.
+  const cycle: (string | null)[] = [
+    null,
+    ...AI_OPTIONS,
+    ...(process.env.COLLAGEN_MOCK_AI ? MOCK_AI_OPTIONS : []),
+  ];
   const i = cycle.indexOf(current);
   return cycle[(i + 1) % cycle.length] ?? null;
 }

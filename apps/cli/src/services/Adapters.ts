@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { Context, Layer, Option } from "effect";
 import type { RoomMessage } from "@collagen/p2p";
 
@@ -117,6 +118,38 @@ export const codexAdapter: Adapter = {
   },
 };
 
+// Mock: a real spawn of a tiny node script that does the full agent dance
+// (MCP handshake → get-messages → send-to-peer ack) with canned "thinking".
+// Lets a machine without any LLM CLI be a complete peer in a cross-network
+// test — everything downstream of the adapter (AgentRunner, MCP, swarm) is
+// exercised for real. Selected via COLLAGEN_MOCK_AI=1.
+const mockAgentPath = fileURLToPath(new URL("../mock-agent.mjs", import.meta.url));
+
+export const mockAdapter: Adapter = {
+  cmd: process.execPath,
+  auth: {
+    args: ["--version"],
+    loggedIn: (_out, exitCode) => exitCode === 0,
+  },
+  args: (o) => [
+    mockAgentPath,
+    o.mcpUrl,
+    o.msg.threadId,
+    o.msg.fromName,
+    o.msg.project,
+    o.msg.intent,
+    Option.isSome(o.sessionId) ? "resumed" : "fresh",
+  ],
+  parse: (out) => {
+    try {
+      const j = JSON.parse(out) as { session_id?: string; result?: string };
+      return { sessionId: j.session_id, result: j.result };
+    } catch {
+      return {};
+    }
+  },
+};
+
 /** Injectable spawn-adapter registry, keyed by the `preferredAi` value.
  *  Tests provide fakes here instead of spawning real agent CLIs. */
 export class Adapters extends Context.Service<Adapters, Readonly<Record<string, Adapter>>>()("cli/Adapters") {}
@@ -124,4 +157,18 @@ export class Adapters extends Context.Service<Adapters, Readonly<Record<string, 
 export const AdaptersLive = Layer.succeed(Adapters, {
   "claude-code": claudeAdapter,
   codex: codexAdapter,
+});
+
+/** The mocked options dev mode adds to the cycle. Two names, one behavior —
+ *  the point is the label: peers see "mock:claude-code" in the room and know
+ *  no real AI sits behind this peer. */
+export const MOCK_AI_OPTIONS = ["mock:claude-code", "mock:codex"] as const;
+
+/** AdaptersLive plus the mocks — the DI seam for LLM-less machines: swap the
+ *  layer, change nothing else. */
+export const AdaptersWithMock = Layer.succeed(Adapters, {
+  "claude-code": claudeAdapter,
+  codex: codexAdapter,
+  "mock:claude-code": mockAdapter,
+  "mock:codex": mockAdapter,
 });
