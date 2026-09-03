@@ -99,6 +99,9 @@ importers:
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.18
+      cross-env:
+        specifier: ^10.1.0
+        version: 10.1.0
       hyperdht:
         specifier: ^6.33.2
         version: 6.33.2(bare-url@2.4.5)
@@ -345,6 +348,9 @@ packages:
   '@effect/tsgo@0.39.0':
     resolution: {integrity: sha512-vP4gdaVnAQy6NaMDKFaPeaPU63HaoVsdbP7axEcHxwJJMwE2llocXEplIwsYM6EvBVMtwtiBCvl9K2aFVNlZPA==}
     hasBin: true
+
+  '@epic-web/invariant@1.0.0':
+    resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -1633,6 +1639,15 @@ packages:
   cose-base@2.2.0:
     resolution: {integrity: sha512-AzlgcsCbUMymkADOJtQm3wO9S3ltPfYOFD5033keQn9NJzIbtnZj+UdBJe7DYml/8TdbtHJW3j58SOnKhWY/5g==}
 
+  cross-env@10.1.0:
+    resolution: {integrity: sha512-GsYosgnACZTADcmEyJctkJIoqAhHjttw7RsFrVoJNXbsWWqaq6Ym+7kZjq6mS45O0jij6vtiReppKQEtqWy6Dw==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  cross-spawn@7.0.6:
+    resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
+    engines: {node: '>= 8'}
+
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
@@ -1953,6 +1968,9 @@ packages:
     resolution: {integrity: sha512-oG7cgbmg5kLYae2N5IVd3jm2s+vldjxJzK1pcu9LfpGuQ93MQSzo0okvRna+7y5ifrD+20FE8FvjusyGaz14fw==}
     engines: {node: '>=18'}
 
+  isexe@2.0.0:
+    resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
+
   kademlia-routing-table@1.0.6:
     resolution: {integrity: sha512-Ve6jwIlUCYvUzBnXnzVRHDZCFgXURW9gmF3r7n05kZs/2rNbLHXwGdcq0qIaSwdmJCvtosgR4JensnVU65hzNQ==}
 
@@ -2142,6 +2160,10 @@ packages:
   path-data-parser@0.1.0:
     resolution: {integrity: sha512-NOnmBpt5Y2RWbuv0LMzsayp3lVylAHLPUTut412ZA3l+C4uw4ZVkQbjShYCQ8TCpUMdPapr4YjUqLYD6v68j+w==}
 
+  path-key@3.1.1:
+    resolution: {integrity: sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==}
+    engines: {node: '>=8'}
+
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
@@ -2255,6 +2277,14 @@ packages:
 
   search-insights@2.17.3:
     resolution: {integrity: sha512-RQPdCYTa8A68uM2jwxoY842xDhvx3E5LFL1LxvxCNMev4o5mLuokczhzjAgGwUZBAmOKZknArSxLKmXtIi2AxQ==}
+
+  shebang-command@2.0.0:
+    resolution: {integrity: sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==}
+    engines: {node: '>=8'}
+
+  shebang-regex@3.0.0:
+    resolution: {integrity: sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==}
+    engines: {node: '>=8'}
 
   shell-quote@1.8.4:
     resolution: {integrity: sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==}
@@ -2577,6 +2607,11 @@ packages:
   which-runtime@1.4.0:
     resolution: {integrity: sha512-0ugbP4CJW4e2D20jvEcC4973dCgIaHI4Rw1PT+26U9zEve7FyYdWAIwUnoeOYvoCfn+wXHoHTKb1KhkYlb60Pw==}
 
+  which@2.0.2:
+    resolution: {integrity: sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==}
+    engines: {node: '>= 8'}
+    hasBin: true
+
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
@@ -2842,6 +2877,8 @@ snapshots:
       '@effect/tsgo-linux-x64': 0.39.0
       '@effect/tsgo-win32-arm64': 0.39.0
       '@effect/tsgo-win32-x64': 0.39.0
+
+  '@epic-web/invariant@1.0.0': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
@@ -3888,6 +3925,17 @@ snapshots:
     dependencies:
       layout-base: 2.0.1
 
+  cross-env@10.1.0:
+    dependencies:
+      '@epic-web/invariant': 1.0.0
+      cross-spawn: 7.0.6
+
+  cross-spawn@7.0.6:
+    dependencies:
+      path-key: 3.1.1
+      shebang-command: 2.0.0
+      which: 2.0.2
+
   csstype@3.2.3: {}
 
   cytoscape-cose-bilkent@4.1.0(cytoscape@3.34.0):
@@ -4350,6 +4398,8 @@ snapshots:
 
   is-what@5.5.0: {}
 
+  isexe@2.0.0: {}
+
   kademlia-routing-table@1.0.6:
     dependencies:
       bare-events: 2.9.1
@@ -4559,6 +4609,8 @@ snapshots:
 
   path-data-parser@0.1.0: {}
 
+  path-key@3.1.1: {}
+
   pathe@2.0.3: {}
 
   perfect-debounce@1.0.0: {}
@@ -4726,6 +4778,12 @@ snapshots:
   scheduler@0.27.0: {}
 
   search-insights@2.17.3: {}
+
+  shebang-command@2.0.0:
+    dependencies:
+      shebang-regex: 3.0.0
+
+  shebang-regex@3.0.0: {}
 
   shell-quote@1.8.4: {}
 
@@ -5076,6 +5134,10 @@ snapshots:
   web-tree-sitter@0.25.10: {}
 
   which-runtime@1.4.0: {}
+
+  which@2.0.2:
+    dependencies:
+      isexe: 2.0.0
 
   why-is-node-running@2.3.0:
     dependencies:
