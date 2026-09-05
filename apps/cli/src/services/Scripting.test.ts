@@ -40,9 +40,11 @@ const roomStub = (sent: Array<{ peerKey: string; intent: string; findings: strin
       const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
       const meta = yield* SubscriptionRef.make({ name: "test room", ts: 0 });
       const drives = yield* PubSub.unbounded<{ from: string; action: DriveAction }>();
+      const sentRef = yield* SubscriptionRef.make<ReadonlyArray<RoomMessage>>([]);
       return {
         roster,
         meta,
+        sent: sentRef,
         rename: (_name: string) => Effect.void,
         drives: Stream.fromPubSub(drives),
         sendDrive: (_key: string, _action: DriveAction) => Effect.succeed(undefined),

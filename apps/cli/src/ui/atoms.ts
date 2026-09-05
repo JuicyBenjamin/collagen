@@ -61,6 +61,22 @@ export const stateAtom = runtimeAtom.atom(
   })),
 );
 
+/** Messages this instance sent — the other half of the a2a trace. */
+export const sentMessagesAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return SubscriptionRef.changes((yield* Room).sent);
+  })),
+);
+
+/** Shared tickets, as an array (newest activity last). */
+export const ticketsAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return SubscriptionRef.changes((yield* Room).tickets).pipe(
+      Stream.map((m) => [...m.values()].sort((a, b) => a.updatedAt - b.updatedAt)),
+    );
+  })),
+);
+
 export const recentMessagesAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     return SubscriptionRef.changes((yield* Inbox).recent);

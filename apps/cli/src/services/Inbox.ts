@@ -10,7 +10,7 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
 
     const push = (msg: RoomMessage) =>
       Ref.update(buffer, (b) => [...b, msg]).pipe(
-        Effect.andThen(SubscriptionRef.update(recent, (r) => [...r.slice(-19), msg])),
+        Effect.andThen(SubscriptionRef.update(recent, (r) => [...r.slice(-99), msg])),
       );
 
     /** Drain the buffer — everything, or just one thread's messages. */

@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
-import { useKeyboard, useRenderer } from "@opentui/react";
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { Option } from "effect";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { AI_OPTIONS, newProject, roomProjects, shortRoomId, type LocalState, type Project } from "@collagen/p2p";
+import {
+  AI_OPTIONS,
+  deriveThreadId,
+  newProject,
+  roomProjects,
+  shortRoomId,
+  type LocalState,
+  type Project,
+  type RoomMessage,
+  type Ticket,
+} from "@collagen/p2p";
 import { writeProfileFile } from "../profileFile";
 import { MOCK_AI_OPTIONS } from "../services/Adapters";
 import { SetupForm } from "./Setup";
@@ -22,13 +32,25 @@ import {
   roomMetaAtom,
   setMyNameAtom,
   rosterAtom,
+  sentMessagesAtom,
   stateAtom,
+  ticketsAtom,
   updateStateAtom,
 } from "./atoms";
 import { FsPicker, Panel, isEnter, keyDebug } from "./components";
 import { theme } from "./theme";
 
 type Mode = "room" | "projects" | "pick" | "settings";
+/** Room tabs: the overview is what a person cares about (who's here, what's
+ *  shared, what's in flight); the message log is the agent-to-agent trace. */
+type Tab = "overview" | "messages";
+
+const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
+  pending: "·",
+  suspended: "⟳",
+  settled: "✓",
+  failed: "✗",
+};
 
 const emptyState: LocalState = { preferredAi: null, rooms: {} };
 
@@ -54,12 +76,28 @@ export function App({ onExit }: { onExit: () => void }) {
   const room = currentRoom();
   const ROOM = room.id;
   const [mode, setMode] = useState<Mode>("room");
+  const [tab, setTab] = useState<Tab>("overview");
   const [cursor, setCursor] = useState(0);
+  const { height: termHeight } = useTerminalDimensions();
 
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => emptyState);
-  const messages = AsyncResult.getOrElse(useAtomValue(recentMessagesAtom), () => [] as const);
+  const inbound = AsyncResult.getOrElse(useAtomValue(recentMessagesAtom), () => [] as const);
+  const outbound = AsyncResult.getOrElse(useAtomValue(sentMessagesAtom), () => [] as const);
+  const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
+  // The a2a trace: both directions, chronological.
+  const trace: ReadonlyArray<{ msg: RoomMessage; out: boolean }> = [
+    ...inbound.map((msg) => ({ msg, out: false })),
+    ...outbound.map((msg) => ({ msg, out: true })),
+  ].sort((a, b) => a.msg.ts - b.msg.ts);
+  // A sent message records no recipient, but its thread id is derived from
+  // (me, peer, project) — so the peer is recoverable from the roster.
+  const peerNameFor = (m: RoomMessage): string => {
+    if (!identity) return "peer";
+    const hit = peers.find((p) => deriveThreadId(identity.pubkey, p.key, m.project) === m.threadId);
+    return hit?.name ?? inbound.find((i) => i.threadId === m.threadId)?.fromName ?? "peer";
+  };
   const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
@@ -139,7 +177,11 @@ export function App({ onExit }: { onExit: () => void }) {
       if (key.name === "q") return onExit();
       if (key.name === "a")
         return updateState({ update: (s) => ({ ...s, preferredAi: nextAi(s.preferredAi) }) });
+      if (key.name === "1") return setTab("overview");
+      if (key.name === "2") return setTab("messages");
       if (key.name === "right" || key.name === "tab" || key.name === "p") {
+        // the projects sidebar lives on the overview tab
+        setTab("overview");
         setCursor(0);
         setMode("projects");
         return;
@@ -211,29 +253,60 @@ export function App({ onExit }: { onExit: () => void }) {
       <box marginTop={1} flexDirection="column" flexGrow={1} flexShrink={1}>
         <Panel title={`room · ${roomName}`} grow>
           <text>
+            <span fg={tab === "overview" ? theme.accent : theme.dim}>[1] overview</span>
+            <span fg={theme.dim}>   </span>
+            <span fg={tab === "messages" ? theme.accent : theme.dim}>[2] messages</span>
+            <span fg={theme.dim}> ({trace.length})</span>
+            <span fg={theme.dim}>   ·   </span>
             <span fg={theme.fg}>{peers.length + 1} online</span>
             <span fg={theme.dim}> · </span>
             <span fg={theme.fg}>{sharedCount} shared</span>
             <span fg={theme.dim}> {sharedCount === 1 ? "project" : "projects"}</span>
           </text>
+
+          {tab === "messages" ? (
+            <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1}>
+              <text fg={theme.dim}>agent-to-agent trace · ← received · → sent · newest last</text>
+              {trace.length === 0 ? (
+                <text fg={theme.dim}>no messages yet</text>
+              ) : (
+                trace.slice(-Math.max(5, termHeight - 16)).map(({ msg, out }) => (
+                  <text key={msg.id} fg={theme.fg} truncate>
+                    <span fg={out ? theme.accent : theme.warn}>
+                      {out ? "→ " : "← "}
+                      {out ? peerNameFor(msg) : msg.fromName}
+                    </span>
+                    <span fg={theme.dim}> [{msg.project}/{msg.intent}] </span>
+                    {msg.findings}
+                  </text>
+                ))
+              )}
+            </box>
+          ) : (
           <box flexDirection="row" gap={2} marginTop={1} flexGrow={1} flexShrink={1}>
             <box flexDirection="column" flexGrow={1} flexShrink={1}>
               <PeerLine name={`${myName} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
               {peers.map((p) => (
                 <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} />
               ))}
-              {messages.length > 0 ? (
-                <box flexDirection="column" marginTop={1}>
-                  <text fg={theme.dim}>messages</text>
-                  {messages.slice(-5).map((m) => (
-                    <text key={m.id} fg={theme.fg} truncate>
-                      <span fg={theme.warn}>← {m.fromName}</span>
-                      <span fg={theme.dim}> [{m.project}/{m.intent}] </span>
-                      {m.findings}
-                    </text>
-                  ))}
-                </box>
-              ) : null}
+              <box flexDirection="column" marginTop={1}>
+                <text fg={theme.dim}>tickets</text>
+                {tickets.length === 0 ? (
+                  <text fg={theme.dim}>none — agents create them for multi-step work</text>
+                ) : (
+                  tickets.slice(-8).map((t) => {
+                    const done = t.steps.filter((s) => s.status === "settled").length;
+                    return (
+                      <text key={t.id} fg={done === t.steps.length ? theme.dim : theme.fg} truncate>
+                        <span fg={theme.warn}>⧉ </span>
+                        {t.goal}
+                        <span fg={theme.dim}> · {t.project} · {done}/{t.steps.length} </span>
+                        <span fg={theme.dim}>{t.steps.map((s) => STEP_GLYPH[s.status]).join(" ")}</span>
+                      </text>
+                    );
+                  })
+                )}
+              </box>
             </box>
 
             <box flexDirection="column" width={34} flexShrink={0}>
@@ -273,6 +346,7 @@ export function App({ onExit }: { onExit: () => void }) {
               </Panel>
             </box>
           </box>
+          )}
         </Panel>
       </box>
 
@@ -299,7 +373,7 @@ export function App({ onExit }: { onExit: () => void }) {
         </text>
         <text fg={theme.dim}>
           {mode === "room"
-            ? "→ projects · a cycle ai · c copy invite · s settings · q quit"
+            ? "1/2 tabs · → projects · a cycle ai · c copy invite · s settings · q quit"
             : mode === "projects"
               ? "↑↓ select · enter add · d remove yours · ← back"
               : "esc back"}

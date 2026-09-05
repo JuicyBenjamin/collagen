@@ -56,6 +56,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const roster = yield* SubscriptionRef.make<ReadonlyArray<Peer>>([]);
     const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
     const meta = yield* SubscriptionRef.make<RoomMeta>(config.roomLabel);
+    // Outbound trace (last 100) — the UI's message log shows both directions.
+    const sent = yield* SubscriptionRef.make<ReadonlyArray<RoomMessage>>([]);
     const inbound = yield* Effect.acquireRelease(
       PubSub.unbounded<RoomMessage>(),
       (p) => PubSub.shutdown(p),
@@ -211,6 +213,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         ts,
       };
       yield* writeFrame(conn, { kind: "msg", msg });
+      yield* SubscriptionRef.update(sent, (s) => [...s.slice(-99), msg]);
       return msg;
     });
 
@@ -254,6 +257,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       shareTicket,
       /** Every directed message addressed to us. Each subscription sees all. */
       messages: Stream.fromPubSub(inbound),
+      /** Messages we sent (recent ring) — for the UI's a2a trace. */
+      sent,
       /** Send a directed message; fails typed if the peer isn't connected. */
       sendTo,
       /** Drive requests addressed to us (testing; policy is the app's call). */
