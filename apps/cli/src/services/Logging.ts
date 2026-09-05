@@ -28,15 +28,21 @@ export const LoggerLive = Layer.unwrap(
       const rendered = cause === undefined ? "" : String(cause);
       const failure = rendered === "" || rendered === "Cause([])" ? "" : ` ${rendered.slice(0, 400)}`;
       const line = `${date.toISOString()} [${logLevel.toUpperCase()}] ${text}${failure}`;
-      buffer.appendSync(line);
-      if (file) {
+      // File first: it must never depend on the UI buffer succeeding. Sync on
+      // purpose — loggers must not suspend, and async appends would reorder.
+      const toFile = (s: string) => {
+        if (!file) return;
         try {
-          // sync on purpose: loggers must not suspend, and interleaved async
-          // appends would reorder lines
-          appendFileSync(file, line + "\n");
+          appendFileSync(file, s + "\n");
         } catch {
           // best-effort
         }
+      };
+      toFile(line);
+      try {
+        buffer.appendSync(line);
+      } catch (e) {
+        toFile(`${date.toISOString()} [LOGGER] ui buffer append failed: ${String(e).slice(0, 200)}`);
       }
     });
     return Logger.layer([logger]);

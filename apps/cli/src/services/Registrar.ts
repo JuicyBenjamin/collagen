@@ -43,9 +43,21 @@ const registerCodex = Effect.fn("Registrar.codex")(
     const block = `[mcp_servers.${name}]\nurl = "${url}"\ndefault_tools_approval_mode = "approve"\n`;
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`\\[mcp_servers\\.${escaped}\\][^[]*`, "m");
-    const toml = yield* fs.readFileString(file);
-    const next = re.test(toml) ? toml.replace(re, block) : toml.trimEnd() + "\n\n" + block;
-    yield* fs.writeFileString(file, next);
+    const write = Effect.gen(function* () {
+      const toml = yield* fs.readFileString(file);
+      const next = re.test(toml) ? toml.replace(re, block) : toml.trimEnd() + "\n\n" + block;
+      yield* fs.writeFileString(file, next);
+    });
+    // Two instances starting together (multi-profile dev) race on this file:
+    // a concurrent read-modify-write can carry our stale block back over the
+    // fresh one. Verify our block landed; rewrite if it got clobbered.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      yield* write;
+      yield* Effect.sleep(`${50 + attempt * 100} millis`);
+      const after = yield* fs.readFileString(file);
+      if (after.includes(block)) break;
+      yield* Effect.logWarning(`codex config write clobbered (attempt ${attempt + 1}), retrying`);
+    }
     yield* Effect.log(`registered codex MCP ${name}`);
   },
   Effect.catch((e) => Effect.logWarning(`codex register failed: ${String(e)}`)),

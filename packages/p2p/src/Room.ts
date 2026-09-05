@@ -81,7 +81,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const writeFrame = (conn: SwarmConnection, frame: Frame) =>
       encodeFrame(frame).pipe(
         Effect.flatMap((json) => Effect.sync(() => void conn.write(b4a.from(json)))),
-        Effect.catch((e) => Effect.logDebug(`frame write failed: ${String(e)}`)),
+        // warn, not debug: a silently dropped frame looks exactly like "peer
+        // never answered" and has cost hours of misdiagnosis
+        Effect.catch((e) => Effect.logWarning(`frame write failed (${frame.kind}): ${String(e).slice(0, 160)}`)),
       );
 
     const broadcastProfile = Effect.gen(function* () {
@@ -108,8 +110,12 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     const handleFrame = (key: string, frame: Frame) =>
       frame.kind === "profile"
-        ? Effect.sync(() => {
+        ? Effect.suspend(() => {
+            const known = peers.has(key);
             peers.set(key, { key, ...frame.profile });
+            // first profile from a connection = the peer is actually reachable
+            // (a bare "swarm connection" can be half-open and carry nothing)
+            return known ? Effect.void : Effect.log(`peer online: ${frame.profile.name} (${key.slice(0, 8)})`);
           }).pipe(Effect.andThen(publishRoster))
         : frame.kind === "msg"
           ? PubSub.publish(inbound, frame.msg)
