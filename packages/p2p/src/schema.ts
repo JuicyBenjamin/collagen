@@ -120,11 +120,22 @@ export const Project = Schema.Struct({
 });
 export type Project = typeof Project.Type;
 
+/** A conversation the user's own agent session has claimed: new messages on
+ *  the thread resume that session (via the agent CLI's resume mechanism)
+ *  instead of queueing. */
+export const AdoptedThread = Schema.Struct({
+  ai: Schema.String,
+  sessionId: Schema.String,
+});
+export type AdoptedThread = typeof AdoptedThread.Type;
+
 /** Local, per-user state: preferred AI + per-room projects. A project
  *  belongs to the room it was added in (Keet-style) — the same repo shared
  *  into two rooms is two entries. */
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
+  /** threadId → the user's adopted conversation for it. */
+  threads: Schema.optional(Schema.Record(Schema.String, AdoptedThread)),
 });
 export type LocalState = typeof LocalState.Type;

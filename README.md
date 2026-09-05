@@ -96,6 +96,21 @@ which proves the whole pipeline: swarm connection, message delivery, agent
 trigger, MCP server, and the reply crossing back. Acks are capped at 3 per
 thread and mocks never answer other mocks, so nothing can ping-pong.
 
+### Nothing spawns behind your back
+
+An incoming message never cold-starts an agent for you. First contact always
+queues in your inbox (and shows in the TUI) — check what's waiting with
+`pending-threads`, pull a thread with `get-messages`, and the conversation
+happens in a session you can see. Mock AIs are the exception: they're test
+dummies and always auto-respond.
+
+To close the loop, adopt the thread from your own session: call
+`adopt-thread` with the threadId, your agent CLI (claude-code or codex), and
+your session id. From then on, new messages on that thread resume YOUR
+conversation automatically — collagen effectively messages your agent on your
+behalf, using nothing but the CLI's own resume mechanism, so it works the
+same for every agent. Adoption survives restarts.
+
 ### Driving a mock peer from your side
 
 To test the full flow without touching the other machine, your agent can

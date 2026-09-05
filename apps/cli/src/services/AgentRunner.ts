@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { Context, Effect, Layer, Option, Ref, Semaphore, Stream, SynchronizedRef } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { mcpServerName } from "../util";
-import { Adapters, type Adapter, type SpawnCtx } from "./Adapters";
+import { Adapters, nudgePrompt, type Adapter, type SpawnCtx } from "./Adapters";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
@@ -56,6 +56,13 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         if (parsed.sessionId !== undefined) {
           const sid = parsed.sessionId;
           yield* Ref.update(sessions, (m) => new Map(m).set(threadId, sid));
+          // an adopted thread's persisted pointer follows the newest resume
+          // id, so adoption survives restarts without going stale
+          yield* store.update((s) =>
+            s.threads?.[threadId]
+              ? { ...s, threads: { ...s.threads, [threadId]: { ...s.threads[threadId]!, sessionId: sid } } }
+              : s,
+          );
         }
         yield* Effect.log(`agent done (exit ${exitCode}): ${(parsed.result ?? "").slice(0, 160)}`);
       },
@@ -64,6 +71,27 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
           Effect.scoped,
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
           Effect.catch((e) => Effect.logWarning(`spawn failed: ${String(e)}`)),
+        ),
+    );
+
+    /** Codex can receive messages natively: `codex queue` drops a nudge into
+     *  the user's own thread — it surfaces at their next turn (live session)
+     *  or next resume. Non-blocking, no fork, the user keeps chatting. */
+    const queueNudge = Effect.fn("AgentRunner.queueNudge")(
+      function* (codexThread: string, ctx: SpawnCtx) {
+        const proc = yield* ChildProcess.make(
+          "codex",
+          ["queue", "--thread", codexThread, "--message", nudgePrompt(ctx)],
+          { stdin: "ignore" },
+        );
+        const exit = yield* proc.exitCode;
+        yield* Effect.log(`queued nudge into codex thread ${codexThread.slice(0, 8)}… (exit ${exit})`);
+      },
+      (effect) =>
+        effect.pipe(
+          Effect.scoped,
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.catch((e) => Effect.logWarning(`codex queue failed: ${String(e)}`)),
         ),
     );
 
@@ -76,7 +104,44 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
 
       const mcpUrl = yield* mcpInfo.awaitUrl;
       const state = yield* store.get;
-      const ai = state.preferredAi ?? "claude-code";
+      // An adopted thread resumes the USER'S own conversation (registered
+      // via the adopt-thread tool) with the CLI that owns it; the in-memory
+      // map tracks the freshest resume id within this process.
+      const adopted = state.threads?.[threadId];
+      const ai = adopted?.ai ?? state.preferredAi;
+      const sessionId = Option.fromNullishOr(
+        (yield* Ref.get(sessions)).get(threadId) ?? adopted?.sessionId,
+      );
+
+      // A real AI is never cold-started by an incoming message — spawning
+      // invisible conversations behind the user is exactly what we don't
+      // want (and the CLI may not even exist). It only resumes a thread
+      // that already has a conversation (an adoption, or a session it
+      // started itself). Everything else queues in the inbox for the user's
+      // own session to pull — and adopt. Mocks are test dummies and always
+      // auto-respond.
+      const isMock = ai !== null && ai !== undefined && ai.startsWith("mock");
+      if (ai === null || ai === undefined || (!isMock && Option.isNone(sessionId))) {
+        yield* Effect.log(
+          `message queued (${ai == null ? "no ai set" : "no conversation for this thread yet"}): ${sample.fromName}/${sample.project}`,
+        );
+        return null;
+      }
+      // codex-adopted threads get the message pushed INTO the user's session
+      // instead of us spawning anything.
+      if (!isMock && adopted?.ai === "codex") {
+        const ctx: SpawnCtx = {
+          cwd: homedir(),
+          mcpUrl,
+          serverName: mcpServerName(profile),
+          msg: sample,
+          sessionId: Option.some(adopted.sessionId),
+        };
+        yield* Effect.log(`queue → codex · ${sample.fromName}/${sample.project}`);
+        yield* queueNudge(adopted.sessionId, ctx);
+        return new Set(queued.map((m) => m.id));
+      }
+
       const adapter = adapters[ai];
       if (!adapter) {
         yield* Effect.logWarning(`no spawn adapter for "${ai}" yet`);
@@ -84,7 +149,6 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       }
 
       const proj = (state.rooms[room.id] ?? []).find((p) => p.name === sample.project);
-      const sessionId = Option.fromNullishOr((yield* Ref.get(sessions)).get(threadId));
       const ctx: SpawnCtx = {
         cwd: proj?.path ?? homedir(),
         mcpUrl,

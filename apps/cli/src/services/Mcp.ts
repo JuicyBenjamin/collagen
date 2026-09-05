@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
-import { HttpRouter, HttpServer } from "effect/unstable/http";
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { Room, shortRoomId, type Ticket } from "@collagen/p2p";
@@ -10,6 +10,7 @@ import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { Scripting } from "./Scripting";
+import { StateStore } from "./StateStore";
 import { McpInfo } from "./McpInfo";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
@@ -53,11 +54,46 @@ const SendToPeer = Tool.make("send-to-peer", {
   success: Schema.String,
 });
 
+const PendingThreads = Tool.make("pending-threads", {
+  description:
+    "List the conversation threads that have messages waiting for you, without consuming them. Each row is one thread: its threadId, who it's from, the project, how many messages are queued, and the latest intent. Call this first to see what's waiting, then pull a specific thread with get-messages. Returns TOON (compact YAML/CSV-style) text.",
+  success: Schema.String,
+});
+
+const WatchRoom = Tool.make("watch-room", {
+  description:
+    "How to stay responsive to room messages WITHOUT blocking your conversation — call this once and follow the instructions for your harness. Pass which harness you are running in: 'claude-code' (you get a background-watcher recipe: events arrive while the user keeps chatting), 'codex' (adopt threads and collagen queues messages directly into your session), or 'other' (polling fallback). This tool changes nothing by itself; it returns setup instructions.",
+  parameters: Schema.Struct({
+    harness: Schema.Literals(["claude-code", "codex", "other"]),
+  }),
+  success: Schema.String,
+});
+
+const AwaitMessages = Tool.make("await-messages", {
+  description:
+    "Wait for the next incoming room message: this call BLOCKS until a message arrives (returning the pending threads immediately) or until `seconds` elapse (returning a keep-waiting note). This is how you watch the room from any harness — while you have nothing else to do, call await-messages in a loop: handle what it returns (get-messages → act → send-to-peer), then call it again. Waiting costs nothing. Default 55 seconds; raise it only if your harness allows longer tool calls, lower it if it times out.",
+  parameters: Schema.Struct({
+    seconds: Schema.optional(Schema.Finite),
+  }),
+  success: Schema.String,
+});
+
+const AdoptThread = Tool.make("adopt-thread", {
+  description:
+    "Link a collagen thread to YOUR OWN conversation in your agent harness, so new messages on it resume that conversation (claude --resume / codex exec resume) instead of waiting in the inbox — the full loop with no manual pulling. 'threadId' is collagen's thread id (from pending-threads or a message you were handed) — it is derived by collagen and can never be chosen or changed. 'sessionId' is the id of your conversation IN THE HARNESS: the Claude Code session id, or the codex thread id. This only stores a mapping; it does not alter any collagen ids. Adoption persists across restarts. Adopt only your own conversation.",
+  parameters: Schema.Struct({
+    threadId: Schema.String,
+    agent: Schema.Literals(["claude-code", "codex"]),
+    sessionId: Schema.String,
+  }),
+  success: Schema.String,
+});
+
 const GetMessages = Tool.make("get-messages", {
   description:
-    "Retrieve and clear messages sent to you. Pass the threadId you were given to get just this conversation's messages. Each includes the sender, project, intent, and findings — use them to pick up the conversation and act on the request.",
+    "Retrieve and clear the messages waiting in one thread. You must pass the threadId of the thread you're pulling (get it from pending-threads, or from a message you were already handed). Each message includes the sender, project, intent, and findings — use them to pick up the conversation and act on the request. To reply, use send-to-peer with the same peer and project (that keeps the reply in this thread).",
   parameters: Schema.Struct({
-    threadId: Schema.optional(Schema.String),
+    threadId: Schema.String,
   }),
   success: Schema.String,
 });
@@ -150,7 +186,11 @@ const GetTickets = Tool.make("get-tickets", {
 export const CollagenToolkit = Toolkit.make(
   ListRoom,
   SendToPeer,
+  PendingThreads,
   GetMessages,
+  AwaitMessages,
+  AdoptThread,
+  WatchRoom,
   ExecuteScript,
   SearchTools,
   DescribeScripting,
@@ -164,7 +204,11 @@ export const CollagenToolkit = Toolkit.make(
 export const DevCollagenToolkit = Toolkit.make(
   ListRoom,
   SendToPeer,
+  PendingThreads,
   GetMessages,
+  AwaitMessages,
+  AdoptThread,
+  WatchRoom,
   ExecuteScript,
   SearchTools,
   DescribeScripting,
@@ -176,6 +220,8 @@ export const DevCollagenToolkit = Toolkit.make(
 
 const makeHandlers = Effect.gen(function* () {
     const room = yield* Room;
+    const store = yield* StateStore;
+    const mcpInfo = yield* McpInfo;
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
     const { identity, room: roomInfo, knownRooms, nameRef } = yield* IdentityService;
@@ -224,7 +270,74 @@ const makeHandlers = Effect.gen(function* () {
           Effect.withSpan("Mcp.listRoom"),
         ),
       "send-to-peer": sendToPeer,
-      "get-messages": ({ threadId }: { threadId?: string }) =>
+      "pending-threads": () =>
+        inbox.pending.pipe(
+          Effect.map((threads) => toToon({ threads })),
+          Effect.withSpan("Mcp.pendingThreads"),
+        ),
+      "watch-room": ({ harness }: { harness: "claude-code" | "codex" | "other" }) =>
+        Effect.gen(function* () {
+          const url = yield* mcpInfo.awaitUrl;
+          const origin = url.replace(/\/mcp$/, "");
+          if (harness === "codex") {
+            return [
+              "You are on codex — collagen can push messages straight into your session:",
+              "1. Note your own codex thread id (the thread_id of this conversation).",
+              `2. For each collagen thread you care about, call adopt-thread {threadId, agent: "codex", sessionId: <your codex thread id>}.`,
+              "3. Done. New messages on adopted threads are queued into your codex session (codex queue) — they appear at your next turn, no blocking, and your user keeps chatting normally.",
+              "For not-yet-adopted threads, check pending-threads when convenient.",
+            ].join("\n");
+          }
+          if (harness === "claude-code") {
+            return [
+              "You are on Claude Code — arm a persistent background monitor (Monitor tool, or a background bash task). Each output line = one new-message event arriving in this conversation while the user keeps chatting. Script:",
+              "",
+              "while true; do",
+              `  out=$(curl -s -m 70 "${origin}/inbox/wait?seconds=60" || true)`,
+              '  [ -n "$out" ] && printf \'%s\\n\' "$out"',
+              "  sleep 1",
+              "done",
+              "",
+              "On each event: get-messages with the threadId in the event line, act, reply with send-to-peer.",
+              "Optionally also adopt-thread (agent claude-code, your session id) so messages reach you even when this session is closed.",
+            ].join("\n");
+          }
+          return [
+            "No push mechanism known for your harness. Options:",
+            `- Poll GET ${origin}/inbox/pending (one line per waiting thread) or the pending-threads tool when convenient.`,
+            "- await-messages blocks until a message arrives — fine for dedicated watcher loops, not for interactive sessions.",
+            "- adopt-thread works if your agent CLI is claude-code or codex.",
+          ].join("\n");
+        }).pipe(Effect.withSpan("Mcp.watchRoom")),
+      "await-messages": ({ seconds }: { seconds?: number }) =>
+        Effect.gen(function* () {
+          const waitMs = Math.min(Math.max(seconds ?? 55, 5), 570) * 1000;
+          const started = yield* Clock.currentTimeMillis;
+          while (true) {
+            const threads = yield* inbox.pending;
+            if (threads.length > 0) {
+              return toToon({
+                threads,
+                next: "pull a thread with get-messages, act on it, reply with send-to-peer, then call await-messages again",
+              });
+            }
+            const now = yield* Clock.currentTimeMillis;
+            if (now - started >= waitMs) {
+              return "no new messages — call await-messages again to keep watching the room";
+            }
+            yield* Effect.sleep("500 millis");
+          }
+        }).pipe(Effect.withSpan("Mcp.awaitMessages")),
+      "adopt-thread": ({ threadId, agent, sessionId }: { threadId: string; agent: "claude-code" | "codex"; sessionId: string }) =>
+        store
+          .update((s) => ({ ...s, threads: { ...(s.threads ?? {}), [threadId]: { ai: agent, sessionId } } }))
+          .pipe(
+            Effect.map(
+              () => `adopted: new messages on thread ${threadId} will resume your ${agent} conversation (${sessionId})`,
+            ),
+            Effect.withSpan("Mcp.adoptThread"),
+          ),
+      "get-messages": ({ threadId }: { threadId: string }) =>
         inbox.take(threadId).pipe(
           Effect.map((messages) => toToon({ messages })),
           Effect.withSpan("Mcp.getMessages"),
@@ -365,6 +478,39 @@ export const DevToolHandlers = DevCollagenToolkit.toLayer(makeHandlers);
  *  so the v3-era workarounds (singleton-batch unwrapping, 202-on-empty) are
  *  gone. Newer spec revisions (e.g. stateless 2026-07-28) slot in by adding
  *  their adapter to `protocols` once effect ships it. */
+/** Plain-HTTP inbox endpoints beside /mcp, so a watcher script needs no MCP
+ *  handshake: GET /inbox/pending lists waiting threads (one line each);
+ *  GET /inbox/wait?seconds=N long-polls until something is waiting (204 on
+ *  timeout). Read-only — messages are only consumed via get-messages. */
+const inboxLine = (t: { threadId: string; from: string; project: string; count: number; lastIntent: string }) =>
+  `${t.threadId} | ${t.from} | ${t.project} | ${t.count} msg | ${t.lastIntent}`;
+
+const InboxRoutes = Layer.mergeAll(
+  HttpRouter.add(
+    "GET",
+    "/inbox/pending",
+    Effect.gen(function* () {
+      const threads = yield* (yield* Inbox).pending;
+      return HttpServerResponse.text(threads.map(inboxLine).join("\n"));
+    }),
+  ),
+  HttpRouter.add("GET", "/inbox/wait", (request) =>
+    Effect.gen(function* () {
+      const seconds = Number(new URL(request.url, "http://localhost").searchParams.get("seconds") ?? "60");
+      const waitMs = Math.min(Math.max(Number.isFinite(seconds) ? seconds : 60, 1), 300) * 1000;
+      const inbox = yield* Inbox;
+      const started = yield* Clock.currentTimeMillis;
+      while (true) {
+        const threads = yield* inbox.pending;
+        if (threads.length > 0) return HttpServerResponse.text(threads.map(inboxLine).join("\n"));
+        const now = yield* Clock.currentTimeMillis;
+        if (now - started >= waitMs) return HttpServerResponse.empty({ status: 204 });
+        yield* Effect.sleep("500 millis");
+      }
+    }),
+  ),
+);
+
 export const McpLive = Layer.unwrap(
   Effect.gen(function* () {
     const { profile } = yield* CliArgs;
@@ -393,6 +539,7 @@ export const McpLive = Layer.unwrap(
         Layer.mergeAll(
           toolkitLayer,
           announce,
+          InboxRoutes,
         ).pipe(
           Layer.provideMerge(
             McpServer.layerHttp({
@@ -406,6 +553,17 @@ export const McpLive = Layer.unwrap(
         { disableListenLog: true },
       ).pipe(Layer.provide(NodeHttpServer.layer(() => createServer(), { port })));
 
-    return serve(portForProfile(profile)).pipe(Layer.catch(() => serve(0)));
+    const port = portForProfile(profile);
+    // Say WHY we fell back — a silent ephemeral port makes every registered
+    // client point at the wrong place with no trace.
+    return serve(port).pipe(
+      Layer.catch((e) =>
+        Layer.unwrap(
+          Effect.logWarning(`mcp port ${port} unavailable (${String(e).slice(0, 120)}) — using an ephemeral port`).pipe(
+            Effect.as(serve(0)),
+          ),
+        ),
+      ),
+    );
   }),
 );

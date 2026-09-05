@@ -98,7 +98,7 @@ const message = (over: Partial<RoomMessage> = {}): RoomMessage => ({
 });
 
 const baseState: LocalState = {
-  preferredAi: "fake-ai",
+  preferredAi: "mock:fake-ai",
   rooms: { testroom: [{ id: "p1", name: "sandbox", path: "/tmp/fake-project" }] },
 };
 
@@ -129,7 +129,7 @@ const testLayer = (opts: {
   const exec = mockSpawner(opts.respond ?? (() => ({ stdout: "{}" })));
   const layer = AgentRunner.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(Inbox.layer, McpInfo.layer)),
-    Layer.provideMerge(Layer.succeed(Adapters, { "fake-ai": fakeAdapter })),
+    Layer.provideMerge(Layer.succeed(Adapters, { "mock:fake-ai": fakeAdapter, "fake-ai": fakeAdapter })),
     Layer.provideMerge(stateStoreStub(opts.state ?? baseState)),
     Layer.provideMerge(identityStub),
     Layer.provideMerge(exec.layer),
@@ -210,6 +210,79 @@ describe("AgentRunner", () => {
       ["fresh", "t-b"],
       ["resume:sess-for-t-a", "t-a"],
     ]);
+  });
+
+  it("an adopted thread resumes the user's own conversation, even with no preferred ai", async () => {
+    const { layer, calls } = testLayer({
+      state: {
+        ...baseState,
+        preferredAi: null,
+        threads: { "thread-1": { ai: "fake-ai", sessionId: "my-app-session" } },
+      },
+    });
+    await run(
+      layer,
+      Effect.gen(function* () {
+        const { inbox, runner } = yield* setup;
+        yield* inbox.push(message());
+        yield* runner.runThread("thread-1");
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.args[0]).toBe("resume:my-app-session");
+  });
+
+  it("a codex-adopted thread gets the nudge queued into the user's codex session", async () => {
+    const { layer, calls } = testLayer({
+      state: {
+        ...baseState,
+        preferredAi: null,
+        threads: { "thread-1": { ai: "codex", sessionId: "codex-thread-9" } },
+      },
+    });
+    await run(
+      layer,
+      Effect.gen(function* () {
+        const { inbox, runner } = yield* setup;
+        yield* inbox.push(message());
+        yield* runner.runThread("thread-1");
+        // messages stay for the user's session to pull via get-messages
+        expect(yield* inbox.peekThread("thread-1")).toHaveLength(1);
+      }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.cmd).toBe("codex");
+    expect(calls[0]!.args.slice(0, 3)).toEqual(["queue", "--thread", "codex-thread-9"]);
+    expect(calls[0]!.args[4]).toContain("thread-1");
+  });
+
+  it("a real ai is never cold-started — first contact queues even with an adapter available", async () => {
+    const { layer, calls } = testLayer({ state: { ...baseState, preferredAi: "fake-ai" } });
+    await run(
+      layer,
+      Effect.gen(function* () {
+        const { inbox, runner } = yield* setup;
+        yield* inbox.push(message());
+        yield* runner.runThread("thread-1");
+        expect(yield* inbox.peekThread("thread-1")).toHaveLength(1);
+      }),
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("inbox mode: no ai set → never spawns, the message stays queued", async () => {
+    const { layer, calls } = testLayer({ state: { ...baseState, preferredAi: null } });
+    await run(
+      layer,
+      Effect.gen(function* () {
+        const { inbox, runner } = yield* setup;
+        yield* inbox.push(message());
+        yield* runner.runThread("thread-1");
+        // still queued for whoever pulls via get-messages
+        expect(yield* inbox.peekThread("thread-1")).toHaveLength(1);
+      }),
+    );
+    expect(calls).toHaveLength(0);
   });
 
   it("does not spawn when no adapter matches the preferred ai", async () => {

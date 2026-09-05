@@ -25,7 +25,30 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
     const peekThread = (threadId: string) =>
       Ref.get(buffer).pipe(Effect.map((b) => b.filter((m) => m.threadId === threadId)));
 
-    return { push, take, peekThread, recent } as const;
+    /** One row per waiting thread (newest-first), without draining — so a
+     *  puller can see what's queued and choose a thread to pull by id. */
+    const pending = Ref.get(buffer).pipe(
+      Effect.map((b) => {
+        const byThread = new Map<
+          string,
+          { threadId: string; from: string; project: string; count: number; lastIntent: string; lastTs: number }
+        >();
+        for (const m of b) {
+          const cur = byThread.get(m.threadId);
+          byThread.set(m.threadId, {
+            threadId: m.threadId,
+            from: m.fromName,
+            project: m.project,
+            count: (cur?.count ?? 0) + 1,
+            lastIntent: m.intent,
+            lastTs: m.ts,
+          });
+        }
+        return [...byThread.values()].sort((a, b) => b.lastTs - a.lastTs);
+      }),
+    );
+
+    return { push, take, peekThread, pending, recent } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
