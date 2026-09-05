@@ -67,7 +67,7 @@ With both instances running and showing each other in the room:
 1. One of you asks their agent (in any repo):
    *"check who's in my collagen room and create a ticket asking <friend>'s
    agent to explain what average() does in their sandbox project"*
-2. The ticket gossips across; the friend's agent triggers automatically,
+2. The ticket broadcasts across; the friend's agent triggers automatically,
    investigates their local repo, and settles the step with its findings.
 3. Ask your agent for `get-tickets` to read the settled answer.
 
@@ -118,6 +118,17 @@ remote-control a mock peer with the `drive-peer` MCP tool: ask it to send you
 a message, create a shared ticket, or settle a step — the mock performs the
 action as itself, so everything arrives back through the real pipeline.
 Only peers whose AI is a `mock:*` obey; real peers ignore drive requests.
+
+## Let your agent manage collagen for you
+
+Everything a person can configure, their agent can configure through the MCP
+tools — say it in your own chat and it happens: `add-project` / `remove-project`
+(share a folder into the current room), `set-ai` (claude-code, codex, a mock, or
+`none` for inbox mode), `set-name`, `rename-room` (shared with everyone). Those
+apply live. Room membership — `create-room`, `join-room` (from an invite id),
+`switch-room`, `list-rooms` — is saved at once but takes effect on the next
+start, since collagen runs one room per process. UI state (tabs, focus) is
+deliberately not exposed.
 
 ## Troubleshooting
 

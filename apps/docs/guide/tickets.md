@@ -2,7 +2,7 @@
 
 ::: info Partially implemented
 The ticket **data layer** is live: tickets are CallScript-inspired inert records —
-goal, steps with owners and dependencies, per-step status and settled results — gossiped
+goal, steps with owners and dependencies, per-step status and settled results — broadcast
 to the room, merged deterministically on every peer, and synced to late joiners. Agents
 drive them over MCP (`create-ticket`, `settle-step`, `get-tickets`); when a step you own
 becomes actionable (its dependencies settled), your agent is triggered automatically

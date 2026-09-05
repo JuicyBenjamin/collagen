@@ -101,7 +101,7 @@ export function App({ onExit }: { onExit: () => void }) {
   const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
-  // shared name: live view of what the room agreed on (gossiped LWW)
+  // shared name: live view of what the room agreed on (broadcast LWW)
   const roomName = AsyncResult.getOrElse(useAtomValue(roomMetaAtom), () => ({ name: room.name, ts: 0 })).name;
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -224,7 +224,7 @@ export function App({ onExit }: { onExit: () => void }) {
           onDone={({ name, roomName: newRoomName }) => {
             writeProfileFile(currentProfile(), { name });
             if (name !== myName) setMyName({ name });
-            // renaming is shared state — gossiped to the whole room
+            // renaming is shared state — broadcast to the whole room
             if (newRoomName !== roomName) renameRoom({ name: newRoomName });
             setSettingsSaved(true);
           }}

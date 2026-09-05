@@ -33,7 +33,7 @@ function Root({
         initialName={initialName}
         onDone={({ name, mode, roomName, roomId }) => {
           // create: fresh unguessable id, and the chosen name is stamped so it
-          // gossips to joiners; join: the pasted invite IS the id, labeled by
+          // is sent to joiners; join: the pasted invite IS the id, labeled by
           // its short prefix (ts 0) until the room's shared name arrives.
           const id = mode === "create" ? uuidv7() : roomId;
           const label = mode === "create" ? roomName : roomId.slice(0, 8);

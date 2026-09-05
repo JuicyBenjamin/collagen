@@ -8,7 +8,7 @@ import { CliArgs } from "./CliArgs";
 const RoomEntry = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
-  /** when the shared room name was last set — 0/absent loses to any gossip */
+  /** when the shared room name was last set — 0/absent loses to any broadcast name */
   nameTs: Schema.optional(Schema.Finite),
 });
 

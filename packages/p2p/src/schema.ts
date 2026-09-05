@@ -57,7 +57,7 @@ export const TicketFrame = Schema.Struct({
   kind: Schema.Literal("ticket"),
   ticket: Ticket,
 });
-/** The room's shared display name — gossiped, last-writer-wins by ts. */
+/** The room's shared display name — broadcast, last-writer-wins by ts. */
 export const RoomMetaFrame = Schema.Struct({
   kind: Schema.Literal("room-meta"),
   name: Schema.String,

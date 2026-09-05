@@ -7,7 +7,7 @@ import { CliArgs } from "./CliArgs";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
 import { IdentityService } from "./Identity";
-import { readProfileFile, upsertActiveRoom } from "../profileFile";
+import { readProfileFile, upsertRoom } from "../profileFile";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";
@@ -89,7 +89,7 @@ const Daemons = Layer.effectDiscard(
     // Ticket steps becoming actionable for THIS peer wake the local agent:
     // the ticket record is the suspended state, the nudge resumes it. Only
     // pending steps are nudged — the nudge itself marks them suspended (and
-    // gossips that), so repeated merges don't re-trigger a running agent.
+    // broadcasts that), so repeated merges don't re-trigger a running agent.
     const { identity } = yield* IdentityService;
     yield* SubscriptionRef.changes(room.tickets).pipe(
       Stream.mapEffect(
@@ -192,7 +192,7 @@ const Daemons = Layer.effectDiscard(
       Effect.forkScoped,
     );
 
-    // A shared room name (local rename OR gossiped from a peer) is persisted
+    // A shared room name (local rename OR received from a peer) is persisted
     // so it survives restarts.
     const { profile } = yield* CliArgs;
     const { room: roomInfo, nameRef } = yield* IdentityService;
@@ -206,7 +206,9 @@ const Daemons = Layer.effectDiscard(
     yield* SubscriptionRef.changes(room.meta).pipe(
       Stream.drop(1),
       Stream.tap((m) =>
-        Effect.sync(() => upsertActiveRoom(profile, { id: roomInfo.id, name: m.name, nameTs: m.ts })),
+        // upsertRoom, not upsertActiveRoom: a broadcast rename must never undo a
+        // create/join/switch the user (or their agent) made for the next start
+        Effect.sync(() => upsertRoom(profile, { id: roomInfo.id, name: m.name, nameTs: m.ts })),
       ),
       Stream.runDrain,
       Effect.forkScoped,

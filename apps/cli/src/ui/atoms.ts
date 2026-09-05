@@ -108,7 +108,7 @@ export const roomMetaAtom = runtimeAtom.atom(
   })),
 );
 
-/** Rename the room for everyone in it (gossiped, last-writer-wins). */
+/** Rename the room for everyone in it (broadcast, last-writer-wins). */
 export const renameRoomAtom = runtimeAtom.fn(
   Effect.fnUntraced(function* ({ name }: { name: string }) {
     const room = yield* Room;
@@ -123,7 +123,7 @@ export const myNameAtom = runtimeAtom.atom(
   })),
 );
 
-/** Change your display name now — peers see it on the next profile gossip. */
+/** Change your display name now — peers see it on the next profile broadcast. */
 export const setMyNameAtom = runtimeAtom.fn(
   Effect.fnUntraced(function* ({ name }: { name: string }) {
     const ident = yield* IdentityService;

@@ -10,7 +10,7 @@ export interface RoomEntry {
   /** The room's identity — an unguessable id (uuid v7); the topic derives
    *  from this, so knowing the id IS the invite. */
   id: string;
-  /** The room's shared display name (gossiped, last-writer-wins). */
+  /** The room's shared display name (broadcast, last-writer-wins). */
   name: string;
   /** When `name` was last set; 0/absent = local default, any peer's named
    *  version wins over it. */
@@ -30,11 +30,18 @@ export function storedRoom(f: ProfileFile): RoomEntry | undefined {
   return rooms.find((r) => r.id === f.activeRoomId) ?? rooms[0];
 }
 
-/** Add-or-relabel a room and make it active. */
-export function upsertActiveRoom(profile: string, room: RoomEntry): void {
+/** Add-or-relabel a room WITHOUT touching which room is active — for
+ *  persisting broadcast state about the room we're in. */
+export function upsertRoom(profile: string, room: RoomEntry): void {
   const f = readProfileFile(profile);
   const rooms = (f.rooms ?? []).filter((r) => r.id !== room.id);
-  writeProfileFile(profile, { rooms: [...rooms, room], activeRoomId: room.id });
+  writeProfileFile(profile, { rooms: [...rooms, room] });
+}
+
+/** Add-or-relabel a room and make it active (an explicit create/join/switch). */
+export function upsertActiveRoom(profile: string, room: RoomEntry): void {
+  upsertRoom(profile, room);
+  writeProfileFile(profile, { activeRoomId: room.id });
 }
 
 export function profilePath(profile: string): string {

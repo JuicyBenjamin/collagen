@@ -19,7 +19,7 @@ export class RoomConfig extends Context.Service<RoomConfig, {
   readonly identity: Identity;
   readonly roomName: string;
   /** The room's shared display name + when it was last set (0 = never shared:
-   *  a local default that any gossiped name overrides). */
+   *  a local default that any broadcast name overrides). */
   readonly roomLabel: RoomMeta;
   /** Re-evaluated on every broadcast, so profile changes are picked up live. */
   readonly getProfile: Effect.Effect<SharedProfile>;
@@ -224,7 +224,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* writeFrame(conn, { kind: "drive", action });
     });
 
-    /** Rename the room for everyone: stamp now, set locally, gossip. */
+    /** Rename the room for everyone: stamp now, set locally, broadcast. */
     const rename = Effect.fn("Room.rename")(function* (name: string) {
       const ts = yield* Clock.currentTimeMillis;
       yield* SubscriptionRef.set(meta, { name, ts });

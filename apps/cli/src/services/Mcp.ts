@@ -1,10 +1,16 @@
+import { statSync } from "node:fs";
 import { createServer } from "node:http";
+import { basename, resolve } from "node:path";
+import { v7 as uuidv7 } from "uuid";
 import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
-import { Room, shortRoomId, type Ticket } from "@collagen/p2p";
+import { AI_OPTIONS, Room, newProject, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
+import { readProfileFile, upsertActiveRoom, writeProfileFile } from "../profileFile";
+import { isRoomInviteId } from "../util";
+import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "../util";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
@@ -33,6 +39,9 @@ const ticketView = (ticket: Ticket, nameFor: (key: string) => string) => ({
     result: s.result ?? "",
   })),
 });
+
+const RESTART_NOTE =
+  "Collagen runs one room per process — it joins the active room on its next start, so ask the user to restart collagen (q, then start it again).";
 
 const ListRoom = Tool.make("list-room", {
   description:
@@ -122,7 +131,7 @@ const DescribeScripting = Tool.make("describe-scripting", {
 
 const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket: a structured, serialized record of a cross-peer task. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). The ticket is gossiped to the room; each owner's agent is triggered when its steps become actionable, and settles them with settle-step. Prefer this over send-to-peer for multi-step work — the intermediate state stays inspectable and survives restarts.",
+    "Create a shared ticket: a structured, serialized record of a cross-peer task. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). The ticket is broadcast to the room; each owner's agent is triggered when its steps become actionable, and settles them with settle-step. Prefer this over send-to-peer for multi-step work — the intermediate state stays inspectable and survives restarts.",
   parameters: Schema.Struct({
     goal: Schema.String,
     project: Schema.String,
@@ -141,7 +150,7 @@ const CreateTicket = Tool.make("create-ticket", {
 
 const SettleStep = Tool.make("settle-step", {
   description:
-    "Settle (or fail) a ticket step you own, with your findings as the result. The updated ticket is gossiped to the room; steps waiting on this one become actionable on their owners' side.",
+    "Settle (or fail) a ticket step you own, with your findings as the result. The updated ticket is broadcast to the room; steps waiting on this one become actionable on their owners' side.",
   parameters: Schema.Struct({
     ticketId: Schema.String,
     stepId: Schema.String,
@@ -177,6 +186,69 @@ const DrivePeer = Tool.make("drive-peer", {
   success: Schema.String,
 });
 
+// ── settings on behalf of the user ──────────────────────────────────────────
+// Anything a person can configure, an agent can configure for them. UI state
+// (tabs, focus) is deliberately NOT here.
+
+const AddProject = Tool.make("add-project", {
+  description:
+    "Share a local project folder into the CURRENT room on behalf of the user. 'path' must be an existing directory (absolute, or relative to the agent's cwd); 'name' defaults to the folder name. Applies live — peers see it at once and can message about it.",
+  parameters: Schema.Struct({ path: Schema.String, name: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
+const RemoveProject = Tool.make("remove-project", {
+  description: "Stop sharing one of the user's projects in the current room, by name. Applies live.",
+  parameters: Schema.Struct({ name: Schema.String }),
+  success: Schema.String,
+});
+
+const SetAi = Tool.make("set-ai", {
+  description:
+    "Set which agent CLI acts for this user: 'claude-code', 'codex', a mock ('mock:claude-code' / 'mock:codex' — test dummies, visibly labeled to peers), or 'none' (inbox mode: nothing ever auto-runs; messages wait to be pulled). Applies live; peers see the choice and its auth status.",
+  parameters: Schema.Struct({ ai: Schema.Literals([...AI_OPTIONS, ...MOCK_AI_OPTIONS, "none"]) }),
+  success: Schema.String,
+});
+
+const SetName = Tool.make("set-name", {
+  description: "Change the user's display name as peers see it. Applies live.",
+  parameters: Schema.Struct({ name: Schema.String }),
+  success: Schema.String,
+});
+
+const RenameRoom = Tool.make("rename-room", {
+  description: "Rename the CURRENT room for everyone in it (the name is shared state, broadcast last-writer-wins). Applies live.",
+  parameters: Schema.Struct({ name: Schema.String }),
+  success: Schema.String,
+});
+
+const ListRooms = Tool.make("list-rooms", {
+  description:
+    "Every room this user has created or joined, with the stable short id, the name, which one is active, and the invite id (the secret a friend needs to join — share it only when the user asks). Returns TOON text.",
+  success: Schema.String,
+});
+
+const CreateRoom = Tool.make("create-room", {
+  description:
+    "Create a new room for the user and make it their active room. Collagen runs one room per process, so it JOINS the new room on the next start — tell the user to restart collagen (q, then start it again). Returns the invite id to share with friends.",
+  parameters: Schema.Struct({ name: Schema.String }),
+  success: Schema.String,
+});
+
+const JoinRoom = Tool.make("join-room", {
+  description:
+    "Join a friend's room from its invite id (a uuid the friend copied with c) and make it the active room. Takes effect on the next start — tell the user to restart collagen. Optional 'name' is a local label until the room's shared name arrives.",
+  parameters: Schema.Struct({ inviteId: Schema.String, name: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
+const SwitchRoom = Tool.make("switch-room", {
+  description:
+    "Make one of the user's known rooms active (by short id, name, or invite id — see list-rooms). Takes effect on the next start — tell the user to restart collagen.",
+  parameters: Schema.Struct({ room: Schema.String }),
+  success: Schema.String,
+});
+
 const GetTickets = Tool.make("get-tickets", {
   description:
     "All shared tickets this instance knows, merged from the room. Includes step ownership, status, dependencies, and settled results. Returns TOON (compact YAML/CSV-style) text.",
@@ -197,6 +269,15 @@ export const CollagenToolkit = Toolkit.make(
   CreateTicket,
   SettleStep,
   GetTickets,
+  AddProject,
+  RemoveProject,
+  SetAi,
+  SetName,
+  RenameRoom,
+  ListRooms,
+  CreateRoom,
+  JoinRoom,
+  SwitchRoom,
 );
 
 /** Dev-only surface: everything plus the drive-peer test tool. A prod run
@@ -215,6 +296,15 @@ export const DevCollagenToolkit = Toolkit.make(
   CreateTicket,
   SettleStep,
   GetTickets,
+  AddProject,
+  RemoveProject,
+  SetAi,
+  SetName,
+  RenameRoom,
+  ListRooms,
+  CreateRoom,
+  JoinRoom,
+  SwitchRoom,
   DrivePeer,
 );
 
@@ -222,9 +312,10 @@ const makeHandlers = Effect.gen(function* () {
     const room = yield* Room;
     const store = yield* StateStore;
     const mcpInfo = yield* McpInfo;
+    const { profile } = yield* CliArgs;
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
-    const { identity, room: roomInfo, knownRooms, nameRef } = yield* IdentityService;
+    const { identity, room: roomInfo, knownRooms, nameRef, setName } = yield* IdentityService;
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
       const peers = yield* SubscriptionRef.get(room.roster);
       const myName = yield* SubscriptionRef.get(nameRef);
@@ -457,6 +548,117 @@ const makeHandlers = Effect.gen(function* () {
           Effect.catchTag("PeerNotConnected", () => Effect.succeed("failed: peer not connected")),
         );
       }),
+      // ── settings ──
+      "add-project": ({ path, name }: { path: string; name?: string }) =>
+        Effect.gen(function* () {
+          const abs = resolve(path);
+          const isDir = yield* Effect.sync(() => {
+            try {
+              return statSync(abs).isDirectory();
+            } catch {
+              return false;
+            }
+          });
+          if (!isDir) return `failed: ${abs} is not an existing directory`;
+          const label = (name ?? basename(abs)).trim();
+          if (label.length === 0) return "failed: empty project name";
+          let outcome = "";
+          yield* store.update((s) => {
+            const here = s.rooms[roomInfo.id] ?? [];
+            if (here.some((p) => p.path === abs)) {
+              outcome = `already sharing ${abs}`;
+              return s;
+            }
+            if (here.some((p) => p.name === label)) {
+              outcome = `failed: a project named "${label}" is already shared in this room — pass a different name`;
+              return s;
+            }
+            outcome = `sharing "${label}" (${abs}) in room ${roomInfo.name} — peers see it now`;
+            return { ...s, rooms: { ...s.rooms, [roomInfo.id]: [...here, newProject(label, abs)] } };
+          });
+          return outcome;
+        }).pipe(Effect.withSpan("Mcp.addProject")),
+      "remove-project": ({ name }: { name: string }) =>
+        Effect.gen(function* () {
+          const before = roomProjects(yield* store.get, roomInfo.id);
+          if (!before.some((p) => p.name === name)) {
+            return `failed: no project named "${name}" in this room (yours: ${before.map((p) => p.name).join(", ") || "none"})`;
+          }
+          yield* store.update((s) => ({
+            ...s,
+            rooms: { ...s.rooms, [roomInfo.id]: (s.rooms[roomInfo.id] ?? []).filter((p) => p.name !== name) },
+          }));
+          return `stopped sharing "${name}"`;
+        }).pipe(Effect.withSpan("Mcp.removeProject")),
+      "set-ai": ({ ai }: { ai: string }) =>
+        store
+          .update((s) => ({ ...s, preferredAi: ai === "none" ? null : ai }))
+          .pipe(
+            Effect.map(() =>
+              ai === "none"
+                ? "ai set to none — inbox mode: nothing auto-runs, messages wait to be pulled"
+                : `ai set to ${ai} — its auth status is probed now and broadcast to the room`,
+            ),
+            Effect.withSpan("Mcp.setAi"),
+          ),
+      "set-name": ({ name }: { name: string }) =>
+        Effect.gen(function* () {
+          const n = name.trim();
+          if (n.length === 0) return "failed: empty name";
+          yield* Effect.sync(() => writeProfileFile(profile, { name: n }));
+          yield* setName(n);
+          return `display name is now "${n}" — peers see it on the next profile broadcast`;
+        }).pipe(Effect.withSpan("Mcp.setName")),
+      "rename-room": ({ name }: { name: string }) =>
+        Effect.gen(function* () {
+          const n = name.trim();
+          if (n.length === 0) return "failed: empty room name";
+          yield* room.rename(n);
+          return `room renamed to "${n}" for everyone in it`;
+        }).pipe(Effect.withSpan("Mcp.renameRoom")),
+      "list-rooms": () =>
+        Effect.sync(() => {
+          const f = readProfileFile(profile);
+          return toToon({
+            rooms: (f.rooms ?? []).map((r) => ({
+              shortId: shortRoomId(r.id),
+              name: r.name,
+              active: r.id === (f.activeRoomId ?? roomInfo.id),
+              current: r.id === roomInfo.id,
+              inviteId: r.id,
+            })),
+          });
+        }).pipe(Effect.withSpan("Mcp.listRooms")),
+      "create-room": ({ name }: { name: string }) =>
+        Effect.sync(() => {
+          const n = name.trim();
+          if (n.length === 0) return "failed: empty room name";
+          const id = uuidv7();
+          upsertActiveRoom(profile, { id, name: n, nameTs: Date.now() });
+          return `created room "${n}" [${shortRoomId(id)}] and made it active. ${RESTART_NOTE} Invite id to share: ${id}`;
+        }).pipe(Effect.withSpan("Mcp.createRoom")),
+      "join-room": ({ inviteId, name }: { inviteId: string; name?: string }) =>
+        Effect.sync(() => {
+          const id = inviteId.trim();
+          if (!isRoomInviteId(id)) return "failed: that is not a room invite id (expected a uuid)";
+          upsertActiveRoom(profile, { id, name: name?.trim() || id.slice(0, 8) });
+          return `joined room [${shortRoomId(id)}] and made it active. ${RESTART_NOTE}`;
+        }).pipe(Effect.withSpan("Mcp.joinRoom")),
+      "switch-room": ({ room: which }: { room: string }) =>
+        Effect.sync(() => {
+          const f = readProfileFile(profile);
+          const q = which.trim();
+          const hit = (f.rooms ?? []).find((r) => r.id === q || shortRoomId(r.id) === q || r.name === q);
+          if (!hit) return `failed: no known room matching "${q}" — see list-rooms`;
+          const alreadyActive = (f.activeRoomId ?? roomInfo.id) === hit.id;
+          if (hit.id === roomInfo.id && alreadyActive) return `already in "${hit.name}" and it is the active room`;
+          upsertActiveRoom(profile, hit);
+          // switching back to the room we're currently in just cancels a
+          // pending create/join — no restart needed for that
+          return hit.id === roomInfo.id
+            ? `"${hit.name}" is the active room again (a pending switch was cancelled) — no restart needed`
+            : `active room is now "${hit.name}" [${shortRoomId(hit.id)}]. ${RESTART_NOTE}`;
+        }).pipe(Effect.withSpan("Mcp.switchRoom")),
       "get-tickets": () =>
         SubscriptionRef.get(room.tickets).pipe(
           Effect.flatMap((m) => Effect.forEach([...m.values()], renderTicket)),
