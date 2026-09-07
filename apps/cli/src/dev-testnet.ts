@@ -16,7 +16,8 @@ const TestnetLive = Layer.effectDiscard(
       (t) => Effect.promise(() => t.destroy() as Promise<void>),
     );
     yield* fs.makeDirectory(dirname(bootstrapFile), { recursive: true });
-    yield* fs.writeFileString(bootstrapFile, JSON.stringify(testnet.bootstrap));
+    // pid included so clients can detect a stale file from a killed testnet
+    yield* fs.writeFileString(bootstrapFile, JSON.stringify({ pid: process.pid, bootstrap: testnet.bootstrap }));
     yield* Effect.addFinalizer(() => fs.remove(bootstrapFile).pipe(Effect.ignore));
     yield* Console.log("collagen dev testnet running.");
     yield* Console.log(`bootstrap: ${JSON.stringify(testnet.bootstrap)}`);

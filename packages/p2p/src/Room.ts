@@ -73,10 +73,13 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const peers = new Map<string, Peer>();
     const publishRoster = Effect.suspend(() => SubscriptionRef.set(roster, [...peers.values()]));
 
-    const swarm = yield* Effect.acquireRelease(
-      Effect.sync(() => new Hyperswarm({ keyPair: config.identity.keyPair, bootstrap: config.bootstrap })),
-      (s) => Effect.promise(() => s.destroy() as Promise<void>).pipe(Effect.orDie),
-    );
+    // The swarm lives in a slot, not a const: self-heal can destroy and
+    // recreate it (see below). hyperswarm ships no types.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let swarm: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let discovery: any = null;
+    const topic = roomTopic(config.roomName);
 
     // Serialize + write one frame to one connection; failures are logged, not fatal
     // (peer mid-teardown behaves like a lost packet, same as before).
@@ -135,7 +138,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         ),
       );
 
-    swarm.on("connection", (conn: SwarmConnection, info: { publicKey: Buffer }) => {
+    const onConnection = (conn: SwarmConnection, info: { publicKey: Buffer }) => {
       const key = b4a.toString(info.publicKey, "hex");
       runFork(Effect.log(`swarm connection: ${key.slice(0, 12)}`));
       connByKey.set(key, conn);
@@ -175,22 +178,79 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           ),
         ),
       );
-    });
+    };
 
-    const discovery = swarm.join(roomTopic(config.roomName), { server: true, client: true });
-    // Fire-and-forget: flushed() resolves when fully announced; not required for readiness.
-    yield* Effect.promise(() => discovery.flushed() as Promise<void>).pipe(
-      Effect.timeout("10 seconds"),
-      Effect.ignore,
-      Effect.forkScoped,
+    /** Build a swarm, attach our handler, join the topic. Used at start and
+     *  again by the self-heal. */
+    const startSwarm = () => {
+      const s = new Hyperswarm({ keyPair: config.identity.keyPair, bootstrap: config.bootstrap });
+      s.on("connection", onConnection);
+      swarm = s;
+      discovery = s.join(topic, { server: true, client: true });
+      // Fire-and-forget: flushed() resolves when fully announced; not required for readiness.
+      runFork(
+        Effect.promise(() => discovery.flushed() as Promise<void>).pipe(Effect.timeout("10 seconds"), Effect.ignore),
+      );
+    };
+
+    yield* Effect.acquireRelease(
+      Effect.sync(startSwarm),
+      () => Effect.promise(() => swarm.destroy() as Promise<void>).pipe(Effect.orDie),
     );
+
     // Peers that join in the same instant can miss each other: each side's
     // topic lookup can run before the other side's announce lands, and
     // hyperswarm's own re-lookup is too infrequent to recover quickly.
     // Periodically re-running announce+lookup makes the room converge.
-    yield* Effect.promise(() => discovery.refresh({ client: true, server: true }) as Promise<void>).pipe(
+    yield* Effect.suspend(() => Effect.promise(() => discovery.refresh({ client: true, server: true }) as Promise<void>)).pipe(
       Effect.ignore,
       Effect.schedule(Schedule.spaced("15 seconds")),
+      Effect.forkScoped,
+    );
+
+    // Swarm health, every minute, but only logged when it changes (or when
+    // starving) — so the log file can answer "why aren't they connecting?"
+    // after the fact. Per known peer: short key, attempts, proven ✓, banned !.
+    const healthLine = (): { line: string; known: number; open: number } => {
+      const known = [...(swarm.peers as Map<string, { publicKey: Buffer; attempts: number; proven: boolean; banned: boolean }>).values()];
+      const open = (swarm.connections as Set<unknown>).size;
+      const c = swarm.stats.connects as {
+        client: { attempted: number; opened: number; closed: number };
+        server: { opened: number; closed: number };
+      };
+      const peersText = known
+        .map((p) => `${b4a.toString(p.publicKey, "hex").slice(0, 8)}:a${p.attempts}${p.proven ? "✓" : ""}${p.banned ? "!" : ""}`)
+        .join(" ");
+      const line = `swarm: ${open} open · ${swarm.connecting} connecting · known [${peersText || "none"}] · client ${c.client.attempted}/${c.client.opened}/${c.client.closed} · server ${c.server.opened}/${c.server.closed}`;
+      return { line, known: known.length, open };
+    };
+
+    // Self-heal: two long-running instances can discover each other yet never
+    // connect — a hung connection attempt keeps the peer in hyperswarm's
+    // _allConnections, which blocks rediscovery, retries AND the other side's
+    // inbound attempts (duplicate tie-break). Only a fresh swarm clears it,
+    // which used to mean restarting collagen. If we know of peers but hold no
+    // connection for two checks in a row, recreate the swarm.
+    let lastHealth = "";
+    let starving = 0;
+    yield* Effect.gen(function* () {
+      const { line, known, open } = healthLine();
+      starving = known > 0 && open === 0 ? starving + 1 : 0;
+      if (line !== lastHealth || starving > 0) {
+        lastHealth = line;
+        yield* Effect.log(line);
+      }
+      if (starving < 2) return;
+      starving = 0;
+      yield* Effect.logWarning(`${known} peer(s) known but none connected for 2 min — recreating the swarm`);
+      const old = swarm;
+      yield* Effect.promise(() => old.destroy() as Promise<void>).pipe(Effect.timeout("15 seconds"), Effect.ignore);
+      connByKey.clear();
+      peers.clear();
+      yield* publishRoster;
+      yield* Effect.sync(startSwarm);
+    }).pipe(
+      Effect.schedule(Schedule.spaced("60 seconds")),
       Effect.forkScoped,
     );
 
