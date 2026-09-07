@@ -5,22 +5,20 @@ import { useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { shortRoomId } from "@collagen/p2p";
-import { captureAtom, focusAtom, hintsAtom } from "../../../../components/focus";
+import { captureAtom } from "../../../../components/focus";
 import { useSession } from "../../../../app/session";
 import { theme } from "../../../../app/theme";
 import { roomMetaAtom } from "../../../atoms";
 import { logsAtom, mcpUrlAtom } from "./atoms";
 
 /** Pinned footer: a fixed 3-line activity log, the MCP url, the room's invite
- *  line (c copies it), and the hovered section's hint. Every line is
- *  single-line on purpose — a wrapped line here changes the footer's height
- *  and reflows the whole screen. */
+ *  line (c copies it). Every line is single-line on purpose — a wrapped line
+ *  here changes the footer's height and reflows the whole screen. The key
+ *  legend lives inside the room panel (Keys), next to what it describes. */
 export function Footer() {
   const { room } = useSession();
   const renderer = useRenderer();
-  const focus = useAtomValue(focusAtom);
   const captured = useAtomValue(captureAtom);
-  const hints = useAtomValue(hintsAtom);
   const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const roomName = AsyncResult.getOrElse(useAtomValue(roomMetaAtom), () => ({ name: room.name, ts: 0 })).name;
@@ -62,9 +60,6 @@ export function Footer() {
           room: <span fg={theme.fg}>{roomName}</span> [{shortRoomId(room.id)}] · invite id:{" "}
           <span fg={theme.fg}>{room.id}</span>
           {copied ? <span fg={theme.ok}>  ✓ copied</span> : <span fg={theme.dim}>  (c to copy)</span>}
-        </text>
-        <text fg={theme.dim} truncate wrapMode="none">
-          {captured ?? hints[focus] ?? "esc back to tabs"}
         </text>
       </box>
     </>

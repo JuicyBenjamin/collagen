@@ -12,6 +12,7 @@ import { useSession } from "../../app/session";
 import { roomMetaAtom } from "../atoms";
 import { updateStateAtom } from "./atoms";
 import { Footer } from "./components/Footer/Footer";
+import { Keys } from "./components/Keys/Keys";
 import { StatusLine } from "./components/StatusLine/StatusLine";
 import { TabBar } from "./components/TabBar/TabBar";
 import { useTabs } from "./tabs";
@@ -63,6 +64,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
         <Panel title={`room · ${roomName}`} grow>
           <TabBar />
           {children}
+          <Keys />
         </Panel>
       </box>
       <Footer />

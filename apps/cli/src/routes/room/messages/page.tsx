@@ -42,7 +42,7 @@ export function MessagesPage() {
 
   // Sticky viewport: only scrolls when the cursor hits an edge, so a keypress
   // redraws one or two rows — not the whole panel.
-  const window = Math.max(5, height - 16 - (expanded ? 3 : 0));
+  const window = Math.max(5, height - 16 - (expanded ? 5 : 0));
   const maxStart = Math.max(0, trace.length - window);
   let start = cursor === null ? maxStart : clamp(startRef.current, 0, maxStart);
   if (sel < start) start = sel;
@@ -52,7 +52,7 @@ export function MessagesPage() {
   return (
     <Focusable
       id="messages"
-      hint="↑↓ scroll · enter full text · ↑ at the top leaves · 1/2 jump · esc"
+      hint="↑↓ scroll · enter details · ↑ at the top leaves · 1/2 jump · esc"
       flexDirection="column"
       marginTop={1}
       flexGrow={1}
@@ -110,7 +110,7 @@ function MessageRow({
   return (
     <box flexDirection="column">
       <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
-        {selected ? "› " : "  "}
+        {selected ? (expanded ? "▾ " : "› ") : "  "}
         <span fg={out ? theme.accent : theme.warn}>
           {out ? "→ " : "← "}
           {peer}
@@ -118,10 +118,13 @@ function MessageRow({
         <span fg={theme.dim}>
           {" "}[{msg.project}/{msg.intent}]{" "}
         </span>
-        {expanded ? "" : msg.findings}
+        {msg.findings}
       </text>
       {expanded ? (
-        <box paddingLeft={4}>
+        <box flexDirection="column" paddingLeft={4} marginBottom={1}>
+          <text fg={theme.dim} truncate wrapMode="none">
+            thread {msg.threadId} · {new Date(msg.ts).toLocaleString()}
+          </text>
           <text fg={theme.fg}>{msg.findings}</text>
         </box>
       ) : null}
