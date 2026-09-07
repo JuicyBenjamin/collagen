@@ -7,23 +7,25 @@ _Last updated: 2026-09-07._
 
 ## Working today
 
-- **P2P core (`packages/p2p`)** — Effect-based `Room` service over Hyperswarm: `Schema`
-  wire frames (`profile`, `msg`, `ticket`, `room-meta`, `drive`), roster as a
-  `SubscriptionRef`, messages as a `PubSub`, symmetric thread ids. Periodic discovery
-  refresh, a swarm health line, and self-healing when peers are known but none connect.
+- **P2P core (`packages/p2p`)** — one Hyperswarm per identity (`Swarm`), rooms as topics;
+  per room an **Autobase log** with a Hyperbee view (`RoomLog`) holding messages, tickets,
+  the name and membership, replicated over the same connections via Corestore. Presence
+  and remote-control stay ephemeral frames on a Protomux channel. Periodic discovery
+  refresh, a swarm health line, self-healing when peers are known but none connect.
 - **Rooms are conversations** — a room id is an unguessable uuid that doubles as the
   invite; the room's name is shared state (last-writer-wins). You are in every room you
   joined at once and look at one; elsewhere you're `away`. Live create / join / switch,
   from the TUI (rooms rail) or the agent's tools.
-- **Messaging** — `send-to-peer` lands in the thread between two peers about one
-  project. **Nothing spawns behind your back**: a real AI is never cold-started by an
+- **Messaging** — `send-to-peer` appends to the room's log in the thread between two peers
+  about one project; the recipient may be offline and reads it when back. Room-visible.
+  Unread is a per-thread cursor in local state. **Nothing spawns behind your back**: a real AI is never cold-started by an
   incoming message; it waits in the inbox (`pending-threads`, `get-messages`,
   `await-messages`) or — once you `adopt-thread` — resumes *your own* conversation in
   your harness (`claude -p --resume`, `codex queue`). Verified live in both harnesses,
   cross-machine, cross-NAT.
 - **Tickets (data layer)** — a shared record: goal + steps with owners, `needs`
-  dependencies, status and results. Broadcast, merged deterministically on every peer,
-  synced to late joiners. `create-ticket` / `settle-step` / `get-tickets`. A step that
+  dependencies, status and results. On the room log, merged deterministically in `apply`,
+  so they survive every restart and reach offline members. `create-ticket` / `settle-step` / `get-tickets`. A step that
   becomes actionable is delivered to its owner on the same thread messages use.
 - **MCP server** — `effect/unstable/ai` `McpServer` over Streamable HTTP, per-profile
   port. Tools for the room, messages, tickets, settings (projects, ai, name, room name,
@@ -43,8 +45,11 @@ _Last updated: 2026-09-07._
 
 - **Concurrent MCP registration** — two instances registering at once can race on
   `~/.claude.json` (a one-off `claude mcp add exited 1`). Idempotent, self-heals.
-- **Tickets and messages live in memory.** A late joiner receives every ticket from the
-  peers present; if *everyone* restarts, the tickets are gone. See roadmap.
+- **First write needs a member online once.** A joiner can read the room as soon as any
+  member replicates the log to them, but can't append until a member appends their writer
+  key — automatic, but requires one moment of overlap.
+- **Every member is an indexer.** Fine for small rooms; large rooms would want a fixed
+  indexer set (Autobase supports it).
 
 ## Roadmap
 
@@ -61,16 +66,15 @@ Rough order, not committed.
 
 ### 2. Persistence — [spec](/guide/tickets#sync-model)
 
-- [ ] Tickets survive a full restart (per-room log on disk, merged with the room's copy
-  on reconnect — the merge rules already converge)
-- [ ] Store-and-forward for messages to peers that are offline
-- [ ] Delivery acks / retries (at-most-once today)
+- [x] Tickets survive a full restart (the room's Autobase log)
+- [x] Store-and-forward for messages to peers that are offline (same log)
+- [ ] Read receipts: the sender can't tell whether the recipient has pulled a message
 
 ### 3. Rooms lifecycle — [spec](/guide/rooms#room-lifecycle)
 
 - [ ] Leave a room (local forget)
-- [ ] Membership enforcement: today anyone holding the id connects; a keypair-backed room
-  with invite codes would let members drop unknown keys
+- [ ] Membership enforcement: drop connections from keys the log doesn't know; revoke a
+  member (`removeWriter`). Admission to the log exists; it's automatic today.
 
 ### 4. Identity & devices — [spec](/guide/identity)
 
@@ -114,4 +118,12 @@ Rough order, not committed.
   connected at all. hyperdht's own testnet helper builds its nodes with
   `firewalled: false`; we now do the same when a dev bootstrap is present. Local peers
   connect in ~40 ms. The public DHT keeps detection on.
+- **Rooms are Autobase logs** (2026-09-07) — messages, tickets, the room name and
+  membership are entries on one Autobase per room (Hyperbee view, Corestore per profile,
+  replicated over the swarm connections). Replaced full-record broadcast + in-memory
+  state; a JSON snapshot was considered for an afternoon and rejected as a dead end on a
+  Pear stack. Messages are room-visible (every member holds the log) — chosen over
+  sealed-to-recipient; the room is the audience. Same-day finding: a PubSub inside
+  `Room.make` dropped the log's existing messages because nobody had subscribed yet —
+  `messages` now replays on subscribe.
 - **"broadcast", never "gossip"** — vocabulary for shared state.

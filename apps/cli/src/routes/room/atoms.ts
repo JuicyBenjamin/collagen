@@ -2,7 +2,6 @@ import { Effect, Stream, SubscriptionRef } from "effect";
 import { type LocalState } from "@collagen/p2p";
 import { AiStatus } from "../../services/AiStatus";
 import { IdentityService } from "../../services/Identity";
-import { Inbox } from "../../services/Inbox";
 import { Rooms } from "../../services/Rooms";
 import { StateStore } from "../../services/StateStore";
 import { runtimeAtom } from "../../app/runtime";
@@ -42,27 +41,30 @@ export const aiStatusAtom = runtimeAtom.atom(
   })),
 );
 
-/** Peers in the focused room (emits the current value on subscribe). */
+/** Peers present in the focused room (emits the current value on subscribe). */
 export const rosterAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.roster));
   })),
 );
 
-/** Messages received in the focused room (recent ring). */
-export const inboundMessagesAtom = runtimeAtom.atom(
+/** Everyone the focused room's log remembers — names for offline peers. */
+export const membersAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    const rooms = yield* Rooms;
-    const inbox = yield* Inbox;
-    return rooms.watch((h) =>
-      SubscriptionRef.changes(inbox.recent).pipe(Stream.map((all) => all.filter((e) => e.roomId === h.id).map((e) => e.msg))),
-    );
+    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.members));
   })),
 );
 
-/** Messages this instance sent in the focused room — the other half of the a2a trace. */
-export const sentMessagesAtom = runtimeAtom.atom(
+/** Every message in the focused room, in log order — the a2a trace. */
+export const traceAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.sent));
+    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.trace));
+  })),
+);
+
+/** Whether we can write to the focused room's log yet (a member admits us). */
+export const admittedAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.writable));
   })),
 );

@@ -10,6 +10,11 @@ const RoomEntry = Schema.Struct({
   name: Schema.String,
   /** when the shared room name was last set — 0/absent loses to any broadcast name */
   nameTs: Schema.optional(Schema.Finite),
+  /** the room's log key once known; `creator` = we bootstrap the log.
+   *  Must match config/profileFile RoomEntry: this file is re-encoded on
+   *  start, so any field missing here is silently erased. */
+  logKey: Schema.optional(Schema.String),
+  creator: Schema.optional(Schema.Boolean),
 });
 
 const IdentityFile = Schema.fromJsonString(

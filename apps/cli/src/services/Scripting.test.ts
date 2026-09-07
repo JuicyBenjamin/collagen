@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, PubSub, Stream, SubscriptionRef } from "effect";
-import { deriveThreadId, type DriveAction, type Peer, type RoomMessage, type Ticket } from "@collagen/p2p";
-import { PeerNotConnected } from "@collagen/p2p";
+import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
+import { StateStore } from "./StateStore";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { Scripting } from "./Scripting";
 
@@ -23,7 +23,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
         payload: { project: string; intent: string; findings: string },
       ) =>
         peerKey === "k-dave"
-          ? Effect.fail(new PeerNotConnected({ peerKey }))
+          ? Effect.fail(new NotWritable({ roomId: "testroom" }))
           : Effect.sync(() => {
               sent.push({ peerKey, intent: payload.intent, findings: payload.findings });
               const msg: RoomMessage = {
@@ -31,6 +31,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
                 threadId: deriveThreadId("me", peerKey, payload.project),
                 from: "me",
                 fromName: "tester",
+                to: peerKey,
                 project: payload.project,
                 intent: payload.intent,
                 findings: payload.findings,
@@ -41,17 +42,23 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
       const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
       const meta = yield* SubscriptionRef.make({ name: "test room", ts: 0 });
       const drives = yield* PubSub.unbounded<{ from: string; action: DriveAction }>();
-      const sentRef = yield* SubscriptionRef.make<ReadonlyArray<RoomMessage>>([]);
+      const trace = yield* SubscriptionRef.make<ReadonlyArray<RoomMessage>>([]);
+      const members = yield* SubscriptionRef.make<ReadonlyArray<Member>>([]);
+      const logKey = yield* SubscriptionRef.make<string | null>("log");
+      const writable = yield* SubscriptionRef.make(true);
       const room = {
         roster,
+        members,
         meta,
-        sent: sentRef,
+        trace,
+        logKey,
+        writable,
         rename: (_name: string) => Effect.void,
         drives: Stream.fromPubSub(drives),
         sendDrive: (_key: string, _action: DriveAction) => Effect.succeed(undefined),
         tickets,
         shareTicket: (ticket: Ticket) => Effect.succeed(ticket),
-        messages: Stream.fromPubSub(inbound),
+        messages: Stream.fromPubSub(inbound).pipe(Stream.map((msg) => ({ seq: 0, msg }))),
         sendTo,
         updateProfile: Effect.void,
       };
@@ -71,10 +78,24 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
     }),
   );
 
+/** StateStore backed by a plain SubscriptionRef — no filesystem. */
+const stateStoreStub = Layer.effect(
+  StateStore,
+  Effect.gen(function* () {
+    const state = yield* SubscriptionRef.make<LocalState>({ preferredAi: null, rooms: {} });
+    return {
+      state,
+      update: (f: (s: LocalState) => LocalState) => SubscriptionRef.update(state, f).pipe(Effect.asVoid),
+      get: SubscriptionRef.get(state),
+    };
+  }),
+);
+
 const make = () => {
   const sent: Array<{ peerKey: string; intent: string; findings: string }> = [];
   const layer = Scripting.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(roomsStub(sent), Inbox.layer)),
+    Layer.provideMerge(stateStoreStub),
   );
   return { sent, layer };
 };

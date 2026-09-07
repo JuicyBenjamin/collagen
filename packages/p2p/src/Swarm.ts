@@ -1,6 +1,9 @@
 import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 import Hyperswarm from "hyperswarm";
 import DHT from "hyperdht";
+import Corestore from "corestore";
+import Protomux from "protomux";
+import c from "compact-encoding";
 import b4a from "b4a";
 import { EnvelopeFromJson, type Bootstrap, type Frame } from "./schema";
 import { PeerNotConnected } from "./errors";
@@ -9,12 +12,12 @@ import type { Identity } from "./types";
 export class SwarmConfig extends Context.Service<SwarmConfig, {
   readonly identity: Identity;
   readonly bootstrap?: Bootstrap;
+  /** Directory for this identity's Corestore (the rooms' logs). */
+  readonly storage: string;
 }>()("p2p/SwarmConfig") {}
 
 /** Minimal structural view of a hyperswarm connection (the lib ships no types). */
 interface SwarmConnection {
-  write(data: Uint8Array): void;
-  on(event: "data", cb: (data: Uint8Array) => void): SwarmConnection;
   on(event: "error", cb: (err: Error) => void): SwarmConnection;
   on(event: "close", cb: () => void): SwarmConnection;
   readonly isInitiator: boolean;
@@ -59,7 +62,13 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
     const services = yield* Effect.context<never>();
     const runFork = Effect.runForkWith(services);
 
-    const connByKey = new Map<string, SwarmConnection>();
+    /** Per connected peer: how to send one envelope (a Protomux message). */
+    const connByKey = new Map<string, { send: (json: string) => void }>();
+    const store = new Corestore(config.storage);
+    yield* Effect.acquireRelease(
+      Effect.promise(() => store.ready() as Promise<void>),
+      () => Effect.promise(() => store.close() as Promise<void>).pipe(Effect.ignore),
+    );
     const hooksByTopic = new Map<string, TopicHooks>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const discoveries = new Map<string, any>();
@@ -86,8 +95,8 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
         );
       });
 
-    const onData = (key: string, data: Uint8Array) =>
-      decodeEnvelope(b4a.toString(data)).pipe(
+    const onData = (key: string, json: string) =>
+      decodeEnvelope(json).pipe(
         Effect.flatMap(({ topic, frame }) => {
           const hooks = hooksByTopic.get(topic);
           return hooks ? hooks.onFrame(key, frame) : Effect.logDebug(`frame for a room we're not in (${topic.slice(0, 8)}) from ${key.slice(0, 8)}`);
@@ -101,12 +110,27 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       const key = b4a.toString(info.publicKey, "hex");
       const who = `${key.slice(0, 12)} ${conn.isInitiator ? "out" : "in"} ${conn.rawStream?.remoteHost ?? "?"}:${conn.rawStream?.remotePort ?? "?"}`;
       runFork(Effect.log(`swarm connection: ${who}`));
-      connByKey.set(key, conn);
+      // One connection carries two protocols over Protomux: Corestore
+      // replication (the rooms' logs) and our envelopes. Protomux.from reuses
+      // the muxer Corestore attaches, so both ride the same framing.
+      const mux = Protomux.from(conn);
+      store.replicate(conn);
+      const channel = mux.createChannel({ protocol: "collagen/1" });
+      if (channel === null) {
+        runFork(Effect.logWarning(`duplicate collagen channel on ${who} — ignoring this connection`));
+        return;
+      }
+      const envelopes = channel.addMessage({
+        encoding: c.string,
+        onmessage: (json: string) => runFork(onData(key, json)),
+      });
+      channel.open();
+      const link = { send: (json: string) => void envelopes.send(json) };
+      connByKey.set(key, link);
       let lastError: Error | null = null;
       conn.on("error", (e) => {
         lastError = e;
       });
-      conn.on("data", (d) => runFork(onData(key, d)));
       conn.on("close", () => {
         // the close reason answers "why didn't they connect?" after the fact
         runFork(
@@ -117,7 +141,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
         // A replacement connection for the same peer may already be in the
         // book (hyperswarm reconnects overlap) — only forget the peer if the
         // closing connection is still the current one.
-        if (connByKey.get(key) === conn) {
+        if (connByKey.get(key) === link) {
           connByKey.delete(key);
           runFork(forEachHook((_, h) => h.onPeerGone(key)));
         }
@@ -264,14 +288,20 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
         const conn = connByKey.get(key);
         if (!conn) return Effect.fail(new PeerNotConnected({ peerKey: key }));
         return encodeEnvelope({ topic: topicHex, frame }).pipe(
-          Effect.flatMap((json) => Effect.sync(() => void conn.write(b4a.from(json)))),
+          Effect.flatMap((json) => Effect.sync(() => conn.send(json))),
           // warn, not debug: a silently dropped frame looks exactly like "peer
           // never answered" and has cost hours of misdiagnosis
           Effect.catch((e) => Effect.logWarning(`frame write failed (${frame.kind}): ${String(e).slice(0, 160)}`)),
         );
       });
 
-    return { identity: config.identity, join, write } as const;
+    return {
+      identity: config.identity,
+      /** This identity's Corestore — rooms keep their logs in namespaces of it. */
+      store,
+      join,
+      write,
+    } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

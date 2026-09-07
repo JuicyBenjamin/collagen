@@ -5,7 +5,7 @@ import { focusAtom, nearestFocusable } from "../../../../components/focus";
 import { isEnter } from "../../../../components/keys";
 import { theme } from "../../../../app/theme";
 import { roomAtom } from "../../../atoms";
-import { inboundMessagesAtom, rosterAtom, sentMessagesAtom, stateAtom } from "../../atoms";
+import { admittedAtom, rosterAtom, stateAtom, traceAtom } from "../../atoms";
 import { projectRows } from "../../projectRows";
 import { TABS, useTabs } from "../../tabs";
 
@@ -19,8 +19,8 @@ export function TabBar() {
   const setFocus = useAtomSet(focusAtom);
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null, rooms: {} }));
-  const inbound = AsyncResult.getOrElse(useAtomValue(inboundMessagesAtom), () => [] as const);
-  const sent = AsyncResult.getOrElse(useAtomValue(sentMessagesAtom), () => [] as const);
+  const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
+  const admitted = AsyncResult.getOrElse(useAtomValue(admittedAtom), () => true);
 
   const shared = projectRows(state, room.id, peers).filter((r) => r.holders.length >= 2).length;
   const online = peers.filter((p) => !p.away).length + 1;
@@ -49,12 +49,13 @@ export function TabBar() {
           <span fg={active === "room/overview" ? theme.accent : theme.dim}>[1] overview</span>
           <span fg={theme.dim}>   </span>
           <span fg={active === "room/messages" ? theme.accent : theme.dim}>[2] messages</span>
-          <span fg={theme.dim}> ({inbound.length + sent.length})</span>
+          <span fg={theme.dim}> ({trace.length})</span>
           <span fg={theme.dim}>   ·   </span>
           <span fg={theme.fg}>{online} online</span>
           <span fg={theme.dim}> · </span>
           <span fg={theme.fg}>{shared} shared</span>
           <span fg={theme.dim}> {shared === 1 ? "project" : "projects"}</span>
+          {admitted ? null : <span fg={theme.warn}> · waiting for a member to admit you</span>}
         </text>
       )}
     </Focusable>

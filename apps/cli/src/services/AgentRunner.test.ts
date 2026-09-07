@@ -90,6 +90,7 @@ const message = (over: Partial<RoomMessage> = {}): RoomMessage => ({
   threadId: "thread-1",
   from: "aa".repeat(32),
   fromName: "alice",
+  to: "bb".repeat(32),
   project: "sandbox",
   intent: "question",
   findings: "check average()",

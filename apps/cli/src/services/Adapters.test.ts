@@ -6,6 +6,7 @@ import { claudeAdapter, codexAdapter, mockAdapter, nudgePrompt, type SpawnCtx } 
 const msg: RoomMessage = {
   id: "m1",
   threadId: "thread-1",
+  to: "bb".repeat(32),
   from: "aa".repeat(32),
   fromName: "alice",
   project: "sandbox",

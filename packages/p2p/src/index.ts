@@ -6,4 +6,5 @@ export * from "./domain";
 export * from "./topic";
 export * from "./identity";
 export * from "./Swarm";
+export * from "./RoomLog";
 export * from "./Room";

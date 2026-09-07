@@ -323,9 +323,12 @@ const makeHandlers = Effect.gen(function* () {
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
       const { room } = yield* focusedRoom;
       const peers = yield* SubscriptionRef.get(room.roster);
+      const members = yield* SubscriptionRef.get(room.members);
       const myName = yield* SubscriptionRef.get(nameRef);
       const lookup = (key: string) =>
-        key === identity.pubkey ? myName : (peers.find((p) => p.key === key)?.name ?? key.slice(0, 12));
+        key === identity.pubkey
+          ? myName
+          : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 12));
       return ticketView(ticket, lookup);
     });
 
@@ -336,14 +339,19 @@ const makeHandlers = Effect.gen(function* () {
       findings: string;
     }) {
       const { room } = yield* focusedRoom;
+      // present peers first; then anyone the log remembers (they read it when back)
       const peers = yield* SubscriptionRef.get(room.roster);
-      const target = peers.find((p) => p.name === input.peer);
-      if (!target) return `failed: no peer named ${input.peer}`;
+      const members = yield* SubscriptionRef.get(room.members);
+      const target = peers.find((p) => p.name === input.peer) ?? members.find((m) => m.name === input.peer);
+      if (!target) return `failed: no peer named ${input.peer} — see list-room`;
+      const online = peers.some((p) => p.key === target.key);
       return yield* room
         .sendTo(target.key, { project: input.project, intent: input.intent, findings: input.findings })
         .pipe(
-          Effect.map(() => `sent to ${input.peer}`),
-          Effect.catchTag("PeerNotConnected", () => Effect.succeed("failed: peer not connected")),
+          Effect.map(() => (online ? `sent to ${input.peer}` : `sent to ${input.peer} (offline — they get it when they are next online)`)),
+          Effect.catchTag("NotWritable", () =>
+            Effect.succeed("failed: you are not admitted to this room's log yet — a member has to be online once to admit you"),
+          ),
         );
     });
 
@@ -365,7 +373,11 @@ const makeHandlers = Effect.gen(function* () {
         Effect.gen(function* () {
           const { id, name, room } = yield* focusedRoom;
           const peers = yield* SubscriptionRef.get(room.roster);
+          const members = yield* SubscriptionRef.get(room.members);
           const others = (yield* rooms.summaries).filter((r) => r.id !== id);
+          // members the log remembers who aren't here right now: you can still
+          // message them — they read the log when they are next online
+          const offline = members.filter((m) => m.key !== identity.pubkey && !peers.some((p) => p.key === m.key));
           return toToon({
             room: { shortId: shortRoomId(id), name },
             otherRooms: others.map((r) => ({ shortId: r.shortId, name: r.name, online: r.online, unread: r.unread })),
@@ -376,6 +388,7 @@ const makeHandlers = Effect.gen(function* () {
               away: p.away ?? false,
               projects: p.projects.map((x) => x.name),
             })),
+            offlineMembers: offline.map((m) => m.name),
           });
         }).pipe(Effect.withSpan("Mcp.listRoom")),
       "send-to-peer": sendToPeer,
@@ -479,9 +492,11 @@ const makeHandlers = Effect.gen(function* () {
       }) {
         const { room } = yield* focusedRoom;
         const peers = yield* SubscriptionRef.get(room.roster);
+        const members = yield* SubscriptionRef.get(room.members);
         const myName = yield* SubscriptionRef.get(nameRef);
+        // present peers, then anyone the log remembers — an owner may be offline
         const keyFor = (name: string) =>
-          name === myName ? identity.pubkey : peers.find((p) => p.name === name)?.key;
+          name === myName ? identity.pubkey : (peers.find((p) => p.name === name)?.key ?? members.find((m) => m.name === name)?.key);
         const now = yield* Clock.currentTimeMillis;
         const unknown = input.steps.map((s) => s.owner).filter((o) => keyFor(o) === undefined);
         if (unknown.length > 0) {
@@ -504,7 +519,8 @@ const makeHandlers = Effect.gen(function* () {
             updatedAt: now,
           })),
         };
-        const merged = yield* room.shareTicket(ticket);
+        const merged = yield* room.shareTicket(ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+        if (!merged) return "failed: you are not admitted to this room's log yet — a member has to be online once to admit you";
         return toToon({ ticket: yield* renderTicket(merged) });
       }),
       "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {
@@ -525,7 +541,8 @@ const makeHandlers = Effect.gen(function* () {
               : s,
           ),
         };
-        const merged = yield* room.shareTicket(updated);
+        const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+        if (!merged) return "failed: you are not admitted to this room's log yet — a member has to be online once to admit you";
         return toToon({ ticket: yield* renderTicket(merged) });
       }),
       "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: {
@@ -639,8 +656,10 @@ const makeHandlers = Effect.gen(function* () {
           const n = name.trim();
           if (n.length === 0) return "failed: empty room name";
           const { room } = yield* focusedRoom;
-          yield* room.rename(n);
-          return `room renamed to "${n}" for everyone in it`;
+          return yield* room.rename(n).pipe(
+            Effect.map(() => `room renamed to "${n}" for everyone in it`),
+            Effect.catchTag("NotWritable", () => Effect.succeed("failed: you are not admitted to this room's log yet — a member has to be online once to admit you")),
+          );
         }).pipe(Effect.withSpan("Mcp.renameRoom")),
       "list-rooms": () => roomLines.pipe(Effect.map((rows) => toToon({ rooms: rows })), Effect.withSpan("Mcp.listRooms")),
       "create-room": ({ name }: { name: string }) =>

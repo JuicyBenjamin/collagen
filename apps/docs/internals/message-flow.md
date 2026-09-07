@@ -15,9 +15,9 @@ sequenceDiagram
   participant AA as Alice's AI (her session)
 
   BA->>BC: send-to-peer(peer=alice, project, findings)
-  Note over BC: Room.sendTo derives the symmetric threadId,<br/>writes a msg frame
-  BC-->>AC: msg frame (Hyperswarm)
-  Note over AC: Schema-validate → Inbox.push(roomId, msg)<br/>TUI: messages tab + unread dot
+  Note over BC: Room.sendTo derives the symmetric threadId,<br/>appends a msg entry to the room log
+  BC-->>AC: log replicates (Corestore over Hyperswarm)
+  Note over AC: apply → view → Room.messages → Inbox.push(roomId, msg, seq)<br/>TUI: messages tab + unread dot
   AC->>AR: runThread(threadId)
   alt thread adopted by Alice's session
     AR->>AA: claude -p --resume <session> / codex queue --thread <id>
@@ -28,7 +28,7 @@ sequenceDiagram
   else not adopted
     Note over AC: waits — pending-threads / await-messages / GET /inbox/wait
   end
-  AC-->>BC: msg frame (same threadId)
+  AC-->>BC: log replicates (same threadId)
   Note over BC: Inbox.push → runThread → Bob's session continues
 ```
 
@@ -57,11 +57,11 @@ sequenceDiagram
   participant BA as Bob's AI
 
   AA->>AC: create-ticket(s1: bob investigate, s2: alice review needs s1)
-  AC-->>BC: ticket frame (merged on every peer)
+  AC-->>BC: ticket entry replicates (merged in every member's apply)
   Note over BC: s1 actionable for bob → mark suspended, broadcast
   BC->>BC: Inbox.push on thread(alice↔bob / project) → runThread
   BA->>BC: settle-step(s1, result)
-  BC-->>AC: ticket frame
+  BC-->>AC: ticket entry replicates
   Note over AC: s2 actionable for alice → same thread(alice↔bob / project)
   AC->>AC: Inbox.push → runThread → Alice's session resumes with bob's result
 ```
@@ -91,9 +91,13 @@ thread runs twice at once.
 
 ## Delivery guarantees
 
-- **Live-only.** If the peer isn't connected, `send-to-peer` returns
-  `failed: peer not connected` (a typed `PeerNotConnected` inside `Room.sendTo`). No
-  store-and-forward yet — see [Status](/status).
-- **At-most-once.** Messages are not retried or acked at the Collagen layer today.
-- **Tickets converge.** Every ticket change is a full-record broadcast merged with
-  deterministic rules; a late joiner receives all tickets on connect.
+- **Store-and-forward.** A message is an entry on the room's log, so `send-to-peer` to a
+  member who is offline succeeds; they read it from whoever has the log when they are next
+  online. Only a peer never admitted to the log is unreachable (`NotWritable` on your side
+  says *you* aren't admitted yet).
+- **Exactly-once into the inbox.** Each message has a log position; the inbox drops
+  positions at or below the thread's pulled cursor and duplicates by id.
+- **No read receipts.** The sender can't tell whether the recipient has pulled a message —
+  see [Status](/status).
+- **Tickets converge.** Every ticket change is a full-record entry merged in `apply` with
+  deterministic rules; the log's order is the same for every member.

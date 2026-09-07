@@ -41,6 +41,9 @@ export const RoomMessage = Schema.Struct({
   threadId: Schema.String,
   from: Schema.String, // sender pubkey (hex)
   fromName: Schema.String,
+  /** Recipient pubkey (hex) — messages live on the room's shared log, so the
+   *  record itself says who it is for. */
+  to: Schema.String,
   project: Schema.String,
   intent: Schema.String,
   findings: Schema.String,
@@ -52,19 +55,15 @@ export const ProfileFrame = Schema.Struct({
   kind: Schema.Literal("profile"),
   profile: SharedProfile,
 });
-export const MessageFrame = Schema.Struct({
-  kind: Schema.Literal("msg"),
-  msg: RoomMessage,
+/** "This room's log is this Autobase" — sent in the greet by anyone who knows. */
+export const LogInfoFrame = Schema.Struct({
+  kind: Schema.Literal("log-info"),
+  key: Schema.String,
 });
-export const TicketFrame = Schema.Struct({
-  kind: Schema.Literal("ticket"),
-  ticket: Ticket,
-});
-/** The room's shared display name — broadcast, last-writer-wins by ts. */
-export const RoomMetaFrame = Schema.Struct({
-  kind: Schema.Literal("room-meta"),
-  name: Schema.String,
-  ts: Schema.Finite,
+/** "Admit my writer core to the room's log" — a joiner asks a member. */
+export const JoinLogFrame = Schema.Struct({
+  kind: Schema.Literal("join-log"),
+  writer: Schema.String,
 });
 
 /** Remote-control for end-to-end testing: asks a peer to perform an action
@@ -104,8 +103,35 @@ export const DriveFrame = Schema.Struct({
   action: DriveAction,
 });
 
-export const Frame = Schema.Union([ProfileFrame, MessageFrame, TicketFrame, RoomMetaFrame, DriveFrame]);
+/** Ephemeral frames — what is said connection-to-connection and not
+ *  remembered: presence, log bootstrap, remote control. Everything that must
+ *  outlive a connection (messages, tickets, the room name, membership) is a
+ *  LogOp on the room's shared log instead. */
+export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, DriveFrame]);
 export type Frame = typeof Frame.Type;
+
+/** One entry on a room's Autobase log. Applied deterministically by every
+ *  member into the room's view (see RoomLog). */
+export const LogOp = Schema.Union([
+  /** Admit a writer core to the log (any member may append this). */
+  Schema.Struct({ op: Schema.Literal("add-writer"), key: Schema.String }),
+  /** A member introducing itself (so names resolve even while offline). */
+  Schema.Struct({ op: Schema.Literal("member"), key: Schema.String, name: Schema.String, ts: Schema.Finite }),
+  /** The full ticket record; the view merges it with what it holds. */
+  Schema.Struct({ op: Schema.Literal("ticket"), ticket: Ticket }),
+  /** The room's shared name — last writer wins by ts. */
+  Schema.Struct({ op: Schema.Literal("rename"), name: Schema.String, ts: Schema.Finite }),
+  /** A directed message; room-visible, delivered to `msg.to` whenever they read the log. */
+  Schema.Struct({ op: Schema.Literal("msg"), msg: RoomMessage }),
+]);
+export type LogOp = typeof LogOp.Type;
+
+/** A member as recorded on the log. */
+export interface Member {
+  readonly key: string;
+  readonly name: string;
+  readonly ts: number;
+}
 
 /** What actually crosses a connection: a frame addressed to one room. One
  *  connection per peer carries every room the two of you share, so each
@@ -151,5 +177,9 @@ export const LocalState = Schema.Struct({
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
   /** threadId → the user's adopted conversation for it. */
   threads: Schema.optional(Schema.Record(Schema.String, AdoptedThread)),
+  /** roomId → threadId → log position of the last message pulled from the
+   *  inbox. Messages live on the room's log; this is what makes "waiting"
+   *  a local, per-reader notion that survives restarts. */
+  consumed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))),
 });
 export type LocalState = typeof LocalState.Type;

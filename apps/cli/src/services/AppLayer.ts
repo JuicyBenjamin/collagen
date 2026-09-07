@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Swarm, SwarmConfig } from "@collagen/p2p";
@@ -5,7 +6,7 @@ import { AdaptersLive } from "./Adapters";
 import { AiStatus } from "./AiStatus";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
-import { IdentityService } from "./Identity";
+import { configDir, IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";
@@ -40,7 +41,11 @@ const SwarmLive = Swarm.layer.pipe(
       SwarmConfig,
       Effect.gen(function* () {
         const { identity } = yield* IdentityService;
-        return { identity, bootstrap: Option.getOrUndefined(yield* loadDevBootstrap) };
+        return {
+          identity,
+          bootstrap: Option.getOrUndefined(yield* loadDevBootstrap),
+          storage: join(configDir, `store-${identity.profile}`),
+        };
       }),
     ),
   ),

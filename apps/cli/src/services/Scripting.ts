@@ -74,8 +74,8 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
               .sendTo(target.key, { project: args.project, intent: args.intent, findings: args.findings })
               .pipe(
                 Effect.map(() => ({ delivered: true, detail: `sent to ${args.peer}` })),
-                Effect.catchTag("PeerNotConnected", () =>
-                  Effect.succeed({ delivered: false, detail: "peer not connected" }),
+                Effect.catchTag("NotWritable", () =>
+                  Effect.succeed({ delivered: false, detail: "not admitted to the room log yet" }),
                 ),
               );
           }),

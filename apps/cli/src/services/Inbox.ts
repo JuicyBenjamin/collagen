@@ -1,12 +1,15 @@
 import { Context, Effect, Layer, SubscriptionRef } from "effect";
 import type { RoomMessage } from "@collagen/p2p";
+import { StateStore } from "./StateStore";
 
-/** A message we received, tagged with the room it arrived in. Thread ids are
- *  derived per peer-pair + project, so the room is what keeps two rooms'
- *  conversations about the same project apart. */
+/** A message waiting for pickup, tagged with the room it belongs to. Thread
+ *  ids are derived per peer-pair + project, so the room is what keeps two
+ *  rooms' conversations about the same project apart. `seq` is the message's
+ *  position on the room's log; step deliveries are local and have none. */
 export interface Received {
   readonly roomId: string;
   readonly msg: RoomMessage;
+  readonly seq?: number;
 }
 
 export interface PendingThread {
@@ -18,24 +21,49 @@ export interface PendingThread {
   lastTs: number;
 }
 
-/** Buffer of received messages awaiting pickup (the `get-messages` MCP tool)
- *  plus a recent-messages ring for the UI. A room's unread count is simply
- *  how many of its messages are still waiting here. */
+/** What is waiting for this reader. Messages themselves live on each room's
+ *  log; "waiting" is local: a message is pending until it is pulled with
+ *  get-messages, and the pull is remembered as a per-thread cursor (log
+ *  position) in local state — so a restart re-reads the log and lands on the
+ *  same unread set. A room's unread count is how many messages wait here. */
 export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
   make: Effect.gen(function* () {
+    const store = yield* StateStore;
     const buffer = yield* SubscriptionRef.make<ReadonlyArray<Received>>([]);
-    const recent = yield* SubscriptionRef.make<ReadonlyArray<Received>>([]);
 
-    const push = (roomId: string, msg: RoomMessage) =>
-      SubscriptionRef.update(buffer, (b) => [...b, { roomId, msg }]).pipe(
-        Effect.andThen(SubscriptionRef.update(recent, (r) => [...r.slice(-99), { roomId, msg }])),
-      );
+    const cursor = (roomId: string, threadId: string) =>
+      store.get.pipe(Effect.map((s) => s.consumed?.[roomId]?.[threadId] ?? -1));
 
-    /** Drain one room's waiting messages — everything, or just one thread's. */
+    /** Offer a message; already-pulled (by cursor) or already-buffered ones are dropped. */
+    const push = (roomId: string, msg: RoomMessage, seq?: number) =>
+      Effect.gen(function* () {
+        if (seq !== undefined && seq <= (yield* cursor(roomId, msg.threadId))) return;
+        yield* SubscriptionRef.update(buffer, (b) =>
+          b.some((e) => e.msg.id === msg.id) ? b : [...b, { roomId, msg, seq }],
+        );
+      });
+
+    /** Drain one room's waiting messages — everything, or just one thread's —
+     *  and remember how far each thread was read. */
     const take = (roomId: string, threadId?: string) =>
-      SubscriptionRef.modify(buffer, (b) => {
+      Effect.gen(function* () {
         const mine = (e: Received) => e.roomId === roomId && (threadId === undefined || e.msg.threadId === threadId);
-        return [b.filter(mine).map((e) => e.msg), b.filter((e) => !mine(e))] as const;
+        const taken = yield* SubscriptionRef.modify(buffer, (b) => [b.filter(mine), b.filter((e) => !mine(e))] as const);
+        const advanced = new Map<string, number>();
+        for (const e of taken) {
+          if (e.seq === undefined) continue;
+          advanced.set(e.msg.threadId, Math.max(advanced.get(e.msg.threadId) ?? -1, e.seq));
+        }
+        if (advanced.size > 0) {
+          yield* store.update((s) => ({
+            ...s,
+            consumed: {
+              ...(s.consumed ?? {}),
+              [roomId]: { ...(s.consumed?.[roomId] ?? {}), ...Object.fromEntries(advanced) },
+            },
+          }));
+        }
+        return taken.map((e) => e.msg);
       });
 
     /** Non-destructive read of one thread's queued messages. */
@@ -71,7 +99,7 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
       }),
     );
 
-    return { buffer, push, take, peekThread, pending, unread, recent } as const;
+    return { buffer, push, take, peekThread, pending, unread } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

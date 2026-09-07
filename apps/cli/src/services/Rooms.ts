@@ -71,10 +71,10 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       Effect.gen(function* () {
         const { room } = h;
         yield* room.messages.pipe(
-          Stream.tap((m) => Effect.log(`← ${m.fromName} [${m.project}/${m.intent}]`)),
-          Stream.tap((m) => inbox.push(h.id, m)),
+          Stream.tap(({ msg }) => Effect.log(`← ${msg.fromName} [${msg.project}/${msg.intent}]`)),
+          Stream.tap(({ msg, seq }) => inbox.push(h.id, msg, seq)),
           // fork: a running agent must not block message intake
-          Stream.tap((m) => Effect.forkChild(runner.runThread(m.threadId))),
+          Stream.tap(({ msg }) => Effect.forkChild(runner.runThread(msg.threadId))),
           Stream.runDrain,
           Effect.forkScoped,
         );
@@ -83,12 +83,20 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         // the ticket record is the suspended state, the nudge resumes it. Only
         // pending steps are nudged — the nudge itself marks them suspended (and
         // broadcasts that), so repeated merges don't re-trigger a running agent.
+        // Exception: the first pass over the tickets the log remembers also
+        // delivers steps left suspended by a previous run — their delivery
+        // message lived in the inbox, which does not survive a restart.
+        let firstPass = true;
         yield* SubscriptionRef.changes(room.tickets).pipe(
           Stream.mapEffect(
             Effect.fnUntraced(function* (all) {
               const now = yield* Clock.currentTimeMillis;
+              const redeliver = firstPass && all.size > 0;
+              if (all.size > 0) firstPass = false;
               for (const ticket of all.values()) {
-                const mine = actionableSteps(ticket, identity.pubkey).filter((s) => s.status === "pending");
+                const mine = actionableSteps(ticket, identity.pubkey).filter(
+                  (s) => s.status === "pending" || (redeliver && s.status === "suspended"),
+                );
                 if (mine.length === 0) continue;
                 yield* room.shareTicket({
                   ...ticket,
@@ -96,7 +104,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   steps: ticket.steps.map((s) =>
                     mine.some((m) => m.id === s.id) ? { ...s, status: "suspended" as const, updatedAt: now } : s,
                   ),
-                });
+                }).pipe(Effect.catchTag("NotWritable", () => Effect.logWarning("cannot mark step delivered: not admitted to the room log")));
                 // the step is the creator's ask, so it arrives from them by name
                 const creatorName =
                   ticket.createdBy === identity.pubkey
@@ -114,6 +122,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     threadId,
                     from: ticket.createdBy,
                     fromName: creatorName,
+                    to: identity.pubkey,
                     project: ticket.project,
                     intent: `ticket-step:${s.intent}`,
                     findings: `Ticket "${ticket.goal}" (${ticket.id}) — you own step ${s.id}: ${s.description}${
@@ -147,7 +156,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 case "send-message":
                   return yield* room
                     .sendTo(from, { project: action.project, intent: action.intent, findings: action.findings })
-                    .pipe(Effect.catchTag("PeerNotConnected", () => Effect.logWarning("drive reply: peer gone")));
+                    .pipe(Effect.catchTag("NotWritable", () => Effect.logWarning("drive reply: not admitted to the room log")));
                 case "create-ticket": {
                   const id = crypto.randomUUID();
                   yield* room.shareTicket({
@@ -184,7 +193,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   return;
                 }
               }
-            }),
+            }).pipe(Effect.catchTag("NotWritable", () => Effect.logWarning(`drive ${action.kind}: not admitted to the room log`))),
           ),
           Stream.runDrain,
           Effect.forkScoped,
@@ -195,11 +204,31 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         // upsertActiveRoom: a rename must not change which room is focused.
         yield* SubscriptionRef.changes(room.meta).pipe(
           Stream.drop(1),
-          Stream.tap((m) => Effect.sync(() => upsertRoom(profile, { id: h.id, name: m.name, nameTs: m.ts }))),
+          Stream.tap((m) => Effect.sync(() => relabelRoom(profile, h.id, m))),
+          Stream.runDrain,
+          Effect.forkScoped,
+        );
+
+        // The log's key, once learned, is remembered: with it the room
+        // reopens on its own, without waiting for a member to be online.
+        yield* SubscriptionRef.changes(room.logKey).pipe(
+          Stream.filter((k): k is string => k !== null),
+          Stream.tap((logKey) =>
+            Effect.sync(() => {
+              const entry = readProfileFile(profile).rooms?.find((r) => r.id === h.id);
+              if (entry && entry.logKey !== logKey) upsertRoom(profile, { ...entry, logKey });
+            }),
+          ),
           Stream.runDrain,
           Effect.forkScoped,
         );
       });
+
+    /** Keep an entry's identity fields (log key, creator) when only the name moved. */
+    const relabelRoom = (prof: string, id: string, m: { name: string; ts: number }) => {
+      const entry = readProfileFile(prof).rooms?.find((r) => r.id === id);
+      upsertRoom(prof, { ...(entry ?? { id }), id, name: m.name, nameTs: m.ts });
+    };
 
     /** Bring a room to life (idempotent). */
     const open = Effect.fn("Rooms.open")(function* (entry: RoomEntry) {
@@ -210,6 +239,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         roomName: entry.id,
         roomLabel: { name: entry.name, ts: entry.nameTs ?? 0 },
         getProfile: profileFor(entry.id),
+        // rooms from before logs existed: whoever named it made it
+        log: { key: entry.logKey ?? null, creator: entry.creator ?? entry.nameTs !== undefined },
       };
       const room = yield* Room.make.pipe(
         Effect.provideService(RoomConfig, config),

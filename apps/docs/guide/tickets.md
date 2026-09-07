@@ -88,22 +88,19 @@ with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed) 
 
 ## Sync model
 
-Tickets are shared state. Every change broadcasts the whole ticket; each peer merges it
-with what it has using rules that converge regardless of arrival order:
+Tickets live on the room's **log** — an [Autobase](https://github.com/holepunchto/autobase)
+every member writes to and every member holds a copy of (see
+[Architecture](/internals/architecture#the-room-log-autobase)). Creating or settling
+appends the whole ticket record; every member's `apply` folds it into the room's view with
+rules that converge regardless of order:
 
 - steps are unioned by id — the creator adds structure, owners never lose steps
 - per step, the higher status wins (`settled`/`failed` beat `suspended` beat `pending`);
   equal ranks resolve by timestamp, then a deterministic tiebreak
 - the goal follows the newest timestamp
 
-A peer that joins later receives every ticket from the peers already present.
-
-::: warning In memory today
-Tickets live in memory. As long as one peer who knows a ticket stays up, the others get it
-back on reconnect; if everyone restarts, it is gone. Persisting each room's tickets to disk
-and merging them on reconnect is next on the [roadmap](/status#roadmap) — the merge rules
-above already make that safe.
-:::
+Because it's a replicated log, tickets survive everyone restarting, and a member who was
+offline catches up on reconnect — including steps that became theirs while they were away.
 
 ## What changed from the original plan
 

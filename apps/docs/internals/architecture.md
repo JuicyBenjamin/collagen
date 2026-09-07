@@ -83,19 +83,47 @@ the wrong node and connections time out for minutes — found 2026-09-07.)
   if peers are known but none are connected for two minutes the swarm is recreated (a
   hyperswarm connection attempt can hang and block rediscovery).
 
-`Room` (`packages/p2p/src/Room.ts`) is a **scoped service** for one topic on the swarm:
+`Room` (`packages/p2p/src/Room.ts`) is a **scoped service** for one topic on the swarm
+plus that room's log:
 
-- Roster (peers who greeted us *in this room*), tickets and meta are `SubscriptionRef`s
-  (current value + `.changes` stream); inbound messages are a `PubSub` exposed as a
-  `Stream`.
-- Greeting a peer sends our profile, the room name, and every ticket we know — that's
-  how a late joiner reconstructs shared state. A peer that greets us first is answered in
-  kind.
-- `sendTo` requires the peer to be *in the room*, not merely connected through another.
+- Roster = peers who greeted us *in this room* (presence, ephemeral). Tickets, members,
+  the name and the message trace are read from the log's view into `SubscriptionRef`s
+  whenever the log changes.
+- Greeting a peer sends our profile and, if we know it, the log's key (`log-info`); a
+  joiner answers with `join-log` and a member appends `add-writer`.
+- `messages` (the ones addressed to us) is a stream that **replays** what the log already
+  holds on subscribe and then follows — a PubSub here would drop entries that arrived
+  before anyone listened, which is exactly the offline-catch-up case.
+- `sendTo` / `shareTicket` / `rename` append to the log; they fail typed (`NotWritable`)
+  until we're admitted. `sendDrive` stays ephemeral and needs the peer present.
 
 Every envelope is validated with `Schema` at the boundary (`EnvelopeFromJson`);
 malformed ones are logged and dropped, never trusted. Unknown fields are ignored, so
 peers on slightly different versions keep talking.
+
+## The room log (Autobase)
+
+`RoomLog` (`packages/p2p/src/RoomLog.ts`) wraps one
+[Autobase](https://github.com/holepunchto/autobase) per room, in a namespace of the
+identity's Corestore (`~/.config/collagen/store-<profile>`), with a
+[Hyperbee](https://github.com/holepunchto/hyperbee) view (`json` values, no extension).
+
+- **Writers**: every member. The room's creator bootstraps the base (its key is the
+  `logKey` persisted in the profile and sent in greets); a joiner opens it by key and is
+  admitted when a member appends `add-writer` with the joiner's local core key. Members
+  are indexers too — fine at room scale.
+- **Entries** (`LogOp`, Schema-validated in `apply`; bad entries skipped): `add-writer`,
+  `member` (key + name, so offline peers still resolve), `ticket` (full record, merged with
+  `mergeTicket`), `rename` (LWW by ts), `msg` (a `RoomMessage` with `to`).
+- **View keys**: `ticket/<id>`, `member/<key>`, `meta/name`, `msg/<000…seq>` +
+  `state/msgs` (the counter). `apply` reads and writes only the view — Autobase may
+  reorder entries when causal forks arrive, and re-applies deterministically.
+- **Replication** is Corestore's, over every swarm connection (`store.replicate(conn)`),
+  multiplexed with our envelope channel by Protomux. A member who was offline gets every
+  missing block from whoever is around, then `apply` catches up their view.
+- **Unread** is local: `Inbox` keeps, per room and thread, the log position of the last
+  message pulled (`LocalState.consumed`), so a restart re-reads the log and lands on the
+  same waiting set.
 
 ### Threads
 

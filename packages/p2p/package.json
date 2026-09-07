@@ -13,11 +13,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "autobase": "^7.28.1",
     "b4a": "^1.8.1",
+    "compact-encoding": "^3.4.0",
+    "corestore": "^7.12.3",
     "effect": "4.0.0-rc.112",
+    "hyperbee": "^2.27.3",
     "hypercore-crypto": "^3.7.0",
     "hyperdht": "^6.32.0",
-    "hyperswarm": "^4.17.0"
+    "hyperswarm": "^4.17.0",
+    "protomux": "^3.11.0"
   },
   "devDependencies": {
     "@collagen/typescript-config": "workspace:*",

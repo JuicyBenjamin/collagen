@@ -70,11 +70,18 @@ without leaving the app, and your agent can do it too: `create-room`, `join-room
 Leaving is local: stop announcing on the room's topic, forget it on disk, gone from
 everyone's roster. Rejoining needs the id again.
 
-### Membership <Badge type="info" text="planned" />
+### Membership
 
-Today the id is the whole secret: anyone holding it connects. A keypair-backed room with
-single- or multi-use invite codes (the Pear ecosystem's pairing primitives) would let
-members drop connections from unknown keys. The data model doesn't need to change for it.
+Two layers. The id is the invite: anyone holding it connects and sees presence. Writing
+to the room — messages, tickets, the name — needs **admission to the room's log**: a member
+who is online appends your writer key (it happens automatically on your first greet; the tab
+bar says `waiting for a member to admit you` until then). Members are remembered on the log
+by name, so you can message someone who's offline.
+
+::: info Planned
+Dropping connections from keys the log doesn't know, and revoking a member (Autobase can
+remove writers). Today admission is automatic for anyone holding the id.
+:::
 
 ## Projects
 

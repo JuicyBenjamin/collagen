@@ -16,6 +16,10 @@ export interface RoomEntry {
   /** When `name` was last set; 0/absent = local default, any peer's named
    *  version wins over it. */
   nameTs?: number;
+  /** The room's Autobase log key, once known — lets the room reopen alone. */
+  logKey?: string;
+  /** We made this room: we bootstrap its log instead of waiting for a member. */
+  creator?: boolean;
 }
 
 export interface ProfileFile {
@@ -29,7 +33,7 @@ export interface ProfileFile {
 /** A room you create: a fresh unguessable id, and your name stamped now so
  *  it wins over joiners' placeholder labels. */
 export function newRoomEntry(name: string): RoomEntry {
-  return { id: uuidv7(), name: name.trim(), nameTs: Date.now() };
+  return { id: uuidv7(), name: name.trim(), nameTs: Date.now(), creator: true };
 }
 
 /** A room you were invited to: the invite IS the id; labeled by its short

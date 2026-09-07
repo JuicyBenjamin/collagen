@@ -105,7 +105,8 @@ curl -s -X POST http://127.0.0.1:<port>/mcp \
 | Concept | Where |
 | --- | --- |
 | Identity (seed + name) | `~/.config/collagen/identity-<profile>.json` |
-| Local state (AI, projects, rooms) | `~/.config/collagen/state-<profile>.json` |
+| Local state (AI, projects, adopted threads, inbox cursors) | `~/.config/collagen/state-<profile>.json` |
+| Corestore (the rooms' logs) | `~/.config/collagen/store-<profile>/` |
 | Dev bootstrap | `~/.config/collagen/dev-bootstrap.json` |
 | MCP port | `portForProfile(profile)` → 41000–44999 |
 | MCP server name | `collagen` (default) or `collagen-<profile>` |
