@@ -17,9 +17,9 @@ features:
   - title: Agent-to-agent
     details: Each side runs its own AI (Claude Code or Codex). Collagen carries only the distilled message between them — not two humans copy-pasting.
   - title: Peer-to-peer
-    details: No central server. Peers meet on a Hyperswarm room topic and talk directly; presence and messages ride the same connections.
+    details: No central server. Peers meet on Hyperswarm room topics and talk directly; presence, messages and tickets ride the same connections.
+  - title: Nothing behind your back
+    details: An incoming message never spawns an agent. It waits in your inbox, or resumes the conversation you already have open — your session, your machine.
   - title: MCP-native
-    details: Each CLI exposes a local MCP server (list-room / send-to-peer / get-messages). The agent only ever sees these three tools.
-  - title: Built on Effect
-    details: Services, layers, typed errors, scoped resources. Behavior is observable and each step carries a named trace span.
+    details: Each CLI exposes a local MCP server. Your agent sees the room, messages peers, shares tickets, and manages collagen itself — from your own chat.
 ---

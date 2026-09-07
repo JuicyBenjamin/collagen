@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { actionableSteps, mergeTicket, type Ticket, type TicketStep } from "./ticket";
+import { actionableSteps, mergeTicket, stepThreadId, type Ticket, type TicketStep } from "./ticket";
+import { deriveThreadId } from "./topic";
 
 const step = (over: Partial<TicketStep>): TicketStep => ({
   id: "s1",
@@ -14,7 +15,6 @@ const step = (over: Partial<TicketStep>): TicketStep => ({
 
 const ticket = (over: Partial<Ticket>): Ticket => ({
   id: "t1",
-  threadId: "th1",
   project: "sandbox",
   goal: "fix average()",
   createdBy: "alice",
@@ -74,6 +74,28 @@ describe("actionableSteps", () => {
       ],
     });
     expect(actionableSteps(t, "me").map((s) => s.id)).toEqual(["b"]);
+  });
+});
+
+describe("stepThreadId", () => {
+  const t = ticket({
+    createdBy: "alice",
+    steps: [
+      step({ id: "work", owner: "bob" }),
+      step({ id: "review", owner: "alice", needs: ["work"] }),
+      step({ id: "solo", owner: "alice" }),
+    ],
+  });
+  const pair = deriveThreadId("alice", "bob", "sandbox");
+
+  it("a step given to a peer rides the creator↔owner conversation, same as a message", () => {
+    expect(stepThreadId(t, t.steps[0]!)).toBe(pair);
+  });
+  it("the creator's review step continues the conversation with the peer it waits on", () => {
+    expect(stepThreadId(t, t.steps[1]!)).toBe(pair);
+  });
+  it("a creator's step waiting on nobody else lands on the creator's own thread", () => {
+    expect(stepThreadId(t, t.steps[2]!)).toBe(deriveThreadId("alice", "alice", "sandbox"));
   });
 });
 

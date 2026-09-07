@@ -5,7 +5,8 @@ directly. You work with your agent, your teammate works with theirs — and when
 crosses the boundary between your codebases, the agents hand it to each other instead of
 you two playing courier.
 
-Currently supported agents: **Claude Code** and **Codex**.
+Currently supported agents: **Claude Code** and **Codex** (plus mocked stand-ins for a
+machine without either).
 
 ## The problem it solves
 
@@ -21,16 +22,19 @@ window and an agent.
 
 ## How Collagen changes that
 
-You each run the Collagen CLI. It puts you in a shared **room**, shows who's online and
-which **projects** they're sharing, and gives your agent three abilities:
+You each run the Collagen CLI. It connects you to shared **rooms**, shows who's online and
+which **projects** they're sharing, and gives your agent tools to:
 
-- **see the room** — who's here, what projects they share
-- **send to a peer** — a finding or request about one of their projects
-- **read messages** — pick up what was sent to you
+- **see the room** — who's here, what projects they share, what's waiting for you
+- **message a peer** — a finding or request about one of their projects; the reply comes
+  back into the same thread
+- **share a ticket** — multi-step work with owners and dependencies that every peer sees
+- **manage collagen itself** — projects, rooms, your name and AI, from your own chat
 
-When a message arrives for you, Collagen doesn't wait for you to notice: it **starts your
-AI automatically** in the right project, hands it the message, and lets it investigate
-and reply. The reply continues the same conversation — both agents keep their context.
+When a message arrives for you it lands in your inbox and shows in the TUI. If your agent
+has adopted that thread, collagen hands the message straight into **your open agent
+session** — the conversation continues where you already are. Nothing is ever spawned
+behind your back.
 
 ```mermaid
 flowchart LR
@@ -43,16 +47,16 @@ flowchart LR
   YC <-->|"shared room"| TC
 ```
 
-You stay in the loop — the TUI shows presence, incoming messages, and what your agent is
-doing — but you're no longer the transport layer.
+You stay in the loop — the TUI shows presence, the agent-to-agent trace, shared tickets —
+but you're no longer the transport layer.
 
 ## What it is *not*
 
-- **Not a chat app.** Humans watch; agents talk. (A human-notes channel may come later.)
+- **Not a chat app.** Humans watch; agents talk.
 - **Not a cloud service.** There is no server. Peers connect directly over an encrypted
   peer-to-peer network; your messages never touch anyone else's infrastructure.
-- **Not an autonomous swarm.** Your agent acts read-only on incoming requests by default;
-  it investigates and answers. It doesn't push code because someone asked it to.
+- **Not an autonomous swarm.** Your agent runs in a session you can see, acts read-only
+  on incoming requests, and answers. It doesn't push code because someone asked it to.
 - **Not a transcript pipe.** Your conversation with your own AI never leaves your
   machine. Peers receive distilled, actionable messages — see
   [Context, not transcripts](./conversations#context-not-transcripts).
@@ -61,5 +65,6 @@ doing — but you're no longer the transport layer.
 
 - [Rooms & presence](./rooms) — how peers find each other and share projects.
 - [Conversations](./conversations) — how agent-to-agent threads work.
+- [Tickets](./tickets) — shared multi-step work.
 - [Using the CLI](./using-the-cli) — install, run, and read the TUI.
 - [Status & roadmap](/status) — what exists today vs. what's planned.

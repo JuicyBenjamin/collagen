@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { deriveThreadId } from "./topic";
 
 // The CallScript-inspired intermediate state for cross-peer work: a ticket is
 // one inert, serializable record — the goal, every step, each step's owner and
@@ -37,9 +38,6 @@ export type TicketStep = typeof TicketStep.Type;
 
 export const Ticket = Schema.Struct({
   id: Schema.String,
-  /** Conversation key — same derivation as messages, so a ticket and its
-   *  discussion share a thread. */
-  threadId: Schema.String,
   project: Schema.String,
   goal: Schema.String,
   /** Pubkey (hex) of the creator — authoritative for the ticket's structure. */
@@ -82,6 +80,25 @@ function mergeStep(a: TicketStep, b: TicketStep): TicketStep {
   if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? a : b;
   // deterministic final tiebreak so all peers converge on the same copy
   return (a.result ?? "") >= (b.result ?? "") ? a : b;
+}
+
+/** The conversation a step belongs to. A ticket has no thread of its own:
+ *  its steps ride the same threads messages use, so a step landing on your
+ *  side continues the conversation you already have with that peer about
+ *  that project (an adopted session resumes; a reply goes to the same place).
+ *  - a step you gave a peer → the thread between the creator and that owner
+ *  - a step the creator kept (typically the review at the end) → the thread
+ *    with the peer whose work it waits on (first non-creator owner in `needs`)
+ *  - a creator's step that waits on nobody else → the creator's own thread */
+export function stepThreadId(ticket: Ticket, step: TicketStep): string {
+  const creator = ticket.createdBy;
+  const counterpart =
+    step.owner !== creator
+      ? step.owner
+      : (step.needs
+          .map((id) => ticket.steps.find((s) => s.id === id)?.owner)
+          .find((owner): owner is string => owner !== undefined && owner !== creator) ?? creator);
+  return deriveThreadId(creator, counterpart, ticket.project);
 }
 
 /** Steps a given peer should act on now: it owns them, they're not settled,

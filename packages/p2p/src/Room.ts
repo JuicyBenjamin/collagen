@@ -1,19 +1,12 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Clock, Context, Effect, Layer, PubSub, Schedule, Schema, Stream, SubscriptionRef } from "effect";
 import Hyperswarm from "hyperswarm";
 import b4a from "b4a";
 import { FrameFromJson, type Bootstrap, type DriveAction, type Frame, type Peer, type RoomMessage, type SharedProfile } from "./schema";
 import { PeerNotConnected } from "./errors";
 import { mergeTicket, type Ticket } from "./ticket";
-import { roomTopic } from "./topic";
+import { deriveThreadId, roomTopic } from "./topic";
 import type { Identity } from "./types";
-
-/** Conversation key — symmetric (sorted keys), so A→B and B→A land in the
- *  same thread and replies continue the same AI session on both sides. */
-export function deriveThreadId(a: string, b: string, project: string): string {
-  const [lo, hi] = a < b ? [a, b] : [b, a];
-  return createHash("sha256").update(`${lo}|${hi}|${project}`).digest("hex").slice(0, 16);
-}
 
 export class RoomConfig extends Context.Service<RoomConfig, {
   readonly identity: Identity;

@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Exit, Layer, Option, Scope, Stream, SubscriptionRef } from "effect";
-import { Room, RoomConfig, actionableSteps, roomProjects, shortRoomId, type RoomMessage } from "@collagen/p2p";
+import { Room, RoomConfig, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
@@ -102,9 +102,10 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     .filter((x) => x.status === "settled" && s.needs.includes(x.id))
                     .map((x) => `- ${x.id} (${x.intent}): ${x.result ?? ""}`)
                     .join("\n");
+                  const threadId = stepThreadId(ticket, s);
                   const msg: RoomMessage = {
                     id: crypto.randomUUID(),
-                    threadId: ticket.threadId,
+                    threadId,
                     from: ticket.createdBy,
                     fromName: "ticket",
                     project: ticket.project,
@@ -116,7 +117,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   };
                   yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${s.id} actionable`);
                   yield* inbox.push(h.id, msg);
-                  yield* Effect.forkChild(runner.runThread(ticket.threadId));
+                  yield* Effect.forkChild(runner.runThread(threadId));
                 }
               }
             }),
@@ -145,7 +146,6 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   const id = crypto.randomUUID();
                   yield* room.shareTicket({
                     id,
-                    threadId: id,
                     project: action.project,
                     goal: action.goal,
                     createdBy: identity.pubkey,

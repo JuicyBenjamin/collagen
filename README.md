@@ -24,41 +24,43 @@ pnpm install
 pnpm --filter @collagen/cli dev
 ```
 
-On first start the TUI asks for your **name** and a **room**. A room has two
-parts:
+First start is a two-step wizard: **who are you**, then **join or create a
+room**. A room has two parts:
 
 - **room id** — an unguessable uuid (v7, so it also carries its creation time).
   The swarm topic derives from the id, so *the id is the invite and the
-  secret*: leave the field empty to create a fresh room, or paste a friend's
-  id to join theirs. The running TUI shows your room id at the bottom — send
-  that to whoever should join. (Nobody lands in your room by guessing a cute
-  name.)
-- **room label** — your local nickname for it, any string, change it whenever.
+  secret*: create a room and you get one to share; paste a friend's id to join
+  theirs. The running TUI shows the id at the bottom (`c` copies it). Nobody
+  lands in your room by guessing a cute name.
+- **room name** — shared with everyone in it: rename it (`s`, or `rename-room`
+  from your agent) and every member sees the new name.
 
-Both persist per profile (edit later with `s`, applies on restart). Different
-machines find each other over the public DHT; nothing to configure, no server.
-macOS will ask once to allow incoming connections for node — accept. Flags
-(`--name`, `--room <id>`, `--profile`) still exist as overrides for scripting
-and same-machine testing.
+Both persist per profile; every change applies live. Different machines find
+each other over the public DHT; nothing to configure, no server. macOS will
+ask once to allow incoming connections for node — accept. Flags (`--name`,
+`--room <id>`, `--profile`) exist as overrides for scripting and same-machine
+testing.
 
 Collagen probes whether your selected agent CLI is installed and logged in
 (`a` to cycle agents) and broadcasts that with your presence — an
 unauthenticated or missing CLI shows next to your name for everyone in the
 room, so a silent agent is never a mystery.
 
-In the TUI:
-
-- `a` — cycle your preferred AI (claude-code / codex)
-- `p` — manage this room's projects, `n` — add a project folder (the repo your
-  agent investigates when peers send you work). Projects are per-room,
-  Keet-style: what you add in your work room never shows in another room.
-- `q` — quit
+In the TUI, arrows move between sections (the rooms rail, tab bar, peers,
+tickets, projects), `enter` opens what's under the cursor, and the legend at
+the bottom of the room panel says what the keys do where you are. From
+anywhere: `1`/`2` tabs, `a` cycle your AI, `c` copy the invite id, `s`
+settings, `q` quit. Projects (the repos your agent works in when peers send
+you something) are added in the overview's projects section and belong to the
+room you added them in, Keet-style.
 
 On first start collagen registers its MCP server with your `claude` and `codex`
 user configs, so **any agent session you run on your machine** gets the
-collagen tools: `list-room`, `send-to-peer`, `get-messages`, tickets
-(`create-ticket` / `settle-step` / `get-tickets`), and a CallScript `execute`
-tool for composing several calls in one program.
+collagen tools: the room (`list-room`, `list-rooms`, `switch-room`, …),
+messages (`send-to-peer`, `pending-threads`, `get-messages`, `await-messages`,
+`adopt-thread`), tickets (`create-ticket` / `settle-step` / `get-tickets`),
+settings, and a CallScript `execute` tool for composing several calls in one
+program.
 
 ## Try it together
 
@@ -67,13 +69,18 @@ With both instances running and showing each other in the room:
 1. One of you asks their agent (in any repo):
    *"check who's in my collagen room and create a ticket asking <friend>'s
    agent to explain what average() does in their sandbox project"*
-2. The ticket broadcasts across; the friend's agent triggers automatically,
-   investigates their local repo, and settles the step with its findings.
-3. Ask your agent for `get-tickets` to read the settled answer.
+2. The ticket broadcasts across. On the friend's side the step lands in their
+   inbox — on the thread between you two about that project — and shows in
+   their TUI. If their agent has adopted that thread, their open session picks
+   it up on its own; otherwise they ask their agent to check `pending-threads`.
+   Their agent investigates the local repo and settles the step with its
+   findings.
+3. Ask your agent for `get-tickets` to read the settled answer (or add a
+   review step you own, and it comes to you as a message).
 
-Incoming work triggers **your locally authenticated agent** — nobody's agent
-ever runs on the other person's machine, and peers exchange only data
-(messages and ticket records), never code.
+Nobody's agent ever runs on the other person's machine, and nothing is
+spawned behind anyone's back — peers exchange only data (messages and ticket
+records), never code.
 
 ## Rooms are conversations
 

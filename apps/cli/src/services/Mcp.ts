@@ -21,8 +21,7 @@ import { McpInfo } from "./McpInfo";
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
 // `structuredContent` as an object, and Claude Code rejects array roots.
 /** Agent-facing ticket view: pubkeys resolved to peer names, uniform step
- *  rows (so TOON renders them as one compact table), threadId dropped (it
- *  equals the ticket id). */
+ *  rows (so TOON renders them as one compact table). */
 const ticketView = (ticket: Ticket, nameFor: (key: string) => string) => ({
   id: ticket.id,
   project: ticket.project,
@@ -49,7 +48,7 @@ const ListRoom = Tool.make("list-room", {
 
 const SendToPeer = Tool.make("send-to-peer", {
   description:
-    "Send a finding or request to a peer in the room about a specific project. The peer's AI will be triggered with your message. Use a 'peer' name and 'project' from list-room. 'intent' is a short verb like 'flag-issue' or 'ask-review'. 'findings' is the full context plus what you want from them.",
+    "Send a finding or request to a peer in the room about a specific project. It lands in the thread between you two about that project: if their agent has adopted that thread it resumes their conversation, otherwise it waits in their inbox until they pull it — nothing is ever spawned on their machine for you. Use a 'peer' name and 'project' from list-room. 'intent' is a short verb like 'flag-issue' or 'ask-review'. 'findings' is the full context plus what you want from them.",
   parameters: Schema.Struct({
     peer: Schema.String,
     project: Schema.String,
@@ -127,7 +126,7 @@ const DescribeScripting = Tool.make("describe-scripting", {
 
 const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket: a structured, serialized record of a cross-peer task. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). The ticket is broadcast to the room; each owner's agent is triggered when its steps become actionable, and settles them with settle-step. Prefer this over send-to-peer for multi-step work — the intermediate state stays inspectable and survives restarts.",
+    "Create a shared ticket: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project — same as send-to-peer: their adopted conversation resumes, or it waits in their inbox until they pull it. The owner answers with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
   parameters: Schema.Struct({
     goal: Schema.String,
     project: Schema.String,
@@ -146,7 +145,7 @@ const CreateTicket = Tool.make("create-ticket", {
 
 const SettleStep = Tool.make("settle-step", {
   description:
-    "Settle (or fail) a ticket step you own, with your findings as the result. The updated ticket is broadcast to the room; steps waiting on this one become actionable on their owners' side.",
+    "Settle (or fail) a ticket step you own, with your findings as the result. The updated ticket is broadcast to the room; steps waiting on this one become actionable and are delivered to their owners (as messages on the ticket creator's thread with them).",
   parameters: Schema.Struct({
     ticketId: Schema.String,
     stepId: Schema.String,
@@ -491,7 +490,6 @@ const makeHandlers = Effect.gen(function* () {
         const id = crypto.randomUUID();
         const ticket: Ticket = {
           id,
-          threadId: id,
           project: input.project,
           goal: input.goal,
           createdBy: identity.pubkey,

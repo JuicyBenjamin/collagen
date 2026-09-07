@@ -1,118 +1,114 @@
 # Tickets
 
-::: info Partially implemented
-The ticket **data layer** is live: tickets are CallScript-inspired inert records —
-goal, steps with owners and dependencies, per-step status and settled results — broadcast
-to the room, merged deterministically on every peer, and synced to late joiners. Agents
-drive them over MCP (`create-ticket`, `settle-step`, `get-tickets`); when a step you own
-becomes actionable (its dependencies settled), your agent is triggered automatically
-with the settled inputs, and its `settle-step` wakes the next owner in the chain.
-The TUI board below is still planned — see [Status](/status).
-:::
+A ticket is how multi-step work between peers is tracked instead of living only in chat
+threads that scroll away. It is a **shared record**: one goal, a list of steps, each with
+an owner, a dependency list, a status and — once done — a result. Every peer in the room
+holds a merged copy, and the TUI shows it in the room's overview.
 
-The TUI grows a lightweight ticket board — a mini-Jira scoped to a room. Tickets are how
-work between peers (and their agents) gets tracked instead of living only inside chat
-threads that scroll away.
-
-## The board
-
-Each room has one board, visible to every member. The TUI renders it as columns by
-status; tickets are created, moved, and closed either by humans (keyboard) or by agents
-(MCP tools).
-
-```mermaid
-flowchart LR
-  subgraph board["room board"]
-    todo["Todo"] --> doing["Doing"] --> review["Review"] --> done["Done"]
-  end
-  doing -.-> blocked["Blocked"]
-  blocked -.-> doing
-  todo -.-> wontdo["Won't do"]
-  doing -.-> wontdo
-```
-
-## Statuses
-
-| Status | Meaning |
-| --- | --- |
-| `todo` | Accepted, not started |
-| `doing` | Someone (or someone's agent) is on it |
-| `review` | Work done, awaiting a human or the requesting peer's confirmation |
-| `done` | Confirmed complete |
-| `blocked` | Can't proceed — waiting on something outside the ticket |
-| `wont-do` | Deliberately closed without doing it |
-
-Six is the intended ceiling — if a workflow needs more, it probably needs a second
-ticket, not a seventh column.
+Tickets are **data, not commands**. Settling a step is a choice the owning peer's agent
+makes; a record can't force anyone's machine to do anything.
 
 ## A ticket
 
 | Field | Notes |
 | --- | --- |
-| id | stable, room-unique |
-| title / description | the ask |
+| id | uuid, room-unique |
 | project | which shared project it concerns |
-| status | see above |
-| assignee | a peer (their agent does the work) |
-| created by | peer key |
-| thread | the agent conversation attached to this ticket |
-| history | status changes with who/when — humans and agents both leave a trail |
+| goal | the ask, one line |
+| createdBy | peer key — authoritative for the ticket's structure |
+| steps | see below |
 
-**Ticket ↔ thread linkage** is the interesting part: a ticket can spawn an agent
-conversation (its `thread`), so "the discussion about this work" and "the status of this
-work" are one object. Opening a ticket in the TUI shows the exchange underneath — the
-distilled collagen messages, never either side's private AI transcript
-(see [Context, not transcripts](./conversations#context-not-transcripts)).
+A **step**:
 
-## Agents close their own tickets
+| Field | Notes |
+| --- | --- |
+| id | `s1`, `s2`, … (or chosen) |
+| owner | the peer expected to settle it — a peer or yourself |
+| intent | short verb, like a message's (`investigate`, `review`, …) |
+| description | what is being asked, in full |
+| needs | step ids that must settle first |
+| status | `pending` → `suspended` (delivered to the owner) → `settled` / `failed` |
+| result | the owner's findings, or the failure reason |
 
-Agents get ticket tools on the MCP server alongside the messaging tools:
+```mermaid
+flowchart LR
+  s1["s1 · bob · investigate"] --> s2["s2 · alice · review\nneeds: s1"]
+```
+
+## How a step gets done
+
+1. A step is **actionable** when its owner hasn't settled it and everything in `needs`
+   has settled.
+2. Collagen marks it `suspended` (so nothing re-triggers it) and delivers it to the owner
+   as a message — on the **same thread a plain message would use** between the ticket's
+   creator and that owner about that project. The message carries the step, the
+   settled inputs it depends on, and the exact `settle-step` call to make.
+3. What happens next follows the [messaging policy](./conversations#what-happens-when-a-message-arrives):
+   if the owner's agent has adopted that thread, their conversation resumes with the
+   step in it; otherwise it waits in their inbox until they pull it. Nothing is spawned
+   for them.
+4. The owner's agent calls `settle-step` with its findings. The merged ticket is broadcast;
+   steps waiting on this one become actionable on *their* owners' side.
+
+Because a ticket has no thread of its own, "the discussion about this work" and "the
+status of this work" travel together: the ticket in the overview, its exchange in the
+messages tab, both about the same thread.
+
+### A review gate
+
+There is no separate `review` status. Want the requester to confirm before the work counts
+as done? Make the confirmation a step:
+
+```
+s1  owner: bob    investigate  "what does average() do"
+s2  owner: alice  review       "check bob's answer"   needs: s1
+```
+
+Bob's settled result becomes the input to alice's review step, which is delivered to alice
+on her thread with bob — the same conversation where she would have asked in the first
+place.
+
+## Agents drive tickets
 
 | Tool | Purpose |
 | --- | --- |
-| `list-tickets` | Board state for a room (filter by status/assignee/project) |
-| `create-ticket` | File work — e.g. the peer's agent found a bug on your side |
-| `update-ticket` | Change status, reassign, append a comment |
+| `create-ticket` | goal, project, steps (owner by peer name, intent, description, `needs`) |
+| `settle-step` | settle or fail a step you own, with your result |
+| `get-tickets` | every ticket in the room you're looking at, merged, with owners resolved to names |
 
-The flow the board is designed around: a ticket is assigned to you, **your agent picks
-it up** (ticket → `doing`), works in the project, and when it believes the work is
-complete it calls `update-ticket` to move it forward.
+Prefer a ticket over a chain of `send-to-peer` when the work has more than one step or
+more than one owner — the intermediate state stays inspectable by everyone, and the
+dependency order is enforced by delivery, not by remembering.
 
-**Guardrail:** by default an agent can move a ticket to `review`, not `done` — `done` is
-a human (or requesting peer) confirmation. Configurable per room for people who want
-fully autonomous closes. `wont-do` from an agent always requires a stated reason, which
-lands in the history.
+## In the TUI
 
-## Tickets from messages
-
-Work-kind [messages](./conversations#message-kinds) (`feature-request`, `bug-report`)
-land as tickets with the message's sections attached (the `ask` becomes the title, the
-rest is the description). Every ticket **starts or continues a conversation** — that's
-the point of the board; the ticket's thread is where the work happens.
-
-What you control is **dispatch** — when that conversation runs:
-
-- **direct**: your agent spawns on arrival, the ticket opens in `doing` with the thread
-  already live.
-- **queued**: the ticket waits in `todo`; the thread kicks off on pickup — you move it
-  to `doing`, or your agent pulls the next queued ticket.
-
-Dispatch is your policy (per room or per peer): e.g. bug reports direct, feature
-requests queued. Senders can hint urgency; your policy wins.
-
-Triage on queued tickets is the usual moves: assign and pick up, or close `wont-do` with
-a reason — which flows back to the requesting peer on the ticket's thread. Their agent
-checks progress with `list-tickets` instead of asking "is it done yet" in chat.
+The overview tab lists the room's tickets: goal, project, `settled/total`, and a glyph per
+step (`·` pending, `⟳` suspended, `✓` settled, `✗` failed). `enter` unfolds the steps
+with owner, status and result.
 
 ## Sync model
 
-The board is shared state, which is new — presence and messages today are ephemeral.
-Tickets must survive restarts and reach peers who were offline when a change happened.
+Tickets are shared state. Every change broadcasts the whole ticket; each peer merges it
+with what it has using rules that converge regardless of arrival order:
 
-Plan: per-room replicated log of ticket operations (create / status change / comment),
-merged deterministically on reconnect — the Pear stack has the primitives for this
-(append-only cores / Autobase). Conflicts resolve last-writer-wins per field, with
-history keeping both entries so nothing is silently lost.
+- steps are unioned by id — the creator adds structure, owners never lose steps
+- per step, the higher status wins (`settled`/`failed` beat `suspended` beat `pending`);
+  equal ranks resolve by timestamp, then a deterministic tiebreak
+- the goal follows the newest timestamp
 
-This is the same machinery offline messaging needs, so the two land together — see
-[Status](/status#roadmap).
+A peer that joins later receives every ticket from the peers already present.
+
+::: warning In memory today
+Tickets live in memory. As long as one peer who knows a ticket stays up, the others get it
+back on reconnect; if everyone restarts, it is gone. Persisting each room's tickets to disk
+and merging them on reconnect is next on the [roadmap](/status#roadmap) — the merge rules
+above already make that safe.
+:::
+
+## What changed from the original plan
+
+The first spec was a mini-Jira: columns `todo / doing / review / done / blocked /
+wont-do`, an assignee, a status history. It was replaced by the step model above before
+any of it shipped: agents need dependencies and results more than columns, several peers
+can own parts of one ticket, and a review gate is just a step. Human-facing board views
+can still be derived from the steps if they turn out to be wanted.
