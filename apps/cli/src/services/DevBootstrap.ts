@@ -4,7 +4,10 @@ import { Effect, Option, Schema } from "effect";
 import { FileSystem } from "effect";
 import { Bootstrap } from "@collagen/p2p";
 
-export const bootstrapFile = join(homedir(), ".config", "collagen", "dev-bootstrap.json");
+/** Where the dev testnet advertises itself. Overridable so a test harness can
+ *  run its own testnet without every other instance on the machine (a real
+ *  TUI session, say) silently joining it on its next restart. */
+export const bootstrapFile = process.env.COLLAGEN_BOOTSTRAP_FILE ?? join(homedir(), ".config", "collagen", "dev-bootstrap.json");
 
 /** What dev-testnet writes: its bootstrap nodes AND its pid, so a client can
  *  tell a live testnet from a stale file left behind by a killed one. */

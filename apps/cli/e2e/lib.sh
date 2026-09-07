@@ -19,6 +19,10 @@ if [ -s "$HOME/.nvm/nvm.sh" ]; then . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1; nvm u
 # to the agent CLIs it spawns, which then misbehave — scrub it.
 for v in $(env | grep -E '^(CLAUDE|ANTHROPIC|BAGGAGE|AI_AGENT)' | cut -d= -f1); do unset "$v"; done
 
+# The e2e testnet advertises itself in $OUT, not in ~/.config/collagen — a
+# developer's own TUI restarting mid-run must not join the test DHT.
+export COLLAGEN_BOOTSTRAP_FILE="$OUT/dev-bootstrap.json"
+
 # MCP ports are derived from the profile name (services/mcpAddress.ts)
 A=http://127.0.0.1:44040/mcp
 B=http://127.0.0.1:42717/mcp
