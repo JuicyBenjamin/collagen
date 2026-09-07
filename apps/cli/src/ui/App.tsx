@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { execFile } from "node:child_process";
 import { homedir } from "node:os";
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
@@ -40,10 +40,17 @@ import {
 import { FsPicker, Panel, isEnter, keyDebug } from "./components";
 import { theme } from "./theme";
 
-type Mode = "room" | "projects" | "pick" | "settings";
+type Mode = "room" | "pick" | "settings";
 /** Room tabs: the overview is what a person cares about (who's here, what's
  *  shared, what's in flight); the message log is the agent-to-agent trace. */
 type Tab = "overview" | "messages";
+const TABS: ReadonlyArray<Tab> = ["overview", "messages"];
+
+/** Spatial focus: every section is a place the cursor can land. Arrows move
+ *  between sections by direction, and inside the hovered section they do
+ *  the natural thing (switch tab, pick a row, scroll). Number keys jump tabs
+ *  from anywhere; letters are global accelerators. */
+type Focus = "tabs" | "tickets" | "projects" | "messages";
 
 const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
   pending: "·",
@@ -72,12 +79,23 @@ interface ProjectRow {
   holders: string[];
 }
 
+const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+
 export function App({ onExit }: { onExit: () => void }) {
   const room = currentRoom();
   const ROOM = room.id;
   const [mode, setMode] = useState<Mode>("room");
   const [tab, setTab] = useState<Tab>("overview");
-  const [cursor, setCursor] = useState(0);
+  const [focus, setFocus] = useState<Focus>("tabs");
+  const [projCursor, setProjCursor] = useState(0);
+  const [ticketCursor, setTicketCursor] = useState(0);
+  // null = follow the newest message until the user scrolls
+  const [msgCursor, setMsgCursor] = useState<number | null>(null);
+  // one expanded item (ticket id or message id) shows its full detail inline
+  const [expanded, setExpanded] = useState<string | null>(null);
+  // first visible row of the message list — a ref, not state: it's derived
+  // from the cursor each render and must not itself trigger renders
+  const msgStartRef = useRef(0);
   const { height: termHeight } = useTerminalDimensions();
 
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
@@ -98,6 +116,8 @@ export function App({ onExit }: { onExit: () => void }) {
     const hit = peers.find((p) => deriveThreadId(identity.pubkey, p.key, m.project) === m.threadId);
     return hit?.name ?? inbound.find((i) => i.threadId === m.threadId)?.fromName ?? "peer";
   };
+  const nameFor = (key: string): string =>
+    key === identity?.pubkey ? "you" : (peers.find((p) => p.key === key)?.name ?? key.slice(0, 8));
   const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
@@ -144,6 +164,12 @@ export function App({ onExit }: { onExit: () => void }) {
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   })();
   const sharedCount = rows.filter((r) => r.holders.length >= 2).length;
+  // The sidebar's last row is always "+ add project", so adding is just
+  // arrows + enter — no chorded keys to remember.
+  const projCount = rows.length + 1;
+  const projSel = clamp(projCursor, 0, projCount - 1);
+  const ticketSel = clamp(ticketCursor, 0, Math.max(0, tickets.length - 1));
+  const msgSel = msgCursor === null ? trace.length - 1 : clamp(msgCursor, 0, Math.max(0, trace.length - 1));
 
   // Projects belong to the room they were added in (Keet-style).
   const deleteProject = (id: string) =>
@@ -163,52 +189,83 @@ export function App({ onExit }: { onExit: () => void }) {
         return { ...s, rooms: { ...s.rooms, [ROOM]: [...here, newProject(name, path)] } };
       },
     });
-    setMode("projects");
+    setMode("room");
+    setFocus("projects");
   };
 
-  // The sidebar's last row is always "+ add project", so adding is just
-  // arrows + enter — no chorded keys to remember.
-  const itemCount = rows.length + 1;
+  const switchTab = (next: Tab) => {
+    setTab(next);
+    setFocus("tabs");
+    setExpanded(null);
+  };
+  const stepTab = (dir: -1 | 1) => switchTab(TABS[clamp(TABS.indexOf(tab) + dir, 0, TABS.length - 1)]!);
+  /** Where ↓ from the tab bar lands: the content section of the current tab. */
+  const contentOf = (t: Tab): Focus => (t === "overview" ? "tickets" : "messages");
 
-  // One handler, gated by focus; pick mode is handled by FsPicker's own hook.
+  // One handler; pick mode is handled by FsPicker's own hook, settings by its form.
   useKeyboard((key) => {
-    keyDebug(`app:${mode}`, key);
-    if (mode === "room") {
-      if (key.name === "q") return onExit();
-      if (key.name === "a")
-        return updateState({ update: (s) => ({ ...s, preferredAi: nextAi(s.preferredAi) }) });
-      if (key.name === "1") return setTab("overview");
-      if (key.name === "2") return setTab("messages");
-      if (key.name === "right" || key.name === "tab" || key.name === "p") {
-        // the projects sidebar lives on the overview tab
-        setTab("overview");
-        setCursor(0);
-        setMode("projects");
-        return;
-      }
-      if (key.name === "s") {
-        setSettingsSaved(false);
-        setMode("settings");
-      }
-      if (key.name === "c") return copyInvite();
-      return;
-    }
+    keyDebug(`app:${mode}:${focus}`, key);
     if (mode === "settings") {
       if (key.name === "escape") return setMode("room");
       return;
     }
-    if (mode === "projects") {
-      if (key.name === "escape" || key.name === "left" || key.name === "tab") return setMode("room");
-      if (key.name === "n") return setMode("pick");
-      if (key.name === "up" || key.name === "k") return setCursor((i) => Math.max(0, i - 1));
-      if (key.name === "down" || key.name === "j")
-        return setCursor((i) => Math.min(itemCount - 1, i + 1));
-      const i = Math.min(cursor, itemCount - 1);
-      if (isEnter(key) && i === rows.length) return setMode("pick");
-      const row = rows[i];
-      if (!row) return;
-      // only your own projects can be removed
-      if (key.name === "d" && row.mine) return deleteProject(row.mine.id);
+    if (mode !== "room") return;
+
+    // ── global accelerators: work wherever the cursor is ──
+    if (key.name === "q") return onExit();
+    if (key.name === "a") return updateState({ update: (s) => ({ ...s, preferredAi: nextAi(s.preferredAi) }) });
+    if (key.name === "c") return copyInvite();
+    if (key.name === "s") {
+      setSettingsSaved(false);
+      return setMode("settings");
+    }
+    if (key.name === "1") return switchTab("overview");
+    if (key.name === "2") return switchTab("messages");
+    if (key.name === "escape") {
+      setExpanded(null);
+      return setFocus("tabs");
+    }
+
+    // ── section-local behaviour ──
+    switch (focus) {
+      case "tabs": {
+        if (key.name === "left") return stepTab(-1);
+        if (key.name === "right") return stepTab(1);
+        if (key.name === "down" || isEnter(key)) return setFocus(contentOf(tab));
+        return;
+      }
+      case "tickets": {
+        if (key.name === "up") return ticketSel > 0 ? setTicketCursor(ticketSel - 1) : setFocus("tabs");
+        if (key.name === "down") return setTicketCursor(clamp(ticketSel + 1, 0, Math.max(0, tickets.length - 1)));
+        if (key.name === "right") return setFocus("projects");
+        if (isEnter(key)) {
+          const t = tickets[ticketSel];
+          if (t) setExpanded((e) => (e === t.id ? null : t.id));
+        }
+        return;
+      }
+      case "projects": {
+        if (key.name === "up") return projSel > 0 ? setProjCursor(projSel - 1) : setFocus("tabs");
+        if (key.name === "down") return setProjCursor(clamp(projSel + 1, 0, projCount - 1));
+        if (key.name === "left") return setFocus("tickets");
+        if (isEnter(key) && projSel === rows.length) return setMode("pick");
+        const row = rows[projSel];
+        // only your own projects can be removed
+        if (key.name === "d" && row?.mine) return deleteProject(row.mine.id);
+        return;
+      }
+      case "messages": {
+        if (key.name === "up") return msgSel > 0 ? setMsgCursor(msgSel - 1) : setFocus("tabs");
+        if (key.name === "down") {
+          // scrolling back to the newest message resumes following
+          return msgSel >= trace.length - 1 ? setMsgCursor(null) : setMsgCursor(msgSel + 1);
+        }
+        if (isEnter(key)) {
+          const m = trace[msgSel]?.msg;
+          if (m) setExpanded((e) => (e === m.id ? null : m.id));
+        }
+        return;
+      }
     }
   });
 
@@ -233,11 +290,36 @@ export function App({ onExit }: { onExit: () => void }) {
     );
   }
 
+  const hint = (() => {
+    if (mode === "pick") return "↑↓ move · → open · ← up · enter pick · esc cancel";
+    switch (focus) {
+      case "tabs":
+        return "←→ switch tab · ↓ into the tab · 1/2 jump · a cycle ai · c copy invite · s settings · q quit";
+      case "tickets":
+        return "↑↓ select ticket · enter details · → projects · ↑ tabs · esc";
+      case "projects":
+        return "↑↓ select · enter add · d remove yours · ← tickets · ↑ tabs · esc";
+      case "messages":
+        return "↑↓ scroll · enter full text · ↑ tabs · 1/2 jump · esc";
+    }
+  })();
+
+  const sectionColor = (f: Focus) => (focus === f && mode === "room" ? theme.accent : theme.dim);
+  const msgWindow = Math.max(5, termHeight - 16 - (expanded ? 3 : 0));
+  // Sticky viewport: the list only scrolls when the cursor hits an edge, so a
+  // keypress redraws one or two rows — not the whole panel. Following mode
+  // (msgCursor null) keeps the newest message on the bottom row.
+  const maxStart = Math.max(0, trace.length - msgWindow);
+  let msgStart = msgCursor === null ? maxStart : clamp(msgStartRef.current, 0, maxStart);
+  if (msgSel < msgStart) msgStart = msgSel;
+  if (msgSel >= msgStart + msgWindow) msgStart = msgSel - msgWindow + 1;
+  msgStartRef.current = msgStart;
+
   return (
     <box flexDirection="column" padding={1} height="100%">
       <ascii-font text="collagen" font="tiny" color={theme.accent} />
       <text fg={theme.dim}>peer-to-peer</text>
-      <text>
+      <text truncate wrapMode="none">
         <span fg={theme.dim}>you </span>
         <span fg={theme.fg}>{myName}</span>
         <span fg={theme.dim}> · ai </span>
@@ -252,7 +334,9 @@ export function App({ onExit }: { onExit: () => void }) {
           space so the footer stays pinned and resizes don't reflow. */}
       <box marginTop={1} flexDirection="column" flexGrow={1} flexShrink={1}>
         <Panel title={`room · ${roomName}`} grow>
-          <text>
+          {/* tab bar — a section: hover it and ←→ switch, ↓ enters the tab */}
+          <text truncate wrapMode="none">
+            <span fg={sectionColor("tabs")}>{focus === "tabs" ? "› " : "  "}</span>
             <span fg={tab === "overview" ? theme.accent : theme.dim}>[1] overview</span>
             <span fg={theme.dim}>   </span>
             <span fg={tab === "messages" ? theme.accent : theme.dim}>[2] messages</span>
@@ -266,86 +350,118 @@ export function App({ onExit }: { onExit: () => void }) {
 
           {tab === "messages" ? (
             <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1}>
-              <text fg={theme.dim}>agent-to-agent trace · ← received · → sent · newest last</text>
+              <text fg={sectionColor("messages")}>
+                agent-to-agent trace · ← received · → sent · newest last
+              </text>
               {trace.length === 0 ? (
                 <text fg={theme.dim}>no messages yet</text>
               ) : (
-                trace.slice(-Math.max(5, termHeight - 16)).map(({ msg, out }) => (
-                  <text key={msg.id} fg={theme.fg} truncate>
-                    <span fg={out ? theme.accent : theme.warn}>
-                      {out ? "→ " : "← "}
-                      {out ? peerNameFor(msg) : msg.fromName}
-                    </span>
-                    <span fg={theme.dim}> [{msg.project}/{msg.intent}] </span>
-                    {msg.findings}
-                  </text>
-                ))
+                trace.slice(msgStart, msgStart + msgWindow).map(({ msg, out }, i) => {
+                  const selected = focus === "messages" && msgStart + i === msgSel;
+                  const open = expanded === msg.id;
+                  return (
+                    <box key={msg.id} flexDirection="column">
+                      <text fg={selected ? theme.accent : theme.fg} truncate={!open} wrapMode={open ? "word" : "none"}>
+                        {selected ? "› " : "  "}
+                        <span fg={out ? theme.accent : theme.warn}>
+                          {out ? "→ " : "← "}
+                          {out ? peerNameFor(msg) : msg.fromName}
+                        </span>
+                        <span fg={theme.dim}> [{msg.project}/{msg.intent}] </span>
+                        {open ? "" : msg.findings}
+                      </text>
+                      {open ? (
+                        <box paddingLeft={4}>
+                          <text fg={theme.fg}>{msg.findings}</text>
+                        </box>
+                      ) : null}
+                    </box>
+                  );
+                })
               )}
             </box>
           ) : (
-          <box flexDirection="row" gap={2} marginTop={1} flexGrow={1} flexShrink={1}>
-            <box flexDirection="column" flexGrow={1} flexShrink={1}>
-              <PeerLine name={`${myName} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
-              {peers.map((p) => (
-                <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} />
-              ))}
-              <box flexDirection="column" marginTop={1}>
-                <text fg={theme.dim}>tickets</text>
-                {tickets.length === 0 ? (
-                  <text fg={theme.dim}>none — agents create them for multi-step work</text>
-                ) : (
-                  tickets.slice(-8).map((t) => {
-                    const done = t.steps.filter((s) => s.status === "settled").length;
-                    return (
-                      <text key={t.id} fg={done === t.steps.length ? theme.dim : theme.fg} truncate>
-                        <span fg={theme.warn}>⧉ </span>
-                        {t.goal}
-                        <span fg={theme.dim}> · {t.project} · {done}/{t.steps.length} </span>
-                        <span fg={theme.dim}>{t.steps.map((s) => STEP_GLYPH[s.status]).join(" ")}</span>
+            <box flexDirection="row" gap={2} marginTop={1} flexGrow={1} flexShrink={1}>
+              <box flexDirection="column" flexGrow={1} flexShrink={1}>
+                <PeerLine name={`${myName} (you)`} ai={state.preferredAi} aiStatus={aiStatus} />
+                {peers.map((p) => (
+                  <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} />
+                ))}
+                {/* tickets — a section: hover it and ↑↓ select, enter shows steps */}
+                <box flexDirection="column" marginTop={1}>
+                  <text fg={sectionColor("tickets")}>{focus === "tickets" ? "› " : "  "}tickets</text>
+                  {tickets.length === 0 ? (
+                    <text fg={theme.dim}>  none — agents create them for multi-step work</text>
+                  ) : (
+                    tickets.slice(-8).map((t, i) => {
+                      const idx = tickets.length - Math.min(8, tickets.length) + i;
+                      const selected = focus === "tickets" && idx === ticketSel;
+                      const done = t.steps.filter((s) => s.status === "settled").length;
+                      const open = expanded === t.id;
+                      return (
+                        <box key={t.id} flexDirection="column">
+                          <text fg={selected ? theme.accent : done === t.steps.length ? theme.dim : theme.fg} truncate wrapMode="none">
+                            {selected ? "› " : "  "}
+                            <span fg={theme.warn}>⧉ </span>
+                            {t.goal}
+                            <span fg={theme.dim}> · {t.project} · {done}/{t.steps.length} </span>
+                            <span fg={theme.dim}>{t.steps.map((s) => STEP_GLYPH[s.status]).join(" ")}</span>
+                          </text>
+                          {open
+                            ? t.steps.map((s) => (
+                                <text key={s.id} fg={theme.dim} truncate wrapMode="none">
+                                  {"      "}
+                                  <span fg={s.status === "settled" ? theme.ok : s.status === "failed" ? theme.warn : theme.dim}>
+                                    {STEP_GLYPH[s.status]}
+                                  </span>{" "}
+                                  {s.id} {nameFor(s.owner)} · {s.intent} — {s.result ?? s.description}
+                                </text>
+                              ))
+                            : null}
+                        </box>
+                      );
+                    })
+                  )}
+                </box>
+              </box>
+
+              {/* projects — a section: hover it and ↑↓ select, enter adds */}
+              <box flexDirection="column" width={34} flexShrink={0}>
+                <Panel
+                  title={mode === "pick" ? "pick a folder" : "projects"}
+                  color={mode === "pick" ? theme.accent : sectionColor("projects")}
+                  grow
+                >
+                  {mode === "pick" ? (
+                    <FsPicker
+                      start={homedir()}
+                      onPick={addFolder}
+                      onCancel={() => {
+                        setMode("room");
+                        setFocus("projects");
+                      }}
+                    />
+                  ) : (
+                    <box flexDirection="column">
+                      {rows.map((row, i) => {
+                        const active = row.holders.length >= 2;
+                        const selected = focus === "projects" && i === projSel;
+                        return (
+                          <text key={row.name} fg={selected ? theme.accent : active ? theme.fg : theme.dim} truncate wrapMode="none">
+                            {selected ? "› " : "  "}
+                            {row.name}
+                            <span fg={theme.dim}> — {row.holders.join(", ")}</span>
+                          </text>
+                        );
+                      })}
+                      <text fg={focus === "projects" && projSel === rows.length ? theme.accent : theme.dim} truncate wrapMode="none">
+                        {focus === "projects" && projSel === rows.length ? "› " : "  "}+ add project
                       </text>
-                    );
-                  })
-                )}
+                    </box>
+                  )}
+                </Panel>
               </box>
             </box>
-
-            <box flexDirection="column" width={34} flexShrink={0}>
-              <Panel
-                title={mode === "pick" ? "pick a folder" : "projects"}
-                color={mode === "projects" || mode === "pick" ? theme.accent : theme.dim}
-                grow
-              >
-                {mode === "pick" ? (
-                  <FsPicker start={homedir()} onPick={addFolder} onCancel={() => setMode("projects")} />
-                ) : (
-                <box flexDirection="column">
-                    {rows.map((row, i) => {
-                      const active = row.holders.length >= 2;
-                      const selected = mode === "projects" && i === cursor;
-                      return (
-                        <text key={row.name} fg={selected ? theme.accent : active ? theme.fg : theme.dim} truncate>
-                          {selected ? "› " : "  "}
-                          {row.name}
-                          <span fg={theme.dim}> — {row.holders.join(", ")}</span>
-                        </text>
-                      );
-                    })}
-                    <text
-                      fg={mode === "projects" && Math.min(cursor, itemCount - 1) === rows.length ? theme.accent : theme.dim}
-                      truncate
-                    >
-                      {mode === "projects" && Math.min(cursor, itemCount - 1) === rows.length ? "› " : "  "}+ add project
-                    </text>
-                    {mode !== "projects" && rows.length === 0 ? (
-                      <text fg={theme.dim} truncate>
-                        press → to get started
-                      </text>
-                    ) : null}
-                </box>
-                )}
-              </Panel>
-            </box>
-          </box>
           )}
         </Panel>
       </box>
@@ -355,7 +471,7 @@ export function App({ onExit }: { onExit: () => void }) {
         {[0, 1, 2].map((i) => {
           const line = logs.slice(-3)[i] ?? " ";
           return (
-            <text key={i} fg={theme.dim} truncate>
+            <text key={i} fg={theme.dim} truncate wrapMode="none">
               {line}
             </text>
           );
@@ -363,20 +479,16 @@ export function App({ onExit }: { onExit: () => void }) {
       </box>
 
       <box flexDirection="column" flexShrink={0}>
-        <text fg={theme.dim} truncate>
+        <text fg={theme.dim} truncate wrapMode="none">
           mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>
-        <text fg={theme.dim} truncate>
+        <text fg={theme.dim} truncate wrapMode="none">
           room: <span fg={theme.fg}>{roomName}</span> [{shortRoomId(room.id)}] · invite id:{" "}
           <span fg={theme.fg}>{room.id}</span>
           {copied ? <span fg={theme.ok}>  ✓ copied</span> : <span fg={theme.dim}>  (c to copy)</span>}
         </text>
-        <text fg={theme.dim}>
-          {mode === "room"
-            ? "1/2 tabs · → projects · a cycle ai · c copy invite · s settings · q quit"
-            : mode === "projects"
-              ? "↑↓ select · enter add · d remove yours · ← back"
-              : "esc back"}
+        <text fg={theme.dim} truncate wrapMode="none">
+          {hint}
         </text>
       </box>
     </box>
@@ -386,7 +498,7 @@ export function App({ onExit }: { onExit: () => void }) {
 function PeerLine({ name, ai, aiStatus }: { name: string; ai: string | null; aiStatus?: string }) {
   const bad = ai !== null && aiStatus !== undefined && aiStatus !== "ok" && aiStatus !== "unknown";
   return (
-    <text>
+    <text truncate wrapMode="none">
       <span fg={bad ? theme.warn : theme.ok}>● </span>
       <span fg={theme.fg}>{name}</span>
       <span fg={theme.dim}> {ai ?? "—"}</span>
