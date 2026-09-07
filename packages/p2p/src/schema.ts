@@ -59,6 +59,9 @@ export const ProfileFrame = Schema.Struct({
 export const LogInfoFrame = Schema.Struct({
   kind: Schema.Literal("log-info"),
   key: Schema.String,
+  /** How many members that log has — lets two sides that each started a log
+   *  agree on which one to keep (a log nobody else is on yields). */
+  members: Schema.optional(Schema.Finite),
 });
 /** "Admit my writer core to the room's log" — a joiner asks a member. */
 export const JoinLogFrame = Schema.Struct({

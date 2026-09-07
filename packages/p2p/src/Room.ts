@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Clock, Context, Effect, Layer, PubSub, Scope, Stream, SubscriptionRef } from "effect";
+import { Clock, Context, Effect, Exit, Layer, PubSub, Scope, Stream, SubscriptionRef } from "effect";
 import type { DriveAction, Frame, Member, Peer, RoomMessage, SharedProfile } from "./schema";
 import { NotWritable, PeerNotConnected } from "./errors";
 import type { Ticket } from "./ticket";
@@ -68,6 +68,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const greeted = new Set<string>();
     const admitted = new Set<string>();
     let log: RoomLog | null = null;
+    let logScope: Scope.Closeable | null = null;
     const publishRoster = Effect.suspend(() => SubscriptionRef.set(roster, [...peers.values()]));
 
     let topicHex = "";
@@ -98,22 +99,48 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(mine, view.messages.filter((m) => m.msg.to === me));
     });
 
-    /** Say who we are on the log — once we can write to it. */
+    /** Say who we are on the log — once we can write to it. The creator also
+     *  puts the room's name there the first time, so a room named before the
+     *  log existed (or named at creation) reaches joiners by name. */
     const introduce = Effect.gen(function* () {
       if (!log || !log.writable()) return;
       const profile = yield* config.getProfile;
       const ts = yield* Clock.currentTimeMillis;
       yield* log.append({ op: "member", key: me, name: profile.name, ts }).pipe(Effect.ignore);
+      const view = yield* log.read;
+      const label = config.roomLabel;
+      if (config.log.creator && view.name === null && label.ts > 0) {
+        yield* log.append({ op: "rename", name: label.name, ts: label.ts }).pipe(Effect.ignore);
+      }
+    });
+
+    const logInfo = Effect.gen(function* () {
+      const l = log;
+      if (!l) return null;
+      const count = (yield* SubscriptionRef.get(members)).length;
+      const frame: Frame = { kind: "log-info", key: l.key, members: count };
+      return frame;
+    });
+
+    /** Let go of the log we hold (to adopt another one). */
+    const dropLog = Effect.gen(function* () {
+      if (logScope) yield* Scope.close(logScope, Exit.void);
+      log = null;
+      logScope = null;
+      yield* SubscriptionRef.set(writable, false);
+      yield* SubscriptionRef.set(mine, []);
     });
 
     /** Bring the log up (create it, or open a key we learned) and follow it. */
     const attachLog = (key: string | null) =>
       Effect.gen(function* () {
         if (log) return;
-        const opened = yield* openRoomLog(swarm.store.namespace(config.roomName), key).pipe(
-          Effect.provideService(Scope.Scope, scope),
+        const child = yield* Scope.fork(scope);
+        const opened = yield* openRoomLog(swarm.store, config.roomName, key).pipe(
+          Effect.provideService(Scope.Scope, child),
         );
         log = opened;
+        logScope = child;
         yield* SubscriptionRef.set(logKey, opened.key);
         yield* Effect.log(`room log ${key ? "opened" : "created"}: ${opened.key.slice(0, 12)}… writable=${String(opened.writable())}`);
         yield* refresh;
@@ -131,10 +158,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             }),
           ),
           Stream.runDrain,
-          Effect.forkIn(scope),
+          Effect.forkIn(child),
         );
         // tell everyone present where the log is
-        yield* broadcast({ kind: "log-info", key: opened.key });
+        const info = yield* logInfo;
+        if (info) yield* broadcast(info);
       });
 
     /** Ask a member to admit our writer core (no-op once we're in). */
@@ -152,7 +180,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (greeted.has(key)) return;
         greeted.add(key);
         yield* send(key, { kind: "profile", profile: yield* config.getProfile });
-        if (log) yield* send(key, { kind: "log-info", key: log.key });
+        const info = yield* logInfo;
+        if (info) yield* send(key, info);
         yield* askToJoin(key);
       }).pipe(Effect.catchTag("PeerNotConnected", () => Effect.sync(() => void greeted.delete(key))));
 
@@ -178,13 +207,27 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
               Effect.andThen(greet(key)),
             );
           case "log-info":
-            return Effect.suspend(() => {
+            return Effect.gen(function* () {
               if (log && log.key !== frame.key) {
-                return Effect.logWarning(
-                  `peer ${key.slice(0, 8)} uses another log for this room (${frame.key.slice(0, 12)}…) — ignoring`,
-                );
+                // Two logs for one room: both sides started one (e.g. a room
+                // from before logs existed). A log nobody else is on yields
+                // to a populated one; two lonely logs keep the lower key. A
+                // populated pair is a real split and stays (loudly).
+                const ourMembers = (yield* SubscriptionRef.get(members)).filter((m) => m.key !== me).length;
+                const theirMembers = frame.members ?? 1;
+                const lonely = ourMembers === 0;
+                const theyAreLonely = theirMembers <= 1;
+                const yieldToTheirs = lonely && (!theyAreLonely || frame.key < log.key);
+                if (!yieldToTheirs) {
+                  return yield* Effect.logWarning(
+                    `peer ${key.slice(0, 8)} uses another log for this room (${frame.key.slice(0, 12)}…, ${theirMembers} member(s)) — keeping ours (${String(ourMembers + 1)} member(s))`,
+                  );
+                }
+                yield* Effect.log(`abandoning our lonely log ${log.key.slice(0, 12)}… for the room's log ${frame.key.slice(0, 12)}…`);
+                yield* dropLog;
               }
-              return (log ? Effect.void : attachLog(frame.key)).pipe(Effect.andThen(askToJoin(key)));
+              if (!log) yield* attachLog(frame.key);
+              yield* askToJoin(key);
             });
           case "join-log":
             return Effect.suspend(() => {
@@ -205,6 +248,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     // creator: the log is ours to make; joiner with a remembered key: open it;
     // fresh joiner: wait for a member's log-info
     if (config.log.creator || config.log.key !== null) yield* attachLog(config.log.key);
+    else yield* Effect.log("no log for this room yet — waiting for a member to announce it");
 
     const sendTo = Effect.fn("Room.sendTo")(function* (
       peerKey: string,

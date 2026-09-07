@@ -68,17 +68,36 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
   }
 }
 
-/** Open (or create, when `bootstrap` is null) a room's Autobase in the given
- *  Corestore namespace. Scoped: closes with the scope. */
+/** Where in the Corestore a room's log lives. The room's own namespace holds
+ *  the writer core we made for it; if that core already belongs to ANOTHER
+ *  base (we started a log of our own before adopting the room's), the adopted
+ *  log gets a namespace of its own — reusing a writer core across bases
+ *  corrupts both. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const namespaceFor = async (store: any, roomName: string, bootstrap: string | null): Promise<any> => {
+  const primary = store.namespace(roomName);
+  if (bootstrap === null) return primary;
+  const local = Autobase.getLocalCore(primary, {});
+  await local.ready();
+  const { referrer } = await Autobase.getUserData(local);
+  await local.close();
+  const ours = referrer === null || referrer === undefined || b4a.equals(referrer, b4a.from(bootstrap, "hex"));
+  return ours ? primary : store.namespace(`${roomName}/${bootstrap}`);
+};
+
+/** Open (or create, when `bootstrap` is null) a room's Autobase in the
+ *  identity's Corestore. Scoped: closes with the scope. */
 export const openRoomLog = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   store: any,
+  roomName: string,
   bootstrap: string | null,
 ): Effect.Effect<RoomLog, never, import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const base = yield* Effect.acquireRelease(
       Effect.promise(async () => {
-        const b = new Autobase(store, bootstrap ? b4a.from(bootstrap, "hex") : null, {
+        const ns = await namespaceFor(store, roomName, bootstrap);
+        const b = new Autobase(ns, bootstrap ? b4a.from(bootstrap, "hex") : null, {
           valueEncoding: "json",
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           open: (viewStore: any) =>

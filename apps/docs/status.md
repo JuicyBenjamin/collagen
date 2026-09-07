@@ -125,5 +125,10 @@ Rough order, not committed.
   Pear stack. Messages are room-visible (every member holds the log) — chosen over
   sealed-to-recipient; the room is the audience. Same-day finding: a PubSub inside
   `Room.make` dropped the log's existing messages because nobody had subscribed yet —
-  `messages` now replays on subscribe.
+  `messages` now replays on subscribe. Second same-day finding, on the real PC2: "has a
+  `nameTs`" had been taken as "created this room", but `nameTs` is also set when a name
+  is *received*, so both machines bootstrapped a log and ignored each other's. Now only an
+  explicit `creator` flag bootstraps, and a log nobody else is on **yields** to a populated
+  one (two lonely logs: lower key wins) — the adopted log gets its own Corestore
+  namespace, since reusing a writer core across bases corrupts both.
 - **"broadcast", never "gossip"** — vocabulary for shared state.

@@ -239,8 +239,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         roomName: entry.id,
         roomLabel: { name: entry.name, ts: entry.nameTs ?? 0 },
         getProfile: profileFor(entry.id),
-        // rooms from before logs existed: whoever named it made it
-        log: { key: entry.logKey ?? null, creator: entry.creator ?? entry.nameTs !== undefined },
+        // only an explicit flag makes us the creator: `nameTs` is also set when a
+        // name is RECEIVED, and two self-appointed creators means two logs
+        log: { key: entry.logKey ?? null, creator: entry.creator === true },
       };
       const room = yield* Room.make.pipe(
         Effect.provideService(RoomConfig, config),
