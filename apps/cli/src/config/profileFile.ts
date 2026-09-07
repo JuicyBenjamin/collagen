@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { configDir } from "./services/Identity";
+import { configDir } from "../services/Identity";
 
 /** Synchronous pre-runtime access to the per-profile config file. The TUI
  *  reads it before the Effect runtime exists (to decide whether to show the

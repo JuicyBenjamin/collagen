@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { mcpServerName } from "../util";
+import { mcpServerName } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
 import { McpInfo } from "./McpInfo";
 

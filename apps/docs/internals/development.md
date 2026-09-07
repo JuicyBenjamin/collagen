@@ -106,6 +106,50 @@ curl -s -X POST http://127.0.0.1:<port>/mcp \
 | MCP port | `portForProfile(profile)` → 41000–44999 |
 | MCP server name | `collagen` (default) or `collagen-<profile>` |
 
+## UI code layout (apps/cli/src)
+
+The TUI borrows the web's vocabulary so changes are easy to say out loud.
+
+- **`routes/`** — frames (pages). A frame is a folder with a `page.tsx`; nested
+  frames nest folders (`routes/room/overview`, `routes/room/messages` are the
+  room's tabs). A `layout.tsx` next to frames wraps them: `routes/layout.tsx`
+  is the brand header every frame sits in; `routes/room/layout.tsx` adds the
+  status line, the room panel with its tab bar, the footer, and the global
+  keys, and renders the active tab as `children`.
+- **`components/`** inside a frame or layout folder holds *its* child
+  components, one folder each (`routes/room/components/Footer/Footer.tsx`);
+  children that have children repeat the pattern. Siblings live side by side.
+- **Top-level `components/`** — app-agnostic primitives shared across frames
+  (`Panel`, `FsPicker`, key helpers).
+- **`atoms.ts` sits at the lowest folder shared by everything that reads it**:
+  `routes/atoms.ts` for state every frame needs, `routes/room/atoms.ts` for
+  what several room sections share, `…/Footer/atoms.ts` for what only the
+  footer reads. `app/runtime.ts` holds the runtime atom they all derive from;
+  `app/session.tsx` is the one context — who you are and which room you're in —
+  owned by `app/app.tsx` once setup is done.
+- **Logic lives with its UI.** A section the cursor can land on is a
+  `<Focusable id hint onKey …boxProps>` (shared component in `components/`).
+  It is the box around the section's content, so it knows its own place on
+  screen. The section decides what a key means while hovered and returns
+  `true` to consume it; an arrow it leaves alone moves focus to whichever
+  Focusable lies in that direction — worked out from the rendered layout,
+  never configured. A component knows nothing about its neighbors: move it,
+  and navigation follows. Focus, keyboard capture (the folder picker) and the
+  registered hints are plain atoms in `components/focus.ts`; the footer shows
+  the hovered section's hint without knowing the sections exist. No prop
+  drilling — shared state is an atom at the lowest common ancestor.
+- **`app/`** — the shell: `app.tsx` (maps routes to layouts and pages),
+  `router.tsx` (a tiny route state), `session.tsx`, `theme.ts`, `runtime.ts`.
+  `src/` itself holds only the two entries (`index.tsx`, `headless.ts`) and
+  folders: `app/`, `routes/`, `components/`, `services/`, `config/` (cli
+  flags, profile file), `dev/` (testnet, mock agent), `lib/` (pure helpers) (setup is the frame shown before a session exists, so it is not a
+  route).
+
+To add a tab: create `routes/room/<name>/page.tsx`, add the route to
+`router.tsx` and `app.tsx`, wrap its sections in `<Focusable>` with an id and a hint. To add a
+section inside a tab: a folder under that tab's `components/` with the
+component (and `atoms.ts` if it needs runtime state nobody else reads).
+
 ## Gotchas
 
 - **Harness env leaks into spawned agents.** If you spawn from inside another agent

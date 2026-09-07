@@ -1,4 +1,4 @@
-// Shared palette (Tokyo Night-ish). Ink accepts hex colors.
+// Shared palette (Tokyo Night-ish).
 export const theme = {
   accent: "#7aa2f7",
   fg: "#c0caf5",

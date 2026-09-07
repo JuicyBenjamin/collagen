@@ -3,7 +3,7 @@ import { Console, Effect, Layer } from "effect";
 import { FileSystem } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import createTestnet from "hyperdht/testnet.js";
-import { bootstrapFile } from "./services/DevBootstrap";
+import { bootstrapFile } from "../services/DevBootstrap";
 
 // Local DHT for development: lets same-machine peers connect deterministically
 // (the public DHT hairpins on localhost). Keep this running, then start clients.

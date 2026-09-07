@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "cross-env COLLAGEN_DEV=1 node --experimental-ffi --import tsx src/index.tsx",
-    "dev:net": "tsx src/dev-testnet.ts",
+    "dev:net": "tsx src/dev/dev-testnet.ts",
     "start": "node --experimental-ffi --import tsx src/index.tsx",
     "test": "vitest run",
     "test:watch": "vitest",

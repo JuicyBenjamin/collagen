@@ -7,11 +7,10 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
-import { AI_OPTIONS, Room, newProject, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
-import { readProfileFile, upsertActiveRoom, writeProfileFile } from "../profileFile";
-import { isRoomInviteId } from "../util";
+import { AI_OPTIONS, isRoomId, newProject, Room, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
+import { readProfileFile, upsertActiveRoom, writeProfileFile } from "../config/profileFile";
 import { MOCK_AI_OPTIONS } from "./Adapters";
-import { portForProfile } from "../util";
+import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
@@ -640,7 +639,7 @@ const makeHandlers = Effect.gen(function* () {
       "join-room": ({ inviteId, name }: { inviteId: string; name?: string }) =>
         Effect.sync(() => {
           const id = inviteId.trim();
-          if (!isRoomInviteId(id)) return "failed: that is not a room invite id (expected a uuid)";
+          if (!isRoomId(id)) return "failed: that is not a room invite id (expected a uuid)";
           upsertActiveRoom(profile, { id, name: name?.trim() || id.slice(0, 8) });
           return `joined room [${shortRoomId(id)}] and made it active. ${RESTART_NOTE}`;
         }).pipe(Effect.withSpan("Mcp.joinRoom")),

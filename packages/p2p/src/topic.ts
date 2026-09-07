@@ -12,3 +12,9 @@ export function roomTopic(roomName: string): Buffer {
 export function shortRoomId(roomId: string): string {
   return createHash("sha256").update(`collagen-short:${roomId}`).digest("hex").slice(0, 8);
 }
+
+/** A room id (= the invite) is a uuid, v7 in practice. Anything else is
+ *  rejected at the edges so a botched paste can't silently become a new room. */
+export function isRoomId(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+}

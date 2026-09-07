@@ -1,58 +1,17 @@
-import { useState } from "react";
 import { Deferred, Effect, Option } from "effect";
 import { Command } from "effect/unstable/cli";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { nameOption, profileOption, roomOption } from "./args";
-import { v7 as uuidv7 } from "uuid";
-import { readProfileFile, storedRoom, upsertActiveRoom, writeProfileFile } from "./profileFile";
-import { App } from "./ui/App";
-import { SetupWizard } from "./ui/Setup";
-import { setCliArgs, setResolvedRoom } from "./ui/atoms";
-import { stripArgSeparator } from "./util";
-
-/** Setup gate: until name+room are known (flags, stored profile, or the
- *  first-run form) nothing subscribes to the app atoms, so the swarm/MCP
- *  runtime only builds once the user is configured. */
-function Root({
-  profile,
-  initialName,
-  needsSetup,
-  onExit,
-}: {
-  profile: string;
-  initialName: string;
-  needsSetup: boolean;
-  onExit: () => void;
-}) {
-  const [phase, setPhase] = useState<"setup" | "app">(needsSetup ? "setup" : "app");
-  if (phase === "setup") {
-    return (
-      <SetupWizard
-        initialName={initialName}
-        onDone={({ name, mode, roomName, roomId }) => {
-          // create: fresh unguessable id, and the chosen name is stamped so it
-          // is sent to joiners; join: the pasted invite IS the id, labeled by
-          // its short prefix (ts 0) until the room's shared name arrives.
-          const id = mode === "create" ? uuidv7() : roomId;
-          const label = mode === "create" ? roomName : roomId.slice(0, 8);
-          writeProfileFile(profile, { name });
-          upsertActiveRoom(profile, { id, name: label, ...(mode === "create" ? { nameTs: Date.now() } : {}) });
-          setCliArgs({ profile, name: Option.some(name), room: Option.some(id) });
-          setResolvedRoom({ id, name: label });
-          setPhase("app");
-        }}
-      />
-    );
-  }
-  return <App onExit={onExit} />;
-}
+import { App } from "./app/app";
+import { nameOption, profileOption, roomOption, stripArgSeparator } from "./config/args";
+import { readProfileFile, storedRoom } from "./config/profileFile";
+import { setCliArgs } from "./app/runtime";
 
 const command = Command.make("collagen", { profile: profileOption, name: nameOption, room: roomOption }, (args) =>
   Effect.gen(function* () {
     // Resolve config before anything renders: flags override the stored
-    // profile; missing pieces trigger the setup form.
+    // profile; a missing name or room means first run (the setup frame).
     const stored = readProfileFile(args.profile);
     const name = Option.getOrUndefined(args.name) ?? stored.name;
     const flagRoomId = Option.getOrUndefined(args.room);
@@ -60,13 +19,11 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
       flagRoomId !== undefined
         ? { id: flagRoomId, name: storedRoom(stored)?.id === flagRoomId ? storedRoom(stored)!.name : flagRoomId.slice(0, 8) }
         : storedRoom(stored);
-    const needsSetup = name === undefined || room === undefined;
     setCliArgs({
       profile: args.profile,
       name: name === undefined ? Option.none() : Option.some(name),
       room: room === undefined ? Option.none() : Option.some(room.id),
     });
-    if (room !== undefined) setResolvedRoom(room);
 
     // Resolved when the UI asks to quit (q); the scope then tears down the
     // React root and the renderer (which restores the terminal).
@@ -82,10 +39,10 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
       Effect.sync(() => {
         const root = createRoot(renderer);
         root.render(
-          <Root
+          <App
             profile={args.profile}
             initialName={name ?? ""}
-            needsSetup={needsSetup}
+            room={name === undefined ? undefined : room}
             onExit={() => Deferred.doneUnsafe(done, Effect.void)}
           />,
         );

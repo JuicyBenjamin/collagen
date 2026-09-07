@@ -7,7 +7,7 @@ import { CliArgs } from "./CliArgs";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
 import { IdentityService } from "./Identity";
-import { readProfileFile, upsertRoom } from "../profileFile";
+import { readProfileFile, upsertRoom } from "../config/profileFile";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";

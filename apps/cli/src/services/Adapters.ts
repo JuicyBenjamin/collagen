@@ -123,7 +123,7 @@ export const codexAdapter: Adapter = {
 // Lets a machine without any LLM CLI be a complete peer in a cross-network
 // test — everything downstream of the adapter (AgentRunner, MCP, swarm) is
 // exercised for real.
-const mockAgentPath = fileURLToPath(new URL("../mock-agent.mjs", import.meta.url));
+const mockAgentPath = fileURLToPath(new URL("../dev/mock-agent.mjs", import.meta.url));
 
 export const mockAdapter: Adapter = {
   cmd: process.execPath,
