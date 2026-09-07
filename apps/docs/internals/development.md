@@ -44,7 +44,20 @@ app is **process spawn**, and both sides of it are injectable:
   scripted stdout (see `AgentRunner.test.ts`).
 
 `Adapters.test.ts` pins the real CLIs' argument shapes (e.g. codex ≥0.152
-rejecting `--sandbox` on `exec resume`) and output parsing.
+rejecting `--sandbox` on `exec resume`) and output parsing. `RoomLog.test.ts`
+runs the log's `apply` on a real Corestore in a temp dir.
+
+### End-to-end
+
+```sh
+pnpm --filter @collagen/cli e2e        # ~4 minutes, needs the alice/bob profiles
+```
+
+Real instances on a local testnet, driven over MCP, judged from their logs — see
+[`apps/cli/e2e/README.md`](https://github.com/JuicyBenjamin/collagen/tree/main/apps/cli/e2e)
+for the scenarios, prerequisites and how to read a failure. Run it after anything
+that touches `packages/p2p` or the services; the unit tests can't see connection
+stalls, dropped history or two peers each bootstrapping a log — these did.
 
 ## Running the docs
 

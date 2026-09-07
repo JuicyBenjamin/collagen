@@ -8,7 +8,7 @@ import { theme } from "../../../../app/theme";
 import { useRouter } from "../../../../app/router";
 import { clamp } from "../../../../lib/math";
 import { initials } from "./initials";
-import { focusRoomAtom, roomSummariesAtom } from "./atoms";
+import { focusRoomAtom, leaveRoomAtom, roomSummariesAtom } from "./atoms";
 
 /** Rooms sidebar — Discord's server rail: one avatar per room (its initials
  *  in a rounded box) and a + at the bottom to join or create another. The
@@ -22,6 +22,7 @@ import { focusRoomAtom, roomSummariesAtom } from "./atoms";
 export function Sidebar() {
   const rooms = AsyncResult.getOrElse(useAtomValue(roomSummariesAtom), () => [] as ReadonlyArray<RoomSummary>);
   const focusRoom = useAtomSet(focusRoomAtom);
+  const leaveRoom = useAtomSet(leaveRoomAtom);
   const { navigate } = useRouter();
   // null = the cursor rests on the room you're in until you move it
   const [cursor, setCursor] = useState<number | null>(null);
@@ -33,7 +34,7 @@ export function Sidebar() {
   return (
     <Focusable
       id="rooms"
-      hint="↑↓ pick room · enter look at it · + join or create · → into the room · esc"
+      hint="↑↓ pick room · enter look at it · d leave · + join or create · → into the room · esc"
       flexDirection="column"
       flexShrink={0}
       marginRight={1}
@@ -42,6 +43,11 @@ export function Sidebar() {
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
         // the rail is the left edge: nowhere to go
         if (key.name === "up" || key.name === "down" || key.name === "left") return true;
+        if (key.name === "d") {
+          const room = rooms[sel];
+          if (room) leaveRoom({ id: room.id });
+          return true;
+        }
         if (isEnter(key) || isSpace(key)) {
           const room = rooms[sel];
           if (room) {

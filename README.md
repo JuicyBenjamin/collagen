@@ -150,8 +150,8 @@ tools — say it in your own chat and it happens: `add-project` / `remove-projec
 (share a folder into the current room), `set-ai` (claude-code, codex, a mock, or
 `none` for inbox mode), `set-name`, `rename-room` (shared with everyone). Room
 membership is live too: `create-room`, `join-room` (from an invite id),
-`switch-room` (look at another room — instant), `list-rooms` (one line per
-room: online, unread, which one you're looking at). UI state (tabs, focus) is
+`switch-room` (look at another room — instant), `leave-room`, `list-rooms` (one
+line per room: online, unread, which one you're looking at). UI state (tabs, focus) is
 deliberately not exposed.
 
 ## Troubleshooting

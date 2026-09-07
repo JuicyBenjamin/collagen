@@ -6,7 +6,7 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
-import { AI_OPTIONS, isRoomId, newProject, Room, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
+import { AI_OPTIONS, isRoomId, newProject, PROTOCOL_VERSION, Room, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
@@ -244,6 +244,13 @@ const SwitchRoom = Tool.make("switch-room", {
   success: Schema.String,
 });
 
+const LeaveRoom = Tool.make("leave-room", {
+  description:
+    "Leave one of the user's rooms, by short id, name, or invite id — see list-rooms. Local: the user stops taking part and the room disappears from their list; the other members keep the room and its history. Refused for the user's only room. Only do this when the user asks.",
+  parameters: Schema.Struct({ room: Schema.String }),
+  success: Schema.String,
+});
+
 const GetTickets = Tool.make("get-tickets", {
   description:
     "All shared tickets this instance knows, merged from the room. Includes step ownership, status, dependencies, and settled results. Returns TOON (compact YAML/CSV-style) text.",
@@ -273,6 +280,7 @@ export const CollagenToolkit = Toolkit.make(
   CreateRoom,
   JoinRoom,
   SwitchRoom,
+  LeaveRoom,
 );
 
 /** Dev-only surface: everything plus the drive-peer test tool. A prod run
@@ -300,6 +308,7 @@ export const DevCollagenToolkit = Toolkit.make(
   CreateRoom,
   JoinRoom,
   SwitchRoom,
+  LeaveRoom,
   DrivePeer,
 );
 
@@ -387,6 +396,7 @@ const makeHandlers = Effect.gen(function* () {
               aiStatus: p.aiStatus ?? "unknown",
               away: p.away ?? false,
               projects: p.projects.map((x) => x.name),
+              ...((p.protocol ?? "pre-1") === PROTOCOL_VERSION ? {} : { protocol: `${p.protocol ?? "pre-1"} (yours: ${PROTOCOL_VERSION} — one side must update)` }),
             })),
             offlineMembers: offline.map((m) => m.name),
           });
@@ -678,6 +688,14 @@ const makeHandlers = Effect.gen(function* () {
           yield* rooms.join(name?.trim() ? { ...entry, name: name.trim() } : entry, true);
           return `joined room [${shortRoomId(id)}] — you are in it now; its shared name arrives from the peers`;
         }).pipe(Effect.withSpan("Mcp.joinRoom")),
+      "leave-room": ({ room: which }: { room: string }) =>
+        Effect.gen(function* () {
+          const q = which.trim();
+          const hit = (yield* rooms.summaries).find((r) => r.id === q || r.shortId === q || r.name === q);
+          if (!hit) return `failed: no room matching "${q}" — see list-rooms`;
+          const outcome = yield* rooms.leave(hit.id);
+          return outcome === "left" ? `left "${hit.name}" [${hit.shortId}]` : `failed: ${outcome}`;
+        }).pipe(Effect.withSpan("Mcp.leaveRoom")),
       "switch-room": ({ room: which }: { room: string }) =>
         Effect.gen(function* () {
           const q = which.trim();

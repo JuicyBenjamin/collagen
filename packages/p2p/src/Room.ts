@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Clock, Context, Effect, Exit, Layer, PubSub, Scope, Stream, SubscriptionRef } from "effect";
-import type { DriveAction, Frame, Member, Peer, RoomMessage, SharedProfile } from "./schema";
+import { Clock, Context, Effect, Exit, Layer, PubSub, Schedule, Scope, Stream, SubscriptionRef } from "effect";
+import { PROTOCOL_VERSION, type DriveAction, type Frame, type Member, type Peer, type RoomMessage, type SharedProfile } from "./schema";
 import { NotWritable, PeerNotConnected } from "./errors";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic } from "./topic";
@@ -67,6 +67,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const peers = new Map<string, Peer>();
     const greeted = new Set<string>();
     const admitted = new Set<string>();
+    // join requests we couldn't serve yet (no log, or not admitted ourselves)
+    const pendingJoins = new Set<string>();
     let log: RoomLog | null = null;
     let logScope: Scope.Closeable | null = null;
     const publishRoster = Effect.suspend(() => SubscriptionRef.set(roster, [...peers.values()]));
@@ -97,6 +99,21 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       if (name) yield* SubscriptionRef.update(meta, (cur) => (name.ts > cur.ts ? name : cur));
       yield* SubscriptionRef.set(writable, log.writable());
       yield* SubscriptionRef.set(mine, view.messages.filter((m) => m.msg.to === me));
+    });
+
+    /** Admit everyone who asked while we couldn't. */
+    const admitPending = Effect.gen(function* () {
+      const l = log;
+      if (!l || !l.writable()) return;
+      for (const writer of [...pendingJoins]) {
+        pendingJoins.delete(writer);
+        if (admitted.has(writer)) continue;
+        admitted.add(writer);
+        yield* Effect.log(`admitting ${writer.slice(0, 8)} to the room log`);
+        yield* l.append({ op: "add-writer", key: writer }).pipe(
+          Effect.catch((e) => Effect.logWarning(`admit failed: ${e.message}`)),
+        );
+      }
     });
 
     /** Say who we are on the log — once we can write to it. The creator also
@@ -145,6 +162,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         yield* Effect.log(`room log ${key ? "opened" : "created"}: ${opened.key.slice(0, 12)}… writable=${String(opened.writable())}`);
         yield* refresh;
         yield* introduce;
+        yield* admitPending;
         let wasWritable = opened.writable();
         yield* opened.changes.pipe(
           Stream.tap(() =>
@@ -154,6 +172,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
                 wasWritable = true;
                 yield* Effect.log("admitted to the room log");
                 yield* introduce;
+                yield* admitPending;
               }
             }),
           ),
@@ -199,8 +218,18 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             return Effect.suspend(() => {
               const known = peers.has(key);
               peers.set(key, { key, ...frame.profile });
+              if (known) return Effect.void;
               // first profile from a peer = they are actually reachable here
-              return known ? Effect.void : Effect.log(`peer online: ${frame.profile.name} (${key.slice(0, 8)})`);
+              const theirs = frame.profile.protocol ?? "pre-1";
+              return Effect.log(`peer online: ${frame.profile.name} (${key.slice(0, 8)})`).pipe(
+                Effect.andThen(
+                  theirs === PROTOCOL_VERSION
+                    ? Effect.void
+                    : Effect.logWarning(
+                        `${frame.profile.name} runs collagen protocol ${theirs}, we run ${PROTOCOL_VERSION} — messages between you may not get through until one side updates`,
+                      ),
+                ),
+              );
             }).pipe(
               Effect.andThen(publishRoster),
               // they found us on this topic; answer in kind (no-op if we already did)
@@ -230,13 +259,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
               yield* askToJoin(key);
             });
           case "join-log":
+            // served now if we can write; otherwise kept until we can
             return Effect.suspend(() => {
-              if (!log || !log.writable() || admitted.has(frame.writer)) return Effect.void;
-              admitted.add(frame.writer);
-              return Effect.log(`admitting ${key.slice(0, 8)} to the room log`).pipe(
-                Effect.andThen(log.append({ op: "add-writer", key: frame.writer })),
-                Effect.catch((e) => Effect.logWarning(`admit failed: ${e.message}`)),
-              );
+              if (admitted.has(frame.writer)) return Effect.void;
+              pendingJoins.add(frame.writer);
+              return admitPending;
             });
           case "drive":
             return PubSub.publish(driveRequests, { from: key, action: frame.action }).pipe(Effect.asVoid);
@@ -245,6 +272,13 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     };
 
     topicHex = yield* swarm.join(roomTopic(config.roomName), hooks);
+
+    // A join request can land on a member who can't serve it yet (or get lost
+    // with a connection); keep asking everyone present until admitted.
+    yield* Effect.gen(function* () {
+      if (!log || log.writable()) return;
+      yield* Effect.forEach([...peers.keys()], askToJoin, { discard: true });
+    }).pipe(Effect.schedule(Schedule.spaced("10 seconds")), Effect.forkScoped);
     // creator: the log is ours to make; joiner with a remembered key: open it;
     // fresh joiner: wait for a member's log-info
     if (config.log.creator || config.log.key !== null) yield* attachLog(config.log.key);

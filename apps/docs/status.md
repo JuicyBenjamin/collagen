@@ -14,8 +14,9 @@ _Last updated: 2026-09-07._
   refresh, a swarm health line, self-healing when peers are known but none connect.
 - **Rooms are conversations** — a room id is an unguessable uuid that doubles as the
   invite; the room's name is shared state (last-writer-wins). You are in every room you
-  joined at once and look at one; elsewhere you're `away`. Live create / join / switch,
-  from the TUI (rooms rail) or the agent's tools.
+  joined at once and look at one; elsewhere you're `away`. Live create / join / switch /
+  leave, from the TUI (rooms rail) or the agent's tools. Peers announce their protocol
+  version; a mismatch is flagged next to the peer and in `list-room`.
 - **Messaging** — `send-to-peer` appends to the room's log in the thread between two peers
   about one project; the recipient may be offline and reads it when back. Room-visible.
   Unread is a per-thread cursor in local state. **Nothing spawns behind your back**: a real AI is never cold-started by an
@@ -37,9 +38,11 @@ _Last updated: 2026-09-07._
 - **TUI** — OpenTUI + React on `@effect/atom-react`: rooms rail, overview (peers,
   tickets, projects) and messages (a2a trace) tabs, settings, first-run wizard. Spatial
   keyboard navigation between sections. Headless entry for servers.
-- **Tests** — 47 unit tests (p2p merge/thread rules, agent-run policy, adapters, scripting,
-  cli plumbing), plus a scripted two-instance e2e flow on a local testnet
-  ([development](/internals/development)).
+- **Tests** — 52 unit tests (log apply on a real Corestore, merge/thread rules, agent-run
+  policy, adapters, scripting, cli plumbing) and an in-repo e2e suite: five deterministic
+  two/three-instance scenarios on a local testnet (`pnpm --filter @collagen/cli e2e`)
+  plus TUI, codex and Claude adopted-thread scenarios run by hand
+  ([development](/internals/development#tests)).
 
 ## Known issues
 
@@ -72,7 +75,7 @@ Rough order, not committed.
 
 ### 3. Rooms lifecycle — [spec](/guide/rooms#room-lifecycle)
 
-- [ ] Leave a room (local forget)
+- [x] Leave a room (local forget; `d` in the rail, `leave-room`)
 - [ ] Membership enforcement: drop connections from keys the log doesn't know; revoke a
   member (`removeWriter`). Admission to the log exists; it's automatic today.
 

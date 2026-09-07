@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { Room, RoomConfig, Swarm, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
@@ -55,6 +55,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           name: yield* SubscriptionRef.get(nameRef),
           ai: s.preferredAi,
           aiStatus: yield* SubscriptionRef.get(aiStatus.current),
+          protocol: PROTOCOL_VERSION,
           projects: roomProjects(s, roomId).map((p) => ({ name: p.name, path: p.path })),
           away: (yield* SubscriptionRef.get(focused)) !== roomId,
         };
@@ -290,6 +291,29 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       return h;
     });
 
+    /** Leave a room: forget it locally and stop taking part. The log and its
+     *  history stay with the other members (and on disk here — a rejoin by
+     *  invite would pick the same log up). Refused for the last room: the app
+     *  needs one to look at. */
+    const leave = Effect.fn("Rooms.leave")(function* (id: string) {
+      const hs = yield* SubscriptionRef.get(handles);
+      const h = hs.find((x) => x.id === id);
+      if (!h) return "not in that room";
+      if (hs.length === 1) return "cannot leave your only room — join or create another first";
+      const remaining = hs.filter((x) => x.id !== id);
+      if ((yield* SubscriptionRef.get(focused)) === id) yield* setFocus(remaining[0]!.id);
+      yield* SubscriptionRef.set(handles, remaining);
+      const scope = scopes.get(id);
+      scopes.delete(id);
+      if (scope) yield* Scope.close(scope, Exit.void);
+      yield* Effect.sync(() => {
+        const f = readProfileFile(profile);
+        writeProfileFile(profile, { rooms: (f.rooms ?? []).filter((r) => r.id !== id) });
+      });
+      yield* Effect.log(`left room [${shortRoomId(id)}]`);
+      return "left";
+    });
+
     const summaries: Effect.Effect<ReadonlyArray<RoomSummary>> = Effect.gen(function* () {
       const f = yield* SubscriptionRef.get(focused);
       const counts = yield* inbox.unread;
@@ -345,7 +369,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       Effect.forkScoped,
     );
 
-    return { handles, focused, current, setFocus, join, summaries, summaryChanges, watch } as const;
+    return { handles, focused, current, setFocus, join, leave, summaries, summaryChanges, watch } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

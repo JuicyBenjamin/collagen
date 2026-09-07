@@ -14,8 +14,15 @@ export type SharedProject = typeof SharedProject.Type;
 export const AiStatus = Schema.Literals(["ok", "unauthenticated", "missing", "unknown"]);
 export type AiStatus = typeof AiStatus.Type;
 
+/** The wire protocol this build speaks. Bump on any change to frames, log
+ *  entries or the view layout; peers show a mismatch instead of silently
+ *  dropping each other's frames. */
+export const PROTOCOL_VERSION = "1";
+
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
+  /** PROTOCOL_VERSION of the sender; absent = a build from before it existed. */
+  protocol: Schema.optional(Schema.String),
   ai: Schema.NullOr(Schema.String),
   /** Whether the peer's preferred agent CLI is actually usable — visible to
    *  the whole room so "claude-code (unauthenticated)" is no surprise. */

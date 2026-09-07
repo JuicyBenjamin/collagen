@@ -71,6 +71,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
         current: Effect.succeed(handle),
         setFocus: (_id: string) => Effect.succeed(true),
         join: (_entry: { id: string; name: string; nameTs?: number }, _focus: boolean) => Effect.succeed(handle),
+        leave: (_id: string) => Effect.succeed("left" as const),
         summaries: Effect.succeed([]),
         summaryChanges: Stream.empty,
         watch: <A,>(select: (h: RoomHandle) => Stream.Stream<A>) => select(handle),

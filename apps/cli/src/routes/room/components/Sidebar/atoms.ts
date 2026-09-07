@@ -17,3 +17,11 @@ export const focusRoomAtom = runtimeAtom.fn(
     yield* (yield* Rooms).setFocus(id);
   }),
 );
+
+/** Leave the room under the cursor (refused for the only room). */
+export const leaveRoomAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ id }: { id: string }) {
+    const outcome = yield* (yield* Rooms).leave(id);
+    if (outcome !== "left") yield* Effect.logWarning(outcome);
+  }),
+);

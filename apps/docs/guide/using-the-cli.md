@@ -74,7 +74,7 @@ what's natural there. Number keys work from anywhere.
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, details of a ticket or message, `+ add project` |
-| `d` (projects) | Remove one of your projects |
+| `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
 | `c` | Copy the room's invite id |
 | `s` | Settings (your name, the room's shared name) |
@@ -87,7 +87,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 
 | Group | Tools |
 | --- | --- |
-| Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `rename-room` |
+| Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room` |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `get-tickets` |
 | Settings | `add-project`, `remove-project`, `set-ai`, `set-name` |

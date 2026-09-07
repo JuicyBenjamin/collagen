@@ -65,10 +65,12 @@ First run asks: **create** a room (you name it, you get the id to share) or **jo
 (paste a friend's id). Later, the `+` at the bottom of the rail asks the same question
 without leaving the app, and your agent can do it too: `create-room`, `join-room`.
 
-### Leaving <Badge type="info" text="planned" />
+### Leaving <Badge type="tip" text="live" />
 
-Leaving is local: stop announcing on the room's topic, forget it on disk, gone from
-everyone's roster. Rejoining needs the id again.
+`d` on a room in the rail, or `leave-room` from your agent. Local: you stop taking part
+and the room leaves your list; the other members keep the room and its history (your
+entries on its log stay — they were shared). Rejoining needs the invite id again. You
+can't leave your only room — the app needs one to look at.
 
 ### Membership
 
