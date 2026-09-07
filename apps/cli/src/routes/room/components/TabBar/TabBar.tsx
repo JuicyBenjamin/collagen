@@ -3,16 +3,18 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { Focusable } from "../../../../components/Focusable";
 import { focusAtom, nearestFocusable } from "../../../../components/focus";
 import { isEnter } from "../../../../components/keys";
-import { useSession } from "../../../../app/session";
 import { theme } from "../../../../app/theme";
+import { roomAtom } from "../../../atoms";
 import { inboundMessagesAtom, rosterAtom, sentMessagesAtom, stateAtom } from "../../atoms";
 import { projectRows } from "../../projectRows";
 import { TABS, useTabs } from "../../tabs";
 
-/** The tab bar is a section: hover it and ←→ switch tabs; ↓ (or enter) drops
- *  the cursor into whatever section sits below. Also carries the room's vitals. */
+/** The tab bar is a section: hover it and ←→ switch tabs (← past the first
+ *  tab leaves for whatever sits to the left — the rooms rail); ↓ (or enter)
+ *  drops the cursor into whatever section sits below. Also carries the
+ *  room's vitals. */
 export function TabBar() {
-  const { room } = useSession();
+  const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { active, jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
@@ -21,6 +23,7 @@ export function TabBar() {
   const sent = AsyncResult.getOrElse(useAtomValue(sentMessagesAtom), () => [] as const);
 
   const shared = projectRows(state, room.id, peers).filter((r) => r.holders.length >= 2).length;
+  const online = peers.filter((p) => !p.away).length + 1;
 
   return (
     <Focusable
@@ -36,8 +39,8 @@ export function TabBar() {
           if (below !== null) setFocus(below);
           return true;
         }
-        // ←/→ at the ends stay put rather than wandering sideways
-        return key.name === "left" || key.name === "right";
+        // ←/→ at the ends are not ours: ← from the first tab reaches the rooms rail
+        return false;
       }}
     >
       {(focused) => (
@@ -48,7 +51,7 @@ export function TabBar() {
           <span fg={active === "room/messages" ? theme.accent : theme.dim}>[2] messages</span>
           <span fg={theme.dim}> ({inbound.length + sent.length})</span>
           <span fg={theme.dim}>   ·   </span>
-          <span fg={theme.fg}>{peers.length + 1} online</span>
+          <span fg={theme.fg}>{online} online</span>
           <span fg={theme.dim}> · </span>
           <span fg={theme.fg}>{shared} shared</span>
           <span fg={theme.dim}> {shared === 1 ? "project" : "projects"}</span>

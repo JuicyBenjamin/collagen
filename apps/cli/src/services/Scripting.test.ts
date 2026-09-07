@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, PubSub, Stream, SubscriptionRef } from "effect";
-import { Room, deriveThreadId, type DriveAction, type Peer, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { deriveThreadId, type DriveAction, type Peer, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { PeerNotConnected } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
+import { Rooms, type RoomHandle } from "./Rooms";
 import { Scripting } from "./Scripting";
 
 const peers: Peer[] = [
@@ -11,9 +12,9 @@ const peers: Peer[] = [
   { key: "k-dave", name: "dave", ai: null, projects: [] },
 ];
 
-const roomStub = (sent: Array<{ peerKey: string; intent: string; findings: string }>) =>
+const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: string }>) =>
   Layer.effect(
-    Room,
+    Rooms,
     Effect.gen(function* () {
       const roster = yield* SubscriptionRef.make<ReadonlyArray<Peer>>(peers);
       const inbound = yield* PubSub.unbounded<RoomMessage>();
@@ -41,7 +42,7 @@ const roomStub = (sent: Array<{ peerKey: string; intent: string; findings: strin
       const meta = yield* SubscriptionRef.make({ name: "test room", ts: 0 });
       const drives = yield* PubSub.unbounded<{ from: string; action: DriveAction }>();
       const sentRef = yield* SubscriptionRef.make<ReadonlyArray<RoomMessage>>([]);
-      return {
+      const room = {
         roster,
         meta,
         sent: sentRef,
@@ -54,13 +55,26 @@ const roomStub = (sent: Array<{ peerKey: string; intent: string; findings: strin
         sendTo,
         updateProfile: Effect.void,
       };
+      const handle: RoomHandle = { id: "testroom", room };
+      const handles = yield* SubscriptionRef.make<ReadonlyArray<RoomHandle>>([handle]);
+      const focused = yield* SubscriptionRef.make("testroom");
+      return {
+        handles,
+        focused,
+        current: Effect.succeed(handle),
+        setFocus: (_id: string) => Effect.succeed(true),
+        join: (_entry: { id: string; name: string; nameTs?: number }, _focus: boolean) => Effect.succeed(handle),
+        summaries: Effect.succeed([]),
+        summaryChanges: Stream.empty,
+        watch: <A,>(select: (h: RoomHandle) => Stream.Stream<A>) => select(handle),
+      };
     }),
   );
 
 const make = () => {
   const sent: Array<{ peerKey: string; intent: string; findings: string }> = [];
   const layer = Scripting.layer.pipe(
-    Layer.provideMerge(Layer.mergeAll(roomStub(sent), Inbox.layer)),
+    Layer.provideMerge(Layer.mergeAll(roomsStub(sent), Inbox.layer)),
   );
   return { sent, layer };
 };

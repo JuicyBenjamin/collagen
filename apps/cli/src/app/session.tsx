@@ -1,11 +1,9 @@
 import { createContext, useContext, type ReactNode } from "react";
 
-/** Who this process runs as and which room it joined — fixed once the
- *  runtime builds (collagen runs one room per process). Owned by the app,
- *  read by any frame or section that needs it. */
+/** Who this process runs as. Which room is being looked at is live state
+ *  (see routes/atoms.ts `roomAtom`), not part of the session. */
 export interface Session {
   profile: string;
-  room: { id: string; name: string };
 }
 
 const SessionContext = createContext<Session | null>(null);

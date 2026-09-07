@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
 /** Frames the configured app can show. Nested paths are tabs inside the room layout. */
-export type Route = "settings" | "room/overview" | "room/messages";
+export type Route = "settings" | "new-room" | "room/overview" | "room/messages";
 
 interface Router {
   route: Route;

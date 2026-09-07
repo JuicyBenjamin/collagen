@@ -42,7 +42,7 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
           <App
             profile={args.profile}
             initialName={name ?? ""}
-            room={name === undefined ? undefined : room}
+            configured={name !== undefined && room !== undefined}
             onExit={() => Deferred.doneUnsafe(done, Effect.void)}
           />,
         );

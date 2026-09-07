@@ -1,7 +1,7 @@
 import { Context, Effect, Layer, SubscriptionRef } from "effect";
 import { scriptEngine, tool, type AgentExecuteResult } from "callscript";
-import { Room } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
+import { Rooms } from "./Rooms";
 
 /** CallScript engine with collagen's tools mounted. Spawned agents author one
  *  small JS program (compiled to an inert JSON plan — never executed as code)
@@ -9,7 +9,7 @@ import { Inbox } from "./Inbox";
  *  to peers bounded by `max`, collect the results. */
 export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
   make: Effect.gen(function* () {
-    const room = yield* Room;
+    const rooms = yield* Rooms;
     const inbox = yield* Inbox;
     // Callscript tools are plain async functions; capture the service map so
     // effects run with the app's services (logger etc).
@@ -39,11 +39,11 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
       idempotent: true,
       execute: () =>
         runP(
-          SubscriptionRef.get(room.roster).pipe(
-            Effect.map((peers) => ({
-              peers: peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })),
-            })),
-          ),
+          Effect.gen(function* () {
+            const { room } = yield* rooms.current;
+            const peers = yield* SubscriptionRef.get(room.roster);
+            return { peers: peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })) };
+          }),
         ),
     });
 
@@ -66,6 +66,7 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
       execute: (args: { peer: string; project: string; intent: string; findings: string }) =>
         runP(
           Effect.gen(function* () {
+            const { room } = yield* rooms.current;
             const peers = yield* SubscriptionRef.get(room.roster);
             const target = peers.find((p) => p.name === args.peer);
             if (!target) return { delivered: false, detail: `no peer named ${args.peer}` };
@@ -94,7 +95,12 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
         properties: { messages: { type: "array", items: { type: "object" } } },
       },
       execute: (args: { threadId?: string } | void) =>
-        runP(inbox.take(args?.threadId ?? undefined).pipe(Effect.map((messages) => ({ messages })))),
+        runP(
+          rooms.current.pipe(
+            Effect.flatMap((h) => inbox.take(h.id, args?.threadId ?? undefined)),
+            Effect.map((messages) => ({ messages })),
+          ),
+        ),
     });
 
     const engine = scriptEngine({ tools: [listRoom, sendToPeer, getMessages] });

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { Room } from "@collagen/p2p";
 import { IdentityService } from "../../services/Identity";
+import { Rooms } from "../../services/Rooms";
 import { runtimeAtom } from "../../app/runtime";
 
 // Only the settings frame changes these.
@@ -13,10 +13,10 @@ export const setMyNameAtom = runtimeAtom.fn(
   }),
 );
 
-/** Rename the room for everyone in it (broadcast, last-writer-wins). */
+/** Rename the focused room for everyone in it (broadcast, last-writer-wins). */
 export const renameRoomAtom = runtimeAtom.fn(
   Effect.fnUntraced(function* ({ name }: { name: string }) {
-    const room = yield* Room;
+    const { room } = yield* (yield* Rooms).current;
     yield* room.rename(name);
   }),
 );

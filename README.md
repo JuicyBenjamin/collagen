@@ -75,6 +75,23 @@ Incoming work triggers **your locally authenticated agent** — nobody's agent
 ever runs on the other person's machine, and peers exchange only data
 (messages and ticket records), never code.
 
+## Rooms are conversations
+
+You're in every room you've joined, all the time — like conversations — and
+you look at one. That's where you work: peers there see you online, and your
+agent acts there. Everywhere else you show as **away**: still connected,
+messages for you still arrive and count as unread, but nothing runs for you
+and you're not counted as online. Switching rooms is instant (`switch-room`,
+or the sidebar). The point is focus: one room at a time, without missing what
+happens in the others.
+
+The TUI shows this as a rail on the left, one avatar per room (its initials in
+a rounded box): a pill marks the room you're in, a dot marks a room with
+messages waiting for you, the number in the corner is how many people are
+online there (you count where you are). Hover the rail (`←` from the tab bar) and the names unfold;
+`↑↓` pick, `enter` looks at that room, and the `+` at the bottom joins or
+creates another. Your agent sees the same picture through `list-rooms`.
+
 ## Same-machine testing (two instances on one computer)
 
 The public DHT can't hairpin two peers on one host. Run a local testnet first,
@@ -124,10 +141,10 @@ Only peers whose AI is a `mock:*` obey; real peers ignore drive requests.
 Everything a person can configure, their agent can configure through the MCP
 tools — say it in your own chat and it happens: `add-project` / `remove-project`
 (share a folder into the current room), `set-ai` (claude-code, codex, a mock, or
-`none` for inbox mode), `set-name`, `rename-room` (shared with everyone). Those
-apply live. Room membership — `create-room`, `join-room` (from an invite id),
-`switch-room`, `list-rooms` — is saved at once but takes effect on the next
-start, since collagen runs one room per process. UI state (tabs, focus) is
+`none` for inbox mode), `set-name`, `rename-room` (shared with everyone). Room
+membership is live too: `create-room`, `join-room` (from an invite id),
+`switch-room` (look at another room — instant), `list-rooms` (one line per
+room: online, unread, which one you're looking at). UI state (tabs, focus) is
 deliberately not exposed.
 
 ## Troubleshooting

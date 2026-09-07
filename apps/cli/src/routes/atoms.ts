@@ -1,6 +1,6 @@
 import { Effect, Stream, SubscriptionRef } from "effect";
-import { Room } from "@collagen/p2p";
 import { IdentityService } from "../services/Identity";
+import { Rooms } from "../services/Rooms";
 import { runtimeAtom } from "../app/runtime";
 
 // Only what more than one frame reads (the room frame AND settings). Atoms a
@@ -13,9 +13,11 @@ export const myNameAtom = runtimeAtom.atom(
   })),
 );
 
-/** The room's shared name — live view of what the room agreed on (LWW). */
-export const roomMetaAtom = runtimeAtom.atom(
+/** The room being looked at: id + its shared name. Follows focus changes and
+ *  renames alike. */
+export const roomAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return SubscriptionRef.changes((yield* Room).meta);
+    const rooms = yield* Rooms;
+    return rooms.watch((h) => SubscriptionRef.changes(h.room.meta).pipe(Stream.map((m) => ({ id: h.id, name: m.name }))));
   })),
 );

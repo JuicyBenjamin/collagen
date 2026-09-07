@@ -8,11 +8,11 @@ import { Panel } from "../../components/Panel";
 import { captureAtom, focusAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
 import { useRouter } from "../../app/router";
-import { useSession } from "../../app/session";
-import { roomMetaAtom } from "../atoms";
+import { roomAtom } from "../atoms";
 import { updateStateAtom } from "./atoms";
 import { Footer } from "./components/Footer/Footer";
 import { Keys } from "./components/Keys/Keys";
+import { Sidebar } from "./components/Sidebar/Sidebar";
 import { StatusLine } from "./components/StatusLine/StatusLine";
 import { TabBar } from "./components/TabBar/TabBar";
 import { useTabs } from "./tabs";
@@ -26,17 +26,17 @@ function nextAi(current: string | null): string | null {
   return cycle[(i + 1) % cycle.length] ?? null;
 }
 
-/** Room layout: status line · the room panel (tab bar + the active tab as
- *  children) · footer. Owns the global accelerators; each section is a
- *  Focusable that owns its own keys. The room IS the container — it absorbs
- *  all free vertical space so the footer stays pinned and resizes don't reflow. */
+/** Room layout: status line · the rooms sidebar beside the room panel (tab
+ *  bar + the active tab as children) · footer. Owns
+ *  the global accelerators; each section is a Focusable that owns its own
+ *  keys. The room IS the container — it absorbs all free vertical space so
+ *  the footer stays pinned and resizes don't reflow. */
 export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: () => void }) {
-  const { room } = useSession();
   const { navigate } = useRouter();
   const { jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const captured = useAtomValue(captureAtom) !== null;
-  const roomName = AsyncResult.getOrElse(useAtomValue(roomMetaAtom), () => ({ name: room.name, ts: 0 })).name;
+  const roomName = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "…" })).name;
   const updateState = useAtomSet(updateStateAtom);
 
   // the cursor starts on the tab bar whenever the room frame appears
@@ -60,7 +60,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   return (
     <>
       <StatusLine />
-      <box marginTop={1} flexDirection="column" flexGrow={1} flexShrink={1}>
+      <box flexDirection="row" marginTop={1} flexGrow={1} flexShrink={1}>
+        <Sidebar />
         <Panel title={`room · ${roomName}`} grow>
           <TabBar />
           {children}

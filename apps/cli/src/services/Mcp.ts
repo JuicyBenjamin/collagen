@@ -1,20 +1,20 @@
 import { statSync } from "node:fs";
 import { createServer } from "node:http";
 import { basename, resolve } from "node:path";
-import { v7 as uuidv7 } from "uuid";
 import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { AI_OPTIONS, isRoomId, newProject, Room, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
-import { readProfileFile, upsertActiveRoom, writeProfileFile } from "../config/profileFile";
+import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { Scripting } from "./Scripting";
+import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { McpInfo } from "./McpInfo";
 
@@ -39,12 +39,9 @@ const ticketView = (ticket: Ticket, nameFor: (key: string) => string) => ({
   })),
 });
 
-const RESTART_NOTE =
-  "Collagen runs one room per process — it joins the active room on its next start, so ask the user to restart collagen (q, then start it again).";
-
 const ListRoom = Tool.make("list-room", {
   description:
-    "List your current room (a stable short id plus its local label — the label can change, the short id never does) and the peers in it with the projects each shares. Call this first to discover who you can contact and about which project. otherRooms lists rooms this user has but is NOT currently in: peers, messages and tickets there are unreachable until the user switches rooms — if a request concerns one of those, say so instead of acting in the wrong room. Returns TOON (compact YAML/CSV-style) text.",
+    "The room the user is looking at (a stable short id plus its shared name) and the peers in it with the projects each shares; peers marked away are connected but working elsewhere. Call this first to discover who you can contact and about which project. otherRooms is one line per other room the user is in — name, short id, who is online, unread messages — nothing more; use switch-room if a request concerns one of them. Returns TOON (compact YAML/CSV-style) text.",
   // no `parameters`: an empty Schema.Struct({}) produces a JSON schema without
   // "type", which the MCP tool codec rejects at registration
   success: Schema.String,
@@ -223,27 +220,27 @@ const RenameRoom = Tool.make("rename-room", {
 
 const ListRooms = Tool.make("list-rooms", {
   description:
-    "Every room this user has created or joined, with the stable short id, the name, which one is active, and the invite id (the secret a friend needs to join — share it only when the user asks). Returns TOON text.",
+    "Every room this user is in, one line each: stable short id, shared name, who is online, unread messages waiting there, whether it is the one being looked at, and the invite id (the secret a friend needs to join — share it only when the user asks). Returns TOON text.",
   success: Schema.String,
 });
 
 const CreateRoom = Tool.make("create-room", {
   description:
-    "Create a new room for the user and make it their active room. Collagen runs one room per process, so it JOINS the new room on the next start — tell the user to restart collagen (q, then start it again). Returns the invite id to share with friends.",
+    "Create a new room for the user, join it live and look at it. Returns the invite id to share with friends.",
   parameters: Schema.Struct({ name: Schema.String }),
   success: Schema.String,
 });
 
 const JoinRoom = Tool.make("join-room", {
   description:
-    "Join a friend's room from its invite id (a uuid the friend copied with c) and make it the active room. Takes effect on the next start — tell the user to restart collagen. Optional 'name' is a local label until the room's shared name arrives.",
+    "Join a friend's room from its invite id (a uuid the friend copied with c), live, and look at it. Optional 'name' is a local label until the room's shared name arrives.",
   parameters: Schema.Struct({ inviteId: Schema.String, name: Schema.optional(Schema.String) }),
   success: Schema.String,
 });
 
 const SwitchRoom = Tool.make("switch-room", {
   description:
-    "Make one of the user's known rooms active (by short id, name, or invite id — see list-rooms). Takes effect on the next start — tell the user to restart collagen.",
+    "Look at (work in) another of the user's rooms, by short id, name, or invite id — see list-rooms. Instant: the user is then present there and away everywhere else; all other tools now refer to that room.",
   parameters: Schema.Struct({ room: Schema.String }),
   success: Schema.String,
 });
@@ -308,14 +305,24 @@ export const DevCollagenToolkit = Toolkit.make(
 );
 
 const makeHandlers = Effect.gen(function* () {
-    const room = yield* Room;
+    const rooms = yield* Rooms;
     const store = yield* StateStore;
     const mcpInfo = yield* McpInfo;
     const { profile } = yield* CliArgs;
     const inbox = yield* Inbox;
     const scripting = yield* Scripting;
-    const { identity, room: roomInfo, knownRooms, nameRef, setName } = yield* IdentityService;
+    const { identity, nameRef, setName } = yield* IdentityService;
+
+    // Every tool is scoped to the room the user is looking at — resolved per
+    // call, so switching rooms retargets all of them without a reconnect.
+    const focusedRoom = Effect.gen(function* () {
+      const h = yield* rooms.current;
+      const meta = yield* SubscriptionRef.get(h.room.meta);
+      return { id: h.id, name: meta.name, room: h.room };
+    });
+
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
+      const { room } = yield* focusedRoom;
       const peers = yield* SubscriptionRef.get(room.roster);
       const myName = yield* SubscriptionRef.get(nameRef);
       const lookup = (key: string) =>
@@ -329,6 +336,7 @@ const makeHandlers = Effect.gen(function* () {
       intent: string;
       findings: string;
     }) {
+      const { room } = yield* focusedRoom;
       const peers = yield* SubscriptionRef.get(room.roster);
       const target = peers.find((p) => p.name === input.peer);
       if (!target) return `failed: no peer named ${input.peer}`;
@@ -340,28 +348,41 @@ const makeHandlers = Effect.gen(function* () {
         );
     });
 
+    const roomLines = Effect.gen(function* () {
+      const all = yield* rooms.summaries;
+      const f = readProfileFile(profile);
+      return all.map((r) => ({
+        shortId: r.shortId,
+        name: r.name,
+        online: r.online,
+        unread: r.unread,
+        lookingAt: r.focused,
+        inviteId: f.rooms?.find((x) => x.id === r.id)?.id ?? r.id,
+      }));
+    });
+
     return {
       "list-room": () =>
-        Effect.all([SubscriptionRef.get(room.roster), SubscriptionRef.get(room.meta)]).pipe(
-          Effect.map(([peers, meta]) =>
-            toToon({
-              room: { shortId: shortRoomId(roomInfo.id), name: meta.name },
-              otherRooms: knownRooms
-                .filter((r) => r.id !== roomInfo.id)
-                .map((r) => ({ shortId: shortRoomId(r.id), name: r.name })),
-              peers: peers.map((p) => ({
-                name: p.name,
-                ai: p.ai,
-                aiStatus: p.aiStatus ?? "unknown",
-                projects: p.projects.map((x) => x.name),
-              })),
-            }),
-          ),
-          Effect.withSpan("Mcp.listRoom"),
-        ),
+        Effect.gen(function* () {
+          const { id, name, room } = yield* focusedRoom;
+          const peers = yield* SubscriptionRef.get(room.roster);
+          const others = (yield* rooms.summaries).filter((r) => r.id !== id);
+          return toToon({
+            room: { shortId: shortRoomId(id), name },
+            otherRooms: others.map((r) => ({ shortId: r.shortId, name: r.name, online: r.online, unread: r.unread })),
+            peers: peers.map((p) => ({
+              name: p.name,
+              ai: p.ai,
+              aiStatus: p.aiStatus ?? "unknown",
+              away: p.away ?? false,
+              projects: p.projects.map((x) => x.name),
+            })),
+          });
+        }).pipe(Effect.withSpan("Mcp.listRoom")),
       "send-to-peer": sendToPeer,
       "pending-threads": () =>
-        inbox.pending.pipe(
+        rooms.current.pipe(
+          Effect.flatMap((h) => inbox.pending(h.id)),
           Effect.map((threads) => toToon({ threads })),
           Effect.withSpan("Mcp.pendingThreads"),
         ),
@@ -404,7 +425,8 @@ const makeHandlers = Effect.gen(function* () {
           const waitMs = Math.min(Math.max(seconds ?? 55, 5), 570) * 1000;
           const started = yield* Clock.currentTimeMillis;
           while (true) {
-            const threads = yield* inbox.pending;
+            const { id } = yield* focusedRoom;
+            const threads = yield* inbox.pending(id);
             if (threads.length > 0) {
               return toToon({
                 threads,
@@ -428,7 +450,8 @@ const makeHandlers = Effect.gen(function* () {
             Effect.withSpan("Mcp.adoptThread"),
           ),
       "get-messages": ({ threadId }: { threadId: string }) =>
-        inbox.take(threadId).pipe(
+        rooms.current.pipe(
+          Effect.flatMap((h) => inbox.take(h.id, threadId)),
           Effect.map((messages) => toToon({ messages })),
           Effect.withSpan("Mcp.getMessages"),
         ),
@@ -455,55 +478,57 @@ const makeHandlers = Effect.gen(function* () {
           needs?: ReadonlyArray<string>;
         }>;
       }) {
-          const peers = yield* SubscriptionRef.get(room.roster);
-          const myName = yield* SubscriptionRef.get(nameRef);
-          const keyFor = (name: string) =>
-            name === myName ? identity.pubkey : peers.find((p) => p.name === name)?.key;
-          const now = yield* Clock.currentTimeMillis;
-          const unknown = input.steps.map((s) => s.owner).filter((o) => keyFor(o) === undefined);
-          if (unknown.length > 0) {
-            return yield* Effect.die(`unknown step owners: ${unknown.join(", ")} — use names from list-room`);
-          }
-          const id = crypto.randomUUID();
-          const ticket: Ticket = {
-            id,
-            threadId: id,
-            project: input.project,
-            goal: input.goal,
-            createdBy: identity.pubkey,
+        const { room } = yield* focusedRoom;
+        const peers = yield* SubscriptionRef.get(room.roster);
+        const myName = yield* SubscriptionRef.get(nameRef);
+        const keyFor = (name: string) =>
+          name === myName ? identity.pubkey : peers.find((p) => p.name === name)?.key;
+        const now = yield* Clock.currentTimeMillis;
+        const unknown = input.steps.map((s) => s.owner).filter((o) => keyFor(o) === undefined);
+        if (unknown.length > 0) {
+          return yield* Effect.die(`unknown step owners: ${unknown.join(", ")} — use names from list-room`);
+        }
+        const id = crypto.randomUUID();
+        const ticket: Ticket = {
+          id,
+          threadId: id,
+          project: input.project,
+          goal: input.goal,
+          createdBy: identity.pubkey,
+          updatedAt: now,
+          steps: input.steps.map((s, i) => ({
+            id: s.id ?? `s${i + 1}`,
+            owner: keyFor(s.owner)!,
+            intent: s.intent,
+            description: s.description,
+            needs: s.needs ?? [],
+            status: "pending" as const,
             updatedAt: now,
-            steps: input.steps.map((s, i) => ({
-              id: s.id ?? `s${i + 1}`,
-              owner: keyFor(s.owner)!,
-              intent: s.intent,
-              description: s.description,
-              needs: s.needs ?? [],
-              status: "pending" as const,
-              updatedAt: now,
-            })),
-          };
-          const merged = yield* room.shareTicket(ticket);
-          return toToon({ ticket: yield* renderTicket(merged) });
+          })),
+        };
+        const merged = yield* room.shareTicket(ticket);
+        return toToon({ ticket: yield* renderTicket(merged) });
       }),
       "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {
-          const all = yield* SubscriptionRef.get(room.tickets);
-          const ticket = all.get(input.ticketId);
-          if (!ticket) return yield* Effect.die(`no ticket ${input.ticketId} — check get-tickets`);
-          if (!ticket.steps.some((s) => s.id === input.stepId)) {
-            return yield* Effect.die(`no step ${input.stepId} on ticket ${input.ticketId}`);
-          }
-          const now = yield* Clock.currentTimeMillis;
-          const updated: Ticket = {
-            ...ticket,
-            updatedAt: now,
-            steps: ticket.steps.map((s) =>
-              s.id === input.stepId
-                ? { ...s, status: input.failed ? ("failed" as const) : ("settled" as const), result: input.result, updatedAt: now }
-                : s,
-            ),
-          };
-          const merged = yield* room.shareTicket(updated);
-          return toToon({ ticket: yield* renderTicket(merged) });
+        const { room } = yield* focusedRoom;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ticket = all.get(input.ticketId);
+        if (!ticket) return yield* Effect.die(`no ticket ${input.ticketId} — check get-tickets`);
+        if (!ticket.steps.some((s) => s.id === input.stepId)) {
+          return yield* Effect.die(`no step ${input.stepId} on ticket ${input.ticketId}`);
+        }
+        const now = yield* Clock.currentTimeMillis;
+        const updated: Ticket = {
+          ...ticket,
+          updatedAt: now,
+          steps: ticket.steps.map((s) =>
+            s.id === input.stepId
+              ? { ...s, status: input.failed ? ("failed" as const) : ("settled" as const), result: input.result, updatedAt: now }
+              : s,
+          ),
+        };
+        const merged = yield* room.shareTicket(updated);
+        return toToon({ ticket: yield* renderTicket(merged) });
       }),
       "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: {
         peer: string;
@@ -517,13 +542,14 @@ const makeHandlers = Effect.gen(function* () {
         stepId?: string;
         result?: string;
       }) {
+        const { room } = yield* focusedRoom;
         const peers = yield* SubscriptionRef.get(room.roster);
         const target = peers.find((p) => p.name === input.peer);
         if (!target) return `failed: no peer named ${input.peer}`;
         if (!(target.ai ?? "").startsWith("mock")) {
           return `failed: ${input.peer} runs "${target.ai ?? "no ai"}", not a mock — real peers can't be driven`;
         }
-        const need = (field: string, v: string | undefined): v is string => v !== undefined && v.length > 0;
+        const need = (_field: string, v: string | undefined): v is string => v !== undefined && v.length > 0;
         const action =
           input.action === "send-message"
             ? need("project", input.project) && need("intent", input.intent) && need("findings", input.findings)
@@ -550,6 +576,7 @@ const makeHandlers = Effect.gen(function* () {
       // ── settings ──
       "add-project": ({ path, name }: { path: string; name?: string }) =>
         Effect.gen(function* () {
+          const { id: roomId, name: roomName } = yield* focusedRoom;
           const abs = resolve(path);
           const isDir = yield* Effect.sync(() => {
             try {
@@ -563,7 +590,7 @@ const makeHandlers = Effect.gen(function* () {
           if (label.length === 0) return "failed: empty project name";
           let outcome = "";
           yield* store.update((s) => {
-            const here = s.rooms[roomInfo.id] ?? [];
+            const here = s.rooms[roomId] ?? [];
             if (here.some((p) => p.path === abs)) {
               outcome = `already sharing ${abs}`;
               return s;
@@ -572,20 +599,21 @@ const makeHandlers = Effect.gen(function* () {
               outcome = `failed: a project named "${label}" is already shared in this room — pass a different name`;
               return s;
             }
-            outcome = `sharing "${label}" (${abs}) in room ${roomInfo.name} — peers see it now`;
-            return { ...s, rooms: { ...s.rooms, [roomInfo.id]: [...here, newProject(label, abs)] } };
+            outcome = `sharing "${label}" (${abs}) in room ${roomName} — peers see it now`;
+            return { ...s, rooms: { ...s.rooms, [roomId]: [...here, newProject(label, abs)] } };
           });
           return outcome;
         }).pipe(Effect.withSpan("Mcp.addProject")),
       "remove-project": ({ name }: { name: string }) =>
         Effect.gen(function* () {
-          const before = roomProjects(yield* store.get, roomInfo.id);
+          const { id: roomId } = yield* focusedRoom;
+          const before = roomProjects(yield* store.get, roomId);
           if (!before.some((p) => p.name === name)) {
             return `failed: no project named "${name}" in this room (yours: ${before.map((p) => p.name).join(", ") || "none"})`;
           }
           yield* store.update((s) => ({
             ...s,
-            rooms: { ...s.rooms, [roomInfo.id]: (s.rooms[roomInfo.id] ?? []).filter((p) => p.name !== name) },
+            rooms: { ...s.rooms, [roomId]: (s.rooms[roomId] ?? []).filter((p) => p.name !== name) },
           }));
           return `stopped sharing "${name}"`;
         }).pipe(Effect.withSpan("Mcp.removeProject")),
@@ -612,54 +640,40 @@ const makeHandlers = Effect.gen(function* () {
         Effect.gen(function* () {
           const n = name.trim();
           if (n.length === 0) return "failed: empty room name";
+          const { room } = yield* focusedRoom;
           yield* room.rename(n);
           return `room renamed to "${n}" for everyone in it`;
         }).pipe(Effect.withSpan("Mcp.renameRoom")),
-      "list-rooms": () =>
-        Effect.sync(() => {
-          const f = readProfileFile(profile);
-          return toToon({
-            rooms: (f.rooms ?? []).map((r) => ({
-              shortId: shortRoomId(r.id),
-              name: r.name,
-              active: r.id === (f.activeRoomId ?? roomInfo.id),
-              current: r.id === roomInfo.id,
-              inviteId: r.id,
-            })),
-          });
-        }).pipe(Effect.withSpan("Mcp.listRooms")),
+      "list-rooms": () => roomLines.pipe(Effect.map((rows) => toToon({ rooms: rows })), Effect.withSpan("Mcp.listRooms")),
       "create-room": ({ name }: { name: string }) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           const n = name.trim();
           if (n.length === 0) return "failed: empty room name";
-          const id = uuidv7();
-          upsertActiveRoom(profile, { id, name: n, nameTs: Date.now() });
-          return `created room "${n}" [${shortRoomId(id)}] and made it active. ${RESTART_NOTE} Invite id to share: ${id}`;
+          const entry = newRoomEntry(n);
+          yield* rooms.join(entry, true);
+          return `created room "${n}" [${shortRoomId(entry.id)}] — you are in it now. Invite id to share: ${entry.id}`;
         }).pipe(Effect.withSpan("Mcp.createRoom")),
       "join-room": ({ inviteId, name }: { inviteId: string; name?: string }) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           const id = inviteId.trim();
           if (!isRoomId(id)) return "failed: that is not a room invite id (expected a uuid)";
-          upsertActiveRoom(profile, { id, name: name?.trim() || id.slice(0, 8) });
-          return `joined room [${shortRoomId(id)}] and made it active. ${RESTART_NOTE}`;
+          const entry = invitedRoomEntry(id);
+          yield* rooms.join(name?.trim() ? { ...entry, name: name.trim() } : entry, true);
+          return `joined room [${shortRoomId(id)}] — you are in it now; its shared name arrives from the peers`;
         }).pipe(Effect.withSpan("Mcp.joinRoom")),
       "switch-room": ({ room: which }: { room: string }) =>
-        Effect.sync(() => {
-          const f = readProfileFile(profile);
+        Effect.gen(function* () {
           const q = which.trim();
-          const hit = (f.rooms ?? []).find((r) => r.id === q || shortRoomId(r.id) === q || r.name === q);
-          if (!hit) return `failed: no known room matching "${q}" — see list-rooms`;
-          const alreadyActive = (f.activeRoomId ?? roomInfo.id) === hit.id;
-          if (hit.id === roomInfo.id && alreadyActive) return `already in "${hit.name}" and it is the active room`;
-          upsertActiveRoom(profile, hit);
-          // switching back to the room we're currently in just cancels a
-          // pending create/join — no restart needed for that
-          return hit.id === roomInfo.id
-            ? `"${hit.name}" is the active room again (a pending switch was cancelled) — no restart needed`
-            : `active room is now "${hit.name}" [${shortRoomId(hit.id)}]. ${RESTART_NOTE}`;
+          const all = yield* rooms.summaries;
+          const hit = all.find((r) => r.id === q || r.shortId === q || r.name === q);
+          if (!hit) return `failed: no room matching "${q}" — see list-rooms`;
+          if (hit.focused) return `already looking at "${hit.name}"`;
+          yield* rooms.setFocus(hit.id);
+          return `now in "${hit.name}" [${hit.shortId}] — ${hit.online} online, ${hit.unread} unread; all tools now refer to this room`;
         }).pipe(Effect.withSpan("Mcp.switchRoom")),
       "get-tickets": () =>
-        SubscriptionRef.get(room.tickets).pipe(
+        focusedRoom.pipe(
+          Effect.flatMap(({ room }) => SubscriptionRef.get(room.tickets)),
           Effect.flatMap((m) => Effect.forEach([...m.values()], renderTicket)),
           Effect.map((tickets) => toToon({ tickets })),
           Effect.withSpan("Mcp.getTickets"),
@@ -691,7 +705,8 @@ const InboxRoutes = Layer.mergeAll(
     "GET",
     "/inbox/pending",
     Effect.gen(function* () {
-      const threads = yield* (yield* Inbox).pending;
+      const h = yield* (yield* Rooms).current;
+      const threads = yield* (yield* Inbox).pending(h.id);
       return HttpServerResponse.text(threads.map(inboxLine).join("\n"));
     }),
   ),
@@ -700,9 +715,10 @@ const InboxRoutes = Layer.mergeAll(
       const seconds = Number(new URL(request.url, "http://localhost").searchParams.get("seconds") ?? "60");
       const waitMs = Math.min(Math.max(Number.isFinite(seconds) ? seconds : 60, 1), 300) * 1000;
       const inbox = yield* Inbox;
+      const rooms = yield* Rooms;
       const started = yield* Clock.currentTimeMillis;
       while (true) {
-        const threads = yield* inbox.pending;
+        const threads = yield* inbox.pending((yield* rooms.current).id);
         if (threads.length > 0) return HttpServerResponse.text(threads.map(inboxLine).join("\n"));
         const now = yield* Clock.currentTimeMillis;
         if (now - started >= waitMs) return HttpServerResponse.empty({ status: 204 });

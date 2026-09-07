@@ -114,13 +114,17 @@ The TUI borrows the web's vocabulary so changes are easy to say out loud.
   frames nest folders (`routes/room/overview`, `routes/room/messages` are the
   room's tabs). A `layout.tsx` next to frames wraps them: `routes/layout.tsx`
   is the brand header every frame sits in; `routes/room/layout.tsx` adds the
-  status line, the room panel with its tab bar, the footer, and the global
-  keys, and renders the active tab as `children`.
+  rooms sidebar, the status line, the room panel with its tab bar, the
+  footer, and the global keys, and renders the active tab as `children`.
+  `routes/settings` and `routes/new-room` (the sidebar's `+`) are full
+  frames of their own, like Discord's settings screen.
 - **`components/`** inside a frame or layout folder holds *its* child
   components, one folder each (`routes/room/components/Footer/Footer.tsx`);
   children that have children repeat the pattern. Siblings live side by side.
 - **Top-level `components/`** — app-agnostic primitives shared across frames
-  (`Panel`, `FsPicker`, key helpers).
+  (`Panel`, `FsPicker`, key helpers). App-specific pieces two frames share
+  sit in the lowest folder above both: `routes/components/RoomChooser` is
+  the join-or-create question used by setup and by new-room.
 - **`atoms.ts` sits at the lowest folder shared by everything that reads it**:
   `routes/atoms.ts` for state every frame needs, `routes/room/atoms.ts` for
   what several room sections share, `…/Footer/atoms.ts` for what only the
@@ -141,7 +145,7 @@ The TUI borrows the web's vocabulary so changes are easy to say out loud.
 - **`app/`** — the shell: `app.tsx` (maps routes to layouts and pages),
   `router.tsx` (a tiny route state), `session.tsx`, `theme.ts`, `runtime.ts`.
   `src/` itself holds only the two entries (`index.tsx`, `headless.ts`) and
-  folders: `app/`, `routes/`, `components/`, `services/`, `config/` (cli
+  folders: `app/`, `routes/`, `components/`, `services/` (incl. `Rooms`: every joined room live, one focused), `config/` (cli
   flags, profile file), `dev/` (testnet, mock agent), `lib/` (pure helpers) (setup is the frame shown before a session exists, so it is not a
   route).
 

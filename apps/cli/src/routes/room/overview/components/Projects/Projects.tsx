@@ -8,9 +8,9 @@ import { FS_PICKER_HINT, FsPicker } from "../../../../../components/FsPicker";
 import { Panel } from "../../../../../components/Panel";
 import { captureAtom } from "../../../../../components/focus";
 import { isEnter } from "../../../../../components/keys";
-import { useSession } from "../../../../../app/session";
 import { theme } from "../../../../../app/theme";
 import { clamp } from "../../../../../lib/math";
+import { roomAtom } from "../../../../atoms";
 import { rosterAtom, stateAtom, updateStateAtom } from "../../../atoms";
 import { projectRows } from "../../../projectRows";
 
@@ -18,7 +18,7 @@ import { projectRows } from "../../../projectRows";
  *  picker (which captures the keyboard), d removes one of yours. Projects
  *  belong to the room they were added in (Keet-style). */
 export function Projects() {
-  const roomId = useSession().room.id;
+  const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null, rooms: {} }));
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const updateState = useAtomSet(updateStateAtom);

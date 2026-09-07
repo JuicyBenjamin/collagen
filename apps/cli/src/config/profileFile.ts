@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { v7 as uuidv7 } from "uuid";
 import { configDir } from "../services/Identity";
 
 /** Synchronous pre-runtime access to the per-profile config file. The TUI
@@ -23,6 +24,19 @@ export interface ProfileFile {
   /** Every room this profile has joined; the process runs in one at a time. */
   rooms?: RoomEntry[];
   activeRoomId?: string;
+}
+
+/** A room you create: a fresh unguessable id, and your name stamped now so
+ *  it wins over joiners' placeholder labels. */
+export function newRoomEntry(name: string): RoomEntry {
+  return { id: uuidv7(), name: name.trim(), nameTs: Date.now() };
+}
+
+/** A room you were invited to: the invite IS the id; labeled by its short
+ *  prefix (ts 0) until the room's shared name arrives from a peer. */
+export function invitedRoomEntry(inviteId: string): RoomEntry {
+  const id = inviteId.trim();
+  return { id, name: id.slice(0, 8) };
 }
 
 export function storedRoom(f: ProfileFile): RoomEntry | undefined {

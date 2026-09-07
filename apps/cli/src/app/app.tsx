@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Option } from "effect";
-import { v7 as uuidv7 } from "uuid";
-import { upsertActiveRoom, writeProfileFile } from "../config/profileFile";
+import { invitedRoomEntry, newRoomEntry, upsertActiveRoom, writeProfileFile } from "../config/profileFile";
 import { RouterProvider, useRouter } from "./router";
 import { setCliArgs } from "./runtime";
 import { SessionProvider, type Session } from "./session";
 import { RootLayout } from "../routes/layout";
+import { NewRoomPage } from "../routes/new-room/page";
 import { RoomLayout } from "../routes/room/layout";
 import { MessagesPage } from "../routes/room/messages/page";
 import { OverviewPage } from "../routes/room/overview/page";
@@ -17,7 +17,8 @@ import { SettingsPage } from "../routes/settings/page";
  *   RootLayout (brand)
  *   ├─ setup            first run — before a session exists
  *   ├─ settings
- *   └─ RoomLayout (status · room panel · footer)
+ *   ├─ new-room         join or create another room (the sidebar's +)
+ *   └─ RoomLayout (rooms sidebar · status · room panel · footer)
  *      ├─ room/overview
  *      └─ room/messages
  *
@@ -26,32 +27,28 @@ import { SettingsPage } from "../routes/settings/page";
 export function App({
   profile,
   initialName,
-  room,
+  configured,
   onExit,
 }: {
   profile: string;
   initialName: string;
-  /** Resolved from flags/profile; undefined = first run, show setup. */
-  room: Session["room"] | undefined;
+  /** false = first run: no name or room yet, show setup. */
+  configured: boolean;
   onExit: () => void;
 }) {
-  const [session, setSession] = useState<Session | null>(room ? { profile, room } : null);
+  const [session, setSession] = useState<Session | null>(configured ? { profile } : null);
 
   if (session === null) {
     return (
       <RootLayout>
         <SetupPage
           initialName={initialName}
-          onDone={({ name, mode, roomName, roomId }) => {
-            // create: fresh unguessable id, and the chosen name is stamped so it
-            // is sent to joiners; join: the pasted invite IS the id, labeled by
-            // its short prefix (ts 0) until the room's shared name arrives.
-            const id = mode === "create" ? uuidv7() : roomId;
-            const label = mode === "create" ? roomName : roomId.slice(0, 8);
+          onDone={({ name, room }) => {
+            const entry = room.mode === "create" ? newRoomEntry(room.name) : invitedRoomEntry(room.inviteId);
             writeProfileFile(profile, { name });
-            upsertActiveRoom(profile, { id, name: label, ...(mode === "create" ? { nameTs: Date.now() } : {}) });
-            setCliArgs({ profile, name: Option.some(name), room: Option.some(id) });
-            setSession({ profile, room: { id, name: label } });
+            upsertActiveRoom(profile, entry);
+            setCliArgs({ profile, name: Option.some(name), room: Option.some(entry.id) });
+            setSession({ profile });
           }}
         />
       </RootLayout>
@@ -72,5 +69,6 @@ export function App({
 function Frames({ onExit }: { onExit: () => void }) {
   const { route } = useRouter();
   if (route === "settings") return <SettingsPage />;
+  if (route === "new-room") return <NewRoomPage />;
   return <RoomLayout onExit={onExit}>{route === "room/messages" ? <MessagesPage /> : <OverviewPage />}</RoomLayout>;
 }

@@ -21,6 +21,9 @@ export const SharedProfile = Schema.Struct({
    *  the whole room so "claude-code (unauthenticated)" is no surprise. */
   aiStatus: Schema.optional(AiStatus),
   projects: Schema.Array(SharedProject),
+  /** Connected to this room but working in another one: present for
+   *  messages, not counted as online, nothing auto-runs for them. */
+  away: Schema.optional(Schema.Boolean),
 });
 export type SharedProfile = typeof SharedProfile.Type;
 

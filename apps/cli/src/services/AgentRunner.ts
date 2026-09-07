@@ -4,7 +4,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { mcpServerName } from "./mcpAddress";
 import { Adapters, nudgePrompt, type Adapter, type SpawnCtx } from "./Adapters";
 import { CliArgs } from "./CliArgs";
-import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
@@ -14,7 +13,6 @@ import { StateStore } from "./StateStore";
 export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner", {
   make: Effect.gen(function* () {
     const { profile } = yield* CliArgs;
-    const { room } = yield* IdentityService;
     const inbox = yield* Inbox;
     const store = yield* StateStore;
     const mcpInfo = yield* McpInfo;
@@ -99,8 +97,9 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
      *  set of message ids that were queued when the run started. */
     const runOnce = Effect.fn("AgentRunner.runOnce")(function* (threadId: string) {
       const queued = yield* inbox.peekThread(threadId);
-      const sample = queued[0];
-      if (!sample) return null;
+      const first = queued[0];
+      if (!first) return null;
+      const { roomId, msg: sample } = first;
 
       const mcpUrl = yield* mcpInfo.awaitUrl;
       const state = yield* store.get;
@@ -139,7 +138,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         };
         yield* Effect.log(`queue → codex · ${sample.fromName}/${sample.project}`);
         yield* queueNudge(adopted.sessionId, ctx);
-        return new Set(queued.map((m) => m.id));
+        return new Set(queued.map((e) => e.msg.id));
       }
 
       const adapter = adapters[ai];
@@ -148,7 +147,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         return null;
       }
 
-      const proj = (state.rooms[room.id] ?? []).find((p) => p.name === sample.project);
+      const proj = (state.rooms[roomId] ?? []).find((p) => p.name === sample.project);
       const ctx: SpawnCtx = {
         cwd: proj?.path ?? homedir(),
         mcpUrl,
@@ -160,7 +159,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         `${Option.isSome(sessionId) ? "continue" : "start"} ${ai} · ${sample.fromName}/${sample.project}`,
       );
 
-      const before = new Set(queued.map((m) => m.id));
+      const before = new Set(queued.map((e) => e.msg.id));
       yield* spawn(adapter, ctx, threadId);
       return before;
     });
@@ -175,7 +174,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
           let before = yield* runOnce(threadId);
           while (before !== null) {
             const queued = yield* inbox.peekThread(threadId);
-            if (!queued.some((m) => !before!.has(m.id))) break;
+            if (!queued.some((e) => !before!.has(e.msg.id))) break;
             before = yield* runOnce(threadId);
           }
         }),

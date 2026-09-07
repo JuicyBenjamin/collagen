@@ -6,16 +6,17 @@ import { writeProfileFile } from "../../config/profileFile";
 import { useRouter } from "../../app/router";
 import { useSession } from "../../app/session";
 import { theme } from "../../app/theme";
-import { myNameAtom, roomMetaAtom } from "../atoms";
+import { myNameAtom, roomAtom } from "../atoms";
 import { renameRoomAtom, setMyNameAtom } from "./atoms";
 
 /** Settings frame: your name + the room's shared name, both applied live.
  *  The room id is shown for reference only — it's the invite, never editable. */
 export function SettingsPage() {
-  const { profile, room } = useSession();
+  const { profile } = useSession();
+  const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { navigate } = useRouter();
   const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => "");
-  const roomName = AsyncResult.getOrElse(useAtomValue(roomMetaAtom), () => ({ name: room.name, ts: 0 })).name;
+  const roomName = room.name;
   const setMyName = useAtomSet(setMyNameAtom);
   const renameRoom = useAtomSet(renameRoomAtom);
 

@@ -157,7 +157,7 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
       }),
     );
@@ -180,9 +180,9 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
       }),
     );
@@ -197,11 +197,11 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message({ threadId: "t-a" }));
+        yield* inbox.push("testroom", message({ threadId: "t-a" }));
         yield* runner.runThread("t-a");
-        yield* inbox.push(message({ threadId: "t-b" }));
+        yield* inbox.push("testroom", message({ threadId: "t-b" }));
         yield* runner.runThread("t-b");
-        yield* inbox.push(message({ threadId: "t-a" }));
+        yield* inbox.push("testroom", message({ threadId: "t-a" }));
         yield* runner.runThread("t-a");
       }),
     );
@@ -224,7 +224,7 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
       }),
     );
@@ -244,7 +244,7 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
         // messages stay for the user's session to pull via get-messages
         expect(yield* inbox.peekThread("thread-1")).toHaveLength(1);
@@ -262,7 +262,7 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
         expect(yield* inbox.peekThread("thread-1")).toHaveLength(1);
       }),
@@ -276,7 +276,7 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
         // still queued for whoever pulls via get-messages
         expect(yield* inbox.peekThread("thread-1")).toHaveLength(1);
@@ -291,7 +291,7 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message());
+        yield* inbox.push("testroom", message());
         yield* runner.runThread("thread-1");
       }),
     );
@@ -304,7 +304,7 @@ describe("AgentRunner", () => {
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push(message({ project: "not-in-pool" }));
+        yield* inbox.push("testroom", message({ project: "not-in-pool" }));
         yield* runner.runThread("thread-1");
       }),
     );
