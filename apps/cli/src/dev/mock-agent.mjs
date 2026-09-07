@@ -63,19 +63,21 @@ async function main() {
 
   const messages = toolText(await call(2, "get-messages", { threadId }));
 
-  // A ticket step is work handed to us: do what a real agent would and settle
-  // it. The nudge text names the exact call to make.
-  const step = intent.startsWith("ticket-step:") && /ticketId \\?"([^"\\]+)\\?", stepId \\?"([^"\\]+)\\?"/.exec(messages);
-  if (step) {
-    const [, ticketId, stepId] = step;
-    const r = toolText(
-      await call(3, "settle-step", {
-        ticketId,
-        stepId,
-        result: `mock agent: settled step ${stepId} without looking at anything (${new Date().toISOString()}).`,
-      }),
-    );
-    console.log(JSON.stringify({ session_id: session ?? "mock#0", result: `mock agent: settled ${stepId} of ${ticketId} — ${r.slice(0, 60)}` }));
+  // Ticket steps are work handed to us: do what a real agent would and settle
+  // every one the thread held (a pull drains the whole thread, so a step may
+  // arrive alongside ordinary messages). The nudge text names the exact call.
+  const steps = [...messages.matchAll(/ticketId \\?"([^"\\]+)\\?", stepId \\?"([^"\\]+)\\?"/g)];
+  const settled = [];
+  for (const [, ticketId, stepId] of steps) {
+    await call(3, "settle-step", {
+      ticketId,
+      stepId,
+      result: `mock agent: settled step ${stepId} without looking at anything (${new Date().toISOString()}).`,
+    });
+    settled.push(stepId);
+  }
+  if (settled.length > 0 && intent.startsWith("ticket-step:")) {
+    console.log(JSON.stringify({ session_id: session ?? "mock#0", result: `mock agent: settled ${settled.join(", ")}` }));
     return;
   }
 
@@ -102,7 +104,7 @@ async function main() {
       session_id: `mock#${replied ? acked + 1 : acked}`,
       result: `mock agent: read thread${
         replied
-          ? `, replied via send-to-peer (ack ${acked + 1}/${MAX_ACKS})`
+          ? `${settled.length ? `, settled ${settled.join(", ")}` : ""}, replied via send-to-peer (ack ${acked + 1}/${MAX_ACKS})`
           : acked >= MAX_ACKS
             ? `, ack cap reached (${MAX_ACKS})`
             : ", not acking a mock message"
