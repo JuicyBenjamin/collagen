@@ -1,10 +1,9 @@
-import { Clock, Context, Effect, Exit, Layer, Option, Scope, Stream, SubscriptionRef } from "effect";
-import { Room, RoomConfig, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage } from "@collagen/p2p";
+import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
+import { Room, RoomConfig, Swarm, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
-import { loadDevBootstrap } from "./DevBootstrap";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
@@ -31,7 +30,8 @@ export interface RoomSummary {
 }
 
 /** All the rooms this profile is in, live at once — like conversations, you
- *  are in many and look at one. The focused room is where you work: you're
+ *  are in many and look at one. They share the identity's one swarm (a room
+ *  is a topic on it). The focused room is where you work: you're
  *  `away` everywhere else (connected, receiving, not counted as online, and
  *  nothing auto-runs for you there). Switching focus is instant. */
 export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
@@ -42,7 +42,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     const aiStatus = yield* AiStatus;
     const inbox = yield* Inbox;
     const runner = yield* AgentRunner;
-    const bootstrap = Option.getOrUndefined(yield* loadDevBootstrap);
+    const swarm = yield* Swarm;
 
     const focused = yield* SubscriptionRef.make(initial.id);
     const handles = yield* SubscriptionRef.make<ReadonlyArray<RoomHandle>>([]);
@@ -97,6 +97,12 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     mine.some((m) => m.id === s.id) ? { ...s, status: "suspended" as const, updatedAt: now } : s,
                   ),
                 });
+                // the step is the creator's ask, so it arrives from them by name
+                const creatorName =
+                  ticket.createdBy === identity.pubkey
+                    ? yield* SubscriptionRef.get(nameRef)
+                    : ((yield* SubscriptionRef.get(room.roster)).find((p) => p.key === ticket.createdBy)?.name ??
+                      ticket.createdBy.slice(0, 8));
                 for (const s of mine) {
                   const settled = ticket.steps
                     .filter((x) => x.status === "settled" && s.needs.includes(x.id))
@@ -107,7 +113,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     id: crypto.randomUUID(),
                     threadId,
                     from: ticket.createdBy,
-                    fromName: "ticket",
+                    fromName: creatorName,
                     project: ticket.project,
                     intent: `ticket-step:${s.intent}`,
                     findings: `Ticket "${ticket.goal}" (${ticket.id}) — you own step ${s.id}: ${s.description}${
@@ -201,14 +207,13 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       if (existing) return existing;
       const scope = yield* Scope.make();
       const config: Context.Service.Shape<typeof RoomConfig> = {
-        identity,
         roomName: entry.id,
         roomLabel: { name: entry.name, ts: entry.nameTs ?? 0 },
         getProfile: profileFor(entry.id),
-        bootstrap,
       };
       const room = yield* Room.make.pipe(
         Effect.provideService(RoomConfig, config),
+        Effect.provideService(Swarm, swarm),
         Effect.provideService(Scope.Scope, scope),
       );
       const handle: RoomHandle = { id: entry.id, room };

@@ -89,17 +89,18 @@ function TicketRow({
   nameFor: (key: string) => string;
 }) {
   const done = t.steps.filter((s) => s.status === "settled").length;
-  const color = selected ? theme.accent : done === t.steps.length ? theme.dim : theme.fg;
+  const failed = t.steps.some((s) => s.status === "failed");
+  const complete = done === t.steps.length;
+  const color = selected ? theme.accent : complete ? theme.dim : theme.fg;
   return (
     <box flexDirection="column">
       <text fg={color} truncate wrapMode="none">
         {selected ? "› " : "  "}
-        <span fg={theme.warn}>⧉ </span>
+        <span fg={complete ? theme.ok : theme.warn}>{complete ? "✓ " : failed ? "✗ " : "⧉ "}</span>
         {t.goal}
         <span fg={theme.dim}>
-          {" "}· {t.project} · {done}/{t.steps.length}{" "}
+          {" "}· {t.project} · {done}/{t.steps.length}
         </span>
-        <span fg={theme.dim}>{t.steps.map((s) => STEP_GLYPH[s.status]).join(" ")}</span>
       </text>
       {expanded
         ? t.steps.map((s) => (

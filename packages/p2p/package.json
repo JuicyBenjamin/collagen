@@ -16,6 +16,7 @@
     "b4a": "^1.8.1",
     "effect": "4.0.0-rc.112",
     "hypercore-crypto": "^3.7.0",
+    "hyperdht": "^6.32.0",
     "hyperswarm": "^4.17.0"
   },
   "devDependencies": {

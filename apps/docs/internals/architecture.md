@@ -22,7 +22,8 @@ flowchart TD
   AiStatus["AiStatus\nis the CLI installed + logged in"]
   AgentRunner["AgentRunner\nresume policy per thread"]
   Rooms["Rooms\nevery known room live, one focused"]
-  Room["Room ×N (p2p)\nHyperswarm: roster · messages · tickets · meta"]
+  Swarm["Swarm (p2p)\none Hyperswarm per identity"]
+  Room["Room ×N (p2p)\na topic: roster · messages · tickets · meta"]
   Scripting["Scripting\nCallScript engine"]
   Mcp["Mcp\nMcpServer over HTTP"]
   Registrar["Registrar\nregisters MCP in AI configs"]
@@ -33,6 +34,7 @@ flowchart TD
   Adapters --> AgentRunner
   AiStatus --> Rooms
   AgentRunner --> Rooms
+  Identity --> Swarm --> Room
   Rooms --> Room
   Rooms --> Scripting --> Mcp
   Rooms --> Mcp
@@ -59,25 +61,41 @@ UI atoms follow it with `watch` (a `switchMap` over focus), so switching is inst
 nothing restarts. `join` opens a room live; `summaryChanges` streams one line per room
 (name, online, unread, focused) for the rail and `list-rooms`.
 
-## The p2p core: `Room`
+## The p2p core: `Swarm` and `Room`
 
-`Room` (`packages/p2p/src/Room.ts`) is a **scoped service** wrapping one Hyperswarm swarm:
+`Swarm` (`packages/p2p/src/Swarm.ts`) is **one Hyperswarm per identity** — one DHT node
+per keypair, however many rooms. A room is a **topic** on it; a peer you share several
+rooms with is **one connection** carrying frames for each. (The first design ran one
+swarm per room; two DHT nodes announcing the same key made relayed handshakes land on
+the wrong node and connections time out for minutes — found 2026-09-07.)
 
 - `acquireRelease` creates the swarm and destroys it when the scope closes.
-- Five frame kinds ride the **same connections**: `profile` (presence), `msg` (directed
-  message), `ticket` (a whole ticket, merged on receipt), `room-meta` (the shared name,
-  last-writer-wins), `drive` (remote control of a mock peer).
-- Roster, tickets and meta are `SubscriptionRef`s (current value + `.changes` stream);
-  inbound messages are a `PubSub` exposed as a `Stream`.
-- Greeting a new connection sends our profile, the room name, and every ticket we know —
-  that's how a late joiner reconstructs shared state.
-- Discovery is refreshed every 15 s; a health line is logged every minute, and if peers
-  are known but none are connected for two minutes the swarm is recreated (a hyperswarm
-  connection attempt can hang and block rediscovery).
+- What crosses a connection is an **envelope**: `{ topic, frame }`. Five frame kinds:
+  `profile` (presence), `msg` (directed message), `ticket` (a whole ticket, merged on
+  receipt), `room-meta` (the shared name, last-writer-wins), `drive` (remote control of a
+  mock peer). The swarm routes each envelope to the room registered for its topic.
+- A room joins with `TopicHooks` — `greet(key)`, `onFrame(key, frame)`, `onPeerGone(key)`.
+  When a connected peer is discovered on a topic we're in, the swarm asks that room to
+  greet (idempotent; re-swept every 15 s and on hyperswarm `update`, because topics can
+  arrive after the connection). Nothing is ever said to a peer about rooms it wasn't
+  discovered in — an invite is a secret.
+- Discovery is refreshed every 15 s per topic; a health line is logged every minute, and
+  if peers are known but none are connected for two minutes the swarm is recreated (a
+  hyperswarm connection attempt can hang and block rediscovery).
 
-Every frame is validated with `Schema` at the boundary (`FrameFromJson`); malformed
-frames are logged and dropped, never trusted. Unknown fields are ignored, so peers on
-slightly different versions keep talking.
+`Room` (`packages/p2p/src/Room.ts`) is a **scoped service** for one topic on the swarm:
+
+- Roster (peers who greeted us *in this room*), tickets and meta are `SubscriptionRef`s
+  (current value + `.changes` stream); inbound messages are a `PubSub` exposed as a
+  `Stream`.
+- Greeting a peer sends our profile, the room name, and every ticket we know — that's
+  how a late joiner reconstructs shared state. A peer that greets us first is answered in
+  kind.
+- `sendTo` requires the peer to be *in the room*, not merely connected through another.
+
+Every envelope is validated with `Schema` at the boundary (`EnvelopeFromJson`);
+malformed ones are logged and dropped, never trusted. Unknown fields are ignored, so
+peers on slightly different versions keep talking.
 
 ### Threads
 

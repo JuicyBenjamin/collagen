@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Mock agent: stands in for a real LLM CLI on machines without one, so a
 // second device can be a full peer in a real cross-network test. It walks the
-// exact path a real agent would — MCP handshake, get-messages, send-to-peer —
-// only the "thinking" is canned. Spawned by the `mock` adapter; argv:
+// exact path a real agent would — MCP handshake, get-messages, then
+// send-to-peer (a message) or settle-step (a ticket step) — only the
+// "thinking" is canned. Spawned by the `mock` adapter; argv:
 //   mcpUrl threadId fromName project intent session
 // `session` is the runner's stored session id for this thread — ours encode
 // the ack count as "mock#N", which is the only state the mock needs.
@@ -31,7 +32,17 @@ async function rpc(body, session) {
   return { sid, json };
 }
 
-const toolText = (r) => r.json?.result?.content?.[0]?.text ?? "";
+/** A tool's text result. String-returning tools arrive JSON-encoded
+ *  ('"sent to alice"'), so decode that layer to get the actual text. */
+const toolText = (r) => {
+  const raw = r.json?.result?.content?.[0]?.text ?? "";
+  if (!raw.startsWith('"')) return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
 
 async function main() {
   const init = await rpc({
@@ -51,6 +62,22 @@ async function main() {
     rpc({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } }, mcpSession);
 
   const messages = toolText(await call(2, "get-messages", { threadId }));
+
+  // A ticket step is work handed to us: do what a real agent would and settle
+  // it. The nudge text names the exact call to make.
+  const step = intent.startsWith("ticket-step:") && /ticketId \\?"([^"\\]+)\\?", stepId \\?"([^"\\]+)\\?"/.exec(messages);
+  if (step) {
+    const [, ticketId, stepId] = step;
+    const r = toolText(
+      await call(3, "settle-step", {
+        ticketId,
+        stepId,
+        result: `mock agent: settled step ${stepId} without looking at anything (${new Date().toISOString()}).`,
+      }),
+    );
+    console.log(JSON.stringify({ session_id: session ?? "mock#0", result: `mock agent: settled ${stepId} of ${ticketId} — ${r.slice(0, 60)}` }));
+    return;
+  }
 
   // Reply to pings, but capped per thread and never to another mock's ack —
   // otherwise two mocks (or a polite real agent) ping-pong forever.

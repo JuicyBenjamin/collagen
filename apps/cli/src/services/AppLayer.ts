@@ -1,8 +1,10 @@
-import { Effect, Layer, Stream, SubscriptionRef } from "effect";
+import { Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { Swarm, SwarmConfig } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
 import { AiStatus } from "./AiStatus";
 import { AgentRunner } from "./AgentRunner";
+import { loadDevBootstrap } from "./DevBootstrap";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
@@ -31,12 +33,26 @@ const Daemons = Layer.effectDiscard(
   }),
 );
 
+/** One swarm for this identity; every room is a topic on it. */
+const SwarmLive = Swarm.layer.pipe(
+  Layer.provide(
+    Layer.effect(
+      SwarmConfig,
+      Effect.gen(function* () {
+        const { identity } = yield* IdentityService;
+        return { identity, bootstrap: Option.getOrUndefined(yield* loadDevBootstrap) };
+      }),
+    ),
+  ),
+);
+
 /** The whole app apart from the UI. Requires CliArgs.
  *  Process layer (identity, state, inbox, agents, MCP) wraps the room layer
- *  (Rooms: every joined room live, one focused). */
+ *  (Rooms: every joined room live, one focused, on one swarm). */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(Scripting.layer),
   Layer.provideMerge(Rooms.layer),
+  Layer.provideMerge(SwarmLive),
   Layer.provideMerge(AgentRunner.layer),
   Layer.provideMerge(AiStatus.layer),
   Layer.provideMerge(AdaptersLive),

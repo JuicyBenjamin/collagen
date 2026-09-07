@@ -41,8 +41,6 @@ _Last updated: 2026-09-07._
 
 ## Known issues
 
-- **Discovery on the local testnet is slow after repeated restarts** (45–130 s observed
-  on 2026-09-07 vs. ~15 s normally). Real network unaffected so far; watch it.
 - **Concurrent MCP registration** — two instances registering at once can race on
   `~/.claude.json` (a one-off `claude mcp add exited 1`). Idempotent, self-heals.
 - **Tickets and messages live in memory.** A late joiner receives every ticket from the
@@ -103,4 +101,17 @@ Rough order, not committed.
   agents need dependencies and inline results more than columns, and a review gate is
   just a final step the creator owns. Tickets have no thread of their own — steps ride
   the message threads.
+- **One swarm per identity, rooms are topics** (2026-09-07) — the first multi-room
+  runtime opened one Hyperswarm per room, i.e. several DHT nodes on one keypair. Relayed
+  handshakes then landed on the wrong node and every connection attempt timed out until
+  the 2‑minute self-heal. Now `Swarm` owns the single node and routes `{topic, frame}`
+  envelopes to `Room`s; a peer in several of your rooms is one connection.
+- **Dev testnet nodes are declared not firewalled** (2026-09-07) — same day, second
+  cause of slow local connects: our DHT nodes auto-detected their NAT on a 3‑node
+  localhost DHT and concluded `firewalled`, so hyperdht took its same-host connect path
+  (client dials the LAN address directly, server waits for a holepunch) which fails on
+  this machine — every attempt `r0 … connection timed out`, 40–130 s to connect when it
+  connected at all. hyperdht's own testnet helper builds its nodes with
+  `firewalled: false`; we now do the same when a dev bootstrap is present. Local peers
+  connect in ~40 ms. The public DHT keeps detection on.
 - **"broadcast", never "gossip"** — vocabulary for shared state.

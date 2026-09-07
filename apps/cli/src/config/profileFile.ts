@@ -48,8 +48,11 @@ export function storedRoom(f: ProfileFile): RoomEntry | undefined {
  *  persisting broadcast state about the room we're in. */
 export function upsertRoom(profile: string, room: RoomEntry): void {
   const f = readProfileFile(profile);
-  const rooms = (f.rooms ?? []).filter((r) => r.id !== room.id);
-  writeProfileFile(profile, { rooms: [...rooms, room] });
+  const rooms = f.rooms ?? [];
+  // in place, not filter+append: the rail lists rooms in this order, and a
+  // relabel must not make a room jump to the bottom
+  const next = rooms.some((r) => r.id === room.id) ? rooms.map((r) => (r.id === room.id ? room : r)) : [...rooms, room];
+  writeProfileFile(profile, { rooms: next });
 }
 
 /** Add-or-relabel a room and make it active (an explicit create/join/switch). */

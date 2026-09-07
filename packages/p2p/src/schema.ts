@@ -107,8 +107,19 @@ export const DriveFrame = Schema.Struct({
 export const Frame = Schema.Union([ProfileFrame, MessageFrame, TicketFrame, RoomMetaFrame, DriveFrame]);
 export type Frame = typeof Frame.Type;
 
-/** Wire codec: JSON string <-> validated Frame. */
-export const FrameFromJson = Schema.fromJsonString(Frame);
+/** What actually crosses a connection: a frame addressed to one room. One
+ *  connection per peer carries every room the two of you share, so each
+ *  frame names its room by topic (the hex of the swarm topic — knowing it
+ *  reveals nothing about other rooms, and only rooms the peer was discovered
+ *  in are ever mentioned to them). */
+export const Envelope = Schema.Struct({
+  topic: Schema.String,
+  frame: Frame,
+});
+export type Envelope = typeof Envelope.Type;
+
+/** Wire codec: JSON string <-> validated Envelope. */
+export const EnvelopeFromJson = Schema.fromJsonString(Envelope);
 
 export const Bootstrap = Schema.Array(
   Schema.Struct({ host: Schema.String, port: Schema.Finite }),

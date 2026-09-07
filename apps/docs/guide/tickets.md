@@ -82,9 +82,9 @@ dependency order is enforced by delivery, not by remembering.
 
 ## In the TUI
 
-The overview tab lists the room's tickets: goal, project, `settled/total`, and a glyph per
-step (`·` pending, `⟳` suspended, `✓` settled, `✗` failed). `enter` unfolds the steps
-with owner, status and result.
+The overview tab lists the room's tickets: goal, project, `settled/total` — `⧉` while in
+flight, `✓` when every step has settled, `✗` if one failed. `enter` unfolds the steps
+with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed) and result.
 
 ## Sync model
 

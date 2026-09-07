@@ -67,7 +67,11 @@ The public DHT hairpins on localhost, so dev uses a local one:
 pnpm --filter @collagen/cli dev:net
 ```
 
-This writes `~/.config/collagen/dev-bootstrap.json`, which clients auto-detect.
+This writes `~/.config/collagen/dev-bootstrap.json`, which clients auto-detect. A client
+that finds it builds its DHT node with `firewalled: false` (everything is on this host —
+the same thing hyperdht's testnet helper does for its own nodes); two local peers then
+connect in well under a second. If they don't, read the `swarm connection … closed`
+lines in the log first — they carry the target address, bytes each way, and the reason.
 
 ### 2. Start two peers
 
