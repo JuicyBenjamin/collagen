@@ -2,6 +2,7 @@ import { Effect, Stream, SubscriptionRef } from "effect";
 import { type LocalState } from "@collagen/p2p";
 import { AiStatus } from "../../services/AiStatus";
 import { IdentityService } from "../../services/Identity";
+import { Outbox } from "../../services/Outbox";
 import { Rooms } from "../../services/Rooms";
 import { StateStore } from "../../services/StateStore";
 import { Updates } from "../../services/Updates";
@@ -68,6 +69,34 @@ export const admittedAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.writable));
   })),
+);
+
+/** Everything the agent wants to send, across rooms, waiting for the person. */
+export const outboxAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Outbox).changes;
+  })),
+);
+
+/** The person rewrote the text before sending. */
+export const editOutgoingAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ id, text }: { id: string; text: string }) {
+    yield* (yield* Outbox).edit(id, text);
+  }),
+);
+
+/** The person approves: it leaves now. */
+export const approveOutgoingAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ id }: { id: string }) {
+    return yield* (yield* Outbox).approve(id);
+  }),
+);
+
+/** The person rejects: it never leaves. */
+export const rejectOutgoingAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ id }: { id: string }) {
+    yield* (yield* Outbox).reject(id);
+  }),
 );
 
 /** Is a newer collagen on npm; is an install running; what to tell the user. */

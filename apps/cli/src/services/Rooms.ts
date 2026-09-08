@@ -128,7 +128,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     intent: `ticket-step:${s.intent}`,
                     findings: `Ticket "${ticket.goal}" (${ticket.id}) — you own step ${s.id}: ${s.description}${
                       settled ? `\nSettled inputs:\n${settled}` : ""
-                    }\nWhen done, call settle-step with ticketId "${ticket.id}", stepId "${s.id}", and your findings.`,
+                    }\nTell your user about this step and let them decide whether and how it gets done — do not start on it by yourself. When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${s.id}", and the result they want to send; it waits for their approval in the collagen TUI.`,
                     ts: now,
                   };
                   yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${s.id} actionable`);
