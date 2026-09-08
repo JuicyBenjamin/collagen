@@ -20,8 +20,7 @@
   ],
   "type": "module",
   "bin": {
-    "collagen": "bin/collagen.js",
-    "collagen-headless": "bin/collagen-headless.js"
+    "collagen": "bin/collagen.js"
   },
   "files": [
     "bin",

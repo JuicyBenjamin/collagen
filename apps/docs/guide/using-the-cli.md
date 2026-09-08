@@ -112,7 +112,8 @@ auto-responds.
 No terminal (a server, a spare machine)? Run the same app without the TUI:
 
 ```sh
-COLLAGEN_LOG=/tmp/collagen.log pnpm --filter @collagen/cli exec tsx src/headless.ts --name yourname
+COLLAGEN_LOG=/tmp/collagen.log collagen --headless --name yourname
 ```
 
-Everything works identically; activity goes to the log file instead of a screen.
+Everything works identically; activity goes to the log file instead of a screen. (From
+source: `pnpm --filter @collagen/cli exec tsx src/headless.ts …`.)
