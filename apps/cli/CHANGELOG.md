@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.2.0-alpha...cli-v0.3.0-alpha) (2026-09-08)
+
+
+### Features
+
+* **cli:** human in the loop — the outbox gate and relay-only prompts ([9c708ed](https://github.com/JuicyBenjamin/collagen/commit/9c708edca09f9a1d88a36516fd2aed6aa34141c8))
+* **p2p:** outgoing and proposal schemas, an outbox in LocalState ([d8bdd0d](https://github.com/JuicyBenjamin/collagen/commit/d8bdd0d47185a76352966240838fb51921f07a82))
+
 ## [0.2.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.1.1-alpha...cli-v0.2.0-alpha) (2026-09-08)
 
 
