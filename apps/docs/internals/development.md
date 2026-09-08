@@ -172,6 +172,76 @@ To add a tab: create `routes/room/<name>/page.tsx`, add the route to
 section inside a tab: a folder under that tab's `components/` with the
 component (and `atoms.ts` if it needs runtime state nobody else reads).
 
+## Workflow: branches, commits, staging
+
+Work happens on branches and lands on `main` by **rebase merge**, so every commit
+arrives as-is and becomes a line in the release notes. Every commit is therefore a
+conventional commit — `commitlint` checks each PR's commits (types: the conventional
+set; scopes: `cli`, `p2p`, `docs`, `e2e`, `deps`, `release`, `main`, `ci`). Squash is
+allowed for a genuinely messy branch; merge commits are off.
+
+```sh
+git switch -c feat/rooms-rail
+# … commits like: feat(cli): rooms rail · fix(p2p): retry admission · docs: rail keys
+gh pr create --fill
+gh pr merge --rebase --auto      # merges when ci is green
+git switch main && git pull     # picks up the bot's release commit too
+```
+
+**Staging** for a peer-to-peer app is separate identities and rooms, not servers:
+`pnpm dev -- --profile staging` runs a dev build with its own identity, state, store,
+MCP port and MCP server name next to your real install; join a **staging room** (its own
+invite id) from your dev machines and never the real one. Same-machine: the local testnet
+below. A newer *app* version in a real room is harmless; a new *protocol* version shows
+peers as `⚠ other collagen version` — by design.
+
+## Building and releasing
+
+The published package is **`@collagen/cli`** (`npx @collagen/cli`, command `collagen`).
+`packages/p2p` is bundled into it and is never published on its own.
+
+```sh
+pnpm --filter @collagen/cli build     # tsup → apps/cli/dist (TUI + headless entries)
+node apps/cli/bin/collagen.js --version
+pnpm --filter @collagen/cli pack      # the exact tarball npm would get
+```
+
+- `bin/collagen.js` re-runs Node with `--experimental-ffi` (OpenTUI's renderer) and
+  refuses Node < 26.4; `bin/collagen-headless.js` runs the headless entry directly.
+- The version is baked in at build time from `package.json`; `pnpm dev` reports `dev`.
+- The **protocol version** (`PROTOCOL_VERSION` in `packages/p2p/src/schema.ts`) is
+  separate from the package version: bump it whenever frames, log entries or the view
+  layout change — peers on another protocol are flagged, not silently dropped.
+
+**Release flow (release-please, lockstep):** commits are the release notes. On every push
+to `main` the `release` workflow reads the conventional commits since the last release and
+keeps one release PR current. All packages share **one version** (like Effect, MUI, Angular:
+same number = built and tested together): `@collagen/cli` and `@collagen/p2p` bump in step,
+each with its own `CHANGELOG.md` of its own commits (attributed by path), grouped Features /
+Bug Fixes with each line labelled by scope (`**cli:** …`). `feat` bumps minor, `fix` patch,
+`feat!` / `BREAKING CHANGE:` major (pre-1.0: minor). `docs`, `test`, `chore`, `ci`, `build`,
+`refactor` are hidden and never trigger a release — the type is the fence, the scope is the
+label: user-facing work is `feat(cli|p2p):` or `fix(cli|p2p):`, documentation is `docs(...)`.
+Merging the PR tags `cli-vX.Y.Z` and `p2p-vX.Y.Z`, creates the GitHub Releases with the
+notes, and publishes `@collagen/cli` (p2p is bundled into it, never published) through npm's
+**trusted publishing** (GitHub OIDC — configured on npmjs.com under the package's settings:
+repository `JuicyBenjamin/collagen`, workflow `release.yml`; no token in the repo). Adding a
+package later is one more entry in `release-please-config.json`.
+
+**Zero-touch:** with a repo secret `RELEASE_TOKEN` (fine-grained PAT for this repo:
+Contents + Pull requests write) and "Allow auto-merge" enabled, the release PR merges
+itself once `ci` is green, and the merge triggers the publish — every push with a `feat`
+or `fix` becomes a release within minutes; nothing else does. Without the secret the PR
+waits for a human merge (merges made with the default `GITHUB_TOKEN` would not re-trigger
+the workflow — GitHub's loop guard — which is why the PAT is needed for the automatic
+path). The bot's release commit only touches versions and changelogs; `git pull` before
+your next push.
+
+One-time, by hand: the very first version can't use trusted publishing (the package has
+to exist first) — `npm login` then `pnpm --filter @collagen/cli publish --access public`
+— then set up the trusted publisher on npmjs.com. `ci.yml` runs typecheck, tests and a
+build on every push and PR.
+
 ## Gotchas
 
 - **Harness env leaks into spawned agents.** If you spawn from inside another agent
