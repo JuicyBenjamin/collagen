@@ -90,8 +90,10 @@ Rough order, not committed.
 - [x] **Packaging** — `@collagen/cli` on npm (`npx @collagen/cli`); release-please turns
   the conventional commits into the version bump + patch notes, GitHub Actions publishes
   through npm trusted publishing.
-- [ ] **In-app update** — check the registry on start, `u` to reinstall via the package
-  manager that installed us and re-exec.
+- [x] **In-app update** — the registry is checked 10 s after start and every 6 h; a newer
+  version shows in the status line and in `list-rooms`; `u` reinstalls through the package
+  manager that installed us (npm/pnpm global) and exits with code 75, which the bin shim
+  turns into a relaunch. `npx` runs are told to restart; source runs are told to pull.
 - [ ] **More AI adapters** — beyond `claude-code` / `codex`.
 
 ## Decisions log

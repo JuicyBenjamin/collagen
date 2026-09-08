@@ -16,6 +16,7 @@ import { Inbox } from "./Inbox";
 import { Scripting } from "./Scripting";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
+import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
@@ -314,6 +315,7 @@ export const DevCollagenToolkit = Toolkit.make(
 
 const makeHandlers = Effect.gen(function* () {
     const rooms = yield* Rooms;
+    const updates = yield* Updates;
     const store = yield* StateStore;
     const mcpInfo = yield* McpInfo;
     const { profile } = yield* CliArgs;
@@ -671,7 +673,14 @@ const makeHandlers = Effect.gen(function* () {
             Effect.catchTag("NotWritable", () => Effect.succeed("failed: you are not admitted to this room's log yet — a member has to be online once to admit you")),
           );
         }).pipe(Effect.withSpan("Mcp.renameRoom")),
-      "list-rooms": () => roomLines.pipe(Effect.map((rows) => toToon({ rooms: rows })), Effect.withSpan("Mcp.listRooms")),
+      "list-rooms": () =>
+        Effect.gen(function* () {
+          const rows = yield* roomLines;
+          const u = yield* SubscriptionRef.get(updates.state);
+          // the agent can mention an available update; installing stays the user's key (u)
+          const collagen = u.latest ? `${u.current} — update ${u.latest} available (the user presses u in collagen)` : u.current;
+          return toToon({ collagen, rooms: rows });
+        }).pipe(Effect.withSpan("Mcp.listRooms")),
       "create-room": ({ name }: { name: string }) =>
         Effect.gen(function* () {
           const n = name.trim();

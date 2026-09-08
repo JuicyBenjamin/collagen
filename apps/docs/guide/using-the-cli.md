@@ -77,6 +77,7 @@ what's natural there. Number keys work from anywhere.
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
 | `c` | Copy the room's invite id |
 | `s` | Settings (your name, the room's shared name) |
+| `u` | Install the newer collagen the status line announces, then restart into it |
 | `esc` | Back to the tab bar |
 | `q` | Quit |
 
