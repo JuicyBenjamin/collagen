@@ -26,7 +26,7 @@ npm i -g @collagen/cli
 collagen
 ```
 
-(`collagen-headless` is the same app without a terminal, for servers.) To hack
+(`collagen --headless` is the same app without a terminal, for servers.) To hack
 on it instead, see [local development](apps/docs/internals/development.md).
 
 First start is a two-step wizard: **who are you**, then **join or create a

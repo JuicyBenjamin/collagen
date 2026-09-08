@@ -207,7 +207,9 @@ pnpm --filter @collagen/cli pack      # the exact tarball npm would get
 ```
 
 - `bin/collagen.js` re-runs Node with `--experimental-ffi` (OpenTUI's renderer) and
-  refuses Node < 26.4; `bin/collagen-headless.js` runs the headless entry directly.
+  refuses Node < 26.4; with `--headless` it runs the headless entry (no FFI) instead. One
+  bin on purpose: `npx @collagen/cli` can only pick an executable on its own when the
+  package has exactly one (or one named like the package).
 - The version is baked in at build time from `package.json`; `pnpm dev` reports `dev`.
 - The **protocol version** (`PROTOCOL_VERSION` in `packages/p2p/src/schema.ts`) is
   separate from the package version: bump it whenever frames, log entries or the view

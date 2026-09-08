@@ -12,8 +12,14 @@ if (major < 26 || (major === 26 && minor < 4)) {
   process.exit(1);
 }
 
-const entry = fileURLToPath(new URL("../dist/index.js", import.meta.url));
-const child = spawn(process.execPath, ["--experimental-ffi", "--no-warnings=ExperimentalWarning", entry, ...process.argv.slice(2)], {
+// `collagen --headless …` runs the same app without a terminal (servers, a
+// spare machine): no renderer, so no FFI flag needed. One bin for both, so
+// `npx @collagen/cli` knows what to run.
+const args = process.argv.slice(2);
+const headless = args.includes("--headless");
+const entry = fileURLToPath(new URL(headless ? "../dist/headless.js" : "../dist/index.js", import.meta.url));
+const nodeFlags = headless ? [] : ["--experimental-ffi", "--no-warnings=ExperimentalWarning"];
+const child = spawn(process.execPath, [...nodeFlags, entry, ...args.filter((a) => a !== "--headless")], {
   stdio: "inherit",
 });
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
