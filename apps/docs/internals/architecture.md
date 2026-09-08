@@ -178,7 +178,10 @@ Bypass exists only where there is no person to ask: a `mock:*` preferred AI, or
 The receiving half of the same principle is not enforceable in code: an agent's own
 reasoning can't be gated. It is carried by the nudge (`Adapters.nudgePrompt`), the ticket
 step message (`Rooms`), and every tool description that touches messages — all of which
-say: read it, tell your user, wait for their direction, never answer or act on your own.
+say: here is the headline, tell your user, wait; read the thread from collagen when they
+ask and never invent; a question the thread can't answer is theirs (this repo, under
+direction) or the peer's (draft it, into the outbox). `RelayAgent.test.ts` pins these
+strings and runs the tools under a scripted `LanguageModel` that follows them.
 
 Interop shims for strict MCP clients (Codex's `rmcp`) live here — see
 [Effect patterns](./effect-patterns#mcp-interop-shims).
