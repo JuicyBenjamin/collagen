@@ -4,7 +4,7 @@
 
 - Node ≥ 26.4 (`.nvmrc` pins 26) and pnpm ≥ 10
 - At least one supported agent CLI installed and authenticated: `claude` (Claude Code)
-  and/or `codex` — or none, using a [mocked agent](#no-agent-cli-mocked-agents)
+  and/or `codex`
 
 ## Start
 
@@ -99,14 +99,6 @@ the TUI the agent can configure too; UI state (tabs, focus) is deliberately not 
 
 The receiving side never spawns anything for you — see
 [what happens when a message arrives](./conversations#what-happens-when-a-message-arrives).
-
-## No agent CLI? Mocked agents
-
-A machine without a Claude or Codex subscription can still be a full peer: cycle `a`
-past the real options to **mock:claude-code** / **mock:codex**. Everyone sees the `mock:`
-prefix. The mock does what a real agent CLI does (MCP handshake, `get-messages`, a
-`send-to-peer` ack), so it exercises the whole pipeline — and it's the one kind of AI that
-auto-responds.
 
 ## Headless mode
 
