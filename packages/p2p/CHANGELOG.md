@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.2.0-alpha...p2p-v0.3.0-alpha) (2026-09-08)
+
+
+### Features
+
+* **p2p:** outgoing and proposal schemas, an outbox in LocalState ([d8bdd0d](https://github.com/JuicyBenjamin/collagen/commit/d8bdd0d47185a76352966240838fb51921f07a82))
+
 ## [0.2.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.1.1-alpha...p2p-v0.2.0-alpha) (2026-09-08)
 
 
