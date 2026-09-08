@@ -47,6 +47,16 @@ app is **process spawn**, and both sides of it are injectable:
 rejecting `--sandbox` on `exec resume`) and output parsing. `RoomLog.test.ts`
 runs the log's `apply` on a real Corestore in a temp dir.
 
+**The model is mocked with Effect's own extension point**, never a third party:
+`src/test/scriptedModel.ts` builds a `LanguageModel` from `LanguageModel.make` whose
+provider is a list of scripted turns (tool calls + text), and records what each turn was
+shown (prompt, tool descriptions). `RelayAgent.test.ts` runs the real tool definitions
+(`get-messages`, `send-to-peer`, …) with the real `Inbox` and `Outbox` under such an
+agent: the nudge is a headline and says the right things; the tool descriptions carry the
+same rules; nothing is read until the person asks; a send queues verbatim and writes
+nothing until approved. These tests don't check that a model obeys — nothing offline can —
+they check that what we tell the agent is correct and that the tools behave when followed.
+
 ### End-to-end
 
 ```sh

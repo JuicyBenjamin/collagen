@@ -13,8 +13,15 @@ and started doing things, there would be no reason for this app — that is what
 already does. Collagen exists to get input that is *not* AI: a colleague's context, their
 judgment, the bigger picture. So:
 
-- an incoming message is shown to the person on that side; their agent does not answer,
-  investigate or act on it by itself;
+- an incoming message reaches the person on that side as a **headline** — "bob asks you to
+  address *ask-review* on *sandbox*" — nothing more. Their agent does not read the details,
+  investigate, decide or answer by itself;
+- when the person asks what it says, the agent reads it from collagen (`get-messages`, a
+  ticket's steps with `get-tickets`) and relays what is there — never filling gaps from its
+  own head. With that context, the person steers;
+- when the person asks something the thread doesn't answer, the agent decides which it is:
+  the person's own to answer, from this repo under their direction — or the other peer's,
+  in which case it drafts the question for them (into the outbox, like any send);
 - an outgoing message is what the person decided to send, and it waits in the **outbox**
   until they approve it — the agent's call to `send-to-peer` (or `create-ticket`,
   `settle-step`) queues, it does not send;
@@ -74,8 +81,9 @@ never starts an agent for you, and the agent it reaches is told to relay it, not
 2. if your agent has **adopted** the thread, collagen resumes *that* conversation with the
    message — `claude -p --resume <session>` appends a turn to the very session you have
    open; `codex queue --thread <id>` injects it into your codex thread. Same window, no
-   fork. The turn it appends says: read it, tell your user what it says, wait for their
-   direction;
+   fork. The turn it appends carries only the headline (who, project, intent) and says:
+   tell your user that, wait, read the thread when they ask, never invent, and a question
+   the thread can't answer is either theirs or the peer's;
 3. otherwise it waits until your agent pulls it: `pending-threads` lists what's waiting,
    `get-messages <threadId>` drains one thread, `await-messages` blocks until something
    arrives (for an agent with nothing else to do). Same instruction on the way out.
