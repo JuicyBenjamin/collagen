@@ -38,7 +38,9 @@ testnet() { pnpm exec tsx src/dev/dev-testnet.ts < /dev/null > "$OUT/testnet.log
 # start <profile> [extra args...] — headless instance, log at $OUT/<profile>.log
 start() {
   local who=$1; shift
-  COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" pnpm exec tsx src/headless.ts --profile "$who" --name "$who" "$@" < /dev/null > /dev/null 2>&1 &
+  # AUTO_APPROVE: a headless peer has no person at the TUI to approve outgoing
+  # messages, so the scenarios skip the gate (approval.sh turns it back on)
+  COLLAGEN_AUTO_APPROVE="${COLLAGEN_AUTO_APPROVE:-1}" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" pnpm exec tsx src/headless.ts --profile "$who" --name "$who" "$@" < /dev/null > /dev/null 2>&1 &
 }
 
 # fresh_logs — forget every room log so a scenario starts from nothing
@@ -50,10 +52,11 @@ prep_profiles() {
   python3 - "$CFG" "${1:-0}" <<'PY'
 import json, os, sys
 base, bob_creator = sys.argv[1], sys.argv[2] == "1"
-a = json.load(open(f"{base}/state-alice.json")); a["preferredAi"] = None; a["threads"] = {}; a.pop("consumed", None); json.dump(a, open(f"{base}/state-alice.json", "w"))
-b = json.load(open(f"{base}/state-bob.json")); b["preferredAi"] = "mock:codex"; b.pop("consumed", None); json.dump(b, open(f"{base}/state-bob.json", "w"))
+a = json.load(open(f"{base}/state-alice.json")); a["preferredAi"] = None; a["threads"] = {}; a.pop("consumed", None); a.pop("outbox", None); json.dump(a, open(f"{base}/state-alice.json", "w"))
+b = json.load(open(f"{base}/state-bob.json")); b["preferredAi"] = "mock:codex"; b.pop("consumed", None); b.pop("outbox", None); json.dump(b, open(f"{base}/state-bob.json", "w"))
 for who, creator in (("alice", True), ("bob", bob_creator)):
     f = json.load(open(f"{base}/identity-{who}.json"))
+    f["activeRoomId"] = "st-test3"  # every tool call targets the focused room; a TUI session may have left it elsewhere
     for r in f["rooms"]:
         r.pop("logKey", None); r["creator"] = creator
     json.dump(f, open(f"{base}/identity-{who}.json", "w"))
@@ -64,8 +67,8 @@ restore_profiles() {
   python3 - "$CFG" <<'PY'
 import json, os, sys
 base = sys.argv[1]
-a = json.load(open(f"{base}/state-alice.json")); a["preferredAi"] = "codex"; a.pop("threads", None); json.dump(a, open(f"{base}/state-alice.json", "w"))
-b = json.load(open(f"{base}/state-bob.json")); b["preferredAi"] = "claude-code"; json.dump(b, open(f"{base}/state-bob.json", "w"))
+a = json.load(open(f"{base}/state-alice.json")); a["preferredAi"] = "codex"; a.pop("threads", None); a.pop("outbox", None); json.dump(a, open(f"{base}/state-alice.json", "w"))
+b = json.load(open(f"{base}/state-bob.json")); b["preferredAi"] = "claude-code"; b.pop("outbox", None); json.dump(b, open(f"{base}/state-bob.json", "w"))
 f = json.load(open(f"{base}/identity-bob.json"))
 for r in f["rooms"]: r["creator"] = False
 json.dump(f, open(f"{base}/identity-bob.json", "w"))

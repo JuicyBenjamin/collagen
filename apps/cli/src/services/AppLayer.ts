@@ -6,11 +6,13 @@ import { AdaptersLive } from "./Adapters";
 import { AiStatus } from "./AiStatus";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
+import { Dispatch } from "./Dispatch";
 import { configDir, IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";
 import { McpLive } from "./Mcp";
+import { Outbox } from "./Outbox";
 import { registerAll } from "./Registrar";
 import { Rooms } from "./Rooms";
 import { Scripting } from "./Scripting";
@@ -57,6 +59,8 @@ const SwarmLive = Swarm.layer.pipe(
  *  (Rooms: every joined room live, one focused, on one swarm). */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(Updates.layer),
+  Layer.provideMerge(Outbox.layer),
+  Layer.provideMerge(Dispatch.layer),
   Layer.provideMerge(Scripting.layer),
   Layer.provideMerge(Rooms.layer),
   Layer.provideMerge(SwarmLive),
