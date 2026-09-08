@@ -27,9 +27,17 @@ export function nudgePrompt(o: SpawnCtx): string {
   const verb = Option.isSome(o.sessionId)
     ? "a new message arrived in this conversation"
     : "a new conversation was started";
-  // Relay, don't act: the person on this side decides. The message is from a
-  // person (through their agent); it is answered by a person (through you).
-  return `Collagen: ${verb} from ${o.msg.fromName} about "${o.msg.project}" (intent: ${o.msg.intent}). Read it with the ${o.serverName} get-messages tool, threadId "${o.msg.threadId}". Then tell your user what ${o.msg.fromName} says and ask how they want to respond. Do NOT answer, investigate, or act on it on your own — a person decides here. When your user has decided, send exactly what they decided with send-to-peer (it waits for their approval in the collagen TUI).`;
+  // Human in the loop. The nudge carries only the headline; the details stay
+  // in collagen until the person asks. The agent relays, never decides: what
+  // it can't find in the thread is either its own user's to answer (from this
+  // repo, under direction) or the other peer's (then it drafts the question).
+  return [
+    `Collagen: ${verb} — ${o.msg.fromName} asks your user to address "${o.msg.intent}" on project "${o.msg.project}".`,
+    `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`,
+    `If your user asks what it says or wants more, read it with the ${o.serverName} get-messages tool, threadId "${o.msg.threadId}" (a ticket's steps: get-tickets), and relay what is there — never fill gaps from your own head.`,
+    `If your user then asks something the thread does not answer, decide which it is: yours to answer from this repo under their direction, or ${o.msg.fromName}'s to answer — then draft that question for them with send-to-peer.`,
+    `Anything you send is only what your user decided, and it waits for their approval in the collagen TUI.`,
+  ].join(" ");
 }
 
 // Claude: MCP passed inline + strict so the spawn is isolated to this cli's
