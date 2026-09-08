@@ -1,0 +1,67 @@
+name: release
+
+# Zero-touch releases. On every push to main release-please reads the
+# conventional commits since the last release (feat → minor, fix → patch,
+# feat!/BREAKING CHANGE → major; docs/test/chore/ci/build/refactor are hidden
+# and never release) and keeps ONE release PR current. All packages move to
+# the same version (lockstep: same number = built together), each with its
+# own CHANGELOG of its own commits, lines labelled with their scope.
+#
+# With RELEASE_TOKEN (a fine-grained PAT: Contents + Pull requests, this repo)
+# the PR merges itself — via auto-merge once ci is green where the repo allows
+# auto-merge (public, or GitHub Pro), otherwise straight away (the publish job
+# re-runs typecheck + tests, so nothing broken ships). Merges made with the
+# default GITHUB_TOKEN would not trigger this workflow again (GitHub's loop
+# guard), so the PAT is what makes the second hop happen. Without the secret
+# the PR waits for a human merge — the "ship it" button.
+#
+# The merge commit (chore(main): release vX.Y.Z) triggers the run that tags
+# cli-vX.Y.Z / p2p-vX.Y.Z, creates the GitHub Releases with the notes, and
+# publishes @collagen/cli (p2p is bundled into it) through npm trusted
+# publishing (GitHub OIDC — no npm token anywhere).
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      # `secrets` can't be read in step conditions; surface its presence here
+      AUTO_MERGE: ${{ secrets.RELEASE_TOKEN != '' }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # hop 1: a release PR exists → let it merge itself when ci passes
+      - name: auto-merge the release PR
+        if: ${{ steps.release.outputs.prs_created == 'true' && env.AUTO_MERGE == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          PR: ${{ fromJSON(steps.release.outputs.pr).number }}
+        run: gh pr merge "$PR" --rebase --auto --repo "$GITHUB_REPOSITORY" || gh pr merge "$PR" --rebase --repo "$GITHUB_REPOSITORY"
+
+      # hop 2: the release commit landed → publish
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
+      - uses: pnpm/action-setup@v4
+        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
+      - uses: actions/setup-node@v4
+        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
+      - run: pnpm typecheck && pnpm test
+        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
+      - run: pnpm release
+        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
