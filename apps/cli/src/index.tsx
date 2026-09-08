@@ -44,7 +44,11 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
             profile={args.profile}
             initialName={name ?? ""}
             configured={name !== undefined && room !== undefined}
-            onExit={() => Deferred.doneUnsafe(done, Effect.void)}
+            onExit={(code) => {
+              // the bin shim reads this: RESTART means "start me again"
+              if (code !== undefined) process.exitCode = code;
+              Deferred.doneUnsafe(done, Effect.void);
+            }}
           />,
         );
         return root;
@@ -53,7 +57,14 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
     );
 
     yield* Deferred.await(done);
-  }).pipe(Effect.scoped),
+  }).pipe(
+    Effect.scoped,
+    // The swarm, the corestore and the MCP server keep the event loop alive, and
+    // runMain only exits the process for a non-zero code — so quitting is
+    // explicit, once the renderer has given the terminal back. Hypercore's
+    // append-only files are safe to leave without a graceful close.
+    Effect.andThen(Effect.sync(() => process.exit(process.exitCode ?? 0))),
+  ),
 );
 
 Command.runWith(command, { version: VERSION })(stripArgSeparator(process.argv.slice(2))).pipe(
