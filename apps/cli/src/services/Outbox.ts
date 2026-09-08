@@ -1,0 +1,111 @@
+import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+import type { Outgoing, Proposal } from "@collagen/p2p";
+import { Dispatch } from "./Dispatch";
+import { StateStore } from "./StateStore";
+
+export type { Proposal };
+
+/** The text a tool returns to the agent when its call was queued instead of run. */
+export const QUEUED_TEXT =
+  "queued for your user's approval — nothing leaves this machine until they approve it in the collagen TUI (outbox section). Tell them what you queued, then stop: do not resend, and do not work around it.";
+
+/** The full text of a proposal, as the person reads it before saying yes. */
+export function proposalText(p: Proposal): string {
+  const o = p.outgoing;
+  switch (o.kind) {
+    case "message":
+      return o.findings;
+    case "ticket":
+      return o.ticket.steps.map((s) => `${s.id} · ${s.intent}: ${s.description}`).join("\n");
+    case "settle":
+      return o.result;
+  }
+}
+
+/** Can the person change the text before it goes? (A ticket's shape is the
+ *  agent's to redraft: reject it and say what you want instead.) */
+export const editable = (p: Proposal): boolean => p.outgoing.kind !== "ticket";
+
+/** Human in the loop, sending side. send-to-peer, create-ticket and
+ *  settle-step don't run when the agent calls them: they propose, the person
+ *  approves (after editing, if they like) or rejects in the TUI, and only
+ *  then does Dispatch write the log. Proposals are data in LocalState, so
+ *  they wait across a restart. Mocked agents are dev dummies and skip the
+ *  gate, as does COLLAGEN_AUTO_APPROVE=1 — for tests, never for people. */
+export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
+  make: Effect.gen(function* () {
+    const store = yield* StateStore;
+    const dispatch = yield* Dispatch;
+
+    const envAuto = process.env.COLLAGEN_AUTO_APPROVE === "1";
+    if (envAuto) yield* Effect.logWarning("COLLAGEN_AUTO_APPROVE=1: outgoing messages leave WITHOUT a person approving them (testing only)");
+
+    /** Mocks are not people; nothing to approve. */
+    const bypass = store.get.pipe(Effect.map((s) => envAuto || (s.preferredAi ?? "").startsWith("mock")));
+
+    const all = store.get.pipe(Effect.map((s) => s.outbox ?? []));
+    const changes = SubscriptionRef.changes(store.state).pipe(Stream.map((s) => s.outbox ?? []));
+    const setAll = (f: (ps: ReadonlyArray<Proposal>) => ReadonlyArray<Proposal>) =>
+      store.update((s) => ({ ...s, outbox: f(s.outbox ?? []) }));
+
+    const describe = (p: Proposal) => `${p.outgoing.kind} → ${p.to} · ${p.title}`;
+
+    const waiting = all.pipe(Effect.map((ps) => ps.length));
+    if ((yield* waiting) > 0) yield* Effect.log(`⧗ outbox: ${yield* waiting} proposal(s) still waiting for your approval from before`);
+
+    /** Queue it behind the person's approval; returns what the agent is told. */
+    const propose = (p: Omit<Proposal, "id" | "ts">) =>
+      Effect.gen(function* () {
+        if (yield* bypass) return yield* dispatch.perform(p.roomId, p.outgoing);
+        const full: Proposal = { ...p, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis };
+        yield* setAll((ps) => [...ps, full]);
+        yield* Effect.log(`⧗ outbox: ${describe(full)} — awaiting your approval`);
+        return QUEUED_TEXT;
+      });
+
+    const take = (id: string) =>
+      Effect.gen(function* () {
+        const found = (yield* all).find((p) => p.id === id) ?? null;
+        if (found) yield* setAll((ps) => ps.filter((p) => p.id !== id));
+        return found;
+      });
+
+    /** The person said yes: it leaves now. */
+    const approve = (id: string) =>
+      Effect.gen(function* () {
+        const p = yield* take(id);
+        if (!p) return "gone";
+        const outcome = yield* dispatch.perform(p.roomId, p.outgoing);
+        yield* Effect.log(`✓ approved: ${describe(p)} — ${outcome.split("\n")[0]}`);
+        return outcome;
+      });
+
+    /** The person said no: it never happened. The agent is not told — the
+     *  person tells it, in their own words. */
+    const reject = (id: string) =>
+      Effect.gen(function* () {
+        const p = yield* take(id);
+        if (p) yield* Effect.log(`✗ rejected: ${describe(p)}`);
+      });
+
+    /** The person changed the words before sending (message findings, or a
+     *  step's result). What leaves is what they wrote. */
+    const edit = (id: string, text: string) =>
+      setAll((ps) =>
+        ps.map((p) => {
+          if (p.id !== id) return p;
+          const o: Outgoing =
+            p.outgoing.kind === "message"
+              ? { ...p.outgoing, findings: text }
+              : p.outgoing.kind === "settle"
+                ? { ...p.outgoing, result: text }
+                : p.outgoing;
+          return { ...p, outgoing: o };
+        }),
+      );
+
+    return { all, changes, propose, approve, reject, edit } as const;
+  }),
+}) {
+  static readonly layer = Layer.effect(this, this.make);
+}

@@ -2,11 +2,12 @@ import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { theme } from "../../../../app/theme";
 import { myNameAtom } from "../../../atoms";
-import { aiStatusAtom, appUpdateAtom, stateAtom } from "../../atoms";
+import { aiStatusAtom, appUpdateAtom, outboxAtom, stateAtom } from "../../atoms";
 
-/** "you <name> · ai <choice> (auth badge) · update … (u)" — the one-line status. */
+/** "you <name> · ai <choice> (auth badge) · N to approve · update … (u)" — the one-line status. */
 export function StatusLine() {
   const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => "…");
+  const waiting = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const).length;
   const ai = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null })).preferredAi;
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
   const bad = ai !== null && aiStatus !== "ok" && aiStatus !== "unknown";
@@ -19,6 +20,7 @@ export function StatusLine() {
       <span fg={theme.dim}> · ai </span>
       <span fg={ai ? theme.warn : theme.dim}>{ai ?? "not set"}</span>
       {bad ? <span fg={theme.warn}> ({aiStatus === "missing" ? "cli not found" : "unauthenticated"})</span> : null}
+      {waiting > 0 ? <span fg={theme.warn}> · {waiting} to approve</span> : null}
       {update.note ? (
         <span fg={update.installing ? theme.warn : theme.dim}> · {update.note}</span>
       ) : update.latest ? (
