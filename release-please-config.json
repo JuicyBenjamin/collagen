@@ -9,7 +9,7 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "separate-pull-requests": false,
-  "group-pull-request-title-pattern": "release: v${version}",
+  "group-pull-request-title-pattern": "chore(release): v${version}",
   "changelog-sections": [
     {
       "type": "feat",
@@ -68,8 +68,8 @@
       "type": "linked-versions",
       "groupName": "collagen",
       "components": [
-        "@collagen/cli",
-        "@collagen/p2p"
+        "cli",
+        "p2p"
       ]
     }
   ],
@@ -82,5 +82,6 @@
       "component": "p2p",
       "package-name": "@collagen/p2p"
     }
-  }
+  },
+  "pull-request-title-pattern": "chore(release): ${component} v${version}"
 }
