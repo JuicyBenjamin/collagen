@@ -17,6 +17,14 @@ _Last updated: 2026-09-07._
   joined at once and look at one; elsewhere you're `away`. Live create / join / switch /
   leave, from the TUI (rooms rail) or the agent's tools. Peers announce their protocol
   version; a mismatch is flagged next to the peer and in `list-room`.
+- **Human in the loop** — the founding rule. Outgoing: `send-to-peer`,
+  `create-ticket` and `settle-step` never write to the log themselves; they queue a proposal
+  (data, persisted in local state — it waits across a restart) in the **outbox** (`Outbox`
+  service, overview section, status-line count) and the person approves (`y`), rewrites
+  the text first (`e`) or rejects (`n`); only then does `Dispatch` write the log, resolving
+  the peer by name at send time. Incoming: every nudge and tool description tells the
+  agent to relay to its person and wait, never to answer or act on its own. Mocks and
+  `COLLAGEN_AUTO_APPROVE=1` (tests) bypass the gate.
 - **Messaging** — `send-to-peer` appends to the room's log in the thread between two peers
   about one project; the recipient may be offline and reads it when back. Room-visible.
   Unread is a per-thread cursor in local state. **Nothing spawns behind your back**: a real AI is never cold-started by an
@@ -38,10 +46,11 @@ _Last updated: 2026-09-07._
 - **TUI** — OpenTUI + React on `@effect/atom-react`: rooms rail, overview (peers,
   tickets, projects) and messages (a2a trace) tabs, settings, first-run wizard. Spatial
   keyboard navigation between sections. Headless entry for servers.
-- **Tests** — 52 unit tests (log apply on a real Corestore, merge/thread rules, agent-run
-  policy, adapters, scripting, cli plumbing) and an in-repo e2e suite: five deterministic
-  two/three-instance scenarios on a local testnet (`pnpm --filter @collagen/cli e2e`)
-  plus TUI, codex and Claude adopted-thread scenarios run by hand
+- **Tests** — unit tests (log apply on a real Corestore, merge/thread rules, the outbox
+  gate, agent-run policy, adapters, scripting, cli plumbing) and an in-repo e2e suite:
+  eight deterministic two/three-instance scenarios on a local testnet (`pnpm --filter @collagen/cli e2e`),
+  two of them the human gate (headless, and `y`/`n` in a real pty),
+  plus a TUI rail scenario run by hand
   ([development](/internals/development#tests)).
 
 ## Known issues
@@ -104,6 +113,12 @@ Rough order, not committed.
 - **pnpm + Node 26, not Bun** — the p2p stack's native bindings panic under Bun.
 - **OpenTUI + React** — Solid 2 would suit the TUI better, but `@opentui/solid` pins
   Solid 1.9; revisit when it moves.
+- **Human in the loop, always** (2026-09-08) — the reason the app exists: two agents
+  chatting and acting on their own is what orchestration already does; collagen is for
+  the input that is *not* AI — a colleague's context, judgment and direction. So agents
+  relay and draft, people decide; nothing leaves a machine unapproved (the outbox, a
+  structural gate, not a prompt), and nothing answers for a person (every nudge and tool
+  description says relay-and-wait). Every later decision is judged against this.
 - **No cold spawns** (2026-09-03) — an incoming message never starts an agent for you.
   Inbox or adopted session; mocks are the only exception. The user works in their own
   agent session; collagen messages *that* session on their behalf.

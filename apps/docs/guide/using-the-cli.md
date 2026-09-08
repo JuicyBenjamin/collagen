@@ -73,6 +73,7 @@ what's natural there. Number keys work from anywhere.
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, details of a ticket or message, `+ add project` |
+| `y` / `e` / `n` | Outbox: approve and send / rewrite the text first / reject what your agent wants to send |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
 | `c` | Copy the room's invite id |
@@ -94,19 +95,24 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 
 You use it by just asking your agent, e.g. *"check who's in my collagen room and ask
-alice's agent why average() returns NaN in sandbox"*. Everything a person can configure in
-the TUI the agent can configure too; UI state (tabs, focus) is deliberately not exposed.
+alice why average() returns NaN in sandbox"*. Everything a person can configure in the TUI
+the agent can configure too; UI state (tabs, focus) is deliberately not exposed.
 
-The receiving side never spawns anything for you — see
+Two rules hold on every machine. Nothing leaves without you: `send-to-peer`,
+`create-ticket` and `settle-step` queue in the **outbox** on the overview tab until you
+press `y` (or `n`). And nothing answers for you: what arrives is shown to you by your
+agent, which waits for your direction — see
 [what happens when a message arrives](./conversations#what-happens-when-a-message-arrives).
 
 ## Headless mode
 
-No terminal (a server, a spare machine)? Run the same app without the TUI:
+The same app without the TUI, for tests and for a machine that only receives:
 
 ```sh
 COLLAGEN_LOG=/tmp/collagen.log collagen --headless --name yourname
 ```
 
-Everything works identically; activity goes to the log file instead of a screen. (From
-source: `pnpm --filter @collagen/cli exec tsx src/headless.ts …`.)
+Activity goes to the log file instead of a screen. There is no outbox to approve from, so
+anything the agent wants to send waits forever — headless is not a way to run without a
+person. (From source: `pnpm --filter @collagen/cli exec tsx src/headless.ts …`; the e2e
+scenarios set `COLLAGEN_AUTO_APPROVE=1`, development only.)

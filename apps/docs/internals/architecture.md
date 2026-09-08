@@ -18,6 +18,8 @@ flowchart TD
   Identity["Identity\nseed + name + known rooms"]
   StateStore["StateStore\nLocalState: ai, per-room projects, adopted threads"]
   Inbox["Inbox\nwaiting messages, tagged by room"]
+  Outbox["Outbox\nproposals waiting for the person's yes"]
+  Dispatch["Dispatch\nwrites an approved Outgoing to the log"]
   Adapters["Adapters\nclaude-code · codex · mock:*"]
   AiStatus["AiStatus\nis the CLI installed + logged in"]
   AgentRunner["AgentRunner\nresume policy per thread"]
@@ -39,6 +41,8 @@ flowchart TD
   Rooms --> Scripting --> Mcp
   Rooms --> Mcp
   Inbox --> Mcp
+  Rooms --> Dispatch --> Outbox --> Mcp
+  StateStore --> Outbox
   StateStore --> Mcp
   Mcp --> Registrar
 ```
@@ -148,6 +152,33 @@ Dev runs (`COLLAGEN_DEV=1`) add `drive-peer`; a production build never registers
 
 Two plain HTTP routes exist for harnesses without a convenient blocking tool call:
 `GET /inbox/pending` and `GET /inbox/wait?seconds=N` (long-poll, 204 on timeout).
+
+### `Outbox`: the human gate
+
+The three tools that write to a room's log on the agent's behalf — `send-to-peer`,
+`create-ticket`, `settle-step` — do not write. Each validates its input (unknown peer or
+step fails at once) and hands `Outbox.propose` a `Proposal`: room, recipient, title, and an
+`Outgoing` — plain data (`packages/p2p/src/schema.ts`): a message by peer *name*, a full
+ticket record, or a step settlement. Proposals live in `LocalState.outbox`, persisted by
+`StateStore` like everything else there, so they wait across a restart. The TUI renders
+them from the same state (overview's first section, and a count in the status line).
+
+`approve(id)` hands the Outgoing to **`Dispatch`**, the only place the cli appends
+messages, tickets or settlements for the agent: it looks up the room, resolves the peer by
+name *now* (a proposal that waited overnight still finds them), applies the settlement to
+the ticket as it currently is, writes the log, and returns the same text the tool used to.
+`edit(id, text)` rewrites a message's findings or a step's result before that happens;
+`reject(id)` drops it — the agent isn't told, the person tells it. The tool's return value
+to the agent is a fixed sentence: queued for your user's approval, tell them, stop.
+
+Bypass exists only where there is no person to ask: a `mock:*` preferred AI, or
+`COLLAGEN_AUTO_APPROVE=1` (the e2e scenarios; logged as a warning at start). In that case
+`propose` dispatches at once and returns Dispatch's text.
+
+The receiving half of the same principle is not enforceable in code: an agent's own
+reasoning can't be gated. It is carried by the nudge (`Adapters.nudgePrompt`), the ticket
+step message (`Rooms`), and every tool description that touches messages — all of which
+say: read it, tell your user, wait for their direction, never answer or act on your own.
 
 Interop shims for strict MCP clients (Codex's `rmcp`) live here — see
 [Effect patterns](./effect-patterns#mcp-interop-shims).
