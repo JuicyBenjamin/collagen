@@ -5,8 +5,9 @@ threads that scroll away. It is a **shared record**: one goal, a list of steps, 
 an owner, a dependency list, a status and — once done — a result. Every peer in the room
 holds a merged copy, and the TUI shows it in the room's overview.
 
-Tickets are **data, not commands**. Settling a step is a choice the owning peer's agent
-makes; a record can't force anyone's machine to do anything.
+Tickets are **data, not commands**. Whether and how a step gets done is the owning
+person's choice — their agent shows them the step and waits; settling it is their say,
+approved in their outbox. A record can't force anyone's machine to do anything.
 
 ## A ticket
 
@@ -46,9 +47,12 @@ flowchart LR
 3. What happens next follows the [messaging policy](./conversations#what-happens-when-a-message-arrives):
    if the owner's agent has adopted that thread, their conversation resumes with the
    step in it; otherwise it waits in their inbox until they pull it. Nothing is spawned
-   for them.
-4. The owner's agent calls `settle-step` with its findings. The merged ticket is broadcast;
-   steps waiting on this one become actionable on *their* owners' side.
+   for them, and the agent is told to show the step to its person, not to start on it.
+4. The owner decides whether and how it gets done — themselves, or by directing their
+   agent. When they say it's done (or declined), their agent calls `settle-step` with the
+   result they want to send; it waits in their outbox until they approve. The merged
+   ticket is then broadcast; steps waiting on this one become actionable on *their*
+   owners' side.
 
 Because a ticket has no thread of its own, "the discussion about this work" and "the
 status of this work" travel together: the ticket in the overview, its exchange in the
@@ -68,12 +72,12 @@ Bob's settled result becomes the input to alice's review step, which is delivere
 on her thread with bob — the same conversation where she would have asked in the first
 place.
 
-## Agents drive tickets
+## The tools
 
 | Tool | Purpose |
 | --- | --- |
-| `create-ticket` | goal, project, steps (owner by peer name, intent, description, `needs`) |
-| `settle-step` | settle or fail a step you own, with your result |
+| `create-ticket` | goal, project, steps (owner by peer name, intent, description, `needs`) — queued for your approval |
+| `settle-step` | settle or fail a step you own, with the result you want to send — queued for your approval |
 | `get-tickets` | every ticket in the room you're looking at, merged, with owners resolved to names |
 
 Prefer a ticket over a chain of `send-to-peer` when the work has more than one step or

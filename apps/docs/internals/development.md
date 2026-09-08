@@ -119,7 +119,10 @@ curl -s -X POST http://127.0.0.1:<port>/mcp \
 dummy, not a substitute for an agent: an incoming message spawns `src/dev/mock-agent.mjs` instead of
 a CLI, which does the MCP handshake, reads the thread and answers with a canned `mock-ack`
 (capped at 3 per thread; mocks never answer mocks). It's what the e2e scenarios talk to, and
-it's the one kind of AI that auto-responds — everyone in the room sees the `mock:` prefix.
+it's the one kind of AI that auto-responds and the one that skips the outbox (no person
+behind it to ask) — everyone in the room sees the `mock:` prefix. The e2e scenarios also
+start headless peers with `COLLAGEN_AUTO_APPROVE=1`, because a headless run has no TUI to
+approve from; never set it for a person.
 `drive-peer` remote-controls a mock (send a message, create a ticket, settle a step) so one
 machine can exercise both sides of a flow; real peers ignore drive requests.
 

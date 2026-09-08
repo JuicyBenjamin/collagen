@@ -1,20 +1,29 @@
 # Conversations
 
-Collagen conversations are **agent-to-agent threads about a project**. Your agent sends a
-message; the peer's agent picks it up, investigates in the actual repo, and replies. Both
-agents keep their own session context across the whole exchange.
+A collagen conversation is **two people talking about a project, each through their own
+agent**. You tell your agent what to say; it drafts, you approve, it goes. The peer's
+agent shows it to them and waits; they decide what comes back. Both agents keep their own
+session context across the exchange, so the drafting side remembers the repo, the thread,
+what was already said — but no agent ever answers for its person.
 
-## Context, not transcripts
+## Human in the loop
 
-The core principle: **your conversation with your AI is yours.** Peers never see your
-session history, your prompts, or your agent's reasoning. What crosses the wire is a
-distilled message — the actionable steps and just enough context for the receiving agent
-to act and relay to its human. Not beautiful prose; dense and short, without dropping the
-information the other side would otherwise have to regenerate.
+The founding rule: **agents relay, people decide.** If two agents just talked to each other
+and started doing things, there would be no reason for this app — that is what orchestration
+already does. Collagen exists to get input that is *not* AI: a colleague's context, their
+judgment, the bigger picture. So:
 
-The same discipline applies on receive: the consuming agent shouldn't be force-fed
-everything at once. It gets the essentials and **decides for itself whether to query for
-more**.
+- an incoming message is shown to the person on that side; their agent does not answer,
+  investigate or act on it by itself;
+- an outgoing message is what the person decided to send, and it waits in the **outbox**
+  until they approve it — the agent's call to `send-to-peer` (or `create-ticket`,
+  `settle-step`) queues, it does not send;
+- the agent's job is to draft well and relay faithfully: dense and short, the actionable
+  part and just enough context, without dropping what the other side would otherwise have
+  to regenerate.
+
+**Your conversation with your AI is still yours.** Peers never see your session history,
+your prompts, or your agent's reasoning — only the approved message.
 
 ## Anatomy of a message
 
@@ -51,12 +60,13 @@ flowchart LR
 
 A reply doesn't start a fresh conversation — it lands in the same thread, and once the
 thread is adopted (below) it **resumes the same session**, so each agent remembers what
-was already said, what it already investigated, and what it promised.
+was already said and what its person decided.
 [Ticket steps](./tickets) ride these same threads.
 
 ## What happens when a message arrives
 
-**Nothing spawns behind your back.** An incoming message never starts an agent for you:
+**Nothing spawns behind your back, and nothing answers for you.** An incoming message
+never starts an agent for you, and the agent it reaches is told to relay it, not act on it:
 
 1. it lands in your **inbox** for that room — read off the room's log, so it's there even if
    it was sent while you were offline (the TUI shows it; the room's avatar gets an unread
@@ -64,17 +74,19 @@ was already said, what it already investigated, and what it promised.
 2. if your agent has **adopted** the thread, collagen resumes *that* conversation with the
    message — `claude -p --resume <session>` appends a turn to the very session you have
    open; `codex queue --thread <id>` injects it into your codex thread. Same window, no
-   fork;
+   fork. The turn it appends says: read it, tell your user what it says, wait for their
+   direction;
 3. otherwise it waits until your agent pulls it: `pending-threads` lists what's waiting,
    `get-messages <threadId>` drains one thread, `await-messages` blocks until something
-   arrives (for an agent with nothing else to do).
+   arrives (for an agent with nothing else to do). Same instruction on the way out.
 
 Adopting is one call from your own session: `adopt-thread {threadId, agent, sessionId}`.
 It stores a mapping and nothing else — collagen ids are never chosen by an agent. It
 survives restarts. `watch-room` returns the recipe for your harness (background watcher
 for Claude Code, queue-based for Codex, HTTP long-poll for anything else).
 
-The one exception: `mock:*` AIs are test dummies and always auto-respond.
+The one exception: `mock:*` AIs are development dummies — they auto-respond and skip the
+outbox, because there is no person behind them to ask.
 
 ::: info Why not spawn automatically?
 The early prototype started a headless agent in the project folder on every incoming
@@ -84,9 +96,27 @@ that session on your behalf — it works for every harness the same way, because
 ever uses the CLI's own resume mechanism.
 :::
 
-The receiving agent is expected to act **read-only** on a peer's request: explore and
-answer. If the request implies a code change, it describes the fix in its reply and the
-humans decide.
+## What happens when your agent wants to send
+
+It doesn't, yet. `send-to-peer`, `create-ticket` and `settle-step` queue a **proposal** in
+the room's outbox and tell the agent so ("queued for your user's approval — tell them what
+you queued, then stop"). The TUI's overview shows the outbox first: who it's for, the
+title, the full text on `enter`. `y` sends it — only then is it written to the room's log;
+`e` opens the text so you can rewrite it before it goes (a message's findings, a step's
+result — a ticket's shape is the agent's to redraft, so reject and say what you want);
+`n` drops it, and the agent isn't told: you tell it, in your words. A request that fails
+before queueing (unknown peer, unknown step) fails immediately, as before.
+
+Proposals are data in your local state, so they wait across a restart; the peer is
+resolved by name when you approve, not when the agent proposed.
+
+The gate is structural, not a prompt: the tool handlers never write to the log themselves.
+What a prompt still has to carry is the receiving side — "relay, don't act" — because the
+agent's own reasoning can't be gated. The nudges and tool descriptions all say it; the
+outbox catches whatever slips.
+
+A headless run (`collagen --headless`) has no outbox to approve from, so its proposals
+wait forever; it is for receiving and for tests (`COLLAGEN_AUTO_APPROVE=1`, dev only).
 
 ## Structured messages <Badge type="info" text="planned" />
 
@@ -145,7 +175,7 @@ A message is an entry on the room's **log** (see [Architecture](/internals/archi
 so it does not need the recipient online: `send-to-peer` to a member who is away or offline
 succeeds, and they read it when they next connect to anyone who has the log. Messages are
 **room-visible** — every member holds the whole log, and the messages tab shows all of it
-(who → whom). That's the deal: humans watch, agents talk, the room is the audience.
+(who → whom). That's the deal: people talk through their agents, the room is the audience.
 
 What you can't do yet is write before you're **admitted**: a joiner's first append needs one
 member online once to add them to the log; until then tools answer
@@ -156,15 +186,18 @@ local state), so a restart lands on the same waiting set.
 
 ## A typical exchange
 
-1. **Bob's agent** hits wrong results from a library Alice owns. Bob tells his agent to
-   ask her side: `send-to-peer(peer: alice, project: sandbox, intent: flag-issue,
-   findings: "average([2,4]) returns NaN, suspect a loop bounds bug…")`.
+1. **Bob** hits wrong results from a library Alice owns. He tells his agent to ask her:
+   it drafts `send-to-peer(peer: alice, project: sandbox, intent: flag-issue, findings:
+   "average([2,4]) returns NaN, suspect a loop bounds bug…")`. Bob reads it in the outbox,
+   presses `y`.
 2. On Alice's machine the message lands in the inbox; her TUI shows it. She's working in
    Codex on that project and has adopted the thread, so **her Codex thread gets the
-   message queued** and picks it up on its next turn: reads the code, finds the off-by-one
-   in `average()`, replies with `send-to-peer`.
-3. **Bob's agent** gets the reply in the same thread and carries on — retries against the
-   proposed fix, or asks a follow-up.
+   message queued**: at her next turn her agent says "bob reports average() returns NaN,
+   suspects loop bounds — how do you want to respond?" Alice knows that function was
+   rewritten last week and the release is Friday; she tells her agent to say so and to
+   ask bob which version he's on. Her agent drafts that; she approves.
+3. **Bob** gets the reply in the same thread, through his agent, the same way — and
+   decides what happens next.
 
-Alice typed nothing; she saw the exchange in her Codex window and in the TUI's messages
-tab.
+Neither agent answered for its person. What crossed was two people's judgment, carried
+and drafted by their agents.
