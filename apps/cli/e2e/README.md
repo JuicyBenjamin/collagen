@@ -26,6 +26,8 @@ created on the fly.
 | `conflict.sh` | two self-appointed creators: the lonely log yields, the ticket completes on the survivor |
 | `three-members.sh` | three indexers: the view advances with 1 and 2 offline; the absent one catches up |
 | `leave.sh` | leaving a room forgets it locally and moves focus; the last room can't be left |
+| `approval.sh` | human in the loop, sending side: a non-mock peer's `send-to-peer` / `create-ticket` queue for approval and nothing reaches the other side; a mock is not gated; the queued proposals survive a restart |
+| `approval-tui.sh` | the gate from the person's side, TUI in a pty: two queued messages, ↓ lands on the outbox, `y` sends one (bob gets it), `n` drops the other — judged from logs and the key trace, no pyte needed |
 
 ## Manual scenarios
 
@@ -34,9 +36,19 @@ Not in `run-all.sh` — they need something the machine may not have.
 | Scenario | Needs | Proves |
 | --- | --- | --- |
 | `tui-sidebar.sh` | `pip install pyte` (set `PYTE_PATH` if not on `sys.path`) | the TUI in a pty: rooms rail, unread dot, online bubble, switching rooms, the `+` frame — rendered with a real terminal emulator (`render.py`) and judged from the key trace |
-| `codex-adopt.sh` | `codex` logged in | first contact queues; `adopt-thread` into a codex conversation; the next message is queued into that conversation; codex reads the thread and replies; the mock acks |
-| `claude-adopt.sh` | `claude` logged in | same loop with `claude -p --resume` into a Claude Code session — pass the session id as `$1` |
 | `update.sh` | network, ~10 min (two global installs) | the in-app updater: the current build installed globally into a temp prefix, a fake registry (`fake-registry.py`) serving the same build as `9.9.9-alpha` and proxying everything else to npm; the TUI notices, `u` installs from it, the app exits 75 and the bin shim relaunches the new version in the same pty |
+
+## Writing a scenario
+
+- Build JSON arguments in a variable first, then pass the variable. macOS ships bash 3.2,
+  which mangles `\"` escapes nested inside `"$( … )"` — the call reaches the server as
+  invalid JSON (`-32700 Parse error`) while a loose assertion may still pass.
+- Assert on the exact answer (`^"adopted: …`), not on a word that an error text might also
+  contain. Assert tool calls in agent output by their `"tool":"…name"` form, never by the
+  bare tool name — the message text under test may mention it.
+- Every `start`ed headless peer runs with `COLLAGEN_AUTO_APPROVE=1`; to test the human gate
+  itself, start that peer with `COLLAGEN_AUTO_APPROVE=0` (see `approval.sh`). `prep_profiles`
+  clears the persisted outbox so a scenario never inherits another's proposals.
 
 ## Reading a failure
 
