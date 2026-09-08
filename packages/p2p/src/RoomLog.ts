@@ -2,6 +2,7 @@ import { Effect, Option, Queue, Schema, Stream } from "effect";
 import Autobase from "autobase";
 import Hyperbee from "hyperbee";
 import b4a from "b4a";
+import { LogAppendFailed } from "./errors";
 import { LogOp, type Member, type RoomMessage } from "./schema";
 import { mergeTicket, type Ticket } from "./ticket";
 
@@ -20,8 +21,8 @@ export interface RoomLog {
   /** Our writer core's key: what a member appends to admit us. */
   readonly writerKey: string;
   readonly writable: () => boolean;
-  /** Fails with "Not writable" until admitted. Resolves once the view reflects the entry. */
-  readonly append: (op: LogOp) => Effect.Effect<void, Error>;
+  /** Fails (LogAppendFailed, "Not writable") until admitted. Resolves once the view reflects the entry. */
+  readonly append: (op: LogOp) => Effect.Effect<void, LogAppendFailed>;
   readonly read: Effect.Effect<LogView>;
   /** Fires after the view changed or our writer status did. */
   readonly changes: Stream.Stream<void>;
@@ -152,7 +153,7 @@ export const openRoomLog = (
           await base.append(op);
           await base.update();
         },
-        catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+        catch: (cause) => new LogAppendFailed({ cause }),
       });
 
     return {
