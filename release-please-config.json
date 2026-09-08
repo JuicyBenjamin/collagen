@@ -9,7 +9,7 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "separate-pull-requests": false,
-  "group-pull-request-title-pattern": "chore(release): v${version}",
+  "group-pull-request-title-pattern": "chore(release): collagen",
   "changelog-sections": [
     {
       "type": "feat",
