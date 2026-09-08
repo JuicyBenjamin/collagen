@@ -113,6 +113,10 @@ Rough order, not committed.
 - **pnpm + Node 26, not Bun** — the p2p stack's native bindings panic under Bun.
 - **OpenTUI + React** — Solid 2 would suit the TUI better, but `@opentui/solid` pins
   Solid 1.9; revisit when it moves.
+- **Tests never call a third party; the model is Effect's own `LanguageModel.make`**
+  (2026-09-09) — no real `codex`/`claude`, no provider API, nothing billed or flaky. A
+  scripted `LanguageModel` runs the real tool definitions and handlers; the tests assert
+  what we tell the agent and what the tools do when followed, not whether a model obeys.
 - **Human in the loop, always** (2026-09-08) — the reason the app exists: two agents
   chatting and acting on their own is what orchestration already does; collagen is for
   the input that is *not* AI — a colleague's context, judgment and direction. So agents
