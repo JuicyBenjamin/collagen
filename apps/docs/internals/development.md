@@ -218,7 +218,10 @@ to `main` the `release` workflow reads the conventional commits since the last r
 keeps one release PR current. All packages share **one version** (like Effect, MUI, Angular:
 same number = built and tested together): `@collagen/cli` and `@collagen/p2p` bump in step,
 each with its own `CHANGELOG.md` of its own commits (attributed by path), grouped Features /
-Bug Fixes with each line labelled by scope (`**cli:** …`). `feat` bumps minor, `fix` patch,
+Bug Fixes with each line labelled by scope (`**cli:** …`). While collagen is alpha, releases are
+prereleases: `0.1.0-alpha.0`, `-alpha.1`, … — every `feat`/`fix` bumps the prerelease
+number; graduating (beta, then `0.1.0`) is a one-line change in `release-please-config.json`
+(`prerelease-type`, then dropping `prerelease`). After that: `feat` bumps minor, `fix` patch,
 `feat!` / `BREAKING CHANGE:` major (pre-1.0: minor). `docs`, `test`, `chore`, `ci`, `build`,
 `refactor` are hidden and never trigger a release — the type is the fence, the scope is the
 label: user-facing work is `feat(cli|p2p):` or `fix(cli|p2p):`, documentation is `docs(...)`.
