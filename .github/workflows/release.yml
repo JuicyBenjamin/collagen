@@ -56,12 +56,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       # hop 1: a release PR exists → let it merge itself
+      # (step env is evaluated before `if`, so no fromJSON on a possibly empty
+      # output here — the number is read in the script). Squash: the release
+      # commit's message becomes the PR title, which we control.
       - name: merge the release PR
         if: ${{ steps.release.outputs.prs_created == 'true' && env.AUTO_MERGE == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-          PR: ${{ fromJSON(steps.release.outputs.pr).number }}
-        run: gh pr merge "$PR" --rebase --auto --repo "$GITHUB_REPOSITORY" || gh pr merge "$PR" --rebase --repo "$GITHUB_REPOSITORY"
+          PR_JSON: ${{ steps.release.outputs.pr }}
+        run: |
+          PR=$(printf '%s' "$PR_JSON" | jq -r .number)
+          gh pr merge "$PR" --squash --auto --repo "$GITHUB_REPOSITORY" || gh pr merge "$PR" --squash --repo "$GITHUB_REPOSITORY"
 
       # hop 2: the release commit landed → publish
       - run: pnpm typecheck && pnpm test
