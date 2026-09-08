@@ -4,6 +4,7 @@ import { AiStatus } from "../../services/AiStatus";
 import { IdentityService } from "../../services/Identity";
 import { Rooms } from "../../services/Rooms";
 import { StateStore } from "../../services/StateStore";
+import { Updates } from "../../services/Updates";
 import { runtimeAtom } from "../../app/runtime";
 
 // Read by the room layout and/or more than one of its sections. Everything
@@ -67,4 +68,18 @@ export const admittedAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.writable));
   })),
+);
+
+/** Is a newer collagen on npm; is an install running; what to tell the user. */
+export const appUpdateAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return SubscriptionRef.changes((yield* Updates).state);
+  })),
+);
+
+/** Install the newer version. Resolves true when the app should restart. */
+export const installAppUpdateAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* (_: object) {
+    return yield* (yield* Updates).install;
+  }),
 );

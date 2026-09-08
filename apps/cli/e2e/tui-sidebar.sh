@@ -24,7 +24,7 @@ sleep 4
 KEYS=$(cut -d' ' -f2 "$OUT/tui.log.keys" 2>/dev/null | tr '\n' ' ')
 expect "← reached the rail" "$KEYS" "rooms"
 if python3 -c "import pyte" 2>/dev/null || [ -n "${PYTE_PATH:-}" ]; then
-  echo "--- screen after the switch:"; python3 "$(dirname "$0")/render.py" "$PTY" "$MARKS" 40 120 M3_switched | sed -n 6,12p
+  echo "--- screen after the switch:"; python3 "$E2E/render.py" "$PTY" "$MARKS" 40 120 M3_switched | sed -n 6,12p
 else
   echo "(pyte not installed — skipping screen render; key trace judged only)"
 fi
