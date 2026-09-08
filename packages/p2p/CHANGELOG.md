@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.3.0-alpha...p2p-v0.4.0-alpha) (2026-09-08)
+
+
+### Chores
+
+* **p2p:** Synchronize collagen versions
+
 ## [0.3.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.2.0-alpha...p2p-v0.3.0-alpha) (2026-09-08)
 
 

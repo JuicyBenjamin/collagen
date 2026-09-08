@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.3.0-alpha...cli-v0.4.0-alpha) (2026-09-08)
+
+
+### Features
+
+* **cli:** the receiving agent relays a headline, reads on request, never invents ([3abe56a](https://github.com/JuicyBenjamin/collagen/commit/3abe56a07bad86f66187a55330cb38442f373f33))
+
 ## [0.3.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.2.0-alpha...cli-v0.3.0-alpha) (2026-09-08)
 
 
