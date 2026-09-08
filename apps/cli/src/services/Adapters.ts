@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Context, Layer, Option } from "effect";
 import type { RoomMessage } from "@collagen/p2p";
@@ -123,7 +124,10 @@ export const codexAdapter: Adapter = {
 // Lets a machine without any LLM CLI be a complete peer in a cross-network
 // test — everything downstream of the adapter (AgentRunner, MCP, swarm) is
 // exercised for real.
-const mockAgentPath = fileURLToPath(new URL("../dev/mock-agent.mjs", import.meta.url));
+// Next to the built entry (dist/) or in src/dev when running from source.
+const mockAgentPath = [new URL("./mock-agent.mjs", import.meta.url), new URL("../dev/mock-agent.mjs", import.meta.url)]
+  .map((u) => fileURLToPath(u))
+  .find((p) => existsSync(p)) ?? fileURLToPath(new URL("../dev/mock-agent.mjs", import.meta.url));
 
 export const mockAdapter: Adapter = {
   cmd: process.execPath,

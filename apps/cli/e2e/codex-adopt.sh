@@ -6,7 +6,7 @@
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 start bob; sleep 3; start alice; sleep 9
-SA=$(mcp $A); wait_for_peer $A "$SA" bob
+SA=$(mcp $A); wait_for_peer $A "$SA" bob; sleep 2
 pend() { call $A "$SA" pending-threads '{}' | grep -oE '[0-9a-f]{16},[^"\\]*' | head -1; }
 
 echo "## 0. the user's codex conversation"
@@ -14,7 +14,7 @@ CODEX_TID=$(codex exec --json -c sandbox_mode="read-only" --skip-git-repo-check 
 expect "codex started a conversation" "$CODEX_TID" "^[0-9a-f-]{36}$"
 
 echo "## 1. first contact queues"
-call $A "$SA" drive-peer '{"peer":"bob","action":"send-message","project":"loopdemo","intent":"m1","findings":"first message - answer both of my messages via send-to-peer to bob with intent codex-answer"}' > /dev/null
+call $A "$SA" drive-peer '{"peer":"bob","action":"send-message","project":"loopdemo","intent":"m1","findings":"first message - answer both of my messages via send-to-peer to bob with intent codex-answer"}' | sed 's/^/  drive: /' 
 wait_until "message waits in the inbox (no ai set)" "loopdemo,1,m1" pend
 CTID=$(pend | cut -d, -f1)
 

@@ -4,6 +4,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { App } from "./app/app";
+import { VERSION } from "./app/version";
 import { nameOption, profileOption, roomOption, stripArgSeparator } from "./config/args";
 import { readProfileFile, storedRoom } from "./config/profileFile";
 import { setCliArgs } from "./app/runtime";
@@ -55,7 +56,7 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
   }).pipe(Effect.scoped),
 );
 
-Command.runWith(command, { version: "0.0.0" })(stripArgSeparator(process.argv.slice(2))).pipe(
+Command.runWith(command, { version: VERSION })(stripArgSeparator(process.argv.slice(2))).pipe(
   Effect.provide(NodeServices.layer),
   NodeRuntime.runMain,
 );

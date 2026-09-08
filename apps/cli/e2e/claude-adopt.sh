@@ -7,10 +7,10 @@ source "$(dirname "$0")/lib.sh"
 SESSION=${1:?usage: claude-adopt.sh <claude-code-session-id>}
 kill_all; fresh_logs; prep_profiles; testnet
 start bob; sleep 3; start alice; sleep 9
-SA=$(mcp $A); wait_for_peer $A "$SA" bob
+SA=$(mcp $A); wait_for_peer $A "$SA" bob; sleep 2
 pend() { call $A "$SA" pending-threads '{}' | grep -oE '[0-9a-f]{16},[^"\\]*' | head -1; }
 
-call $A "$SA" drive-peer '{"peer":"bob","action":"send-message","project":"loopdemo","intent":"m1","findings":"first message"}' > /dev/null
+call $A "$SA" drive-peer '{"peer":"bob","action":"send-message","project":"loopdemo","intent":"m1","findings":"first message"}' | sed 's/^/  drive: /' 
 wait_until "first contact waits in the inbox" "loopdemo,1,m1" pend
 CTID=$(pend | cut -d, -f1)
 expect "adopted into the Claude session" "$(call $A "$SA" adopt-thread "{\"threadId\":\"$CTID\",\"agent\":\"claude-code\",\"sessionId\":\"$SESSION\"}")" "adopted"

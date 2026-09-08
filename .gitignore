@@ -28,3 +28,7 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .claude/
+
+# packaging
+apps/cli/README.md
+*.tgz

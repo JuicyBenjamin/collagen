@@ -1,10 +1,38 @@
 {
   "name": "@collagen/cli",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Peer-to-peer rooms where your coding agents talk to each other",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JuicyBenjamin/collagen.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://github.com/JuicyBenjamin/collagen#readme",
+  "keywords": [
+    "p2p",
+    "hyperswarm",
+    "mcp",
+    "claude-code",
+    "codex",
+    "agents",
+    "tui"
+  ],
   "type": "module",
   "bin": {
-    "collagen": "src/index.tsx"
+    "collagen": "bin/collagen.js",
+    "collagen-headless": "bin/collagen-headless.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=26.4"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "cross-env COLLAGEN_DEV=1 node --experimental-ffi --import tsx --watch-preserve-output --watch src/index.tsx",
@@ -14,26 +42,37 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo node_modules",
-    "e2e": "bash e2e/run-all.sh"
+    "e2e": "bash e2e/run-all.sh",
+    "build": "tsup",
+    "prepack": "pnpm build && cp ../../README.md README.md"
   },
   "dependencies": {
-    "@collagen/p2p": "workspace:*",
     "@effect/atom-react": "4.0.0-rc.112",
     "@effect/platform-node": "4.0.0-rc.112",
     "@opentui/core": "catalog:",
     "@opentui/react": "catalog:",
     "@toon-format/toon": "^4.1.1",
+    "autobase": "^7.28.1",
+    "b4a": "^1.8.1",
     "callscript": "^0.1.0",
+    "compact-encoding": "^3.4.0",
+    "corestore": "^7.12.3",
     "effect": "4.0.0-rc.112",
+    "hyperbee": "^2.27.3",
+    "hypercore-crypto": "^3.7.0",
+    "hyperdht": "^6.32.0",
+    "hyperswarm": "^4.17.0",
+    "protomux": "^3.11.0",
     "react": "catalog:",
     "uuid": "^14.0.2"
   },
   "devDependencies": {
+    "@collagen/p2p": "workspace:*",
     "@collagen/typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "cross-env": "^10.1.0",
-    "hyperdht": "^6.33.2",
+    "tsup": "^8.5.1",
     "tsx": "^4.22.4",
     "typescript": "catalog:",
     "vitest": "catalog:"
