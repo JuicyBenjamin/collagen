@@ -179,6 +179,42 @@ export const AdoptedThread = Schema.Struct({
 });
 export type AdoptedThread = typeof AdoptedThread.Type;
 
+/** Something an agent wants to send out of this machine — as data, so it can
+ *  wait for the person's yes across a restart and be edited before it goes.
+ *  A message names its peer (resolved when it is sent, not when proposed); a
+ *  ticket is the full record; a settle names the step and the result. */
+export const Outgoing = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("message"),
+    peer: Schema.String,
+    project: Schema.String,
+    intent: Schema.String,
+    findings: Schema.String,
+  }),
+  Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
+  Schema.Struct({
+    kind: Schema.Literal("settle"),
+    ticketId: Schema.String,
+    stepId: Schema.String,
+    result: Schema.String,
+    failed: Schema.Boolean,
+  }),
+]);
+export type Outgoing = typeof Outgoing.Type;
+
+/** An Outgoing waiting in the outbox: where it goes, how it is shown. */
+export const Proposal = Schema.Struct({
+  id: Schema.String,
+  roomId: Schema.String,
+  /** Who it goes to, by name (a peer, the step owners, or the ticket's creator). */
+  to: Schema.String,
+  /** One line: project · intent, or the ticket goal. */
+  title: Schema.String,
+  ts: Schema.Finite,
+  outgoing: Outgoing,
+});
+export type Proposal = typeof Proposal.Type;
+
 /** Local, per-user state: preferred AI + per-room projects. A project
  *  belongs to the room it was added in (Keet-style) — the same repo shared
  *  into two rooms is two entries. */
@@ -191,5 +227,7 @@ export const LocalState = Schema.Struct({
    *  inbox. Messages live on the room's log; this is what makes "waiting"
    *  a local, per-reader notion that survives restarts. */
   consumed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))),
+  /** What the agent wants to send, waiting for the person (see cli Outbox). */
+  outbox: Schema.optional(Schema.Array(Proposal)),
 });
 export type LocalState = typeof LocalState.Type;
