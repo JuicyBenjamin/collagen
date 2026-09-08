@@ -9,20 +9,25 @@ local repo and answers back.
 
 ## Prerequisites
 
-- **Node ≥ 26.4** — `nvm install 26` (the repo has an `.nvmrc`)
-- **pnpm ≥ 10** — `npm i -g pnpm`
+- **Node ≥ 26.4**
 - At least one agent CLI installed **and authenticated**: `claude` (Claude Code)
-  and/or `codex`
+  and/or `codex` — or neither, using a mocked agent (below)
 
 ## Run it
 
 ```sh
-git clone https://github.com/JuicyBenjamin/collagen.git
-cd collagen
-nvm use
-pnpm install
-pnpm --filter @collagen/cli dev
+npx @collagen/cli
 ```
+
+or install it once and run `collagen`:
+
+```sh
+npm i -g @collagen/cli
+collagen
+```
+
+(`collagen-headless` is the same app without a terminal, for servers.) To hack
+on it instead, see [local development](apps/docs/internals/development.md).
 
 First start is a two-step wizard: **who are you**, then **join or create a
 room**. A room has two parts:

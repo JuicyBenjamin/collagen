@@ -6,16 +6,15 @@
 - At least one supported agent CLI installed and authenticated: `claude` (Claude Code)
   and/or `codex` — or none, using a [mocked agent](#no-agent-cli-mocked-agents)
 
-::: info Currently
-Collagen isn't published yet — you run it from the monorepo. A packaged `collagen`
-binary is the goal.
-:::
-
 ## Start
 
 ```sh
-pnpm --filter @collagen/cli dev
+npx @collagen/cli          # run it
+npm i -g @collagen/cli     # or install once, then: collagen
 ```
+
+Working on collagen itself? `pnpm --filter @collagen/cli dev` runs it from source — see
+[local development](/internals/development).
 
 First run is a two-step wizard: **who are you**, then **join or create a room**. Both
 persist per profile. Flags exist as overrides for scripting and same-machine testing:

@@ -87,7 +87,11 @@ Rough order, not committed.
 ### Infrastructure
 
 - [ ] **Tracing sink** — spans exist (`Effect.fn` / `withSpan`); wire an exporter.
-- [ ] **Packaging** — a `collagen` binary instead of running from the monorepo.
+- [x] **Packaging** — `@collagen/cli` on npm (`npx @collagen/cli`); release-please turns
+  the conventional commits into the version bump + patch notes, GitHub Actions publishes
+  through npm trusted publishing.
+- [ ] **In-app update** — check the registry on start, `u` to reinstall via the package
+  manager that installed us and re-exec.
 - [ ] **More AI adapters** — beyond `claude-code` / `codex`.
 
 ## Decisions log
