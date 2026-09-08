@@ -113,6 +113,16 @@ curl -s -X POST http://127.0.0.1:<port>/mcp \
        "params":{"name":"list-room","arguments":{}}}'
 ```
 
+### Mocked agents (development only)
+
+`a` cycles past the real agents to **mock:claude-code** / **mock:codex**. A mock is a test
+dummy, not a substitute for an agent: an incoming message spawns `src/dev/mock-agent.mjs` instead of
+a CLI, which does the MCP handshake, reads the thread and answers with a canned `mock-ack`
+(capped at 3 per thread; mocks never answer mocks). It's what the e2e scenarios talk to, and
+it's the one kind of AI that auto-responds — everyone in the room sees the `mock:` prefix.
+`drive-peer` remote-controls a mock (send a message, create a ticket, settle a step) so one
+machine can exercise both sides of a flow; real peers ignore drive requests.
+
 ## Profiles, ports, and files
 
 | Concept | Where |
