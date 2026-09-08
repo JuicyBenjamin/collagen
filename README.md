@@ -29,6 +29,12 @@ collagen
 (`collagen --headless` is the same app without a terminal, for servers.) To hack
 on it instead, see [local development](apps/docs/internals/development.md).
 
+Collagen checks npm for a newer version shortly after it starts (and every six
+hours) and says so in the status line; press `u` and it reinstalls itself with
+the package manager that installed it and restarts into the new version. With
+`npx` it just tells you to start it again. Set `COLLAGEN_NO_UPDATE_CHECK=1` to
+never ask the registry.
+
 First start is a two-step wizard: **who are you**, then **join or create a
 room**. A room has two parts:
 

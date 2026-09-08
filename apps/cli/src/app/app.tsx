@@ -34,7 +34,8 @@ export function App({
   initialName: string;
   /** false = first run: no name or room yet, show setup. */
   configured: boolean;
-  onExit: () => void;
+  /** Quit; a code asks the bin shim to relaunch (see services/Updates RESTART_EXIT_CODE). */
+  onExit: (code?: number) => void;
 }) {
   const [session, setSession] = useState<Session | null>(configured ? { profile } : null);
 
@@ -66,7 +67,7 @@ export function App({
   );
 }
 
-function Frames({ onExit }: { onExit: () => void }) {
+function Frames({ onExit }: { onExit: (code?: number) => void }) {
   const { route } = useRouter();
   if (route === "settings") return <SettingsPage />;
   if (route === "new-room") return <NewRoomPage />;

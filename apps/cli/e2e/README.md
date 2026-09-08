@@ -36,6 +36,7 @@ Not in `run-all.sh` — they need something the machine may not have.
 | `tui-sidebar.sh` | `pip install pyte` (set `PYTE_PATH` if not on `sys.path`) | the TUI in a pty: rooms rail, unread dot, online bubble, switching rooms, the `+` frame — rendered with a real terminal emulator (`render.py`) and judged from the key trace |
 | `codex-adopt.sh` | `codex` logged in | first contact queues; `adopt-thread` into a codex conversation; the next message is queued into that conversation; codex reads the thread and replies; the mock acks |
 | `claude-adopt.sh` | `claude` logged in | same loop with `claude -p --resume` into a Claude Code session — pass the session id as `$1` |
+| `update.sh` | network, ~10 min (two global installs) | the in-app updater: the current build installed globally into a temp prefix, a fake registry (`fake-registry.py`) serving the same build as `9.9.9-alpha` and proxying everything else to npm; the TUI notices, `u` installs from it, the app exits 75 and the bin shim relaunches the new version in the same pty |
 
 ## Reading a failure
 

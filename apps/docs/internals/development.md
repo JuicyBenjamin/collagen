@@ -211,6 +211,14 @@ pnpm --filter @collagen/cli pack      # the exact tarball npm would get
   bin on purpose: `npx @collagen/cli` can only pick an executable on its own when the
   package has exactly one (or one named like the package).
 - The version is baked in at build time from `package.json`; `pnpm dev` reports `dev`.
+- **In-app update** (`src/services/Updates.ts`): 10 s after start and every 6 h the app
+  asks the registry (`COLLAGEN_REGISTRY`, default npmjs) for `@collagen/cli/latest`; a newer
+  version goes to the status line, the log and `list-rooms`. `u` picks a plan from where the
+  running file lives — npm global (`…/lib/node_modules/@collagen/cli/`) or pnpm global get
+  reinstalled with that tool, `npx` (`/_npx/`) is told to restart, a source run to pull —
+  and on success exits with `RESTART_EXIT_CODE` (75), which `bin/collagen.js` turns into a
+  relaunch with the same args. `COLLAGEN_NO_UPDATE_CHECK=1` disables the check; a `dev`
+  build never checks. `e2e/update.sh` proves the whole loop against a fake registry.
 - The **protocol version** (`PROTOCOL_VERSION` in `packages/p2p/src/schema.ts`) is
   separate from the package version: bump it whenever frames, log entries or the view
   layout change — peers on another protocol are flagged, not silently dropped.

@@ -4,12 +4,13 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { AI_OPTIONS } from "@collagen/p2p";
 import { MOCK_AI_OPTIONS } from "../../services/Adapters";
+import { RESTART_EXIT_CODE } from "../../services/Updates";
 import { Panel } from "../../components/Panel";
 import { captureAtom, focusAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
 import { useRouter } from "../../app/router";
 import { roomAtom } from "../atoms";
-import { updateStateAtom } from "./atoms";
+import { installAppUpdateAtom, updateStateAtom } from "./atoms";
 import { Footer } from "./components/Footer/Footer";
 import { Keys } from "./components/Keys/Keys";
 import { Sidebar } from "./components/Sidebar/Sidebar";
@@ -31,13 +32,21 @@ function nextAi(current: string | null): string | null {
  *  the global accelerators; each section is a Focusable that owns its own
  *  keys. The room IS the container — it absorbs all free vertical space so
  *  the footer stays pinned and resizes don't reflow. */
-export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: () => void }) {
+export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: (code?: number) => void }) {
   const { navigate } = useRouter();
   const { jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const captured = useAtomValue(captureAtom) !== null;
   const roomName = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "…" })).name;
   const updateState = useAtomSet(updateStateAtom);
+  const installUpdate = useAtomSet(installAppUpdateAtom);
+  const installed = useAtomValue(installAppUpdateAtom);
+
+  // an update was installed: hand the terminal back and let the bin shim
+  // start the new version in our place
+  useEffect(() => {
+    if (AsyncResult.isSuccess(installed) && installed.value === true) onExit(RESTART_EXIT_CODE);
+  }, [installed, onExit]);
 
   // the cursor starts on the tab bar whenever the room frame appears
   useEffect(() => {
@@ -52,6 +61,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "q") return onExit();
     if (key.name === "a") return updateState({ update: (s) => ({ ...s, preferredAi: nextAi(s.preferredAi) }) });
     if (key.name === "s") return navigate("settings");
+    if (key.name === "u") return installUpdate({});
     if (key.name === "1") return jump("room/overview");
     if (key.name === "2") return jump("room/messages");
     if (key.name === "escape") return setFocus("tabs");

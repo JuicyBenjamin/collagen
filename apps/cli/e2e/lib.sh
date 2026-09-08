@@ -7,6 +7,7 @@
 # user's; the scenarios overwrite the parts they need and restore them.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+E2E="$ROOT/e2e" # we cd to ROOT below — helper files must be reached through this, not $(dirname "$0")
 OUT="${COLLAGEN_E2E_OUT:-${TMPDIR:-/tmp}/collagen-e2e}"
 CFG="$HOME/.config/collagen"
 mkdir -p "$OUT"

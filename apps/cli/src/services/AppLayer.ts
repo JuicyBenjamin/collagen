@@ -15,6 +15,7 @@ import { registerAll } from "./Registrar";
 import { Rooms } from "./Rooms";
 import { Scripting } from "./Scripting";
 import { StateStore } from "./StateStore";
+import { Updates } from "./Updates";
 
 /** Process-wide background rules (per-room ones live in Rooms): re-probe the
  *  agent CLI when the preferred ai changes; register our MCP server with the
@@ -55,6 +56,7 @@ const SwarmLive = Swarm.layer.pipe(
  *  Process layer (identity, state, inbox, agents, MCP) wraps the room layer
  *  (Rooms: every joined room live, one focused, on one swarm). */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
+  Layer.provideMerge(Updates.layer),
   Layer.provideMerge(Scripting.layer),
   Layer.provideMerge(Rooms.layer),
   Layer.provideMerge(SwarmLive),
