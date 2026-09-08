@@ -9,7 +9,7 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "separate-pull-requests": false,
-  "group-pull-request-title-pattern": "chore(release): collagen",
+  "group-pull-request-title-pattern": "chore(release): ${branch}",
   "changelog-sections": [
     {
       "type": "feat",
@@ -82,6 +82,5 @@
       "component": "p2p",
       "package-name": "@collagen/p2p"
     }
-  },
-  "pull-request-title-pattern": "chore(release): ${component} v${version}"
+  }
 }
