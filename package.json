@@ -1,6 +1,6 @@
 {
   "name": "collagen",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha",
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "engines": {
@@ -16,13 +16,15 @@
     "clean": "turbo run clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "prepare": "effect-tsgo patch --typescript --no-oxlint",
-    "release": "pnpm --filter @collagen/cli publish --access public --no-git-checks"
+    "release": "pnpm --filter @collagen/cli publish --access public --no-git-checks",
+    "release-please": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@effect/tsgo": "catalog:",
     "prettier": "catalog:",
+    "release-please": "^17.11.2",
     "turbo": "catalog:",
     "typescript": "catalog:"
   },

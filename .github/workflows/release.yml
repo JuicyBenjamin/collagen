@@ -35,13 +35,28 @@ jobs:
       # `secrets` can't be read in step conditions; surface its presence here
       AUTO_MERGE: ${{ secrets.RELEASE_TOKEN != '' }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
 
-      # hop 1: a release PR exists → let it merge itself when ci passes
-      - name: auto-merge the release PR
+      # release-please as a library: registers the "labelled" versioning
+      # strategy (0.2.0-alpha, not 0.1.0-alpha.1), then creates releases for
+      # a merged release commit and/or the release PR — same outputs as the action
+      - name: release-please
+        id: release
+        run: pnpm release-please
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # hop 1: a release PR exists → let it merge itself
+      - name: merge the release PR
         if: ${{ steps.release.outputs.prs_created == 'true' && env.AUTO_MERGE == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -49,19 +64,7 @@ jobs:
         run: gh pr merge "$PR" --rebase --auto --repo "$GITHUB_REPOSITORY" || gh pr merge "$PR" --rebase --repo "$GITHUB_REPOSITORY"
 
       # hop 2: the release commit landed → publish
-      - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
-      - uses: pnpm/action-setup@v4
-        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
-      - uses: actions/setup-node@v4
-        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-      - run: pnpm install --frozen-lockfile
-        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
       - run: pnpm typecheck && pnpm test
-        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
+        if: ${{ steps.release.outputs['apps/cli--release_created'] == 'true' }}
       - run: pnpm release
-        if: ${{ steps.release.outputs['apps/cli--release_created'] }}
+        if: ${{ steps.release.outputs['apps/cli--release_created'] == 'true' }}
