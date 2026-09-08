@@ -13,3 +13,12 @@ export class SwarmError extends Data.TaggedError("SwarmError")<{
 export class NotWritable extends Data.TaggedError("NotWritable")<{
   readonly roomId: string;
 }> {}
+
+/** An append to the room's log failed (Autobase refused or the store errored). */
+export class LogAppendFailed extends Data.TaggedError("LogAppendFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return this.cause instanceof Error ? this.cause.message : String(this.cause);
+  }
+}
