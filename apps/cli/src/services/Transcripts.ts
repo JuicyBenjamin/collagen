@@ -1,6 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { stepThreadId, type Ticket } from "@collagen/p2p";
 import { sessionDirs, sessionFile, sliceSince, unpack } from "../lib/transcripts";
 import { configDir, IdentityService } from "./Identity";
@@ -20,6 +20,29 @@ export interface SavedTranscript {
   readonly path: string;
 }
 
+/** Provenance, written next to each transcript as `<file>.meta.json`: the
+ *  filename says who and which agent at the time; this says the rest. */
+export interface TranscriptMeta {
+  readonly subject: string;
+  readonly from: string;
+  readonly fromKey: string;
+  readonly ai: string;
+  readonly threadId: string;
+  readonly sessionId: string;
+  /** The slice starts here (their adoption time), ms. */
+  readonly since: number;
+  readonly entries: number;
+  readonly receivedAt: number;
+  readonly requestId: string;
+}
+
+export interface ListedTranscript {
+  readonly subject: string;
+  readonly file: string;
+  readonly bytes: number;
+  readonly meta: TranscriptMeta | null;
+}
+
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
 const fileFor = (subject: string, from: string, threadId: string, ai: string) =>
   join(transcriptsDir, safe(subject), `${safe(from)}-${threadId}.${safe(ai)}.jsonl`);
@@ -35,7 +58,7 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
     const rooms = yield* Rooms;
     const outbox = yield* Outbox;
     const store = yield* StateStore;
-    const { nameRef } = yield* IdentityService;
+    const { identity, nameRef } = yield* IdentityService;
     const saved = yield* SubscriptionRef.make<ReadonlyArray<SavedTranscript>>([]);
 
     const nameOf = (h: RoomHandle, key: string) =>
@@ -45,10 +68,11 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
         return peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8);
       });
 
-    const file = (entry: SavedTranscript, text: string) =>
+    const file = (entry: SavedTranscript, text: string, meta: TranscriptMeta) =>
       Effect.gen(function* () {
         mkdirSync(dirname(entry.path), { recursive: true });
         writeFileSync(entry.path, text);
+        writeFileSync(`${entry.path}.meta.json`, JSON.stringify(meta, null, 2));
         yield* SubscriptionRef.update(saved, (s) => [...s.filter((x) => x.path !== entry.path), entry]);
       });
 
@@ -69,7 +93,12 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
         const path = sessionFile(a.ai, a.sessionId, sessionDirs());
         if (!path) continue;
         const { lines, entries } = sliceSince(readFileSync(path, "utf8"), a.since ?? 0);
-        yield* file({ subject, from: me, threadId, ai: a.ai, entries, path: fileFor(subject, me, threadId, a.ai) }, lines.join("\n") + "\n");
+        const now = yield* Clock.currentTimeMillis;
+        yield* file(
+          { subject, from: me, threadId, ai: a.ai, entries, path: fileFor(subject, me, threadId, a.ai) },
+          lines.join("\n") + "\n",
+          { subject, from: me, fromKey: identity.pubkey, ai: a.ai, threadId, sessionId: a.sessionId, since: a.since ?? 0, entries, receivedAt: now, requestId: "own" },
+        );
         own++;
       }
       const asked = yield* h.room.requestTranscripts({ requestId: crypto.randomUUID(), subject, threadIds });
@@ -114,8 +143,20 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
           Stream.tap(({ from, transcript: t }) =>
             Effect.gen(function* () {
               const name = yield* nameOf(h, from);
+              const now = yield* Clock.currentTimeMillis;
               const entry: SavedTranscript = { subject: t.subject, from: name, threadId: t.threadId, ai: t.ai, entries: t.entries, path: fileFor(t.subject, name, t.threadId, t.ai) };
-              yield* file(entry, unpack(t.data));
+              yield* file(entry, unpack(t.data), {
+                subject: t.subject,
+                from: name,
+                fromKey: from,
+                ai: t.ai,
+                threadId: t.threadId,
+                sessionId: t.sessionId,
+                since: t.since,
+                entries: t.entries,
+                receivedAt: now,
+                requestId: t.requestId,
+              });
               yield* Effect.log(`transcript from ${name}: ${t.entries} entries → ${entry.path}`);
             }),
           ),
@@ -142,8 +183,15 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
     );
 
     /** Everything filed so far, from disk (survives restarts). */
-    const list = Effect.sync((): ReadonlyArray<{ subject: string; file: string; bytes: number }> => {
-      const out: Array<{ subject: string; file: string; bytes: number }> = [];
+    const list = Effect.sync((): ReadonlyArray<ListedTranscript> => {
+      const out: Array<ListedTranscript> = [];
+      const readMeta = (path: string): TranscriptMeta | null => {
+        try {
+          return JSON.parse(readFileSync(`${path}.meta.json`, "utf8")) as TranscriptMeta;
+        } catch {
+          return null;
+        }
+      };
       let subjects: Array<string>;
       try {
         subjects = readdirSync(transcriptsDir);
@@ -153,7 +201,11 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       for (const subject of subjects) {
         const dir = join(transcriptsDir, subject);
         try {
-          for (const f of readdirSync(dir)) out.push({ subject, file: join(dir, f), bytes: statSync(join(dir, f)).size });
+          for (const f of readdirSync(dir)) {
+            if (f.endsWith(".meta.json")) continue;
+            const file = join(dir, f);
+            out.push({ subject, file, bytes: statSync(file).size, meta: readMeta(file) });
+          }
         } catch {
           /* not a dir */
         }

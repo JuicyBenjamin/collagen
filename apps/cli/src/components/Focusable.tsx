@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import type { BoxRenderable } from "@opentui/core";
 import { useKeyboard, type BoxProps } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { captureAtom, focusAtom, hintsAtom, nearestFocusable, registerFocusable, type Direction } from "./focus";
+import { captureAtom, focusAtom, hintsAtom, leftEdgeAtom, nearestFocusable, registerFocusable, type Direction } from "./focus";
 import { keyDebug, type Key } from "./keys";
 
 const DIRECTIONS: ReadonlySet<string> = new Set<Direction>(["up", "down", "left", "right"]);
@@ -36,6 +36,7 @@ export function Focusable({
   const captured = useAtomValue(captureAtom) !== null;
   const setFocus = useAtomSet(focusAtom);
   const setHints = useAtomSet(hintsAtom);
+  const leftEdge = useAtomValue(leftEdgeAtom);
 
   useEffect(
     () =>
@@ -61,6 +62,8 @@ export function Focusable({
     if (onKey?.(key) === true) return;
     if (!DIRECTIONS.has(key.name)) return;
     const to = nearestFocusable(id, key.name as Direction);
+    // ← off the page's left edge (nothing there, or just the rooms rail) is "back"
+    if (key.name === "left" && leftEdge !== null && (to === null || to === "rooms")) return leftEdge();
     if (to !== null) setFocus(to);
   });
 
