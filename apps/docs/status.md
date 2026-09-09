@@ -20,7 +20,8 @@ _Last updated: 2026-09-07._
 - **Human in the loop** — the founding rule. Outgoing: `send-to-peer`,
   `create-ticket` and `settle-step` never write to the log themselves; they queue a proposal
   (data, persisted in local state — it waits across a restart) in the **outbox** (`Outbox`
-  service, overview section, status-line count) and the person approves (`y`), rewrites
+  service; shown as waiting rows at the bottom of the messages tab and of a ticket's
+  conversation; counted in the tab bar and the status line) and the person approves (`y`), rewrites
   the text first (`e`) or rejects (`n`); only then does `Dispatch` write the log, resolving
   the peer by name at send time. Incoming: every nudge and tool description tells the
   agent to relay to its person and wait, never to answer or act on its own. Mocks and
@@ -44,7 +45,11 @@ _Last updated: 2026-09-07._
 - **Tickets (data layer)** — a shared record: goal + steps with owners, `needs`
   dependencies, status and results. On the room log, merged deterministically in `apply`,
   so they survive every restart and reach offline members. `create-ticket` / `settle-step` / `get-tickets`. A step that
-  becomes actionable is delivered to its owner on the same thread messages use.
+  becomes actionable is delivered to its owner on the same thread messages use. Anyone may
+  weigh in (`send-to-peer … ticketId`); everyone the ticket concerns — creator, owners,
+  whoever weighed in — hears when a step settles or someone weighs in (`ticket-update`
+  on the thread their agent knows it by). The overview lists tickets by what they want from
+  you (needs you · waiting on … · done) with who was asked and who answered.
 - **MCP server** — `effect/unstable/ai` `McpServer` over Streamable HTTP, per-profile
   port. Tools for the room, messages, tickets, settings (projects, ai, name, room name,
   room membership) and a CallScript `execute` engine. Auto-registered in `~/.claude.json`
