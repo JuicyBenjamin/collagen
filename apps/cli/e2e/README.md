@@ -28,6 +28,8 @@ created on the fly.
 | `leave.sh` | leaving a room forgets it locally and moves focus; the last room can't be left |
 | `approval.sh` | human in the loop, sending side: a non-mock peer's `send-to-peer` / `create-ticket` queue for approval and nothing reaches the other side; a mock is not gated; the queued proposals survive a restart |
 | `approval-tui.sh` | the gate from the person's side, TUI in a pty: two queued messages, ↓ lands on the outbox, `y` sends one (bob gets it), `n` drops the other — judged from logs and the key trace, no pyte needed |
+| `ticket-tui.sh` | the ticket page in a pty: ↓ to the tickets list, enter opens the ticket (cursor on its steps), ↓ walks to diagnostics, enter runs the transcripts diagnostic (the log shows the ask), esc returns to the list |
+| `transcripts.sh` | transcripts on request: bob adopted the pair thread into a fake codex session (rollout file in a temp `CODEX_HOME`); alice's `request-transcripts` reaches him, the slice from adoption on comes back directly and is filed; older lines are not included; `list-transcripts` sees it |
 
 ## Manual scenarios
 
