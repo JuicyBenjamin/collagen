@@ -6,7 +6,7 @@
 # the app exits with the RESTART code and the bin shim brings the new version up
 # in the same pty. Needs network (dependencies come from the real registry).
 source "$(dirname "$0")/lib.sh"
-kill_all; fresh_logs
+kill_all; fresh_logs; prep_profiles
 PREFIX="$OUT/prefix"; REG=48731; NEXT=9.9.9-alpha
 rm -rf "$PREFIX" "$OUT"/collagen-cli-*.tgz "$OUT/update-next.tgz"; mkdir -p "$PREFIX"
 
@@ -45,10 +45,10 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( until grep -q "update available" "$OUT/update.log" 2>/dev/null; do sleep 1; done; sleep 2; mark M0_notice; printf 'u'
   until grep -q "update installed" "$OUT/update.log" 2>/dev/null; do sleep 1; done; sleep 12; mark M1_relaunched; sleep 1; printf 'q' ) | \
   COLLAGEN_REGISTRY="http://127.0.0.1:$REG" npm_config_registry="http://127.0.0.1:$REG" npm_config_prefix="$PREFIX" \
-  COLLAGEN_LOG="$OUT/update.log" script -F -q "$PTY" bash -c "stty rows 40 cols 120; '$PREFIX/bin/collagen' --profile alice; echo EXIT=\$?" > /dev/null 2>&1 &
+  HOME="$SHOME" npm_config_cache="$HOME/.npm" COLLAGEN_LOG="$OUT/update.log" script -F -q "$PTY" bash -c "stty rows 40 cols 120; '$PREFIX/bin/collagen' --profile $(profile alice); echo EXIT=\$?" > /dev/null 2>&1 &
 for i in $(seq 1 150); do grep -q M1_relaunched "$MARKS" 2>/dev/null && break; sleep 2; done
 for i in $(seq 1 10); do grep -q "EXIT=" "$PTY" 2>/dev/null && break; sleep 1; done
-kill $REGPID 2>/dev/null; pkill -9 -f "prefix/bin/collagen|dist/index.js --profile alice|script -F -q $PTY" 2>/dev/null
+kill $REGPID 2>/dev/null; pkill -9 -f "prefix/bin/collagen|dist/index.js --profile $(profile alice)|script -F -q $PTY" 2>/dev/null
 
 LOG=$(cat "$OUT/update.log" 2>/dev/null)
 expect "the app noticed the newer version" "$LOG" "update available: collagen $NEXT"
@@ -61,4 +61,4 @@ if python3 -c "import pyte" 2>/dev/null || [ -n "${PYTE_PATH:-}" ]; then
   SCREEN=$(python3 "$E2E/render.py" "$PTY" "$MARKS" 40 120 M1_relaunched)
   expect "the relaunched TUI reports $NEXT" "$SCREEN" "collagen $NEXT"
 fi
-restore_profiles; summary
+summary

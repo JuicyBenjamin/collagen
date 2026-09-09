@@ -60,7 +60,7 @@ they check that what we tell the agent is correct and that the tools behave when
 ### End-to-end
 
 ```sh
-pnpm --filter @collagen/cli e2e        # ~4 minutes, needs the alice/bob profiles
+pnpm --filter @collagen/cli e2e        # ~1 minute, scenarios side by side, touches nothing of yours
 ```
 
 Real instances on a local testnet, driven over MCP, judged from their logs — see

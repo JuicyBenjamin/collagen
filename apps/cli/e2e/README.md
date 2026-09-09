@@ -7,16 +7,25 @@ history, two peers each bootstrapping a log, …). Run them after anything that
 touches `packages/p2p` or the services.
 
 ```sh
-pnpm --filter @collagen/cli e2e          # the deterministic set, ~4 minutes
-bash apps/cli/e2e/log.sh                 # one scenario
-COLLAGEN_E2E_OUT=/tmp/x bash …           # where logs go (default $TMPDIR/collagen-e2e)
+pnpm --filter @collagen/cli e2e          # the deterministic set, side by side, ~1 minute
+E2E_ONLY="log attach" pnpm --filter @collagen/cli e2e   # a few of them
+E2E_JOBS=3 pnpm --filter @collagen/cli e2e              # fewer at once (default 6)
+bash apps/cli/e2e/log.sh                 # one scenario, ~5 s
+COLLAGEN_E2E_OUT=/tmp/x bash …           # where output goes (default $TMPDIR/collagen-e2e)
 ```
 
-Prerequisites: `pnpm install`, `python3`, and the test profiles `alice` and
-`bob` in `~/.config/collagen` (any two profiles that share the room `st-test3`;
-the scripts set the parts they depend on — alice creates the room's log and has
-no AI, bob is a `mock:codex` joiner — and restore them afterwards). `carol` is
-created on the fly.
+Prerequisites: `pnpm install`, `python3`. Nothing of yours is touched: every
+scenario is an island with its own `HOME` under `$COLLAGEN_E2E_OUT/<scenario>/home`
+(so its own `~/.config/collagen`, `~/.codex`, `~/.claude`), its own generated profiles
+(`alice-<scenario>`, `bob-<scenario>`; `carol` is created on the fly), and its own
+testnet. Profile names decide MCP ports, so scenarios never collide and run in
+parallel. Instances start with `COLLAGEN_REGISTER=0`: no agent CLI is ever run to
+register the MCP server.
+
+There are no fixed sleeps. `mcp` waits for an instance to answer, `wait_for_peer` for
+presence, `admitted <who>` for the log admission, `wait_until` for any condition — a
+scenario is as slow as the thing it waits for, not as slow as a guess. A negative
+assertion ("nothing reached bob") is the one place a short sleep stays.
 
 | Scenario | Proves |
 | --- | --- |
@@ -51,8 +60,13 @@ Not in `run-all.sh` — they need something the machine may not have.
   contain. Assert tool calls in agent output by their `"tool":"…name"` form, never by the
   bare tool name — the message text under test may mention it.
 - Every `start`ed headless peer runs with `COLLAGEN_AUTO_APPROVE=1`; to test the human gate
-  itself, start that peer with `COLLAGEN_AUTO_APPROVE=0` (see `approval.sh`). `prep_profiles`
-  clears the persisted outbox so a scenario never inherits another's proposals.
+  itself, start that peer with `COLLAGEN_AUTO_APPROVE=0` (see `approval.sh`). Profiles are
+  generated fresh by `prep_profiles`, so a scenario never inherits another's state.
+- Wait for the condition, never for a duration: `SA=$(mcp $A)` blocks until alice is up,
+  `wait_for_peer` / `admitted bob` until bob is present and writing, `wait_until` for the
+  rest. Files live under `$CFG` (the scenario's `~/.config/collagen`), never `$HOME`.
+- Paths and the TUI: `HOME="$SHOME" … script -F -q "$PTY" bash -c "stty …; $TUI"` — `$TUI`
+  is alice's TUI command for this scenario.
 
 ## Reading a failure
 
@@ -62,6 +76,10 @@ Start with the instance logs in `$COLLAGEN_E2E_OUT`. Connection lines say
 `room log created|opened … writable=…`, `admitting …`, `admitted to the room log`
 tell the admission story. Presence problems show as no `peer online` line.
 
-Harness hygiene: kill instances by pattern (`pkill -f src/headless.ts`), never by
-the wrapper pid — an orphan keeps the deterministic MCP port and the next
+Each peer's stderr is in `$COLLAGEN_E2E_OUT/<scenario>/<who>.err` — a crash that would
+otherwise look like "the MCP server never answered" is there. `run-all.sh` prints the
+FAIL lines and any stderr of a red scenario at the end.
+
+Harness hygiene: the harness kills instances by pattern (`--profile <who>-<scenario>`),
+never by the wrapper pid — an orphan keeps the deterministic MCP port and the next
 instance silently moves to an ephemeral one while your curls hit the ghost.
