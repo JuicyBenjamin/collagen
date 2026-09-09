@@ -5,7 +5,7 @@ import { focusAtom, nearestFocusable } from "../../../../components/focus";
 import { isEnter } from "../../../../components/keys";
 import { theme } from "../../../../app/theme";
 import { roomAtom } from "../../../atoms";
-import { admittedAtom, rosterAtom, stateAtom, traceAtom } from "../../atoms";
+import { admittedAtom, outboxAtom, rosterAtom, stateAtom, traceAtom } from "../../atoms";
 import { projectRows } from "../../projectRows";
 import { TABS, useTabs } from "../../tabs";
 
@@ -21,6 +21,7 @@ export function TabBar() {
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null, rooms: {} }));
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const admitted = AsyncResult.getOrElse(useAtomValue(admittedAtom), () => true);
+  const waiting = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const).filter((p) => p.roomId === room.id).length;
 
   const shared = projectRows(state, room.id, peers).filter((r) => r.holders.length >= 2).length;
   const online = peers.filter((p) => !p.away).length + 1;
@@ -50,6 +51,7 @@ export function TabBar() {
           <span fg={theme.dim}>   </span>
           <span fg={active === "room/messages" ? theme.accent : theme.dim}>[2] messages</span>
           <span fg={theme.dim}> ({trace.length})</span>
+          {waiting > 0 ? <span fg={theme.warn}> · {waiting} to approve</span> : null}
           <span fg={theme.dim}>   ·   </span>
           <span fg={theme.fg}>{online} online</span>
           <span fg={theme.dim}> · </span>

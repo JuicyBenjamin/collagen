@@ -1,6 +1,7 @@
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
+import { isParticipant, myThreadFor, stepChanges, stepUpdateText, weighInText } from "../lib/ticketUpdates";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
@@ -142,6 +143,76 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           Effect.forkScoped,
         );
 
+        // Ticket updates for participants — the creator, the owners, anyone who
+        // weighed in: a step settled or failed, or someone weighed in. A local
+        // inbox message on the thread that person's agent knows the ticket by,
+        // so their adopted session resumes with it. An owner whose own step
+        // just became actionable gets the step delivery (above) instead.
+        const nameOf = (key: string) =>
+          Effect.gen(function* () {
+            if (key === identity.pubkey) return yield* SubscriptionRef.get(nameRef);
+            const peers = yield* SubscriptionRef.get(room.roster);
+            const members = yield* SubscriptionRef.get(room.members);
+            return peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8);
+          });
+        const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string) =>
+          Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            const msg: RoomMessage = {
+              id: crypto.randomUUID(),
+              threadId,
+              from,
+              fromName,
+              to: identity.pubkey,
+              project: ticket.project,
+              intent: `ticket-update:${what}`,
+              findings,
+              ts: now,
+              ticketId: ticket.id,
+            };
+            yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)}: ${fromName} ${what} — telling your agent`);
+            yield* inbox.push(h.id, msg);
+            yield* Effect.forkChild(runner.runThread(threadId));
+          });
+        let prevTickets: ReadonlyMap<string, Ticket> | null = null;
+        yield* SubscriptionRef.changes(room.tickets).pipe(
+          Stream.mapEffect(
+            Effect.fnUntraced(function* (all) {
+              const prev = prevTickets;
+              prevTickets = all;
+              if (prev === null) return; // what the log already held is history, not news
+              const trace = yield* SubscriptionRef.get(room.trace);
+              for (const c of stepChanges(prev, all)) {
+                if (c.step.owner === identity.pubkey) continue; // our own doing
+                if (!isParticipant(c.ticket, trace, identity.pubkey)) continue;
+                if (actionableSteps(c.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
+                const actorName = yield* nameOf(c.step.owner);
+                yield* notify(myThreadFor(c.ticket, trace, identity.pubkey, c.step.owner), c.step.owner, actorName, c.ticket, c.to, stepUpdateText(c, actorName));
+              }
+            }),
+          ),
+          Stream.runDrain,
+          Effect.forkScoped,
+        );
+        let seenTrace = -1;
+        yield* SubscriptionRef.changes(room.trace).pipe(
+          Stream.mapEffect(
+            Effect.fnUntraced(function* (trace) {
+              const start = seenTrace < 0 ? trace.length : seenTrace;
+              seenTrace = trace.length;
+              const tickets = yield* SubscriptionRef.get(room.tickets);
+              for (const m of trace.slice(start)) {
+                if (!m.ticketId || m.from === identity.pubkey || m.to === identity.pubkey) continue;
+                const ticket = tickets.get(m.ticketId);
+                if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
+                yield* notify(myThreadFor(ticket, trace, identity.pubkey, m.from), m.from, m.fromName, ticket, "weighed in", weighInText(ticket, m, yield* nameOf(m.to)));
+              }
+            }),
+          ),
+          Stream.runDrain,
+          Effect.forkScoped,
+        );
+
         // Drive requests: a peer remote-controls us for e2e testing — but ONLY
         // when we're running a mock AI. A real user's instance ignores them.
         yield* room.drives.pipe(
@@ -156,7 +227,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               switch (action.kind) {
                 case "send-message":
                   return yield* room
-                    .sendTo(from, { project: action.project, intent: action.intent, findings: action.findings })
+                    .sendTo(from, { project: action.project, intent: action.intent, findings: action.findings, ...(action.ticketId ? { ticketId: action.ticketId } : {}) })
                     .pipe(Effect.catchTag("NotWritable", () => Effect.logWarning("drive reply: not admitted to the room log")));
                 case "create-ticket": {
                   const id = crypto.randomUUID();
