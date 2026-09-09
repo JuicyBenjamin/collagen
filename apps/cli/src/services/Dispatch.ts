@@ -6,6 +6,7 @@ import { ticketView } from "../lib/ticketView";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
+import { StateStore } from "./StateStore";
 
 const NOT_ADMITTED = "failed: you are not admitted to this room's log yet — a member has to be online once to admit you";
 
@@ -17,6 +18,7 @@ const NOT_ADMITTED = "failed: you are not admitted to this room's log yet — a 
 export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
   make: Effect.gen(function* () {
     const rooms = yield* Rooms;
+    const store = yield* StateStore;
     const { identity, nameRef } = yield* IdentityService;
 
     const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing) {
@@ -63,6 +65,39 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           };
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           return merged ? render(merged) : NOT_ADMITTED;
+        }
+        case "attach": {
+          // references go on the log; the files stay here, remembered by
+          // attachment id so a fetch can be answered — even after a restart
+          const now = yield* Clock.currentTimeMillis;
+          const files: Record<string, string> = {};
+          let attached = 0;
+          for (const item of out.items) {
+            const id = crypto.randomUUID();
+            const attachment = {
+              id,
+              ticketId: out.ticketId,
+              holder: identity.pubkey,
+              holderName: myName,
+              name: item.name,
+              bytes: item.bytes,
+              mime: item.mime,
+              ...(out.note ? { note: out.note } : {}),
+              ...(item.transcript ? { transcript: item.transcript } : {}),
+              attachedAt: now,
+            };
+            const ok = yield* room.attach(attachment).pipe(
+              Effect.as(true),
+              Effect.catchTag("NotWritable", () => Effect.succeed(false)),
+            );
+            if (ok) {
+              files[id] = item.file;
+              attached++;
+            }
+          }
+          if (attached === 0) return NOT_ADMITTED;
+          yield* store.update((st) => ({ ...st, attachedFiles: { ...(st.attachedFiles ?? {}), ...files } }));
+          return `attached ${attached} file(s) to "${out.goal}" — the references are on the ticket for everyone; the files go to whoever fetches them while you are online`;
         }
         case "transcript": {
           // read now, not when proposed: the file may have grown since

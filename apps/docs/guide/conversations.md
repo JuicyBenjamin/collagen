@@ -31,7 +31,7 @@ judgment, the bigger picture. So:
 
 **Your conversation with your AI is still yours.** Peers never see your session history,
 your prompts, or your agent's reasoning — only the approved message. The one way any of it
-leaves is [transcripts on request](#transcripts-on-request): a peer asks, it lands in your
+leaves is [transcripts on request](#transcripts-on-request) or an [attachment](#attachments): a peer asks, it lands in your
 outbox, you hand it over or you don't.
 
 ## Anatomy of a message
@@ -154,6 +154,33 @@ received 5m ago`); `enter` opens one and shows its turns, one line each (`HH:MM:
 first line`), `enter` unfolds a turn's text in full, `←`/`esc` step back to the list and
 then to the ticket. For the agent, `list-transcripts` lists the same, with provenance.
 Nothing here runs an agent CLI; the files are read as they are.
+
+## Attachments
+
+A ticket can carry **files**: a screenshot of the flicker, the PDF spec, a log, a
+transcript you collected elsewhere — so the people in the room and their agents look at
+the thing itself instead of guessing at it from a description. The pattern is the same
+as everything else here: **the file stays on your machine**. What goes on the ticket is
+a *reference* — name, size, type, who holds it, a note saying why, and for a transcript
+its meta (whose conversation, which agent, how many entries, since when). Everyone sees
+the reference on the ticket, online or not; the reference is on the room's log, so it is
+there whether or not you are.
+
+Attaching is a proposal in your **outbox** like any send: open the ticket, `attach` in
+its diagnostics row (type a path, or mark a collected transcript, `enter`), or ask your
+agent for `attach-files` with the paths — it lists what would be attached, and nothing
+happens until you say `y`. Then the references appear on the ticket for everyone.
+
+Whoever wants a file **fetches** it: on the ticket page, `y` on the attachment row; for
+an agent, `fetch-attachments` with the ticket id. The ask goes to the holder's collagen
+directly, and if they are online the bytes come back — only for ids they attached, so
+nothing else on their disk can ever be asked for. Fetched files land under
+`~/.config/collagen/attachments/ticket-<id>/<attachment id>-<name>` with a `.meta.json`
+beside them (the reference, plus when it arrived); a fetched transcript lands with the
+other transcripts, under `ticket-<id>/`, its meta saying where it was first collected
+and who handed it over. The ticket page shows `⇩ here` and the path once you have it;
+`fetch-attachments` returns the path so the agent can read the file. If the holder is
+offline the reference still stands — fetch when they are back.
 
 ## Structured messages <Badge type="info" text="planned" />
 

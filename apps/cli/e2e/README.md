@@ -31,6 +31,7 @@ created on the fly.
 | `ticket-tui.sh` | the ticket page in a pty: ↓ to the tickets list, enter opens the ticket (cursor on its steps), ↓ walks to diagnostics, enter runs the transcripts diagnostic (the log shows the ask), esc returns to the list |
 | `weigh-in.sh` | ticket updates reach everyone the ticket concerns: the creator hears bob settled (a `ticket-update` on her thread with him); carol, not asked, weighs in with a tagged message to alice — bob, owner but not recipient, hears she did |
 | `transcripts.sh` | transcripts on request: bob adopted the pair thread into a fake codex session (rollout file in a temp `CODEX_HOME`); alice's `request-transcripts` reaches him, the slice from adoption on comes back directly and is filed; older lines are not included; `list-transcripts` sees it |
+| `attach.sh` | attachments: alice `attach-files` a screenshot and a collected transcript to a ticket — references on the log, no file moves; bob's `fetch-attachments` lists them (name, type, size, holder, note) and fetches: bytes arrive directly, byte-identical, filed under `attachments/ticket-<id>/` with the record beside, the transcript with the transcripts (meta: origin, via); a missing path is refused; an unknown id is refused |
 
 ## Manual scenarios
 

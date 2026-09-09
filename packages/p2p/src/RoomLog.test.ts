@@ -103,6 +103,30 @@ describe("RoomLog", () => {
     });
   });
 
+  it("attachments are references keyed by ticket and id; a repeat does not overwrite", async () => {
+    await withLog(async (log) => {
+      const a = {
+        id: "a1",
+        ticketId: "t1",
+        holder: "k-bob",
+        holderName: "bob",
+        name: "bob-0123456789abcdef.codex.jsonl",
+        bytes: 100,
+        mime: "application/jsonl",
+        transcript: { from: "bob", ai: "codex", threadId: "0123456789abcdef", sessionId: "s", entries: 2, since: 5, origin: "thread-0123456789abcdef" },
+        attachedAt: 10,
+      };
+      await Effect.runPromise(log.append({ op: "attachment", attachment: a }));
+      await Effect.runPromise(log.append({ op: "attachment", attachment: { ...a, bytes: 999 } }));
+      await Effect.runPromise(log.append({ op: "attachment", attachment: { ...a, id: "a2", ticketId: "t2", name: "shot.png", mime: "image/png", transcript: undefined } }));
+      const view = await Effect.runPromise(log.read);
+      expect(view.attachments.map((x) => [x.ticketId, x.id, x.bytes])).toEqual([
+        ["t1", "a1", 100],
+        ["t2", "a2", 100],
+      ]);
+    });
+  });
+
   it("malformed entries are skipped, not fatal", async () => {
     await withLog(async (log) => {
       await Effect.runPromise(log.append({ op: "bogus", anything: 1 } as never));

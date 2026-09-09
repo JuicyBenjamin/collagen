@@ -142,11 +142,72 @@ export const TranscriptFrame = Schema.Struct({
   data: Schema.String,
 });
 
+/** What makes an attached file a transcript: whose conversation, which
+ *  agent, which thread / session, how much — its meta file, in short. */
+export const TranscriptInfo = Schema.Struct({
+  from: Schema.String,
+  ai: Schema.String,
+  threadId: Schema.String,
+  sessionId: Schema.String,
+  entries: Schema.Finite,
+  since: Schema.Finite,
+  /** The subject it was first collected under. */
+  origin: Schema.String,
+});
+export type TranscriptInfo = typeof TranscriptInfo.Type;
+
+/** A file someone holds, as they pick it to attach: the path is the holder's
+ *  own and never leaves the machine (the log gets an Attachment). */
+export const AttachItem = Schema.Struct({
+  file: Schema.String,
+  name: Schema.String,
+  bytes: Schema.Finite,
+  mime: Schema.String,
+  transcript: Schema.optional(TranscriptInfo),
+});
+export type AttachItem = typeof AttachItem.Type;
+
+/** A file attached to a ticket — a screenshot, a document, a transcript — as
+ *  the reference on the room's log, so everyone sees it is there whether or
+ *  not the holder is online. The file itself stays with the holder until a
+ *  member fetches it (both online). */
+export const Attachment = Schema.Struct({
+  id: Schema.String,
+  ticketId: Schema.String,
+  /** Who holds the file (key) and their name at the time. */
+  holder: Schema.String,
+  holderName: Schema.String,
+  name: Schema.String,
+  bytes: Schema.Finite,
+  mime: Schema.String,
+  /** Why it is here, in the holder's words. */
+  note: Schema.optional(Schema.String),
+  /** Present when the file is an agent's conversation. */
+  transcript: Schema.optional(TranscriptInfo),
+  attachedAt: Schema.Finite,
+});
+export type Attachment = typeof Attachment.Type;
+
+/** "Send me attachment X" — to its holder, when both are online. */
+export const FetchAttachmentFrame = Schema.Struct({
+  kind: Schema.Literal("fetch-attachment"),
+  attachmentId: Schema.String,
+});
+export type FetchAttachmentFrame = typeof FetchAttachmentFrame.Type;
+
+/** The file, to the one who asked: its bytes gzipped, base64. */
+export const AttachmentFrame = Schema.Struct({
+  kind: Schema.Literal("attachment"),
+  attachmentId: Schema.String,
+  data: Schema.String,
+});
+export type AttachmentFrame = typeof AttachmentFrame.Type;
+
 /** Ephemeral frames — what is said connection-to-connection and not
  *  remembered: presence, log bootstrap, remote control, transcripts.
  *  Everything that must outlive a connection (messages, tickets, the room
  *  name, membership) is a LogOp on the room's shared log instead. */
-export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame]);
+export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
 export type TranscriptRequestFrame = typeof TranscriptRequestFrame.Type;
 export type TranscriptFrame = typeof TranscriptFrame.Type;
 export type Frame = typeof Frame.Type;
@@ -164,6 +225,8 @@ export const LogOp = Schema.Union([
   Schema.Struct({ op: Schema.Literal("rename"), name: Schema.String, ts: Schema.Finite }),
   /** A directed message; room-visible, delivered to `msg.to` whenever they read the log. */
   Schema.Struct({ op: Schema.Literal("msg"), msg: RoomMessage }),
+  /** A file attached to a ticket (the reference; the holder keeps the file). */
+  Schema.Struct({ op: Schema.Literal("attachment"), attachment: Attachment }),
 ]);
 export type LogOp = typeof LogOp.Type;
 
@@ -234,6 +297,15 @@ export const Outgoing = Schema.Union([
     result: Schema.String,
     failed: Schema.Boolean,
   }),
+  /** Attach files you hold to a ticket: references go on the log; the files
+   *  go to members who fetch them while you are online. */
+  Schema.Struct({
+    kind: Schema.Literal("attach"),
+    ticketId: Schema.String,
+    goal: Schema.String,
+    items: Schema.Array(AttachItem),
+    note: Schema.optional(Schema.String),
+  }),
   /** Hand a peer the agent's conversation on one thread, from adoption on. */
   Schema.Struct({
     kind: Schema.Literal("transcript"),
@@ -276,5 +348,8 @@ export const LocalState = Schema.Struct({
   consumed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))),
   /** What the agent wants to send, waiting for the person (see cli Outbox). */
   outbox: Schema.optional(Schema.Array(Proposal)),
+  /** Files we attached to tickets: attachment id → our local path, so a fetch
+   *  can be answered (only for ids here — nothing else ever leaves). */
+  attachedFiles: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 export type LocalState = typeof LocalState.Type;

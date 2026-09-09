@@ -8,6 +8,8 @@ import {
   type Peer,
   type RoomMessage,
   type SharedProfile,
+  type Attachment,
+  type AttachmentFrame,
   type TranscriptFrame,
   type TranscriptRequestFrame,
 } from "./schema";
@@ -81,6 +83,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       PubSub.unbounded<{ from: string; transcript: TranscriptFrame }>(),
       (p) => PubSub.shutdown(p),
     );
+    // Transcripts attached to tickets (from the log) and peers asking us for one.
+    const attachments = yield* SubscriptionRef.make<ReadonlyArray<Attachment>>([]);
+    const fetchRequests = yield* Effect.acquireRelease(
+      PubSub.unbounded<{ from: string; attachmentId: string }>(),
+      (p) => PubSub.shutdown(p),
+    );
+    const attachmentsIn = yield* Effect.acquireRelease(
+      PubSub.unbounded<{ from: string; attachment: AttachmentFrame }>(),
+      (p) => PubSub.shutdown(p),
+    );
 
     // Peers present in THIS room (they greeted us here), whom we greeted, and
     // which joiners we already admitted. Only touched from effects.
@@ -115,6 +127,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(tickets, new Map(view.tickets.map((t) => [t.id, t])));
       yield* SubscriptionRef.set(members, view.members);
       yield* SubscriptionRef.set(trace, view.messages.map((m) => m.msg));
+      yield* SubscriptionRef.set(attachments, view.attachments);
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (cur) => (name.ts > cur.ts ? name : cur));
       yield* SubscriptionRef.set(writable, log.writable());
@@ -291,6 +304,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             return PubSub.publish(transcriptRequests, { from: key, request: frame }).pipe(Effect.asVoid);
           case "transcript":
             return PubSub.publish(transcripts, { from: key, transcript: frame }).pipe(Effect.asVoid);
+          case "fetch-attachment":
+            return PubSub.publish(fetchRequests, { from: key, attachmentId: frame.attachmentId }).pipe(Effect.asVoid);
+          case "attachment":
+            return PubSub.publish(attachmentsIn, { from: key, attachment: frame }).pipe(Effect.asVoid);
         }
       },
     };
@@ -343,6 +360,25 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const requestTranscripts = Effect.fn("Room.requestTranscripts")(function* (request: Omit<TranscriptRequestFrame, "kind">) {
       yield* broadcast({ kind: "transcript-request", ...request });
       return peers.size;
+    });
+
+    /** Put an attachment reference on the log (the file stays with us). */
+    const attach = Effect.fn("Room.attach")(function* (attachment: Attachment) {
+      const l = yield* requireLog;
+      yield* l.append({ op: "attachment", attachment }).pipe(Effect.orDie);
+      yield* refresh;
+    });
+
+    /** Hand a fetched attachment's bytes to the one who asked. */
+    const sendAttachment = Effect.fn("Room.sendAttachment")(function* (peerKey: string, attachment: Omit<AttachmentFrame, "kind">) {
+      if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
+      yield* send(peerKey, { kind: "attachment", ...attachment });
+    });
+
+    /** Ask an attachment's holder for the file. Ephemeral: they must be present. */
+    const fetchAttachment = Effect.fn("Room.fetchAttachment")(function* (holderKey: string, attachmentId: string) {
+      if (!peers.has(holderKey)) return yield* new PeerNotConnected({ peerKey: holderKey });
+      yield* send(holderKey, { kind: "fetch-attachment", attachmentId });
     });
 
     /** Hand one approved transcript slice to the peer who asked. Ephemeral:
@@ -404,6 +440,15 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       transcripts: Stream.fromPubSub(transcripts),
       requestTranscripts,
       sendTranscript,
+      /** Files attached to the room's tickets — references from the log. */
+      attachments,
+      attach,
+      /** Peers asking us for an attachment we hold. */
+      fetchRequests: Stream.fromPubSub(fetchRequests),
+      fetchAttachment,
+      /** Attachments arriving because we fetched them. */
+      attachmentsIn: Stream.fromPubSub(attachmentsIn),
+      sendAttachment,
       /** Re-broadcast the local profile to all present peers (after a settings change). */
       updateProfile: Effect.gen(function* () {
         yield* broadcast({ kind: "profile", profile: yield* config.getProfile });

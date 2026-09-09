@@ -3,7 +3,7 @@ import Autobase from "autobase";
 import Hyperbee from "hyperbee";
 import b4a from "b4a";
 import { LogAppendFailed } from "./errors";
-import { LogOp, type Member, type RoomMessage } from "./schema";
+import { LogOp, type Member, type RoomMessage, type Attachment } from "./schema";
 import { mergeTicket, type Ticket } from "./ticket";
 
 /** The room as derived from its log. Read whole — rooms are small. */
@@ -13,6 +13,8 @@ export interface LogView {
   readonly members: ReadonlyArray<Member>;
   /** Every message in the room, in log order, with its position. */
   readonly messages: ReadonlyArray<{ readonly seq: number; readonly msg: RoomMessage }>;
+  /** Transcripts attached to tickets — references; the files stay with their holders. */
+  readonly attachments: ReadonlyArray<Attachment>;
 }
 
 export interface RoomLog {
@@ -63,6 +65,12 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         const count = (await view.get("state/msgs"))?.value ?? 0;
         await view.put(MSG_KEY(count), op.msg);
         await view.put("state/msgs", count + 1);
+        break;
+      }
+      case "attachment": {
+        // first write wins: an attachment is a fact about a file someone holds
+        const cur = await view.get(`attachment/${op.attachment.ticketId}/${op.attachment.id}`);
+        if (!cur) await view.put(`attachment/${op.attachment.ticketId}/${op.attachment.id}`, op.attachment);
         break;
       }
     }
@@ -127,8 +135,9 @@ export const openRoomLog = (
         seq: Number(e.key.slice("msg/".length)),
         msg: e.value as RoomMessage,
       }));
+      const attachments = (yield* readRange("attachment")).map((e) => e.value as Attachment);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
-      return { tickets, members, messages, name: name?.value ?? null };
+      return { tickets, members, messages, attachments, name: name?.value ?? null };
     });
 
     const changes = Stream.callback<void>((queue) =>

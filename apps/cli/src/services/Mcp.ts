@@ -20,6 +20,7 @@ import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { Transcripts } from "./Transcripts";
+import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 
@@ -731,11 +732,12 @@ export const DevToolHandlers = DevCollagenToolkit.toLayer(makeHandlers);
 const makeDiagnosticHandlers = Effect.gen(function* () {
   const rooms = yield* Rooms;
   const transcripts = yield* Transcripts;
+  const attachments = yield* Attachments;
   const handlers: Record<string, (params: unknown) => Effect.Effect<string>> = {};
   for (const d of diagnostics) {
     handlers[d.id] = (params) =>
       rooms.current.pipe(
-        Effect.flatMap((h) => d.run(params ?? {}, { roomId: h.id }, { rooms, transcripts })),
+        Effect.flatMap((h) => d.run(params ?? {}, { roomId: h.id }, { rooms, transcripts, attachments })),
         Effect.withSpan(`Mcp.${d.id}`),
       );
   }

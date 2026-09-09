@@ -35,6 +35,11 @@ _Last updated: 2026-09-07._
   the log) and filed under `~/.config/collagen/transcripts/`. Session files are read as
   they are (Claude Code and Codex layouts; `CLAUDE_CONFIG_DIR` / `CODEX_HOME` honoured);
   no CLI runs.
+- **Attachments** — files on a ticket by reference: `attach` / `attach-files` proposes; on
+  approval the record (name, size, type, holder, note; transcript meta when it is one) goes
+  on the log, the file stays home. `y` on the ticket page / `fetch-attachments` asks the
+  holder directly; bytes come only while they are online and only for ids they attached,
+  filed under `~/.config/collagen/attachments/` (transcripts with the transcripts).
 - **Messaging** — `send-to-peer` appends to the room's log in the thread between two peers
   about one project; the recipient may be offline and reads it when back. Room-visible.
   Unread is a per-thread cursor in local state. **Nothing spawns behind your back**: a real AI is never cold-started by an

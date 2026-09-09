@@ -92,7 +92,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room` |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `get-tickets` |
-| Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person |
+| Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request |
 | Settings | `add-project`, `remove-project`, `set-ai`, `set-name` |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 
