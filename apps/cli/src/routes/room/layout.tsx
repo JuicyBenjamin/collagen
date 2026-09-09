@@ -8,9 +8,10 @@ import { RESTART_EXIT_CODE } from "../../services/Updates";
 import { Panel } from "../../components/Panel";
 import { captureAtom, focusAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
-import { useRouter } from "../../app/router";
+import { routeName, useRouter } from "../../app/router";
 import { roomAtom } from "../atoms";
 import { installAppUpdateAtom, updateStateAtom } from "./atoms";
+import { Crumb } from "./components/Crumb/Crumb";
 import { Footer } from "./components/Footer/Footer";
 import { Keys } from "./components/Keys/Keys";
 import { Sidebar } from "./components/Sidebar/Sidebar";
@@ -33,7 +34,9 @@ function nextAi(current: string | null): string | null {
  *  keys. The room IS the container — it absorbs all free vertical space so
  *  the footer stays pinned and resizes don't reflow. */
 export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: (code?: number) => void }) {
-  const { navigate } = useRouter();
+  const { route, navigate } = useRouter();
+  // a ticket is a page of its own inside the room: crumb instead of tabs
+  const ticket = typeof route === "object" && route.name === "room/ticket" ? route : null;
   const { jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const captured = useAtomValue(captureAtom) !== null;
@@ -64,7 +67,14 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "u") return installUpdate({});
     if (key.name === "1") return jump("room/overview");
     if (key.name === "2") return jump("room/messages");
-    if (key.name === "escape") return setFocus("tabs");
+    if (key.name === "escape") {
+      // inside a ticket, esc is "back to the list"; elsewhere, back to the tab bar
+      if (routeName(route) === "room/ticket") {
+        navigate("room/overview");
+        return setFocus("tickets");
+      }
+      return setFocus("tabs");
+    }
   });
 
   return (
@@ -72,8 +82,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
       <StatusLine />
       <box flexDirection="row" marginTop={1} flexGrow={1} flexShrink={1}>
         <Sidebar />
-        <Panel title={`room · ${roomName}`} grow>
-          <TabBar />
+        <Panel title={ticket ? `room · ${roomName} › ticket` : `room · ${roomName}`} grow>
+          {ticket ? <Crumb label={`ticket ${ticket.ticketId.slice(0, 8)}`} /> : <TabBar />}
           {children}
           <Keys />
         </Panel>

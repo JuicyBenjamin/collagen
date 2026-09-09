@@ -19,12 +19,15 @@ export function proposalText(p: Proposal): string {
       return o.ticket.steps.map((s) => `${s.id} · ${s.intent}: ${s.description}`).join("\n");
     case "settle":
       return o.result;
+    case "transcript":
+      return `your ${o.ai} conversation ${o.sessionId.slice(0, 8)}… on thread ${o.threadId}, from ${new Date(o.since).toISOString()} on — every line of it, as the session file has it. It goes to the requester only.`;
   }
 }
 
 /** Can the person change the text before it goes? (A ticket's shape is the
- *  agent's to redraft: reject it and say what you want instead.) */
-export const editable = (p: Proposal): boolean => p.outgoing.kind !== "ticket";
+ *  agent's to redraft: reject it and say what you want instead; a transcript
+ *  is the file as it is — hand it over or don't.) */
+export const editable = (p: Proposal): boolean => p.outgoing.kind === "message" || p.outgoing.kind === "settle";
 
 /** Human in the loop, sending side. send-to-peer, create-ticket and
  *  settle-step don't run when the agent calls them: they propose, the person
@@ -56,7 +59,14 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
     /** Queue it behind the person's approval; returns what the agent is told. */
     const propose = (p: Omit<Proposal, "id" | "ts">) =>
       Effect.gen(function* () {
-        if (yield* bypass) return yield* dispatch.perform(p.roomId, p.outgoing);
+        if (yield* bypass) {
+          // no person to ask (a mock, or a test run): straight out — but say so
+          const outcome = yield* dispatch.perform(p.roomId, p.outgoing);
+          yield* Effect.log(
+            `↗ sent without approval (${envAuto ? "COLLAGEN_AUTO_APPROVE" : "mock"}): ${p.outgoing.kind} → ${p.to} · ${p.title} — ${outcome.split("\n")[0]}`,
+          );
+          return outcome;
+        }
         const full: Proposal = { ...p, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis };
         yield* setAll((ps) => [...ps, full]);
         yield* Effect.log(`⧗ outbox: ${describe(full)} — awaiting your approval`);

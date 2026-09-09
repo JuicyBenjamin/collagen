@@ -1,25 +1,23 @@
 import { useState } from "react";
 import { Option } from "effect";
 import { invitedRoomEntry, newRoomEntry, upsertActiveRoom, writeProfileFile } from "../config/profileFile";
-import { RouterProvider, useRouter } from "./router";
+import { RouterProvider } from "./router";
 import { setCliArgs } from "./runtime";
 import { SessionProvider, type Session } from "./session";
+import { RouterView } from "../routes";
 import { RootLayout } from "../routes/layout";
-import { NewRoomPage } from "../routes/new-room/page";
-import { RoomLayout } from "../routes/room/layout";
-import { MessagesPage } from "../routes/room/messages/page";
-import { OverviewPage } from "../routes/room/overview/page";
 import { SetupPage } from "../routes/setup/page";
-import { SettingsPage } from "../routes/settings/page";
 
-/** The app: a router over frames, each rendered inside its layouts.
+/** The app: setup until a session exists, then the router (routes/index.tsx
+ *  maps each route to its page and wraps `room/*` in the room layout).
  *
  *   RootLayout (brand)
  *   ├─ setup            first run — before a session exists
  *   ├─ settings
  *   ├─ new-room         join or create another room (the sidebar's +)
  *   └─ RoomLayout (rooms sidebar · status · room panel · footer)
- *      ├─ room/overview
+ *      ├─ room/overview      the lists: outbox, peers, tickets, projects
+ *      ├─ room/ticket/:id    one ticket: steps, its conversation, diagnostics
  *      └─ room/messages
  *
  *  Nothing subscribes to a runtime atom until a session exists, so the
@@ -60,16 +58,9 @@ export function App({
     <SessionProvider session={session}>
       <RouterProvider initial="room/overview">
         <RootLayout>
-          <Frames onExit={onExit} />
+          <RouterView onExit={onExit} />
         </RootLayout>
       </RouterProvider>
     </SessionProvider>
   );
-}
-
-function Frames({ onExit }: { onExit: (code?: number) => void }) {
-  const { route } = useRouter();
-  if (route === "settings") return <SettingsPage />;
-  if (route === "new-room") return <NewRoomPage />;
-  return <RoomLayout onExit={onExit}>{route === "room/messages" ? <MessagesPage /> : <OverviewPage />}</RoomLayout>;
 }

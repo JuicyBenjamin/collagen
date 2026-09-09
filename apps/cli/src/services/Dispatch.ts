@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import type { Outgoing, Ticket } from "@collagen/p2p";
 import { ticketView } from "../lib/ticketView";
+import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
 
@@ -61,6 +63,37 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           };
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           return merged ? render(merged) : NOT_ADMITTED;
+        }
+        case "transcript": {
+          // read now, not when proposed: the file may have grown since
+          const file = sessionFile(out.ai, out.sessionId, sessionDirs());
+          if (!file) return `failed: no ${out.ai} session file for ${out.sessionId.slice(0, 8)}… on this machine`;
+          const text = yield* Effect.sync(() => {
+            try {
+              return readFileSync(file, "utf8");
+            } catch {
+              return null;
+            }
+          });
+          if (text === null) return `failed: could not read ${file}`;
+          const { lines, entries } = sliceSince(text, out.since);
+          const data = pack(lines);
+          if (data.length > MAX_PACKED_BYTES) return `failed: transcript too large to send (${Math.round(data.length / 1024 / 1024)} MB packed)`;
+          return yield* room
+            .sendTranscript(out.requester, {
+              requestId: out.requestId,
+              subject: out.subject,
+              threadId: out.threadId,
+              ai: out.ai,
+              sessionId: out.sessionId,
+              since: out.since,
+              entries,
+              data,
+            })
+            .pipe(
+              Effect.map(() => `transcript sent: ${entries} entries to ${nameFor(out.requester)}`),
+              Effect.catchTag("PeerNotConnected", () => Effect.succeed(`failed: ${nameFor(out.requester)} is not connected right now — approve again when they are`)),
+            );
         }
       }
     });
