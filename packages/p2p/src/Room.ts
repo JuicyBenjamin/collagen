@@ -310,7 +310,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     const sendTo = Effect.fn("Room.sendTo")(function* (
       peerKey: string,
-      payload: { project: string; intent: string; findings: string },
+      payload: { project: string; intent: string; findings: string; ticketId?: string },
     ) {
       const l = yield* requireLog;
       const ts = yield* Clock.currentTimeMillis;
@@ -325,6 +325,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         intent: payload.intent,
         findings: payload.findings,
         ts,
+        ...(payload.ticketId ? { ticketId: payload.ticketId } : {}),
       };
       yield* l.append({ op: "msg", msg }).pipe(Effect.orDie);
       return msg;
