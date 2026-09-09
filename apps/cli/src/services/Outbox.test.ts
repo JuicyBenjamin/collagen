@@ -139,6 +139,24 @@ describe("Outbox — human in the loop, sending side", () => {
     expect(sent).toEqual([{ roomId: "r1", out: message.outgoing }]);
   });
 
+  it("a transcript proposal reads as what it is and is not editable", async () => {
+    const { value } = await run("codex", (o) =>
+      Effect.gen(function* () {
+        yield* o.propose({
+          roomId: "r1",
+          to: "alice",
+          title: "ticket-1234 · thread t1 · your codex conversation",
+          outgoing: { kind: "transcript", requestId: "q", subject: "ticket-1234", requester: "alicekey", threadId: "t1", ai: "codex", sessionId: "019c0000-0000-7000-8000-000000000abc", since: Date.parse("2026-09-09T10:00:00.000Z") },
+        });
+        const [p] = yield* o.all;
+        return { text: proposalText(p!), editable: editable(p!) };
+      }),
+    );
+    expect(value.text).toContain("your codex conversation 019c0000… on thread t1, from 2026-09-09T10:00:00.000Z on");
+    expect(value.text).toContain("It goes to the requester only");
+    expect(value.editable).toBe(false);
+  });
+
   it("a mocked agent is not a person: dispatched straight away", async () => {
     const { value, sent } = await run("mock:codex", (o) => o.propose(message));
     expect(value).toBe("sent message");
