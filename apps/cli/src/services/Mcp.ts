@@ -37,12 +37,13 @@ export const ListRoom = Tool.make("list-room", {
 
 export const SendToPeer = Tool.make("send-to-peer", {
   description:
-    "Send what YOUR USER decided to say to a peer in the room, about a specific project. Collagen puts a person between two agents: send only what your user asked you to send — never a reply, a question or findings on your own initiative. The call does not send: it queues the message for your user's approval in the collagen TUI, and only their approval writes it to the room. It lands in the thread between you two about that project; the peer's agent relays it to its person, who decides what comes back. Use a 'peer' name and 'project' from list-room. 'intent' is a short verb like 'flag-issue' or 'ask-review'. 'findings' is the text as it should arrive: the context your user wants shared plus what they want from the other side.",
+    "Send what YOUR USER decided to say to a peer in the room, about a specific project. Collagen puts a person between two agents: send only what your user asked you to send — never a reply, a question or findings on your own initiative. The call does not send: it queues the message for your user's approval in the collagen TUI, and only their approval writes it to the room. It lands in the thread between you two about that project; the peer's agent relays it to its person, who decides what comes back. Use a 'peer' name and 'project' from list-room. 'intent' is a short verb like 'flag-issue' or 'ask-review'. 'findings' is the text as it should arrive: the context your user wants shared plus what they want from the other side. When your user weighs in on a ticket (anyone in the room may, asked or not), pass its 'ticketId' (from get-tickets) so it shows on that ticket for everyone.",
   parameters: Schema.Struct({
     peer: Schema.String,
     project: Schema.String,
     intent: Schema.String,
     findings: Schema.String,
+    ticketId: Schema.optional(Schema.String),
   }),
   success: Schema.String,
 });
@@ -337,6 +338,7 @@ const makeHandlers = Effect.gen(function* () {
       project: string;
       intent: string;
       findings: string;
+      ticketId?: string;
     }) {
       const { id: roomId, room } = yield* focusedRoom;
       // present peers first; then anyone the log remembers (they read it when back)
@@ -350,7 +352,14 @@ const makeHandlers = Effect.gen(function* () {
         roomId,
         to: input.peer,
         title: `${input.project} · ${input.intent}`,
-        outgoing: { kind: "message", peer: input.peer, project: input.project, intent: input.intent, findings: input.findings },
+        outgoing: {
+          kind: "message",
+          peer: input.peer,
+          project: input.project,
+          intent: input.intent,
+          findings: input.findings,
+          ...(input.ticketId ? { ticketId: input.ticketId } : {}),
+        },
       });
     });
 
@@ -567,7 +576,7 @@ const makeHandlers = Effect.gen(function* () {
         const action =
           input.action === "send-message"
             ? need("project", input.project) && need("intent", input.intent) && need("findings", input.findings)
-              ? ({ kind: "send-message" as const, project: input.project, intent: input.intent, findings: input.findings })
+              ? ({ kind: "send-message" as const, project: input.project, intent: input.intent, findings: input.findings, ...(input.ticketId ? { ticketId: input.ticketId } : {}) })
               : null
             : input.action === "create-ticket"
               ? need("project", input.project) && need("goal", input.goal) && (input.steps?.length ?? 0) > 0
