@@ -98,6 +98,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     // which joiners we already admitted. Only touched from effects.
     const peers = new Map<string, Peer>();
     const greeted = new Set<string>();
+    /** peers told where the current log is (cleared when the log changes) */
+    const announced = new Set<string>();
     const admitted = new Set<string>();
     // join requests we couldn't serve yet (no log, or not admitted ourselves)
     const pendingJoins = new Set<string>();
@@ -177,6 +179,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       if (logScope) yield* Scope.close(logScope, Exit.void);
       log = null;
       logScope = null;
+      announced.clear();
       yield* SubscriptionRef.set(writable, false);
       yield* SubscriptionRef.set(mine, []);
     });
@@ -212,9 +215,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           Stream.runDrain,
           Effect.forkIn(child),
         );
-        // tell everyone present where the log is
-        const info = yield* logInfo;
-        if (info) yield* broadcast(info);
+        // tell everyone present where the log is (anyone whose profile has
+        // not arrived yet hears it with their profile — see onFrame)
+        announced.clear();
+        yield* Effect.forEach([...peers.keys()], announceLog, { discard: true });
       });
 
     /** Ask a member to admit our writer core (no-op once we're in). */
@@ -225,6 +229,19 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           : Effect.void,
       );
 
+    /** Tell one peer where the room's log lives, once per connection and per
+     *  log. A no-op until we have a log — the peer hears it when we do, or
+     *  when their profile arrives, whichever comes later. */
+    const announceLog = (key: string) =>
+      Effect.gen(function* () {
+        if (announced.has(key)) return;
+        const info = yield* logInfo;
+        if (!info) return;
+        announced.add(key);
+        yield* send(key, info).pipe(Effect.catchTag("PeerNotConnected", () => Effect.sync(() => void announced.delete(key))));
+        yield* askToJoin(key);
+      });
+
     /** Introduce ourselves to one peer in this room: our profile and, if we
      *  know it, where the room's log lives. Once per connection. */
     const greet = (key: string) =>
@@ -232,8 +249,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (greeted.has(key)) return;
         greeted.add(key);
         yield* send(key, { kind: "profile", profile: yield* config.getProfile });
-        const info = yield* logInfo;
-        if (info) yield* send(key, info);
+        yield* announceLog(key);
         yield* askToJoin(key);
       }).pipe(Effect.catchTag("PeerNotConnected", () => Effect.sync(() => void greeted.delete(key))));
 
@@ -242,6 +258,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       onPeerGone: (key) =>
         Effect.suspend(() => {
           greeted.delete(key);
+          announced.delete(key);
           if (!peers.delete(key)) return Effect.void;
           return publishRoster;
         }),
@@ -267,6 +284,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
               Effect.andThen(publishRoster),
               // they found us on this topic; answer in kind (no-op if we already did)
               Effect.andThen(greet(key)),
+              // the greeting may have gone out before our log existed (the
+              // connection came up as the room opened): they are here now,
+              // so they hear where the log is — or they would wait forever
+              Effect.andThen(announceLog(key)),
             );
           case "log-info":
             return Effect.gen(function* () {
