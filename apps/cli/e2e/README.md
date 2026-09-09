@@ -27,8 +27,9 @@ created on the fly.
 | `three-members.sh` | three indexers: the view advances with 1 and 2 offline; the absent one catches up |
 | `leave.sh` | leaving a room forgets it locally and moves focus; the last room can't be left |
 | `approval.sh` | human in the loop, sending side: a non-mock peer's `send-to-peer` / `create-ticket` queue for approval and nothing reaches the other side; a mock is not gated; the queued proposals survive a restart |
-| `approval-tui.sh` | the gate from the person's side, TUI in a pty: two queued messages, ↓ lands on the outbox, `y` sends one (bob gets it), `n` drops the other — judged from logs and the key trace, no pyte needed |
+| `approval-tui.sh` | the gate from the person's side, TUI in a pty: two queued messages wait at the bottom of the messages tab; `2` then ↓ lands on the newest, `n` drops it, `y` sends the other (bob gets exactly that one) — judged from logs and the key trace, no pyte needed |
 | `ticket-tui.sh` | the ticket page in a pty: ↓ to the tickets list, enter opens the ticket (cursor on its steps), ↓ walks to diagnostics, enter runs the transcripts diagnostic (the log shows the ask), esc returns to the list |
+| `weigh-in.sh` | ticket updates reach everyone the ticket concerns: the creator hears bob settled (a `ticket-update` on her thread with him); carol, not asked, weighs in with a tagged message to alice — bob, owner but not recipient, hears she did |
 | `transcripts.sh` | transcripts on request: bob adopted the pair thread into a fake codex session (rollout file in a temp `CODEX_HOME`); alice's `request-transcripts` reaches him, the slice from adoption on comes back directly and is filed; older lines are not included; `list-transcripts` sees it |
 
 ## Manual scenarios
