@@ -2,7 +2,26 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { pack, sessionDirs, sessionFile, sliceSince, unpack } from "./transcripts";
+import { pack, readLine, sessionDirs, sessionFile, sliceSince, unpack } from "./transcripts";
+
+describe("readLine — a session line, readable", () => {
+  it("codex: messages by role, reasoning, tool calls; token counts and turn context are noise", () => {
+    expect(readLine(JSON.stringify({ timestamp: "t", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "hi" }] } }))).toEqual({ ts: "t", who: "assistant", text: "hi" });
+    expect(readLine(JSON.stringify({ type: "response_item", payload: { type: "reasoning", summary: [], encrypted_content: "x" } }))).toEqual({ ts: null, who: "reasoning", text: "(reasoning, encrypted)" });
+    expect(readLine(JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "get-messages", arguments: "{}" } }))?.text).toBe("⚙ get-messages {}");
+    expect(readLine(JSON.stringify({ type: "event_msg", payload: { type: "token_count" } }))).toBeNull();
+    expect(readLine(JSON.stringify({ type: "turn_context", payload: {} }))).toBeNull();
+    expect(readLine(JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: "/w" } }))?.text).toBe("codex_cli · /w");
+  });
+
+  it("claude code: user and assistant turns, tool use, the collagen nudge; attachments are noise", () => {
+    expect(readLine(JSON.stringify({ timestamp: "t", type: "user", message: { role: "user", content: "hello" } }))).toEqual({ ts: "t", who: "user", text: "hello" });
+    expect(readLine(JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "a" }, { type: "tool_use", name: "Read", input: { p: 1 } }] } }))?.text).toBe('a\n⚙ Read {"p":1}');
+    expect(readLine(JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "Collagen: …" }))).toEqual({ ts: null, who: "collagen (enqueue)", text: "Collagen: …" });
+    expect(readLine(JSON.stringify({ type: "attachment", attachment: {} }))).toBeNull();
+    expect(readLine("nope")).toBeNull();
+  });
+});
 
 const tmp = () => mkdtempSync(join(tmpdir(), "collagen-transcripts-"));
 
