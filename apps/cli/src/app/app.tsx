@@ -57,7 +57,7 @@ export function App({
   return (
     <SessionProvider session={session}>
       <RouterProvider initial="room/overview">
-        <RootLayout>
+        <RootLayout live>
           <RouterView onExit={onExit} />
         </RootLayout>
       </RouterProvider>
