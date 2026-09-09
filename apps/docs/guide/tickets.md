@@ -87,8 +87,12 @@ dependency order is enforced by delivery, not by remembering.
 ## In the TUI
 
 The overview tab lists the room's tickets: goal, project, `settled/total` — `⧉` while in
-flight, `✓` when every step has settled, `✗` if one failed. `enter` unfolds the steps
-with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed) and result.
+flight, `✓` when every step has settled, `✗` if one failed. `enter` opens the ticket's own
+page — the tab bar gives way to a `‹ overview › ticket …` crumb — with its **steps** with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed)
+and result; the **conversation** on its threads (every message between the creator and the
+owners about this work, `enter` for the full text); and **diagnostics** that apply to it —
+today "ask peers for their agents' conversations" ([transcripts](./conversations#transcripts-on-request))
+and "conversations collected so far". `esc` goes back to the list.
 
 ## Sync model
 
