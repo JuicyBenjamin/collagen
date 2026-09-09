@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.4.0-alpha...p2p-v0.5.0-alpha) (2026-09-09)
+
+
+### Features
+
+* **p2p:** transcript frames, adoption time, a transcript outgoing ([c51373f](https://github.com/JuicyBenjamin/collagen/commit/c51373f496d47a576c4984d22e4e88f1402f8a17))
+
 ## [0.4.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.3.0-alpha...p2p-v0.4.0-alpha) (2026-09-08)
 
 
