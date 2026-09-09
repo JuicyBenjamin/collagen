@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.5.0-alpha...cli-v0.6.0-alpha) (2026-09-09)
+
+
+### Features
+
+* **cli:** the ticket page reshaped; transcripts as list and reader; ← is back on pages ([60e6a58](https://github.com/JuicyBenjamin/collagen/commit/60e6a58dd650d4a64a421f15d67aaf656d8b8793))
+* **cli:** tickets by what they want from you; people; participants hear updates ([c26b154](https://github.com/JuicyBenjamin/collagen/commit/c26b15421c4ad3c5d6fd128952ee222aaa93da16))
+
 ## [0.5.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.4.0-alpha...cli-v0.5.0-alpha) (2026-09-09)
 
 
