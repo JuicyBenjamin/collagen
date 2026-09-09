@@ -9,7 +9,7 @@
 # from the key trace, the logs and the pty text.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
-start bob; sleep 3
+start bob
 PTY="$OUT/ticket-tui.out"; MARKS="$OUT/ticket-tui.marks"; LOG="$OUT/ticket-tui.log"
 rm -f "$PTY" "$MARKS" "$OUT/ticket-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
@@ -26,9 +26,8 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\033[D'; sleep 2; mark M4d_back_to_list
   printf '\033[D'; sleep 2; mark M5_back_to_ticket
   printf '\033'; sleep 2; printf '\033[B'; sleep 1; mark M6_back; sleep 1; printf 'q' ) | \
-  COLLAGEN_AUTO_APPROVE=1 COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c 'stty rows ${ROWS:-45} cols 120; node --experimental-ffi --import tsx src/index.tsx --profile alice' > /dev/null 2>&1 &
-sleep 12
-SA=$(mcp $A); wait_for_peer $A "$SA" bob; sleep 2
+  HOME="$SHOME" COLLAGEN_AUTO_APPROVE=1 COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
+SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
 echo "## bob creates a ticket (a mock: no outbox on his side)"
 call $A "$SA" drive-peer '{"peer":"bob","action":"create-ticket","project":"sandbox","goal":"explain average()","steps":[{"intent":"investigate","description":"what does average() do","mine":true}]}' > /dev/null
@@ -37,7 +36,7 @@ TICKET=$(call $A "$SA" get-tickets '{}' | grep -oE 'id: [0-9a-f-]{36}' | head -1
 call $A "$SA" drive-peer "{\"peer\":\"bob\",\"action\":\"send-message\",\"project\":\"sandbox\",\"intent\":\"two-cents\",\"findings\":\"average divides by length, so an empty list gives NaN — guard it first.\",\"ticketId\":\"$TICKET\"}" > /dev/null
 wait_until "bob weighed in on the ticket" ",bob,sandbox,[0-9]+,two-cents" call $A "$SA" pending-threads '{}'
 # a collected transcript on disk (as a peer would have handed over), so the viewer has something to show
-TDIR="$HOME/.config/collagen/transcripts/ticket-${TICKET:0:8}"; mkdir -p "$TDIR"
+TDIR="$CFG/transcripts/ticket-${TICKET:0:8}"; mkdir -p "$TDIR"
 python3 - "$TDIR/bob-deadbeefdeadbeef.codex.jsonl" <<'PY'
 import json, sys
 lines = [{"timestamp":f"2026-09-09T09:{1+i//60:02d}:{i%60:02d}.000Z","type":"response_item","payload":{"type":"message","role":"user" if i % 2 else "assistant","content":[{"type":"output_text","text":f"filler turn {i}"}]}} for i in range(60)] + [
@@ -56,7 +55,7 @@ expect "alice attached the collected transcript to the ticket (a reference on th
 sleep 1
 touch "$OUT/ticket-tui.go"
 await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
-await_mark M6_back; sleep 3
+await_mark M6_back; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 expect "↓↓↓ from the tab bar reached the tickets list" "$KEYS" "tickets"
 expect "enter opened the ticket: the cursor landed on its steps" "$KEYS" "ticket-steps"
@@ -69,10 +68,9 @@ expect "…under its head line (intent shown; the pty stream splits coloured spa
 expect "→ enter opened the transcripts page (cursor on the collected files)" "$KEYS" "transcript-files"
 expect "the transcripts page listed the collected file by provenance" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -c 'from bob')" "^[1-9]"
 expect "…and, opened, showed its turns readable: the assistant's line" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -c 'review the NaN fix')" "^[1-9]"
-rm -rf "$TDIR"
 expect "enter unfolded the turn under its row (the wrapped second line is on screen)" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -c 'details, or do you have a reply for her')" "^[1-9]"
 expect "enter on the file opened its turns (a page of its own)" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-files/,$p' | tr '\n' ' ')" "transcript-files room transcript-lines"
 expect "← from the turns went back to the list of transcripts" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-lines/,$p' | grep -v room | tr '\n' ' ')" "transcript-lines transcript-lines transcript-lines transcript-files"
 expect "← from the list went back to the ticket's diagnostics (not the rail)" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-lines/,$p' | tr '\n' ' ')" "ticket-diagnostics"
 expect "esc again went back to the list: the next ↓ moved in the tickets section" "$(echo "$KEYS" | tr ' ' '\n' | tail -4 | tr '\n' ' ')" "tickets"
-kill_all; restore_profiles; summary
+kill_all; summary

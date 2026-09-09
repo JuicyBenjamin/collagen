@@ -65,6 +65,9 @@ const registerCodex = Effect.fn("Registrar.codex")(
 
 /** Waits for the MCP server URL, then registers it with both supported AIs. */
 export const registerAll = Effect.gen(function* () {
+  // a test harness runs many instances against throwaway homes: nothing to
+  // register, and no agent CLI to run for it
+  if (process.env.COLLAGEN_REGISTER === "0") return yield* Effect.log("COLLAGEN_REGISTER=0: not registering the MCP server with any agent");
   const { profile } = yield* CliArgs;
   const mcpInfo = yield* McpInfo;
   const url = yield* mcpInfo.awaitUrl;

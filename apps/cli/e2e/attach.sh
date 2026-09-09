@@ -11,20 +11,20 @@ source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 CODEX_FAKE="$OUT/codex-home"; rm -rf "$CODEX_FAKE"; mkdir -p "$CODEX_FAKE/sessions/2026/09/09"
 SID="019c0000-0000-7000-8000-00000000a77a"
-CODEX_HOME="$CODEX_FAKE" start bob; sleep 3; start alice; sleep 9
-SA=$(mcp $A); wait_for_peer $A "$SA" bob; SB=$(mcp $B); sleep 2
+CODEX_HOME="$CODEX_FAKE" start bob; start alice
+SA=$(mcp $A); wait_for_peer $A "$SA" bob; SB=$(mcp $B); admitted bob
 
 echo "## a thread, a codex session on bob's side, a collected transcript on alice's"
 call $A "$SA" send-to-peer '{"peer":"bob","project":"sandbox","intent":"ask","findings":"hello bob"}' > /dev/null
 wait_until "bob's mock answered on the pair thread" ",bob,sandbox," call $A "$SA" pending-threads '{}'
 TID=$(call $A "$SA" pending-threads '{}' | grep -oE '[0-9a-f]{16}' | head -1)
-call $B "$SB" adopt-thread "{\"threadId\":\"$TID\",\"agent\":\"codex\",\"sessionId\":\"$SID\"}" > /dev/null; sleep 1
+call $B "$SB" adopt-thread "{\"threadId\":\"$TID\",\"agent\":\"codex\",\"sessionId\":\"$SID\"}" > /dev/null
 cat > "$CODEX_FAKE/sessions/2026/09/09/rollout-2026-09-09T10-00-00-$SID.jsonl" <<EOF
 {"timestamp":"2030-01-01T00:00:00.000Z","type":"session_meta","payload":{"id":"$SID"}}
 {"timestamp":"2030-01-01T00:00:01.000Z","type":"response_item","text":"collagen nudge arrives"}
 {"timestamp":"2030-01-01T00:00:02.000Z","type":"response_item","text":"bob decides what to answer"}
 EOF
-SUBJECT="thread-$TID"; TDIR="$HOME/.config/collagen/transcripts"; rm -rf "$TDIR/$SUBJECT" "$TDIR"/ticket-* "$HOME/.config/collagen/attachments"
+SUBJECT="thread-$TID"; TDIR="$CFG/transcripts"
 call $A "$SA" request-transcripts "{\"threadId\":\"$TID\"}" > /dev/null
 TFILE="$TDIR/$SUBJECT/bob-$TID.codex.jsonl"
 wait_until "alice holds bob's conversation" "^1$" bash -c "ls '$TFILE' 2>/dev/null | wc -l | tr -d ' '"
@@ -47,7 +47,7 @@ expect "…the transcript with whose conversation it is" "$LISTED" "bob.{1,6}cod
 expect "…the note travels with the reference" "$LISTED" "the frame and bob's side of it"
 
 echo "## the fetch: alice is online, so the bytes come, and are filed"
-BDIR="$HOME/.config/collagen/attachments/ticket-${TICKET:0:8}"
+BDIR="$CFG/attachments/ticket-${TICKET:0:8}"
 wait_until "the screenshot landed under attachments/ticket-<id>/ with the record beside it" "^1$" bash -c "ls '$BDIR'/*-flicker_shot.png.meta.json 2>/dev/null | wc -l | tr -d ' '"
 GOT=$(ls "$BDIR"/*-flicker_shot.png | head -1)
 expect "the bytes are alice's, untouched" "$(cmp "$SHOT" "$GOT" && echo same)" "^same$"
@@ -61,5 +61,4 @@ expect "alice's log shows bob fetching" "$(grep -c 'bob fetched' "$OUT/alice.log
 
 echo "## a fetch for something alice never attached is ignored"
 expect "fetch-attachments refuses an unknown id" "$(call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\",\"attachmentId\":\"00000000-0000-0000-0000-000000000000\"}")" "^\"failed: no attachment"
-rm -rf "$TDIR/$SUBJECT" "$TDIR/ticket-${TICKET:0:8}" "$HOME/.config/collagen/attachments"
-kill_all; restore_profiles; summary
+kill_all; summary
