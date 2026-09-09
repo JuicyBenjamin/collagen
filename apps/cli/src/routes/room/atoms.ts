@@ -1,6 +1,7 @@
 import { Effect, Stream, SubscriptionRef } from "effect";
 import { type LocalState } from "@collagen/p2p";
 import { AiStatus } from "../../services/AiStatus";
+import { Attachments } from "../../services/Attachments";
 import { IdentityService } from "../../services/Identity";
 import { Outbox } from "../../services/Outbox";
 import { Rooms } from "../../services/Rooms";
@@ -96,6 +97,37 @@ export const approveOutgoingAtom = runtimeAtom.fn(
 export const rejectOutgoingAtom = runtimeAtom.fn(
   Effect.fnUntraced(function* ({ id }: { id: string }) {
     yield* (yield* Outbox).reject(id);
+  }),
+);
+
+/** Files attached to the focused room's tickets — references on the log. */
+export const attachmentsAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.attachments));
+  })),
+);
+/** Attachments whose file is on this machine — fetched, or attached by us:
+ *  id → path. Live: a file landing re-reads the folders. */
+export const heldAttachmentsAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    const a = yield* Attachments;
+    const store = yield* StateStore;
+    return Stream.merge(
+      SubscriptionRef.changes(a.saved).pipe(Stream.map(() => undefined)),
+      SubscriptionRef.changes(store.state).pipe(Stream.map(() => undefined)),
+    ).pipe(Stream.mapEffect(() => a.held));
+  })),
+);
+/** Ask the holder for an attachment's file (both online). */
+export const fetchAttachmentAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ roomId, attachmentId }: { roomId: string; attachmentId: string }) {
+    return yield* (yield* Attachments).fetch(roomId, attachmentId);
+  }),
+);
+/** Attach files you hold to a ticket — a proposal in your outbox. */
+export const attachFilesAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ roomId, ticketId, goal, paths }: { roomId: string; ticketId: string; goal: string; paths: ReadonlyArray<string> }) {
+    return yield* (yield* Attachments).attach(roomId, ticketId, goal, paths);
   }),
 );
 

@@ -52,8 +52,8 @@ prep_profiles() {
   python3 - "$CFG" "${1:-0}" <<'PY'
 import json, os, sys
 base, bob_creator = sys.argv[1], sys.argv[2] == "1"
-a = json.load(open(f"{base}/state-alice.json")); a["preferredAi"] = None; a["threads"] = {}; a.pop("consumed", None); a.pop("outbox", None); json.dump(a, open(f"{base}/state-alice.json", "w"))
-b = json.load(open(f"{base}/state-bob.json")); b["preferredAi"] = "mock:codex"; b["threads"] = {}; b.pop("consumed", None); b.pop("outbox", None); json.dump(b, open(f"{base}/state-bob.json", "w"))
+a = json.load(open(f"{base}/state-alice.json")); a["preferredAi"] = None; a["threads"] = {}; a.pop("consumed", None); a.pop("outbox", None); a.pop("attachedFiles", None); json.dump(a, open(f"{base}/state-alice.json", "w"))
+b = json.load(open(f"{base}/state-bob.json")); b["preferredAi"] = "mock:codex"; b["threads"] = {}; b.pop("consumed", None); b.pop("outbox", None); b.pop("attachedFiles", None); json.dump(b, open(f"{base}/state-bob.json", "w"))
 for who, creator in (("alice", True), ("bob", bob_creator)):
     f = json.load(open(f"{base}/identity-{who}.json"))
     f["activeRoomId"] = "st-test3"  # every tool call targets the focused room; a TUI session may have left it elsewhere

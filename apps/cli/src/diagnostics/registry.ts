@@ -1,5 +1,6 @@
 import type { Effect, Schema } from "effect";
 import type { Route } from "../app/router";
+import type { Attachments } from "../services/Attachments";
 import type { Rooms } from "../services/Rooms";
 import type { Transcripts } from "../services/Transcripts";
 
@@ -8,6 +9,7 @@ import type { Transcripts } from "../services/Transcripts";
 export interface DiagnosticDeps {
   readonly rooms: Rooms["Service"];
   readonly transcripts: Transcripts["Service"];
+  readonly attachments: Attachments["Service"];
 }
 
 /** Where the person (or agent) is when they run it. */
