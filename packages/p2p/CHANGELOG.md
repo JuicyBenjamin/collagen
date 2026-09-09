@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.7.0-alpha...p2p-v0.8.0-alpha) (2026-09-09)
+
+
+### Bug Fixes
+
+* **p2p:** announce the log to a peer whose profile arrives after it opened ([41ff1ec](https://github.com/JuicyBenjamin/collagen/commit/41ff1ec2f0cbbfd7529b913643645f20a769a48a))
+
 ## [0.7.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.6.0-alpha...p2p-v0.7.0-alpha) (2026-09-09)
 
 
