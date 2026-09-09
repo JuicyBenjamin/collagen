@@ -113,11 +113,38 @@ export const DriveFrame = Schema.Struct({
   action: DriveAction,
 });
 
+/** "Send me your agent's conversation on these threads" — a diagnostic ask
+ *  from a peer, answered only by a person (it lands in their outbox). Direct
+ *  and ephemeral: never on the shared log. */
+export const TranscriptRequestFrame = Schema.Struct({
+  kind: Schema.Literal("transcript-request"),
+  requestId: Schema.String,
+  /** What the threads belong to, for the folder it is saved under. */
+  subject: Schema.String,
+  threadIds: Schema.Array(Schema.String),
+});
+
+/** One agent conversation slice, handed over after the person approved it.
+ *  `data` is the session file's lines from `since` on, gzip + base64. */
+export const TranscriptFrame = Schema.Struct({
+  kind: Schema.Literal("transcript"),
+  requestId: Schema.String,
+  subject: Schema.String,
+  threadId: Schema.String,
+  ai: Schema.String,
+  sessionId: Schema.String,
+  since: Schema.Finite,
+  entries: Schema.Finite,
+  data: Schema.String,
+});
+
 /** Ephemeral frames — what is said connection-to-connection and not
- *  remembered: presence, log bootstrap, remote control. Everything that must
- *  outlive a connection (messages, tickets, the room name, membership) is a
- *  LogOp on the room's shared log instead. */
-export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, DriveFrame]);
+ *  remembered: presence, log bootstrap, remote control, transcripts.
+ *  Everything that must outlive a connection (messages, tickets, the room
+ *  name, membership) is a LogOp on the room's shared log instead. */
+export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame]);
+export type TranscriptRequestFrame = typeof TranscriptRequestFrame.Type;
+export type TranscriptFrame = typeof TranscriptFrame.Type;
 export type Frame = typeof Frame.Type;
 
 /** One entry on a room's Autobase log. Applied deterministically by every
@@ -176,6 +203,9 @@ export type Project = typeof Project.Type;
 export const AdoptedThread = Schema.Struct({
   ai: Schema.String,
   sessionId: Schema.String,
+  /** When it was adopted — a transcript handed over on request starts here,
+   *  never earlier: the session may hold unrelated work before that. */
+  since: Schema.optional(Schema.Finite),
 });
 export type AdoptedThread = typeof AdoptedThread.Type;
 
@@ -198,6 +228,18 @@ export const Outgoing = Schema.Union([
     stepId: Schema.String,
     result: Schema.String,
     failed: Schema.Boolean,
+  }),
+  /** Hand a peer the agent's conversation on one thread, from adoption on. */
+  Schema.Struct({
+    kind: Schema.Literal("transcript"),
+    requestId: Schema.String,
+    subject: Schema.String,
+    /** The requester's key — the file goes to them alone. */
+    requester: Schema.String,
+    threadId: Schema.String,
+    ai: Schema.String,
+    sessionId: Schema.String,
+    since: Schema.Finite,
   }),
 ]);
 export type Outgoing = typeof Outgoing.Type;

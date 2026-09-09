@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { Clock, Context, Effect, Exit, Layer, PubSub, Schedule, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, type DriveAction, type Frame, type Member, type Peer, type RoomMessage, type SharedProfile } from "./schema";
+import {
+  PROTOCOL_VERSION,
+  type DriveAction,
+  type Frame,
+  type Member,
+  type Peer,
+  type RoomMessage,
+  type SharedProfile,
+  type TranscriptFrame,
+  type TranscriptRequestFrame,
+} from "./schema";
 import { NotWritable, PeerNotConnected } from "./errors";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic } from "./topic";
@@ -59,6 +69,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const mine = yield* SubscriptionRef.make<ReadonlyArray<LoggedMessage>>([]);
     const driveRequests = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; action: DriveAction }>(),
+      (p) => PubSub.shutdown(p),
+    );
+    // Transcript diagnostics: asks arrive here (the app puts them in the
+    // person's outbox), answers arrive here (the app files them). Both direct.
+    const transcriptRequests = yield* Effect.acquireRelease(
+      PubSub.unbounded<{ from: string; request: TranscriptRequestFrame }>(),
+      (p) => PubSub.shutdown(p),
+    );
+    const transcripts = yield* Effect.acquireRelease(
+      PubSub.unbounded<{ from: string; transcript: TranscriptFrame }>(),
       (p) => PubSub.shutdown(p),
     );
 
@@ -267,6 +287,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             });
           case "drive":
             return PubSub.publish(driveRequests, { from: key, action: frame.action }).pipe(Effect.asVoid);
+          case "transcript-request":
+            return PubSub.publish(transcriptRequests, { from: key, request: frame }).pipe(Effect.asVoid);
+          case "transcript":
+            return PubSub.publish(transcripts, { from: key, transcript: frame }).pipe(Effect.asVoid);
         }
       },
     };
@@ -311,6 +335,20 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const sendDrive = Effect.fn("Room.sendDrive")(function* (peerKey: string, action: DriveAction) {
       if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
       yield* send(peerKey, { kind: "drive", action });
+    });
+
+    /** Ask everyone present for their agent's conversation on these threads.
+     *  Whether anyone answers is that person's call, in their outbox. */
+    const requestTranscripts = Effect.fn("Room.requestTranscripts")(function* (request: Omit<TranscriptRequestFrame, "kind">) {
+      yield* broadcast({ kind: "transcript-request", ...request });
+      return peers.size;
+    });
+
+    /** Hand one approved transcript slice to the peer who asked. Ephemeral:
+     *  they must be present. */
+    const sendTranscript = Effect.fn("Room.sendTranscript")(function* (peerKey: string, transcript: Omit<TranscriptFrame, "kind">) {
+      if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
+      yield* send(peerKey, { kind: "transcript", ...transcript });
     });
 
     /** Rename the room for everyone: stamp now, append; the view updates all. */
@@ -359,6 +397,12 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       /** Drive requests addressed to us (testing; policy is the app's call). */
       drives: Stream.fromPubSub(driveRequests),
       sendDrive,
+      /** Peers asking for our agent's conversations (the app gates them). */
+      transcriptRequests: Stream.fromPubSub(transcriptRequests),
+      /** Conversations peers handed us after their person approved. */
+      transcripts: Stream.fromPubSub(transcripts),
+      requestTranscripts,
+      sendTranscript,
       /** Re-broadcast the local profile to all present peers (after a settings change). */
       updateProfile: Effect.gen(function* () {
         yield* broadcast({ kind: "profile", profile: yield* config.getProfile });
