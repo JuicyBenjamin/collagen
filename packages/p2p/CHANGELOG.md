@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.6.0-alpha...p2p-v0.7.0-alpha) (2026-09-09)
+
+
+### Features
+
+* **cli:** attachments — files on a ticket by reference, fetched from the holder ([781bfe1](https://github.com/JuicyBenjamin/collagen/commit/781bfe1a90110de6e33de56264b7a148bfd851e6))
+
 ## [0.6.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.5.0-alpha...p2p-v0.6.0-alpha) (2026-09-09)
 
 
