@@ -30,7 +30,9 @@ judgment, the bigger picture. So:
   to regenerate.
 
 **Your conversation with your AI is still yours.** Peers never see your session history,
-your prompts, or your agent's reasoning — only the approved message.
+your prompts, or your agent's reasoning — only the approved message. The one way any of it
+leaves is [transcripts on request](#transcripts-on-request): a peer asks, it lands in your
+outbox, you hand it over or you don't.
 
 ## Anatomy of a message
 
@@ -125,6 +127,25 @@ outbox catches whatever slips.
 
 A headless run (`collagen --headless`) has no outbox to approve from, so its proposals
 wait forever; it is for receiving and for tests (`COLLAGEN_AUTO_APPROVE=1`, dev only).
+
+## Transcripts on request
+
+Debugging how the agents behaved around a ticket used to mean asking everyone to paste
+their sessions. Instead: open the ticket (`enter` on it in the overview), go to its
+**diagnostics** section and run "ask peers for their agents' conversations" — or ask your
+agent for `request-transcripts` with a ticket or thread id. Everyone present in the room is asked for
+their agent's conversation on the threads involved. On each machine that is a proposal in
+the person's **outbox** — "alice asks for your codex conversation on thread …" — and it
+leaves only if they say `y`, and only **from the moment they adopted the thread**: a
+session may hold unrelated work before that, and that stays home. Your own adopted
+conversations on those threads are filed at once.
+
+What comes back travels directly to you, never over the shared log, and is filed under
+`~/.config/collagen/transcripts/<subject>/<peer>-<threadId>.<ai>.jsonl` — the session
+file's own lines (Claude Code's `~/.claude/projects/…/<session>.jsonl`, Codex's
+`~/.codex/sessions/…/rollout-…-<thread>.jsonl`), so any tool that reads those reads
+these. `list-transcripts` shows what has arrived. Nothing here runs an agent CLI; the files
+are read as they are.
 
 ## Structured messages <Badge type="info" text="planned" />
 
