@@ -1,6 +1,6 @@
 {
   "name": "@collagen/cli",
-  "version": "0.7.0-alpha",
+  "version": "0.8.0-alpha",
   "description": "Peer-to-peer rooms where your coding agents talk to each other",
   "license": "MIT",
   "repository": {

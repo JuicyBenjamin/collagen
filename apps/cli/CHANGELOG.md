@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.7.0-alpha...cli-v0.8.0-alpha) (2026-09-09)
+
+
+### Features
+
+* **cli:** the opening — the logo boots centred, then glides into the header ([3ffe095](https://github.com/JuicyBenjamin/collagen/commit/3ffe095aac03a2d015b541f3045004beae53ff1c))
+
 ## [0.7.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.6.0-alpha...cli-v0.7.0-alpha) (2026-09-09)
 
 
