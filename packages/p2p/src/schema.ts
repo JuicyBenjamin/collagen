@@ -55,6 +55,9 @@ export const RoomMessage = Schema.Struct({
   intent: Schema.String,
   findings: Schema.String,
   ts: Schema.Finite,
+  /** Set when the message weighs in on a ticket — anyone in the room may,
+   *  asked or not; the ticket's page gathers these. */
+  ticketId: Schema.optional(Schema.String),
 });
 export type RoomMessage = typeof RoomMessage.Type;
 
@@ -85,6 +88,7 @@ export const DriveAction = Schema.Union([
     project: Schema.String,
     intent: Schema.String,
     findings: Schema.String,
+    ticketId: Schema.optional(Schema.String),
   }),
   Schema.Struct({
     kind: Schema.Literal("create-ticket"),
@@ -220,6 +224,7 @@ export const Outgoing = Schema.Union([
     project: Schema.String,
     intent: Schema.String,
     findings: Schema.String,
+    ticketId: Schema.optional(Schema.String),
   }),
   Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
   Schema.Struct({
