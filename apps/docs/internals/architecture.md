@@ -163,7 +163,9 @@ step fails at once) and hands `Outbox.propose` a `Proposal`: room, recipient, ti
 `Outgoing` — plain data (`packages/p2p/src/schema.ts`): a message by peer *name*, a full
 ticket record, or a step settlement. Proposals live in `LocalState.outbox`, persisted by
 `StateStore` like everything else there, so they wait across a restart. The TUI renders
-them from the same state (overview's first section, and a count in the status line).
+them from the same state: waiting rows at the bottom of the messages tab and of a ticket's
+conversation (`usePendingOutgoing` gives both lists the keys and the row), counts in the
+tab bar and the status line.
 
 `approve(id)` hands the Outgoing to **`Dispatch`**, the only place the cli appends
 messages, tickets or settlements for the agent: it looks up the room, resolves the peer by
@@ -176,6 +178,16 @@ to the agent is a fixed sentence: queued for your user's approval, tell them, st
 Bypass exists only where there is no person to ask: a `mock:*` preferred AI, or
 `COLLAGEN_AUTO_APPROVE=1` (the e2e scenarios; logged as a warning at start). In that case
 `propose` dispatches at once and returns Dispatch's text.
+
+### Ticket updates for participants
+
+`Rooms`' per-room daemons also watch the room's tickets and trace for news that concerns
+this machine's person without being addressed to them: a step settling or failing, or a
+message tagged with a ticket they are part of. `lib/ticketUpdates.ts` decides who is a
+participant (creator, owners, anyone who wrote about it) and which thread their agent
+knows the ticket by; the daemon pushes a local `ticket-update:*` inbox message on that
+thread and runs the thread — the same path a delivered step takes. Local, not on the log:
+the log already holds the facts.
 
 ### Diagnostics: a registry, two surfaces
 

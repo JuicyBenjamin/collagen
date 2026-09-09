@@ -73,7 +73,7 @@ what's natural there. Number keys work from anywhere.
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |
-| `y` / `e` / `n` | Outbox: approve and send / rewrite the text first / reject what your agent wants to send |
+| `y` / `e` / `n` | On a waiting row (bottom of the messages tab, or a ticket's conversation): approve and send / rewrite the text first / reject what your agent wants to send |
 | `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
@@ -101,8 +101,8 @@ alice why average() returns NaN in sandbox"*. Everything a person can configure 
 the agent can configure too; UI state (tabs, focus) is deliberately not exposed.
 
 Two rules hold on every machine. Nothing leaves without you: `send-to-peer`,
-`create-ticket` and `settle-step` queue in the **outbox** on the overview tab until you
-press `y` (or `n`). And nothing answers for you: what arrives is shown to you by your
+`create-ticket` and `settle-step` wait at the bottom of the **messages** tab (and in the
+ticket they concern) until you press `y` (or `n`); the tab bar and status line count them. And nothing answers for you: what arrives is shown to you by your
 agent, which waits for your direction — see
 [what happens when a message arrives](./conversations#what-happens-when-a-message-arrives).
 

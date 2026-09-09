@@ -58,6 +58,19 @@ Because a ticket has no thread of its own, "the discussion about this work" and 
 status of this work" travel together: the ticket in the overview, its exchange in the
 messages tab, both about the same thread.
 
+**Anyone in the room may weigh in**, asked or not: a message sent with the ticket's
+`ticketId` (`send-to-peer … ticketId`) belongs to that ticket's conversation whoever sent
+it, and shows on the ticket's page for everyone. The people block and the overview row
+tell the asker whether the person they asked has answered, and who else has.
+
+**Everyone the ticket concerns hears about it.** The creator, the step owners and anyone
+who weighed in are its participants. When a step settles or fails, or someone weighs in,
+each participant who isn't the actor or the recipient gets a `ticket-update` in their
+inbox — on the thread their own agent knows the ticket by (their own messages about it,
+else their step, else the thread with whoever acted) — so an adopted session resumes with
+the news exactly like it would with a message. Headline first, as always. An owner whose
+own step just became actionable gets the step delivery instead, not an update on top.
+
 ### A review gate
 
 There is no separate `review` status. Want the requester to confirm before the work counts
@@ -86,13 +99,20 @@ dependency order is enforced by delivery, not by remembering.
 
 ## In the TUI
 
-The overview tab lists the room's tickets: goal, project, `settled/total` — `⧉` while in
-flight, `✓` when every step has settled, `✗` if one failed. `enter` opens the ticket's own
-page — the tab bar gives way to a `‹ overview › ticket …` crumb — with its **steps** with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed)
+The overview tab lists the room's tickets as what each one wants from you: `needs you` (a
+step you own is up), `waiting on bob`, `done`, `failed` — in that order, newest activity
+first, done ones dim and folded past three. Each row: state · goal · who was asked and
+whether they answered (`bob✓` spoke or settled, `bob·` silent so far, `carol` weighed in
+unasked) · age. The header counts them. `enter` opens the ticket's own
+page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:
+goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body is two
+panels: **steps** with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed)
 and result; the **conversation** on its threads (every message between the creator and the
-owners about this work, `enter` for the full text); and **diagnostics** that apply to it —
-today "ask peers for their agents' conversations" ([transcripts](./conversations#transcripts-on-request))
-and "conversations collected so far". `esc` goes back to the list.
+owners about this work, plus anything you have waiting to send about it; `enter` for the
+full text). At the foot, tucked away, one row of **diagnostics** — today `collect
+transcripts` ([transcripts](./conversations#transcripts-on-request)), which asks the room,
+and `transcripts`, which opens what came back for reading; `←→` pick, `enter` runs or
+opens, a result shows beneath. `esc` goes back to the list.
 
 ## Sync model
 

@@ -44,6 +44,7 @@ Today a message is a single blob:
 | project | Which of their projects it's about |
 | intent | A short verb — `flag-issue`, `ask-review`, `reply`, … |
 | findings | The substance: full context plus what you want from them |
+| ticketId | Optional — the message weighs in on that ticket (anyone may), and shows on its page |
 
 ## Threads
 
@@ -110,8 +111,9 @@ ever uses the CLI's own resume mechanism.
 
 It doesn't, yet. `send-to-peer`, `create-ticket` and `settle-step` queue a **proposal** in
 the room's outbox and tell the agent so ("queued for your user's approval — tell them what
-you queued, then stop"). The TUI's overview shows the outbox first: who it's for, the
-title, the full text on `enter`. `y` sends it — only then is it written to the room's log;
+you queued, then stop"). It shows at the bottom of the **messages** tab — outbound is still
+messages — marked waiting: who it's for, the title, the full text on `enter`; a ticket's
+conversation shows the ones about that ticket. `y` sends it — only then is it written to the room's log;
 `e` opens the text so you can rewrite it before it goes (a message's findings, a step's
 result — a ticket's shape is the agent's to redraft, so reject and say what you want);
 `n` drops it, and the agent isn't told: you tell it, in your words. A request that fails
@@ -131,9 +133,9 @@ wait forever; it is for receiving and for tests (`COLLAGEN_AUTO_APPROVE=1`, dev 
 ## Transcripts on request
 
 Debugging how the agents behaved around a ticket used to mean asking everyone to paste
-their sessions. Instead: open the ticket (`enter` on it in the overview), go to its
-**diagnostics** section and run "ask peers for their agents' conversations" — or ask your
-agent for `request-transcripts` with a ticket or thread id. Everyone present in the room is asked for
+their sessions. Instead: open the ticket (`enter` on it in the overview) and run `collect
+transcripts` in its diagnostics row — or ask your agent for `request-transcripts` with a
+ticket or thread id. Everyone present in the room is asked for
 their agent's conversation on the threads involved. On each machine that is a proposal in
 the person's **outbox** — "alice asks for your codex conversation on thread …" — and it
 leaves only if they say `y`, and only **from the moment they adopted the thread**: a
@@ -144,8 +146,14 @@ What comes back travels directly to you, never over the shared log, and is filed
 `~/.config/collagen/transcripts/<subject>/<peer>-<threadId>.<ai>.jsonl` — the session
 file's own lines (Claude Code's `~/.claude/projects/…/<session>.jsonl`, Codex's
 `~/.codex/sessions/…/rollout-…-<thread>.jsonl`), so any tool that reads those reads
-these. `list-transcripts` shows what has arrived. Nothing here runs an agent CLI; the files
-are read as they are.
+these. Next to each file a `.meta.json` records the provenance — who (name and key), which
+agent, the thread and session, the slice's start, how many entries, when it arrived, which
+request — so a renamed peer or a stray folder is never a mystery. In the app, `transcripts`
+on the ticket's diagnostics row opens the list (`from bob · codex · 61 entries · since … ·
+received 5m ago`); `enter` opens one and shows its turns, one line each (`HH:MM:SS  who
+first line`), `enter` unfolds a turn's text in full, `←`/`esc` step back to the list and
+then to the ticket. For the agent, `list-transcripts` lists the same, with provenance.
+Nothing here runs an agent CLI; the files are read as they are.
 
 ## Structured messages <Badge type="info" text="planned" />
 

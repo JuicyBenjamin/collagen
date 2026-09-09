@@ -52,9 +52,9 @@ agent session on your machine has the room's tools. Talk to your agent as usual:
 Messages and tickets belong to the room: they survive restarts and reach
 members who were offline. Peers exchange data, never code.
 
-In the TUI: rooms on the left; the room's outbox (what your agent wants to
-send — `y` sends, `e` edits, `n` drops), peers, tickets and projects in the
-centre; keys at the bottom. `1`/`2` switch tabs, `a` picks your agent, `c` copies the invite
+In the TUI: rooms on the left; peers, tickets and projects in the centre;
+keys at the bottom. What your agent wants to send waits at the bottom of the
+messages tab until you say so (`y` sends, `e` edits, `n` drops). `1`/`2` switch tabs, `a` picks your agent, `c` copies the invite
 id, `s` settings, `q` quit.
 
 ## More
