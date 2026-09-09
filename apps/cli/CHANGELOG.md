@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.4.0-alpha...cli-v0.5.0-alpha) (2026-09-09)
+
+
+### Features
+
+* **cli:** transcripts on request, a ticket page, and a diagnostics registry ([8d79916](https://github.com/JuicyBenjamin/collagen/commit/8d799160da3516d4fe788db511aeed92737c3541))
+
+
+### Bug Fixes
+
+* **cli:** a mock machine never runs a real CLI, whatever a thread was adopted into ([c7088f2](https://github.com/JuicyBenjamin/collagen/commit/c7088f21c2f5dccac4821d87d1cc375787bba9c4))
+
 ## [0.4.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.3.0-alpha...cli-v0.4.0-alpha) (2026-09-08)
 
 
