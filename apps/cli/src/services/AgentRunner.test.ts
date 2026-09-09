@@ -257,6 +257,29 @@ describe("AgentRunner", () => {
     expect(calls[0]!.args[4]).toContain("thread-1");
   });
 
+  it("a mock machine never runs a real CLI, even when a thread was adopted into codex", async () => {
+    // a mock peer is a whole fake agent; a stray adoption (a test, a slip) must
+    // not make it spawn the real `codex` on this machine
+    const { layer, calls } = testLayer({
+      state: {
+        ...baseState,
+        preferredAi: "mock:fake-ai",
+        threads: { "thread-1": { ai: "codex", sessionId: "codex-thread-9" } },
+      },
+    });
+    await run(
+      layer,
+      Effect.gen(function* () {
+        const { inbox, runner } = yield* setup;
+        yield* inbox.push("testroom", message());
+        yield* runner.runThread("thread-1");
+      }),
+    );
+    expect(calls.map((c) => c.cmd)).not.toContain("codex");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.cmd).toBe(fakeAdapter.cmd);
+  });
+
   it("a real ai is never cold-started — first contact queues even with an adapter available", async () => {
     const { layer, calls } = testLayer({ state: { ...baseState, preferredAi: "fake-ai" } });
     await run(

@@ -107,7 +107,9 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       // via the adopt-thread tool) with the CLI that owns it; the in-memory
       // map tracks the freshest resume id within this process.
       const adopted = state.threads?.[threadId];
-      const ai = adopted?.ai ?? state.preferredAi;
+      // A machine running a mock never runs a real CLI, whatever a thread was
+      // adopted into: the mock is the whole agent here.
+      const ai = (state.preferredAi ?? "").startsWith("mock") ? state.preferredAi : (adopted?.ai ?? state.preferredAi);
       const sessionId = Option.fromNullishOr(
         (yield* Ref.get(sessions)).get(threadId) ?? adopted?.sessionId,
       );
