@@ -13,7 +13,7 @@ import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
 import { to, useRouter } from "../../../app/router";
 import { roomAtom } from "../../atoms";
-import { identityAtom, membersAtom, outboxAtom, rosterAtom, traceAtom } from "../atoms";
+import { attachmentsAtom, fetchAttachmentAtom, heldAttachmentsAtom, identityAtom, membersAtom, outboxAtom, rosterAtom, traceAtom } from "../atoms";
 import { Arrow } from "../components/Arrow/Arrow";
 import { PENDING_HINT, usePendingOutgoing } from "../components/PendingOutgoing/PendingOutgoing";
 import { proposalText } from "../../../services/Outbox";
@@ -42,7 +42,8 @@ const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
 
 /** One ticket, as a page.
  *    header  — the meta: goal, state, project, who made it, who is in it
- *    body    — two panels: steps, conversation (with what you have waiting to send)
+ *    body    — steps; attachments (files on the ticket, if any); conversation
+ *              (with what you have waiting to send)
  *    foot    — diagnostics, one row, tucked away
  *  The overview is the list; this is the show. `esc` goes back. */
 export function TicketPage({ ticketId }: { ticketId: string }) {
@@ -53,6 +54,10 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const pending = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const);
+  const allAttachments = AsyncResult.getOrElse(useAtomValue(attachmentsAtom), () => [] as const);
+  const held = AsyncResult.getOrElse(useAtomValue(heldAttachmentsAtom), () => ({}) as Record<string, string>);
+  const fetch = useAtomSet(fetchAttachmentAtom);
+  const fetchOutcome = useAtomValue(fetchAttachmentAtom);
   const outgoing = usePendingOutgoing();
   const setFocus = useAtomSet(focusAtom);
   const focus = useAtomValue(focusAtom);
@@ -71,6 +76,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const [stepSel, setStepSel] = useState(0);
   const [msgSel, setMsgSel] = useState<number | null>(null);
   const [diagSel, setDiagSel] = useState(0);
+  const [attSel, setAttSel] = useState(0);
 
   // the cursor lands on the steps when the page opens — unless we came back
   // from a page of ours (transcripts), which put it where it left from
@@ -105,6 +111,12 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
         (p.outgoing.kind === "transcript" && p.outgoing.subject === `ticket-${ticket.id.slice(0, 8)}`)),
   );
   const rows = [...conversation.map((m) => ({ kind: "msg" as const, id: m.id, m })), ...waiting.map((p) => ({ kind: "pending" as const, id: p.id, p }))];
+  // files attached to this ticket: references from the log; the file is here
+  // once fetched (or when we attached it)
+  const attachments = allAttachments.filter((a) => a.ticketId === ticket.id);
+  const online = (key: string) => key === me || peers.some((p) => p.key === key);
+  const aSel = clamp(attSel, 0, Math.max(0, attachments.length - 1));
+  const fetchNote = AsyncResult.isSuccess(fetchOutcome) ? fetchOutcome.value : AsyncResult.isFailure(fetchOutcome) ? `failed: ${String(fetchOutcome.cause)}` : "";
   // every row in full: a head line (who → whom · intent) then its text, wrapped
   const textWidth = Math.max(30, width - 30);
   const lines = rows.flatMap((r, row) => {
@@ -195,6 +207,56 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
           )}
         </Focusable>
       </box>
+
+      {/* body: attachments — files on this ticket, fetched or not. Only when
+          there are any. y fetches from the holder (both online); enter reads a
+          fetched transcript; other files are yours to open at their path. */}
+      {attachments.length > 0 ? (
+        <Focusable
+          id="ticket-attachments"
+          hint="↑↓ select · y fetch the file from its holder · enter read a fetched transcript · esc back to the list"
+          flexDirection="column"
+          flexShrink={0}
+          onKey={(key) => {
+            if (key.name === "up" && aSel > 0) return setAttSel(aSel - 1), true;
+            if (key.name === "down" && aSel < attachments.length - 1) return setAttSel(aSel + 1), true;
+            const a = attachments[aSel];
+            if (!a) return false;
+            if (key.name === "y" && !held[a.id]) return fetch({ roomId, attachmentId: a.id }), true;
+            if (isEnter(key)) {
+              const file = held[a.id];
+              if (file && a.transcript) navigate(to.transcript(file, a.name, to.ticket(ticketId)));
+              else if (!file) fetch({ roomId, attachmentId: a.id });
+              return true;
+            }
+            return false;
+          }}
+        >
+          {(focused) => (
+            <>
+              <SectionTitle title="attachments" note={`${attachments.length} file${attachments.length === 1 ? "" : "s"}${fetchNote ? ` · ${fetchNote}` : ""}`} focused={focused} />
+              {attachments.map((a, i) => (
+                <text key={a.id} fg={focused && i === aSel ? theme.accent : theme.fg} truncate wrapMode="none">
+                  {focused && i === aSel ? "› " : "  "}
+                  <span fg={held[a.id] ? theme.ok : theme.dim}>{held[a.id] ? "⇩" : "○"} </span>
+                  {a.name}
+                  <span fg={theme.dim}>
+                    {" "}· {a.transcript ? `${a.transcript.from}'s ${a.transcript.ai} conversation · ${a.transcript.entries} entries` : `${a.mime} · ${Math.max(1, Math.round(a.bytes / 1024))} kB`}
+                    {a.note ? ` · "${a.note}"` : ""} · {nameFor(a.holder)} {age(a.attachedAt, now)} ago ·{" "}
+                  </span>
+                  {held[a.id] ? (
+                    <span fg={theme.ok}>{a.transcript ? "here · enter reads it" : `here · ${held[a.id]}`}</span>
+                  ) : online(a.holder) ? (
+                    <span fg={theme.warn}>y fetch</span>
+                  ) : (
+                    <span fg={theme.dim}>{nameFor(a.holder)} is offline — fetch when they are</span>
+                  )}
+                </text>
+              ))}
+            </>
+          )}
+        </Focusable>
+      ) : null}
 
       {/* body: conversation — every message about this ticket, in full, in a
           viewport of fixed height: ↑↓ scroll by message, the newest followed

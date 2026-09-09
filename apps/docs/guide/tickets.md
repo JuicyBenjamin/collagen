@@ -105,14 +105,17 @@ first, done ones dim and folded past three. Each row: state · goal · who was a
 whether they answered (`bob✓` spoke or settled, `bob·` silent so far, `carol` weighed in
 unasked) · age. The header counts them. `enter` opens the ticket's own
 page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:
-goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body is two
-panels: **steps** with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed)
-and result; the **conversation** on its threads (every message between the creator and the
-owners about this work, plus anything you have waiting to send about it; `enter` for the
-full text). At the foot, tucked away, one row of **diagnostics** — today `collect
-transcripts` ([transcripts](./conversations#transcripts-on-request)), which asks the room,
-and `transcripts`, which opens what came back for reading; `←→` pick, `enter` runs or
-opens, a result shows beneath. `esc` goes back to the list.
+goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body:
+**steps** with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed) and
+result; **attachments**, when the ticket has any — each file by name, type and size (or
+whose conversation it is), who holds it, `○ y fetch` / `⇩ here` ([attachments](./conversations#attachments));
+the **conversation** on its threads (every message between the creator and the owners
+about this work, plus anything you have waiting to send about it; `enter` for the full
+text). At the foot, tucked away, one row of **diagnostics** — `collect transcripts`
+([transcripts](./conversations#transcripts-on-request)), which asks the room,
+`transcripts`, which opens what came back for reading, and `attach`, which puts a file of
+yours on the ticket; `←→` pick, `enter` runs or opens, a result shows beneath. `esc` goes
+back to the list.
 
 ## Sync model
 

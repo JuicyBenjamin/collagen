@@ -34,6 +34,10 @@ export interface TranscriptMeta {
   readonly entries: number;
   readonly receivedAt: number;
   readonly requestId: string;
+  /** When attached to a ticket from elsewhere: the subject it was first filed under. */
+  readonly origin?: string;
+  /** Who handed it over, when that is not whose conversation it is. */
+  readonly via?: string;
 }
 
 export interface ListedTranscript {
@@ -165,6 +169,15 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
         );
       });
 
+    /** File a transcript that reached us some other way (an attachment
+     *  fetched from a ticket): where every transcript goes, meta beside it.
+     *  Returns the path. */
+    const fileIncoming = Effect.fn("Transcripts.fileIncoming")(function* (meta: TranscriptMeta, text: string) {
+      const path = fileFor(meta.subject, meta.from, meta.threadId, meta.ai);
+      yield* file({ subject: meta.subject, from: meta.from, threadId: meta.threadId, ai: meta.ai, entries: meta.entries, path }, text, meta);
+      return path;
+    });
+
     // every room, as it appears (a room that leaves ends its own streams)
     const attached = new Set<string>();
     yield* SubscriptionRef.changes(rooms.handles).pipe(
@@ -213,7 +226,7 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       return out;
     });
 
-    return { request, threadsOfTicket, saved, list, dir: transcriptsDir } as const;
+    return { request, threadsOfTicket, saved, list, dir: transcriptsDir, fileIncoming } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

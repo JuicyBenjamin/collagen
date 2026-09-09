@@ -224,6 +224,25 @@ strings and runs the tools under a scripted `LanguageModel` that follows them.
 Interop shims for strict MCP clients (Codex's `rmcp`) live here — see
 [Effect patterns](./effect-patterns#mcp-interop-shims).
 
+### `Attachments`: files by reference
+
+`Attachments` (`apps/cli/src/services/Attachments.ts`) puts files on tickets without
+moving them. `attach(room, ticket, goal, paths, note?)` describes each path
+(`lib/attachments.ts`: name, size, MIME by extension; a `.meta.json` beside it makes it a
+transcript and carries that meta) and proposes `Outgoing.kind = "attach"`. On approval
+`Dispatch` appends one `LogOp { op: "attachment" }` per file — the `Attachment` record:
+id, ticket, holder key and name, name/bytes/mime, note, optional `transcript` info,
+`attachedAt`; no path — and remembers `attachment id → local path` in
+`LocalState.attachedFiles`. `RoomLog` keeps them under `attachment/<ticketId>/<id>`
+(first write wins) and `LogView.attachments` lists them; `Room.attachments` is the
+SubscriptionRef. Fetching is ephemeral and direct: `Room.fetchAttachment(holder, id)`
+sends a `fetch-attachment` frame; the holder's `Attachments` answers only for ids in its
+`attachedFiles` (gzipped bytes in an `attachment` frame, 8 MB cap), and the fetcher files
+them under `~/.config/collagen/attachments/ticket-<id8>/<id8>-<name>` + `.meta.json`, or,
+for a transcript, through `Transcripts.fileIncoming` next to the other transcripts with
+`origin`/`via` in its meta. `held` merges the three sources (attached by us, fetched,
+fetched transcripts) into `id → path` for the ticket page and `fetch-attachments`.
+
 ## `AgentRunner`: the resume policy
 
 When a message (or a ticket step) lands, `Rooms` calls `AgentRunner.runThread`. It never

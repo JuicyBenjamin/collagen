@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { diagnostics, type DiagnosticContext } from "../../../diagnostics";
+import { Attachments } from "../../../services/Attachments";
 import { Rooms } from "../../../services/Rooms";
 import { Transcripts } from "../../../services/Transcripts";
 import { runtimeAtom } from "../../../app/runtime";
@@ -11,6 +12,7 @@ export const runDiagnosticAtom = runtimeAtom.fn(
     if (!d) return `no diagnostic named ${id}`;
     const rooms = yield* Rooms;
     const transcripts = yield* Transcripts;
-    return yield* d.run(params, ctx, { rooms, transcripts });
+    const attachments = yield* Attachments;
+    return yield* d.run(params, ctx, { rooms, transcripts, attachments });
   }),
 );
