@@ -8,6 +8,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { AI_OPTIONS, isRoomId, newProject, PROTOCOL_VERSION, Room, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
+import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { ticketView } from "../lib/ticketView";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
@@ -18,6 +19,7 @@ import { Scripting } from "./Scripting";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
+import { Transcripts } from "./Transcripts";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 
@@ -451,15 +453,15 @@ const makeHandlers = Effect.gen(function* () {
           }
         }).pipe(Effect.withSpan("Mcp.awaitMessages")),
       "adopt-thread": ({ threadId, agent, sessionId }: { threadId: string; agent: "claude-code" | "codex"; sessionId: string }) =>
-        store
-          .update((s) => ({ ...s, threads: { ...(s.threads ?? {}), [threadId]: { ai: agent, sessionId } } }))
-          .pipe(
-            Effect.andThen(Effect.log(`thread ${threadId} adopted → ${agent} ${sessionId.slice(0, 8)}…`)),
-            Effect.map(
-              () => `adopted: new messages on thread ${threadId} will resume your ${agent} conversation (${sessionId})`,
-            ),
-            Effect.withSpan("Mcp.adoptThread"),
-          ),
+        Effect.gen(function* () {
+          if (!/^[0-9a-f]{16}$/.test(threadId)) return `failed: "${threadId}" is not a collagen thread id — take it from pending-threads or the message you were handed`;
+          if (sessionId.trim().length === 0) return "failed: sessionId is empty — pass your harness's session/thread id";
+          // `since`: a transcript handed over later starts here, never earlier
+          const since = yield* Clock.currentTimeMillis;
+          yield* store.update((s) => ({ ...s, threads: { ...(s.threads ?? {}), [threadId]: { ai: agent, sessionId, since } } }));
+          yield* Effect.log(`thread ${threadId} adopted → ${agent} ${sessionId.slice(0, 8)}…`);
+          return `adopted: new messages on thread ${threadId} will resume your ${agent} conversation (${sessionId})`;
+        }).pipe(Effect.withSpan("Mcp.adoptThread")),
       "get-messages": ({ threadId }: { threadId: string }) =>
         rooms.current.pipe(
           Effect.flatMap((h) => inbox.take(h.id, threadId)),
@@ -715,6 +717,23 @@ export const ToolHandlers = CollagenToolkit.toLayer(
 );
 export const DevToolHandlers = DevCollagenToolkit.toLayer(makeHandlers);
 
+/** The diagnostics registry as tools: one handler per entry, run against the
+ *  focused room. Adding a diagnostic touches src/diagnostics only. */
+const makeDiagnosticHandlers = Effect.gen(function* () {
+  const rooms = yield* Rooms;
+  const transcripts = yield* Transcripts;
+  const handlers: Record<string, (params: unknown) => Effect.Effect<string>> = {};
+  for (const d of diagnostics) {
+    handlers[d.id] = (params) =>
+      rooms.current.pipe(
+        Effect.flatMap((h) => d.run(params ?? {}, { roomId: h.id }, { rooms, transcripts })),
+        Effect.withSpan(`Mcp.${d.id}`),
+      );
+  }
+  return handlers;
+});
+export const DiagnosticHandlers = DiagnosticToolkit.toLayer(makeDiagnosticHandlers);
+
 /** MCP server over Streamable HTTP on the profile's deterministic port
  *  (ephemeral fallback if taken). Publishes the resolved URL to McpInfo.
  *
@@ -777,8 +796,8 @@ export const McpLive = Layer.unwrap(
     // tool; anything else serves the plain toolkit — the tool doesn't exist.
     const toolkitLayer =
       process.env.COLLAGEN_DEV === "1"
-        ? McpServer.toolkit(DevCollagenToolkit).pipe(Layer.provide(DevToolHandlers))
-        : McpServer.toolkit(CollagenToolkit).pipe(Layer.provide(ToolHandlers));
+        ? McpServer.toolkit(Toolkit.merge(DevCollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(DevToolHandlers, DiagnosticHandlers)))
+        : McpServer.toolkit(Toolkit.merge(CollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(ToolHandlers, DiagnosticHandlers)));
 
     const serve = (port: number) =>
       HttpRouter.serve(

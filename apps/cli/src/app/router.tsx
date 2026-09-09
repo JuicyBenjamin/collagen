@@ -1,7 +1,18 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-/** Frames the configured app can show. Nested paths are tabs inside the room layout. */
-export type Route = "settings" | "new-room" | "room/overview" | "room/messages";
+/** Where the configured app can be. Plain routes are strings; a route with a
+ *  parameter is an object. `room/*` routes render inside the room layout
+ *  (see routes/index.tsx for the table that maps each to its page). */
+export type Route = "settings" | "new-room" | "room/overview" | "room/messages" | { readonly name: "room/ticket"; readonly ticketId: string };
+
+export type RouteName = Route extends infer R ? (R extends string ? R : R extends { readonly name: infer N } ? N : never) : never;
+
+export const routeName = (route: Route): RouteName => (typeof route === "string" ? route : route.name);
+
+/** Constructors for the routes that carry parameters. */
+export const to = {
+  ticket: (ticketId: string): Route => ({ name: "room/ticket", ticketId }),
+} as const;
 
 interface Router {
   route: Route;

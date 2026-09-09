@@ -5,31 +5,22 @@ import type { Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
 import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
+import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { identityAtom, rosterAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
-const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
-  pending: "·",
-  suspended: "⟳",
-  settled: "✓",
-  failed: "✗",
-};
 const SHOWN = 8;
 
-/** Shared tickets — a section: ↑↓ select, enter shows the steps (owner,
- *  status, result). At the top edge ↑ is left for spatial navigation. */
+/** Shared tickets — the list. ↑↓ select, enter opens the ticket's own page
+ *  (steps, conversation, diagnostics). At the top edge ↑ is left for
+ *  spatial navigation. */
 export function Tickets() {
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
-  const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
-  const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
+  const { navigate } = useRouter();
   const [cursor, setCursor] = useState(0);
-  const [expanded, setExpanded] = useState<string | null>(null);
 
   const last = Math.max(0, tickets.length - 1);
   const sel = clamp(cursor, 0, last);
-  const nameFor = (key: string): string =>
-    key === identity?.pubkey ? "you" : (peers.find((p) => p.key === key)?.name ?? key.slice(0, 8));
 
   const shown = tickets.slice(-SHOWN);
   const firstShown = tickets.length - shown.length;
@@ -37,7 +28,7 @@ export function Tickets() {
   return (
     <Focusable
       id="tickets"
-      hint="↑↓ select ticket · enter details · arrows move between sections · esc"
+      hint="↑↓ select ticket · enter open · arrows move between sections · esc"
       flexDirection="column"
       marginTop={1}
       onKey={(key) => {
@@ -45,7 +36,7 @@ export function Tickets() {
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
         if (isEnter(key)) {
           const t = tickets[sel];
-          if (t) setExpanded((e) => (e === t.id ? null : t.id));
+          if (t) navigate(to.ticket(t.id));
           return true;
         }
         return false;
@@ -61,15 +52,7 @@ export function Tickets() {
               {"  "}none — agents create them for multi-step work
             </text>
           ) : (
-            shown.map((t, i) => (
-              <TicketRow
-                key={t.id}
-                ticket={t}
-                selected={focused && firstShown + i === sel}
-                expanded={expanded === t.id}
-                nameFor={nameFor}
-              />
-            ))
+            shown.map((t, i) => <TicketRow key={t.id} ticket={t} selected={focused && firstShown + i === sel} />)
           )}
         </>
       )}
@@ -77,42 +60,24 @@ export function Tickets() {
   );
 }
 
-function TicketRow({
-  ticket: t,
-  selected,
-  expanded,
-  nameFor,
-}: {
-  ticket: Ticket;
-  selected: boolean;
-  expanded: boolean;
-  nameFor: (key: string) => string;
-}) {
+export function ticketGlyph(t: Ticket): { glyph: string; color: string; done: number } {
   const done = t.steps.filter((s) => s.status === "settled").length;
   const failed = t.steps.some((s) => s.status === "failed");
   const complete = done === t.steps.length;
-  const color = selected ? theme.accent : complete ? theme.dim : theme.fg;
+  return { glyph: complete ? "✓" : failed ? "✗" : "⧉", color: complete ? theme.ok : theme.warn, done };
+}
+
+function TicketRow({ ticket: t, selected }: { ticket: Ticket; selected: boolean }) {
+  const { glyph, color, done } = ticketGlyph(t);
+  const complete = done === t.steps.length;
   return (
-    <box flexDirection="column">
-      <text fg={color} truncate wrapMode="none">
-        {selected ? "› " : "  "}
-        <span fg={complete ? theme.ok : theme.warn}>{complete ? "✓ " : failed ? "✗ " : "⧉ "}</span>
-        {t.goal}
-        <span fg={theme.dim}>
-          {" "}· {t.project} · {done}/{t.steps.length}
-        </span>
-      </text>
-      {expanded
-        ? t.steps.map((s) => (
-            <text key={s.id} fg={theme.dim} truncate wrapMode="none">
-              {"      "}
-              <span fg={s.status === "settled" ? theme.ok : s.status === "failed" ? theme.warn : theme.dim}>
-                {STEP_GLYPH[s.status]}
-              </span>{" "}
-              {s.id} {nameFor(s.owner)} · {s.intent} — {s.result ?? s.description}
-            </text>
-          ))
-        : null}
-    </box>
+    <text fg={selected ? theme.accent : complete ? theme.dim : theme.fg} truncate wrapMode="none">
+      {selected ? "› " : "  "}
+      <span fg={color}>{glyph} </span>
+      {t.goal}
+      <span fg={theme.dim}>
+        {" "}· {t.project} · {done}/{t.steps.length}
+      </span>
+    </text>
   );
 }

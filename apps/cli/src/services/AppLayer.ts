@@ -17,6 +17,7 @@ import { registerAll } from "./Registrar";
 import { Rooms } from "./Rooms";
 import { Scripting } from "./Scripting";
 import { StateStore } from "./StateStore";
+import { Transcripts } from "./Transcripts";
 import { Updates } from "./Updates";
 
 /** Process-wide background rules (per-room ones live in Rooms): re-probe the
@@ -59,6 +60,7 @@ const SwarmLive = Swarm.layer.pipe(
  *  (Rooms: every joined room live, one focused, on one swarm). */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(Updates.layer),
+  Layer.provideMerge(Transcripts.layer),
   Layer.provideMerge(Outbox.layer),
   Layer.provideMerge(Dispatch.layer),
   Layer.provideMerge(Scripting.layer),
