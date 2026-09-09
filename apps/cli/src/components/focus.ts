@@ -12,6 +12,11 @@ export const focusAtom = Atom.make<string>("");
  *  its hint; every other key handler stands down until it is null again. */
 export const captureAtom = Atom.make<string | null>(null);
 
+/** What ← does when a section leaves it alone and nothing (or only the rooms
+ *  rail) lies to the left: a page installs "go back" here, so ← means back
+ *  everywhere on the page instead of jumping to the rail. Null on the tabs. */
+export const leftEdgeAtom = Atom.make<(() => void) | null>(null);
+
 /** Hint text per Focusable id, registered by the Focusables themselves — a
  *  footer can show the hovered one's without knowing the sections exist. */
 export const hintsAtom = Atom.make<Readonly<Record<string, string>>>({});

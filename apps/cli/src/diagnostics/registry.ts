@@ -1,4 +1,5 @@
 import type { Effect, Schema } from "effect";
+import type { Route } from "../app/router";
 import type { Rooms } from "../services/Rooms";
 import type { Transcripts } from "../services/Transcripts";
 
@@ -28,6 +29,10 @@ export interface Diagnostic<P = unknown> {
   /** Params from the TUI context, or null when it doesn't apply there. */
   readonly fromContext: (ctx: DiagnosticContext) => P | null;
   readonly run: (params: P, ctx: DiagnosticContext, deps: DiagnosticDeps) => Effect.Effect<string>;
+  /** In the TUI, some diagnostics are a page rather than a line of text:
+   *  given, enter navigates there instead of running. The agent still gets
+   *  `run`. */
+  readonly open?: (ctx: DiagnosticContext, back: Route) => Route;
 }
 
 export const diagnostic = <P>(d: Diagnostic<P>): Diagnostic<P> => d;

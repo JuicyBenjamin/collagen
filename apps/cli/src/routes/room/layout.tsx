@@ -6,11 +6,12 @@ import { AI_OPTIONS } from "@collagen/p2p";
 import { MOCK_AI_OPTIONS } from "../../services/Adapters";
 import { RESTART_EXIT_CODE } from "../../services/Updates";
 import { Panel } from "../../components/Panel";
-import { captureAtom, focusAtom } from "../../components/focus";
+import { captureAtom, focusAtom, leftEdgeAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
-import { routeName, useRouter } from "../../app/router";
+import { useRouter, type Route } from "../../app/router";
 import { roomAtom } from "../atoms";
 import { installAppUpdateAtom, updateStateAtom } from "./atoms";
+import { ticketsAtom } from "./overview/components/Tickets/atoms";
 import { Crumb } from "./components/Crumb/Crumb";
 import { Footer } from "./components/Footer/Footer";
 import { Keys } from "./components/Keys/Keys";
@@ -36,7 +37,39 @@ function nextAi(current: string | null): string | null {
 export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: (code?: number) => void }) {
   const { route, navigate } = useRouter();
   // a ticket is a page of its own inside the room: crumb instead of tabs
-  const ticket = typeof route === "object" && route.name === "room/ticket" ? route : null;
+  const page = typeof route === "object" ? route : null;
+  const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
+  const goalOf = (ticketId: string) => tickets.find((t) => t.id === ticketId)?.goal ?? `ticket ${ticketId.slice(0, 8)}`;
+  // what the crumb says, and where esc / ← go from here
+  // the trail of names above a route: overview › ticket › transcripts › …
+  const trailOf = (r: Route): ReadonlyArray<string> =>
+    typeof r === "string"
+      ? ["overview"]
+      : r.name === "room/ticket"
+        ? [...trailOf("room/overview"), goalOf(r.ticketId)]
+        : r.name === "room/transcripts"
+          ? [...trailOf(r.back), "transcripts"]
+          : [...trailOf(r.back), r.file];
+  const crumb =
+    page === null
+      ? null
+      : page.name === "room/ticket"
+        ? { trail: ["overview"], label: goalOf(page.ticketId), back: "room/overview" as const, focus: "tickets" }
+        : page.name === "room/transcripts"
+          ? { trail: trailOf(page.back), label: "transcripts", back: page.back, focus: typeof page.back === "object" ? "ticket-diagnostics" : "tickets" }
+          : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
+  const goBack = () => {
+    if (!crumb) return;
+    navigate(crumb.back);
+    setFocus(crumb.focus);
+  };
+  // on a page, ← past the left edge is back; on the tabs it reaches the rail as before
+  const setLeftEdge = useAtomSet(leftEdgeAtom);
+  useEffect(() => {
+    setLeftEdge(crumb ? () => goBack : null);
+    return () => setLeftEdge(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on where we are
+  }, [setLeftEdge, page?.name, page && "ticketId" in page ? page.ticketId : "", page && "subject" in page ? page.subject : "", page && "path" in page ? page.path : ""]);
   const { jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const captured = useAtomValue(captureAtom) !== null;
@@ -68,11 +101,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "1") return jump("room/overview");
     if (key.name === "2") return jump("room/messages");
     if (key.name === "escape") {
-      // inside a ticket, esc is "back to the list"; elsewhere, back to the tab bar
-      if (routeName(route) === "room/ticket") {
-        navigate("room/overview");
-        return setFocus("tickets");
-      }
+      // inside a page (ticket, transcripts), esc is "back"; on a tab, back to the tab bar
+      if (crumb) return goBack();
       return setFocus("tabs");
     }
   });
@@ -82,8 +112,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
       <StatusLine />
       <box flexDirection="row" marginTop={1} flexGrow={1} flexShrink={1}>
         <Sidebar />
-        <Panel title={ticket ? `room · ${roomName} › ticket` : `room · ${roomName}`} grow>
-          {ticket ? <Crumb label={`ticket ${ticket.ticketId.slice(0, 8)}`} /> : <TabBar />}
+        <Panel title={crumb ? `room · ${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : "transcript"}` : `room · ${roomName}`} grow>
+          {crumb ? <Crumb trail={crumb.trail} label={crumb.label} onBack={goBack} /> : <TabBar />}
           {children}
           <Keys />
         </Panel>
