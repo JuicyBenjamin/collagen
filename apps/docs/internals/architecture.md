@@ -20,6 +20,7 @@ flowchart TD
   Inbox["Inbox\nwaiting messages, tagged by room"]
   Outbox["Outbox\nproposals waiting for the person's yes"]
   Dispatch["Dispatch\nwrites an approved Outgoing to the log"]
+  Transcripts["Transcripts\nasks peers, files what they hand over"]
   Adapters["Adapters\nclaude-code · codex · mock:*"]
   AiStatus["AiStatus\nis the CLI installed + logged in"]
   AgentRunner["AgentRunner\nresume policy per thread"]
@@ -42,6 +43,7 @@ flowchart TD
   Rooms --> Mcp
   Inbox --> Mcp
   Rooms --> Dispatch --> Outbox --> Mcp
+  Outbox --> Transcripts --> Mcp
   StateStore --> Outbox
   StateStore --> Mcp
   Mcp --> Registrar
@@ -174,6 +176,30 @@ to the agent is a fixed sentence: queued for your user's approval, tell them, st
 Bypass exists only where there is no person to ask: a `mock:*` preferred AI, or
 `COLLAGEN_AUTO_APPROVE=1` (the e2e scenarios; logged as a warning at start). In that case
 `propose` dispatches at once and returns Dispatch's text.
+
+### Diagnostics: a registry, two surfaces
+
+`apps/cli/src/diagnostics/` holds one file per diagnostic — `id`, `title`, `summary` (the
+tool description), `params` (the agent's schema), `fromContext` (params from where the
+person is in the TUI, or null), `run(params, ctx, deps)` returning the text both surfaces
+show — and `index.ts` lists them. `Mcp.ts` builds a `Tool` per entry (prefixed
+"DIAGNOSTIC, only when the user asks for it") and merges that toolkit with the room's;
+the ticket page lists the entries whose `fromContext` applies and runs them with the same
+deps. Adding a diagnostic touches that folder only.
+
+### `Transcripts`: diagnostics through the same gate
+
+`Transcripts` (`apps/cli/src/services/Transcripts.ts`) sits above `Outbox`. `request(room,
+subject, threadIds)` files the requester's own adopted slices, then broadcasts a
+`transcript-request` frame (ephemeral, direct). On every other machine the service turns
+a request into one outbox proposal per adopted thread it has a session file for
+(`Outgoing.kind = "transcript"`, `since` = the adoption time stored on `AdoptedThread`).
+Approval reaches `Dispatch`, which reads the session file *now*, keeps the lines from
+`since` on (`lib/transcripts.ts`: `sessionFile`, `sliceSince`), gzips them and sends a
+`transcript` frame to the requester alone. The requester's `Transcripts` files it under
+`~/.config/collagen/transcripts/<subject>/`. Nothing touches the room log; no agent CLI
+runs — the files are read where the CLIs keep them (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`
+honoured).
 
 The receiving half of the same principle is not enforceable in code: an agent's own
 reasoning can't be gated. It is carried by the nudge (`Adapters.nudgePrompt`), the ticket

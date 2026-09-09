@@ -72,8 +72,9 @@ what's natural there. Number keys work from anywhere.
 | `1` / `2` | Overview / messages tab |
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
-| `enter` | Open / pick: a room in the rail, details of a ticket or message, `+ add project` |
+| `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |
 | `y` / `e` / `n` | Outbox: approve and send / rewrite the text first / reject what your agent wants to send |
+| `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
 | `c` | Copy the room's invite id |
@@ -91,6 +92,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room` |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `get-tickets` |
+| Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person |
 | Settings | `add-project`, `remove-project`, `set-ai`, `set-name` |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 

@@ -151,23 +151,30 @@ machine can exercise both sides of a flow; real peers ignore drive requests.
 
 The TUI borrows the web's vocabulary so changes are easy to say out loud.
 
-- **`routes/`** — frames (pages). A frame is a folder with a `page.tsx`; nested
-  frames nest folders (`routes/room/overview`, `routes/room/messages` are the
-  room's tabs). A `layout.tsx` next to frames wraps them: `routes/layout.tsx`
-  is the brand header every frame sits in; `routes/room/layout.tsx` adds the
-  rooms sidebar, the status line, the room panel with its tab bar, the
-  footer, and the global keys, and renders the active tab as `children`.
-  `routes/settings` and `routes/new-room` (the sidebar's `+`) are full
-  frames of their own, like Discord's settings screen.
-- **`components/`** inside a frame or layout folder holds *its* child
+- **`routes/`** — one folder per route, each with a `page.tsx`. `app/router.tsx`
+  holds the `Route` type (a string, or an object when the route carries a
+  parameter: `{ name: "room/ticket", ticketId }`) and the navigation context;
+  `routes/index.tsx` is the route table — one line per route mapping it to its
+  page — and the layouts that wrap routes by prefix (`room/*` renders inside
+  `routes/room/layout.tsx`: rooms sidebar, status line, room panel with its tab
+  bar, footer, global keys). Adding a route: a folder, a `Route` member, a line in
+  the table. `routes/room/overview` is the room's list view (outbox, peers,
+  tickets, projects); `routes/room/ticket` is one ticket (steps, conversation,
+  diagnostics); `routes/room/messages` is the trace; `routes/settings` and
+  `routes/new-room` (the sidebar's `+`) are full pages of their own.
+- **`components/`** inside a route or layout folder holds *its* child
   components, one folder each (`routes/room/components/Footer/Footer.tsx`);
   children that have children repeat the pattern. Siblings live side by side.
-- **Top-level `components/`** — app-agnostic primitives shared across frames
-  (`Panel`, `FsPicker`, key helpers). App-specific pieces two frames share
+- **Top-level `components/`** — app-agnostic primitives shared across routes
+  (`Panel`, `FsPicker`, key helpers). App-specific pieces two routes share
   sit in the lowest folder above both: `routes/components/RoomChooser` is
   the join-or-create question used by setup and by new-room.
+- **`diagnostics/`** — the registry: one file per diagnostic (`id`, `title`,
+  `summary`, `params`, `fromContext`, `run`), listed in `index.ts`. The MCP server
+  makes a tool of each; the ticket page lists the ones that apply where the
+  person is. Adding one touches this folder only.
 - **`atoms.ts` sits at the lowest folder shared by everything that reads it**:
-  `routes/atoms.ts` for state every frame needs, `routes/room/atoms.ts` for
+  `routes/atoms.ts` for state every route needs, `routes/room/atoms.ts` for
   what several room sections share, `…/Footer/atoms.ts` for what only the
   footer reads. `app/runtime.ts` holds the runtime atom they all derive from;
   `app/session.tsx` is the one context — who you are and which room you're in —

@@ -25,6 +25,15 @@ _Last updated: 2026-09-07._
   the peer by name at send time. Incoming: every nudge and tool description tells the
   agent to relay to its person and wait, never to answer or act on its own. Mocks and
   `COLLAGEN_AUTO_APPROVE=1` (tests) bypass the gate.
+- **Ticket page + diagnostics registry** — `enter` on a ticket opens it: steps, the
+  conversation on its threads, and the diagnostics that apply. Diagnostics are one file
+  each in `src/diagnostics/`; the MCP server and the ticket page both read the registry.
+- **Transcripts on request** — the ticket page's diagnostics / `request-transcripts` asks everyone present
+  for their agent's conversation on the ticket's threads; each answer is a proposal in that
+  person's outbox, sliced from the moment they adopted the thread, sent directly (never on
+  the log) and filed under `~/.config/collagen/transcripts/`. Session files are read as
+  they are (Claude Code and Codex layouts; `CLAUDE_CONFIG_DIR` / `CODEX_HOME` honoured);
+  no CLI runs.
 - **Messaging** — `send-to-peer` appends to the room's log in the thread between two peers
   about one project; the recipient may be offline and reads it when back. Room-visible.
   Unread is a per-thread cursor in local state. **Nothing spawns behind your back**: a real AI is never cold-started by an
