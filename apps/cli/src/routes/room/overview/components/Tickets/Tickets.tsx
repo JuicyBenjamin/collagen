@@ -7,23 +7,48 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
+import { age, compareSummaries, peopleLabel, STATE_LABEL, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
-const SHOWN = 8;
+/** How many done/failed tickets to show before folding the rest. */
+const DONE_SHOWN = 3;
 
-/** Shared tickets — the list. ↑↓ select, enter opens the ticket's own page
- *  (steps, conversation, diagnostics). At the top edge ↑ is left for
- *  spatial navigation. */
+/** Shared tickets — the list, for a person who wants to know what wants
+ *  them. Each row: state · goal · who was asked and whether they answered ·
+ *  age. Needs-you first, then waiting, then failed, then done (dim, folded
+ *  past a few). ↑↓ select, enter opens the ticket's page. The `›` is the
+ *  cursor, nothing else. */
 export function Tickets() {
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
+  const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
+  const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
+  const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
+  const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const { navigate } = useRouter();
   const [cursor, setCursor] = useState(0);
+  const [unfolded, setUnfolded] = useState(false);
 
-  const last = Math.max(0, tickets.length - 1);
+  const me = identity?.pubkey ?? "";
+  const nameFor = (key: string): string =>
+    key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
+  const now = Date.now();
+
+  const rows = tickets
+    .map((t) => ({ t, s: summarize(t, trace, me) }))
+    .sort((a, b) => compareSummaries(a.s, b.s));
+  const open = rows.filter((r) => r.s.state === "needs-you" || r.s.state === "waiting");
+  const closed = rows.filter((r) => r.s.state === "failed" || r.s.state === "done");
+  const shownClosed = unfolded ? closed : closed.slice(0, DONE_SHOWN);
+  const folded = closed.length - shownClosed.length;
+  const shown = [...open, ...shownClosed];
+  const needsYou = rows.filter((r) => r.s.state === "needs-you").length;
+  const projects = new Set(tickets.map((t) => t.project));
+  const showProject = projects.size > 1;
+
+  // the fold row is selectable too: enter unfolds
+  const last = Math.max(0, shown.length - (folded > 0 ? 0 : 1));
   const sel = clamp(cursor, 0, last);
-
-  const shown = tickets.slice(-SHOWN);
-  const firstShown = tickets.length - shown.length;
 
   return (
     <Focusable
@@ -35,8 +60,9 @@ export function Tickets() {
         if (key.name === "up" && sel > 0) return setCursor(sel - 1), true;
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
         if (isEnter(key)) {
-          const t = tickets[sel];
-          if (t) navigate(to.ticket(t.id));
+          const r = shown[sel];
+          if (r) navigate(to.ticket(r.t.id));
+          else if (folded > 0) setUnfolded(true);
           return true;
         }
         return false;
@@ -45,14 +71,30 @@ export function Tickets() {
       {(focused) => (
         <>
           <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none">
-            {focused ? "› " : "  "}tickets
+            tickets
+            {tickets.length > 0 ? (
+              <span fg={theme.dim}>
+                {" "}·{" "}
+                {needsYou > 0 ? <span fg={theme.warn}>{needsYou} need{needsYou === 1 ? "s" : ""} you · </span> : null}
+                {open.length - needsYou} waiting · {closed.length} done
+              </span>
+            ) : null}
           </text>
           {tickets.length === 0 ? (
             <text fg={theme.dim} truncate wrapMode="none">
               {"  "}none — agents create them for multi-step work
             </text>
           ) : (
-            shown.map((t, i) => <TicketRow key={t.id} ticket={t} selected={focused && firstShown + i === sel} />)
+            <>
+              {shown.map((r, i) => (
+                <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} now={now} showProject={showProject} />
+              ))}
+              {folded > 0 ? (
+                <text fg={focused && sel === shown.length ? theme.accent : theme.dim} truncate wrapMode="none">
+                  {focused && sel === shown.length ? "› " : "  "}… {folded} more done
+                </text>
+              ) : null}
+            </>
           )}
         </>
       )}
@@ -60,23 +102,32 @@ export function Tickets() {
   );
 }
 
-export function ticketGlyph(t: Ticket): { glyph: string; color: string; done: number } {
-  const done = t.steps.filter((s) => s.status === "settled").length;
-  const failed = t.steps.some((s) => s.status === "failed");
-  const complete = done === t.steps.length;
-  return { glyph: complete ? "✓" : failed ? "✗" : "⧉", color: complete ? theme.ok : theme.warn, done };
-}
+const STATE_COLOR = { "needs-you": theme.warn, waiting: theme.fg, failed: theme.warn, done: theme.dim } as const;
 
-function TicketRow({ ticket: t, selected }: { ticket: Ticket; selected: boolean }) {
-  const { glyph, color, done } = ticketGlyph(t);
-  const complete = done === t.steps.length;
+function TicketRow({
+  ticket: t,
+  summary: s,
+  selected,
+  nameFor,
+  now,
+  showProject,
+}: {
+  ticket: Ticket;
+  summary: TicketSummary;
+  selected: boolean;
+  nameFor: (key: string) => string;
+  now: number;
+  showProject: boolean;
+}) {
+  const closed = s.state === "done" || s.state === "failed";
+  const stateText = s.state === "waiting" ? `waiting on ${s.waitingOn.map(nameFor).join(", ")}` : STATE_LABEL[s.state];
   return (
-    <text fg={selected ? theme.accent : complete ? theme.dim : theme.fg} truncate wrapMode="none">
+    <text fg={selected ? theme.accent : closed ? theme.dim : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
-      <span fg={color}>{glyph} </span>
+      <span fg={STATE_COLOR[s.state]}>{stateText.padEnd(16)}</span>
       {t.goal}
       <span fg={theme.dim}>
-        {" "}· {t.project} · {done}/{t.steps.length}
+        {showProject ? ` · ${t.project}` : ""} · {peopleLabel(s, nameFor)} · {age(s.lastActivity, now)}
       </span>
     </text>
   );

@@ -38,7 +38,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const target = peers.find((p) => p.name === out.peer) ?? members.find((m) => m.name === out.peer);
           if (!target) return `failed: no peer named ${out.peer} — see list-room`;
           const online = peers.some((p) => p.key === target.key);
-          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings }).pipe(
+          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}) }).pipe(
             Effect.map(() => (online ? `sent to ${out.peer}` : `sent to ${out.peer} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),
           );
