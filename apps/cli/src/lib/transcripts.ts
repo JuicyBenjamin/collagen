@@ -85,6 +85,65 @@ export function sliceSince(jsonl: string, since: number): { readonly lines: Read
   return { lines, entries };
 }
 
+/** One session line, readable: when, who, what — for showing a transcript in
+ *  the app. Both CLIs' shapes are known here; anything else shows by its type
+ *  so nothing is silently hidden. Null = noise not worth a row (token counts,
+ *  turn context, attachments). */
+export interface TranscriptLine {
+  readonly ts: string | null;
+  readonly who: string;
+  readonly text: string;
+}
+
+const textOf = (content: unknown): string => {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((p: unknown) => {
+      if (typeof p === "string") return p;
+      if (!p || typeof p !== "object") return "";
+      const part = p as { type?: string; text?: string; name?: string; input?: unknown; content?: unknown };
+      if (typeof part.text === "string") return part.text;
+      if (part.type === "thinking") return "(thinking)";
+      if (part.type === "tool_use") return `⚙ ${part.name ?? "tool"} ${JSON.stringify(part.input ?? {}).slice(0, 200)}`;
+      if (part.type === "tool_result") return `↳ ${textOf(part.content).slice(0, 200)}`;
+      return "";
+    })
+    .filter((s) => s.length > 0)
+    .join("\n");
+};
+
+export function readLine(raw: string): TranscriptLine | null {
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const ts = typeof o.timestamp === "string" ? o.timestamp : null;
+  const type = typeof o.type === "string" ? o.type : "";
+  const payload = o.payload && typeof o.payload === "object" ? (o.payload as Record<string, unknown>) : null;
+  // codex rollout
+  if (type === "session_meta" && payload) return { ts, who: "session", text: `${String(payload.originator ?? "codex")} · ${String(payload.cwd ?? "")}` };
+  if (type === "response_item" && payload) {
+    if (payload.type === "message") return { ts, who: String(payload.role ?? "message"), text: textOf(payload.content) };
+    if (payload.type === "reasoning") return { ts, who: "reasoning", text: textOf(payload.summary) || "(reasoning, encrypted)" };
+    if (payload.type === "function_call") return { ts, who: "tool call", text: `⚙ ${String(payload.name ?? "")} ${String(payload.arguments ?? "").slice(0, 200)}` };
+    if (payload.type === "function_call_output") return { ts, who: "tool result", text: `↳ ${String(payload.output ?? "").slice(0, 200)}` };
+    return { ts, who: String(payload.type ?? "item"), text: "" };
+  }
+  if (type === "event_msg" || type === "turn_context") return null;
+  // claude code session
+  if ((type === "user" || type === "assistant") && o.message && typeof o.message === "object") {
+    const m = o.message as { role?: string; content?: unknown };
+    return { ts, who: m.role ?? type, text: textOf(m.content) };
+  }
+  if (type === "system") return { ts, who: "system", text: typeof o.content === "string" ? o.content : String(o.subtype ?? "") };
+  if (type === "queue-operation") return { ts, who: `collagen (${String(o.operation ?? "queue")})`, text: typeof o.content === "string" ? o.content : "" };
+  // anything else with nothing to say is bookkeeping, not conversation
+  return null;
+}
+
 /** Wire form of a slice: gzip + base64 of the JSONL. */
 export const pack = (lines: ReadonlyArray<string>): string => gzipSync(Buffer.from(lines.join("\n") + "\n", "utf8")).toString("base64");
 export const unpack = (data: string): string => gunzipSync(Buffer.from(data, "base64")).toString("utf8");

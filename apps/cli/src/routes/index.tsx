@@ -5,6 +5,8 @@ import { RoomLayout } from "./room/layout";
 import { MessagesPage } from "./room/messages/page";
 import { OverviewPage } from "./room/overview/page";
 import { TicketPage } from "./room/ticket/page";
+import { TranscriptPage } from "./room/transcript/page";
+import { TranscriptsPage } from "./room/transcripts/page";
 import { SettingsPage } from "./settings/page";
 
 /** The route table: one page per route. Adding a route = a folder with a
@@ -15,6 +17,8 @@ const pages: { readonly [N in RouteName]: (route: Extract<Route, N | { readonly 
   "room/overview": () => <OverviewPage />,
   "room/messages": () => <MessagesPage />,
   "room/ticket": (route) => <TicketPage ticketId={route.ticketId} />,
+  "room/transcripts": (route) => <TranscriptsPage subject={route.subject} />,
+  "room/transcript": (route) => <TranscriptPage path={route.path} file={route.file} />,
 };
 
 /** Layouts wrap every route under their prefix. */
