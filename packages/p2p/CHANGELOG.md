@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.5.0-alpha...p2p-v0.6.0-alpha) (2026-09-09)
+
+
+### Features
+
+* **p2p:** a message may weigh in on a ticket ([e324583](https://github.com/JuicyBenjamin/collagen/commit/e32458354a311cd39206fdf46ed83bfcabe9f0fc))
+
 ## [0.5.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.4.0-alpha...p2p-v0.5.0-alpha) (2026-09-09)
 
 
