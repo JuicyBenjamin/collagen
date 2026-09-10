@@ -74,10 +74,16 @@ export function Tickets() {
   );
 }
 
-/** One ticket at a glance: what kind it is, what it is about, and what each
- *  person on it did — `bob ✓` asked for no changes, `you ↻` asked for some,
- *  `carol ·` nothing yet (lib/glyphs, spelled out in the hint line). Nothing
- *  else: the ticket's own page has the rest, and an agent can read all of it. */
+/** One ticket at a glance: whose it is, what kind it is, what it is about,
+ *  and what each of the OTHER people on it did — `bob ✓` asked for no
+ *  changes, `dave ↻` asked for some, a bare name means nothing from them yet
+ *  (lib/glyphs, spelled out in the hint line).
+ *
+ *  The kind carries the ownership: bright when this person started the
+ *  ticket, dim when somebody else did, and it keeps that colour under the
+ *  cursor — "mine or theirs" is the first thing the eye asks of a list, and
+ *  the answer should not move when the selection does. Nothing else: the
+ *  ticket's own page has the rest, and an agent can read all of it. */
 function TicketRow({
   ticket: t,
   summary: s,
@@ -90,14 +96,19 @@ function TicketRow({
   nameFor: (key: string) => string;
 }) {
   const done = s.state === "done";
+  const people = peopleLabel(s, nameFor);
   return (
     <text fg={selected ? theme.accent : done ? theme.dim : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
       {"  "}
-      <span fg={done ? theme.dim : s.state === "failed" ? theme.warn : theme.fg}>{t.kind.padEnd(9)}</span>
+      <span fg={s.mine ? (done ? theme.fg : theme.accent) : theme.dim}>{t.kind.padEnd(9)}</span>
       {t.goal}
-      <span fg={theme.dim}> · </span>
-      <span fg={s.state === "needs-you" ? theme.warn : theme.dim}>{peopleLabel(s, nameFor)}</span>
+      {people.length > 0 ? (
+        <>
+          <span fg={theme.dim}> · </span>
+          <span fg={s.state === "needs-you" ? theme.warn : theme.dim}>{people}</span>
+        </>
+      ) : null}
     </text>
   );
 }

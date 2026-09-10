@@ -65,8 +65,9 @@ if [ "$HAVE_PYTE" = yes ]; then
   # name, and that the row explains its own symbols
   # a bracket expression matches BYTES, so a class of multibyte glyphs never
   # matches: say it by shape instead — name, space, one glyph
-  expect "each name carries its mark a space away, never glued to it" "$SCREEN" "bob .{1,3}  you .{1,3}"
+  expect "bob's name carries his mark a space away, never glued to it" "$SCREEN" "review feat/opening-animation .{1,3} bob .{1,3}"
   expect "…so no name reads as one token with a tick" "$(echo "$SCREEN" | grep -cE '(bob|you)(✓|↻|✕)')" "^0$"
+  expect "alice is not in her own ticket row: what is hers is said by colour, not by \"you\"" "$(echo "$SCREEN" | grep -c 'opening-animation.*you')" "^0$"
   expect "the legend under the list spells the symbols out, whole" "$SCREEN" "✓ no changes .{1,6} ↻ changes asked .{1,6} ✕ failed"
   expect "…and it fits its row: nothing elided in the middle" "$(echo "$SCREEN" | grep -c '\.\.\.')" "^0$"
 else

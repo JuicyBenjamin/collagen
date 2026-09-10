@@ -125,6 +125,8 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
     return params === null ? [] : [{ d, params }];
   });
   const done = ticket.steps.filter((s) => s.status === "settled").length;
+  // the other people on it and what each did; the reader is not in the list
+  const people = peopleLabel(summary, nameFor);
   const glyph = summary.state === "done" ? "✓" : summary.state === "failed" ? "✗" : "⧉";
   const glyphColor = summary.state === "done" ? theme.ok : theme.warn;
   const stateText = summary.state === "waiting" ? `waiting on ${summary.waitingOn.map(nameFor).join(", ")}` : STATE_LABEL[summary.state];
@@ -150,7 +152,8 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
       </text>
       <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
         {"  "}
-        {ticket.project} · by {nameFor(ticket.createdBy)} · {done}/{ticket.steps.length} settled · people {peopleLabel(summary, nameFor)}
+        {ticket.project} · by {nameFor(ticket.createdBy)} · {done}/{ticket.steps.length} settled
+        {people.length > 0 ? ` · ${people}` : ""}
       </text>
 
       {/* body: why — a review ticket carries the reasons behind the change.

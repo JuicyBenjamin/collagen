@@ -55,7 +55,12 @@ No files are written into your projects.
   waiting for you elsewhere, corner number = people online there. `+` joins or creates.
 - **overview tab** — who's here (with their AI and its auth badge; `○ (away)` for peers
   looking at another room), every ticket in the room — whoever made it and whoever it is
-  for, finished ones dim at the end — and the projects section.
+  for, finished ones dim at the end — and the projects section. A ticket row says whose
+  it is by the colour of its kind (bright for yours, dim for somebody else's) and lists
+  the *other* people on it with what each did: `✓` asked for no changes, `↻` asked for
+  changes, `✕` a step failed, `…` said something, a bare name means nothing from them
+  yet. So `bob ✓  carol ✓  dave ↻` is two readers happy and one asking for changes. You
+  are never in that list: whether a row wants you is said by its place and its colour.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
 - **outbox tab** — everything of yours that has gone out, in one list, newest first,

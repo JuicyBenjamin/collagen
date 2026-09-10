@@ -61,11 +61,28 @@ describe("summarize", () => {
     expect(s.lastActivity).toBe(2000);
   });
 
-  it("peopleLabel: a mark a space off each name — whose turn, what they said, what they asked for", () => {
+  it("peopleLabel: the other people, each with what they did — the reader is not in their own list", () => {
     const t = ticket([step("s1", BOB, "pending"), step("s2", ALICE, "pending", ["s1"])]);
-    // bob's step is up; alice's waits on it; carol spoke without being asked
-    expect(peopleLabel(summarize(t, [msg(CAROL, { ticketId: "t1" })], ALICE), nameFor)).toBe("bob ▸  you ·  carol …");
+    // alice is reading: she is left out, bob has done nothing (a bare name),
+    // carol spoke without being asked
+    expect(peopleLabel(summarize(t, [msg(CAROL, { ticketId: "t1" })], ALICE), nameFor)).toBe("bob  carol …");
     expect(peopleLabel(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE), nameFor)).toBe("bob ✓");
+    // …and from bob's side the same ticket leaves bob out instead
+    expect(peopleLabel(summarize(t, [], BOB), nameFor)).toBe("you");
+  });
+
+  it("counts at a glance: two approvals and one asking for changes", () => {
+    const review = {
+      ...ticket([
+        step("review-bob", BOB, "settled"),
+        step("review-carol", CAROL, "settled"),
+        step("review-dave", "d".repeat(64), "failed"),
+        step("address", ALICE, "pending"),
+      ]),
+      kind: "review" as const,
+    };
+    const withIntents = { ...review, steps: review.steps.map((s) => (s.id.startsWith("review-") ? { ...s, intent: "review" } : s)) };
+    expect(peopleLabel(summarize(withIntents, [], ALICE), nameFor)).toBe("bob ✓  carol ✓  dddddddd ↻");
   });
 
   it("a review asking for changes is not a tick and not a failure: ↻", () => {
@@ -74,6 +91,11 @@ describe("summarize", () => {
     expect(peopleLabel(summarize(reviewStep, [], ALICE), nameFor)).toBe("bob ↻");
     // the same failed status on a task step is a failure, and says so
     expect(peopleLabel(summarize(ticket([step("s1", BOB, "failed")]), [], ALICE), nameFor)).toBe("bob ✕");
+  });
+
+  it("says whose ticket it is, which is what the reader's own name used to imply", () => {
+    expect(summarize(ticket([step("s1", BOB, "pending")]), [], ALICE).mine).toBe(true);
+    expect(summarize(ticket([step("s1", BOB, "pending")]), [], BOB).mine).toBe(false);
   });
 
   it("orders needs-you, waiting, failed, done; newest activity first within a state", () => {
