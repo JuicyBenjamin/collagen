@@ -135,8 +135,9 @@ export const DriveFrame = Schema.Struct({
 });
 
 /** "Send me your agent's conversation on these threads" — a diagnostic ask
- *  from a peer, answered only by a person (it lands in their outbox). Direct
- *  and ephemeral: never on the shared log. */
+ *  from a peer. Kept on the receiving machine until its person says to hand
+ *  it over: the one thing here nobody on that side asked for. Direct and
+ *  ephemeral: never on the shared log. */
 export const TranscriptRequestFrame = Schema.Struct({
   kind: Schema.Literal("transcript-request"),
   requestId: Schema.String,
@@ -145,7 +146,7 @@ export const TranscriptRequestFrame = Schema.Struct({
   threadIds: Schema.Array(Schema.String),
 });
 
-/** One agent conversation slice, handed over after the person approved it.
+/** One agent conversation slice, handed over because its person said so.
  *  `data` is the session file's lines from `since` on, gzip + base64. */
 export const TranscriptFrame = Schema.Struct({
   kind: Schema.Literal("transcript"),
@@ -328,8 +329,7 @@ export const Outgoing = Schema.Union([
   }),
   Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
   /** A review ticket: the record and the why behind the change, together —
-   *  one thing for the person to read and approve, since the review context
-   *  quotes how THEY steered the work. `ticket` is absent on an amendment to
+   *  one thing, since the review context quotes how THEY steered the work. `ticket` is absent on an amendment to
    *  a review that is already on the log. */
   Schema.Struct({
     kind: Schema.Literal("review"),

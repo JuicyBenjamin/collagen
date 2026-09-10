@@ -428,7 +428,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* send(holderKey, { kind: "fetch-attachment", attachmentId });
     });
 
-    /** Hand one approved transcript slice to the peer who asked. Ephemeral:
+    /** Hand one transcript slice to the peer who asked — their person said so.
+     *  Ephemeral:
      *  they must be present. */
     const sendTranscript = Effect.fn("Room.sendTranscript")(function* (peerKey: string, transcript: Omit<TranscriptFrame, "kind">) {
       if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
@@ -494,7 +495,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       sendDrive,
       /** Peers asking for our agent's conversations (the app gates them). */
       transcriptRequests: Stream.fromPubSub(transcriptRequests),
-      /** Conversations peers handed us after their person approved. */
+      /** Conversations peers handed us because their person said so. */
       transcripts: Stream.fromPubSub(transcripts),
       requestTranscripts,
       sendTranscript,

@@ -10,7 +10,7 @@ import { StateStore } from "./StateStore";
 
 const NOT_ADMITTED = "failed: you are not admitted to this room's log yet — a member has to be online once to admit you";
 
-/** Writes an approved Outgoing to its room's log. The only place the cli
+/** Writes an Outgoing to its room's log. The only place the cli
  *  appends messages, tickets or settlements on the agent's behalf — and it is
  *  reached from the Outbox alone, after the person's yes (or a mock's). Names
  *  are resolved here, at send time, so a proposal that waited across a
@@ -158,7 +158,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             })
             .pipe(
               Effect.map(() => `transcript sent: ${entries} entries to ${nameFor(out.requester)}`),
-              Effect.catchTag("PeerNotConnected", () => Effect.succeed(`failed: ${nameFor(out.requester)} is not connected right now — approve again when they are`)),
+              Effect.catchTag("PeerNotConnected", () => Effect.succeed(`failed: ${nameFor(out.requester)} is not connected right now — ask your user again when they are`)),
             );
         }
       }
