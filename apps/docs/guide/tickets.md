@@ -183,9 +183,10 @@ dependency order is enforced by delivery, not by remembering.
 
 ## In the TUI
 
-The overview tab lists the room's tickets as what each one wants from you: `needs you` (a
-step you own is up), `waiting on bob`, `done`, `failed` — in that order, newest activity first, done ones dim and folded past
-three. Each row: state · goal · who was asked and
+The overview tab lists **every** ticket in the room, whoever made it and whoever it is
+for, ordered by what each one wants from you: `needs you` (a step you own is up),
+`waiting on bob`, `failed`, `done` — newest activity first within each, finished ones dim
+at the end. Nothing is hidden or folded away. Each row: state · goal · who was asked and
 whether they answered (`bob✓` spoke or settled, `bob·` silent so far, `carol` weighed in
 unasked) · age. The header counts them. `enter` opens the ticket's own
 page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:

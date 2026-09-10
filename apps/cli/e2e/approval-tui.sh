@@ -31,7 +31,7 @@ expect "the approval is logged" "$(grep -c '✓ approved: message → bob · san
 expect "only one message ever reached bob" "$(grep -c '← alice' "$OUT/bob.log")" "^1$"
 expect "the keys landed in the outbox, its own list" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')" "outbox"
 TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
-expect "the tab bar counts what is waiting" "$(echo "$TEXT" | grep -cE '\[3\] outbox')" "^[1-9]"
-expect "the outbox says nothing has left this machine" "$(echo "$TEXT" | grep -c 'nothing here has left this machine')" "^[1-9]"
+expect "the tab bar carries the count, and nothing else" "$(echo "$TEXT" | grep -cE '\[3\] outbox \(2\)')" "^[1-9]"
+expect "no prose in the header: the count is the whole signal" "$(echo "$TEXT" | grep -c 'waiting for you\|has left this machine')" "^0$"
 expect "…and lists both proposals by where they are going" "$(echo "$TEXT" | grep -cE 'you .{1,4} bob .{0,3}\[sandbox')" "^[1-9]"
 kill_all; summary

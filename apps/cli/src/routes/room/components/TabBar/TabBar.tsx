@@ -52,8 +52,9 @@ export function TabBar() {
           <span fg={active === "room/messages" ? theme.accent : theme.dim}>[2] messages</span>
           <span fg={theme.dim}> ({trace.length})</span>
           <span fg={theme.dim}>   </span>
-          <span fg={active === "room/outbox" ? theme.accent : waiting > 0 ? theme.warn : theme.dim}>[3] outbox</span>
-          {waiting > 0 ? <span fg={theme.warn}> ({waiting} to approve)</span> : <span fg={theme.dim}> (0)</span>}
+          <span fg={active === "room/outbox" ? theme.accent : theme.dim}>[3] outbox</span>
+          {/* the count is the whole signal: orange means something of yours is waiting on you */}
+          <span fg={waiting > 0 ? theme.warn : theme.dim}> ({waiting})</span>
           <span fg={theme.dim}>   ·   </span>
           <span fg={theme.fg}>{online} online</span>
           <span fg={theme.dim}> · </span>

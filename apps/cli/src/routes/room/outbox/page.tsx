@@ -63,14 +63,12 @@ export function OutboxPage() {
           <>
             <text truncate wrapMode="none" flexShrink={0}>
               <span fg={focused ? theme.accent : theme.fg}>outbox</span>
-              <span fg={theme.dim}>
-                {" "}· {rows.length === 0 ? "nothing waiting" : `${rows.length} waiting for you`} · nothing here has left this machine
-              </span>
+              <span fg={rows.length > 0 ? theme.warn : theme.dim}> ({rows.length})</span>
             </text>
             <box ref={listRef} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
               {rows.length === 0 ? (
                 <text fg={theme.dim} truncate wrapMode="none">
-                  {"  "}your agent queues messages, tickets, reviews and files here; they wait for your y
+                  {"  "}nothing on its way out. Your agent queues what it wants to send here; it waits for your y
                 </text>
               ) : (
                 rows

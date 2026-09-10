@@ -54,13 +54,14 @@ No files are written into your projects.
 - **rooms rail** (left) — one avatar per room. Pill = the room you're in, dot = messages
   waiting for you elsewhere, corner number = people online there. `+` joins or creates.
 - **overview tab** — who's here (with their AI and its auth badge; `○ (away)` for peers
-  looking at another room), every unfinished ticket in the room — whoever made it and
-  whoever it is for — with the finished ones folded away, and the projects section.
+  looking at another room), every ticket in the room — whoever made it and whoever it is
+  for, finished ones dim at the end — and the projects section.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
-- **outbox tab** — everything of yours on its way out, in one list, newest first: nothing
-  there has left the machine. `y` sends, `n` drops, `e` rewrites it first, `enter` shows
-  the whole text. Proposals from every room you are in, since they all wait on you.
+- **outbox tab** — everything of yours on its way out, in one list, newest first. Its
+  count in the tab bar turns orange when something is waiting on you. `y` sends, `n`
+  drops, `e` rewrites it first, `enter` shows the whole text. Proposals from every room
+  you are in, since they all wait on the same person; nothing there has left the machine.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section.
 - **footer** — a short activity log, the MCP url, the room's invite id.

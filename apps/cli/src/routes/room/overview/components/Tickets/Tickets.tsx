@@ -11,14 +11,11 @@ import { age, compareSummaries, peopleLabel, STATE_LABEL, summarize, type Ticket
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
-/** How many done/failed tickets to show before folding the rest. */
-const DONE_SHOWN = 3;
-
-/** Shared tickets — the list, for a person who wants to know what wants
- *  them. Each row: state · goal · who was asked and whether they answered ·
- *  age. Needs-you first, then waiting, then failed, then done (dim, folded
- *  past a few). ↑↓ select, enter opens the ticket's page. The `›` is the
- *  cursor, nothing else. */
+/** Shared tickets — every ticket in the room, whoever made it and whoever it
+ *  is for. Each row: state · goal · who was asked and whether they answered ·
+ *  age. Ordered by what wants a person: needs-you, then waiting, then failed,
+ *  then done (dim) — nothing is hidden or folded away. ↑↓ select, enter opens
+ *  the ticket's page. The `›` is the cursor, nothing else. */
 export function Tickets() {
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
@@ -27,7 +24,6 @@ export function Tickets() {
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const { navigate } = useRouter();
   const [cursor, setCursor] = useState(0);
-  const [unfolded, setUnfolded] = useState(false);
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
@@ -37,19 +33,15 @@ export function Tickets() {
   const rows = tickets
     .map((t) => ({ t, s: summarize(t, trace, me) }))
     .sort((a, b) => compareSummaries(a.s, b.s));
-  // every ticket in the room that is not finished, whoever made it and
-  // whoever it is for — a failed one is unfinished, not history
+  // all of them: `rows` is already ordered needs-you → waiting → failed → done
+  const shown = rows;
   const undone = rows.filter((r) => r.s.state !== "done");
   const done = rows.filter((r) => r.s.state === "done");
-  const shownDone = unfolded ? done : done.slice(0, DONE_SHOWN);
-  const folded = done.length - shownDone.length;
-  const shown = [...undone, ...shownDone];
   const needsYou = rows.filter((r) => r.s.state === "needs-you").length;
   const projects = new Set(tickets.map((t) => t.project));
   const showProject = projects.size > 1;
 
-  // the fold row is selectable too: enter unfolds
-  const last = Math.max(0, shown.length - (folded > 0 ? 0 : 1));
+  const last = Math.max(0, shown.length - 1);
   const sel = clamp(cursor, 0, last);
 
   return (
@@ -64,7 +56,6 @@ export function Tickets() {
         if (isEnter(key)) {
           const r = shown[sel];
           if (r) navigate(to.ticket(r.t.id));
-          else if (folded > 0) setUnfolded(true);
           return true;
         }
         return false;
@@ -87,16 +78,9 @@ export function Tickets() {
               {"  "}none — agents create them for multi-step work
             </text>
           ) : (
-            <>
-              {shown.map((r, i) => (
-                <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} now={now} showProject={showProject} />
-              ))}
-              {folded > 0 ? (
-                <text fg={focused && sel === shown.length ? theme.accent : theme.dim} truncate wrapMode="none">
-                  {focused && sel === shown.length ? "› " : "  "}… {folded} more done
-                </text>
-              ) : null}
-            </>
+            shown.map((r, i) => (
+              <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} now={now} showProject={showProject} />
+            ))
           )}
         </>
       )}
