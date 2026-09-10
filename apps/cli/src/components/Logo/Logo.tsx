@@ -31,7 +31,8 @@ const glyphs = (() => {
     widths.push(Math.max(...g.map((l) => [...l].length)));
   });
   const cells = rows.map((r) => [...r]);
-  return { rows: cells, widths, w: Math.max(...cells.map((c) => c.length)), h: cells.length + 1 };
+  // +2: the row of air under the word, then the tagline
+  return { rows: cells, widths, w: Math.max(...cells.map((c) => c.length)), h: cells.length + 2 };
 })();
 
 /** One row of the logo, coloured per column, adjacent equal colours merged. */
@@ -60,7 +61,11 @@ export function Logo() {
   return (
     <>
       <ascii-font text={WORD} font="tiny" color={theme.accent} />
-      <text fg={theme.dim}>{TAGLINE}</text>
+      {/* one row of air, the same as the room's header gets below: the glyphs
+          fill their cells, so text on the next row touches them */}
+      <text fg={theme.dim} marginTop={1}>
+        {TAGLINE}
+      </text>
     </>
   );
 }
@@ -106,7 +111,7 @@ export function Opening({ children }: { children: ReactNode }) {
       {glyphs.rows.map((cells, r) => (
         <Row key={r} cells={cells} colors={frame.columns} />
       ))}
-      <text>
+      <text marginTop={1}>
         <span fg={frame.taglineColor}>{frame.tagline}</span>
         <span fg={theme.accent}>{frame.cursor}</span>
       </text>
