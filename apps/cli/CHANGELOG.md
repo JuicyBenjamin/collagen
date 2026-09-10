@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.8.0-alpha...cli-v0.9.0-alpha) (2026-09-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** review tickets carry the why, and one protocol version at a time
+
+### Features
+
+* **p2p:** review tickets carry the why, and one protocol version at a time ([6ccea5b](https://github.com/JuicyBenjamin/collagen/commit/6ccea5bf6a88957b96031088dfa520f73e56333e))
+
 ## [0.8.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.7.0-alpha...cli-v0.8.0-alpha) (2026-09-09)
 
 
