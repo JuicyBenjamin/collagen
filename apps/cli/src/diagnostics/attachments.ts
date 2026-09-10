@@ -9,7 +9,7 @@ export const attachFiles = diagnostic<{ readonly ticketId: string; readonly file
   id: "attach-files",
   title: "attach",
   summary:
-    "Attach files on this machine to a ticket — a screenshot, a document, a log, a collected transcript (see list-transcripts for those paths) — so the people in the room and their agents can look at the thing itself rather than guess at it. Only when the user asks, with the paths they mean. It queues in the user's outbox; on approval a reference (name, size, type, who holds it; for a transcript whose conversation, which agent, how many entries) goes on the ticket for everyone; the file itself is sent to a member only when they fetch it while the user is online. Pass ticketId, the file paths, and optionally a note saying why.",
+    "Attach files on this machine to a ticket — a screenshot, a document, a log, a collected transcript (see list-transcripts for those paths) — so the people in the room and their agents can look at the thing itself rather than guess at it. Only when the user asks, with the paths they mean. A reference (name, size, type, who holds it; for a transcript whose conversation, which agent, how many entries) goes on the ticket for everyone at once; the file itself is sent to a member only when they fetch it while the user is online. Pass ticketId, the file paths, and optionally a note saying why.",
   params: Schema.Struct({ ticketId: Schema.String, files: Schema.Array(Schema.String), note: Schema.optional(Schema.String) }),
   fromContext: (ctx) => (ctx.ticketId ? { ticketId: ctx.ticketId, files: [] } : null),
   open: (ctx, back) => (ctx.ticketId ? to.attach(ctx.ticketId, back) : back),

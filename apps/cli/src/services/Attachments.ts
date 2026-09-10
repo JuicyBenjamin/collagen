@@ -27,7 +27,7 @@ export interface HeldAttachment {
 
 /** Files on a ticket, human in the loop. Attaching puts a reference on the
  *  room's log — name, size, type, who holds it, and for a transcript its
- *  meta — after the person approves it in their outbox. The file itself
+ *  meta — and records it in the outbox. The file itself
  *  stays home. A member who wants it fetches it; the holder's collagen
  *  answers with the bytes if they are online and the id is one they
  *  attached (nothing else ever leaves), and it is filed here. Screenshots,
@@ -92,7 +92,7 @@ export class Attachments extends Context.Service<Attachments>()("cli/Attachments
     });
 
     /** Attach files you hold (paths) to a ticket: a proposal in your outbox;
-     *  on approval the references go on the log, the files stay with you. */
+     *  the references go on the log, the files stay with you. */
     const attach = Effect.fn("Attachments.attach")(function* (roomId: string, ticketId: string, goal: string, paths: ReadonlyArray<string>, note?: string) {
       const items = [];
       for (const path of paths) {
@@ -102,7 +102,7 @@ export class Attachments extends Context.Service<Attachments>()("cli/Attachments
         items.push(item);
       }
       if (items.length === 0) return "failed: nothing to attach";
-      return yield* outbox.propose({
+      return yield* outbox.tell({
         roomId,
         to: "the room",
         title: `${goal} · attach ${items.length} file(s)`,

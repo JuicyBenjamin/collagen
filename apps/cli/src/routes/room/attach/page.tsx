@@ -20,9 +20,9 @@ const PATH_HINT = "enter add the file · esc cancel";
 /** Pick files you hold to attach to this ticket: the first row takes a path
  *  (a screenshot, a document, a log — anything on this machine); beneath it,
  *  every transcript you have collected. space marks, enter attaches the
- *  marked ones (a proposal in your outbox; once you approve, the references
- *  go on the ticket for everyone, and the files go to whoever fetches them
- *  while you are online). ← / esc back to the ticket. */
+ *  marked ones — the references go on the ticket for everyone at once, the
+ *  files go to whoever fetches them while you are online, and the outbox
+ *  records what went. ← / esc back to the ticket. */
 export function AttachPage({ ticketId }: { ticketId: string }) {
   const { navigate } = useRouter();
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;

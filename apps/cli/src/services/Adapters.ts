@@ -40,7 +40,7 @@ export function nudgePrompt(o: SpawnCtx): string {
     `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`,
     `If your user asks what it says or wants more, read it with the ${o.serverName} get-messages tool, threadId "${o.msg.threadId}" (a ticket's steps: get-tickets), and relay what is there — never fill gaps from your own head.`,
     `If your user then asks something the thread does not answer, decide which it is: yours to answer from this repo under their direction, or ${o.msg.fromName}'s to answer — then draft that question for them with send-to-peer.`,
-    `Anything you send is only what your user decided, and it waits for their approval in the collagen TUI.`,
+    `Anything you send is only what your user decided — it goes to the room as soon as you send it, and the collagen TUI's outbox shows them what went.`,
   ].join(" ");
 }
 

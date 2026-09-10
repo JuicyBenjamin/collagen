@@ -35,11 +35,13 @@ assertion ("nothing reached bob") is the one place a short sleep stays.
 | `conflict.sh` | two self-appointed creators: the lonely log yields, the ticket completes on the survivor |
 | `three-members.sh` | three indexers: the view advances with 1 and 2 offline; the absent one catches up |
 | `leave.sh` | leaving a room forgets it locally and moves focus; the last room can't be left |
-| `approval.sh` | human in the loop, sending side: a non-mock peer's `send-to-peer` / `create-ticket` queue for approval and nothing reaches the other side; a mock is not gated; the queued proposals survive a restart |
-| `approval-tui.sh` | the gate from the person's side, TUI in a pty: two queued messages wait at the bottom of the messages tab; `2` then ↓ lands on the newest, `n` drops it, `y` sends the other (bob gets exactly that one) — judged from logs and the key trace, no pyte needed |
+| `outbox.sh` | no gate, and a receipt: an agent's `send-to-peer` / `create-ticket` reaches the peer at once (the tool answers with the outcome, not a promise), each is recorded in `LocalState.sent`, and the records survive a restart |
+| `outbox-tui.sh` | the outbox in a pty: two messages and a ticket go out on the person's word; the overview lists the ticket at once with nothing about approval on screen; `3` opens the outbox — kind · project/ · who for · what about — `enter` unfolds the text one carried in full, `end`/`home` scroll a 40-line body to its last line and back (header counts the rows, each drawn once, the brand above unmoved), `←` comes back out of the record to the list with the cursor where it was, and `←` on the tab bar walks back through the tabs instead of leaving for the rail. Screen-level checks need pyte (`pip install pyte`, or `PYTE_PATH`); without it they are skipped |
 | `ticket-tui.sh` | the ticket page in a pty: ↓ to the tickets list, enter opens the ticket (cursor on its steps), ↓ walks to diagnostics, enter runs the transcripts diagnostic (the log shows the ask), esc returns to the list |
 | `weigh-in.sh` | ticket updates reach everyone the ticket concerns: the creator hears bob settled (a `ticket-update` on her thread with him); carol, not asked, weighs in with a tagged message to alice — bob, owner but not recipient, hears she did |
-| `transcripts.sh` | transcripts on request: bob adopted the pair thread into a fake codex session (rollout file in a temp `CODEX_HOME`); alice's `request-transcripts` reaches him, the slice from adoption on comes back directly and is filed; older lines are not included; `list-transcripts` sees it |
+| `transcripts.sh` | transcripts on request: bob adopted the pair thread into a fake codex session (rollout file in a temp `CODEX_HOME`); alice's `request-transcripts` reaches him and **waits** — nothing on her disk, the ask readable in his `list-transcripts` — until his `share-transcripts`, then the slice from adoption on comes back directly and is filed; older lines are not included; a second share finds nothing waiting |
+| `review.sh` | review tickets, 0 to many reviewers: `ask-review` brings the why (branch and link read from the project's `.git`, decisions with how the user steered each one, forks with file:line); a hollow review is refused; the headline only in `get-tickets`, the why via `review-context` (whole, or `about` one file); with **nobody asked** the ticket has only the author's step and nothing is pushed to anyone; bob **posts** a review onto a step of his own, carol posts hers beside it, bob's second post revises his own, an **unasked** reader is welcome and takes nobody's step, settling someone else's step is refused, and the author's own step finishes the ticket; **amending** the why tells both readers the code moved; the why reads back with the author stopped |
+| `review-tui.sh` | the why on screen: in alice's TUI ↑ from the steps reaches the ticket's `why` section (branch → base, counts, her summary), `enter` opens the why in full — each decision with `the user:` / `the agent:` and where it landed, each fork with the road not taken — `←` back to the ticket |
 | `attach.sh` | attachments: alice `attach-files` a screenshot and a collected transcript to a ticket — references on the log, no file moves; bob's `fetch-attachments` lists them (name, type, size, holder, note) and fetches: bytes arrive directly, byte-identical, filed under `attachments/ticket-<id>/` with the record beside, the transcript with the transcripts (meta: origin, via); a missing path is refused; an unknown id is refused |
 
 ## Manual scenarios
@@ -59,14 +61,27 @@ Not in `run-all.sh` — they need something the machine may not have.
 - Assert on the exact answer (`^"adopted: …`), not on a word that an error text might also
   contain. Assert tool calls in agent output by their `"tool":"…name"` form, never by the
   bare tool name — the message text under test may mention it.
-- Every `start`ed headless peer runs with `COLLAGEN_AUTO_APPROVE=1`; to test the human gate
-  itself, start that peer with `COLLAGEN_AUTO_APPROVE=0` (see `approval.sh`). Profiles are
-  generated fresh by `prep_profiles`, so a scenario never inherits another's state.
+- Profiles are generated fresh by `prep_profiles`, so a scenario never inherits another's
+  state. Nothing waits for approval any more: what an agent sends goes out at once (see
+  `outbox.sh`).
 - Wait for the condition, never for a duration: `SA=$(mcp $A)` blocks until alice is up,
   `wait_for_peer` / `admitted bob` until bob is present and writing, `wait_until` for the
   rest. Files live under `$CFG` (the scenario's `~/.config/collagen`), never `$HOME`.
 - Paths and the TUI: `HOME="$SHOME" … script -F -q "$PTY" bash -c "stty …; $TUI"` — `$TUI`
-  is alice's TUI command for this scenario.
+  is alice's TUI command for this scenario. Wait for the app to have PAINTED before the
+  first key (`wait_pty "$PTY" tickets`): the opening animation mounts the app only once it
+  has settled, and keys pressed before that are dropped.
+- Assert about one ticket with `rows <url> <sid> <ticketId>`, not the whole `get-tickets`
+  answer: step ids repeat across tickets (every reader's review step is
+  `review-<their name>`), so a blob-wide pattern can pass on another ticket's step.
+- Drive a peer with `drive_until <label> <pattern> <url> <sid> <json> <check cmd…>`, not a
+  bare `drive-peer`. A drive is fire-and-forget over an ephemeral frame, and the first
+  frame to a freshly connected peer can be dropped — the same drive sent twice always
+  lands. `drive_until` re-sends until the effect shows, so only use it for idempotent
+  actions (`settle-step` yes, `send-message` no). The peer must already hold the ticket:
+  `wait_until … goals $B "$SB"` first.
+- Start the room's creator first. A peer joining with `--room` alongside the creator can
+  create a log of its own before hearing about theirs, and the room splits.
 
 ## Reading a failure
 

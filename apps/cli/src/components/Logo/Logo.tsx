@@ -4,12 +4,17 @@ import { useTerminalDimensions } from "@opentui/react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { theme } from "../../app/theme";
+import { VERSION } from "../../app/version";
 import { logoFrame } from "../../lib/logoFrame";
 import { opening } from "../../lib/opening";
+import { versionLabel } from "../../lib/versionLabel";
 import { roomAtom } from "../../routes/atoms";
 
 const WORD = "collagen";
-const TAGLINE = "peer-to-peer";
+/** What the brand says under itself: what this is, and which build you have.
+ *  The stage belongs here rather than only in the footer — an alpha should
+ *  introduce itself as one. */
+const TAGLINE = `peer-to-peer · ${versionLabel(VERSION)}`;
 const FPS = 30;
 
 /** The word in the tiny font, one string per row, plus each letter's width —
@@ -26,7 +31,8 @@ const glyphs = (() => {
     widths.push(Math.max(...g.map((l) => [...l].length)));
   });
   const cells = rows.map((r) => [...r]);
-  return { rows: cells, widths, w: Math.max(...cells.map((c) => c.length)), h: cells.length + 1 };
+  // +2: the row of air under the word, then the tagline
+  return { rows: cells, widths, w: Math.max(...cells.map((c) => c.length)), h: cells.length + 2 };
 })();
 
 /** One row of the logo, coloured per column, adjacent equal colours merged. */
@@ -53,10 +59,17 @@ function Row({ cells, colors }: { cells: ReadonlyArray<string>; colors: Readonly
 /** The brand, still — for screens that have no runtime to wait for. */
 export function Logo() {
   return (
-    <>
+    // flexShrink 0: the header is not the thing that gives way when the page
+    // below it grows — squeezing it out is layout shift, and it looked like
+    // the tagline jumping into the wordmark
+    <box flexDirection="column" flexShrink={0}>
       <ascii-font text={WORD} font="tiny" color={theme.accent} />
-      <text fg={theme.dim}>{TAGLINE}</text>
-    </>
+      {/* one row of air, the same as the room's header gets below: the glyphs
+          fill their cells, so text on the next row touches them */}
+      <text fg={theme.dim} marginTop={1} flexShrink={0}>
+        {TAGLINE}
+      </text>
+    </box>
   );
 }
 
@@ -97,11 +110,11 @@ export function Opening({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <box flexDirection="column" marginLeft={where.x} marginTop={where.y}>
+    <box flexDirection="column" marginLeft={where.x} marginTop={where.y} flexShrink={0}>
       {glyphs.rows.map((cells, r) => (
         <Row key={r} cells={cells} colors={frame.columns} />
       ))}
-      <text>
+      <text marginTop={1}>
         <span fg={frame.taglineColor}>{frame.tagline}</span>
         <span fg={theme.accent}>{frame.cursor}</span>
       </text>

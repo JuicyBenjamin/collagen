@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { ReviewContext } from "./review";
 import { Ticket } from "./ticket";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
@@ -16,21 +17,25 @@ export type AiStatus = typeof AiStatus.Type;
 
 /** The wire protocol this build speaks. Bump on any change to frames, log
  *  entries or the view layout; peers show a mismatch instead of silently
- *  dropping each other's frames. */
-export const PROTOCOL_VERSION = "1";
+ *  dropping each other's frames.
+ *
+ *  One version at a time: this is an alpha, and nothing here carries a path
+ *  for an older build's shapes. A peer on another version is told to update,
+ *  not accommodated. */
+export const PROTOCOL_VERSION = "2";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
-  /** PROTOCOL_VERSION of the sender; absent = a build from before it existed. */
-  protocol: Schema.optional(Schema.String),
+  /** PROTOCOL_VERSION of the sender. */
+  protocol: Schema.String,
   ai: Schema.NullOr(Schema.String),
   /** Whether the peer's preferred agent CLI is actually usable — visible to
    *  the whole room so "claude-code (unauthenticated)" is no surprise. */
-  aiStatus: Schema.optional(AiStatus),
+  aiStatus: AiStatus,
   projects: Schema.Array(SharedProject),
   /** Connected to this room but working in another one: present for
    *  messages, not counted as online, nothing auto-runs for them. */
-  away: Schema.optional(Schema.Boolean),
+  away: Schema.Boolean,
 });
 export type SharedProfile = typeof SharedProfile.Type;
 
@@ -71,7 +76,7 @@ export const LogInfoFrame = Schema.Struct({
   key: Schema.String,
   /** How many members that log has — lets two sides that each started a log
    *  agree on which one to keep (a log nobody else is on yields). */
-  members: Schema.optional(Schema.Finite),
+  members: Schema.Finite,
 });
 /** "Admit my writer core to the room's log" — a joiner asks a member. */
 export const JoinLogFrame = Schema.Struct({
@@ -79,9 +84,16 @@ export const JoinLogFrame = Schema.Struct({
   writer: Schema.String,
 });
 
+/** The actions a driven peer can be asked to perform. One list, so a tool
+ *  that offers them cannot fall behind the union below: `drive-peer` takes
+ *  this as its `action` and dispatches over it exhaustively. */
+export const DriveActionKind = Schema.Literals(["send-message", "create-ticket", "settle-step", "post-review"]);
+export type DriveActionKind = typeof DriveActionKind.Type;
+
 /** Remote-control for end-to-end testing: asks a peer to perform an action
  *  as itself. Only peers running a mock AI obey (the receiver enforces it) —
- *  a real user can't be puppeted. */
+ *  a real user can't be puppeted. Every member's `kind` comes from
+ *  `DriveActionKind`. */
 export const DriveAction = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("send-message"),
@@ -109,6 +121,13 @@ export const DriveAction = Schema.Union([
     stepId: Schema.String,
     result: Schema.String,
   }),
+  Schema.Struct({
+    kind: Schema.Literal("post-review"),
+    ticketId: Schema.String,
+    result: Schema.String,
+    /** true: the review asks for changes, as post-review's own `failed` does. */
+    failed: Schema.optional(Schema.Boolean),
+  }),
 ]);
 export type DriveAction = typeof DriveAction.Type;
 
@@ -118,8 +137,9 @@ export const DriveFrame = Schema.Struct({
 });
 
 /** "Send me your agent's conversation on these threads" — a diagnostic ask
- *  from a peer, answered only by a person (it lands in their outbox). Direct
- *  and ephemeral: never on the shared log. */
+ *  from a peer. Kept on the receiving machine until its person says to hand
+ *  it over: the one thing here nobody on that side asked for. Direct and
+ *  ephemeral: never on the shared log. */
 export const TranscriptRequestFrame = Schema.Struct({
   kind: Schema.Literal("transcript-request"),
   requestId: Schema.String,
@@ -128,7 +148,7 @@ export const TranscriptRequestFrame = Schema.Struct({
   threadIds: Schema.Array(Schema.String),
 });
 
-/** One agent conversation slice, handed over after the person approved it.
+/** One agent conversation slice, handed over because its person said so.
  *  `data` is the session file's lines from `since` on, gzip + base64. */
 export const TranscriptFrame = Schema.Struct({
   kind: Schema.Literal("transcript"),
@@ -227,15 +247,35 @@ export const LogOp = Schema.Union([
   Schema.Struct({ op: Schema.Literal("msg"), msg: RoomMessage }),
   /** A file attached to a ticket (the reference; the holder keeps the file). */
   Schema.Struct({ op: Schema.Literal("attachment"), attachment: Attachment }),
+  /** The why behind a review ticket's change — its author is its only writer,
+   *  so the later ts wins (an amendment carries the whole record). */
+  Schema.Struct({ op: Schema.Literal("review"), review: ReviewContext }),
+  /** The migration. The log is append-only, so a record written by a build
+   *  that spoke another protocol version cannot be rewritten — this is how it
+   *  stops being part of the room instead: the rows it left in the view are
+   *  dropped. Recorded on the log, so every member applies the same cleanup
+   *  and the room converges clean rather than each side hiding its own mess. */
+  Schema.Struct({
+    op: Schema.Literal("evict"),
+    keys: Schema.Array(Schema.String),
+    /** Who did the evicting and why — the log keeps its own history. */
+    protocol: Schema.String,
+    reason: Schema.String,
+    ts: Schema.Finite,
+  }),
 ]);
 export type LogOp = typeof LogOp.Type;
 
+/** What an `evict` may remove: room records only, never the room's meta. */
+export const EVICTABLE = /^(ticket|review|attachment|msg|member)\//;
+
 /** A member as recorded on the log. */
-export interface Member {
-  readonly key: string;
-  readonly name: string;
-  readonly ts: number;
-}
+export const Member = Schema.Struct({
+  key: Schema.String,
+  name: Schema.String,
+  ts: Schema.Finite,
+});
+export type Member = typeof Member.Type;
 
 /** What actually crosses a connection: a frame addressed to one room. One
  *  connection per peer carries every room the two of you share, so each
@@ -276,10 +316,10 @@ export const AdoptedThread = Schema.Struct({
 });
 export type AdoptedThread = typeof AdoptedThread.Type;
 
-/** Something an agent wants to send out of this machine — as data, so it can
- *  wait for the person's yes across a restart and be edited before it goes.
- *  A message names its peer (resolved when it is sent, not when proposed); a
- *  ticket is the full record; a settle names the step and the result. */
+/** Something that goes out of this machine, as data — so what went can be
+ *  shown, and kept across a restart. A message names its peer (resolved as it
+ *  is sent); a ticket is the full record; a settle names the step and the
+ *  result. */
 export const Outgoing = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("message"),
@@ -290,6 +330,22 @@ export const Outgoing = Schema.Union([
     ticketId: Schema.optional(Schema.String),
   }),
   Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
+  /** A review ticket: the record and the why behind the change, together —
+   *  one thing, since the review context quotes how THEY steered the work. `ticket` is absent on an amendment to
+   *  a review that is already on the log. */
+  Schema.Struct({
+    kind: Schema.Literal("review"),
+    ticket: Schema.optional(Ticket),
+    review: ReviewContext,
+  }),
+  /** A review your user read and wants on the ticket — theirs, whether or not
+   *  they were the one asked (see p2p postReview). */
+  Schema.Struct({
+    kind: Schema.Literal("post-review"),
+    ticketId: Schema.String,
+    findings: Schema.String,
+    failed: Schema.Boolean,
+  }),
   Schema.Struct({
     kind: Schema.Literal("settle"),
     ticketId: Schema.String,
@@ -321,7 +377,27 @@ export const Outgoing = Schema.Union([
 ]);
 export type Outgoing = typeof Outgoing.Type;
 
-/** An Outgoing waiting in the outbox: where it goes, how it is shown. */
+/** A peer has asked for your agent's conversation on one thread. Kept as
+ *  data, not answered: a transcript is your session, so it leaves only when
+ *  you tell your agent to hand it over (see cli Transcripts). */
+export const TranscriptAsk = Schema.Struct({
+  roomId: Schema.String,
+  requestId: Schema.String,
+  subject: Schema.String,
+  /** The asker's key — the file goes to them alone. */
+  requester: Schema.String,
+  /** Their name when they asked, for the line the person reads. */
+  requesterName: Schema.String,
+  threadId: Schema.String,
+  ai: Schema.String,
+  sessionId: Schema.String,
+  since: Schema.Finite,
+  ts: Schema.Finite,
+});
+export type TranscriptAsk = typeof TranscriptAsk.Type;
+
+/** One thing that went out (or is going out this instant): where it went and
+ *  how it is shown. */
 export const Proposal = Schema.Struct({
   id: Schema.String,
   roomId: Schema.String,
@@ -346,8 +422,12 @@ export const LocalState = Schema.Struct({
    *  inbox. Messages live on the room's log; this is what makes "waiting"
    *  a local, per-reader notion that survives restarts. */
   consumed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))),
-  /** What the agent wants to send, waiting for the person (see cli Outbox). */
-  outbox: Schema.optional(Schema.Array(Proposal)),
+  /** What has gone out of here, newest first (see cli Outbox) — a record, not
+   *  a queue: nothing waits for approval. */
+  sent: Schema.optional(Schema.Array(Proposal)),
+  /** Transcript requests waiting on the person's word — asked for by a peer,
+   *  never answered by itself. */
+  transcriptAsks: Schema.optional(Schema.Array(TranscriptAsk)),
   /** Files we attached to tickets: attachment id → our local path, so a fetch
    *  can be answered (only for ids here — nothing else ever leaves). */
   attachedFiles: Schema.optional(Schema.Record(Schema.String, Schema.String)),

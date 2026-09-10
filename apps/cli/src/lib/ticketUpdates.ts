@@ -1,4 +1,4 @@
-import { deriveThreadId, stepThreadId, type RoomMessage, type StepStatus, type Ticket, type TicketStep } from "@collagen/p2p";
+import { deriveThreadId, stepThreadId, type ReviewContext, type RoomMessage, type StepStatus, type Ticket, type TicketStep } from "@collagen/p2p";
 import { aboutTicket, ticketThreads } from "./ticketSummary";
 
 /** Everyone a ticket concerns: its creator, its step owners, and anyone who
@@ -45,11 +45,49 @@ export function stepChanges(prev: ReadonlyMap<string, Ticket>, next: ReadonlyMap
   return out;
 }
 
+/** Reviews whose why moved between two views of the room. The lifecycle of a
+ *  review does not stop at the first read: the author changes the code, adds
+ *  decisions for what changed, points the link at a new branch — and the
+ *  people reading it have to hear about it, or the ticket they are reviewing
+ *  is not the ticket that exists. */
+export function reviewChanges(
+  prev: ReadonlyMap<string, number> | null,
+  next: ReadonlyArray<ReviewContext>,
+): ReadonlyArray<ReviewContext> {
+  if (prev === null) return []; // what the log already held is history, not news
+  return next.filter((r) => {
+    const before = prev.get(r.ticketId);
+    return before === undefined || r.ts > before;
+  });
+}
+
+/** What a participant is told when the why behind a review is revised. */
+export const reviewUpdateText = (ticket: Ticket, r: ReviewContext, fresh: boolean): string =>
+  [
+    `${r.authorName} ${fresh ? "put the why behind" : "revised the why behind"} the ticket "${ticket.goal}" (${ticket.id})`,
+    r.branch ? `now ${r.base ? `${r.branch} → ${r.base}` : r.branch}` : "",
+    r.link ?? "",
+    `${r.decisions.length} decision(s), ${r.forks.length} fork(s)`,
+    `${firstLine(r.summary)} — read it with review-context {ticketId} if your person asks what changed; what you read before may be out of date.`,
+  ]
+    .filter((x) => x.length > 0)
+    .join(" · ");
+
 const firstLine = (s: string) => s.split("\n")[0] ?? "";
 
+/** What happened, in the words that state actually has. On a review ticket
+ *  "failed" is how a reader says they want changes, so calling it a failure —
+ *  in the message, its intent, or the activity line — describes the most
+ *  complete kind of review there is as a breakdown. */
+export const stepUpdateWhat = (c: StepChange): string =>
+  c.ticket.kind === "review" && c.step.intent === "review" && c.to === "failed" ? "asked for changes" : c.to;
+
 /** What a participant is told about a step that settled or failed. */
-export const stepUpdateText = (c: StepChange, actorName: string): string =>
-  `${actorName} ${c.to} step ${c.step.id} (${c.step.intent}) on the ticket "${c.ticket.goal}" (${c.ticket.id}): ${firstLine(c.step.result ?? "")}`;
+export const stepUpdateText = (c: StepChange, actorName: string): string => {
+  const what = stepUpdateWhat(c);
+  const did = what === c.to ? `${what} step` : `${what} on`;
+  return `${actorName} ${did} ${c.step.id} (${c.step.intent}) on the ticket "${c.ticket.goal}" (${c.ticket.id}): ${firstLine(c.step.result ?? "")}`;
+};
 
 /** What a participant is told when someone weighs in. */
 export const weighInText = (ticket: Ticket, m: RoomMessage, toName: string): string =>

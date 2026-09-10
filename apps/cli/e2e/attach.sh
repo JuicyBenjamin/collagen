@@ -6,7 +6,7 @@
 # fetches: the bytes come from alice directly and are filed on his side, the
 # transcript with the transcripts (meta says where it came from), the image
 # under attachments/ with the record beside it. A fetch for an id alice never
-# attached is ignored. Both run as mocks (auto-approve); no CLI runs.
+# attached is ignored. No CLI runs.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 CODEX_FAKE="$OUT/codex-home"; rm -rf "$CODEX_FAKE"; mkdir -p "$CODEX_FAKE/sessions/2026/09/09"
@@ -26,6 +26,8 @@ cat > "$CODEX_FAKE/sessions/2026/09/09/rollout-2026-09-09T10-00-00-$SID.jsonl" <
 EOF
 SUBJECT="thread-$TID"; TDIR="$CFG/transcripts"
 call $A "$SA" request-transcripts "{\"threadId\":\"$TID\"}" > /dev/null
+wait_until "bob's side kept the ask" "^1$" bash -c "grep -c 'asks for your codex conversation' '$OUT/bob.log'"
+call $B "$SB" share-transcripts '{}' > /dev/null   # a session leaves only when its person says so
 TFILE="$TDIR/$SUBJECT/bob-$TID.codex.jsonl"
 wait_until "alice holds bob's conversation" "^1$" bash -c "ls '$TFILE' 2>/dev/null | wc -l | tr -d ' '"
 
@@ -34,13 +36,16 @@ TICKET=$(call $A "$SA" create-ticket '{"goal":"why does the render flicker","pro
 wait_until "bob sees the ticket" "flicker" goals $B "$SB"
 SHOT="$OUT/flicker shot.png"; python3 -c "import sys; sys.stdout.buffer.write(b'\x89PNG\r\n\x1a\n' + bytes(range(256)) * 40)" > "$SHOT"
 
-echo "## alice attaches both (a mock: the proposal auto-approves)"
+echo "## alice attaches both"
 ARGS="{\"ticketId\":\"$TICKET\",\"files\":[\"$SHOT\",\"$TFILE\"],\"note\":\"the frame and bob's side of it\"}"
 expect "attach-files put two references on the ticket" "$(call $A "$SA" attach-files "$ARGS")" "attached 2 file\(s\) to .{1,2}why does the render flicker"
 expect "a missing path is refused before anything is proposed" "$(call $A "$SA" attach-files "{\"ticketId\":\"$TICKET\",\"files\":[\"/nope/none.png\"]}")" "^\"failed: /nope/none.png is not a file"
 
 echo "## bob sees the references — no file has moved"
-wait_until "bob's fetch-attachments lists both, from alice, with the note" "flicker_shot.png|flicker shot.png" call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}"
+wait_until "bob's fetch-attachments lists the screenshot, from alice, with the note" "flicker_shot.png|flicker shot.png" call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}"
+# two rows, two appends: wait for the second one too, or the listing below is
+# read while half of it is still crossing
+wait_until "…and the transcript reference lands as well" "codex" call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}"
 LISTED=$(call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}")
 expect "…the image by name, type and size" "$LISTED" "flicker shot.png,image/png,10,alice"
 expect "…the transcript with whose conversation it is" "$LISTED" "bob.{1,6}codex.{1,6}2 entries"
@@ -57,7 +62,9 @@ wait_until "the transcript landed with the transcripts, under the ticket" "^1$" 
 expect "…same lines alice had" "$(cmp "$TFILE" "$TGOT" && echo same)" "^same$"
 expect "…its meta says it was attached: origin subject, via alice, the attachment id as request" "$(python3 -c "import json;m=json.load(open('$TGOT.meta.json'));print(m['origin'],m.get('via'),m['from'],len(m['requestId']))")" "^$SUBJECT alice bob 36$"
 expect "a second fetch-attachments reports both held, with paths" "$(call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}" | grep -o ',held\b' | grep -c .)" "^2$"
-expect "alice's log shows bob fetching" "$(grep -c 'bob fetched' "$OUT/alice.log")" "^2$"
+# at least both files: a fetch is a request, so a poll that lands before the
+# bytes arrive asks again — the count is a floor, not an equality
+expect "alice's log shows bob fetching both files" "$(grep -c 'bob fetched' "$OUT/alice.log")" "^[2-9][0-9]*$"
 
 echo "## a fetch for something alice never attached is ignored"
 expect "fetch-attachments refuses an unknown id" "$(call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\",\"attachmentId\":\"00000000-0000-0000-0000-000000000000\"}")" "^\"failed: no attachment"

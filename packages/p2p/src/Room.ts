@@ -14,6 +14,7 @@ import {
   type TranscriptRequestFrame,
 } from "./schema";
 import { NotWritable, PeerNotConnected } from "./errors";
+import type { ReviewContext } from "./review";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic } from "./topic";
 import { openRoomLog, type RoomLog } from "./RoomLog";
@@ -85,6 +86,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     );
     // Transcripts attached to tickets (from the log) and peers asking us for one.
     const attachments = yield* SubscriptionRef.make<ReadonlyArray<Attachment>>([]);
+    // The why behind review tickets, as the log has it.
+    const reviews = yield* SubscriptionRef.make<ReadonlyArray<ReviewContext>>([]);
     const fetchRequests = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; attachmentId: string }>(),
       (p) => PubSub.shutdown(p),
@@ -130,10 +133,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(members, view.members);
       yield* SubscriptionRef.set(trace, view.messages.map((m) => m.msg));
       yield* SubscriptionRef.set(attachments, view.attachments);
+      yield* SubscriptionRef.set(reviews, view.reviews);
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (cur) => (name.ts > cur.ts ? name : cur));
       yield* SubscriptionRef.set(writable, log.writable());
       yield* SubscriptionRef.set(mine, view.messages.filter((m) => m.msg.to === me));
+      // records from a build speaking another protocol version never reach
+      // the app; take them off the room for everyone (a no-op when there are
+      // none, or until we are admitted). The eviction's own log entry brings
+      // us back here with nothing left to do.
+      yield* log.evictStale;
     });
 
     /** Admit everyone who asked while we couldn't. */
@@ -184,10 +193,21 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(mine, []);
     });
 
-    /** Bring the log up (create it, or open a key we learned) and follow it. */
+    /** Bring the log up (create it, or open a key we learned) and follow it.
+     *
+     *  Guarded against a SECOND caller arriving while the first is still
+     *  opening: `log` is only set once Autobase is ready, so the boot path and
+     *  a peer's `log-info` frame could both get past a `if (log)` check and
+     *  open the same base twice — two Autobases on one writer core in one
+     *  Corestore namespace, which blocks on the storage lock and never
+     *  finishes. That was the returning-peer stall: the room logged "room log
+     *  opened" and the app never came up. The flag is set before the first
+     *  await, so nothing can slip between. */
+    let attaching = false;
     const attachLog = (key: string | null) =>
       Effect.gen(function* () {
-        if (log) return;
+        if (log || attaching) return;
+        attaching = true;
         const child = yield* Scope.fork(scope);
         const opened = yield* openRoomLog(swarm.store, config.roomName, key).pipe(
           Effect.provideService(Scope.Scope, child),
@@ -196,30 +216,36 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         logScope = child;
         yield* SubscriptionRef.set(logKey, opened.key);
         yield* Effect.log(`room log ${key ? "opened" : "created"}: ${opened.key.slice(0, 12)}… writable=${String(opened.writable())}`);
-        yield* refresh;
-        yield* introduce;
-        yield* admitPending;
+        // Everything past this point talks to Autobase, which may be waiting
+        // on another member — so it runs in a fibre of its own. The room (and
+        // with it the app, its MCP server, the TUI) is up as soon as the base
+        // is open; the view, our `member` entry and the announcements land
+        // when the log can. A returning peer used to hang here forever.
         let wasWritable = opened.writable();
-        yield* opened.changes.pipe(
-          Stream.tap(() =>
-            Effect.gen(function* () {
-              yield* refresh;
-              if (!wasWritable && opened.writable()) {
-                wasWritable = true;
-                yield* Effect.log("admitted to the room log");
-                yield* introduce;
-                yield* admitPending;
-              }
-            }),
-          ),
-          Stream.runDrain,
-          Effect.forkIn(child),
-        );
-        // tell everyone present where the log is (anyone whose profile has
-        // not arrived yet hears it with their profile — see onFrame)
-        announced.clear();
-        yield* Effect.forEach([...peers.keys()], announceLog, { discard: true });
-      });
+        yield* Effect.gen(function* () {
+          yield* refresh;
+          yield* introduce;
+          yield* admitPending;
+          // tell everyone present where the log is (anyone whose profile has
+          // not arrived yet hears it with their profile — see onFrame)
+          announced.clear();
+          yield* Effect.forEach([...peers.keys()], announceLog, { discard: true });
+          yield* opened.changes.pipe(
+            Stream.tap(() =>
+              Effect.gen(function* () {
+                yield* refresh;
+                if (!wasWritable && opened.writable()) {
+                  wasWritable = true;
+                  yield* Effect.log("admitted to the room log");
+                  yield* introduce;
+                  yield* admitPending;
+                }
+              }),
+            ),
+            Stream.runDrain,
+          );
+        }).pipe(Effect.forkIn(child));
+      }).pipe(Effect.ensuring(Effect.sync(() => void (attaching = false))));
 
     /** Ask a member to admit our writer core (no-op once we're in). */
     const askToJoin = (key: string) =>
@@ -270,7 +296,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
               peers.set(key, { key, ...frame.profile });
               if (known) return Effect.void;
               // first profile from a peer = they are actually reachable here
-              const theirs = frame.profile.protocol ?? "pre-1";
+              const theirs = frame.profile.protocol;
               return Effect.log(`peer online: ${frame.profile.name} (${key.slice(0, 8)})`).pipe(
                 Effect.andThen(
                   theirs === PROTOCOL_VERSION
@@ -297,7 +323,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
                 // to a populated one; two lonely logs keep the lower key. A
                 // populated pair is a real split and stays (loudly).
                 const ourMembers = (yield* SubscriptionRef.get(members)).filter((m) => m.key !== me).length;
-                const theirMembers = frame.members ?? 1;
+                const theirMembers = frame.members;
                 const lonely = ourMembers === 0;
                 const theyAreLonely = theirMembers <= 1;
                 const yieldToTheirs = lonely && (!theyAreLonely || frame.key < log.key);
@@ -402,7 +428,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* send(holderKey, { kind: "fetch-attachment", attachmentId });
     });
 
-    /** Hand one approved transcript slice to the peer who asked. Ephemeral:
+    /** Hand one transcript slice to the peer who asked — their person said so.
+     *  Ephemeral:
      *  they must be present. */
     const sendTranscript = Effect.fn("Room.sendTranscript")(function* (peerKey: string, transcript: Omit<TranscriptFrame, "kind">) {
       if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
@@ -415,6 +442,14 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       const ts = yield* Clock.currentTimeMillis;
       yield* SubscriptionRef.set(meta, { name, ts });
       yield* l.append({ op: "rename", name, ts }).pipe(Effect.orDie);
+    });
+
+    /** Put the why behind a review ticket on the log (its author writes it;
+     *  an amendment carries the whole record and the later ts wins). */
+    const shareReview = Effect.fn("Room.shareReview")(function* (review: ReviewContext) {
+      const l = yield* requireLog;
+      yield* l.append({ op: "review", review }).pipe(Effect.orDie);
+      yield* refresh;
     });
 
     /** Put a ticket (new or changed) on the log; returns the merged record. */
@@ -436,6 +471,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       /** Shared tickets by id (as the log's view has them) + changes. */
       tickets,
       shareTicket,
+      /** The why behind each review ticket (as the log's view has it). */
+      reviews,
+      shareReview,
       /** Messages for us, in log order with their position. Each subscriber
        *  sees every one exactly once — the ones already on the log first. */
       messages: SubscriptionRef.changes(mine).pipe(
@@ -457,7 +495,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       sendDrive,
       /** Peers asking for our agent's conversations (the app gates them). */
       transcriptRequests: Stream.fromPubSub(transcriptRequests),
-      /** Conversations peers handed us after their person approved. */
+      /** Conversations peers handed us because their person said so. */
       transcripts: Stream.fromPubSub(transcripts),
       requestTranscripts,
       sendTranscript,

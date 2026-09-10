@@ -71,6 +71,16 @@ stop_all() {
   pkill -9 -f -- "$PEERS_PAT" 2>/dev/null; sleep 0.2
 }
 
+# wait_pty <capture> <pattern> [tries] — until the app has actually PAINTED
+# something in the pty (0.5 s steps). Keys sent before that are dropped: the
+# opening animation mounts the app only once it has settled, so a fixed sleep
+# is a race under load. Use this before the first key of a pty scenario.
+wait_pty() {
+  local i
+  for i in $(seq 1 "${3:-80}"); do grep -qa "$2" "$1" 2>/dev/null && return 0; sleep 0.5; done
+  echo "!! the TUI never painted $2 (see $1)"; return 1
+}
+
 # wait_file <path> [tries] — until the file exists (0.1 s steps)
 wait_file() { local i; for i in $(seq 1 "${2:-100}"); do [ -e "$1" ] && return 0; sleep 0.1; done; echo "!! $1 never appeared"; return 1; }
 
@@ -86,9 +96,7 @@ testnet() {
 # Returns at once; `mcp` / `wait_for_peer` wait for it to be up.
 start() {
   local who=$1; shift
-  # AUTO_APPROVE: a headless peer has no person at the TUI to approve outgoing
-  # messages, so the scenarios skip the gate (approval.sh turns it back on)
-  HOME="$SHOME" COLLAGEN_AUTO_APPROVE="${COLLAGEN_AUTO_APPROVE:-1}" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" \
+  HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" \
     node --import tsx src/headless.ts --profile "$(profile "$who")" --name "$who" "$@" < /dev/null >> "$OUT/$who.out" 2>> "$OUT/$who.err" &
   disown # killed later by pattern; no "Killed: 9" job chatter in the output
 }
@@ -147,6 +155,35 @@ wait_for_peer() {
   echo "!! $3 never showed up in the room $(alive "$3")"; return 1
 }
 
+# drive_until <label> <pattern> <url> <sid> <drive-json> <check cmd...> — send a
+# drive and poll a command until its output matches; re-send if it does not.
+# A drive is fire-and-forget over an ephemeral frame, and the FIRST frame to a
+# freshly connected peer can be dropped on the floor (found 2026-09-10: the
+# same drive sent twice always lands, once often does not; real features
+# survive this because greets are re-sent every 15 s and everything durable
+# rides the log). Only for IDEMPOTENT actions — settle-step is, send-message
+# is not.
+drive_until() {
+  local label=$1 pattern=$2 url=$3 sid=$4 json=$5; shift 5
+  local i j out=""
+  for i in $(seq 1 10); do
+    call "$url" "$sid" drive-peer "$json" > /dev/null
+    for j in 1 2 3 4 5 6; do
+      out=$("$@")
+      if echo "$out" | grep -qE "$pattern"; then echo "  ok   $label"; PASS=$((PASS+1)); return 0; fi
+      sleep 0.5
+    done
+  done
+  echo "  FAIL $label — last: $(echo "$out" | head -c 200)"; FAIL=$((FAIL+1)); return 1
+}
+
+# warm <url> <sid> <who> — until <who> has SEEN us. A drive is fire-and-forget:
+# a frame sent before the peer's Protomux channel is open is dropped (greets
+# survive that because discovery re-greets every 15 s; a drive does not). Once
+# the driven peer lists us, frames in that direction land. Call this before the
+# first drive-peer of a run.
+warm() { wait_for_peer "$1" "$2" "$3"; }
+
 # alive <who> — "(alice-log alive)" or "(alice-log GONE)", for failure messages
 alive() { pgrep -f -- "--profile $1-$SCN( |\$)" > /dev/null && echo "($1 alive)" || echo "($1 GONE — see $OUT/$1.out / .err)"; }
 # await_log <who> <pattern> [tries] — until the peer's log matches (0.2 s steps); not an assertion
@@ -176,6 +213,23 @@ wait_until() {
     sleep 0.5
   done
   echo "  FAIL $label — last: $(echo "$out" | head -c 200)"; FAIL=$((FAIL+1)); return 1
+}
+
+# rows <url> <sid> <ticketId> — the block of ONE ticket, readable (the TOON
+# answer is a JSON string with literal \n). Step ids repeat across tickets —
+# every reader's review step is `review-<their name>` — so an assertion about
+# one ticket must be scoped to it.
+rows() {
+  call "$1" "$2" get-tickets '{}' | python3 -c '
+import sys
+text = sys.stdin.read().replace("\\n", "\n")
+tid = sys.argv[1]
+i = text.find(tid)
+if i < 0:
+    print("")
+    raise SystemExit
+j = text.find("  - id:", i)
+print(text[i : j if j > 0 else len(text)])' "$3"
 }
 
 goals() { call "$1" "$2" get-tickets '{}' | grep -o 'goal: [^\\]*' | sed 's/goal: //' | tr '\n' ' '; }

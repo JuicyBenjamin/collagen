@@ -7,7 +7,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { shortRoomId } from "@collagen/p2p";
 import { captureAtom } from "../../../../components/focus";
 import { theme } from "../../../../app/theme";
-import { VERSION } from "../../../../app/version";
+import { IS_RELEASE, VERSION } from "../../../../app/version";
 import { roomAtom } from "../../../atoms";
 import { logsAtom, mcpUrlAtom } from "./atoms";
 
@@ -53,7 +53,7 @@ export function Footer() {
       </box>
       <box flexDirection="column" flexShrink={0}>
         <text fg={theme.dim} truncate wrapMode="none">
-          collagen {VERSION} · mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
+          collagen {VERSION}{IS_RELEASE ? "" : " (source)"} · mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>
         <text fg={theme.dim} truncate wrapMode="none">
           room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] · invite id:{" "}
