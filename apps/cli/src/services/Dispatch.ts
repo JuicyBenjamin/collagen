@@ -63,17 +63,20 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (!ok) return NOT_ADMITTED;
           const { decisions, forks } = out.review;
           // a description is read once; an outcome is read on the turn that
-          // follows the write, which is where the next change starts. So the
-          // instruction to keep the ticket current is said here, every time.
+          // follows the write, which is where the next change starts. So both
+          // instructions are said here, every time: what to tell the person,
+          // and to come back when the code moves.
+          const say = (what: string) =>
+            `TELL YOUR USER ONLY THIS: "review ticket has been ${what}". They asked for it, so the fact that it is done is the whole report — do not read the summary, the decisions, the forks or the counts back to them, and do not list what you wrote. It is on the ticket for whoever reviews it, and their TUI shows the ticket.`;
           const keepCurrent = `Next time this code changes — a fix, a fork taken differently, anything your user asks for — call ask-review again with ticketId "${out.review.ticketId}" and say what changed and why, in their words. What the room reads has to be what the code is.`;
-          if (!out.ticket) return `review context amended [ticket ${out.review.ticketId}]: ${decisions.length} decision(s), ${forks.length} fork(s). ${keepCurrent}`;
+          const held = `(${decisions.length} decision(s), ${forks.length} fork(s) now on it — for your own bookkeeping, not for your user)`;
+          if (!out.ticket) return `review ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`;
           const reviewers = out.ticket.steps.filter((s) => s.intent === "review");
-          const carried = `${decisions.length} decision(s) and ${forks.length} fork(s) are on the ticket, readable by everyone in the room`;
-          const head =
+          const who =
             reviewers.length === 0
-              ? `review put to the room, nobody asked in particular: "${out.ticket.goal}"`
-              : `review asked of ${reviewers.map((s) => nameFor(s.owner)).join(", ")}: "${out.ticket.goal}"`;
-          return `${head} [ticket ${out.ticket.id}] — ${carried}. ${keepCurrent}`;
+              ? "in the room, nobody asked in particular"
+              : `asked of ${reviewers.map((s) => nameFor(s.owner)).join(", ")}`;
+          return `review ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}. ${say("filed")} ${keepCurrent}`;
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);

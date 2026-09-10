@@ -30,7 +30,7 @@ D1='{"what":"pure frame functions for the logo","userWhy":"she said make it look
 D2='{"what":"a fast boot is still held for one sweep","userWhy":"fine if it takes longer, for animation","where":["src/lib/opening.ts:14"]}'
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator","why":"no new dependency","by":"agent"}'
 ASK="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"summary\":\"the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
-expect "the review ticket is on the log" "$(call $A "$SA" ask-review "$ASK")" "review asked of bob"
+expect "the review ticket is on the log" "$(call $A "$SA" ask-review "$ASK")" "review ticket filed, asked of bob"
 sleep 1
 touch "$OUT/review-tui.go"
 await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }

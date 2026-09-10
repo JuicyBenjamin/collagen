@@ -39,7 +39,9 @@ D2='{"what":"a fast boot is still held until the sweep is seen","userWhy":"colla
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator in @opentui/core","why":"no new dependency and the frame stays pure","by":"agent"}'
 ASK="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"focus\":\"the timing constants\",\"summary\":\"the opening animation: the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
 ASKED=$(call $A "$SA" ask-review "$ASK")
-expect "ask-review asks bob, and says how much why went with it" "$ASKED" "review asked of bob.*2 decision\(s\) and 1 fork\(s\)"
+expect "ask-review files the ticket and says it asks bob" "$ASKED" "review ticket filed, asked of bob"
+expect "…the counts are there for the agent, marked as not for the person" "$ASKED" "2 decision\(s\), 1 fork\(s\) now on it — for your own bookkeeping, not for your user"
+expect "…and it says what to report: that the ticket was filed, nothing else" "$ASKED" "TELL YOUR USER ONLY THIS: .{1,3}review ticket has been filed"
 TICKET=$(echo "$ASKED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 
 echo "## bob's side: a review ticket whose headline says where the code is"
@@ -76,12 +78,13 @@ AMEND_BOB="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"what\":\"bob's own idea\"
 expect "bob cannot write alice's why (his reading goes to her as a message)" "$(call $B "$SB" ask-review "$AMEND_BOB")" "is alice's to write"
 AMEND="{\"ticketId\":\"$TICKET\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/23\",\"decisions\":[{\"what\":\"the sheen sweeps until the app is up\",\"userWhy\":\"she asked for the wait to look intentional, not stuck\",\"where\":[\"src/lib/logoFrame.ts:74\"]}]}"
 AMENDED=$(call $A "$SA" ask-review "$AMEND")
-expect "alice adds a third decision" "$AMENDED" "amended .*: 3 decision\(s\)"
+expect "alice adds a third decision" "$AMENDED" "review ticket updated .*3 decision\(s\)"
+expect "…reported as updated, with the contents left off" "$AMENDED" "TELL YOUR USER ONLY THIS: .{1,3}review ticket has been updated"
 expect "…and the outcome itself says to come back when the code moves" "$AMENDED" "call ask-review again with ticketId"
 wait_until "bob sees it, and the link is the pull request now" "look intentional, not stuck" call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}"
 expect "…the pull request link replaced the branch link" "$(call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}")" "pull/23"
 FIX="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"id\":\"d1\",\"what\":\"pure frame functions for the logo\",\"userWhy\":\"she said make it look cool, and later: fine if it takes longer for animation\",\"where\":[\"src/lib/logoFrame.ts:60\"]}]}"
-expect "a correction by id replaces the decision, it does not pile up" "$(call $A "$SA" ask-review "$FIX")" "amended .*: 3 decision\(s\)"
+expect "a correction by id replaces the decision, it does not pile up" "$(call $A "$SA" ask-review "$FIX")" "review ticket updated .*3 decision\(s\)"
 wait_until "bob reads the corrected words" "fine if it takes longer for animation" call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}"
 expect "an amendment with nothing in it is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\"}")" "nothing to amend"
 
@@ -89,7 +92,7 @@ echo "## 0 reviewers: the ticket sits in the room with the why on it"
 OPEN_D='{"what":"the sheen is a gaussian band, not a gradient sweep","userWhy":"he asked for it to look cool","where":["src/lib/logoFrame.ts:74"]}'
 OPEN_ASK="{\"project\":\"sandbox\",\"goal\":\"review the sheen\",\"summary\":\"the sheen that sweeps while the app boots\",\"decisions\":[$OPEN_D],\"forks\":[]}"
 OPENED=$(call $A "$SA" ask-review "$OPEN_ASK")
-expect "no peers named: it goes to the room, nobody in particular" "$OPENED" "review put to the room, nobody asked in particular"
+expect "no peers named: it goes to the room, nobody in particular" "$OPENED" "review ticket filed, in the room, nobody asked in particular"
 expect "…opening one says how to keep it current, where an agent will read it" "$OPENED" "call ask-review again with ticketId"
 OPEN_TICKET=$(echo "$OPENED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "bob sees it in the room" "review the sheen" goals $B "$SB"
@@ -129,7 +132,7 @@ echo "## many reviewers: one review step each, and the author waits on all"
 MANY_D='{"what":"one evict entry per sweep","userWhy":"he said never brick, migrate instead","where":["packages/p2p/src/RoomLog.ts:1"]}'
 MANY_ASK="{\"peers\":[\"bob\",\"carol\"],\"project\":\"sandbox\",\"goal\":\"review the migration\",\"summary\":\"records from an older protocol are evicted, not carried\",\"decisions\":[$MANY_D],\"forks\":[]}"
 MANY=$(call $A "$SA" ask-review "$MANY_ASK")
-expect "both are asked" "$MANY" "review asked of bob, carol"
+expect "both are asked" "$MANY" "review ticket filed, asked of bob, carol"
 MANY_TICKET=$(echo "$MANY" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "each reviewer got a step of their own, named for them" "review-bob,bob" rows $A "$SA" "$MANY_TICKET"
 MANY_ROWS=$(rows $A "$SA" "$MANY_TICKET")
@@ -146,7 +149,7 @@ expect "settling someone else's step is refused, with what to do instead" "$(cal
 
 echo "## the ticket keeps up with the code: a revision reaches its readers"
 REV="{\"ticketId\":\"$MANY_TICKET\",\"branch\":\"feat/evict-v2\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/24\",\"decisions\":[{\"what\":\"the sweep is per read, not per open\",\"userWhy\":\"he asked after bob's read: never brick\",\"where\":[\"packages/p2p/src/RoomLog.ts:150\"]}]}"
-expect "alice revises the why after the reviews" "$(call $A "$SA" ask-review "$REV")" "amended .*: 2 decision\(s\)"
+expect "alice revises the why after the reviews" "$(call $A "$SA" ask-review "$REV")" "review ticket updated .*2 decision\(s\)"
 wait_until "bob is told the why moved, on the thread he knows the ticket by" "revised the why" bash -c "cat '$OUT/bob.log'"
 expect "…and it is the ticket he already knows, not a new one" "$(grep 'revised the why' "$OUT/bob.log" | tail -1)" "ticket ${MANY_TICKET:0:8}"
 expect "…carol too" "$(grep -c 'revised the why' "$OUT/carol.log")" "^[1-9]"
