@@ -42,7 +42,7 @@ export function usePendingOutgoing() {
     return false;
   };
 
-  const row = (p: Proposal, selected: boolean, expanded: boolean) => {
+  const row = (p: Proposal, selected: boolean, expanded: boolean, note?: string) => {
     const text = proposalText(p);
     const isEditing = editing?.id === p.id;
     return (
@@ -53,6 +53,7 @@ export function usePendingOutgoing() {
           <span fg={theme.accent}>you</span>
           <span fg={theme.dim}> → {p.to}</span>
           <span fg={theme.dim}> [{p.title}] </span>
+          {note ? <span fg={theme.dim}>{note} · </span> : null}
           {expanded || isEditing ? <span fg={theme.warn}>waiting for your y / n</span> : text.split("\n")[0]}
         </text>
         {isEditing ? (

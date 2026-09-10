@@ -37,11 +37,13 @@ export function Tickets() {
   const rows = tickets
     .map((t) => ({ t, s: summarize(t, trace, me) }))
     .sort((a, b) => compareSummaries(a.s, b.s));
-  const open = rows.filter((r) => r.s.state === "needs-you" || r.s.state === "waiting");
-  const closed = rows.filter((r) => r.s.state === "failed" || r.s.state === "done");
-  const shownClosed = unfolded ? closed : closed.slice(0, DONE_SHOWN);
-  const folded = closed.length - shownClosed.length;
-  const shown = [...open, ...shownClosed];
+  // every ticket in the room that is not finished, whoever made it and
+  // whoever it is for — a failed one is unfinished, not history
+  const undone = rows.filter((r) => r.s.state !== "done");
+  const done = rows.filter((r) => r.s.state === "done");
+  const shownDone = unfolded ? done : done.slice(0, DONE_SHOWN);
+  const folded = done.length - shownDone.length;
+  const shown = [...undone, ...shownDone];
   const needsYou = rows.filter((r) => r.s.state === "needs-you").length;
   const projects = new Set(tickets.map((t) => t.project));
   const showProject = projects.size > 1;
@@ -76,7 +78,7 @@ export function Tickets() {
               <span fg={theme.dim}>
                 {" "}·{" "}
                 {needsYou > 0 ? <span fg={theme.warn}>{needsYou} need{needsYou === 1 ? "s" : ""} you · </span> : null}
-                {open.length - needsYou} waiting · {closed.length} done
+                {undone.length - needsYou} in flight · {done.length} done
               </span>
             ) : null}
           </text>

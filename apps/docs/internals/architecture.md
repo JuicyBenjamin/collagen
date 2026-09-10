@@ -165,7 +165,7 @@ step fails at once) and hands `Outbox.propose` a `Proposal`: room, recipient, ti
 `Outgoing` — plain data (`packages/p2p/src/schema.ts`): a message by peer *name*, a full
 ticket record, or a step settlement. Proposals live in `LocalState.outbox`, persisted by
 `StateStore` like everything else there, so they wait across a restart. The TUI renders
-them from the same state: waiting rows at the bottom of the messages tab and of a ticket's
+them from the same state: the outbox tab (one list of everything going out) and a ticket's
 conversation (`usePendingOutgoing` gives both lists the keys and the row), counts in the
 tab bar and the status line.
 

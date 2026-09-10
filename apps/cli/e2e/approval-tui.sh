@@ -1,10 +1,10 @@
 #!/bin/bash
 # The human gate from the person's side, in the TUI: alice's "agent" (curl)
-# queues two messages to bob; they wait at the bottom of the messages tab.
-# In the pty: 2 opens that tab, ↓ drops in with the cursor on the newest row
-# (the second proposal) — `n` drops it; the cursor follows to the newest row
-# again (the first proposal) — `y` sends it. Judged from both logs and the key
-# trace.
+# queues two messages to bob; they wait in the OUTBOX — everything of hers on
+# its way out, in one list. In the pty: 3 opens that tab and the cursor is on
+# the newest row (the second proposal) — `n` drops it; the list shrinks and
+# the cursor lands on the first — `y` sends it. Judged from both logs, the
+# screen and the key trace.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 start bob
@@ -12,7 +12,7 @@ PTY="$OUT/approval-tui.out"; MARKS="$OUT/approval-tui.marks"; LOG="$OUT/approval
 rm -f "$PTY" "$MARKS" "$OUT/approval-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/approval-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "messages"; sleep 1; mark M0_queued
-  printf '\033'; sleep 1; printf '2'; sleep 1; printf '\033[B'; sleep 1; mark M1_messages
+  printf '\033'; sleep 1; printf '3'; sleep 2; mark M1_outbox
   printf 'n'; sleep 2; mark M2_rejected
   printf 'y'; sleep 4; mark M3_approved; sleep 1; printf 'q' ) | \
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows 40 cols 120; $TUI" > /dev/null 2>&1 &
@@ -29,5 +29,9 @@ sleep 2 # a negative: give anything that would leak time to arrive
 expect "n dropped the second (the newest row) — logged as rejected" "$(grep -c '✗ rejected: message → bob · sandbox · ask2' "$LOG")" "^1$"
 expect "the approval is logged" "$(grep -c '✓ approved: message → bob · sandbox · ask —' "$LOG")" "^1$"
 expect "only one message ever reached bob" "$(grep -c '← alice' "$OUT/bob.log")" "^1$"
-expect "the keys landed in the messages list, not a section of its own" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')" "messages"
+expect "the keys landed in the outbox, its own list" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')" "outbox"
+TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
+expect "the tab bar counts what is waiting" "$(echo "$TEXT" | grep -cE '\[3\] outbox')" "^[1-9]"
+expect "the outbox says nothing has left this machine" "$(echo "$TEXT" | grep -c 'nothing here has left this machine')" "^[1-9]"
+expect "…and lists both proposals by where they are going" "$(echo "$TEXT" | grep -cE 'you .{1,4} bob .{0,3}\[sandbox')" "^[1-9]"
 kill_all; summary

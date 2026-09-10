@@ -29,7 +29,7 @@ export function TabBar() {
   return (
     <Focusable
       id="tabs"
-      hint="←→ switch tab · ↓ into the tab · 1/2 jump · a cycle ai · c copy invite · s settings · q quit"
+      hint="←→ switch tab · ↓ into the tab · 1/2/3 jump · a cycle ai · c copy invite · s settings · q quit"
       onKey={(key) => {
         const i = TABS.indexOf(active);
         if (key.name === "left" && i > 0) return jump(TABS[i - 1]!), true;
@@ -51,7 +51,9 @@ export function TabBar() {
           <span fg={theme.dim}>   </span>
           <span fg={active === "room/messages" ? theme.accent : theme.dim}>[2] messages</span>
           <span fg={theme.dim}> ({trace.length})</span>
-          {waiting > 0 ? <span fg={theme.warn}> · {waiting} to approve</span> : null}
+          <span fg={theme.dim}>   </span>
+          <span fg={active === "room/outbox" ? theme.accent : waiting > 0 ? theme.warn : theme.dim}>[3] outbox</span>
+          {waiting > 0 ? <span fg={theme.warn}> ({waiting} to approve)</span> : <span fg={theme.dim}> (0)</span>}
           <span fg={theme.dim}>   ·   </span>
           <span fg={theme.fg}>{online} online</span>
           <span fg={theme.dim}> · </span>

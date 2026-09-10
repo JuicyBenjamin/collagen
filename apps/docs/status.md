@@ -20,7 +20,7 @@ _Last updated: 2026-09-07._
 - **Human in the loop** — the founding rule. Outgoing: `send-to-peer`,
   `create-ticket` and `settle-step` never write to the log themselves; they queue a proposal
   (data, persisted in local state — it waits across a restart) in the **outbox** (`Outbox`
-  service; shown as waiting rows at the bottom of the messages tab and of a ticket's
+  service; shown in the **outbox tab** — everything of yours on its way out, in one list — and on the page of the ticket it concerns
   conversation; counted in the tab bar and the status line) and the person approves (`y`), rewrites
   the text first (`e`) or rejects (`n`); only then does `Dispatch` write the log, resolving
   the peer by name at send time. Incoming: every nudge and tool description tells the

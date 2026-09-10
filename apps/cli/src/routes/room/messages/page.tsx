@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import type { Proposal, RoomMessage } from "@collagen/p2p";
+import type { RoomMessage } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
@@ -10,9 +10,8 @@ import { clamp } from "../../../lib/math";
 import { roomAtom } from "../../atoms";
 import { identityAtom, membersAtom, outboxAtom, rosterAtom, traceAtom } from "../atoms";
 import { Arrow } from "../components/Arrow/Arrow";
-import { PENDING_HINT, usePendingOutgoing } from "../components/PendingOutgoing/PendingOutgoing";
 
-type Row = { readonly kind: "msg"; readonly id: string; readonly msg: RoomMessage } | { readonly kind: "pending"; readonly id: string; readonly p: Proposal };
+type Row = { readonly kind: "msg"; readonly id: string; readonly msg: RoomMessage };
 
 /** Messages tab: the room's agent-to-agent trace as its log has it — every
  *  message between members, in log order — and, at the bottom, what your
@@ -26,18 +25,14 @@ export function MessagesPage() {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
-  const pending = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const).filter((p) => p.roomId === roomId);
-  const outgoing = usePendingOutgoing();
+  const waiting = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const).filter((p) => p.roomId === roomId).length;
   // null = follow the newest row until the user scrolls
   const [cursor, setCursor] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   // first visible row — a ref, not state: derived from the cursor each render
   const startRef = useRef(0);
 
-  const rows: ReadonlyArray<Row> = [
-    ...trace.map((msg): Row => ({ kind: "msg", id: msg.id, msg })),
-    ...pending.map((p): Row => ({ kind: "pending", id: p.id, p })),
-  ];
+  const rows: ReadonlyArray<Row> = trace.map((msg): Row => ({ kind: "msg", id: msg.id, msg }));
   const last = Math.max(0, rows.length - 1);
   const sel = cursor === null ? last : clamp(cursor, 0, last);
   const current = rows[sel];
@@ -59,7 +54,7 @@ export function MessagesPage() {
   return (
     <Focusable
       id="messages"
-      hint={current?.kind === "pending" ? `${PENDING_HINT} · ↑↓ scroll · esc` : "↑↓ scroll · enter details · ↑ at the top leaves · 1/2 jump · esc"}
+      hint="↑↓ scroll · enter details · ↑ at the top leaves · 1/2/3 jump · esc"
       flexDirection="column"
       marginTop={1}
       flexGrow={1}
@@ -72,7 +67,6 @@ export function MessagesPage() {
           if (current) setExpanded((e) => (e === current.id ? null : current.id));
           return true;
         }
-        if (current?.kind === "pending") return outgoing.onKey(key, current.p);
         return false;
       }}
     >
@@ -80,26 +74,22 @@ export function MessagesPage() {
         <>
           <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none">
             agent-to-agent trace · who → whom · newest last
-            {pending.length > 0 ? <span fg={theme.warn}> · {pending.length} waiting for your approval</span> : null}
+            {waiting > 0 ? <span fg={theme.warn}> · {waiting} waiting for your y in the outbox [3]</span> : null}
           </text>
           {rows.length === 0 ? (
             <text fg={theme.dim}>no messages yet</text>
           ) : (
-            rows.slice(start, start + window).map((row, i) =>
-              row.kind === "msg" ? (
-                <MessageRow
-                  key={row.id}
-                  msg={row.msg}
-                  mine={row.msg.from === identity?.pubkey}
-                  from={nameFor(row.msg.from)}
-                  to={nameFor(row.msg.to)}
-                  selected={focused && start + i === sel}
-                  expanded={expanded === row.id}
-                />
-              ) : (
-                outgoing.row(row.p, focused && start + i === sel, expanded === row.id)
-              ),
-            )
+            rows.slice(start, start + window).map((row, i) => (
+              <MessageRow
+                key={row.id}
+                msg={row.msg}
+                mine={row.msg.from === identity?.pubkey}
+                from={nameFor(row.msg.from)}
+                to={nameFor(row.msg.to)}
+                selected={focused && start + i === sel}
+                expanded={expanded === row.id}
+              />
+            ))
           )}
         </>
       )}

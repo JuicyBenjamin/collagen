@@ -54,9 +54,13 @@ No files are written into your projects.
 - **rooms rail** (left) — one avatar per room. Pill = the room you're in, dot = messages
   waiting for you elsewhere, corner number = people online there. `+` joins or creates.
 - **overview tab** — who's here (with their AI and its auth badge; `○ (away)` for peers
-  looking at another room), shared tickets, and the projects section.
+  looking at another room), every unfinished ticket in the room — whoever made it and
+  whoever it is for — with the finished ones folded away, and the projects section.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
+- **outbox tab** — everything of yours on its way out, in one list, newest first: nothing
+  there has left the machine. `y` sends, `n` drops, `e` rewrites it first, `enter` shows
+  the whole text. Proposals from every room you are in, since they all wait on you.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section.
 - **footer** — a short activity log, the MCP url, the room's invite id.
@@ -69,11 +73,11 @@ what's natural there. Number keys work from anywhere.
 
 | Key | Action |
 | --- | --- |
-| `1` / `2` | Overview / messages tab |
+| `1` / `2` / `3` | Overview / messages / outbox tab |
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |
-| `y` / `e` / `n` | On a waiting row (bottom of the messages tab, or a ticket's conversation): approve and send / rewrite the text first / reject what your agent wants to send |
+| `y` / `e` / `n` | On a waiting row (the outbox tab, or a ticket's conversation): approve and send / rewrite the text first / reject what your agent wants to send |
 | `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
