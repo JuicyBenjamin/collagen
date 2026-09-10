@@ -75,7 +75,9 @@ echo "## the why grows as the work does — and only its author writes it"
 AMEND_BOB="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"what\":\"bob's own idea\",\"agentWhy\":\"mine\"}]}"
 expect "bob cannot write alice's why (his reading goes to her as a message)" "$(call $B "$SB" ask-review "$AMEND_BOB")" "is alice's to write"
 AMEND="{\"ticketId\":\"$TICKET\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/23\",\"decisions\":[{\"what\":\"the sheen sweeps until the app is up\",\"userWhy\":\"she asked for the wait to look intentional, not stuck\",\"where\":[\"src/lib/logoFrame.ts:74\"]}]}"
-expect "alice adds a third decision" "$(call $A "$SA" ask-review "$AMEND")" "amended .*: 3 decision\(s\)"
+AMENDED=$(call $A "$SA" ask-review "$AMEND")
+expect "alice adds a third decision" "$AMENDED" "amended .*: 3 decision\(s\)"
+expect "…and the outcome itself says to come back when the code moves" "$AMENDED" "call ask-review again with ticketId"
 wait_until "bob sees it, and the link is the pull request now" "look intentional, not stuck" call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}"
 expect "…the pull request link replaced the branch link" "$(call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}")" "pull/23"
 FIX="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"id\":\"d1\",\"what\":\"pure frame functions for the logo\",\"userWhy\":\"she said make it look cool, and later: fine if it takes longer for animation\",\"where\":[\"src/lib/logoFrame.ts:60\"]}]}"
@@ -88,6 +90,7 @@ OPEN_D='{"what":"the sheen is a gaussian band, not a gradient sweep","userWhy":"
 OPEN_ASK="{\"project\":\"sandbox\",\"goal\":\"review the sheen\",\"summary\":\"the sheen that sweeps while the app boots\",\"decisions\":[$OPEN_D],\"forks\":[]}"
 OPENED=$(call $A "$SA" ask-review "$OPEN_ASK")
 expect "no peers named: it goes to the room, nobody in particular" "$OPENED" "review put to the room, nobody asked in particular"
+expect "…opening one says how to keep it current, where an agent will read it" "$OPENED" "call ask-review again with ticketId"
 OPEN_TICKET=$(echo "$OPENED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "bob sees it in the room" "review the sheen" goals $B "$SB"
 OPEN_ROWS=$(rows $B "$SB" "$OPEN_TICKET")

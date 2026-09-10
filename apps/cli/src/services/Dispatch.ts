@@ -62,14 +62,18 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           );
           if (!ok) return NOT_ADMITTED;
           const { decisions, forks } = out.review;
-          if (!out.ticket) return `review context amended [ticket ${out.review.ticketId}]: ${decisions.length} decision(s), ${forks.length} fork(s)`;
+          // a description is read once; an outcome is read on the turn that
+          // follows the write, which is where the next change starts. So the
+          // instruction to keep the ticket current is said here, every time.
+          const keepCurrent = `Next time this code changes — a fix, a fork taken differently, anything your user asks for — call ask-review again with ticketId "${out.review.ticketId}" and say what changed and why, in their words. What the room reads has to be what the code is.`;
+          if (!out.ticket) return `review context amended [ticket ${out.review.ticketId}]: ${decisions.length} decision(s), ${forks.length} fork(s). ${keepCurrent}`;
           const reviewers = out.ticket.steps.filter((s) => s.intent === "review");
           const carried = `${decisions.length} decision(s) and ${forks.length} fork(s) are on the ticket, readable by everyone in the room`;
           const head =
             reviewers.length === 0
               ? `review put to the room, nobody asked in particular: "${out.ticket.goal}"`
               : `review asked of ${reviewers.map((s) => nameFor(s.owner)).join(", ")}: "${out.ticket.goal}"`;
-          return `${head} [ticket ${out.ticket.id}] — ${carried}`;
+          return `${head} [ticket ${out.ticket.id}] — ${carried}. ${keepCurrent}`;
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
