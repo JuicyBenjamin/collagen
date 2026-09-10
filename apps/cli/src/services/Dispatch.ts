@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import type { Outgoing, Ticket } from "@collagen/p2p";
+import { postReview, settleStep, type Outgoing, type Ticket } from "@collagen/p2p";
 import { ticketView } from "../lib/ticketView";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
@@ -49,22 +49,53 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const merged = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           return merged ? render(merged) : NOT_ADMITTED;
         }
+        case "review": {
+          // the record and the why, one approval: the ticket first (so the
+          // review it belongs to exists for everyone), then the context
+          if (out.ticket) {
+            const shared = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+            if (!shared) return NOT_ADMITTED;
+          }
+          const ok = yield* room.shareReview(out.review).pipe(
+            Effect.as(true),
+            Effect.catchTag("NotWritable", () => Effect.succeed(false)),
+          );
+          if (!ok) return NOT_ADMITTED;
+          const { decisions, forks } = out.review;
+          if (!out.ticket) return `review context amended [ticket ${out.review.ticketId}]: ${decisions.length} decision(s), ${forks.length} fork(s)`;
+          const reviewers = out.ticket.steps.filter((s) => s.intent === "review");
+          const carried = `${decisions.length} decision(s) and ${forks.length} fork(s) are on the ticket, readable by everyone in the room`;
+          const head =
+            reviewers.length === 0
+              ? `review put to the room, nobody asked in particular: "${out.ticket.goal}"`
+              : `review asked of ${reviewers.map((s) => nameFor(s.owner)).join(", ")}: "${out.ticket.goal}"`;
+          return `${head} [ticket ${out.ticket.id}] — ${carried}`;
+        }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
           if (!ticket) return `failed: no ticket ${out.ticketId} — check get-tickets`;
-          if (!ticket.steps.some((s) => s.id === out.stepId)) return `failed: no step ${out.stepId} on ticket ${out.ticketId}`;
+          const step = ticket.steps.find((s) => s.id === out.stepId);
+          if (!step) return `failed: no step ${out.stepId} on ticket ${out.ticketId}`;
           const now = yield* Clock.currentTimeMillis;
-          const updated: Ticket = {
-            ...ticket,
-            updatedAt: now,
-            steps: ticket.steps.map((s) =>
-              s.id === out.stepId
-                ? { ...s, status: out.failed ? ("failed" as const) : ("settled" as const), result: out.result, updatedAt: now }
-                : s,
-            ),
-          };
-          const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+          // one rule, shared with the drive path (see p2p settleStep)
+          const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now);
+          if (!done || done.outcome === "not-yours") {
+            return `failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${ticket.kind === "review" ? " — put your user's own review on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`;
+          }
+          const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           return merged ? render(merged) : NOT_ADMITTED;
+        }
+        case "post-review": {
+          const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
+          if (!ticket) return `failed: no ticket ${out.ticketId} — check get-tickets`;
+          const now = yield* Clock.currentTimeMillis;
+          // a review lands on a step of its reader's own: nobody's is taken,
+          // and posting again revises theirs
+          const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now);
+          const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+          if (!merged) return NOT_ADMITTED;
+          const others = merged.steps.filter((s) => s.intent === "review" && s.owner !== identity.pubkey).length;
+          return `your review is on "${ticket.goal}" as step ${stepId}${others > 0 ? ` (beside ${others} other reader(s))` : ""} — anyone else in the room can still post theirs\n${render(merged)}`;
         }
         case "attach": {
           // references go on the log; the files stay here, remembered by

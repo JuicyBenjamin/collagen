@@ -31,7 +31,8 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   const up = ticket.steps.filter((s) => (s.status === "pending" || s.status === "suspended") && s.needs.every((n) => settled.has(n)));
   const waitingOn = [...new Set(up.map((s) => s.owner))];
   const failed = ticket.steps.some((s) => s.status === "failed");
-  const allSettled = ticket.steps.every((s) => s.status === "settled");
+  // a ticket with no steps at all is not "done" — nobody has done anything
+  const allSettled = ticket.steps.length > 0 && ticket.steps.every((s) => s.status === "settled");
   const state: TicketState = waitingOn.includes(me) ? "needs-you" : waitingOn.length > 0 ? "waiting" : failed ? "failed" : allSettled ? "done" : "waiting";
 
   const threads = ticketThreads(ticket);

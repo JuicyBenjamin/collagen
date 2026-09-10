@@ -1,7 +1,7 @@
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, roomProjects, shortRoomId, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
-import { isParticipant, myThreadFor, stepChanges, stepUpdateText, weighInText } from "../lib/ticketUpdates";
+import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, weighInText } from "../lib/ticketUpdates";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
@@ -194,6 +194,28 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           Stream.runDrain,
           Effect.forkScoped,
         );
+        // the why behind a review is revised as the work goes on: the readers
+        // hear it, or they are reviewing a ticket that no longer exists
+        let prevReviews: Map<string, number> | null = null;
+        yield* SubscriptionRef.changes(room.reviews).pipe(
+          Stream.mapEffect(
+            Effect.fnUntraced(function* (all) {
+              const prev = prevReviews;
+              prevReviews = new Map(all.map((r) => [r.ticketId, r.ts]));
+              const trace = yield* SubscriptionRef.get(room.trace);
+              const tickets = yield* SubscriptionRef.get(room.tickets);
+              for (const r of reviewChanges(prev, all)) {
+                if (r.author === identity.pubkey) continue; // our own doing
+                const ticket = tickets.get(r.ticketId);
+                if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
+                const fresh = prev?.has(r.ticketId) !== true;
+                yield* notify(myThreadFor(ticket, trace, identity.pubkey, r.author), r.author, r.authorName, ticket, "revised the why", reviewUpdateText(ticket, r, fresh));
+              }
+            }),
+          ),
+          Stream.runDrain,
+          Effect.forkScoped,
+        );
         let seenTrace = -1;
         yield* SubscriptionRef.changes(room.trace).pipe(
           Stream.mapEffect(
@@ -236,6 +258,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     project: action.project,
                     goal: action.goal,
                     createdBy: identity.pubkey,
+                    kind: "task",
                     updatedAt: now,
                     steps: action.steps.map((st, i) => ({
                       id: `s${i + 1}`,
@@ -253,16 +276,30 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   const all = yield* SubscriptionRef.get(room.tickets);
                   const ticket = all.get(action.ticketId);
                   if (!ticket) return yield* Effect.logWarning(`drive settle: no ticket ${action.ticketId}`);
-                  yield* room.shareTicket({
-                    ...ticket,
-                    updatedAt: now,
-                    steps: ticket.steps.map((st) =>
-                      st.id === action.stepId
-                        ? { ...st, status: "settled" as const, result: action.result, updatedAt: now }
-                        : st,
-                    ),
-                  });
+                  // the same rule the real path uses — a second copy of it
+                  // here once made the tests prove something production
+                  // never did
+                  const done = settleStep(ticket, action.stepId, identity.pubkey, action.result, false, now);
+                  if (!done) return yield* Effect.logWarning(`drive settle: no step ${action.stepId} on ${action.ticketId}`);
+                  if (done.outcome === "not-yours") return yield* Effect.logWarning(`drive settle: step ${action.stepId} is not ours to settle`);
+                  yield* Effect.log(`driven settle: step ${action.stepId} settled`);
+                  yield* room.shareTicket(done.ticket);
                   return;
+                }
+                case "post-review": {
+                  const all = yield* SubscriptionRef.get(room.tickets);
+                  const ticket = all.get(action.ticketId);
+                  if (!ticket) return yield* Effect.logWarning(`drive review: no ticket ${action.ticketId}`);
+                  const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: yield* SubscriptionRef.get(nameRef) }, action.result, false, now);
+                  yield* Effect.log(`driven review: posted on step ${stepId}`);
+                  yield* room.shareTicket(updated);
+                  return;
+                }
+                default: {
+                  // a DriveAction kind with no case here is a COMPILE error,
+                  // not a silently ignored frame
+                  const unhandled: never = action;
+                  return yield* Effect.logWarning(`drive: unhandled action ${JSON.stringify(unhandled)}`);
                 }
               }
             }).pipe(Effect.catchTag("NotWritable", () => Effect.logWarning(`drive ${action.kind}: not admitted to the room log`))),

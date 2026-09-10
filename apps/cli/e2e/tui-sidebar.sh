@@ -12,7 +12,7 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; printf '\r'; sleep 2; mark M4_new_room; printf '\033'; sleep 2; mark M5_back; sleep 1; printf 'q' ) | \
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/tui.log" script -F -q "$PTY" bash -c "stty rows 40 cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
-call $A "$SA" drive-peer '{"peer":"bob","action":"send-message","project":"sandbox","intent":"sidebar-test","findings":"hello alice, this should light the unread dot"}' > /dev/null
+call $A "$SA" drive-peer '{"peer":"bob","action":{"kind":"send-message","project":"sandbox","intent":"sidebar-test","findings":"hello alice, this should light the unread dot"}}' > /dev/null
 wait_until "alice's room shows bob online and one unread" "dev room,2,1,true" call $A "$SA" list-rooms '{}'
 touch "$OUT/tui.go"
 await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (did it start? see $PTY)"; FAIL=$((FAIL+1)); return 1; }

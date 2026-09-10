@@ -13,7 +13,8 @@ import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
 import { to, useRouter } from "../../../app/router";
 import { roomAtom } from "../../atoms";
-import { attachmentsAtom, fetchAttachmentAtom, heldAttachmentsAtom, identityAtom, membersAtom, outboxAtom, rosterAtom, traceAtom } from "../atoms";
+import { attachmentsAtom, fetchAttachmentAtom, heldAttachmentsAtom, identityAtom, membersAtom, outboxAtom, reviewsAtom, rosterAtom, traceAtom } from "../atoms";
+import { reviewHeadline } from "../../../lib/review";
 import { Arrow } from "../components/Arrow/Arrow";
 import { PENDING_HINT, usePendingOutgoing } from "../components/PendingOutgoing/PendingOutgoing";
 import { proposalText } from "../../../services/Outbox";
@@ -55,6 +56,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const pending = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const);
   const allAttachments = AsyncResult.getOrElse(useAtomValue(attachmentsAtom), () => [] as const);
+  const reviews = AsyncResult.getOrElse(useAtomValue(reviewsAtom), () => [] as const);
   const held = AsyncResult.getOrElse(useAtomValue(heldAttachmentsAtom), () => ({}) as Record<string, string>);
   const fetch = useAtomSet(fetchAttachmentAtom);
   const fetchOutcome = useAtomValue(fetchAttachmentAtom);
@@ -97,6 +99,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
+  const review = reviews.find((r) => r.ticketId === ticket.id);
   const threads = ticketThreads(ticket);
   const conversation = trace.filter((m) => aboutTicket(ticket, threads, m));
   const summary = summarize(ticket, trace, me);
@@ -171,6 +174,31 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
         {"  "}
         {ticket.project} · by {nameFor(ticket.createdBy)} · {done}/{ticket.steps.length} settled · people {peopleLabel(summary, nameFor)}
       </text>
+
+      {/* body: why — a review ticket carries the reasons behind the change.
+          The headline here, the whole of it one enter away. */}
+      {review ? (
+        <Focusable
+          id="ticket-review"
+          hint="enter reads the why — every decision, how it was steered, and the forks · esc back to the list"
+          flexDirection="column"
+          flexShrink={0}
+          onKey={(key) => (isEnter(key) ? (navigate(to.review(ticketId, to.ticket(ticketId))), true) : false)}
+        >
+          {(focused) => (
+            <>
+              <SectionTitle title="why" note={`${reviewHeadline(review, { link: false })} · updated ${age(review.ts, now)}`} focused={focused} />
+              <text fg={theme.dim} wrapMode="word">
+                {"  "}
+                {review.summary}
+              </text>
+              <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none">
+                {"  "}enter reads it · by {nameFor(review.author)}
+              </text>
+            </>
+          )}
+        </Focusable>
+      ) : null}
 
       {/* body: steps */}
       <box flexShrink={0}>

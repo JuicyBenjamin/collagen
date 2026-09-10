@@ -120,7 +120,9 @@ identity's Corestore (`~/.config/collagen/store-<profile>`), with a
   are indexers too — fine at room scale.
 - **Entries** (`LogOp`, Schema-validated in `apply`; bad entries skipped): `add-writer`,
   `member` (key + name, so offline peers still resolve), `ticket` (full record, merged with
-  `mergeTicket`), `rename` (LWW by ts), `msg` (a `RoomMessage` with `to`).
+  `mergeTicket`), `rename` (LWW by ts), `msg` (a `RoomMessage` with `to`), `attachment`
+  (a reference, first write wins), `review` (the why behind a review ticket, LWW by ts —
+  its author is its only writer).
 - **View keys**: `ticket/<id>`, `member/<key>`, `meta/name`, `msg/<000…seq>` +
   `state/msgs` (the counter). `apply` reads and writes only the view — Autobase may
   reorder entries when causal forks arrive, and re-applies deterministically.
@@ -242,6 +244,58 @@ them under `~/.config/collagen/attachments/ticket-<id8>/<id8>-<name>` + `.meta.j
 for a transcript, through `Transcripts.fileIncoming` next to the other transcripts with
 `origin`/`via` in its meta. `held` merges the three sources (attached by us, fetched,
 fetched transcripts) into `id → path` for the ticket page and `fetch-attachments`.
+
+### One protocol version at a time (and how records leave)
+
+`PROTOCOL_VERSION` (`packages/p2p/src/schema.ts`) is the whole compatibility story: an
+alpha keeps no path for an older build's shapes, and every wire and log field is required.
+What that needs, so nothing can brick:
+
+- **`RoomLog.read` never trusts the view.** Every row is decoded against its schema
+  (`Ticket`, `Member`, `RoomMessage`, `Attachment`, `ReviewContext`); rows that fail are
+  kept out of `LogView` and remembered as stale.
+- **`RoomLog.evictStale` is the migration.** It appends one `LogOp { op: "evict", keys }`,
+  applied by every member (`EVICTABLE` limits it to room records — never `meta/`), so the
+  cleanup replicates instead of each side hiding its own mess. `Room.refresh` calls it, so
+  it runs as soon as we are admitted; it is idempotent and its own log entry ends the loop.
+- **`apply` ejects on overwrite**: an entry it cannot decode deletes the view row it
+  claims (`claimedKey`), so a record from another version leaves nothing half-applied.
+- **`Swarm.protocolOf`** reads only `frame.profile.protocol` out of a frame that failed to
+  decode — deliberately schema-free — so a peer on another version is told to update
+  rather than appearing to be offline.
+- **`lib/localState.ts` salvages the state file** instead of falling back to empty: parts
+  that still decode are kept, the rest are dropped, named in the log and written back.
+  A stale outbox proposal must not cost the user their rooms.
+
+### Review tickets: the why as data
+
+`ask-review` (`services/Mcp.ts`) builds two things from one call: a `Ticket` with
+`kind: "review"` (a `review-<name>` step per person asked — none when nobody was asked —
+plus an `address` step the author owns that needs them all) and a `ReviewContext`
+(`packages/p2p/src/review.ts`) — summary, branch/base/link, `decisions` (`what`,
+`userWhy`, `agentWhy`, `where[]`) and `forks` (`at`, `chose`, `instead`, `why`, `by`).
+Branch and link fall back to the shared project's own `.git` (`lib/gitInfo.ts`: HEAD, a
+worktree's `gitdir:` pointer, `origin` as an https URL). `lib/review.ts` refuses an empty
+why (`reviewGaps`) and renders it back (`reviewRows`, `reviewHeadline`). Both travel as
+one `Outgoing.kind = "review"`, so the person approves the record and the reasons together
+— `proposalText` prints every quoted line. `Dispatch` appends the ticket, then
+`LogOp { op: "review" }`; `RoomLog` keeps it at `review/<ticketId>` (later `ts` wins) and
+`Room.reviews` is the SubscriptionRef. An amendment is the same call with `ticketId`:
+`mergeReview` folds the delta into what the log has, only the author may write it, and
+`reviewChanges` diffs by ts so every participant gets a `ticket-update`. Reading is on
+demand — the `review-context` diagnostic, optionally narrowed by `about`.
+
+Two pure rules in p2p own who may change what, and both `Dispatch` and `Rooms`' drive
+handler use them (separate copies of this once let the test tool prove behaviour
+production did not have):
+
+- `settleStep` — a step belongs to its owner. Anyone else gets `not-yours` and nothing
+  changes. There is no sentinel owner: a step nobody is doing does not exist.
+- `postReview` — a reader's review, upserted onto `review-<their name>`
+  (`reviewStepId`, keyed apart by pubkey when two people share a display name). Asked or
+  not, everyone's review is their own step, so reviews accumulate instead of being
+  claimed. It reaches the log through `Outgoing.kind = "post-review"`, so the person
+  approves (and may reword) their own review first.
 
 ## `AgentRunner`: the resume policy
 

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Context, Data, Duration, Effect, Layer, Schedule, SubscriptionRef } from "effect";
-import { VERSION } from "../app/version";
+import { IS_RELEASE, VERSION } from "../app/version";
 import { isNewer } from "../lib/versions";
 
 export const PACKAGE = "@collagen/cli";
@@ -46,7 +46,8 @@ export interface UpdateState {
 export class Updates extends Context.Service<Updates>()("cli/Updates", {
   make: Effect.gen(function* () {
     const state = yield* SubscriptionRef.make<UpdateState>({ current: VERSION, latest: null, installing: false, note: null });
-    const enabled = VERSION !== "dev" && process.env.COLLAGEN_NO_UPDATE_CHECK !== "1";
+    // only a built artifact can be replaced by a newer one from npm
+    const enabled = IS_RELEASE && process.env.COLLAGEN_NO_UPDATE_CHECK !== "1";
 
     const check = Effect.gen(function* () {
       const version = yield* Effect.tryPromise({

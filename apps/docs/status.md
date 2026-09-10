@@ -40,6 +40,21 @@ _Last updated: 2026-09-07._
   on the log, the file stays home. `y` on the ticket page / `fetch-attachments` asks the
   holder directly; bytes come only while they are online and only for ids they attached,
   filed under `~/.config/collagen/attachments/` (transcripts with the transcripts).
+- **Review tickets** — the why travels with the code, addressed to 0 to many people:
+  `ask-review` brings the branch and
+  link (read from the project's own `.git` when omitted), the decisions behind the change
+  with how the person steered each one *and* the agent's own reason, and every fork in the
+  road with the `file:line` it produced. Refused when the why is missing. The record goes
+  on the log beside the ticket (its author is its only writer; `ticketId` amends it), and
+  the reviewer's agent reads it on demand — `review-context`, whole or `about` one file —
+  never poured into a listing. The ticket page shows a `why` section; `enter` opens all
+  of it. `peers` is 0 to many: each asked peer gets a
+  review step, and with nobody asked the ticket simply sits in the room with the why on it
+  (works with two of your own agents, no second person needed). Reviews are **posted**
+  (`post-review`), landing on a step of their reader's own — asked or not, a second and a
+  third can review the same change, and nothing is ever claimed or closed to the rest of
+  the room. The author's own step finishes the ticket. Amending the why tells every reader
+  the code moved.
 - **Messaging** — `send-to-peer` appends to the room's log in the thread between two peers
   about one project; the recipient may be offline and reads it when back. Room-visible.
   Unread is a per-thread cursor in local state. **Nothing spawns behind your back**: a real AI is never cold-started by an

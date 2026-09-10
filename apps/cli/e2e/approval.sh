@@ -19,7 +19,7 @@ sleep 3 # a negative: give anything that would leak time to arrive
 expect "nothing reached bob" "$(grep -c '← alice' "$OUT/bob.log")" "^0$"
 expect "bob's log has no ticket" "$(call $B "$(mcp $B)" get-tickets '{}')" "tickets: \[\]|^$|tickets:$"
 expect "alice's log shows both waiting in the outbox" "$(grep -c 'outbox: .* awaiting your approval' "$OUT/alice.log")" "^2$"
-expect "a mock (bob) is not gated: drive makes him send at once" "$(call $A "$SA" drive-peer '{"peer":"bob","action":"send-message","project":"sandbox","intent":"hello","findings":"from a mock"}')" "drive sent"
+expect "a mock (bob) is not gated: drive makes him send at once" "$(call $A "$SA" drive-peer '{"peer":"bob","action":{"kind":"send-message","project":"sandbox","intent":"hello","findings":"from a mock"}}')" "drive sent"
 wait_until "bob's message arrives at alice (mocks bypass the gate)" ",bob,sandbox," call $A "$SA" pending-threads '{}'
 
 echo "## alice restarts: what waited still waits"

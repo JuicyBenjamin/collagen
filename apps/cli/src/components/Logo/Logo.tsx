@@ -4,12 +4,17 @@ import { useTerminalDimensions } from "@opentui/react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { theme } from "../../app/theme";
+import { VERSION } from "../../app/version";
 import { logoFrame } from "../../lib/logoFrame";
 import { opening } from "../../lib/opening";
+import { versionLabel } from "../../lib/versionLabel";
 import { roomAtom } from "../../routes/atoms";
 
 const WORD = "collagen";
-const TAGLINE = "peer-to-peer";
+/** What the brand says under itself: what this is, and which build you have.
+ *  The stage belongs here rather than only in the footer — an alpha should
+ *  introduce itself as one. */
+const TAGLINE = `peer-to-peer · ${versionLabel(VERSION)}`;
 const FPS = 30;
 
 /** The word in the tiny font, one string per row, plus each letter's width —

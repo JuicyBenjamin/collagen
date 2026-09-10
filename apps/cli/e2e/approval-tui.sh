@@ -11,7 +11,7 @@ start bob
 PTY="$OUT/approval-tui.out"; MARKS="$OUT/approval-tui.marks"; LOG="$OUT/approval-tui.log"
 rm -f "$PTY" "$MARKS" "$OUT/approval-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
-( while [ ! -f "$OUT/approval-tui.go" ]; do sleep 1; done; sleep 2; mark M0_queued
+( while [ ! -f "$OUT/approval-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "messages"; sleep 1; mark M0_queued
   printf '\033'; sleep 1; printf '2'; sleep 1; printf '\033[B'; sleep 1; mark M1_messages
   printf 'n'; sleep 2; mark M2_rejected
   printf 'y'; sleep 4; mark M3_approved; sleep 1; printf 'q' ) | \

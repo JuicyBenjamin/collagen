@@ -40,6 +40,8 @@ assertion ("nothing reached bob") is the one place a short sleep stays.
 | `ticket-tui.sh` | the ticket page in a pty: ↓ to the tickets list, enter opens the ticket (cursor on its steps), ↓ walks to diagnostics, enter runs the transcripts diagnostic (the log shows the ask), esc returns to the list |
 | `weigh-in.sh` | ticket updates reach everyone the ticket concerns: the creator hears bob settled (a `ticket-update` on her thread with him); carol, not asked, weighs in with a tagged message to alice — bob, owner but not recipient, hears she did |
 | `transcripts.sh` | transcripts on request: bob adopted the pair thread into a fake codex session (rollout file in a temp `CODEX_HOME`); alice's `request-transcripts` reaches him, the slice from adoption on comes back directly and is filed; older lines are not included; `list-transcripts` sees it |
+| `review.sh` | review tickets, 0 to many reviewers: `ask-review` brings the why (branch and link read from the project's `.git`, decisions with how the user steered each one, forks with file:line); a hollow review is refused; the headline only in `get-tickets`, the why via `review-context` (whole, or `about` one file); with **nobody asked** the ticket has only the author's step and nothing is pushed to anyone; bob **posts** a review onto a step of his own, carol posts hers beside it, bob's second post revises his own, an **unasked** reader is welcome and takes nobody's step, settling someone else's step is refused, and the author's own step finishes the ticket; **amending** the why tells both readers the code moved; the why reads back with the author stopped |
+| `review-tui.sh` | the why on screen: in alice's TUI ↑ from the steps reaches the ticket's `why` section (branch → base, counts, her summary), `enter` opens the why in full — each decision with `the user:` / `the agent:` and where it landed, each fork with the road not taken — `←` back to the ticket |
 | `attach.sh` | attachments: alice `attach-files` a screenshot and a collected transcript to a ticket — references on the log, no file moves; bob's `fetch-attachments` lists them (name, type, size, holder, note) and fetches: bytes arrive directly, byte-identical, filed under `attachments/ticket-<id>/` with the record beside, the transcript with the transcripts (meta: origin, via); a missing path is refused; an unknown id is refused |
 
 ## Manual scenarios
@@ -66,7 +68,20 @@ Not in `run-all.sh` — they need something the machine may not have.
   `wait_for_peer` / `admitted bob` until bob is present and writing, `wait_until` for the
   rest. Files live under `$CFG` (the scenario's `~/.config/collagen`), never `$HOME`.
 - Paths and the TUI: `HOME="$SHOME" … script -F -q "$PTY" bash -c "stty …; $TUI"` — `$TUI`
-  is alice's TUI command for this scenario.
+  is alice's TUI command for this scenario. Wait for the app to have PAINTED before the
+  first key (`wait_pty "$PTY" tickets`): the opening animation mounts the app only once it
+  has settled, and keys pressed before that are dropped.
+- Assert about one ticket with `rows <url> <sid> <ticketId>`, not the whole `get-tickets`
+  answer: step ids repeat across tickets (every reader's review step is
+  `review-<their name>`), so a blob-wide pattern can pass on another ticket's step.
+- Drive a peer with `drive_until <label> <pattern> <url> <sid> <json> <check cmd…>`, not a
+  bare `drive-peer`. A drive is fire-and-forget over an ephemeral frame, and the first
+  frame to a freshly connected peer can be dropped — the same drive sent twice always
+  lands. `drive_until` re-sends until the effect shows, so only use it for idempotent
+  actions (`settle-step` yes, `send-message` no). The peer must already hold the ticket:
+  `wait_until … goals $B "$SB"` first.
+- Start the room's creator first. A peer joining with `--room` alongside the creator can
+  create a log of its own before hearing about theirs, and the room splits.
 
 ## Reading a failure
 

@@ -13,7 +13,7 @@ start bob
 PTY="$OUT/ticket-tui.out"; MARKS="$OUT/ticket-tui.marks"; LOG="$OUT/ticket-tui.log"
 rm -f "$PTY" "$MARKS" "$OUT/ticket-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
-( while [ ! -f "$OUT/ticket-tui.go" ]; do sleep 1; done; sleep 2
+( while [ ! -f "$OUT/ticket-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M0_tickets
   printf '\r'; sleep 2; mark M1_opened
   printf '\033[B'; sleep 1; mark M1a_attachments
@@ -30,10 +30,10 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
 echo "## bob creates a ticket (a mock: no outbox on his side)"
-call $A "$SA" drive-peer '{"peer":"bob","action":"create-ticket","project":"sandbox","goal":"explain average()","steps":[{"intent":"investigate","description":"what does average() do","mine":true}]}' > /dev/null
+call $A "$SA" drive-peer '{"peer":"bob","action":{"kind":"create-ticket","project":"sandbox","goal":"explain average()","steps":[{"intent":"investigate","description":"what does average() do","mine":true}]}}' > /dev/null
 wait_until "the ticket is on alice's log" "explain average" goals $A "$SA"
 TICKET=$(call $A "$SA" get-tickets '{}' | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
-call $A "$SA" drive-peer "{\"peer\":\"bob\",\"action\":\"send-message\",\"project\":\"sandbox\",\"intent\":\"two-cents\",\"findings\":\"average divides by length, so an empty list gives NaN — guard it first.\",\"ticketId\":\"$TICKET\"}" > /dev/null
+call $A "$SA" drive-peer "{\"peer\":\"bob\",\"action\":{\"kind\":\"send-message\",\"project\":\"sandbox\",\"intent\":\"two-cents\",\"findings\":\"average divides by length, so an empty list gives NaN — guard it first.\",\"ticketId\":\"$TICKET\"}}" > /dev/null
 wait_until "bob weighed in on the ticket" ",bob,sandbox,[0-9]+,two-cents" call $A "$SA" pending-threads '{}'
 # a collected transcript on disk (as a peer would have handed over), so the viewer has something to show
 TDIR="$CFG/transcripts/ticket-${TICKET:0:8}"; mkdir -p "$TDIR"
@@ -72,5 +72,6 @@ expect "enter unfolded the turn under its row (the wrapped second line is on scr
 expect "enter on the file opened its turns (a page of its own)" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-files/,$p' | tr '\n' ' ')" "transcript-files room transcript-lines"
 expect "← from the turns went back to the list of transcripts" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-lines/,$p' | grep -v room | tr '\n' ' ')" "transcript-lines transcript-lines transcript-lines transcript-files"
 expect "← from the list went back to the ticket's diagnostics (not the rail)" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-lines/,$p' | tr '\n' ' ')" "ticket-diagnostics"
+expect "the brand introduces the build under itself: peer-to-peer and the release stage" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'peer-to-peer .{1,6} Alpha v[0-9]+\.[0-9]+\.[0-9]+')" "^[1-9]"
 expect "esc again went back to the list: the next ↓ moved in the tickets section" "$(echo "$KEYS" | tr ' ' '\n' | tail -4 | tr '\n' ' ')" "tickets"
 kill_all; summary

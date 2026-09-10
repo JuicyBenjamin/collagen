@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { ReviewContext } from "./review";
 import { Ticket } from "./ticket";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
@@ -16,21 +17,25 @@ export type AiStatus = typeof AiStatus.Type;
 
 /** The wire protocol this build speaks. Bump on any change to frames, log
  *  entries or the view layout; peers show a mismatch instead of silently
- *  dropping each other's frames. */
-export const PROTOCOL_VERSION = "1";
+ *  dropping each other's frames.
+ *
+ *  One version at a time: this is an alpha, and nothing here carries a path
+ *  for an older build's shapes. A peer on another version is told to update,
+ *  not accommodated. */
+export const PROTOCOL_VERSION = "2";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
-  /** PROTOCOL_VERSION of the sender; absent = a build from before it existed. */
-  protocol: Schema.optional(Schema.String),
+  /** PROTOCOL_VERSION of the sender. */
+  protocol: Schema.String,
   ai: Schema.NullOr(Schema.String),
   /** Whether the peer's preferred agent CLI is actually usable — visible to
    *  the whole room so "claude-code (unauthenticated)" is no surprise. */
-  aiStatus: Schema.optional(AiStatus),
+  aiStatus: AiStatus,
   projects: Schema.Array(SharedProject),
   /** Connected to this room but working in another one: present for
    *  messages, not counted as online, nothing auto-runs for them. */
-  away: Schema.optional(Schema.Boolean),
+  away: Schema.Boolean,
 });
 export type SharedProfile = typeof SharedProfile.Type;
 
@@ -71,7 +76,7 @@ export const LogInfoFrame = Schema.Struct({
   key: Schema.String,
   /** How many members that log has — lets two sides that each started a log
    *  agree on which one to keep (a log nobody else is on yields). */
-  members: Schema.optional(Schema.Finite),
+  members: Schema.Finite,
 });
 /** "Admit my writer core to the room's log" — a joiner asks a member. */
 export const JoinLogFrame = Schema.Struct({
@@ -79,9 +84,16 @@ export const JoinLogFrame = Schema.Struct({
   writer: Schema.String,
 });
 
+/** The actions a driven peer can be asked to perform. One list, so a tool
+ *  that offers them cannot fall behind the union below: `drive-peer` takes
+ *  this as its `action` and dispatches over it exhaustively. */
+export const DriveActionKind = Schema.Literals(["send-message", "create-ticket", "settle-step", "post-review"]);
+export type DriveActionKind = typeof DriveActionKind.Type;
+
 /** Remote-control for end-to-end testing: asks a peer to perform an action
  *  as itself. Only peers running a mock AI obey (the receiver enforces it) —
- *  a real user can't be puppeted. */
+ *  a real user can't be puppeted. Every member's `kind` comes from
+ *  `DriveActionKind`. */
 export const DriveAction = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("send-message"),
@@ -107,6 +119,11 @@ export const DriveAction = Schema.Union([
     kind: Schema.Literal("settle-step"),
     ticketId: Schema.String,
     stepId: Schema.String,
+    result: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("post-review"),
+    ticketId: Schema.String,
     result: Schema.String,
   }),
 ]);
@@ -227,15 +244,35 @@ export const LogOp = Schema.Union([
   Schema.Struct({ op: Schema.Literal("msg"), msg: RoomMessage }),
   /** A file attached to a ticket (the reference; the holder keeps the file). */
   Schema.Struct({ op: Schema.Literal("attachment"), attachment: Attachment }),
+  /** The why behind a review ticket's change — its author is its only writer,
+   *  so the later ts wins (an amendment carries the whole record). */
+  Schema.Struct({ op: Schema.Literal("review"), review: ReviewContext }),
+  /** The migration. The log is append-only, so a record written by a build
+   *  that spoke another protocol version cannot be rewritten — this is how it
+   *  stops being part of the room instead: the rows it left in the view are
+   *  dropped. Recorded on the log, so every member applies the same cleanup
+   *  and the room converges clean rather than each side hiding its own mess. */
+  Schema.Struct({
+    op: Schema.Literal("evict"),
+    keys: Schema.Array(Schema.String),
+    /** Who did the evicting and why — the log keeps its own history. */
+    protocol: Schema.String,
+    reason: Schema.String,
+    ts: Schema.Finite,
+  }),
 ]);
 export type LogOp = typeof LogOp.Type;
 
+/** What an `evict` may remove: room records only, never the room's meta. */
+export const EVICTABLE = /^(ticket|review|attachment|msg|member)\//;
+
 /** A member as recorded on the log. */
-export interface Member {
-  readonly key: string;
-  readonly name: string;
-  readonly ts: number;
-}
+export const Member = Schema.Struct({
+  key: Schema.String,
+  name: Schema.String,
+  ts: Schema.Finite,
+});
+export type Member = typeof Member.Type;
 
 /** What actually crosses a connection: a frame addressed to one room. One
  *  connection per peer carries every room the two of you share, so each
@@ -290,6 +327,23 @@ export const Outgoing = Schema.Union([
     ticketId: Schema.optional(Schema.String),
   }),
   Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
+  /** A review ticket: the record and the why behind the change, together —
+   *  one thing for the person to read and approve, since the review context
+   *  quotes how THEY steered the work. `ticket` is absent on an amendment to
+   *  a review that is already on the log. */
+  Schema.Struct({
+    kind: Schema.Literal("review"),
+    ticket: Schema.optional(Ticket),
+    review: ReviewContext,
+  }),
+  /** A review your user read and wants on the ticket — theirs, whether or not
+   *  they were the one asked (see p2p postReview). */
+  Schema.Struct({
+    kind: Schema.Literal("post-review"),
+    ticketId: Schema.String,
+    findings: Schema.String,
+    failed: Schema.Boolean,
+  }),
   Schema.Struct({
     kind: Schema.Literal("settle"),
     ticketId: Schema.String,

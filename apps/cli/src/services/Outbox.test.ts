@@ -107,7 +107,7 @@ describe("Outbox — human in the loop, sending side", () => {
       title: "sandbox · goal",
       outgoing: {
         kind: "ticket",
-        ticket: { id: "t", project: "sandbox", goal: "goal", createdBy: "me", updatedAt: 1, steps: [{ id: "s1", owner: "k", intent: "do", description: "it", needs: [], status: "pending", updatedAt: 1 }] },
+        ticket: { id: "t", project: "sandbox", goal: "goal", createdBy: "me", kind: "task", updatedAt: 1, steps: [{ id: "s1", owner: "k", intent: "do", description: "it", needs: [], status: "pending", updatedAt: 1 }] },
       } as const,
     };
     const { value, sent } = await run("codex", (o) =>
@@ -154,6 +154,44 @@ describe("Outbox — human in the loop, sending side", () => {
     );
     expect(value.text).toContain("your codex conversation 019c0000… on thread t1, from 2026-09-09T10:00:00.000Z on");
     expect(value.text).toContain("It goes to the requester only");
+    expect(value.editable).toBe(false);
+  });
+
+  it("a review proposal shows the person their own words before they leave", async () => {
+    const { value } = await run("claude-code", (o) =>
+      Effect.gen(function* () {
+        yield* o.propose({
+          roomId: "r1",
+          to: "kristian",
+          title: "collagen · review · review opening",
+          outgoing: {
+            kind: "review",
+            ticket: { id: "t1", project: "collagen", goal: "review opening", createdBy: "me", kind: "review", updatedAt: 1, steps: [] },
+            review: {
+              ticketId: "t1",
+              author: "me",
+              authorName: "benjamin",
+              summary: "the logo starts centred and glides into the header",
+              branch: "opening",
+              base: "main",
+              link: "https://github.com/JuicyBenjamin/collagen/pull/22",
+              decisions: [{ id: "d1", what: "pure frame functions", userWhy: "make it look cool", agentWhy: "testable frame by frame", where: ["src/lib/logoFrame.ts:60"] }],
+              forks: [{ id: "f1", at: "src/components/Logo/Logo.tsx:87", chose: "setInterval", instead: "the Timeline animator", why: "no new dependency", by: "agent" }],
+              ts: 1,
+            },
+          },
+        });
+        const [p] = yield* o.all;
+        return { text: proposalText(p!), editable: editable(p!) };
+      }),
+    );
+    expect(value.text).toContain('a review of "review opening"');
+    expect(value.text).toContain("opening → main · https://github.com/JuicyBenjamin/collagen/pull/22");
+    // the quoted steering is the sensitive half — it must be on screen
+    expect(value.text).toContain("you: make it look cool");
+    expect(value.text).toContain("agent: testable frame by frame");
+    expect(value.text).toContain("this goes on the room's log for everyone in it");
+    expect(value.text).toContain("f1 src/components/Logo/Logo.tsx:87: chose setInterval over the Timeline animator — no new dependency (agent's call)");
     expect(value.editable).toBe(false);
   });
 

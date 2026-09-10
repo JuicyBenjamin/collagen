@@ -19,6 +19,26 @@ export function proposalText(p: Proposal): string {
       return o.ticket.steps.map((s) => `${s.id} · ${s.intent}: ${s.description}`).join("\n");
     case "settle":
       return o.result;
+    case "post-review":
+      return o.findings;
+    case "review": {
+      const r = o.review;
+      const head = [
+        r.branch ? (r.base ? `${r.branch} → ${r.base}` : r.branch) : "",
+        r.link ?? "",
+      ].filter((x) => x.length > 0);
+      // your own words are in here: this is the text to read before it goes
+      return [
+        o.ticket ? `a review of "${o.ticket.goal}"` : "more why for a review already on the ticket",
+        ...(head.length > 0 ? [head.join(" · ")] : []),
+        r.summary,
+        "",
+        "why it is the way it is — this goes on the room's log for everyone in it:",
+        ...r.decisions.map((d) => `- ${d.id} ${d.what}${d.userWhy ? `\n    you: ${d.userWhy}` : ""}${d.agentWhy ? `\n    agent: ${d.agentWhy}` : ""}${d.where.length > 0 ? `\n    ${d.where.join(", ")}` : ""}`),
+        ...(r.forks.length > 0 ? ["", "forks in the road:"] : []),
+        ...r.forks.map((f) => `- ${f.id} ${f.at}: chose ${f.chose} over ${f.instead} — ${f.why}${f.by ? ` (${f.by}'s call)` : ""}`),
+      ].join("\n");
+    }
     case "transcript":
       return `your ${o.ai} conversation ${o.sessionId.slice(0, 8)}… on thread ${o.threadId}, from ${new Date(o.since).toISOString()} on — every line of it, as the session file has it. It goes to the requester only.`;
     case "attach":
@@ -31,7 +51,7 @@ export function proposalText(p: Proposal): string {
 /** Can the person change the text before it goes? (A ticket's shape is the
  *  agent's to redraft: reject it and say what you want instead; a transcript
  *  is the file as it is — hand it over or don't.) */
-export const editable = (p: Proposal): boolean => p.outgoing.kind === "message" || p.outgoing.kind === "settle";
+export const editable = (p: Proposal): boolean => p.outgoing.kind === "message" || p.outgoing.kind === "settle" || p.outgoing.kind === "post-review";
 
 /** Human in the loop, sending side. send-to-peer, create-ticket and
  *  settle-step don't run when the agent calls them: they propose, the person
@@ -109,7 +129,7 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
         ps.map((p) => {
           if (p.id !== id) return p;
           const o: Outgoing =
-            p.outgoing.kind === "message"
+            p.outgoing.kind === "message" || p.outgoing.kind === "post-review"
               ? { ...p.outgoing, findings: text }
               : p.outgoing.kind === "settle"
                 ? { ...p.outgoing, result: text }

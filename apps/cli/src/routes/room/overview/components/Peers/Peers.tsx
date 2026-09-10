@@ -16,7 +16,7 @@ export function Peers() {
     <box flexDirection="column">
       <PeerLine name={`${myName} (you)`} ai={myAi} aiStatus={myStatus} />
       {peers.map((p) => (
-        <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} away={p.away} protocol={p.protocol ?? "pre-1"} />
+        <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} away={p.away} protocol={p.protocol} />
       ))}
     </box>
   );
@@ -33,7 +33,7 @@ function PeerLine({
   ai: string | null;
   aiStatus?: string;
   away?: boolean;
-  /** absent on our own line; a peer's build, "pre-1" if older than versioning */
+  /** absent on our own line; a peer's protocol version */
   protocol?: string;
 }) {
   const bad = ai !== null && aiStatus !== undefined && aiStatus !== "ok" && aiStatus !== "unknown";

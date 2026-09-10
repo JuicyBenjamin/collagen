@@ -6,9 +6,11 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
-import { AI_OPTIONS, isRoomId, newProject, PROTOCOL_VERSION, Room, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
+import { AI_OPTIONS, DriveAction, emptyReview, isRoomId, mergeReview, newProject, PROTOCOL_VERSION, Room, reviewStepId, roomProjects, shortRoomId, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
+import { branchLink, branchOf } from "../lib/gitInfo";
+import { reviewGaps, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketView } from "../lib/ticketView";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
@@ -134,9 +136,68 @@ export const CreateTicket = Tool.make("create-ticket", {
   success: Schema.String,
 });
 
+export const AskReview = Tool.make("ask-review", {
+  description: [
+    "Ask for a review of your user's code, with the WHY attached — the thing a diff cannot show. Only when your user asks for a review (\"ask <peer> for a review\", \"put it up for review\"); like every outgoing action it is queued for their approval in the collagen TUI first, and they read the whole text before it goes.",
+    "'peers' is who is asked, and it is 0 to many. Name several and each gets a review step of their own. Leave it out (or pass []) and nobody is asked: the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
+    "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line). Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
+    "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
+    "It creates a review ticket: a step per person asked (their review) and one you own (acting on what comes back). The why goes on the room's log beside it, so it is there when you are offline — and a reader's agent pulls it only when their person asks.",
+    "KEEP IT CURRENT. A review is not a snapshot: your user will change the code, before or after anyone reads it. Whenever they do, call ask-review again with 'ticketId' — add a decision for what changed and why (their words for it), correct a decision that no longer holds by repeating its id, and pass the new 'branch' or 'link' if the code moved. Everyone reading the ticket is told it was revised, so what they review is what exists. When your user has acted on the feedback, settle your own step with settle-step; if the review was open, settling it closes the invitation.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    peers: Schema.optional(Schema.Array(Schema.String)),
+    project: Schema.optional(Schema.String),
+    ticketId: Schema.optional(Schema.String),
+    goal: Schema.optional(Schema.String),
+    summary: Schema.optional(Schema.String),
+    focus: Schema.optional(Schema.String),
+    branch: Schema.optional(Schema.String),
+    base: Schema.optional(Schema.String),
+    link: Schema.optional(Schema.String),
+    decisions: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          what: Schema.String,
+          userWhy: Schema.optional(Schema.String),
+          agentWhy: Schema.optional(Schema.String),
+          where: Schema.optional(Schema.Array(Schema.String)),
+        }),
+      ),
+    ),
+    forks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          at: Schema.String,
+          chose: Schema.String,
+          instead: Schema.String,
+          why: Schema.String,
+          by: Schema.optional(Schema.Literals(["user", "agent"])),
+        }),
+      ),
+    ),
+  }),
+  success: Schema.String,
+});
+
+export const PostReview = Tool.make("post-review", {
+  description: [
+    "Put your user's review of a review ticket on that ticket — what they think of the change, in their words. For a review they were asked for AND for one they were not: anyone in the room may read a review ticket, and each reader's review lands on a step of their own, so nobody takes anything from anyone. Posting again revises your user's own review.",
+    "Only when your user has said what they think — never your own reading of the code, and never a summary you produced on your own initiative. Read the why first (review-context) so the review answers the reasons and not just the diff. Queued for your user's approval in the collagen TUI like everything else that leaves this machine; set 'failed' when they are rejecting the change rather than commenting on it.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    ticketId: Schema.String,
+    findings: Schema.String,
+    failed: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.String,
+});
+
 export const SettleStep = Tool.make("settle-step", {
   description:
-    "Settle (or fail) a ticket step your user owns, with the result they want to send — only when they say the step is done (or declined), never because you decided it is. Queued for their approval in the collagen TUI; on approval the updated ticket is broadcast to the room, and steps waiting on this one become actionable and are delivered to their owners (as messages on the ticket creator's thread with them).",
+    "Settle (or fail) a ticket step your user owns, with the result they want to send — only when they say the step is done (or declined), never because you decided it is. Queued for their approval in the collagen TUI; on approval the updated ticket is broadcast to the room, and steps waiting on this one become actionable and are delivered to their owners (as messages on the ticket creator's thread with them). A step belongs to the person who owns it: settling someone else's is refused on any ticket — to say what your user thinks of a change, use post-review (a review ticket) or send-to-peer with its ticketId.",
   parameters: Schema.Struct({
     ticketId: Schema.String,
     stepId: Schema.String,
@@ -148,27 +209,11 @@ export const SettleStep = Tool.make("settle-step", {
 
 export const DrivePeer = Tool.make("drive-peer", {
   description:
-    "TESTING ONLY: remote-control a mock peer (one whose ai starts with 'mock:') so a single machine can exercise the full cross-peer flow. The driven peer performs the action as itself, so everything arrives back through the real pipeline. Actions: 'send-message' (peer sends YOU a message — needs project/intent/findings; reusing a project continues the same thread), 'create-ticket' (peer creates a shared ticket — needs project/goal/steps, each step {intent, description, mine}; mine=true → the mock owns it, mine=false → you own it and your agent is triggered), 'settle-step' (peer settles a step it owns — needs ticketId/stepId/result). Real peers ignore drive requests.",
-  parameters: Schema.Struct({
-    peer: Schema.String,
-    action: Schema.Literals(["send-message", "create-ticket", "settle-step"]),
-    project: Schema.optional(Schema.String),
-    intent: Schema.optional(Schema.String),
-    findings: Schema.optional(Schema.String),
-    goal: Schema.optional(Schema.String),
-    steps: Schema.optional(
-      Schema.Array(
-        Schema.Struct({
-          intent: Schema.String,
-          description: Schema.String,
-          mine: Schema.optional(Schema.Boolean),
-        }),
-      ),
-    ),
-    ticketId: Schema.optional(Schema.String),
-    stepId: Schema.optional(Schema.String),
-    result: Schema.optional(Schema.String),
-  }),
+    "TESTING ONLY: remote-control a mock peer (one whose ai starts with 'mock:') so a single machine can exercise the full cross-peer flow. The driven peer performs the action as itself, so everything arrives back through the real pipeline. 'action' is the action object, tagged by 'kind': {kind:'send-message', project, intent, findings, ticketId?} (the peer sends YOU a message; reusing a project continues the same thread), {kind:'create-ticket', project, goal, steps:[{intent, description, mine}]} (mine=true → the mock owns the step, mine=false → you own it and your agent is triggered), {kind:'settle-step', ticketId, stepId, result} (the peer settles a step it owns), {kind:'post-review', ticketId, result} (the peer puts its review on a review ticket). Real peers ignore drive requests.",
+  // the action IS the domain's DriveAction — one schema, so a new kind can
+  // never be missing here (it used to be a hand-copied enum, and a kind added
+  // to the union was silently rejected at this boundary)
+  parameters: Schema.Struct({ peer: Schema.String, action: DriveAction }),
   success: Schema.String,
 });
 
@@ -260,6 +305,8 @@ export const CollagenToolkit = Toolkit.make(
   SearchTools,
   DescribeScripting,
   CreateTicket,
+  AskReview,
+  PostReview,
   SettleStep,
   GetTickets,
   AddProject,
@@ -288,6 +335,8 @@ export const DevCollagenToolkit = Toolkit.make(
   SearchTools,
   DescribeScripting,
   CreateTicket,
+  AskReview,
+  PostReview,
   SettleStep,
   GetTickets,
   AddProject,
@@ -331,7 +380,8 @@ const makeHandlers = Effect.gen(function* () {
         key === identity.pubkey
           ? myName
           : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 12));
-      return ticketView(ticket, lookup);
+      const reviews = yield* SubscriptionRef.get(room.reviews);
+      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id));
     });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
@@ -393,10 +443,10 @@ const makeHandlers = Effect.gen(function* () {
             peers: peers.map((p) => ({
               name: p.name,
               ai: p.ai,
-              aiStatus: p.aiStatus ?? "unknown",
+              aiStatus: p.aiStatus,
               away: p.away ?? false,
               projects: p.projects.map((x) => x.name),
-              ...((p.protocol ?? "pre-1") === PROTOCOL_VERSION ? {} : { protocol: `${p.protocol ?? "pre-1"} (yours: ${PROTOCOL_VERSION} — one side must update)` }),
+              ...(p.protocol === PROTOCOL_VERSION ? {} : { protocol: `${p.protocol} (yours: ${PROTOCOL_VERSION} — one side must update)` }),
             })),
             offlineMembers: offline.map((m) => m.name),
           });
@@ -519,6 +569,7 @@ const makeHandlers = Effect.gen(function* () {
           project: input.project,
           goal: input.goal,
           createdBy: identity.pubkey,
+          kind: "task",
           updatedAt: now,
           steps: input.steps.map((s, i) => ({
             id: s.id ?? `s${i + 1}`,
@@ -532,6 +583,158 @@ const makeHandlers = Effect.gen(function* () {
         };
         const owners = [...new Set(input.steps.map((s) => s.owner))].join(", ");
         return yield* outbox.propose({ roomId, to: owners, title: `${input.project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
+      }),
+      "ask-review": Effect.fn("Mcp.askReview")(function* (input: {
+        peers?: ReadonlyArray<string>;
+        project?: string;
+        ticketId?: string;
+        goal?: string;
+        summary?: string;
+        focus?: string;
+        branch?: string;
+        base?: string;
+        link?: string;
+        decisions?: ReadonlyArray<DecisionInput>;
+        forks?: ReadonlyArray<ForkInput>;
+      }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const myName = yield* SubscriptionRef.get(nameRef);
+        const now = yield* Clock.currentTimeMillis;
+        const delta = {
+          ...(input.summary ? { summary: input.summary } : {}),
+          ...(input.base ? { base: input.base } : {}),
+          decisions: input.decisions ?? [],
+          forks: input.forks ?? [],
+        };
+
+        // amending a review already on a ticket: only its author writes it
+        if (input.ticketId) {
+          const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
+          if (!ticket) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+          const existing = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId);
+          if (existing && existing.author !== identity.pubkey) {
+            return `failed: that review's why is ${existing.authorName}'s to write — your user's own reading of the code goes to them with send-to-peer (pass ticketId so it lands on the ticket)`;
+          }
+          const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, true);
+          if (gap) return gap;
+          const review = mergeReview(existing ?? emptyReview(input.ticketId, identity.pubkey, myName), {
+            ...delta,
+            ...(input.branch ? { branch: input.branch } : {}),
+            ...(input.link ? { link: input.link } : {}),
+          }, now);
+          const owners = [...new Set(ticket.steps.map((s) => s.owner).filter((o) => o !== identity.pubkey))];
+          const present = yield* SubscriptionRef.get(room.roster);
+          const known = yield* SubscriptionRef.get(room.members);
+          const named = owners
+            .map((o) => present.find((p) => p.key === o)?.name ?? known.find((m) => m.key === o)?.name)
+            .filter((n): n is string => n !== undefined);
+          const to = named.length > 0 ? named.join(", ") : "the room";
+          return yield* outbox.propose({ roomId, to, title: `${ticket.goal} · more why`, outgoing: { kind: "review", review } });
+        }
+
+        // a new review: who is asked (0 to many), which project, and the why
+        if (!input.project) return "failed: pass 'project' (from list-room), and 'peers' if your user has someone in mind — or 'ticketId' to add to a review you already asked for";
+        const peers = yield* SubscriptionRef.get(room.roster);
+        const members = yield* SubscriptionRef.get(room.members);
+        const asked = [...new Set((input.peers ?? []).map((n) => n.trim()).filter((n) => n.length > 0))];
+        const resolved = asked.map((name) => ({ name, key: (peers.find((p) => p.name === name) ?? members.find((m) => m.name === name))?.key }));
+        const unknown = resolved.filter((r) => r.key === undefined).map((r) => r.name);
+        // narrowed once, so nothing downstream needs a `!`
+        const reviewers = resolved.flatMap((r) => (r.key === undefined ? [] : [{ name: r.name, key: r.key }]));
+        if (unknown.length > 0) return `failed: no peer named ${unknown.join(", ")} — see list-room (or leave 'peers' out to open the review to whoever picks it up)`;
+        if (reviewers.some((r) => r.key === identity.pubkey)) {
+          return "failed: a review goes to someone other than your user — leave 'peers' out to open it to whoever picks it up, including their own second agent";
+        }
+        const project = roomProjects(yield* store.get, roomId).find((p) => p.name === input.project);
+        if (!project) {
+          const mine = roomProjects(yield* store.get, roomId).map((p) => p.name).join(", ");
+          return `failed: "${input.project}" is not a project your user shares in this room (theirs: ${mine || "none"}) — add-project shares one`;
+        }
+        const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, false);
+        if (gap) return gap;
+        // the facts about the code come from the repo when the agent omits them
+        const branch = input.branch ?? branchOf(project.path) ?? undefined;
+        const link = input.link ?? (branch ? (branchLink(project.path, branch) ?? undefined) : undefined);
+        const ticketId = crypto.randomUUID();
+        const goal = input.goal ?? `review ${branch ?? input.project}`;
+        const where = [branch ? `branch ${branch}${input.base ? ` off ${input.base}` : ""}` : "", link ?? ""].filter((x) => x.length > 0).join(" · ");
+        // A step per person asked — and only people: a review nobody was asked
+        // for has no placeholder step, it is simply a ticket with the why on
+        // it, and each reader's review appears as their own step when they
+        // post it (post-review).
+        const taken = new Map<string, string>();
+        const describe = () =>
+          [
+            input.summary ?? goal,
+            where,
+            input.focus ? `what your user wants looked at: ${input.focus}` : "",
+            `the why behind it is on this ticket: ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s), with what steered each one. Read it with review-context {ticketId} when your person asks why something is the way it is — and review nothing on your own.`,
+          ]
+            .filter((x) => x.length > 0)
+            .join("\n");
+        const reviewSteps = reviewers.map((r) => {
+          const id = reviewStepId(r.name, r.key, taken);
+          taken.set(id, r.key);
+          return { id, owner: r.key, intent: "review", description: describe(), needs: [], status: "pending" as const, updatedAt: now };
+        });
+        const ticket: Ticket = {
+          id: ticketId,
+          project: input.project,
+          goal,
+          createdBy: identity.pubkey,
+          kind: "review",
+          updatedAt: now,
+          // The author's own step is always there — it waits on everyone asked
+          // (on nobody, when nobody was asked) and settling it is how the
+          // ticket finishes.
+          steps: [
+            ...reviewSteps,
+            {
+              id: "address",
+              owner: identity.pubkey,
+              intent: "address",
+              description:
+                asked.length > 0
+                  ? `act on ${asked.join(" and ")}'s review of ${goal}`
+                  : `nobody was asked: this is open to the room. Act on the reviews as they are posted, and settle this step when your user has what they need.`,
+              needs: reviewSteps.map((s) => s.id),
+              status: "pending" as const,
+              updatedAt: now,
+            },
+          ],
+        };
+        const review = mergeReview(emptyReview(ticketId, identity.pubkey, myName), {
+          ...delta,
+          ...(branch ? { branch } : {}),
+          ...(link ? { link } : {}),
+        }, now);
+        return yield* outbox.propose({
+          roomId,
+          to: asked.length > 0 ? asked.join(", ") : "the room",
+          title: `${input.project} · review · ${goal}`,
+          outgoing: { kind: "review", ticket, review },
+        });
+      }),
+      "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
+        if (!ticket) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+        if (ticket.kind !== "review") {
+          return `failed: "${ticket.goal}" is not a review ticket — settle a step your user owns with settle-step, or weigh in with send-to-peer (pass ticketId)`;
+        }
+        if (input.findings.trim().length === 0) return "failed: pass what your user actually said about the change";
+        const peers = yield* SubscriptionRef.get(room.roster);
+        const members = yield* SubscriptionRef.get(room.members);
+        const author =
+          ticket.createdBy === identity.pubkey
+            ? "the room"
+            : (peers.find((p) => p.key === ticket.createdBy)?.name ?? members.find((m) => m.key === ticket.createdBy)?.name ?? "the room");
+        return yield* outbox.propose({
+          roomId,
+          to: author,
+          title: `${ticket.goal} · your review`,
+          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false },
+        });
       }),
       "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {
         const { id: roomId, room } = yield* focusedRoom;
@@ -554,18 +757,7 @@ const makeHandlers = Effect.gen(function* () {
           outgoing: { kind: "settle", ticketId: input.ticketId, stepId: input.stepId, result: input.result, failed: input.failed ?? false },
         });
       }),
-      "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: {
-        peer: string;
-        action: "send-message" | "create-ticket" | "settle-step";
-        project?: string;
-        intent?: string;
-        findings?: string;
-        goal?: string;
-        steps?: ReadonlyArray<{ intent: string; description: string; mine?: boolean }>;
-        ticketId?: string;
-        stepId?: string;
-        result?: string;
-      }) {
+      "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: { peer: string; action: DriveAction }) {
         const { room } = yield* focusedRoom;
         const peers = yield* SubscriptionRef.get(room.roster);
         const target = peers.find((p) => p.name === input.peer);
@@ -573,27 +765,8 @@ const makeHandlers = Effect.gen(function* () {
         if (!(target.ai ?? "").startsWith("mock")) {
           return `failed: ${input.peer} runs "${target.ai ?? "no ai"}", not a mock — real peers can't be driven`;
         }
-        const need = (_field: string, v: string | undefined): v is string => v !== undefined && v.length > 0;
-        const action =
-          input.action === "send-message"
-            ? need("project", input.project) && need("intent", input.intent) && need("findings", input.findings)
-              ? ({ kind: "send-message" as const, project: input.project, intent: input.intent, findings: input.findings, ...(input.ticketId ? { ticketId: input.ticketId } : {}) })
-              : null
-            : input.action === "create-ticket"
-              ? need("project", input.project) && need("goal", input.goal) && (input.steps?.length ?? 0) > 0
-                ? ({
-                    kind: "create-ticket" as const,
-                    project: input.project!,
-                    goal: input.goal!,
-                    steps: input.steps!.map((s) => ({ intent: s.intent, description: s.description, mine: s.mine ?? false })),
-                  })
-                : null
-              : need("ticketId", input.ticketId) && need("stepId", input.stepId) && need("result", input.result)
-                ? ({ kind: "settle-step" as const, ticketId: input.ticketId, stepId: input.stepId, result: input.result })
-                : null;
-        if (action === null) return `failed: missing fields for action "${input.action}" — see the tool description`;
-        return yield* room.sendDrive(target.key, action).pipe(
-          Effect.map(() => `drive sent — ${input.peer} will ${input.action} as itself`),
+        return yield* room.sendDrive(target.key, input.action).pipe(
+          Effect.map(() => `drive sent — ${input.peer} will ${input.action.kind} as itself`),
           Effect.catchTag("PeerNotConnected", () => Effect.succeed("failed: peer not connected")),
         );
       }),

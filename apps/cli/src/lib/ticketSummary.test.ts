@@ -8,7 +8,7 @@ const CAROL = "c".repeat(64);
 const names: Record<string, string> = { [ALICE]: "you", [BOB]: "bob", [CAROL]: "carol" };
 const nameFor = (k: string) => names[k] ?? k.slice(0, 8);
 
-const ticket = (steps: Ticket["steps"], updatedAt = 1000): Ticket => ({ id: "t1", project: "sandbox", goal: "fix NaN", createdBy: ALICE, updatedAt, steps });
+const ticket = (steps: Ticket["steps"], updatedAt = 1000): Ticket => ({ id: "t1", project: "sandbox", goal: "fix NaN", createdBy: ALICE, kind: "task", updatedAt, steps });
 const step = (id: string, owner: string, status: Ticket["steps"][number]["status"], needs: string[] = []): Ticket["steps"][number] => ({
   id,
   owner,
@@ -81,5 +81,27 @@ describe("summarize", () => {
     expect(age(now - 5 * 60_000, now)).toBe("5m");
     expect(age(now - 3 * 3_600_000, now)).toBe("3h");
     expect(age(now - 2 * 86_400_000, now)).toBe("2d");
+  });
+});
+
+describe("a review nobody was asked for", () => {
+  it("is the author's to shepherd, and reads waiting for everyone else", () => {
+    // no placeholder step: the author's own step is all there is until a
+    // reader posts theirs
+    const t: Ticket = { ...ticket([step("address", ALICE, "pending")]), kind: "review" };
+    expect(summarize(t, [], ALICE).state).toBe("needs-you");
+    expect(summarize(t, [], BOB).state).toBe("waiting");
+  });
+
+  it("a reader's posted review does not finish it — the author's step does", () => {
+    const read: Ticket = { ...ticket([step("review-bob", BOB, "settled"), step("address", ALICE, "pending")]), kind: "review" };
+    expect(summarize(read, [], ALICE).state).toBe("needs-you");
+    expect(summarize(read, [], ALICE).settledBy.has(BOB)).toBe(true);
+    const acted: Ticket = { ...ticket([step("review-bob", BOB, "settled"), step("address", ALICE, "settled")]), kind: "review" };
+    expect(summarize(acted, [], ALICE).state).toBe("done");
+  });
+
+  it("a ticket with no steps at all is not done", () => {
+    expect(summarize(ticket([]), [], ALICE).state).toBe("waiting");
   });
 });

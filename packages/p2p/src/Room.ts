@@ -14,6 +14,7 @@ import {
   type TranscriptRequestFrame,
 } from "./schema";
 import { NotWritable, PeerNotConnected } from "./errors";
+import type { ReviewContext } from "./review";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic } from "./topic";
 import { openRoomLog, type RoomLog } from "./RoomLog";
@@ -85,6 +86,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     );
     // Transcripts attached to tickets (from the log) and peers asking us for one.
     const attachments = yield* SubscriptionRef.make<ReadonlyArray<Attachment>>([]);
+    // The why behind review tickets, as the log has it.
+    const reviews = yield* SubscriptionRef.make<ReadonlyArray<ReviewContext>>([]);
     const fetchRequests = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; attachmentId: string }>(),
       (p) => PubSub.shutdown(p),
@@ -130,10 +133,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(members, view.members);
       yield* SubscriptionRef.set(trace, view.messages.map((m) => m.msg));
       yield* SubscriptionRef.set(attachments, view.attachments);
+      yield* SubscriptionRef.set(reviews, view.reviews);
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (cur) => (name.ts > cur.ts ? name : cur));
       yield* SubscriptionRef.set(writable, log.writable());
       yield* SubscriptionRef.set(mine, view.messages.filter((m) => m.msg.to === me));
+      // records from a build speaking another protocol version never reach
+      // the app; take them off the room for everyone (a no-op when there are
+      // none, or until we are admitted). The eviction's own log entry brings
+      // us back here with nothing left to do.
+      yield* log.evictStale;
     });
 
     /** Admit everyone who asked while we couldn't. */
@@ -270,7 +279,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
               peers.set(key, { key, ...frame.profile });
               if (known) return Effect.void;
               // first profile from a peer = they are actually reachable here
-              const theirs = frame.profile.protocol ?? "pre-1";
+              const theirs = frame.profile.protocol;
               return Effect.log(`peer online: ${frame.profile.name} (${key.slice(0, 8)})`).pipe(
                 Effect.andThen(
                   theirs === PROTOCOL_VERSION
@@ -297,7 +306,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
                 // to a populated one; two lonely logs keep the lower key. A
                 // populated pair is a real split and stays (loudly).
                 const ourMembers = (yield* SubscriptionRef.get(members)).filter((m) => m.key !== me).length;
-                const theirMembers = frame.members ?? 1;
+                const theirMembers = frame.members;
                 const lonely = ourMembers === 0;
                 const theyAreLonely = theirMembers <= 1;
                 const yieldToTheirs = lonely && (!theyAreLonely || frame.key < log.key);
@@ -417,6 +426,14 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* l.append({ op: "rename", name, ts }).pipe(Effect.orDie);
     });
 
+    /** Put the why behind a review ticket on the log (its author writes it;
+     *  an amendment carries the whole record and the later ts wins). */
+    const shareReview = Effect.fn("Room.shareReview")(function* (review: ReviewContext) {
+      const l = yield* requireLog;
+      yield* l.append({ op: "review", review }).pipe(Effect.orDie);
+      yield* refresh;
+    });
+
     /** Put a ticket (new or changed) on the log; returns the merged record. */
     const shareTicket = Effect.fn("Room.shareTicket")(function* (ticket: Ticket) {
       const l = yield* requireLog;
@@ -436,6 +453,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       /** Shared tickets by id (as the log's view has them) + changes. */
       tickets,
       shareTicket,
+      /** The why behind each review ticket (as the log's view has it). */
+      reviews,
+      shareReview,
       /** Messages for us, in log order with their position. Each subscriber
        *  sees every one exactly once — the ones already on the log first. */
       messages: SubscriptionRef.changes(mine).pipe(

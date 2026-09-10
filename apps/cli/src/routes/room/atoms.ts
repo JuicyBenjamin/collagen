@@ -100,6 +100,13 @@ export const rejectOutgoingAtom = runtimeAtom.fn(
   }),
 );
 
+/** The why behind the focused room's review tickets, as the log has it. */
+export const reviewsAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.reviews));
+  })),
+);
+
 /** Files attached to the focused room's tickets — references on the log. */
 export const attachmentsAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {

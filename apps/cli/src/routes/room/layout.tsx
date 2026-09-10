@@ -51,7 +51,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
           ? [...trailOf(r.back), "transcripts"]
           : r.name === "room/attach"
             ? [...trailOf(r.back), "attach"]
-            : [...trailOf(r.back), r.file];
+            : r.name === "room/review"
+              ? [...trailOf(r.back), "why"]
+              : [...trailOf(r.back), r.file];
   const crumb =
     page === null
       ? null
@@ -61,7 +63,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
           ? { trail: trailOf(page.back), label: "transcripts", back: page.back, focus: typeof page.back === "object" ? "ticket-diagnostics" : "tickets" }
           : page.name === "room/attach"
             ? { trail: trailOf(page.back), label: "attach", back: page.back, focus: "ticket-diagnostics" }
-            : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
+            : page.name === "room/review"
+              ? { trail: trailOf(page.back), label: "why", back: page.back, focus: "ticket-review" }
+              : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
   const goBack = () => {
     if (!crumb) return;
     navigate(crumb.back);
@@ -73,7 +77,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     setLeftEdge(crumb ? () => goBack : null);
     return () => setLeftEdge(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on where we are
-  }, [setLeftEdge, page?.name, page && "ticketId" in page ? page.ticketId : "", page && "subject" in page ? page.subject : "", page && "path" in page ? page.path : "", page?.name === "room/attach" ? page.ticketId : ""]);
+  }, [setLeftEdge, page?.name, page && "ticketId" in page ? page.ticketId : "", page && "subject" in page ? page.subject : "", page && "path" in page ? page.path : "", page?.name === "room/attach" || page?.name === "room/review" ? page.ticketId : ""]);
   const { jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const captured = useAtomValue(captureAtom) !== null;
@@ -116,7 +120,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
       <StatusLine />
       <box flexDirection="row" marginTop={1} flexGrow={1} flexShrink={1}>
         <Sidebar />
-        <Panel title={crumb ? `room · ${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : "transcript"}` : `room · ${roomName}`} grow>
+        <Panel title={crumb ? `room · ${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : page?.name === "room/review" ? "why" : "transcript"}` : `room · ${roomName}`} grow>
           {crumb ? <Crumb trail={crumb.trail} label={crumb.label} onBack={goBack} /> : <TabBar />}
           {children}
           <Keys />

@@ -7,7 +7,7 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { age, compareSummaries, peopleLabel, STATE_LABEL, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { age, compareSummaries, peopleLabel, STATE_LABEL, summarize, type TicketState, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
@@ -102,7 +102,7 @@ export function Tickets() {
   );
 }
 
-const STATE_COLOR = { "needs-you": theme.warn, waiting: theme.fg, failed: theme.warn, done: theme.dim } as const;
+const STATE_COLOR: Record<TicketState, string> = { "needs-you": theme.warn, waiting: theme.fg, failed: theme.warn, done: theme.dim };
 
 function TicketRow({
   ticket: t,
