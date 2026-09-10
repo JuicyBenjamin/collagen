@@ -156,10 +156,18 @@ describe("a review ticket asks 0 to many people", () => {
     expect(after.steps).toHaveLength(2); // no second step of his own
   });
 
-  it("nothing is pushed to anyone for a review nobody was asked for", () => {
+  it("nothing is pushed to anyone for a review nobody was asked for — its own author included", () => {
     expect(actionableSteps(unaddressed, BOB.key)).toEqual([]);
-    // the author's own step is theirs to settle once the reviews are in
-    expect(actionableSteps(unaddressed, ALICE).map((s) => s.id)).toEqual(["address"]);
+    // the author's "address" step names nobody, so the dependency rule alone
+    // would hand it straight back to them: there is nothing to address yet
+    expect(actionableSteps(unaddressed, ALICE)).toEqual([]);
+  });
+
+  it("…and it becomes the author's the moment a review lands", () => {
+    const read = postReview(unaddressed, BOB, "looks right to me", false, 5).ticket;
+    expect(actionableSteps(read, ALICE).map((s) => s.id)).toEqual(["address"]);
+    const changes = postReview(unaddressed, BOB, "this needs work", true, 5).ticket;
+    expect(actionableSteps(changes, ALICE).map((s) => s.id)).toEqual(["address"]);
   });
 });
 

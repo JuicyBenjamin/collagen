@@ -8,7 +8,18 @@ import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
-const NOT_ADMITTED = "failed: you are not admitted to this room's log yet — a member has to be online once to admit you";
+/** What a write did — and it is a type, not a string beginning with
+ *  "failed:", because the outbox has to KNOW: it records what actually left
+ *  this machine, and a caller that must retry (a transcript a peer is still
+ *  waiting for) has to be able to tell. */
+export type Done = { readonly _tag: "sent"; readonly text: string } | { readonly _tag: "refused"; readonly text: string };
+
+/** It reached the room's log, or the peer. */
+export const sent = (text: string): Done => ({ _tag: "sent", text });
+/** Nothing left this machine, and the text says why. */
+export const refused = (text: string): Done => ({ _tag: "refused", text });
+
+const NOT_ADMITTED = refused("failed: you are not admitted to this room's log yet — a member has to be online once to admit you");
 
 /** Writes an Outgoing to its room's log. The only place the cli
  *  appends messages, tickets or settlements on the agent's behalf — and it is
@@ -23,7 +34,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
 
     const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing) {
       const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === roomId);
-      if (!h) return "failed: that room is gone";
+      if (!h) return refused("failed: that room is gone");
       const { room } = h;
       const peers = yield* SubscriptionRef.get(room.roster);
       const members = yield* SubscriptionRef.get(room.members);
@@ -38,16 +49,16 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
         case "message": {
           // present peers first; then anyone the log remembers (they read it when back)
           const target = peers.find((p) => p.name === out.peer) ?? members.find((m) => m.name === out.peer);
-          if (!target) return `failed: no peer named ${out.peer} — see list-room`;
+          if (!target) return refused(`failed: no peer named ${out.peer} — see list-room`);
           const online = peers.some((p) => p.key === target.key);
           return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}) }).pipe(
-            Effect.map(() => (online ? `sent to ${out.peer}` : `sent to ${out.peer} (offline — they get it when they are next online)`)),
+            Effect.map(() => sent(online ? `sent to ${out.peer}` : `sent to ${out.peer} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),
           );
         }
         case "ticket": {
           const merged = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
-          return merged ? render(merged) : NOT_ADMITTED;
+          return merged ? sent(render(merged)) : NOT_ADMITTED;
         }
         case "review": {
           // the record and the why, one write: the ticket first (so the
@@ -70,31 +81,31 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             `TELL YOUR USER ONLY THIS: "review ticket has been ${what}". They asked for it, so the fact that it is done is the whole report — do not read the summary, the decisions, the forks or the counts back to them, and do not list what you wrote. It is on the ticket for whoever reviews it, and their TUI shows the ticket.`;
           const keepCurrent = `Next time this code changes — a fix, a fork taken differently, anything your user asks for — call ask-review again with ticketId "${out.review.ticketId}" and say what changed and why, in their words. What the room reads has to be what the code is.`;
           const held = `(${decisions.length} decision(s), ${forks.length} fork(s) now on it — for your own bookkeeping, not for your user)`;
-          if (!out.ticket) return `review ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`;
+          if (!out.ticket) return sent(`review ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
           const reviewers = out.ticket.steps.filter((s) => s.intent === "review");
           const who =
             reviewers.length === 0
               ? "in the room, nobody asked in particular"
               : `asked of ${reviewers.map((s) => nameFor(s.owner)).join(", ")}`;
-          return `review ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}. ${say("filed")} ${keepCurrent}`;
+          return sent(`review ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}. ${say("filed")} ${keepCurrent}`);
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
-          if (!ticket) return `failed: no ticket ${out.ticketId} — check get-tickets`;
+          if (!ticket) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
           const step = ticket.steps.find((s) => s.id === out.stepId);
-          if (!step) return `failed: no step ${out.stepId} on ticket ${out.ticketId}`;
+          if (!step) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
           const now = yield* Clock.currentTimeMillis;
           // one rule, shared with the drive path (see p2p settleStep)
           const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now);
           if (!done || done.outcome === "not-yours") {
-            return `failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${ticket.kind === "review" ? " — put your user's own review on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`;
+            return refused(`failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${ticket.kind === "review" ? " — put your user's own review on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
           }
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
-          return merged ? render(merged) : NOT_ADMITTED;
+          return merged ? sent(render(merged)) : NOT_ADMITTED;
         }
         case "post-review": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
-          if (!ticket) return `failed: no ticket ${out.ticketId} — check get-tickets`;
+          if (!ticket) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
           const now = yield* Clock.currentTimeMillis;
           // a review lands on a step of its reader's own: nobody's is taken,
           // and posting again revises theirs
@@ -102,7 +113,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
           const others = merged.steps.filter((s) => s.intent === "review" && s.owner !== identity.pubkey).length;
-          return `your review is on "${ticket.goal}" as step ${stepId}${others > 0 ? ` (beside ${others} other reader(s))` : ""} — anyone else in the room can still post theirs\n${render(merged)}`;
+          return sent(`your review is on "${ticket.goal}" as step ${stepId}${others > 0 ? ` (beside ${others} other reader(s))` : ""} — anyone else in the room can still post theirs\n${render(merged)}`);
         }
         case "attach": {
           // references go on the log; the files stay here, remembered by
@@ -135,12 +146,12 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           }
           if (attached === 0) return NOT_ADMITTED;
           yield* store.update((st) => ({ ...st, attachedFiles: { ...(st.attachedFiles ?? {}), ...files } }));
-          return `attached ${attached} file(s) to "${out.goal}" — the references are on the ticket for everyone; the files go to whoever fetches them while you are online`;
+          return sent(`attached ${attached} file(s) to "${out.goal}" — the references are on the ticket for everyone; the files go to whoever fetches them while you are online`);
         }
         case "transcript": {
           // read now, not when proposed: the file may have grown since
           const file = sessionFile(out.ai, out.sessionId, sessionDirs());
-          if (!file) return `failed: no ${out.ai} session file for ${out.sessionId.slice(0, 8)}… on this machine`;
+          if (!file) return refused(`failed: no ${out.ai} session file for ${out.sessionId.slice(0, 8)}… on this machine`);
           const text = yield* Effect.sync(() => {
             try {
               return readFileSync(file, "utf8");
@@ -148,10 +159,10 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
               return null;
             }
           });
-          if (text === null) return `failed: could not read ${file}`;
+          if (text === null) return refused(`failed: could not read ${file}`);
           const { lines, entries } = sliceSince(text, out.since);
           const data = pack(lines);
-          if (data.length > MAX_PACKED_BYTES) return `failed: transcript too large to send (${Math.round(data.length / 1024 / 1024)} MB packed)`;
+          if (data.length > MAX_PACKED_BYTES) return refused(`failed: transcript too large to send (${Math.round(data.length / 1024 / 1024)} MB packed)`);
           return yield* room
             .sendTranscript(out.requester, {
               requestId: out.requestId,
@@ -164,8 +175,8 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
               data,
             })
             .pipe(
-              Effect.map(() => `transcript sent: ${entries} entries to ${nameFor(out.requester)}`),
-              Effect.catchTag("PeerNotConnected", () => Effect.succeed(`failed: ${nameFor(out.requester)} is not connected right now — ask your user again when they are`)),
+              Effect.map(() => sent(`transcript sent: ${entries} entries to ${nameFor(out.requester)}`)),
+              Effect.catchTag("PeerNotConnected", () => Effect.succeed(refused(`failed: ${nameFor(out.requester)} is not connected right now — ask your user again when they are`))),
             );
         }
       }

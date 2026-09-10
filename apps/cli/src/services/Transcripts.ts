@@ -131,15 +131,28 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
 
     const drop = (f: AskFilter) => store.update((s) => ({ ...s, transcriptAsks: (s.transcriptAsks ?? []).filter((a) => !matches(a, f)) }));
 
+    /** Take these exact asks off the list — the ones that were answered. */
+    const forget = (gone: ReadonlyArray<TranscriptAsk>) =>
+      store.update((s) => ({
+        ...s,
+        transcriptAsks: (s.transcriptAsks ?? []).filter((a) => !gone.some((g) => g.requestId === a.requestId && g.threadId === a.threadId)),
+      }));
+
     /** Hand over the conversations a peer asked for. Nothing here happens on
-     *  its own: the person said to, so it goes now. */
+     *  its own: the person said to, so it goes now. An ask whose transcript
+     *  did NOT get there — the peer went offline, the slice is too big — is
+     *  KEPT: the person authorised handing it over, so they should be able to
+     *  say "again" rather than ask the peer to request it a second time. */
     const share = Effect.fn("Transcripts.share")(function* (f: AskFilter) {
       const waiting = (yield* asks).filter((a) => matches(a, f));
       if (waiting.length === 0) return "no transcript requests are waiting";
       const lines: Array<string> = [];
+      const done: Array<TranscriptAsk> = [];
+      const kept: Array<TranscriptAsk> = [];
       for (const a of waiting) {
         if (!sessionFile(a.ai, a.sessionId, sessionDirs())) {
           lines.push(`${a.requesterName} · thread ${a.threadId}: that ${a.ai} session file is gone — nothing to hand over`);
+          done.push(a);
           continue;
         }
         const outcome = yield* outbox.send({
@@ -157,9 +170,15 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
             since: a.since,
           },
         });
-        lines.push(`${a.requesterName} · thread ${a.threadId}: ${outcome}`);
+        lines.push(`${a.requesterName} · thread ${a.threadId}: ${outcome.text}`);
+        (outcome._tag === "sent" ? done : kept).push(a);
       }
-      yield* drop(f);
+      if (done.length > 0) yield* forget(done);
+      if (kept.length > 0) {
+        lines.push(
+          `${kept.length} of these did not get there and are still waiting — your user already said to share them, so share-transcripts sends them again when the peer is back.`,
+        );
+      }
       return lines.join("\n");
     });
 

@@ -168,10 +168,13 @@ with its why, a step settlement, files, a transcript.
 
 `Outbox.send(p)` hands it to **`Dispatch`** — the only place the cli appends anything to a
 room's log for the agent: it looks up the room, resolves the peer by name, applies a
-settlement to the ticket as it currently is, writes, and returns what happened. The record
-then goes into `LocalState.sent` (newest first, capped), so the outbox tab can say what
-this machine has done, across restarts. The tool returns Dispatch's outcome text, not a
-promise about the future.
+settlement to the ticket as it currently is, writes, and returns a `Done`: `sent(text)` or
+`refused(text)`. That is a type and not a string starting with "failed:", because the
+outbox has to know — a record goes into `LocalState.sent` (newest first, capped) **only**
+for a `sent`, so the tab is what left this machine rather than what was attempted. A
+caller that must react to a refusal reads the tag (`Transcripts.share` keeps a peer's
+request alive when the transcript did not get there); one that only relays uses
+`Outbox.tell`, which is `send` with the text taken out.
 
 There is no approval queue, and there used to be: the agent proposed, the person pressed
 `y`. It was theatre — an agent acts only on its person's request, so the person was

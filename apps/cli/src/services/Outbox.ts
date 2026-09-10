@@ -102,18 +102,29 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
     const all = store.get.pipe(Effect.map((s) => s.sent ?? []));
     const changes = SubscriptionRef.changes(store.state).pipe(Stream.map((s) => s.sent ?? []));
 
-    /** Do it, then remember it. Returns what the agent is told: the outcome,
-     *  not a promise about the future. */
+    /** Do it, then remember it — and only if it was done. A refused write
+     *  (not admitted yet, peer gone, the file unreadable) leaves no row: the
+     *  outbox is a receipt of what left this machine, so a failure recorded
+     *  as a send would be a lie the person cannot see through. The caller
+     *  gets the outcome, tag and all: some of them have to retry. */
     const send = (p: Omit<Proposal, "id" | "ts">) =>
       Effect.gen(function* () {
         const outcome = yield* dispatch.perform(p.roomId, p.outgoing);
-        const full: Proposal = { ...p, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis };
-        yield* store.update((s) => ({ ...s, sent: [full, ...(s.sent ?? [])].slice(0, KEPT) }));
-        yield* Effect.log(`↗ ${p.outgoing.kind} → ${p.to} · ${p.title} — ${outcome.split("\n")[0]}`);
+        if (outcome._tag === "sent") {
+          const full: Proposal = { ...p, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis };
+          yield* store.update((s) => ({ ...s, sent: [full, ...(s.sent ?? [])].slice(0, KEPT) }));
+        }
+        const mark = outcome._tag === "sent" ? "↗" : "✕";
+        yield* Effect.log(`${mark} ${p.outgoing.kind} → ${p.to} · ${p.title} — ${outcome.text.split("\n")[0]}`);
         return outcome;
       });
 
-    return { all, changes, send } as const;
+    /** For a caller that only relays what happened to its agent: the text,
+     *  without the tag. Anything that must react to a refusal (retry, keep a
+     *  peer's request alive) uses `send` and reads the tag. */
+    const tell = (p: Omit<Proposal, "id" | "ts">) => send(p).pipe(Effect.map((d) => d.text));
+
+    return { all, changes, send, tell } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

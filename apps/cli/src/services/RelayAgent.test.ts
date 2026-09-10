@@ -5,7 +5,7 @@ import { encode as toToon } from "@toon-format/toon";
 import type { LocalState, Outgoing, RoomMessage } from "@collagen/p2p";
 import { scriptedModel, type Turn } from "../test/scriptedModel";
 import { nudgePrompt } from "./Adapters";
-import { Dispatch } from "./Dispatch";
+import { Dispatch, sent } from "./Dispatch";
 import { Inbox } from "./Inbox";
 import { GetMessages, PendingThreads, SendToPeer } from "./Mcp";
 import { Outbox } from "./Outbox";
@@ -45,8 +45,13 @@ const stateWith = (preferredAi: string | null) =>
 
 /** Records what would have been written to the room instead of writing it. */
 const recording = () => {
-  const sent: Array<Outgoing> = [];
-  return { sent, layer: Layer.succeed(Dispatch, { perform: (_room: string, out: Outgoing) => Effect.sync(() => (sent.push(out), `sent ${out.kind}`)) } as const) };
+  const wrote: Array<Outgoing> = [];
+  return {
+    sent: wrote,
+    layer: Layer.succeed(Dispatch, {
+      perform: (_room: string, out: Outgoing) => Effect.sync(() => (wrote.push(out), sent(`sent ${out.kind}`))),
+    } as const),
+  };
 };
 
 /** The MCP handlers, minus the room lookup: real Inbox, real Outbox. */
@@ -58,7 +63,7 @@ const handlers = RelayToolkit.toLayer(
       "pending-threads": () => inbox.pending(ROOM).pipe(Effect.map((threads) => toToon({ threads }))),
       "get-messages": ({ threadId }: { threadId: string }) => inbox.take(ROOM, threadId).pipe(Effect.map((messages) => toToon({ messages }))),
       "send-to-peer": (input: { peer: string; project: string; intent: string; findings: string }) =>
-        outbox.send({
+        outbox.tell({
           roomId: ROOM,
           to: input.peer,
           title: `${input.project} · ${input.intent}`,

@@ -61,10 +61,19 @@ describe("summarize", () => {
     expect(s.lastActivity).toBe(2000);
   });
 
-  it("peopleLabel: asked first with ✓ (answered) or · (silent), then the unasked who spoke", () => {
+  it("peopleLabel: a mark a space off each name — whose turn, what they said, what they asked for", () => {
     const t = ticket([step("s1", BOB, "pending"), step("s2", ALICE, "pending", ["s1"])]);
-    expect(peopleLabel(summarize(t, [msg(CAROL, { ticketId: "t1" })], ALICE), nameFor)).toBe("bob· you· carol");
-    expect(peopleLabel(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE), nameFor)).toBe("bob✓");
+    // bob's step is up; alice's waits on it; carol spoke without being asked
+    expect(peopleLabel(summarize(t, [msg(CAROL, { ticketId: "t1" })], ALICE), nameFor)).toBe("bob ▸  you ·  carol …");
+    expect(peopleLabel(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE), nameFor)).toBe("bob ✓");
+  });
+
+  it("a review asking for changes is not a tick and not a failure: ↻", () => {
+    const asked = { ...ticket([step("s1", BOB, "failed")]), kind: "review" as const };
+    const reviewStep = { ...asked, steps: [{ ...asked.steps[0]!, intent: "review" }] };
+    expect(peopleLabel(summarize(reviewStep, [], ALICE), nameFor)).toBe("bob ↻");
+    // the same failed status on a task step is a failure, and says so
+    expect(peopleLabel(summarize(ticket([step("s1", BOB, "failed")]), [], ALICE), nameFor)).toBe("bob ✕");
   });
 
   it("orders needs-you, waiting, failed, done; newest activity first within a state", () => {

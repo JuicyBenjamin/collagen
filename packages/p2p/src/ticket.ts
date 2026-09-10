@@ -190,13 +190,23 @@ export function postReview(
 }
 
 /** Steps a given peer should act on now: it owns them, they're not settled,
- *  and everything they depend on has settled. */
+ *  and everything they depend on has settled.
+ *
+ *  One rule beyond the dependencies: on a review ticket that nobody was asked
+ *  for, the author's own "address" step waits for a reader. Its `needs` are
+ *  empty — there was nobody to name — so the dependency rule alone would
+ *  make it actionable the instant the ticket is filed, and the author's agent
+ *  would be told to act on feedback that does not exist. An open review sits
+ *  open until somebody posts one (`postReview` writes a settled or failed
+ *  review step); the person can still settle it by hand whenever they like. */
 export function actionableSteps(ticket: Ticket, pubkey: string): TicketStep[] {
   const settled = new Set(ticket.steps.filter((s) => s.status === "settled").map((s) => s.id));
+  const reviewed = ticket.steps.some((s) => s.intent === "review" && (s.status === "settled" || s.status === "failed"));
   return ticket.steps.filter(
     (s) =>
       s.owner === pubkey &&
       (s.status === "pending" || s.status === "suspended") &&
-      s.needs.every((n) => settled.has(n)),
+      s.needs.every((n) => settled.has(n)) &&
+      !(ticket.kind === "review" && s.intent === "address" && s.needs.length === 0 && !reviewed),
   );
 }

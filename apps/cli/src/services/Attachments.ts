@@ -102,7 +102,7 @@ export class Attachments extends Context.Service<Attachments>()("cli/Attachments
         items.push(item);
       }
       if (items.length === 0) return "failed: nothing to attach";
-      return yield* outbox.send({
+      return yield* outbox.tell({
         roomId,
         to: "the room",
         title: `${goal} · attach ${items.length} file(s)`,

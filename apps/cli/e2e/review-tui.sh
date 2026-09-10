@@ -30,7 +30,15 @@ D1='{"what":"pure frame functions for the logo","userWhy":"she said make it look
 D2='{"what":"a fast boot is still held for one sweep","userWhy":"fine if it takes longer, for animation","where":["src/lib/opening.ts:14"]}'
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator","why":"no new dependency","by":"agent"}'
 ASK="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"summary\":\"the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
-expect "the review ticket is on the log" "$(call $A "$SA" ask-review "$ASK")" "review ticket filed, asked of bob"
+ASKED=$(call $A "$SA" ask-review "$ASK")
+expect "the review ticket is on the log" "$ASKED" "review ticket filed, asked of bob"
+TICKET=$(echo "$ASKED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+
+echo "## bob reads it and asks for changes — a complete review, not a failure"
+SB=$(mcp $B)
+wait_until "bob holds the ticket" "review feat/opening-animation" goals $B "$SB"
+DRIVE="{\"peer\":\"bob\",\"action\":{\"kind\":\"post-review\",\"ticketId\":\"$TICKET\",\"result\":\"the interval leaks on unmount\",\"failed\":true}}"
+drive_until "bob asked for changes" "the interval leaks" $A "$SA" "$DRIVE" rows $A "$SA" "$TICKET"
 sleep 1
 touch "$OUT/review-tui.go"
 await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
@@ -43,6 +51,27 @@ expect "↑ from the steps reached the why section" "$KEYS" "ticket-review"
 expect "the ticket page says where the code is and how much why came with it" "$(echo "$TEXT" | grep -cE 'feat/opening-animation .{1,6} main')" "^[1-9]"
 expect "…the counts, not the why itself" "$(echo "$TEXT" | grep -cE '2 decisions .{1,6} 1 fork')" "^[1-9]"
 expect "…and the change in alice's own words" "$(echo "$TEXT" | grep -c 'glides into the header')" "^[1-9]"
+
+echo "## the mark for a review that asks for changes"
+# the screen, not the scrollback: earlier frames hold earlier states (bob's
+# mock settles its step before the driven review lands), and a grep over the
+# whole dump would judge the wrong moment
+HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
+[ -n "${PYTE_PATH:-}" ] && HAVE_PYTE=yes
+if [ "$HAVE_PYTE" = yes ]; then
+  SCREEN=$(python3 "$E2E/render.py" "$PTY" "$MARKS" "${ROWS:-45}" 120 M0_tickets)
+  # which mark each person carries is unit-tested (lib/ticketSummary.test.ts);
+  # what only a real screen can show is that it is a glyph, a space off the
+  # name, and that the row explains its own symbols
+  # a bracket expression matches BYTES, so a class of multibyte glyphs never
+  # matches: say it by shape instead — name, space, one glyph
+  expect "each name carries its mark a space away, never glued to it" "$SCREEN" "bob .{1,3}  you .{1,3}"
+  expect "…so no name reads as one token with a tick" "$(echo "$SCREEN" | grep -cE '(bob|you)(✓|↻|✕)')" "^0$"
+  expect "the legend under the list spells the symbols out, whole" "$SCREEN" "✓ no changes .{1,6} ↻ changes asked .{1,6} ✕ failed"
+  expect "…and it fits its row: nothing elided in the middle" "$(echo "$SCREEN" | grep -c '\.\.\.')" "^0$"
+else
+  echo "  skip  screen-level glyph checks (no pyte: pip install pyte, or set PYTE_PATH)"
+fi
 expect "enter opened the why in full: how she steered it" "$(echo "$TEXT" | grep -c 'the user: she said make it look cool')" "^[1-9]"
 expect "…what her agent reasoned" "$(echo "$TEXT" | grep -c 'the agent: a frame is testable')" "^[1-9]"
 expect "…where the decision landed" "$(echo "$TEXT" | grep -c 'src/lib/logoFrame.ts:60')" "^[1-9]"

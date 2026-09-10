@@ -210,7 +210,7 @@ export const SettleStep = Tool.make("settle-step", {
 
 export const DrivePeer = Tool.make("drive-peer", {
   description:
-    "TESTING ONLY: remote-control a mock peer (one whose ai starts with 'mock:') so a single machine can exercise the full cross-peer flow. The driven peer performs the action as itself, so everything arrives back through the real pipeline. 'action' is the action object, tagged by 'kind': {kind:'send-message', project, intent, findings, ticketId?} (the peer sends YOU a message; reusing a project continues the same thread), {kind:'create-ticket', project, goal, steps:[{intent, description, mine}]} (mine=true → the mock owns the step, mine=false → you own it and your agent is triggered), {kind:'settle-step', ticketId, stepId, result} (the peer settles a step it owns), {kind:'post-review', ticketId, result} (the peer puts its review on a review ticket). Real peers ignore drive requests.",
+    "TESTING ONLY: remote-control a mock peer (one whose ai starts with 'mock:') so a single machine can exercise the full cross-peer flow. The driven peer performs the action as itself, so everything arrives back through the real pipeline. 'action' is the action object, tagged by 'kind': {kind:'send-message', project, intent, findings, ticketId?} (the peer sends YOU a message; reusing a project continues the same thread), {kind:'create-ticket', project, goal, steps:[{intent, description, mine}]} (mine=true → the mock owns the step, mine=false → you own it and your agent is triggered), {kind:'settle-step', ticketId, stepId, result} (the peer settles a step it owns), {kind:'post-review', ticketId, result, failed?} (the peer puts its review on a review ticket; failed:true asks for changes). Real peers ignore drive requests.",
   // the action IS the domain's DriveAction — one schema, so a new kind can
   // never be missing here (it used to be a hand-copied enum, and a kind added
   // to the union was silently rejected at this boundary)
@@ -400,7 +400,7 @@ const makeHandlers = Effect.gen(function* () {
         return `failed: no peer named ${input.peer} — see list-room`;
       }
       // Outbox → Dispatch: it goes now, and is recorded as having gone
-      return yield* outbox.send({
+      return yield* outbox.tell({
         roomId,
         to: input.peer,
         title: `${input.project} · ${input.intent}`,
@@ -583,7 +583,7 @@ const makeHandlers = Effect.gen(function* () {
           })),
         };
         const owners = [...new Set(input.steps.map((s) => s.owner))].join(", ");
-        return yield* outbox.send({ roomId, to: owners, title: `${input.project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
+        return yield* outbox.tell({ roomId, to: owners, title: `${input.project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
       }),
       "ask-review": Effect.fn("Mcp.askReview")(function* (input: {
         peers?: ReadonlyArray<string>;
@@ -612,6 +612,11 @@ const makeHandlers = Effect.gen(function* () {
         if (input.ticketId) {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
           if (!ticket) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+          // a why belongs to a review: hanging one on a task ticket would
+          // leave context nobody can read back (post-review refuses it)
+          if (ticket.kind !== "review") {
+            return `failed: ticket ${input.ticketId} is a ${ticket.kind}, not a review — "${ticket.goal}". Leave ticketId out to ask for a review of this change, or pass the review ticket's id.`;
+          }
           const existing = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId);
           if (existing && existing.author !== identity.pubkey) {
             return `failed: that review's why is ${existing.authorName}'s to write — your user's own reading of the code goes to them with send-to-peer (pass ticketId so it lands on the ticket)`;
@@ -630,7 +635,7 @@ const makeHandlers = Effect.gen(function* () {
             .map((o) => present.find((p) => p.key === o)?.name ?? known.find((m) => m.key === o)?.name)
             .filter((n): n is string => n !== undefined);
           const to = named.length > 0 ? named.join(", ") : "the room";
-          return yield* outbox.send({ roomId, to, title: `${ticket.goal} · more why`, outgoing: { kind: "review", review } });
+          return yield* outbox.tell({ roomId, to, title: `${ticket.goal} · more why`, outgoing: { kind: "review", review } });
         }
 
         // a new review: who is asked (0 to many), which project, and the why
@@ -709,7 +714,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(branch ? { branch } : {}),
           ...(link ? { link } : {}),
         }, now);
-        return yield* outbox.send({
+        return yield* outbox.tell({
           roomId,
           to: asked.length > 0 ? asked.join(", ") : "the room",
           title: `${input.project} · review · ${goal}`,
@@ -730,7 +735,7 @@ const makeHandlers = Effect.gen(function* () {
           ticket.createdBy === identity.pubkey
             ? "the room"
             : (peers.find((p) => p.key === ticket.createdBy)?.name ?? members.find((m) => m.key === ticket.createdBy)?.name ?? "the room");
-        return yield* outbox.send({
+        return yield* outbox.tell({
           roomId,
           to: author,
           title: `${ticket.goal} · your review`,
@@ -751,7 +756,7 @@ const makeHandlers = Effect.gen(function* () {
           ticket.createdBy === identity.pubkey
             ? "the room"
             : (peers.find((p) => p.key === ticket.createdBy)?.name ?? members.find((m) => m.key === ticket.createdBy)?.name ?? "the room");
-        return yield* outbox.send({
+        return yield* outbox.tell({
           roomId,
           to: creator,
           title: `${ticket.goal} · ${input.stepId} ${input.failed ? "failed" : "settled"}`,

@@ -290,7 +290,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   const all = yield* SubscriptionRef.get(room.tickets);
                   const ticket = all.get(action.ticketId);
                   if (!ticket) return yield* Effect.logWarning(`drive review: no ticket ${action.ticketId}`);
-                  const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: yield* SubscriptionRef.get(nameRef) }, action.result, false, now);
+                  const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: yield* SubscriptionRef.get(nameRef) }, action.result, action.failed ?? false, now);
                   yield* Effect.log(`driven review: posted on step ${stepId}`);
                   yield* room.shareTicket(updated);
                   return;

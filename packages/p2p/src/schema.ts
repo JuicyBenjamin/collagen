@@ -125,6 +125,8 @@ export const DriveAction = Schema.Union([
     kind: Schema.Literal("post-review"),
     ticketId: Schema.String,
     result: Schema.String,
+    /** true: the review asks for changes, as post-review's own `failed` does. */
+    failed: Schema.optional(Schema.Boolean),
   }),
 ]);
 export type DriveAction = typeof DriveAction.Type;

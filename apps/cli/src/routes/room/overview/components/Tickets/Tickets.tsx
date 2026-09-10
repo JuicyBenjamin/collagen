@@ -7,6 +7,7 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
+import { LEGEND } from "../../../../../lib/glyphs";
 import { compareSummaries, peopleLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
@@ -41,7 +42,7 @@ export function Tickets() {
   return (
     <Focusable
       id="tickets"
-      hint="↑↓ select ticket · enter open · arrows move between sections · esc"
+      hint={`↑↓ select · enter open · ${LEGEND}`}
       flexDirection="column"
       marginTop={1}
       onKey={(key) => {
@@ -73,9 +74,10 @@ export function Tickets() {
   );
 }
 
-/** One ticket at a glance: what kind it is, what it is about, and who has
- *  answered (`bob✓` spoke or settled, `bob·` silent so far). Nothing else —
- *  the ticket's own page has the rest, and an agent can read all of it. */
+/** One ticket at a glance: what kind it is, what it is about, and what each
+ *  person on it did — `bob ✓` asked for no changes, `you ↻` asked for some,
+ *  `carol ·` nothing yet (lib/glyphs, spelled out in the hint line). Nothing
+ *  else: the ticket's own page has the rest, and an agent can read all of it. */
 function TicketRow({
   ticket: t,
   summary: s,
