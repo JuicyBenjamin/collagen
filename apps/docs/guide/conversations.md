@@ -240,6 +240,43 @@ sections attached (the `ask` becomes the goal). Delivery stays the same as for a
 message — inbox or adopted session — so the earlier idea of a per-peer "direct vs queued"
 dispatch policy is gone: there is only one policy, and it's yours.
 
+## Solo player <Badge type="info" text="planned" />
+
+Collagen is built for two people, but the same machinery is useful with **one person and
+two agents** — Claude Code writes the change and asks for a review, Codex reads it with
+the [why](./tickets) attached and says what it thinks. Nothing stops you filing that
+review today: `ask-review` with no `peers` puts the ticket in the room for whoever picks
+it up, and your second agent can read it and `post-review` on a step of its own.
+
+What is missing is the nudge. Today a delivery is **peer-shaped**: a step becoming
+actionable, or a review's why being revised, reaches the *other members* of the room, and
+a change your own identity authored is skipped on purpose — you should not be told what
+you just did. Two agents on one machine are one identity, so the second one never hears:
+it has to be told by you, or go looking.
+
+The idea is to make the unit of delivery **an agent attached to a peer**, not the peer.
+Collagen already knows them: `adopt-thread` stores an `{ai, sessionId}` per thread, and
+resuming those sessions is the whole delivery mechanism. So:
+
+- your agents are the adopted sessions on this machine, and a nudge goes to **every one of
+  them except the one whose action caused it** — Claude asks for the review, so Claude is
+  not told; Codex has attached itself, so Codex is;
+- the message is the same headline a peer would get, and carries the same instruction:
+  relay it to the person, read the ticket when they ask, never review on your own
+  initiative. The human stays in the loop — this is not two agents talking, it is one
+  person with a second reader;
+- everything else already works, because the ticket, its steps and its why are on the
+  room's log whether the reader is across the network or in another terminal on your desk.
+
+Open questions, and they are the reason this is not built yet:
+
+| Question | Why it is not obvious |
+| --- | --- |
+| Which agent caused it? | A tool call does not say which session it came from. Something has to identify the caller — the MCP client, or an explicit session on the call — or the nudge loops back to its author. |
+| Which sessions count? | Every adopted thread on the machine, or only those on the ticket's own threads? The first is noisy, the second means a fresh agent hears nothing until it adopts. |
+| How does it read? | One person, two agents, one outbox and one trace: the lists would have to say which of your own agents did a thing, which no screen does today. |
+| Is a step ever "theirs"? | Ownership is a person, deliberately (`TicketStep.owner` is a pubkey). A second agent reviewing your change posts on a step of *yours*, which is fine for a review and wrong for a task. |
+
 ## Delivery
 
 A message is an entry on the room's **log** (see [Architecture](/internals/architecture#the-room-log-autobase)),

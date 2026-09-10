@@ -3,7 +3,7 @@
 A living snapshot of what works, what's in flight, and what's next. Update this as we go —
 it's the "where did we leave off" page.
 
-_Last updated: 2026-09-07._
+_Last updated: 2026-09-10._
 
 ## Working today
 
@@ -123,7 +123,18 @@ Rough order, not committed.
 - [ ] Membership enforcement: drop connections from keys the log doesn't know; revoke a
   member (`removeWriter`). Admission to the log exists; it's automatic today.
 
-### 4. Identity & devices — [spec](/guide/identity)
+### 4. Solo player — [spec](/guide/conversations#solo-player)
+
+One person, two agents: Claude Code writes the change and asks for a review, Codex reads
+it with the why attached. Filing that review works today; the nudge does not.
+
+- [ ] Deliver to **agents attached to a peer**, not only to other peers: every adopted
+  session on the machine except the one whose action caused it (Claude asked, so Codex is
+  told and Claude is not)
+- [ ] Know which agent called a tool, or the nudge loops back to its author
+- [ ] Say which of your own agents did a thing, in the trace and the outbox
+
+### 5. Identity & devices — [spec](/guide/identity)
 
 - [ ] Log out / log in via recovery phrase
 - [ ] Second device (phrase first, device pairing later)
