@@ -193,10 +193,21 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(mine, []);
     });
 
-    /** Bring the log up (create it, or open a key we learned) and follow it. */
+    /** Bring the log up (create it, or open a key we learned) and follow it.
+     *
+     *  Guarded against a SECOND caller arriving while the first is still
+     *  opening: `log` is only set once Autobase is ready, so the boot path and
+     *  a peer's `log-info` frame could both get past a `if (log)` check and
+     *  open the same base twice — two Autobases on one writer core in one
+     *  Corestore namespace, which blocks on the storage lock and never
+     *  finishes. That was the returning-peer stall: the room logged "room log
+     *  opened" and the app never came up. The flag is set before the first
+     *  await, so nothing can slip between. */
+    let attaching = false;
     const attachLog = (key: string | null) =>
       Effect.gen(function* () {
-        if (log) return;
+        if (log || attaching) return;
+        attaching = true;
         const child = yield* Scope.fork(scope);
         const opened = yield* openRoomLog(swarm.store, config.roomName, key).pipe(
           Effect.provideService(Scope.Scope, child),
@@ -205,30 +216,36 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         logScope = child;
         yield* SubscriptionRef.set(logKey, opened.key);
         yield* Effect.log(`room log ${key ? "opened" : "created"}: ${opened.key.slice(0, 12)}… writable=${String(opened.writable())}`);
-        yield* refresh;
-        yield* introduce;
-        yield* admitPending;
+        // Everything past this point talks to Autobase, which may be waiting
+        // on another member — so it runs in a fibre of its own. The room (and
+        // with it the app, its MCP server, the TUI) is up as soon as the base
+        // is open; the view, our `member` entry and the announcements land
+        // when the log can. A returning peer used to hang here forever.
         let wasWritable = opened.writable();
-        yield* opened.changes.pipe(
-          Stream.tap(() =>
-            Effect.gen(function* () {
-              yield* refresh;
-              if (!wasWritable && opened.writable()) {
-                wasWritable = true;
-                yield* Effect.log("admitted to the room log");
-                yield* introduce;
-                yield* admitPending;
-              }
-            }),
-          ),
-          Stream.runDrain,
-          Effect.forkIn(child),
-        );
-        // tell everyone present where the log is (anyone whose profile has
-        // not arrived yet hears it with their profile — see onFrame)
-        announced.clear();
-        yield* Effect.forEach([...peers.keys()], announceLog, { discard: true });
-      });
+        yield* Effect.gen(function* () {
+          yield* refresh;
+          yield* introduce;
+          yield* admitPending;
+          // tell everyone present where the log is (anyone whose profile has
+          // not arrived yet hears it with their profile — see onFrame)
+          announced.clear();
+          yield* Effect.forEach([...peers.keys()], announceLog, { discard: true });
+          yield* opened.changes.pipe(
+            Stream.tap(() =>
+              Effect.gen(function* () {
+                yield* refresh;
+                if (!wasWritable && opened.writable()) {
+                  wasWritable = true;
+                  yield* Effect.log("admitted to the room log");
+                  yield* introduce;
+                  yield* admitPending;
+                }
+              }),
+            ),
+            Stream.runDrain,
+          );
+        }).pipe(Effect.forkIn(child));
+      }).pipe(Effect.ensuring(Effect.sync(() => void (attaching = false))));
 
     /** Ask a member to admit our writer core (no-op once we're in). */
     const askToJoin = (key: string) =>

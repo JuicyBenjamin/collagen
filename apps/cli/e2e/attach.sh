@@ -57,7 +57,9 @@ wait_until "the transcript landed with the transcripts, under the ticket" "^1$" 
 expect "…same lines alice had" "$(cmp "$TFILE" "$TGOT" && echo same)" "^same$"
 expect "…its meta says it was attached: origin subject, via alice, the attachment id as request" "$(python3 -c "import json;m=json.load(open('$TGOT.meta.json'));print(m['origin'],m.get('via'),m['from'],len(m['requestId']))")" "^$SUBJECT alice bob 36$"
 expect "a second fetch-attachments reports both held, with paths" "$(call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}" | grep -o ',held\b' | grep -c .)" "^2$"
-expect "alice's log shows bob fetching" "$(grep -c 'bob fetched' "$OUT/alice.log")" "^2$"
+# at least both files: a fetch is a request, so a poll that lands before the
+# bytes arrive asks again — the count is a floor, not an equality
+expect "alice's log shows bob fetching both files" "$(grep -c 'bob fetched' "$OUT/alice.log")" "^[2-9][0-9]*$"
 
 echo "## a fetch for something alice never attached is ignored"
 expect "fetch-attachments refuses an unknown id" "$(call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\",\"attachmentId\":\"00000000-0000-0000-0000-000000000000\"}")" "^\"failed: no attachment"

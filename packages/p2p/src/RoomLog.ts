@@ -36,6 +36,11 @@ export interface RoomLog {
   readonly changes: Stream.Stream<void>;
 }
 
+/** How long to wait for Autobase to fold our own entry into the view before
+ *  carrying on without it. Long enough to be the normal path, short enough
+ *  that nothing user-facing hangs on a peer that went quiet. */
+const UPDATE_PATIENCE = "5 seconds";
+
 const decodeOp = Schema.decodeUnknownOption(LogOp);
 const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
 
@@ -255,14 +260,32 @@ export const openRoomLog = (
       }),
     );
 
+    /** Append, then bring our own view up so the caller can read what it just
+     *  wrote. `base.update()` is the second half, and on a peer that is still
+     *  catching up it can wait on another member and never resolve — which
+     *  used to park whatever fibre called it, boot included (a returning peer
+     *  logged "room log opened" and then nothing). The entry is already on our
+     *  core by then, so after a few seconds we carry on and let the `changes`
+     *  stream bring the view up when it can. */
     const append = (op: LogOp) =>
       Effect.tryPromise({
-        try: async () => {
-          await base.append(op);
-          await base.update();
-        },
+        try: () => base.append(op) as Promise<void>,
         catch: (cause) => new LogAppendFailed({ cause }),
-      });
+      }).pipe(
+        Effect.andThen(
+          Effect.tryPromise({
+            try: () => base.update() as Promise<void>,
+            catch: (cause) => new LogAppendFailed({ cause }),
+          }).pipe(
+            Effect.timeoutOption(UPDATE_PATIENCE),
+            Effect.flatMap((done) =>
+              Option.isNone(done)
+                ? Effect.logWarning(`the room's log is still catching up (${op.op} is written, the view will follow)`)
+                : Effect.void,
+            ),
+          ),
+        ),
+      );
 
     return {
       key: b4a.toString(base.key, "hex"),
