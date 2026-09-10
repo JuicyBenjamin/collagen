@@ -35,8 +35,8 @@ sleep 2 # a negative: give anything that would leak time to arrive
 TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
 
 echo "## the queued ticket is a ticket: it is in the overview's list"
-expect "listed with the rest, plainly not sent" "$(echo "$TEXT" | grep -cE 'not sent yet.{0,20}explain the NaN')" "^[1-9]"
-expect "…counted in the section header" "$(echo "$TEXT" | grep -c '1 to send')" "^[1-9]"
+expect "listed with the rest, by kind, as yours to approve" "$(echo "$TEXT" | grep -cE 'task .{0,8}explain the NaN.{0,6}yours to approve')" "^[1-9]"
+expect "…and the section header is a count, nothing more" "$(echo "$TEXT" | grep -cE 'tickets \(1\)')" "^[1-9]"
 expect "…and n dropped it from there" "$(grep -c '✗ rejected: ticket → bob' "$LOG")" "^1$"
 expect "the cursor was in the tickets section, not a section of its own" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')" "tickets"
 
@@ -47,5 +47,5 @@ expect "only one message ever reached bob" "$(grep -c '← alice' "$OUT/bob.log"
 expect "the keys landed in the outbox" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')" "outbox"
 expect "the tab bar carries the count, and nothing else" "$(echo "$TEXT" | grep -cE 'outbox \(2\)')" "^[1-9]"
 expect "no prose in the header: the count is the whole signal" "$(echo "$TEXT" | grep -cE '[0-9] waiting for you|has left this machine')" "^0$"
-expect "…nor next to the ai in the status line" "$(echo "$TEXT" | grep -c 'to approve')" "^0$"
+expect "…nor next to the ai in the status line" "$(echo "$TEXT" | grep -cE '[0-9] to approve')" "^0$"
 kill_all; summary

@@ -9,6 +9,10 @@ import { theme } from "../../../../app/theme";
 import { approveOutgoingAtom, editOutgoingAtom, rejectOutgoingAtom } from "../../atoms";
 
 export const PENDING_HINT = "y approve and send · e edit the text · n reject · enter full text";
+
+/** What kind of thing this is, in one word. */
+export const outgoingKind = (p: Proposal): string =>
+  p.outgoing.kind === "post-review" ? "review" : p.outgoing.kind === "attach" ? "files" : p.outgoing.kind;
 const EDIT_HINT = "enter save · esc cancel — what you write here is what leaves";
 
 /** What your agent wants to send, waiting for you — rows at the bottom of a
@@ -47,14 +51,14 @@ export function usePendingOutgoing() {
     const isEditing = editing?.id === p.id;
     return (
       <box key={p.id} flexDirection="column">
+        {/* what it is, where it is going, what it is about — enter has the rest */}
         <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
           {selected ? (expanded ? "▾ " : "› ") : "  "}
-          <span fg={theme.warn}>⧗ </span>
-          <span fg={theme.accent}>you</span>
-          <span fg={theme.dim}> → {p.to}</span>
-          <span fg={theme.dim}> [{p.title}] </span>
-          {note ? <span fg={theme.dim}>{note} · </span> : null}
-          {expanded || isEditing ? <span fg={theme.warn}>waiting for your y / n</span> : text.split("\n")[0]}
+          <span fg={theme.warn}>{outgoingKind(p).padEnd(9)}</span>
+          <span fg={theme.dim}>→ </span>
+          {p.to}
+          <span fg={theme.dim}> · {p.title}</span>
+          {note ? <span fg={theme.dim}> · {note}</span> : null}
         </text>
         {isEditing ? (
           <box marginLeft={4} marginBottom={1} border borderStyle="rounded" borderColor={theme.accent} paddingX={1}>
@@ -71,7 +75,7 @@ export function usePendingOutgoing() {
         ) : expanded ? (
           <box flexDirection="column" paddingLeft={4} marginBottom={1}>
             <text fg={theme.dim} truncate wrapMode="none">
-              {p.outgoing.kind} · proposed {new Date(p.ts).toLocaleString()} · nothing has left yet
+              queued {new Date(p.ts).toLocaleString()} · nothing has left this machine
             </text>
             <text fg={theme.fg} wrapMode="word">
               {text}

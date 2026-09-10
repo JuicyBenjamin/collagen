@@ -15,7 +15,9 @@ export function StatusLine() {
   const update = AsyncResult.getOrElse(useAtomValue(appUpdateAtom), () => ({ latest: null, installing: false, note: null }));
 
   return (
-    <text truncate wrapMode="none">
+    // a row of air above: the word, what it is and which build are one block —
+    // who you are and what runs for you is the room's header, not the brand
+    <text truncate wrapMode="none" marginTop={1}>
       <span fg={theme.dim}>you </span>
       <span fg={theme.fg}>{myName}</span>
       <span fg={theme.dim}> · ai </span>

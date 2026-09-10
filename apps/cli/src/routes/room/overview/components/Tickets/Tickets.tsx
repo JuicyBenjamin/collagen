@@ -7,7 +7,7 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { age, compareSummaries, peopleLabel, STATE_LABEL, summarize, type TicketState, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { compareSummaries, peopleLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { roomAtom } from "../../../../atoms";
 import { identityAtom, membersAtom, outboxAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { usePendingOutgoing } from "../../../components/PendingOutgoing/PendingOutgoing";
@@ -36,7 +36,6 @@ export function Tickets() {
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
-  const now = Date.now();
 
   // a ticket your agent queued is a ticket: it just has not left yet
   const queued = proposals.flatMap((p) => {
@@ -53,8 +52,6 @@ export function Tickets() {
   const undone = live.filter((r) => r.s.state !== "done");
   const done = live.filter((r) => r.s.state === "done");
   const needsYou = live.filter((r) => r.s.state === "needs-you").length;
-  const projects = new Set([...tickets, ...queued.map((q) => q.t)].map((t) => t.project));
-  const showProject = projects.size > 1;
 
   const last = Math.max(0, shown.length - 1);
   const sel = clamp(cursor, 0, last);
@@ -84,16 +81,9 @@ export function Tickets() {
     >
       {(focused) => (
         <>
-          <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none">
-            tickets
-            {shown.length > 0 ? (
-              <span fg={theme.dim}>
-                {" "}·{" "}
-                {queued.length > 0 ? <span fg={theme.warn}>{queued.length} to send · </span> : null}
-                {needsYou > 0 ? <span fg={theme.warn}>{needsYou} need{needsYou === 1 ? "s" : ""} you · </span> : null}
-                {undone.length - needsYou} in flight · {done.length} done
-              </span>
-            ) : null}
+          <text truncate wrapMode="none">
+            <span fg={focused ? theme.accent : theme.dim}>tickets</span>
+            <span fg={needsYou + queued.length > 0 ? theme.warn : theme.dim}> ({shown.length})</span>
           </text>
           {shown.length === 0 ? (
             <text fg={theme.dim} truncate wrapMode="none">
@@ -102,9 +92,9 @@ export function Tickets() {
           ) : (
             shown.map((r, i) =>
               r.kind === "queued" ? (
-                <QueuedRow key={r.p.id} ticket={r.t} to={r.p.to} selected={focused && i === sel} showProject={showProject} />
+                <QueuedRow key={r.p.id} ticket={r.t} selected={focused && i === sel} />
               ) : (
-                <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} now={now} showProject={showProject} />
+                <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} />
               ),
             )
           )}
@@ -114,49 +104,42 @@ export function Tickets() {
   );
 }
 
-const STATE_COLOR: Record<TicketState, string> = { "needs-you": theme.warn, waiting: theme.fg, failed: theme.warn, done: theme.dim };
-
-/** A ticket your agent wants to create, in the list with the rest: same
- *  shape, and plainly not sent. `y` sends it, `n` drops it. */
-function QueuedRow({ ticket, to: target, selected, showProject }: { ticket: Ticket; to: string; selected: boolean; showProject: boolean }) {
+/** A ticket your agent wants to create, in the list with the rest and in the
+ *  same shape. It is yours to approve before the room gets it. */
+function QueuedRow({ ticket, selected }: { ticket: Ticket; selected: boolean }) {
   return (
     <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
-      <span fg={theme.warn}>{"not sent yet".padEnd(16)}</span>
+      <span fg={theme.warn}>{ticket.kind.padEnd(9)}</span>
       {ticket.goal}
-      <span fg={theme.dim}>
-        {showProject ? ` · ${ticket.project}` : ""} · to {target} · {ticket.steps.length} step{ticket.steps.length === 1 ? "" : "s"} ·{" "}
-      </span>
-      <span fg={theme.warn}>waiting for your y</span>
+      <span fg={theme.dim}> · </span>
+      <span fg={theme.warn}>yours to approve</span>
     </text>
   );
 }
 
+/** One ticket at a glance: what kind it is, what it is about, and who has
+ *  answered (`bob✓` spoke or settled, `bob·` silent so far). Nothing else —
+ *  the ticket's own page has the rest, and an agent can read all of it. */
 function TicketRow({
   ticket: t,
   summary: s,
   selected,
   nameFor,
-  now,
-  showProject,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
   selected: boolean;
   nameFor: (key: string) => string;
-  now: number;
-  showProject: boolean;
 }) {
-  const closed = s.state === "done" || s.state === "failed";
-  const stateText = s.state === "waiting" ? `waiting on ${s.waitingOn.map(nameFor).join(", ")}` : STATE_LABEL[s.state];
+  const done = s.state === "done";
   return (
-    <text fg={selected ? theme.accent : closed ? theme.dim : theme.fg} truncate wrapMode="none">
+    <text fg={selected ? theme.accent : done ? theme.dim : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
-      <span fg={STATE_COLOR[s.state]}>{stateText.padEnd(16)}</span>
+      <span fg={done ? theme.dim : s.state === "failed" ? theme.warn : theme.fg}>{t.kind.padEnd(9)}</span>
       {t.goal}
-      <span fg={theme.dim}>
-        {showProject ? ` · ${t.project}` : ""} · {peopleLabel(s, nameFor)} · {age(s.lastActivity, now)}
-      </span>
+      <span fg={theme.dim}> · </span>
+      <span fg={s.state === "needs-you" ? theme.warn : theme.dim}>{peopleLabel(s, nameFor)}</span>
     </text>
   );
 }
