@@ -12,6 +12,7 @@ const t: Ticket = {
   project: "sandbox",
   goal: "fix NaN",
   createdBy: ALICE,
+  kind: "task",
   updatedAt: 1,
   steps: [
     { id: "s1", owner: BOB, intent: "investigate", description: "…", needs: [], status: "pending", updatedAt: 1 },

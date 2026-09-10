@@ -8,8 +8,8 @@ carry messages and work between you; each one answers from its own machine,
 its own repo.
 
 Human in the loop, always. Your agent tells you what arrived and sends only
-what you decided to say; nothing leaves your machine until you approve it (and
-you can rewrite it first). Agents don't talk to each other behind your back — that's what the
+what you decided to say — never on its own initiative, and the outbox shows
+every send. Agents don't talk to each other behind your back — that's what the
 rest of the world already does, and it's not what this is for. Collagen is for
 getting the input that isn't AI: a colleague's context, judgment and direction.
 
@@ -41,9 +41,9 @@ agent session on your machine has the room's tools. Talk to your agent as usual:
 - *"who's in my collagen room?"* — names, projects, online or not, whether their
   agent is logged in.
 - *"ask alice why `average()` returns NaN in her sandbox project"* — your agent
-  drafts the message; you approve it in the outbox; it lands in alice's inbox.
-  Her agent shows it to her and waits. She decides what to answer, her agent
-  sends that once she approves it, and you get it the same way.
+  sends that message and the outbox shows it; it lands in alice's inbox. Her
+  agent shows it to her and waits. She decides what to answer, her agent sends
+  that, and you get it the same way.
 - *"create a ticket: bob writes the migration, then I review"* — a ticket with
   steps, each owned by someone. Each owner sees their step when it's their
   turn, decides how it gets done, and settles it; everyone in the room sees the

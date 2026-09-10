@@ -1,7 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
-import { stepThreadId, type Ticket } from "@collagen/p2p";
+import { stepThreadId, type Ticket, type TranscriptAsk } from "@collagen/p2p";
 import { sessionDirs, sessionFile, sliceSince, unpack } from "../lib/transcripts";
 import { configDir, IdentityService } from "./Identity";
 import { Outbox } from "./Outbox";
@@ -47,16 +47,24 @@ export interface ListedTranscript {
   readonly meta: TranscriptMeta | null;
 }
 
+/** Which waiting requests an answer covers — all of them when empty. */
+export interface AskFilter {
+  readonly subject?: string;
+  readonly requester?: string;
+  readonly threadId?: string;
+}
+
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
 const fileFor = (subject: string, from: string, threadId: string, ai: string) =>
   join(transcriptsDir, safe(subject), `${safe(from)}-${threadId}.${safe(ai)}.jsonl`);
 
 /** Diagnostics, human in the loop: "show me how the agents behaved on this
  *  ticket". A request goes to everyone present in the room; on each machine it
- *  becomes a proposal in that person's outbox — their conversation leaves only
- *  when they say so, and only from the moment they adopted the thread. Answers
- *  come back directly (never on the shared log) and are filed here. The
- *  requester's own slices are filed at once: their data, their ask. */
+ *  is *kept*, not answered — a session transcript is the one thing here that
+ *  nobody asked their own agent to send, so it leaves only when that person
+ *  says so (`share`), and only from the moment they adopted the thread.
+ *  Answers come back directly (never on the shared log) and are filed here.
+ *  The requester's own slices are filed at once: their data, their ask. */
 export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts", {
   make: Effect.gen(function* () {
     const rooms = yield* Rooms;
@@ -110,7 +118,79 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       return { asked, own, dir: join(transcriptsDir, safe(subject)) };
     });
 
-    /** One room: asks become proposals, answers become files. */
+    /** What peers have asked for and has not been answered. */
+    const asks = Effect.gen(function* () {
+      const state = yield* store.get;
+      return state.transcriptAsks ?? [];
+    });
+
+    const matches = (a: TranscriptAsk, f: AskFilter) =>
+      (!f.subject || a.subject === f.subject) &&
+      (!f.requester || a.requesterName.toLowerCase() === f.requester.toLowerCase()) &&
+      (!f.threadId || a.threadId === f.threadId);
+
+    const drop = (f: AskFilter) => store.update((s) => ({ ...s, transcriptAsks: (s.transcriptAsks ?? []).filter((a) => !matches(a, f)) }));
+
+    /** Take these exact asks off the list — the ones that were answered. */
+    const forget = (gone: ReadonlyArray<TranscriptAsk>) =>
+      store.update((s) => ({
+        ...s,
+        transcriptAsks: (s.transcriptAsks ?? []).filter((a) => !gone.some((g) => g.requestId === a.requestId && g.threadId === a.threadId)),
+      }));
+
+    /** Hand over the conversations a peer asked for. Nothing here happens on
+     *  its own: the person said to, so it goes now. An ask whose transcript
+     *  did NOT get there — the peer went offline, the slice is too big — is
+     *  KEPT: the person authorised handing it over, so they should be able to
+     *  say "again" rather than ask the peer to request it a second time. */
+    const share = Effect.fn("Transcripts.share")(function* (f: AskFilter) {
+      const waiting = (yield* asks).filter((a) => matches(a, f));
+      if (waiting.length === 0) return "no transcript requests are waiting";
+      const lines: Array<string> = [];
+      const done: Array<TranscriptAsk> = [];
+      const kept: Array<TranscriptAsk> = [];
+      for (const a of waiting) {
+        if (!sessionFile(a.ai, a.sessionId, sessionDirs())) {
+          lines.push(`${a.requesterName} · thread ${a.threadId}: that ${a.ai} session file is gone — nothing to hand over`);
+          done.push(a);
+          continue;
+        }
+        const outcome = yield* outbox.send({
+          roomId: a.roomId,
+          to: a.requesterName,
+          title: `${a.subject} · thread ${a.threadId} · your ${a.ai} conversation`,
+          outgoing: {
+            kind: "transcript",
+            requestId: a.requestId,
+            subject: a.subject,
+            requester: a.requester,
+            threadId: a.threadId,
+            ai: a.ai,
+            sessionId: a.sessionId,
+            since: a.since,
+          },
+        });
+        lines.push(`${a.requesterName} · thread ${a.threadId}: ${outcome.text}`);
+        (outcome._tag === "sent" ? done : kept).push(a);
+      }
+      if (done.length > 0) yield* forget(done);
+      if (kept.length > 0) {
+        lines.push(
+          `${kept.length} of these did not get there and are still waiting — your user already said to share them, so share-transcripts sends them again when the peer is back.`,
+        );
+      }
+      return lines.join("\n");
+    });
+
+    /** They asked, the person said no: forget it, and tell them nothing. */
+    const decline = Effect.fn("Transcripts.decline")(function* (f: AskFilter) {
+      const waiting = (yield* asks).filter((a) => matches(a, f));
+      if (waiting.length === 0) return "no transcript requests are waiting";
+      yield* drop(f);
+      return `dropped ${waiting.length} transcript request(s) — the peer is not told; tell them yourself if you want to`;
+    });
+
+    /** One room: asks are kept for the person, answers become files. */
     const attach = (h: RoomHandle) =>
       Effect.gen(function* () {
         yield* h.room.transcriptRequests.pipe(
@@ -118,25 +198,27 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
             Effect.gen(function* () {
               const state = yield* store.get;
               const requester = yield* nameOf(h, from);
+              const now = yield* Clock.currentTimeMillis;
               for (const threadId of req.threadIds) {
                 const a = state.threads?.[threadId];
                 if (!a || !sessionFile(a.ai, a.sessionId, sessionDirs())) continue;
-                yield* Effect.log(`${requester} asks for your ${a.ai} conversation on thread ${threadId} (${req.subject}) — in your outbox`);
-                yield* outbox.propose({
+                const ask: TranscriptAsk = {
                   roomId: h.id,
-                  to: requester,
-                  title: `${req.subject} · thread ${threadId} · your ${a.ai} conversation`,
-                  outgoing: {
-                    kind: "transcript",
-                    requestId: req.requestId,
-                    subject: req.subject,
-                    requester: from,
-                    threadId,
-                    ai: a.ai,
-                    sessionId: a.sessionId,
-                    since: a.since ?? 0,
-                  },
+                  requestId: req.requestId,
+                  subject: req.subject,
+                  requester: from,
+                  requesterName: requester,
+                  threadId,
+                  ai: a.ai,
+                  sessionId: a.sessionId,
+                  since: a.since ?? 0,
+                  ts: now,
+                };
+                yield* store.update((s) => {
+                  const kept = (s.transcriptAsks ?? []).filter((x) => !(x.requestId === ask.requestId && x.threadId === ask.threadId));
+                  return { ...s, transcriptAsks: [...kept, ask] };
                 });
+                yield* Effect.log(`${requester} asks for your ${a.ai} conversation on thread ${threadId} (${req.subject}) — nothing has left; say the word (share-transcripts)`);
               }
             }),
           ),
@@ -226,7 +308,7 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       return out;
     });
 
-    return { request, threadsOfTicket, saved, list, dir: transcriptsDir, fileIncoming } as const;
+    return { request, threadsOfTicket, saved, list, dir: transcriptsDir, fileIncoming, asks, share, decline } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

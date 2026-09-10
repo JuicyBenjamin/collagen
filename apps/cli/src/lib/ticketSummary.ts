@@ -1,4 +1,5 @@
-import { stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { GLYPH, type Mark } from "./glyphs";
 
 /** What a ticket wants from the person, now. */
 export type TicketState = "needs-you" | "waiting" | "failed" | "done";
@@ -13,6 +14,13 @@ export interface TicketSummary {
   readonly weighedIn: ReadonlyMap<string, number>;
   /** Owners who settled or failed a step of theirs. */
   readonly settledBy: ReadonlySet<string>;
+  /** What each person did, as a mark: see lib/glyphs. Nobody appears here
+   *  who has done nothing — a bare name says that. */
+  readonly marks: ReadonlyMap<string, Mark>;
+  /** Did this person start it? The lists colour their own tickets. */
+  readonly mine: boolean;
+  /** Whose view this is — so a row can leave them out of its own people. */
+  readonly me: string;
   /** Newest of the ticket's own update and its last message. */
   readonly lastActivity: number;
 }
@@ -27,11 +35,15 @@ export const aboutTicket = (ticket: Ticket, threads: ReadonlySet<string>, m: Roo
 export const ticketThreads = (ticket: Ticket): ReadonlySet<string> => new Set(ticket.steps.map((s) => stepThreadId(ticket, s)));
 
 export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string): TicketSummary {
-  const settled = new Set(ticket.steps.filter((s) => s.status === "settled").map((s) => s.id));
-  const up = ticket.steps.filter((s) => (s.status === "pending" || s.status === "suspended") && s.needs.every((n) => settled.has(n)));
+  // one readiness rule, in p2p, shared with the agent nudges: this used to
+  // be a second copy of it here, and the copy was already wrong (it did not
+  // know that an open review waits for a reader, so the overview said
+  // needs-you about a ticket nobody had reviewed)
+  const up = readySteps(ticket);
   const waitingOn = [...new Set(up.map((s) => s.owner))];
   const failed = ticket.steps.some((s) => s.status === "failed");
-  const allSettled = ticket.steps.every((s) => s.status === "settled");
+  // a ticket with no steps at all is not "done" — nobody has done anything
+  const allSettled = ticket.steps.length > 0 && ticket.steps.every((s) => s.status === "settled");
   const state: TicketState = waitingOn.includes(me) ? "needs-you" : waitingOn.length > 0 ? "waiting" : failed ? "failed" : allSettled ? "done" : "waiting";
 
   const threads = ticketThreads(ticket);
@@ -41,20 +53,59 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   const settledBy = new Set(ticket.steps.filter((s) => s.status === "settled" || s.status === "failed").map((s) => s.owner));
   const lastActivity = Math.max(ticket.updatedAt, ...about.map((m) => m.ts));
 
-  return { state, waitingOn, asked: [...new Set(ticket.steps.map((s) => s.owner))], weighedIn, settledBy, lastActivity };
+  // what each person did, strongest thing first: a failed step outranks a
+  // settled one (they asked for something), and both outrank talking. On a
+  // review ticket a failed step is not a failure, it is changes asked for.
+  // Someone who has done nothing gets no entry: their name stands alone.
+  const marks = new Map<string, Mark>();
+  const rank: Record<Mark, number> = { changes: 3, failed: 3, approved: 2, spoke: 1 };
+  const put = (key: string, mark: Mark) => {
+    const had = marks.get(key);
+    if (had === undefined || rank[mark] > rank[had]) marks.set(key, mark);
+  };
+  for (const key of weighedIn.keys()) put(key, "spoke");
+  for (const step of ticket.steps) {
+    if (step.status === "settled") put(step.owner, "approved");
+    if (step.status === "failed") put(step.owner, ticket.kind === "review" && step.intent === "review" ? "changes" : "failed");
+  }
+
+  return {
+    state,
+    waitingOn,
+    asked: [...new Set(ticket.steps.map((s) => s.owner))],
+    weighedIn,
+    settledBy,
+    marks,
+    mine: ticket.createdBy === me,
+    me,
+    lastActivity,
+  };
 }
 
 /** needs-you first, then waiting, failed, done; newest activity first within. */
 export const compareSummaries = (a: TicketSummary, b: TicketSummary): number =>
   ORDER[a.state] - ORDER[b.state] || b.lastActivity - a.lastActivity;
 
-/** `bob✓ you· carol` — asked people first (✓ answered: spoke or settled; · silent), then
- *  those who weighed in unasked. The creator is not "asked" unless they own a step. */
+/** `bob ✓  carol ✓  dave ↻` — the OTHER people on the ticket and what each of
+ *  them did (see lib/glyphs), so two approvals and one asking for changes can
+ *  be counted at a glance. Asked people first, then anyone who weighed in
+ *  unasked.
+ *
+ *  The reader is not in their own list. "you" said only that they own a step
+ *  here, which on a review they always do — it was true of every row and so
+ *  told nobody anything; whether a row wants them is said by its place in the
+ *  list and its colour. Whose ticket it is, is said by the colour of the kind.
+ *
+ *  A mark is its own word, a space off the name: `bob✓` reads as one token,
+ *  and on a review it read as if bob had approved his own change. */
 export function peopleLabel(s: TicketSummary, nameFor: (key: string) => string): string {
-  const answered = (key: string) => (s.weighedIn.get(key) ?? 0) > 0 || s.settledBy.has(key);
-  const asked = s.asked.map((k) => `${nameFor(k)}${answered(k) ? "✓" : "·"}`);
-  const others = [...s.weighedIn.keys()].filter((k) => !s.asked.includes(k)).map(nameFor);
-  return [...asked, ...others].join(" ");
+  const one = (key: string) => {
+    const mark = s.marks.get(key);
+    return mark === undefined ? nameFor(key) : `${nameFor(key)} ${GLYPH[mark]}`;
+  };
+  const others = s.asked.filter((k) => k !== s.me);
+  const unasked = [...s.weighedIn.keys()].filter((k) => k !== s.me && !s.asked.includes(k));
+  return [...others, ...unasked].map(one).join("  ");
 }
 
 /** "2m" · "3h" · "5d" — compact, for a list column. */

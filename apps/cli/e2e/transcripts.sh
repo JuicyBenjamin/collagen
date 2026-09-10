@@ -1,9 +1,11 @@
 #!/bin/bash
 # Transcripts on request: alice asks the room for the agents' conversations on
-# a thread. bob (mock, so no person to ask — the proposal auto-approves) has
-# adopted that thread into a fake codex session whose rollout file lives in a
-# temp CODEX_HOME; the slice from adoption on is handed to alice directly and
-# filed under ~/.config/collagen/transcripts/<subject>/. No CLI runs.
+# a thread. bob has adopted that thread into a fake codex session whose rollout
+# file lives in a temp CODEX_HOME. The ask does NOT answer itself — a session
+# is the one thing nobody asked their own agent to send — so bob's side waits
+# until his agent is told to share it; then the slice from adoption on goes to
+# alice directly and is filed under ~/.config/collagen/transcripts/<subject>/.
+# No CLI runs.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 CODEX_FAKE="$OUT/codex-home"; rm -rf "$CODEX_FAKE"; mkdir -p "$CODEX_FAKE/sessions/2026/09/09"
@@ -30,12 +32,18 @@ echo "## alice asks the room"
 SUBJECT="thread-$TID"; DEST="$CFG/transcripts/$SUBJECT"; rm -rf "$DEST"
 OUT1=$(call $A "$SA" request-transcripts "{\"threadId\":\"$TID\"}")
 expect "the ask went to the one peer present" "$OUT1" "asked 1 peer"
-wait_until "bob (a mock: no person to ask) handed the slice over and alice filed it" "^1$" bash -c "ls '$DEST' 2>/dev/null | grep -c 'bob-$TID.codex.jsonl\$'"
+wait_until "bob's side kept the ask and answered nothing" "^1$" bash -c "grep -c 'asks for your codex conversation' '$OUT/bob.log'"
+expect "…and it stays waiting: nothing is on alice's disk yet" "$(ls "$DEST" 2>/dev/null | wc -l | tr -d ' ')" "^0$"
+expect "bob's agent can read the ask to him, unanswered" "$(call $B "$SB" list-transcripts '{}')" "askedOfYou"
+echo "## bob says hand it over"
+expect "share-transcripts sent the one that was asked for" "$(call $B "$SB" share-transcripts '{}')" "transcript sent: 2 entries"
+wait_until "alice filed the slice bob handed over" "^1$" bash -c "ls '$DEST' 2>/dev/null | grep -c 'bob-$TID.codex.jsonl\$'"
 FILE="$DEST/bob-$TID.codex.jsonl"
 expect "the slice keeps the meta line and what came after the adoption" "$(grep -c '' "$FILE")" "^3$"
 expect "…and drops what predates it" "$(grep -c 'unrelated work' "$FILE")" "^0$"
 expect "list-transcripts shows it, with provenance" "$(call $A "$SA" list-transcripts '{}')" "$SUBJECT,bob,codex,2,"
 expect "a sidecar records who, which agent, since when, how much" "$(python3 -c "import json;m=json.load(open('$FILE.meta.json'));print(m['from'],m['ai'],m['entries'],m['sessionId'][:8],m['since']>0,len(m['fromKey']))")" "^bob codex 2 019c0000 True 64$"
-expect "bob's log says it left through the outbox path" "$(grep -c 'transcript sent: 2 entries' "$OUT/bob.log")" "^1$"
+expect "bob's log records what went out" "$(grep -c 'transcript sent: 2 entries' "$OUT/bob.log")" "^1$"
+expect "nothing is waiting on bob's side any more" "$(call $B "$SB" share-transcripts '{}')" "no transcript requests are waiting"
 rm -rf "$DEST"
 kill_all; summary

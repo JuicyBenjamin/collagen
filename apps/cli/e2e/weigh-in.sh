@@ -19,7 +19,7 @@ wait_until "alice (creator, no step of her own) was told: bob settled" "^1$" gre
 expect "…as a ticket-update on her inbox" "$(call $A "$SA" pending-threads '{}')" "ticket-update:settled"
 
 echo "## carol, not asked, weighs in — to alice, tagged with the ticket"
-call $A "$SA" drive-peer "{\"peer\":\"carol\",\"action\":\"send-message\",\"project\":\"sandbox\",\"intent\":\"two-cents\",\"findings\":\"have you checked the loop bound?\",\"ticketId\":\"$TICKET\"}" | sed "s/^/  drive: /"
+call $A "$SA" drive-peer "{\"peer\":\"carol\",\"action\":{\"kind\":\"send-message\",\"project\":\"sandbox\",\"intent\":\"two-cents\",\"findings\":\"have you checked the loop bound?\",\"ticketId\":\"$TICKET\"}}" | sed "s/^/  drive: /"
 wait_until "alice got carol's message itself" "carol,sandbox,[0-9]+,two-cents" call $A "$SA" pending-threads '{}'
 wait_until "bob (owner, not the recipient) was told: carol weighed in" "^1$" grep -c "carol weighed in — telling your agent" "$OUT/bob.log"
 expect "carol shows as weighed in on the ticket for everyone (the message carries the ticket)" "$(call $A "$SA" get-messages "{\"threadId\":\"$(call $A "$SA" pending-threads '{}' | grep -oE '[0-9a-f]{16},carol' | head -1 | cut -d, -f1)\"}")" "ticketId"

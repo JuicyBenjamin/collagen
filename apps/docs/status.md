@@ -3,7 +3,7 @@
 A living snapshot of what works, what's in flight, and what's next. Update this as we go —
 it's the "where did we leave off" page.
 
-_Last updated: 2026-09-07._
+_Last updated: 2026-09-10._
 
 ## Working today
 
@@ -17,29 +17,45 @@ _Last updated: 2026-09-07._
   joined at once and look at one; elsewhere you're `away`. Live create / join / switch /
   leave, from the TUI (rooms rail) or the agent's tools. Peers announce their protocol
   version; a mismatch is flagged next to the peer and in `list-room`.
-- **Human in the loop** — the founding rule. Outgoing: `send-to-peer`,
-  `create-ticket` and `settle-step` never write to the log themselves; they queue a proposal
-  (data, persisted in local state — it waits across a restart) in the **outbox** (`Outbox`
-  service; shown as waiting rows at the bottom of the messages tab and of a ticket's
-  conversation; counted in the tab bar and the status line) and the person approves (`y`), rewrites
-  the text first (`e`) or rejects (`n`); only then does `Dispatch` write the log, resolving
-  the peer by name at send time. Incoming: every nudge and tool description tells the
-  agent to relay to its person and wait, never to answer or act on its own. Mocks and
-  `COLLAGEN_AUTO_APPROVE=1` (tests) bypass the gate.
+- **Human in the loop** — the founding rule, and it is about *who decides*, not about
+  clicking yes. An agent acts only when its person asks: every tool says so, incoming
+  messages are relayed and never answered on the agent's own initiative, and a step is
+  settled because the person said it was done. What an agent sends goes out at once and is
+  recorded in the **outbox** (`Outbox` service, `sent` in local state, newest first, the
+  full text on `enter`) — approving your own request was theatre, and a thing that "exists
+  but is not quite sent" was a state nobody wanted to reason about. `Dispatch` is still
+  the single writer: everything reaching a room's log on an agent's behalf goes through it.
 - **Ticket page + diagnostics registry** — `enter` on a ticket opens it: steps, the
   conversation on its threads, and the diagnostics that apply. Diagnostics are one file
   each in `src/diagnostics/`; the MCP server and the ticket page both read the registry.
 - **Transcripts on request** — the ticket page's diagnostics / `request-transcripts` asks everyone present
-  for their agent's conversation on the ticket's threads; each answer is a proposal in that
-  person's outbox, sliced from the moment they adopted the thread, sent directly (never on
-  the log) and filed under `~/.config/collagen/transcripts/`. Session files are read as
+  for their agent's conversation on the ticket's threads. On each machine the ask is kept,
+  not answered — a session is the one thing its person never asked to send — and
+  `share-transcripts` hands it over when they say so, sliced from the moment they adopted
+  the thread, sent directly (never on the log) and filed under
+  `~/.config/collagen/transcripts/`. Session files are read as
   they are (Claude Code and Codex layouts; `CLAUDE_CONFIG_DIR` / `CODEX_HOME` honoured);
   no CLI runs.
-- **Attachments** — files on a ticket by reference: `attach` / `attach-files` proposes; on
-  approval the record (name, size, type, holder, note; transcript meta when it is one) goes
-  on the log, the file stays home. `y` on the ticket page / `fetch-attachments` asks the
+- **Attachments** — files on a ticket by reference: `attach-files` puts the record
+  (name, size, type, holder, note; transcript meta when it is one) on the log at once and
+  the file stays home. `y` on the ticket page / `fetch-attachments` asks the
   holder directly; bytes come only while they are online and only for ids they attached,
   filed under `~/.config/collagen/attachments/` (transcripts with the transcripts).
+- **Review tickets** — the why travels with the code, addressed to 0 to many people:
+  `ask-review` brings the branch and
+  link (read from the project's own `.git` when omitted), the decisions behind the change
+  with how the person steered each one *and* the agent's own reason, and every fork in the
+  road with the `file:line` it produced. Refused when the why is missing. The record goes
+  on the log beside the ticket (its author is its only writer; `ticketId` amends it), and
+  the reviewer's agent reads it on demand — `review-context`, whole or `about` one file —
+  never poured into a listing. The ticket page shows a `why` section; `enter` opens all
+  of it. `peers` is 0 to many: each asked peer gets a
+  review step, and with nobody asked the ticket simply sits in the room with the why on it
+  (works with two of your own agents, no second person needed). Reviews are **posted**
+  (`post-review`), landing on a step of their reader's own — asked or not, a second and a
+  third can review the same change, and nothing is ever claimed or closed to the rest of
+  the room. The author's own step finishes the ticket. Amending the why tells every reader
+  the code moved.
 - **Messaging** — `send-to-peer` appends to the room's log in the thread between two peers
   about one project; the recipient may be offline and reads it when back. Room-visible.
   Unread is a per-thread cursor in local state. **Nothing spawns behind your back**: a real AI is never cold-started by an
@@ -107,7 +123,18 @@ Rough order, not committed.
 - [ ] Membership enforcement: drop connections from keys the log doesn't know; revoke a
   member (`removeWriter`). Admission to the log exists; it's automatic today.
 
-### 4. Identity & devices — [spec](/guide/identity)
+### 4. Solo player — [spec](/guide/conversations#solo-player)
+
+One person, two agents: Claude Code writes the change and asks for a review, Codex reads
+it with the why attached. Filing that review works today; the nudge does not.
+
+- [ ] Deliver to **agents attached to a peer**, not only to other peers: every adopted
+  session on the machine except the one whose action caused it (Claude asked, so Codex is
+  told and Claude is not)
+- [ ] Know which agent called a tool, or the nudge loops back to its author
+- [ ] Say which of your own agents did a thing, in the trace and the outbox
+
+### 5. Identity & devices — [spec](/guide/identity)
 
 - [ ] Log out / log in via recovery phrase
 - [ ] Second device (phrase first, device pairing later)
@@ -139,9 +166,11 @@ Rough order, not committed.
 - **Human in the loop, always** (2026-09-08) — the reason the app exists: two agents
   chatting and acting on their own is what orchestration already does; collagen is for
   the input that is *not* AI — a colleague's context, judgment and direction. So agents
-  relay and draft, people decide; nothing leaves a machine unapproved (the outbox, a
-  structural gate, not a prompt), and nothing answers for a person (every nudge and tool
-  description says relay-and-wait). Every later decision is judged against this.
+  relay and draft, people decide: an agent acts only on its person's word, never answers
+  for them (every nudge and tool description says relay-and-wait), and everything it sends
+  is on the record in the outbox. The gate used to be a queue you approved; that was
+  theatre, because you had just asked for the thing. Every later decision is judged
+  against who decides, not against clicking yes.
 - **No cold spawns** (2026-09-03) — an incoming message never starts an agent for you.
   Inbox or adopted session; mocks are the only exception. The user works in their own
   agent session; collagen messages *that* session on their behalf.

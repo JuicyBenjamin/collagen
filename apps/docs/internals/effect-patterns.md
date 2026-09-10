@@ -55,6 +55,31 @@ Wire frames and persisted files are `Schema` structs (`packages/p2p/src/schema.t
 decoded with `Schema.decodeUnknown(Schema.parseJson(...))`). Invalid input fails as a
 typed `ParseError` we catch and log — it never becomes an untyped runtime surprise.
 
+## One schema per idea, and switches that must be exhaustive
+
+A schema is only worth having if drift is a compile error. Two rules, both learned the
+hard way (a `drive-peer` action added to the domain union was silently rejected by the
+tool, and nothing failed to build):
+
+- **A tool's `parameters` reuse the domain schema** rather than re-listing it. `drive-peer`
+  takes `action: DriveAction`, not a hand-copied `Schema.Literals([...])`, so a new variant
+  needs no second edit. Where a tool genuinely has its own shape, its handler's parameter
+  type is checked against the schema by `Toolkit.toLayer` — a handler that reads a field
+  the schema lacks, or misses a literal the schema allows, does not compile (verified by
+  deliberately breaking each).
+- **Every switch over a schema union ends in a `never` default.** `RoomLog.apply` (LogOp),
+  the drive handler (DriveAction), `Dispatch.perform` and `proposalText` (Outgoing),
+  `Room.onFrame` (Frame): adding a member to the union then fails to build somewhere that
+  matters. An entry every member silently ignores is the worst kind of nothing.
+
+Checking this is mechanical: add a bogus member to the union, run `pnpm typecheck`, see
+which files complain, remove it. Anything that stayed quiet is a hole.
+
+The type system cannot save you from a **sentinel**, though: an `owner: Schema.String`
+holding the magic value `"open"` type-checks everywhere and has to be known by every
+reader. Model the case out of existence instead — a step exists when a person has
+something on it (see [tickets](/guide/tickets#nought-to-many-reviewers)).
+
 ## Typed errors, not throws
 
 Failure modes are `Data.TaggedError` (`PeerNotConnected`, `SwarmError`) and handled with

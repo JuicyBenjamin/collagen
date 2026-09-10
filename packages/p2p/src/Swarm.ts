@@ -5,7 +5,7 @@ import Corestore from "corestore";
 import Protomux from "protomux";
 import c from "compact-encoding";
 import b4a from "b4a";
-import { EnvelopeFromJson, type Bootstrap, type Frame } from "./schema";
+import { EnvelopeFromJson, PROTOCOL_VERSION, type Bootstrap, type Frame } from "./schema";
 import { PeerNotConnected } from "./errors";
 import type { Identity } from "./types";
 
@@ -46,6 +46,20 @@ export interface TopicHooks {
   readonly onPeerGone: (key: string) => Effect.Effect<void>;
 }
 
+/** The one thing read out of a frame we cannot otherwise read: which protocol
+ *  version wrote it. A greet always carries it, so a peer on another version
+ *  is told to update instead of just never appearing. Kept deliberately dumb
+ *  — no schema, no shapes, nothing to maintain across versions. */
+export const protocolOf = (json: string): string | null => {
+  try {
+    const v = JSON.parse(json) as { frame?: { profile?: { protocol?: unknown } } };
+    const p = v.frame?.profile?.protocol;
+    return typeof p === "string" ? p : null;
+  } catch {
+    return null;
+  }
+};
+
 const decodeEnvelope = Schema.decodeUnknownEffect(EnvelopeFromJson);
 const encodeEnvelope = Schema.encodeEffect(EnvelopeFromJson);
 
@@ -70,6 +84,8 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       () => Effect.promise(() => store.close() as Promise<void>).pipe(Effect.ignore),
     );
     const hooksByTopic = new Map<string, TopicHooks>();
+    /** peers already told their build is the odd one out (say it once) */
+    const mismatched = new Set<string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const discoveries = new Map<string, any>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -102,7 +118,19 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
           return hooks ? hooks.onFrame(key, frame) : Effect.logDebug(`frame for a room we're not in (${topic.slice(0, 8)}) from ${key.slice(0, 8)}`);
         }),
         Effect.catchTag("SchemaError", (e) =>
-          Effect.logWarning(`dropped invalid frame from ${key.slice(0, 8)}: ${String(e.issue).slice(0, 120)}`),
+          // A frame we cannot read is dropped — one protocol version at a
+          // time, no shims. But it must not look like a peer that simply
+          // never showed up: if it names a version, say so, once per peer.
+          Effect.suspend(() => {
+            const theirs = protocolOf(json);
+            if (theirs === null || theirs === PROTOCOL_VERSION || mismatched.has(key)) {
+              return Effect.logWarning(`dropped invalid frame from ${key.slice(0, 8)}: ${String(e.issue).slice(0, 120)}`);
+            }
+            mismatched.add(key);
+            return Effect.logWarning(
+              `${key.slice(0, 8)} speaks collagen protocol ${theirs}, we speak ${PROTOCOL_VERSION} — nothing between you gets through until the older side updates (npm i -g @collagen/cli)`,
+            );
+          }),
         ),
       );
 

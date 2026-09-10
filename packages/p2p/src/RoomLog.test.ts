@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Effect, Exit, Scope } from "effect";
 import Corestore from "corestore";
+import Autobase from "autobase";
+import Hyperbee from "hyperbee";
+import b4a from "b4a";
 import { openRoomLog, type RoomLog } from "./RoomLog";
 import type { Ticket } from "./ticket";
 
@@ -41,6 +44,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   project: "sandbox",
   goal: "fix average()",
   createdBy: "alice",
+  kind: "task",
   updatedAt: 1,
   steps: [{ id: "s1", owner: "bob", intent: "investigate", description: "look", needs: [], status: "pending", updatedAt: 1 }],
   ...over,
@@ -127,6 +131,54 @@ describe("RoomLog", () => {
     });
   });
 
+  it("a review is one record per ticket, and an amendment with a later ts replaces it", async () => {
+    await withLog(async (log) => {
+      const r = {
+        ticketId: "t1",
+        author: "k-alice",
+        authorName: "alice",
+        summary: "the opening animation",
+        branch: "opening",
+        base: "main",
+        link: "https://github.com/o/r/pull/22",
+        decisions: [{ id: "d1", what: "pure frame functions", userWhy: "she asked for it to look cool", where: ["src/lib/logoFrame.ts:60"] }],
+        forks: [{ id: "f1", at: "src/components/Logo/Logo.tsx:87", chose: "setInterval at 30 fps", instead: "the Timeline animator", why: "no dependency, testable", by: "agent" as const }],
+        ts: 10,
+      };
+      await Effect.runPromise(log.append({ op: "review", review: r }));
+      // an older amendment is ignored; a later one wins
+      await Effect.runPromise(log.append({ op: "review", review: { ...r, summary: "stale", ts: 5 } }));
+      await Effect.runPromise(log.append({ op: "review", review: { ...r, summary: "the opening animation, revised", ts: 20 } }));
+      await Effect.runPromise(log.append({ op: "review", review: { ...r, ticketId: "t2", summary: "another", ts: 1 } }));
+      const view = await Effect.runPromise(log.read);
+      expect(view.reviews.map((x) => [x.ticketId, x.summary])).toEqual([
+        ["t1", "the opening animation, revised"],
+        ["t2", "another"],
+      ]);
+      expect(view.reviews[0]?.forks[0]?.at).toBe("src/components/Logo/Logo.tsx:87");
+    });
+  });
+
+  it("a settled step is not un-settled by a later copy that says otherwise", async () => {
+    await withLog(async (log) => {
+      const withStep = (status: "pending" | "suspended" | "settled", updatedAt: number, result?: string) =>
+        ticket({
+          kind: "review",
+          updatedAt,
+          steps: [{ id: "address", owner: "alice", intent: "address", description: "act on it", needs: [], status, updatedAt, ...(result ? { result } : {}) }],
+        });
+      await Effect.runPromise(log.append({ op: "ticket", ticket: withStep("pending", 1) }));
+      // the delivery marks it suspended, the owner settles it …
+      await Effect.runPromise(log.append({ op: "ticket", ticket: withStep("suspended", 2) }));
+      await Effect.runPromise(log.append({ op: "ticket", ticket: withStep("settled", 3, "done") }));
+      // … and a peer's copy, written later but made before the settle, must not undo it
+      await Effect.runPromise(log.append({ op: "ticket", ticket: withStep("suspended", 4) }));
+      const view = await Effect.runPromise(log.read);
+      expect(view.tickets[0]!.steps[0]!.status).toBe("settled");
+      expect(view.tickets[0]!.steps[0]!.result).toBe("done");
+    });
+  });
+
   it("malformed entries are skipped, not fatal", async () => {
     await withLog(async (log) => {
       await Effect.runPromise(log.append({ op: "bogus", anything: 1 } as never));
@@ -134,6 +186,90 @@ describe("RoomLog", () => {
       const view = await Effect.runPromise(log.read);
       expect(view.members.map((m) => m.name)).toEqual(["carol"]);
     });
+  });
+
+  it("a record this build cannot read ejects the row it claims — no half-applied ticket", async () => {
+    await withLog(async (log) => {
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({}) }));
+      expect((await Effect.runPromise(log.read)).tickets).toHaveLength(1);
+      // what a build speaking another protocol version would write (no kind)
+      const { kind: _kind, ...older } = ticket({ updatedAt: 5 });
+      await Effect.runPromise(log.append({ op: "ticket", ticket: older } as never));
+      const view = await Effect.runPromise(log.read);
+      expect(view.tickets).toEqual([]);
+      // the room is otherwise untouched
+      await Effect.runPromise(log.append({ op: "member", key: "k", name: "carol", ts: 1 }));
+      expect((await Effect.runPromise(log.read)).members.map((m) => m.name)).toEqual(["carol"]);
+    });
+  });
+
+  it("the migration: an evict entry takes named rows off the room, and cannot touch its meta", async () => {
+    await withLog(async (log) => {
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({}) }));
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({ id: "t2" }) }));
+      await Effect.runPromise(log.append({ op: "rename", name: "dev room", ts: 1 }));
+      await Effect.runPromise(
+        log.append({ op: "evict", keys: ["ticket/t1", "meta/name"], protocol: "2", reason: "unreadable by protocol 2", ts: 2 }),
+      );
+      const view = await Effect.runPromise(log.read);
+      expect(view.tickets.map((t) => t.id)).toEqual(["t2"]);
+      expect(view.name?.name).toBe("dev room");
+      // idempotent: evicting what is already gone changes nothing
+      await Effect.runPromise(log.append({ op: "evict", keys: ["ticket/t1"], protocol: "2", reason: "again", ts: 3 }));
+      expect((await Effect.runPromise(log.read)).tickets.map((t) => t.id)).toEqual(["t2"]);
+      // nothing unreadable is in the view, so there is nothing to migrate
+      expect(await Effect.runPromise(log.evictStale)).toBe(0);
+    });
+  });
+
+  it("a view built by an older build: the rows are kept out of the room, then migrated away", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "collagen-log-"));
+    dirs.push(dir);
+    const store = new Corestore(dir);
+    await store.ready();
+    stores.push(store);
+    const scope = await Effect.runPromise(Scope.make());
+    const open = (key: string | null) =>
+      Effect.runPromise(openRoomLog(store, "room", key).pipe(Effect.provideService(Scope.Scope, scope)));
+
+    // this build makes the log …
+    const first = await open(null);
+    const key = first.key;
+    await Effect.runPromise(first.append({ op: "ticket", ticket: ticket({}) }));
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+
+    // … an OLDER build then writes its own shapes into the same view: a
+    // ticket with no kind, which no schema of ours reads
+    const older = new Autobase(store.namespace("room"), b4a.from(key, "hex"), {
+      valueEncoding: "json",
+      open: (viewStore: any) => new Hyperbee(viewStore.get("view"), { keyEncoding: "utf-8", valueEncoding: "json", extension: false }),
+      apply: async (nodes: ReadonlyArray<{ value: any }>, view: any) => {
+        for (const node of nodes) if (node.value?.op === "ticket") await view.put(`ticket/${node.value.ticket.id}`, node.value.ticket);
+      },
+      close: (view: any) => view.close(),
+    });
+    await older.ready();
+    const { kind: _kind, ...pre } = ticket({ id: "t-old", updatedAt: 9 });
+    await older.append({ op: "ticket", ticket: pre });
+    await older.update();
+    await older.close();
+
+    // … and this build picks it up again
+    const scope2 = await Effect.runPromise(Scope.make());
+    const now = await Effect.runPromise(openRoomLog(store, "room", key).pipe(Effect.provideService(Scope.Scope, scope2)));
+    try {
+      const view = await Effect.runPromise(now.read);
+      // the unreadable ticket never reaches the app; the readable one is fine
+      expect(view.tickets.map((t) => t.id)).toEqual(["t1"]);
+      // the migration takes it off the room
+      expect(await Effect.runPromise(now.evictStale)).toBe(1);
+      // …and the next read finds the view clean: nothing left to migrate
+      const after = await Effect.runPromise(now.read);
+      expect(after.tickets.map((t) => t.id)).toEqual(["t1"]);
+      expect(await Effect.runPromise(now.evictStale)).toBe(0);
+    } finally {
+      await Effect.runPromise(Scope.close(scope2, Exit.void));
+    }
   });
 
   it("reopening by key in the same store finds the same view and stays writable", async () => {

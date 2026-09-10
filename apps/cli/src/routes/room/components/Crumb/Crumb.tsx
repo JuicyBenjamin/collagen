@@ -12,6 +12,7 @@ export function Crumb({ trail, label, onBack }: { trail: ReadonlyArray<string>; 
   return (
     <Focusable
       id="crumb"
+      flexShrink={0}
       hint="← back · ↓ into the page · 1/2 tabs · q quit"
       onKey={(key) => {
         if (key.name === "left") return onBack(), true;

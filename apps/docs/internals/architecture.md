@@ -18,8 +18,8 @@ flowchart TD
   Identity["Identity\nseed + name + known rooms"]
   StateStore["StateStore\nLocalState: ai, per-room projects, adopted threads"]
   Inbox["Inbox\nwaiting messages, tagged by room"]
-  Outbox["Outbox\nproposals waiting for the person's yes"]
-  Dispatch["Dispatch\nwrites an approved Outgoing to the log"]
+  Outbox["Outbox\nwhat went out, newest first"]
+  Dispatch["Dispatch\nthe only writer of the room's log"]
   Transcripts["Transcripts\nasks peers, files what they hand over"]
   Adapters["Adapters\nclaude-code · codex · mock:*"]
   AiStatus["AiStatus\nis the CLI installed + logged in"]
@@ -120,7 +120,9 @@ identity's Corestore (`~/.config/collagen/store-<profile>`), with a
   are indexers too — fine at room scale.
 - **Entries** (`LogOp`, Schema-validated in `apply`; bad entries skipped): `add-writer`,
   `member` (key + name, so offline peers still resolve), `ticket` (full record, merged with
-  `mergeTicket`), `rename` (LWW by ts), `msg` (a `RoomMessage` with `to`).
+  `mergeTicket`), `rename` (LWW by ts), `msg` (a `RoomMessage` with `to`), `attachment`
+  (a reference, first write wins), `review` (the why behind a review ticket, LWW by ts —
+  its author is its only writer).
 - **View keys**: `ticket/<id>`, `member/<key>`, `meta/name`, `msg/<000…seq>` +
   `state/msgs` (the counter). `apply` reads and writes only the view — Autobase may
   reorder entries when causal forks arrive, and re-applies deterministically.
@@ -155,29 +157,32 @@ Dev runs (`COLLAGEN_DEV=1`) add `drive-peer`; a production build never registers
 Two plain HTTP routes exist for harnesses without a convenient blocking tool call:
 `GET /inbox/pending` and `GET /inbox/wait?seconds=N` (long-poll, 204 on timeout).
 
-### `Outbox`: the human gate
+### `Outbox`: one door out, and a receipt
 
-The three tools that write to a room's log on the agent's behalf — `send-to-peer`,
-`create-ticket`, `settle-step` — do not write. Each validates its input (unknown peer or
-step fails at once) and hands `Outbox.propose` a `Proposal`: room, recipient, title, and an
-`Outgoing` — plain data (`packages/p2p/src/schema.ts`): a message by peer *name*, a full
-ticket record, or a step settlement. Proposals live in `LocalState.outbox`, persisted by
-`StateStore` like everything else there, so they wait across a restart. The TUI renders
-them from the same state: waiting rows at the bottom of the messages tab and of a ticket's
-conversation (`usePendingOutgoing` gives both lists the keys and the row), counts in the
-tab bar and the status line.
+Every tool that writes to a room's log on the agent's behalf — `send-to-peer`,
+`create-ticket`, `ask-review`, `post-review`, `settle-step`, `attach-files` — goes through
+one door. Each validates its input (unknown peer or step fails at once) and hands
+`Outbox.send` a `Proposal`: room, recipient, title, and an `Outgoing` — plain data
+(`packages/p2p/src/schema.ts`): a message by peer *name*, a full ticket record, a review
+with its why, a step settlement, files, a transcript.
 
-`approve(id)` hands the Outgoing to **`Dispatch`**, the only place the cli appends
-messages, tickets or settlements for the agent: it looks up the room, resolves the peer by
-name *now* (a proposal that waited overnight still finds them), applies the settlement to
-the ticket as it currently is, writes the log, and returns the same text the tool used to.
-`edit(id, text)` rewrites a message's findings or a step's result before that happens;
-`reject(id)` drops it — the agent isn't told, the person tells it. The tool's return value
-to the agent is a fixed sentence: queued for your user's approval, tell them, stop.
+`Outbox.send(p)` hands it to **`Dispatch`** — the only place the cli appends anything to a
+room's log for the agent: it looks up the room, resolves the peer by name, applies a
+settlement to the ticket as it currently is, writes, and returns a `Done`: `sent(text)` or
+`refused(text)`. That is a type and not a string starting with "failed:", because the
+outbox has to know — a record goes into `LocalState.sent` (newest first, capped) **only**
+for a `sent`, so the tab is what left this machine rather than what was attempted. A
+caller that must react to a refusal reads the tag (`Transcripts.share` keeps a peer's
+request alive when the transcript did not get there); one that only relays uses
+`Outbox.tell`, which is `send` with the text taken out.
 
-Bypass exists only where there is no person to ask: a `mock:*` preferred AI, or
-`COLLAGEN_AUTO_APPROVE=1` (the e2e scenarios; logged as a warning at start). In that case
-`propose` dispatches at once and returns Dispatch's text.
+There is no approval queue, and there used to be: the agent proposed, the person pressed
+`y`. It was theatre — an agent acts only on its person's request, so the person was
+approving what they had just asked for — and "exists but is not quite sent" was a state
+nobody could reason about (removed 2026-09-10 on the user's call). Human in the loop is
+about who decides: the tools say "only when your user asks", incoming messages are relayed
+and never answered on the agent's initiative, a step settles because the person said it
+was done, and the outbox is the receipt.
 
 ### Ticket updates for participants
 
@@ -199,14 +204,19 @@ show — and `index.ts` lists them. `Mcp.ts` builds a `Tool` per entry (prefixed
 the ticket page lists the entries whose `fromContext` applies and runs them with the same
 deps. Adding a diagnostic touches that folder only.
 
-### `Transcripts`: diagnostics through the same gate
+### `Transcripts`: the one ask that waits
 
 `Transcripts` (`apps/cli/src/services/Transcripts.ts`) sits above `Outbox`. `request(room,
 subject, threadIds)` files the requester's own adopted slices, then broadcasts a
-`transcript-request` frame (ephemeral, direct). On every other machine the service turns
-a request into one outbox proposal per adopted thread it has a session file for
-(`Outgoing.kind = "transcript"`, `since` = the adoption time stored on `AdoptedThread`).
-Approval reaches `Dispatch`, which reads the session file *now*, keeps the lines from
+`transcript-request` frame (ephemeral, direct). On every other machine the service
+*keeps* the request — one `TranscriptAsk` in local state per adopted thread it has a
+session file for (`since` = the adoption time stored on `AdoptedThread`) — and answers
+nothing: everything else an agent sends is something its person asked for, and this is
+the one thing they did not, so it waits for their word. `share-transcripts` (a
+diagnostic, `transcripts.share`) turns the waiting asks into `Outgoing.kind =
+"transcript"` sends and drops them; `decline: true` drops them and tells the peer
+nothing; `list-transcripts` shows what is waiting so the agent can read the asks out. A
+send reaches `Dispatch`, which reads the session file *now*, keeps the lines from
 `since` on (`lib/transcripts.ts`: `sessionFile`, `sliceSince`), gzips them and sends a
 `transcript` frame to the requester alone. The requester's `Transcripts` files it under
 `~/.config/collagen/transcripts/<subject>/`. Nothing touches the room log; no agent CLI
@@ -229,7 +239,7 @@ Interop shims for strict MCP clients (Codex's `rmcp`) live here — see
 `Attachments` (`apps/cli/src/services/Attachments.ts`) puts files on tickets without
 moving them. `attach(room, ticket, goal, paths, note?)` describes each path
 (`lib/attachments.ts`: name, size, MIME by extension; a `.meta.json` beside it makes it a
-transcript and carries that meta) and proposes `Outgoing.kind = "attach"`. On approval
+transcript and carries that meta) and sends `Outgoing.kind = "attach"`.
 `Dispatch` appends one `LogOp { op: "attachment" }` per file — the `Attachment` record:
 id, ticket, holder key and name, name/bytes/mime, note, optional `transcript` info,
 `attachedAt`; no path — and remembers `attachment id → local path` in
@@ -242,6 +252,58 @@ them under `~/.config/collagen/attachments/ticket-<id8>/<id8>-<name>` + `.meta.j
 for a transcript, through `Transcripts.fileIncoming` next to the other transcripts with
 `origin`/`via` in its meta. `held` merges the three sources (attached by us, fetched,
 fetched transcripts) into `id → path` for the ticket page and `fetch-attachments`.
+
+### One protocol version at a time (and how records leave)
+
+`PROTOCOL_VERSION` (`packages/p2p/src/schema.ts`) is the whole compatibility story: an
+alpha keeps no path for an older build's shapes, and every wire and log field is required.
+What that needs, so nothing can brick:
+
+- **`RoomLog.read` never trusts the view.** Every row is decoded against its schema
+  (`Ticket`, `Member`, `RoomMessage`, `Attachment`, `ReviewContext`); rows that fail are
+  kept out of `LogView` and remembered as stale.
+- **`RoomLog.evictStale` is the migration.** It appends one `LogOp { op: "evict", keys }`,
+  applied by every member (`EVICTABLE` limits it to room records — never `meta/`), so the
+  cleanup replicates instead of each side hiding its own mess. `Room.refresh` calls it, so
+  it runs as soon as we are admitted; it is idempotent and its own log entry ends the loop.
+- **`apply` ejects on overwrite**: an entry it cannot decode deletes the view row it
+  claims (`claimedKey`), so a record from another version leaves nothing half-applied.
+- **`Swarm.protocolOf`** reads only `frame.profile.protocol` out of a frame that failed to
+  decode — deliberately schema-free — so a peer on another version is told to update
+  rather than appearing to be offline.
+- **`lib/localState.ts` salvages the state file** instead of falling back to empty: parts
+  that still decode are kept, the rest are dropped, named in the log and written back.
+  A stale outbox record must not cost the user their rooms.
+
+### Review tickets: the why as data
+
+`ask-review` (`services/Mcp.ts`) builds two things from one call: a `Ticket` with
+`kind: "review"` (a `review-<name>` step per person asked — none when nobody was asked —
+plus an `address` step the author owns that needs them all) and a `ReviewContext`
+(`packages/p2p/src/review.ts`) — summary, branch/base/link, `decisions` (`what`,
+`userWhy`, `agentWhy`, `where[]`) and `forks` (`at`, `chose`, `instead`, `why`, `by`).
+Branch and link fall back to the shared project's own `.git` (`lib/gitInfo.ts`: HEAD, a
+worktree's `gitdir:` pointer, `origin` as an https URL). `lib/review.ts` refuses an empty
+why (`reviewGaps`) and renders it back (`reviewRows`, `reviewHeadline`). Both travel as
+one `Outgoing.kind = "review"`, so the record and the reasons land together, and the
+outbox keeps the whole text — every quoted line — as the receipt. `Dispatch` appends the ticket, then
+`LogOp { op: "review" }`; `RoomLog` keeps it at `review/<ticketId>` (later `ts` wins) and
+`Room.reviews` is the SubscriptionRef. An amendment is the same call with `ticketId`:
+`mergeReview` folds the delta into what the log has, only the author may write it, and
+`reviewChanges` diffs by ts so every participant gets a `ticket-update`. Reading is on
+demand — the `review-context` diagnostic, optionally narrowed by `about`.
+
+Two pure rules in p2p own who may change what, and both `Dispatch` and `Rooms`' drive
+handler use them (separate copies of this once let the test tool prove behaviour
+production did not have):
+
+- `settleStep` — a step belongs to its owner. Anyone else gets `not-yours` and nothing
+  changes. There is no sentinel owner: a step nobody is doing does not exist.
+- `postReview` — a reader's review, upserted onto `review-<their name>`
+  (`reviewStepId`, keyed apart by pubkey when two people share a display name). Asked or
+  not, everyone's review is their own step, so reviews accumulate instead of being
+  claimed. It reaches the log through `Outgoing.kind = "post-review"`, so it lands in the
+  outbox like everything else that went out.
 
 ## `AgentRunner`: the resume policy
 
