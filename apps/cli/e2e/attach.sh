@@ -42,7 +42,10 @@ expect "attach-files put two references on the ticket" "$(call $A "$SA" attach-f
 expect "a missing path is refused before anything is proposed" "$(call $A "$SA" attach-files "{\"ticketId\":\"$TICKET\",\"files\":[\"/nope/none.png\"]}")" "^\"failed: /nope/none.png is not a file"
 
 echo "## bob sees the references — no file has moved"
-wait_until "bob's fetch-attachments lists both, from alice, with the note" "flicker_shot.png|flicker shot.png" call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}"
+wait_until "bob's fetch-attachments lists the screenshot, from alice, with the note" "flicker_shot.png|flicker shot.png" call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}"
+# two rows, two appends: wait for the second one too, or the listing below is
+# read while half of it is still crossing
+wait_until "…and the transcript reference lands as well" "codex" call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}"
 LISTED=$(call $B "$SB" fetch-attachments "{\"ticketId\":\"$TICKET\"}")
 expect "…the image by name, type and size" "$LISTED" "flicker shot.png,image/png,10,alice"
 expect "…the transcript with whose conversation it is" "$LISTED" "bob.{1,6}codex.{1,6}2 entries"
