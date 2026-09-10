@@ -184,11 +184,13 @@ dependency order is enforced by delivery, not by remembering.
 ## In the TUI
 
 The overview tab lists **every** ticket in the room, whoever made it and whoever it is
-for, ordered by what each one wants from you: `needs you` (a step you own is up),
-`waiting on bob`, `failed`, `done` — newest activity first within each, finished ones dim
-at the end. Nothing is hidden or folded away. Each row: state · goal · who was asked and
-whether they answered (`bob✓` spoke or settled, `bob·` silent so far, `carol` weighed in
-unasked) · age. The header counts them. `enter` opens the ticket's own
+for — including the ones your agent has queued and you have not approved yet, which are
+tickets that simply have not reached the room. A row is a glance and nothing more: its
+**kind**, its **goal**, and **who has answered** (`bob✓` spoke or settled, `bob·` silent
+so far, `carol` weighed in unasked; a queued one says `yours to approve`). Order carries
+the rest: what needs you first, then what is waiting, then failed, then done (dim).
+Nothing is hidden or folded away, and the header is a count. `y` / `n` on a queued row
+sends or drops it. `enter` opens the ticket's own
 page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:
 goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body: **why**,
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening
