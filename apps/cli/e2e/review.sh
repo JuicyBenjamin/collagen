@@ -147,6 +147,13 @@ drive_until "carol's review lands as hers" "carol, unasked" $A "$SA" "$CAROL_UNA
 expect "…bob's own step is still bob's" "$(rows $A "$SA" "$MANY_TICKET")" "review-bob,bob,review"
 expect "settling someone else's step is refused, with what to do instead" "$(call $B "$SB" settle-step "{\"ticketId\":\"$MANY_TICKET\",\"stepId\":\"address\",\"result\":\"not mine\"}")" "is alice.s to settle.*post-review"
 
+echo "## a reviewer who was asked and wants changes hands the ticket back to its author"
+BOB_CHANGES="{\"peer\":\"bob\",\"action\":{\"kind\":\"post-review\",\"ticketId\":\"$MANY_TICKET\",\"result\":\"bob: the evict entry needs the protocol version in it\",\"failed\":true}}"
+drive_until "bob asks for changes on his own step" "review-bob,bob,review,failed" $A "$SA" "$BOB_CHANGES" rows $A "$SA" "$MANY_TICKET"
+wait_until "the author's own step is handed to her — a change request is an answer, not a dead end" "ticket .{1,10} step address actionable" bash -c "cat '$OUT/alice.log'"
+wait_until "carol, the other reader, hears it as a change request" "bob asked for changes" bash -c "cat '$OUT/carol.log'"
+expect "…and nobody is told bob failed" "$(grep -c 'bob failed' "$OUT/carol.log")" "^0$"
+
 echo "## the ticket keeps up with the code: a revision reaches its readers"
 REV="{\"ticketId\":\"$MANY_TICKET\",\"branch\":\"feat/evict-v2\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/24\",\"decisions\":[{\"what\":\"the sweep is per read, not per open\",\"userWhy\":\"he asked after bob's read: never brick\",\"where\":[\"packages/p2p/src/RoomLog.ts:150\"]}]}"
 expect "alice revises the why after the reviews" "$(call $A "$SA" ask-review "$REV")" "review ticket updated .*2 decision\(s\)"

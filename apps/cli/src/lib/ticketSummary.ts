@@ -1,4 +1,4 @@
-import { stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { GLYPH, type Mark } from "./glyphs";
 
 /** What a ticket wants from the person, now. */
@@ -35,8 +35,11 @@ export const aboutTicket = (ticket: Ticket, threads: ReadonlySet<string>, m: Roo
 export const ticketThreads = (ticket: Ticket): ReadonlySet<string> => new Set(ticket.steps.map((s) => stepThreadId(ticket, s)));
 
 export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string): TicketSummary {
-  const settled = new Set(ticket.steps.filter((s) => s.status === "settled").map((s) => s.id));
-  const up = ticket.steps.filter((s) => (s.status === "pending" || s.status === "suspended") && s.needs.every((n) => settled.has(n)));
+  // one readiness rule, in p2p, shared with the agent nudges: this used to
+  // be a second copy of it here, and the copy was already wrong (it did not
+  // know that an open review waits for a reader, so the overview said
+  // needs-you about a ticket nobody had reviewed)
+  const up = readySteps(ticket);
   const waitingOn = [...new Set(up.map((s) => s.owner))];
   const failed = ticket.steps.some((s) => s.status === "failed");
   // a ticket with no steps at all is not "done" — nobody has done anything

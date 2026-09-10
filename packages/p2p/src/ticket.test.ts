@@ -163,6 +163,29 @@ describe("a review ticket asks 0 to many people", () => {
     expect(actionableSteps(unaddressed, ALICE)).toEqual([]);
   });
 
+  it("a reviewer who was ASKED and wants changes unblocks the author — a change request is an answer", () => {
+    const asked = ticket({
+      kind: "review",
+      createdBy: ALICE,
+      steps: [step({ id: "review-bob", owner: BOB.key, intent: "review" }), step({ id: "address", owner: ALICE, needs: ["review-bob"] })],
+    });
+    // nothing yet: the author waits for bob
+    expect(actionableSteps(asked, ALICE)).toEqual([]);
+    const changes = postReview(asked, BOB, "the interval leaks on unmount", true, 5).ticket;
+    expect(actionableSteps(changes, ALICE).map((s) => s.id)).toEqual(["address"]);
+    // and the same when he is happy with it
+    const fine = postReview(asked, BOB, "looks right", false, 5).ticket;
+    expect(actionableSteps(fine, ALICE).map((s) => s.id)).toEqual(["address"]);
+  });
+
+  it("a FAILED task step still blocks what waits on it — only a review reads failure as an answer", () => {
+    const task = ticket({
+      createdBy: ALICE,
+      steps: [step({ id: "s1", owner: BOB.key, status: "failed" }), step({ id: "s2", owner: ALICE, needs: ["s1"] })],
+    });
+    expect(actionableSteps(task, ALICE)).toEqual([]);
+  });
+
   it("…and it becomes the author's the moment a review lands", () => {
     const read = postReview(unaddressed, BOB, "looks right to me", false, 5).ticket;
     expect(actionableSteps(read, ALICE).map((s) => s.id)).toEqual(["address"]);

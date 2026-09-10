@@ -75,9 +75,19 @@ export const reviewUpdateText = (ticket: Ticket, r: ReviewContext, fresh: boolea
 
 const firstLine = (s: string) => s.split("\n")[0] ?? "";
 
+/** What happened, in the words that state actually has. On a review ticket
+ *  "failed" is how a reader says they want changes, so calling it a failure —
+ *  in the message, its intent, or the activity line — describes the most
+ *  complete kind of review there is as a breakdown. */
+export const stepUpdateWhat = (c: StepChange): string =>
+  c.ticket.kind === "review" && c.step.intent === "review" && c.to === "failed" ? "asked for changes" : c.to;
+
 /** What a participant is told about a step that settled or failed. */
-export const stepUpdateText = (c: StepChange, actorName: string): string =>
-  `${actorName} ${c.to} step ${c.step.id} (${c.step.intent}) on the ticket "${c.ticket.goal}" (${c.ticket.id}): ${firstLine(c.step.result ?? "")}`;
+export const stepUpdateText = (c: StepChange, actorName: string): string => {
+  const what = stepUpdateWhat(c);
+  const did = what === c.to ? `${what} step` : `${what} on`;
+  return `${actorName} ${did} ${c.step.id} (${c.step.intent}) on the ticket "${c.ticket.goal}" (${c.ticket.id}): ${firstLine(c.step.result ?? "")}`;
+};
 
 /** What a participant is told when someone weighs in. */
 export const weighInText = (ticket: Ticket, m: RoomMessage, toName: string): string =>

@@ -93,6 +93,19 @@ describe("summarize", () => {
     expect(peopleLabel(summarize(ticket([step("s1", BOB, "failed")]), [], ALICE), nameFor)).toBe("bob ✕");
   });
 
+  it("the overview agrees with the agent nudges: an open review is not needs-you", () => {
+    // nobody asked, so nothing has been reviewed: the row must not shout
+    const open = { ...ticket([step("address", ALICE, "pending")]), kind: "review" as const };
+    const withIntent = { ...open, steps: [{ ...open.steps[0]!, intent: "address" }] };
+    expect(summarize(withIntent, [], ALICE).state).toBe("waiting");
+    // once a reader has posted, it is the author's to act on
+    const read = {
+      ...withIntent,
+      steps: [...withIntent.steps, { ...step("review-bob", BOB, "failed"), intent: "review" }],
+    };
+    expect(summarize(read, [], ALICE).state).toBe("needs-you");
+  });
+
   it("says whose ticket it is, which is what the reader's own name used to imply", () => {
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], ALICE).mine).toBe(true);
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], BOB).mine).toBe(false);

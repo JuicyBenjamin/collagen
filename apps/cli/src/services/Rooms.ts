@@ -1,7 +1,7 @@
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
-import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, weighInText } from "../lib/ticketUpdates";
+import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
@@ -187,7 +187,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (!isParticipant(c.ticket, trace, identity.pubkey)) continue;
                 if (actionableSteps(c.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
                 const actorName = yield* nameOf(c.step.owner);
-                yield* notify(myThreadFor(c.ticket, trace, identity.pubkey, c.step.owner), c.step.owner, actorName, c.ticket, c.to, stepUpdateText(c, actorName));
+                yield* notify(myThreadFor(c.ticket, trace, identity.pubkey, c.step.owner), c.step.owner, actorName, c.ticket, stepUpdateWhat(c), stepUpdateText(c, actorName));
               }
             }),
           ),
