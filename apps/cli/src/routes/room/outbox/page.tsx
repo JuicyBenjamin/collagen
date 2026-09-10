@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { BoxRenderable } from "@opentui/core";
+import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { shortRoomId } from "@collagen/p2p";
@@ -8,6 +9,8 @@ import { focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
+import { wrap } from "../../../lib/wrap";
+import { proposalText } from "../../../services/Outbox";
 import { roomAtom } from "../../atoms";
 import { outboxAtom } from "../atoms";
 import { PENDING_HINT, usePendingOutgoing } from "../components/PendingOutgoing/PendingOutgoing";
@@ -23,6 +26,7 @@ export function OutboxPage() {
   const all = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const);
   const outgoing = usePendingOutgoing();
   const setFocus = useAtomSet(focusAtom);
+  const { width } = useTerminalDimensions();
   const [cursor, setCursor] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const listRef = useRef<BoxRenderable>(null);
@@ -39,7 +43,12 @@ export function OutboxPage() {
   const rows = [...all].sort((a, b) => b.ts - a.ts);
   const last = Math.max(0, rows.length - 1);
   const sel = cursor === null ? 0 : clamp(cursor, 0, last);
-  const start = clamp(sel - Math.floor(viewport / 2), 0, Math.max(0, rows.length - viewport));
+  // an unfolded row is many lines tall: they come out of the window, so the
+  // list never grows past its box and shoves the page around
+  const open = rows.find((p) => p.id === expanded);
+  const bodyLines = open ? wrap(proposalText(open), Math.max(30, width - 30)).length + 1 : 0;
+  const window = Math.max(1, viewport - bodyLines);
+  const start = clamp(sel - Math.floor(window / 2), 0, Math.max(0, rows.length - window));
 
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
@@ -72,7 +81,7 @@ export function OutboxPage() {
                 </text>
               ) : (
                 rows
-                  .slice(start, start + viewport)
+                  .slice(start, start + window)
                   .map((p, i) =>
                     outgoing.row(p, focused && start + i === sel, expanded === p.id, p.roomId === roomId ? undefined : `room ${shortRoomId(p.roomId)}`),
                   )

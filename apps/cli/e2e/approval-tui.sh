@@ -18,6 +18,8 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M1_tickets
   printf 'n'; sleep 2; mark M2_ticket_dropped
   printf '3'; sleep 2; mark M3_outbox
+  printf '\r'; sleep 2; mark M3b_expanded
+  printf '\r'; sleep 1; mark M3c_folded
   printf 'n'; sleep 2; mark M4_rejected
   printf 'y'; sleep 4; mark M5_approved; sleep 1; printf 'q' ) | \
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows 40 cols 120; $TUI" > /dev/null 2>&1 &
@@ -46,7 +48,9 @@ expect "n dropped the second message" "$(grep -c '✗ rejected: message → bob 
 expect "y sent the first, and it is logged" "$(grep -c '✓ approved: message → bob · sandbox · ask —' "$LOG")" "^1$"
 expect "only one message ever reached bob" "$(grep -c '← alice' "$OUT/bob.log")" "^1$"
 expect "the keys landed in the outbox" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')" "outbox"
+expect "enter unfolds a row: the whole text, and when it was queued" "$(echo "$TEXT" | grep -c 'the one alice rejects')" "^[1-9]"
+expect "…with the brand still above it, not squeezed into itself" "$(echo "$TEXT" | grep -c 'peer-to-peer')" "^[1-9]"
 expect "the tab bar carries the count, and nothing else" "$(echo "$TEXT" | grep -cE 'outbox \(2\)')" "^[1-9]"
-expect "no prose in the header: the count is the whole signal" "$(echo "$TEXT" | grep -cE '[0-9] waiting for you|has left this machine')" "^0$"
+expect "no prose in the header: the count is the whole signal" "$(echo "$TEXT" | grep -cE 'outbox .{0,3}[0-9].{0,3} .{0,4}(waiting|nothing)')" "^0$"
 expect "…nor next to the ai in the status line" "$(echo "$TEXT" | grep -cE '[0-9] to approve')" "^0$"
 kill_all; summary

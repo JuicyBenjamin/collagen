@@ -59,14 +59,17 @@ function Row({ cells, colors }: { cells: ReadonlyArray<string>; colors: Readonly
 /** The brand, still — for screens that have no runtime to wait for. */
 export function Logo() {
   return (
-    <>
+    // flexShrink 0: the header is not the thing that gives way when the page
+    // below it grows — squeezing it out is layout shift, and it looked like
+    // the tagline jumping into the wordmark
+    <box flexDirection="column" flexShrink={0}>
       <ascii-font text={WORD} font="tiny" color={theme.accent} />
       {/* one row of air, the same as the room's header gets below: the glyphs
           fill their cells, so text on the next row touches them */}
-      <text fg={theme.dim} marginTop={1}>
+      <text fg={theme.dim} marginTop={1} flexShrink={0}>
         {TAGLINE}
       </text>
-    </>
+    </box>
   );
 }
 
@@ -107,7 +110,7 @@ export function Opening({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <box flexDirection="column" marginLeft={where.x} marginTop={where.y}>
+    <box flexDirection="column" marginLeft={where.x} marginTop={where.y} flexShrink={0}>
       {glyphs.rows.map((cells, r) => (
         <Row key={r} cells={cells} colors={frame.columns} />
       ))}
