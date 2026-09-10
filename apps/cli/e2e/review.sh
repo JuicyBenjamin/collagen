@@ -5,8 +5,7 @@
 # steered each one, and the forks in the road with the file:line each produced.
 # bob's side sees a review ticket and pulls the why on demand, whole or one
 # part at a time. A review with no why is refused before anything leaves, and
-# only the author writes their own why. Both run as mocks (auto-approve); no
-# CLI runs.
+# only the author writes their own why. No CLI runs.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 

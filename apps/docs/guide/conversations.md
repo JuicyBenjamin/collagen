@@ -1,7 +1,7 @@
 # Conversations
 
 A collagen conversation is **two people talking about a project, each through their own
-agent**. You tell your agent what to say; it drafts, you approve, it goes. The peer's
+agent**. You tell your agent what to say; it says exactly that, and the outbox shows what went. The peer's
 agent shows it to them and waits; they decide what comes back. Both agents keep their own
 session context across the exchange, so the drafting side remembers the repo, the thread,
 what was already said — but no agent ever answers for its person.
@@ -22,17 +22,20 @@ judgment, the bigger picture. So:
 - when the person asks something the thread doesn't answer, the agent decides which it is:
   the person's own to answer, from this repo under their direction — or the other peer's,
   in which case it drafts the question for them (into the outbox, like any send);
-- an outgoing message is what the person decided to send, and it waits in the **outbox**
-  until they approve it — the agent's call to `send-to-peer` (or `create-ticket`,
-  `settle-step`) queues, it does not send;
+- an outgoing message is what the person decided to send, so it goes when they say so and
+  the **outbox** shows what went: the agent's call to `send-to-peer` (or `create-ticket`,
+  `settle-step`) writes to the room's log there and then. Nothing is drafted for later
+  approval, because the person already asked for it;
 - the agent's job is to draft well and relay faithfully: dense and short, the actionable
   part and just enough context, without dropping what the other side would otherwise have
   to regenerate.
 
 **Your conversation with your AI is still yours.** Peers never see your session history,
-your prompts, or your agent's reasoning — only the approved message. The one way any of it
-leaves is [transcripts on request](#transcripts-on-request) or an [attachment](#attachments): a peer asks, it lands in your
-outbox, you hand it over or you don't.
+your prompts, or your agent's reasoning — only what you told your agent to send. The one
+way any of it leaves is [transcripts on request](#transcripts-on-request) or an
+[attachment](#attachments), and those are the one place a request from outside is *kept*
+rather than acted on: a peer asks, your agent tells you who asked and for what, and it
+hands the session over only when you say so.
 
 ## Anatomy of a message
 
@@ -96,8 +99,8 @@ It stores a mapping and nothing else — collagen ids are never chosen by an age
 survives restarts. `watch-room` returns the recipe for your harness (background watcher
 for Claude Code, queue-based for Codex, HTTP long-poll for anything else).
 
-The one exception: `mock:*` AIs are development dummies — they auto-respond and skip the
-outbox, because there is no person behind them to ask.
+The one exception: `mock:*` AIs are development dummies — they answer by themselves,
+because there is no person behind them to tell.
 
 ::: info Why not spawn automatically?
 The early prototype started a headless agent in the project folder on every incoming
@@ -107,28 +110,29 @@ that session on your behalf — it works for every harness the same way, because
 ever uses the CLI's own resume mechanism.
 :::
 
-## What happens when your agent wants to send
+## What happens when your agent sends
 
-It doesn't, yet. `send-to-peer`, `create-ticket` and `settle-step` queue a **proposal** in
-the room's outbox and tell the agent so ("queued for your user's approval — tell them what
-you queued, then stop"). It shows at the bottom of the **messages** tab — outbound is still
-messages — marked waiting: who it's for, the title, the full text on `enter`; a ticket's
-conversation shows the ones about that ticket. `y` sends it — only then is it written to the room's log;
-`e` opens the text so you can rewrite it before it goes (a message's findings, a step's
-result — a ticket's shape is the agent's to redraft, so reject and say what you want);
-`n` drops it, and the agent isn't told: you tell it, in your words. A request that fails
-before queueing (unknown peer, unknown step) fails immediately, as before.
+It sends. `send-to-peer`, `create-ticket`, `ask-review`, `post-review` and `settle-step`
+write to the room's log as they are called, and the **outbox** tab is the receipt: every
+send out of this machine, newest first, across every room you are in — kind, project, who
+it went to, the subject, and the full text on `enter`. A send that can't work (unknown
+peer, unknown step, not admitted yet) fails immediately and the agent is told why.
 
-Proposals are data in your local state, so they wait across a restart; the peer is
-resolved by name when you approve, not when the agent proposed.
+There is no draft-and-approve step, and that is deliberate: you asked your agent for the
+message, so a queue asking you to approve your own request is a second yes for nothing —
+and the TUI is not a text editor. What you change, you change by telling your agent, in
+words, the way you asked for it in the first place.
 
-The gate is structural, not a prompt: the tool handlers never write to the log themselves.
-What a prompt still has to carry is the receiving side — "relay, don't act" — because the
-agent's own reasoning can't be gated. The nudges and tool descriptions all say it; the
-outbox catches whatever slips.
+The records are data in your local state, so the outbox survives a restart; the peer's
+name is resolved as the send happens.
 
-A headless run (`collagen --headless`) has no outbox to approve from, so its proposals
-wait forever; it is for receiving and for tests (`COLLAGEN_AUTO_APPROVE=1`, dev only).
+What the design still rests on is the *receiving* side — "relay, don't act" — because an
+agent's own reasoning can't be gated by a tool boundary. The nudges and every tool
+description say it, and the one thing a peer can ask of your machine that you did not ask
+for, a [transcript](#transcripts-on-request), is kept until you say the word.
+
+A headless run (`collagen --headless`) sends the same way; it is for receiving and for
+tests.
 
 ## Transcripts on request
 
@@ -136,11 +140,14 @@ Debugging how the agents behaved around a ticket used to mean asking everyone to
 their sessions. Instead: open the ticket (`enter` on it in the overview) and run `collect
 transcripts` in its diagnostics row — or ask your agent for `request-transcripts` with a
 ticket or thread id. Everyone present in the room is asked for
-their agent's conversation on the threads involved. On each machine that is a proposal in
-the person's **outbox** — "alice asks for your codex conversation on thread …" — and it
-leaves only if they say `y`, and only **from the moment they adopted the thread**: a
-session may hold unrelated work before that, and that stays home. Your own adopted
-conversations on those threads are filed at once.
+their agent's conversation on the threads involved. On each machine the ask is **kept, not
+answered** — "alice asks for your codex conversation on thread … — nothing has left" — and
+the session goes over only when that person tells their agent to (`share-transcripts`, or
+`share-transcripts {decline: true}` to drop the ask and tell them nothing), and only
+**from the moment they adopted the thread**: a session may hold unrelated work before
+that, and that stays home. `list-transcripts` shows what is waiting, so the agent can read
+the asks out instead of deciding for its person. Your own adopted conversations on those
+threads are filed at once.
 
 What comes back travels directly to you, never over the shared log, and is filed under
 `~/.config/collagen/transcripts/<subject>/<peer>-<threadId>.<ai>.jsonl` — the session
@@ -166,10 +173,10 @@ its meta (whose conversation, which agent, how many entries, since when). Everyo
 the reference on the ticket, online or not; the reference is on the room's log, so it is
 there whether or not you are.
 
-Attaching is a proposal in your **outbox** like any send: open the ticket, `attach` in
-its diagnostics row (type a path, or mark a collected transcript, `enter`), or ask your
-agent for `attach-files` with the paths — it lists what would be attached, and nothing
-happens until you say `y`. Then the references appear on the ticket for everyone.
+Attaching is a send like any other, and shows in your **outbox**: open the ticket,
+`attach` in its diagnostics row (type a path, or mark a collected transcript, `enter`), or
+ask your agent for `attach-files` with the paths. The references then appear on the ticket
+for everyone — you named the files, so nothing else on your disk can be asked for.
 
 Whoever wants a file **fetches** it: on the ticket page, `y` on the attachment row; for
 an agent, `fetch-attachments` with the ticket id. The ask goes to the holder's collagen
@@ -251,15 +258,15 @@ local state), so a restart lands on the same waiting set.
 ## A typical exchange
 
 1. **Bob** hits wrong results from a library Alice owns. He tells his agent to ask her:
-   it drafts `send-to-peer(peer: alice, project: sandbox, intent: flag-issue, findings:
-   "average([2,4]) returns NaN, suspect a loop bounds bug…")`. Bob reads it in the outbox,
-   presses `y`.
+   it calls `send-to-peer(peer: alice, project: sandbox, intent: flag-issue, findings:
+   "average([2,4]) returns NaN, suspect a loop bounds bug…")`, and the outbox shows what
+   went.
 2. On Alice's machine the message lands in the inbox; her TUI shows it. She's working in
    Codex on that project and has adopted the thread, so **her Codex thread gets the
    message queued**: at her next turn her agent says "bob reports average() returns NaN,
    suspects loop bounds — how do you want to respond?" Alice knows that function was
    rewritten last week and the release is Friday; she tells her agent to say so and to
-   ask bob which version he's on. Her agent drafts that; she approves.
+   ask bob which version he's on. Her agent sends exactly that.
 3. **Bob** gets the reply in the same thread, through his agent, the same way — and
    decides what happens next.
 

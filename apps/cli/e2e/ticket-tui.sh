@@ -1,7 +1,6 @@
 #!/bin/bash
 # The ticket page in a pty: bob (mock) creates a ticket; alice attaches a
-# collected transcript to it (auto-approved: the TUI runs with
-# COLLAGEN_AUTO_APPROVE so the attach needs no y here); in alice's TUI the
+# collected transcript to it; in alice's TUI the
 # cursor goes down the overview to the tickets list, enter opens the ticket,
 # ↓ walks steps → attachments → conversation → diagnostics, enter runs
 # "collect transcripts" (bob is asked; he has nothing adopted, so nothing
@@ -26,7 +25,7 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\033[D'; sleep 2; mark M4d_back_to_list
   printf '\033[D'; sleep 2; mark M5_back_to_ticket
   printf '\033'; sleep 2; printf '\033[B'; sleep 1; mark M6_back; sleep 1; printf 'q' ) | \
-  HOME="$SHOME" COLLAGEN_AUTO_APPROVE=1 COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
+  HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
 echo "## bob creates a ticket (a mock: no outbox on his side)"

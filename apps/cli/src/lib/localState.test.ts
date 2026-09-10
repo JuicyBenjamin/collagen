@@ -14,21 +14,21 @@ const proposal = (over: Record<string, unknown> = {}) => ({
 
 describe("reading the user's state file", () => {
   it("a whole file is taken as it is", () => {
-    const { state, dropped } = salvageState(JSON.stringify({ preferredAi: "codex", rooms, outbox: [proposal()] }));
+    const { state, dropped } = salvageState(JSON.stringify({ preferredAi: "codex", rooms, sent: [proposal()] }));
     expect(dropped).toEqual([]);
     expect(state.preferredAi).toBe("codex");
     expect(state.rooms["st-test3"]).toHaveLength(1);
-    expect(state.outbox).toHaveLength(1);
+    expect(state.sent).toHaveLength(1);
   });
 
-  it("a proposal from an older build is dropped — the rooms are not", () => {
+  it("a record from an older build is dropped — the rooms are not", () => {
     // a ticket in the pre-kind shape: it no longer decodes
     const stale = proposal({ id: "p-old", outgoing: { kind: "ticket", ticket: { id: "t", project: "sandbox", goal: "g", createdBy: "me", updatedAt: 1, steps: [] } } });
-    const { state, dropped } = salvageState(JSON.stringify({ preferredAi: null, rooms, threads: { abc: { ai: "codex", sessionId: "s", since: 1 } }, outbox: [stale, proposal()] }));
-    expect(dropped).toEqual(["1 queued proposal"]);
+    const { state, dropped } = salvageState(JSON.stringify({ preferredAi: null, rooms, threads: { abc: { ai: "codex", sessionId: "s", since: 1 } }, sent: [stale, proposal()] }));
+    expect(dropped).toEqual(["1 sent record"]);
     expect(state.rooms["st-test3"]?.[0]?.name).toBe("sandbox");
     expect(state.threads?.abc?.sessionId).toBe("s");
-    expect(state.outbox?.map((p) => p.id)).toEqual(["p-1"]);
+    expect(state.sent?.map((p: { id: string }) => p.id)).toEqual(["p-1"]);
   });
 
   it("one broken project does not take the room's others with it", () => {

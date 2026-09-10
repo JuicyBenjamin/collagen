@@ -313,10 +313,10 @@ export const AdoptedThread = Schema.Struct({
 });
 export type AdoptedThread = typeof AdoptedThread.Type;
 
-/** Something an agent wants to send out of this machine — as data, so it can
- *  wait for the person's yes across a restart and be edited before it goes.
- *  A message names its peer (resolved when it is sent, not when proposed); a
- *  ticket is the full record; a settle names the step and the result. */
+/** Something that goes out of this machine, as data — so what went can be
+ *  shown, and kept across a restart. A message names its peer (resolved as it
+ *  is sent); a ticket is the full record; a settle names the step and the
+ *  result. */
 export const Outgoing = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("message"),
@@ -375,7 +375,27 @@ export const Outgoing = Schema.Union([
 ]);
 export type Outgoing = typeof Outgoing.Type;
 
-/** An Outgoing waiting in the outbox: where it goes, how it is shown. */
+/** A peer has asked for your agent's conversation on one thread. Kept as
+ *  data, not answered: a transcript is your session, so it leaves only when
+ *  you tell your agent to hand it over (see cli Transcripts). */
+export const TranscriptAsk = Schema.Struct({
+  roomId: Schema.String,
+  requestId: Schema.String,
+  subject: Schema.String,
+  /** The asker's key — the file goes to them alone. */
+  requester: Schema.String,
+  /** Their name when they asked, for the line the person reads. */
+  requesterName: Schema.String,
+  threadId: Schema.String,
+  ai: Schema.String,
+  sessionId: Schema.String,
+  since: Schema.Finite,
+  ts: Schema.Finite,
+});
+export type TranscriptAsk = typeof TranscriptAsk.Type;
+
+/** One thing that went out (or is going out this instant): where it went and
+ *  how it is shown. */
 export const Proposal = Schema.Struct({
   id: Schema.String,
   roomId: Schema.String,
@@ -400,8 +420,12 @@ export const LocalState = Schema.Struct({
    *  inbox. Messages live on the room's log; this is what makes "waiting"
    *  a local, per-reader notion that survives restarts. */
   consumed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))),
-  /** What the agent wants to send, waiting for the person (see cli Outbox). */
-  outbox: Schema.optional(Schema.Array(Proposal)),
+  /** What has gone out of here, newest first (see cli Outbox) — a record, not
+   *  a queue: nothing waits for approval. */
+  sent: Schema.optional(Schema.Array(Proposal)),
+  /** Transcript requests waiting on the person's word — asked for by a peer,
+   *  never answered by itself. */
+  transcriptAsks: Schema.optional(Schema.Array(TranscriptAsk)),
   /** Files we attached to tickets: attachment id → our local path, so a fetch
    *  can be answered (only for ids here — nothing else ever leaves). */
   attachedFiles: Schema.optional(Schema.Record(Schema.String, Schema.String)),

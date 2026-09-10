@@ -5,7 +5,7 @@
 cd "$(dirname "$0")"
 export ROOT_OUT="${COLLAGEN_E2E_OUT:-${TMPDIR:-/tmp}/collagen-e2e}"
 mkdir -p "$ROOT_OUT"
-ALL="connect ticket-thread log conflict three-members leave approval approval-tui transcripts attach review review-tui ticket-tui weigh-in"
+ALL="connect ticket-thread log conflict three-members leave outbox outbox-tui transcripts attach review review-tui ticket-tui weigh-in"
 PICK="${E2E_ONLY:-$ALL}"
 # a scenario still running from an earlier invocation shares its twin's HOME and
 # ports — the two would wreck each other; say so instead of running

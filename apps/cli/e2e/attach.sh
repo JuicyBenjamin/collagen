@@ -6,7 +6,7 @@
 # fetches: the bytes come from alice directly and are filed on his side, the
 # transcript with the transcripts (meta says where it came from), the image
 # under attachments/ with the record beside it. A fetch for an id alice never
-# attached is ignored. Both run as mocks (auto-approve); no CLI runs.
+# attached is ignored. No CLI runs.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 CODEX_FAKE="$OUT/codex-home"; rm -rf "$CODEX_FAKE"; mkdir -p "$CODEX_FAKE/sessions/2026/09/09"
@@ -26,6 +26,8 @@ cat > "$CODEX_FAKE/sessions/2026/09/09/rollout-2026-09-09T10-00-00-$SID.jsonl" <
 EOF
 SUBJECT="thread-$TID"; TDIR="$CFG/transcripts"
 call $A "$SA" request-transcripts "{\"threadId\":\"$TID\"}" > /dev/null
+wait_until "bob's side kept the ask" "^1$" bash -c "grep -c 'asks for your codex conversation' '$OUT/bob.log'"
+call $B "$SB" share-transcripts '{}' > /dev/null   # a session leaves only when its person says so
 TFILE="$TDIR/$SUBJECT/bob-$TID.codex.jsonl"
 wait_until "alice holds bob's conversation" "^1$" bash -c "ls '$TFILE' 2>/dev/null | wc -l | tr -d ' '"
 
@@ -34,7 +36,7 @@ TICKET=$(call $A "$SA" create-ticket '{"goal":"why does the render flicker","pro
 wait_until "bob sees the ticket" "flicker" goals $B "$SB"
 SHOT="$OUT/flicker shot.png"; python3 -c "import sys; sys.stdout.buffer.write(b'\x89PNG\r\n\x1a\n' + bytes(range(256)) * 40)" > "$SHOT"
 
-echo "## alice attaches both (a mock: the proposal auto-approves)"
+echo "## alice attaches both"
 ARGS="{\"ticketId\":\"$TICKET\",\"files\":[\"$SHOT\",\"$TFILE\"],\"note\":\"the frame and bob's side of it\"}"
 expect "attach-files put two references on the ticket" "$(call $A "$SA" attach-files "$ARGS")" "attached 2 file\(s\) to .{1,2}why does the render flicker"
 expect "a missing path is refused before anything is proposed" "$(call $A "$SA" attach-files "{\"ticketId\":\"$TICKET\",\"files\":[\"/nope/none.png\"]}")" "^\"failed: /nope/none.png is not a file"

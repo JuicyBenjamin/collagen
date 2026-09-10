@@ -121,7 +121,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
       <StatusLine />
       <box flexDirection="row" marginTop={1} flexGrow={1} flexShrink={1}>
         <Sidebar />
-        <Panel title={crumb ? `room · ${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : page?.name === "room/review" ? "why" : "transcript"}` : `room · ${roomName}`} grow>
+        <Panel title={crumb ? `${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : page?.name === "room/review" ? "why" : "transcript"}` : roomName} grow>
           {crumb ? <Crumb trail={crumb.trail} label={crumb.label} onBack={goBack} /> : <TabBar />}
           {children}
           <Keys />

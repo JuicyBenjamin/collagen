@@ -21,7 +21,7 @@ export function TabBar() {
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null, rooms: {} }));
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const admitted = AsyncResult.getOrElse(useAtomValue(admittedAtom), () => true);
-  const waiting = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const).filter((p) => p.roomId === room.id).length;
+  const went = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const).filter((p) => p.roomId === room.id).length;
 
   const shared = projectRows(state, room.id, peers).filter((r) => r.holders.length >= 2).length;
   const online = peers.filter((p) => !p.away).length + 1;
@@ -55,8 +55,7 @@ export function TabBar() {
           <span fg={theme.dim}> ({trace.length})</span>
           <span fg={theme.dim}>   </span>
           <span fg={active === "room/outbox" ? theme.accent : theme.dim}>[3] outbox</span>
-          {/* the count is the whole signal: orange means something of yours is waiting on you */}
-          <span fg={waiting > 0 ? theme.warn : theme.dim}> ({waiting})</span>
+          <span fg={theme.dim}> ({went})</span>
           <span fg={theme.dim}>   ·   </span>
           <span fg={theme.fg}>{online} online</span>
           <span fg={theme.dim}> · </span>

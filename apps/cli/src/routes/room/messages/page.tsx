@@ -25,7 +25,6 @@ export function MessagesPage() {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
-  const waiting = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const).filter((p) => p.roomId === roomId).length;
   // null = follow the newest row until the user scrolls
   const [cursor, setCursor] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -74,7 +73,6 @@ export function MessagesPage() {
         <>
           <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none" flexShrink={0}>
             agent-to-agent trace · who → whom · newest last
-            {waiting > 0 ? <span fg={theme.warn}> · {waiting} waiting for your y in the outbox [3]</span> : null}
           </text>
           {rows.length === 0 ? (
             <text fg={theme.dim}>no messages yet</text>

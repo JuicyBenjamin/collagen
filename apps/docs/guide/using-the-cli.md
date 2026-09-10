@@ -58,12 +58,11 @@ No files are written into your projects.
   for, finished ones dim at the end — and the projects section.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
-- **outbox tab** — everything of yours on its way out, in one list, newest first. A row
-  is what it is, which project (`sandbox/`), who it is for when it is for a person, and
-  what it is about. Its count in the tab bar turns orange when something is waiting on
-  you. `y` sends, `n` drops, `e` rewrites it first, `enter` unfolds the whole text (a
-  long one is capped and points at the ticket's page). Proposals from every room you are
-  in, since they all wait on the same person; nothing there has left the machine.
+- **outbox tab** — everything of yours that has gone out, in one list, newest first,
+  from every room you are in. A row is what it was, which project (`sandbox/`), who it
+  was for when it was for a person, and what it was about; `enter` unfolds the text it
+  carried (a long one is capped). There is nothing to approve here: your agent acts on
+  your word, and this is the receipt.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section.
 - **footer** — a short activity log, the MCP url, the room's invite id.
@@ -80,7 +79,6 @@ what's natural there. Number keys work from anywhere.
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |
-| `y` / `e` / `n` | On a waiting row (the outbox tab, or a ticket's conversation): approve and send / rewrite the text first / reject what your agent wants to send |
 | `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
@@ -107,10 +105,10 @@ You use it by just asking your agent, e.g. *"check who's in my collagen room and
 alice why average() returns NaN in sandbox"*. Everything a person can configure in the TUI
 the agent can configure too; UI state (tabs, focus) is deliberately not exposed.
 
-Two rules hold on every machine. Nothing leaves without you: `send-to-peer`,
-`create-ticket` and `settle-step` wait at the bottom of the **messages** tab (and in the
-ticket they concern) until you press `y` (or `n`); the tab bar and status line count them. And nothing answers for you: what arrives is shown to you by your
-agent, which waits for your direction — see
+Two rules hold on every machine. Nothing goes out on an agent's own initiative:
+`send-to-peer`, `create-ticket` and `settle-step` are things your agent does because you
+said so, and the **outbox** tab is the record of every one of them. And nothing answers
+for you: what arrives is shown to you by your agent, which waits for your direction — see
 [what happens when a message arrives](./conversations#what-happens-when-a-message-arrives).
 
 ## Headless mode
@@ -121,7 +119,7 @@ The same app without the TUI, for tests and for a machine that only receives:
 COLLAGEN_LOG=/tmp/collagen.log collagen --headless --name yourname
 ```
 
-Activity goes to the log file instead of a screen. There is no outbox to approve from, so
-anything the agent wants to send waits forever — headless is not a way to run without a
-person. (From source: `pnpm --filter @collagen/cli exec tsx src/headless.ts …`; the e2e
-scenarios set `COLLAGEN_AUTO_APPROVE=1`, development only.)
+Activity goes to the log file instead of a screen; sends work the same way they do in the
+TUI. What it cannot do is stand in for a person: a transcript a peer asks for still waits
+for someone to say `share-transcripts`, and nothing relays itself. (From source:
+`pnpm --filter @collagen/cli exec tsx src/headless.ts …`.)

@@ -7,7 +7,8 @@ holds a merged copy, and the TUI shows it in the room's overview.
 
 Tickets are **data, not commands**. Whether and how a step gets done is the owning
 person's choice — their agent shows them the step and waits; settling it is their say,
-approved in their outbox. A record can't force anyone's machine to do anything.
+and it happens because they said so. A record can't force anyone's machine to do
+anything.
 
 ## A ticket
 
@@ -51,9 +52,8 @@ flowchart LR
    for them, and the agent is told to show the step to its person, not to start on it.
 4. The owner decides whether and how it gets done — themselves, or by directing their
    agent. When they say it's done (or declined), their agent calls `settle-step` with the
-   result they want to send; it waits in their outbox until they approve. The merged
-   ticket is then broadcast; steps waiting on this one become actionable on *their*
-   owners' side.
+   result they want to send. The merged ticket is broadcast at once and recorded in
+   their outbox; steps waiting on this one become actionable on *their* owners' side.
 
 Because a ticket has no thread of its own, "the discussion about this work" and "the
 status of this work" travel together: the ticket in the overview, its exchange in the
@@ -161,19 +161,19 @@ whole, or narrowed with `about` to one file, symbol or phrase — and relays wha
 Then both sides are reviewing the same thing: the what **and** the why.
 
 ::: tip Human in the loop
-The why quotes how a person steered their work, so `ask-review` is queued like everything
-else: the proposal in the outbox shows the whole text — every `you:` line included —
-before it goes anywhere.
+The why quotes how a person steered their work, so `ask-review` runs only when they ask
+for a review. What went is on the record: the outbox shows the whole text, every `you:`
+line included.
 :::
 
 ## The tools
 
 | Tool | Purpose |
 | --- | --- |
-| `create-ticket` | goal, project, steps (owner by peer name, intent, description, `needs`) — queued for your approval |
-| `settle-step` | settle or fail a step you own, with the result you want to send — queued for your approval |
+| `create-ticket` | goal, project, steps (owner by peer name, intent, description, `needs`) — on your word, straight to the room |
+| `settle-step` | settle or fail a step you own, with the result you want to send |
 | `get-tickets` | every ticket in the room you're looking at, merged, with owners resolved to names; a review ticket also shows its headline |
-| `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — one approval for the record and the reasons. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
+| `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — the record and the reasons in one write. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
 | `post-review` | put your user's review on a review ticket — asked or not; it lands on a step of their own, and posting again revises it |
 | `review-context` | read the why behind a review ticket, on demand — all of it, or the part `about` a file, symbol or phrase |
 
@@ -184,14 +184,11 @@ dependency order is enforced by delivery, not by remembering.
 ## In the TUI
 
 The overview tab lists **every** ticket in the room, whoever made it and whoever it is
-for — including the ones your agent has queued and you have not approved yet, which are
-tickets that simply have not reached the room. A row is a glance and nothing more: its
+for. A row is a glance and nothing more: its
 **kind**, its **goal**, and **who has answered** (`bob✓` spoke or settled, `bob·` silent
-so far, `carol` weighed in unasked). A queued one carries `⧗` — the app's mark for "this
-is yours to say yes to" — and nothing else. Order carries
+so far, `carol` weighed in unasked).  Order carries
 the rest: what needs you first, then what is waiting, then failed, then done (dim).
-Nothing is hidden or folded away, and the header is a count. `y` / `n` on a queued row
-sends or drops it. `enter` opens the ticket's own
+Nothing is hidden or folded away, and the header is a count. `enter` opens the ticket's own
 page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:
 goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body: **why**,
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening
@@ -240,7 +237,7 @@ migrated out.
   you never keep a half-applied ticket.
 - A peer whose frames don't decode is not silently absent: their greet still says which
   version wrote it, and the log tells you which side has to update.
-- Locally, the state file is salvaged rather than discarded: a queued proposal from an
+- Locally, the state file is salvaged rather than discarded: an outbox record from an
   older build is dropped and named, and your rooms, projects and adopted sessions stay.
 
 ## What changed from the original plan

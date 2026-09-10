@@ -72,32 +72,11 @@ export const admittedAtom = runtimeAtom.atom(
   })),
 );
 
-/** Everything the agent wants to send, across rooms, waiting for the person. */
+/** What has gone out of this machine, across rooms, newest first. */
 export const outboxAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     return (yield* Outbox).changes;
   })),
-);
-
-/** The person rewrote the text before sending. */
-export const editOutgoingAtom = runtimeAtom.fn(
-  Effect.fnUntraced(function* ({ id, text }: { id: string; text: string }) {
-    yield* (yield* Outbox).edit(id, text);
-  }),
-);
-
-/** The person approves: it leaves now. */
-export const approveOutgoingAtom = runtimeAtom.fn(
-  Effect.fnUntraced(function* ({ id }: { id: string }) {
-    return yield* (yield* Outbox).approve(id);
-  }),
-);
-
-/** The person rejects: it never leaves. */
-export const rejectOutgoingAtom = runtimeAtom.fn(
-  Effect.fnUntraced(function* ({ id }: { id: string }) {
-    yield* (yield* Outbox).reject(id);
-  }),
 );
 
 /** The why behind the focused room's review tickets, as the log has it. */

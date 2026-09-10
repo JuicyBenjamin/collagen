@@ -50,7 +50,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           return merged ? render(merged) : NOT_ADMITTED;
         }
         case "review": {
-          // the record and the why, one approval: the ticket first (so the
+          // the record and the why, one write: the ticket first (so the
           // review it belongs to exists for everyone), then the context
           if (out.ticket) {
             const shared = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));

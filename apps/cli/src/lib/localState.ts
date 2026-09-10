@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, LocalState, Project, Proposal } from "@collagen/p2p";
+import { AdoptedThread, LocalState, Project, Proposal, TranscriptAsk } from "@collagen/p2p";
 
 /** Reading the user's own state file must never cost them their rooms.
  *
@@ -88,9 +88,9 @@ export const salvageState = (text: string): Salvaged => {
   const attachedFiles = salvageRecord(src.attachedFiles, Schema.String, fileDrops.hit);
   fileDrops.done();
 
-  const proposalDrops = count("queued proposal");
-  const outbox = Array.isArray(src.outbox)
-    ? src.outbox.flatMap((p) => {
+  const proposalDrops = count("sent record");
+  const sent = Array.isArray(src.sent)
+    ? src.sent.flatMap((p) => {
         const one = decode(Proposal, p);
         if (one === null) {
           proposalDrops.hit();
@@ -100,6 +100,19 @@ export const salvageState = (text: string): Salvaged => {
       })
     : undefined;
   proposalDrops.done();
+
+  const askDrops = count("transcript request");
+  const transcriptAsks = Array.isArray(src.transcriptAsks)
+    ? src.transcriptAsks.flatMap((a) => {
+        const one = decode(TranscriptAsk, a);
+        if (one === null) {
+          askDrops.hit();
+          return [];
+        }
+        return [one];
+      })
+    : undefined;
+  askDrops.done();
 
   const preferredAi = typeof src.preferredAi === "string" ? src.preferredAi : null;
   if (src.preferredAi !== null && typeof src.preferredAi !== "string" && src.preferredAi !== undefined) dropped.push("an unreadable ai setting");
@@ -111,7 +124,8 @@ export const salvageState = (text: string): Salvaged => {
       ...(threads ? { threads } : {}),
       ...(consumed ? { consumed } : {}),
       ...(attachedFiles ? { attachedFiles } : {}),
-      ...(outbox ? { outbox } : {}),
+      ...(sent ? { sent } : {}),
+      ...(transcriptAsks ? { transcriptAsks } : {}),
     },
     dropped: dropped.length > 0 ? dropped : ["parts of the state file no longer readable"],
   };

@@ -8,7 +8,7 @@ import { nudgePrompt } from "./Adapters";
 import { Dispatch } from "./Dispatch";
 import { Inbox } from "./Inbox";
 import { GetMessages, PendingThreads, SendToPeer } from "./Mcp";
-import { Outbox, QUEUED_TEXT } from "./Outbox";
+import { Outbox } from "./Outbox";
 import { StateStore } from "./StateStore";
 
 // Human in the loop, receiving side. These tests do not check that a model
@@ -58,7 +58,7 @@ const handlers = RelayToolkit.toLayer(
       "pending-threads": () => inbox.pending(ROOM).pipe(Effect.map((threads) => toToon({ threads }))),
       "get-messages": ({ threadId }: { threadId: string }) => inbox.take(ROOM, threadId).pipe(Effect.map((messages) => toToon({ messages }))),
       "send-to-peer": (input: { peer: string; project: string; intent: string; findings: string }) =>
-        outbox.propose({
+        outbox.send({
           roomId: ROOM,
           to: input.peer,
           title: `${input.project} · ${input.intent}`,
@@ -92,7 +92,7 @@ const converse = (turns: ReadonlyArray<Turn>, userTurns: ReadonlyArray<string>) 
           outbox: yield* outbox.all,
         });
       }
-      return { responses, seen: yield* model.seen, sent: d.sent, approve: outbox.approve };
+      return { responses, seen: yield* model.seen, sent: d.sent };
     });
     return yield* program.pipe(
       Effect.provide(
@@ -121,7 +121,7 @@ describe("what we tell the receiving agent", () => {
   it("the nudge says what to do with a question the thread does not answer: yours, or bob's", () => {
     expect(nudge).toContain("yours to answer from this repo under their direction, or bob's to answer");
     expect(nudge).toContain("draft that question for them with send-to-peer");
-    expect(nudge).toContain("waits for their approval");
+    expect(nudge).toContain("only what your user decided");
   });
 
   it("the tool descriptions the agent sees carry the same rules", async () => {
@@ -130,7 +130,7 @@ describe("what we tell the receiving agent", () => {
     expect(byName["get-messages"]).toContain("never fill gaps from your own head");
     expect(byName["get-messages"]).toContain("the person on this side decides");
     expect(byName["send-to-peer"]).toContain("send only what your user asked you to send");
-    expect(byName["send-to-peer"]).toContain("queues the message for your user's approval");
+    expect(byName["send-to-peer"]).toContain("send only what your user asked you to send");
     expect(seen[0]!.prompt).toContain(nudge);
   });
 });
@@ -168,21 +168,18 @@ describe("the tools, under an agent that follows the rules", () => {
     expect(responses[1]!.pending).toBe(0);
   });
 
-  it("the person's reply is queued, verbatim, and nothing is written to the room", async () => {
+  it("the person's reply goes out verbatim, and is recorded as having gone", async () => {
     const { responses, sent } = await Effect.runPromise(converse(script, turns));
-    expect(responses[2]!.results[0]).toBe(QUEUED_TEXT);
+    expect(sent[0]).toEqual({ kind: "message", peer: "bob", project: "sandbox", intent: "reply", findings: "Confirmed: i <= length. Fix lands Monday." });
     expect(responses[2]!.outbox).toHaveLength(1);
     expect(responses[2]!.outbox[0]!.outgoing).toMatchObject({ kind: "message", peer: "bob", findings: "Confirmed: i <= length. Fix lands Monday." });
-    expect(sent).toEqual([]);
   });
 
-  it("a question the thread can't answer becomes a drafted question to bob — also gated", async () => {
-    const { responses, sent, approve } = await Effect.runPromise(converse(script, turns));
+  it("a question the thread can't answer becomes a question to bob, in the same words", async () => {
+    const { responses, sent } = await Effect.runPromise(converse(script, turns));
     expect(responses[3]!.outbox).toHaveLength(2);
-    expect(responses[3]!.outbox[1]!.outgoing).toMatchObject({ kind: "message", intent: "ask", findings: "Which branch are you seeing this on?" });
-    expect(sent).toEqual([]);
-    // only the person's yes writes anything
-    await Effect.runPromise(approve(responses[3]!.outbox[0]!.id));
-    expect(sent).toEqual([{ kind: "message", peer: "bob", project: "sandbox", intent: "reply", findings: "Confirmed: i <= length. Fix lands Monday." }]);
+    // newest first: the question is the record on top
+    expect(responses[3]!.outbox[0]!.outgoing).toMatchObject({ kind: "message", intent: "ask", findings: "Which branch are you seeing this on?" });
+    expect(sent.map((x) => (x.kind === "message" ? x.intent : x.kind))).toEqual(["reply", "ask"]);
   });
 });

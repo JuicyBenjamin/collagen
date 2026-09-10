@@ -16,8 +16,6 @@ import { roomAtom } from "../../atoms";
 import { attachmentsAtom, fetchAttachmentAtom, heldAttachmentsAtom, identityAtom, membersAtom, outboxAtom, reviewsAtom, rosterAtom, traceAtom } from "../atoms";
 import { reviewHeadline } from "../../../lib/review";
 import { Arrow } from "../components/Arrow/Arrow";
-import { PENDING_HINT, usePendingOutgoing } from "../components/PendingOutgoing/PendingOutgoing";
-import { proposalText } from "../../../services/Outbox";
 import { wrap } from "../../../lib/wrap";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { runDiagnosticAtom } from "./atoms";
@@ -44,7 +42,6 @@ const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
 /** One ticket, as a page.
  *    header  — the meta: goal, state, project, who made it, who is in it
  *    body    — steps; attachments (files on the ticket, if any); conversation
- *              (with what you have waiting to send)
  *    foot    — diagnostics, one row, tucked away
  *  The overview is the list; this is the show. `esc` goes back. */
 export function TicketPage({ ticketId }: { ticketId: string }) {
@@ -54,13 +51,11 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
-  const pending = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const);
   const allAttachments = AsyncResult.getOrElse(useAtomValue(attachmentsAtom), () => [] as const);
   const reviews = AsyncResult.getOrElse(useAtomValue(reviewsAtom), () => [] as const);
   const held = AsyncResult.getOrElse(useAtomValue(heldAttachmentsAtom), () => ({}) as Record<string, string>);
   const fetch = useAtomSet(fetchAttachmentAtom);
   const fetchOutcome = useAtomValue(fetchAttachmentAtom);
-  const outgoing = usePendingOutgoing();
   const setFocus = useAtomSet(focusAtom);
   const focus = useAtomValue(focusAtom);
   const { navigate } = useRouter();
@@ -104,16 +99,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const conversation = trace.filter((m) => aboutTicket(ticket, threads, m));
   const summary = summarize(ticket, trace, me);
   const now = Date.now();
-  // what your agent wants to send about this ticket, waiting for you
-  const participants = new Set([ticket.createdBy, ...ticket.steps.map((s) => s.owner)].map(nameFor));
-  const waiting = pending.filter(
-    (p) =>
-      p.roomId === roomId &&
-      ((p.outgoing.kind === "settle" && p.outgoing.ticketId === ticket.id) ||
-        (p.outgoing.kind === "message" && p.outgoing.project === ticket.project && participants.has(p.to)) ||
-        (p.outgoing.kind === "transcript" && p.outgoing.subject === `ticket-${ticket.id.slice(0, 8)}`)),
-  );
-  const rows = [...conversation.map((m) => ({ kind: "msg" as const, id: m.id, m })), ...waiting.map((p) => ({ kind: "pending" as const, id: p.id, p }))];
+  const rows = conversation.map((m) => ({ kind: "msg" as const, id: m.id, m }));
   // files attached to this ticket: references from the log; the file is here
   // once fetched (or when we attached it)
   const attachments = allAttachments.filter((a) => a.ticketId === ticket.id);
@@ -123,21 +109,13 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   // every row in full: a head line (who → whom · intent) then its text, wrapped
   const textWidth = Math.max(30, width - 30);
   const lines = rows.flatMap((r, row) => {
-    const head =
-      r.kind === "msg" ? (
-        <>
-          <Arrow from={nameFor(r.m.from)} to={nameFor(r.m.to)} mine={r.m.from === me} />
-          <span fg={theme.dim}> · {r.m.intent}</span>
-        </>
-      ) : (
-        <>
-          <span fg={theme.warn}>⧗ </span>
-          <span fg={theme.accent}>you</span>
-          <span fg={theme.dim}> → {r.p.to} [{r.p.title}] </span>
-          <span fg={theme.warn}>waiting for your y / n</span>
-        </>
-      );
-    const text = r.kind === "msg" ? r.m.findings : proposalText(r.p);
+    const head = (
+      <>
+        <Arrow from={nameFor(r.m.from)} to={nameFor(r.m.to)} mine={r.m.from === me} />
+        <span fg={theme.dim}> · {r.m.intent}</span>
+      </>
+    );
+    const text = r.m.findings;
     return [{ kind: "head" as const, row, head, text: "" }, ...wrap(text, textWidth).map((t) => ({ kind: "body" as const, row, head: null, text: t }))];
   });
   const firstLineOf = (row: number) => lines.findIndex((l) => l.row === row);
@@ -288,10 +266,10 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
 
       {/* body: conversation — every message about this ticket, in full, in a
           viewport of fixed height: ↑↓ scroll by message, the newest followed
-          until you scroll up. What you have waiting to send sits at the end. */}
+          until you scroll up. */}
       <Focusable
         id="ticket-conversation"
-        hint={currentRow?.kind === "pending" ? `${PENDING_HINT} · ↑↓ scroll · esc back to the list` : "↑↓ scroll · esc back to the list"}
+        hint="↑↓ scroll · esc back to the list"
         flexDirection="column"
         flexGrow={1}
         flexShrink={1}
@@ -301,8 +279,6 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
             if (mSel >= rows.length - 1) return false; // at the end: let ↓ move on to diagnostics
             return setMsgSel(mSel + 1 >= rows.length - 1 ? null : mSel + 1), true;
           }
-          const r = rows[mSel];
-          if (r?.kind === "pending") return outgoing.onKey(key, r.p);
           return false;
         }}
       >
@@ -310,7 +286,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
           <>
             <SectionTitle
               title="conversation"
-              note={`${conversation.length}${waiting.length > 0 ? ` · ${waiting.length} waiting for your approval` : ""}`}
+              note={`${conversation.length}`}
               focused={focused}
             />
             <box ref={convRef} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
@@ -327,7 +303,6 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
                 ))
               )}
             </box>
-            {outgoing.editing && currentRow?.kind === "pending" ? outgoing.row(currentRow.p, true, false) : null}
           </>
         )}
       </Focusable>

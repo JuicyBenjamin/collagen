@@ -1,6 +1,5 @@
 #!/bin/bash
-# The why, on screen. alice's agent asks bob for a review (auto-approved: the
-# TUI runs with COLLAGEN_AUTO_APPROVE, so no y is needed here). In her TUI the
+# The why, on screen. alice's agent asks bob for a review (it goes out at once — there is no approval step). In her TUI the
 # cursor goes down the overview to the tickets list, enter opens the review
 # ticket — a "why" section sits above the steps with the branch, the link and
 # the counts — ↑ reaches it, enter opens the why in full: every decision with
@@ -23,7 +22,7 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\r'; sleep 2; mark M3_why_page
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M4_scrolled
   printf '\033[D'; sleep 2; mark M5_back_to_ticket; sleep 1; printf 'q' ) | \
-  HOME="$SHOME" COLLAGEN_AUTO_APPROVE=1 COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
+  HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
 echo "## alice's agent asks bob for a review, with the why"

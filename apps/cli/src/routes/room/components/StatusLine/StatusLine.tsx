@@ -4,7 +4,7 @@ import { theme } from "../../../../app/theme";
 import { myNameAtom } from "../../../atoms";
 import { aiStatusAtom, appUpdateAtom, stateAtom } from "../../atoms";
 
-/** "you <name> · ai <choice> (auth badge) · update … (u)" — the one-line status.
+/** "<name> · ai <choice> (auth badge) · update … (u)" — the one-line status.
  *  Who you are and what runs for you. What is going out is the outbox tab's
  *  count, not prose next to your agent. */
 export function StatusLine() {
@@ -18,7 +18,6 @@ export function StatusLine() {
     // a row of air above: the word, what it is and which build are one block —
     // who you are and what runs for you is the room's header, not the brand
     <text truncate wrapMode="none" marginTop={1} flexShrink={0}>
-      <span fg={theme.dim}>you </span>
       <span fg={theme.fg}>{myName}</span>
       <span fg={theme.dim}> · ai </span>
       <span fg={ai ? theme.warn : theme.dim}>{ai ?? "not set"}</span>

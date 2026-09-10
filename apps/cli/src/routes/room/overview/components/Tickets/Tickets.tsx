@@ -8,28 +8,19 @@ import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
 import { compareSummaries, peopleLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
-import { roomAtom } from "../../../../atoms";
-import { identityAtom, membersAtom, outboxAtom, rosterAtom, traceAtom } from "../../../atoms";
-import { usePendingOutgoing } from "../../../components/PendingOutgoing/PendingOutgoing";
+import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
 /** Shared tickets — every ticket the room has, whoever made it and whoever it
- *  is for, PLUS the ones your agent has queued and not sent yet: those are
- *  tickets too, they just have not left this machine. The queued ones sit at
- *  the top, waiting for your y; the rest are ordered by what wants a person:
- *  needs-you, then waiting, then failed, then done (dim). Nothing is hidden
- *  or folded away. Each row: state · goal · who was asked and whether they
- *  answered · age. ↑↓ select, enter opens the ticket's page, `y` / `n` send
- *  or drop a queued one. The `›` is the cursor, nothing else. */
+ *  is for. Ordered by what wants a person: needs-you, then waiting, then
+ *  failed, then done (dim) — nothing hidden or folded away. ↑↓ select, enter
+ *  opens the ticket's page. The `›` is the cursor, nothing else. */
 export function Tickets() {
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
-  const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
-  const proposals = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const);
-  const outgoing = usePendingOutgoing();
   const { navigate } = useRouter();
   const [cursor, setCursor] = useState(0);
 
@@ -37,21 +28,11 @@ export function Tickets() {
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
 
-  // a ticket your agent queued is a ticket: it just has not left yet
-  const queued = proposals.flatMap((p) => {
-    if (p.roomId !== roomId) return [];
-    const t = p.outgoing.kind === "ticket" ? p.outgoing.ticket : p.outgoing.kind === "review" ? p.outgoing.ticket : undefined;
-    return t ? [{ kind: "queued" as const, p, t }] : [];
-  });
-  const live = tickets
-    .map((t) => ({ kind: "live" as const, t, s: summarize(t, trace, me) }))
+  // every ticket the room has, ordered by what wants a person
+  const shown = tickets
+    .map((t) => ({ t, s: summarize(t, trace, me) }))
     .sort((a, b) => compareSummaries(a.s, b.s));
-  // queued first (they are waiting on you), then everything the room has, in
-  // the order that says what wants a person; nothing folded away
-  const shown = [...queued, ...live];
-  const undone = live.filter((r) => r.s.state !== "done");
-  const done = live.filter((r) => r.s.state === "done");
-  const needsYou = live.filter((r) => r.s.state === "needs-you").length;
+  const needsYou = shown.filter((r) => r.s.state === "needs-you").length;
 
   const last = Math.max(0, shown.length - 1);
   const sel = clamp(cursor, 0, last);
@@ -60,18 +41,12 @@ export function Tickets() {
   return (
     <Focusable
       id="tickets"
-      hint={
-        current?.kind === "queued"
-          ? "y send it · n drop it · ↑↓ select · arrows move between sections · esc"
-          : "↑↓ select ticket · enter open · arrows move between sections · esc"
-      }
+      hint="↑↓ select ticket · enter open · arrows move between sections · esc"
       flexDirection="column"
       marginTop={1}
       onKey={(key) => {
         if (key.name === "up" && sel > 0) return setCursor(sel - 1), true;
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
-        // a queued ticket has no page yet — it is not on the room's log
-        if (current?.kind === "queued") return outgoing.onKey(key, current.p);
         if (isEnter(key)) {
           if (current) navigate(to.ticket(current.t.id));
           return true;
@@ -83,39 +58,18 @@ export function Tickets() {
         <>
           <text truncate wrapMode="none" flexShrink={0}>
             <span fg={focused ? theme.accent : theme.dim}>tickets</span>
-            <span fg={needsYou + queued.length > 0 ? theme.warn : theme.dim}> ({shown.length})</span>
+            <span fg={needsYou > 0 ? theme.warn : theme.dim}> ({shown.length})</span>
           </text>
           {shown.length === 0 ? (
             <text fg={theme.dim} truncate wrapMode="none">
-              {"  "}none — agents create them for multi-step work
+              {"  "}none
             </text>
           ) : (
-            shown.map((r, i) =>
-              r.kind === "queued" ? (
-                <QueuedRow key={r.p.id} ticket={r.t} selected={focused && i === sel} />
-              ) : (
-                <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} />
-              ),
-            )
+            shown.map((r, i) => <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} />)
           )}
         </>
       )}
     </Focusable>
-  );
-}
-
-/** A ticket your agent wants to create, in the list with the rest and in the
- *  same shape. The `⧗` is the whole message — the app's mark for "this is
- *  yours to say yes to", the same one the outbox and a ticket's own page use.
- *  Live rows leave that column blank, so everything stays in line. */
-function QueuedRow({ ticket, selected }: { ticket: Ticket; selected: boolean }) {
-  return (
-    <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
-      {selected ? "› " : "  "}
-      <span fg={theme.warn}>⧗ </span>
-      {ticket.kind.padEnd(9)}
-      {ticket.goal}
-    </text>
   );
 }
 

@@ -96,9 +96,7 @@ testnet() {
 # Returns at once; `mcp` / `wait_for_peer` wait for it to be up.
 start() {
   local who=$1; shift
-  # AUTO_APPROVE: a headless peer has no person at the TUI to approve outgoing
-  # messages, so the scenarios skip the gate (approval.sh turns it back on)
-  HOME="$SHOME" COLLAGEN_AUTO_APPROVE="${COLLAGEN_AUTO_APPROVE:-1}" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" \
+  HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" \
     node --import tsx src/headless.ts --profile "$(profile "$who")" --name "$who" "$@" < /dev/null >> "$OUT/$who.out" 2>> "$OUT/$who.err" &
   disown # killed later by pattern; no "Killed: 9" job chatter in the output
 }

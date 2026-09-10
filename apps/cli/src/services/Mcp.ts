@@ -40,7 +40,7 @@ export const ListRoom = Tool.make("list-room", {
 
 export const SendToPeer = Tool.make("send-to-peer", {
   description:
-    "Send what YOUR USER decided to say to a peer in the room, about a specific project. Collagen puts a person between two agents: send only what your user asked you to send — never a reply, a question or findings on your own initiative. The call does not send: it queues the message for your user's approval in the collagen TUI, and only their approval writes it to the room. It lands in the thread between you two about that project; the peer's agent relays it to its person, who decides what comes back. Use a 'peer' name and 'project' from list-room. 'intent' is a short verb like 'flag-issue' or 'ask-review'. 'findings' is the text as it should arrive: the context your user wants shared plus what they want from the other side. When your user weighs in on a ticket (anyone in the room may, asked or not), pass its 'ticketId' (from get-tickets) so it shows on that ticket for everyone.",
+    "Send what YOUR USER decided to say to a peer in the room, about a specific project. Collagen puts a person between two agents: send only what your user asked you to send — never a reply, a question or findings on your own initiative. It goes to the room as your user asked, and lands in the thread between you two about that project; the peer's agent relays it to its person, who decides what comes back. Use a 'peer' name and 'project' from list-room. 'intent' is a short verb like 'flag-issue' or 'ask-review'. 'findings' is the text as it should arrive: the context your user wants shared plus what they want from the other side. When your user weighs in on a ticket (anyone in the room may, asked or not), pass its 'ticketId' (from get-tickets) so it shows on that ticket for everyone.",
   parameters: Schema.Struct({
     peer: Schema.String,
     project: Schema.String,
@@ -119,7 +119,7 @@ export const DescribeScripting = Tool.make("describe-scripting", {
 
 export const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative — and, like every outgoing action, it is queued for their approval in the collagen TUI before it reaches the room. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
+    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
   parameters: Schema.Struct({
     goal: Schema.String,
     project: Schema.String,
@@ -138,7 +138,7 @@ export const CreateTicket = Tool.make("create-ticket", {
 
 export const AskReview = Tool.make("ask-review", {
   description: [
-    "Ask for a review of your user's code, with the WHY attached — the thing a diff cannot show. Only when your user asks for a review (\"ask <peer> for a review\", \"put it up for review\"); like every outgoing action it is queued for their approval in the collagen TUI first, and they read the whole text before it goes.",
+    "Ask for a review of your user's code, with the WHY attached — the thing a diff cannot show. Only when your user asks for a review (\"ask <peer> for a review\", \"put it up for review\") — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went, in full.",
     "'peers' is who is asked, and it is 0 to many. Name several and each gets a review step of their own. Leave it out (or pass []) and nobody is asked: the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
     "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line). Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
@@ -197,7 +197,7 @@ export const PostReview = Tool.make("post-review", {
 
 export const SettleStep = Tool.make("settle-step", {
   description:
-    "Settle (or fail) a ticket step your user owns, with the result they want to send — only when they say the step is done (or declined), never because you decided it is. Queued for their approval in the collagen TUI; on approval the updated ticket is broadcast to the room, and steps waiting on this one become actionable and are delivered to their owners (as messages on the ticket creator's thread with them). A step belongs to the person who owns it: settling someone else's is refused on any ticket — to say what your user thinks of a change, use post-review (a review ticket) or send-to-peer with its ticketId.",
+    "Settle (or fail) a ticket step your user owns, with the result they want to send — only when they say the step is done (or declined), never because you decided it is. The updated ticket is broadcast to the room at once, and steps waiting on this one become actionable and are delivered to their owners (as messages on the ticket creator's thread with them). A step belongs to the person who owns it: settling someone else's is refused on any ticket — to say what your user thinks of a change, use post-review (a review ticket) or send-to-peer with its ticketId.",
   parameters: Schema.Struct({
     ticketId: Schema.String,
     stepId: Schema.String,
@@ -398,8 +398,8 @@ const makeHandlers = Effect.gen(function* () {
       if (!peers.some((p) => p.name === input.peer) && !members.some((m) => m.name === input.peer)) {
         return `failed: no peer named ${input.peer} — see list-room`;
       }
-      // the person approves before anything leaves (Outbox → Dispatch); mocks skip the gate
-      return yield* outbox.propose({
+      // Outbox → Dispatch: it goes now, and is recorded as having gone
+      return yield* outbox.send({
         roomId,
         to: input.peer,
         title: `${input.project} · ${input.intent}`,
@@ -582,7 +582,7 @@ const makeHandlers = Effect.gen(function* () {
           })),
         };
         const owners = [...new Set(input.steps.map((s) => s.owner))].join(", ");
-        return yield* outbox.propose({ roomId, to: owners, title: `${input.project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
+        return yield* outbox.send({ roomId, to: owners, title: `${input.project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
       }),
       "ask-review": Effect.fn("Mcp.askReview")(function* (input: {
         peers?: ReadonlyArray<string>;
@@ -629,7 +629,7 @@ const makeHandlers = Effect.gen(function* () {
             .map((o) => present.find((p) => p.key === o)?.name ?? known.find((m) => m.key === o)?.name)
             .filter((n): n is string => n !== undefined);
           const to = named.length > 0 ? named.join(", ") : "the room";
-          return yield* outbox.propose({ roomId, to, title: `${ticket.goal} · more why`, outgoing: { kind: "review", review } });
+          return yield* outbox.send({ roomId, to, title: `${ticket.goal} · more why`, outgoing: { kind: "review", review } });
         }
 
         // a new review: who is asked (0 to many), which project, and the why
@@ -708,7 +708,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(branch ? { branch } : {}),
           ...(link ? { link } : {}),
         }, now);
-        return yield* outbox.propose({
+        return yield* outbox.send({
           roomId,
           to: asked.length > 0 ? asked.join(", ") : "the room",
           title: `${input.project} · review · ${goal}`,
@@ -729,7 +729,7 @@ const makeHandlers = Effect.gen(function* () {
           ticket.createdBy === identity.pubkey
             ? "the room"
             : (peers.find((p) => p.key === ticket.createdBy)?.name ?? members.find((m) => m.key === ticket.createdBy)?.name ?? "the room");
-        return yield* outbox.propose({
+        return yield* outbox.send({
           roomId,
           to: author,
           title: `${ticket.goal} · your review`,
@@ -750,7 +750,7 @@ const makeHandlers = Effect.gen(function* () {
           ticket.createdBy === identity.pubkey
             ? "the room"
             : (peers.find((p) => p.key === ticket.createdBy)?.name ?? members.find((m) => m.key === ticket.createdBy)?.name ?? "the room");
-        return yield* outbox.propose({
+        return yield* outbox.send({
           roomId,
           to: creator,
           title: `${ticket.goal} · ${input.stepId} ${input.failed ? "failed" : "settled"}`,

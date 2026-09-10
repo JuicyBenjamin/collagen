@@ -17,27 +17,28 @@ _Last updated: 2026-09-07._
   joined at once and look at one; elsewhere you're `away`. Live create / join / switch /
   leave, from the TUI (rooms rail) or the agent's tools. Peers announce their protocol
   version; a mismatch is flagged next to the peer and in `list-room`.
-- **Human in the loop** — the founding rule. Outgoing: `send-to-peer`,
-  `create-ticket` and `settle-step` never write to the log themselves; they queue a proposal
-  (data, persisted in local state — it waits across a restart) in the **outbox** (`Outbox`
-  service; shown in the **outbox tab** — everything of yours on its way out, in one list — and on the page of the ticket it concerns
-  conversation; counted in the tab bar and the status line) and the person approves (`y`), rewrites
-  the text first (`e`) or rejects (`n`); only then does `Dispatch` write the log, resolving
-  the peer by name at send time. Incoming: every nudge and tool description tells the
-  agent to relay to its person and wait, never to answer or act on its own. Mocks and
-  `COLLAGEN_AUTO_APPROVE=1` (tests) bypass the gate.
+- **Human in the loop** — the founding rule, and it is about *who decides*, not about
+  clicking yes. An agent acts only when its person asks: every tool says so, incoming
+  messages are relayed and never answered on the agent's own initiative, and a step is
+  settled because the person said it was done. What an agent sends goes out at once and is
+  recorded in the **outbox** (`Outbox` service, `sent` in local state, newest first, the
+  full text on `enter`) — approving your own request was theatre, and a thing that "exists
+  but is not quite sent" was a state nobody wanted to reason about. `Dispatch` is still
+  the single writer: everything reaching a room's log on an agent's behalf goes through it.
 - **Ticket page + diagnostics registry** — `enter` on a ticket opens it: steps, the
   conversation on its threads, and the diagnostics that apply. Diagnostics are one file
   each in `src/diagnostics/`; the MCP server and the ticket page both read the registry.
 - **Transcripts on request** — the ticket page's diagnostics / `request-transcripts` asks everyone present
-  for their agent's conversation on the ticket's threads; each answer is a proposal in that
-  person's outbox, sliced from the moment they adopted the thread, sent directly (never on
-  the log) and filed under `~/.config/collagen/transcripts/`. Session files are read as
+  for their agent's conversation on the ticket's threads. On each machine the ask is kept,
+  not answered — a session is the one thing its person never asked to send — and
+  `share-transcripts` hands it over when they say so, sliced from the moment they adopted
+  the thread, sent directly (never on the log) and filed under
+  `~/.config/collagen/transcripts/`. Session files are read as
   they are (Claude Code and Codex layouts; `CLAUDE_CONFIG_DIR` / `CODEX_HOME` honoured);
   no CLI runs.
-- **Attachments** — files on a ticket by reference: `attach` / `attach-files` proposes; on
-  approval the record (name, size, type, holder, note; transcript meta when it is one) goes
-  on the log, the file stays home. `y` on the ticket page / `fetch-attachments` asks the
+- **Attachments** — files on a ticket by reference: `attach-files` puts the record
+  (name, size, type, holder, note; transcript meta when it is one) on the log at once and
+  the file stays home. `y` on the ticket page / `fetch-attachments` asks the
   holder directly; bytes come only while they are online and only for ids they attached,
   filed under `~/.config/collagen/attachments/` (transcripts with the transcripts).
 - **Review tickets** — the why travels with the code, addressed to 0 to many people:
@@ -154,9 +155,11 @@ Rough order, not committed.
 - **Human in the loop, always** (2026-09-08) — the reason the app exists: two agents
   chatting and acting on their own is what orchestration already does; collagen is for
   the input that is *not* AI — a colleague's context, judgment and direction. So agents
-  relay and draft, people decide; nothing leaves a machine unapproved (the outbox, a
-  structural gate, not a prompt), and nothing answers for a person (every nudge and tool
-  description says relay-and-wait). Every later decision is judged against this.
+  relay and draft, people decide: an agent acts only on its person's word, never answers
+  for them (every nudge and tool description says relay-and-wait), and everything it sends
+  is on the record in the outbox. The gate used to be a queue you approved; that was
+  theatre, because you had just asked for the thing. Every later decision is judged
+  against who decides, not against clicking yes.
 - **No cold spawns** (2026-09-03) — an incoming message never starts an agent for you.
   Inbox or adopted session; mocks are the only exception. The user works in their own
   agent session; collagen messages *that* session on their behalf.
