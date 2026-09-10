@@ -81,7 +81,7 @@ export function Tickets() {
     >
       {(focused) => (
         <>
-          <text truncate wrapMode="none">
+          <text truncate wrapMode="none" flexShrink={0}>
             <span fg={focused ? theme.accent : theme.dim}>tickets</span>
             <span fg={needsYou + queued.length > 0 ? theme.warn : theme.dim}> ({shown.length})</span>
           </text>

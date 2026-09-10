@@ -58,10 +58,12 @@ No files are written into your projects.
   for, finished ones dim at the end — and the projects section.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
-- **outbox tab** — everything of yours on its way out, in one list, newest first. Its
-  count in the tab bar turns orange when something is waiting on you. `y` sends, `n`
-  drops, `e` rewrites it first, `enter` shows the whole text. Proposals from every room
-  you are in, since they all wait on the same person; nothing there has left the machine.
+- **outbox tab** — everything of yours on its way out, in one list, newest first. A row
+  is what it is, which project (`sandbox/`), who it is for when it is for a person, and
+  what it is about. Its count in the tab bar turns orange when something is waiting on
+  you. `y` sends, `n` drops, `e` rewrites it first, `enter` unfolds the whole text (a
+  long one is capped and points at the ticket's page). Proposals from every room you are
+  in, since they all wait on the same person; nothing there has left the machine.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section.
 - **footer** — a short activity log, the MCP url, the room's invite id.

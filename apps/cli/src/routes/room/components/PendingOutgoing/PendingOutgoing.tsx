@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet } from "@effect/atom-react";
 import type { Proposal } from "@collagen/p2p";
-import { editable, proposalText } from "../../../../services/Outbox";
+import { editable, outgoingSummary, proposalText } from "../../../../services/Outbox";
 import { captureAtom } from "../../../../components/focus";
 import type { Key } from "../../../../components/keys";
 import { theme } from "../../../../app/theme";
@@ -10,9 +10,6 @@ import { approveOutgoingAtom, editOutgoingAtom, rejectOutgoingAtom } from "../..
 
 export const PENDING_HINT = "y approve and send · e edit the text · n reject · enter full text";
 
-/** What kind of thing this is, in one word. */
-export const outgoingKind = (p: Proposal): string =>
-  p.outgoing.kind === "post-review" ? "review" : p.outgoing.kind === "attach" ? "files" : p.outgoing.kind;
 const EDIT_HINT = "enter save · esc cancel — what you write here is what leaves";
 
 /** What your agent wants to send, waiting for you — rows at the bottom of a
@@ -46,22 +43,32 @@ export function usePendingOutgoing() {
     return false;
   };
 
-  const row = (p: Proposal, selected: boolean, expanded: boolean, note?: string) => {
-    const text = proposalText(p);
+  /** One proposal as a row. `body` is the unfolded text, already wrapped by
+   *  the caller — it knows how wide its box is, and it has to budget the same
+   *  number of rows it renders. Everything here is flexShrink 0: a squeezed
+   *  row draws its lines on top of each other. */
+  const row = (p: Proposal, selected: boolean, expanded: boolean, note?: string, body?: ReadonlyArray<string>) => {
     const isEditing = editing?.id === p.id;
+    const summary = outgoingSummary(p);
     return (
-      <box key={p.id} flexDirection="column">
-        {/* what it is, where it is going, what it is about — enter has the rest */}
-        <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
+      <box key={p.id} flexDirection="column" flexShrink={0}>
+        {/* kind · project · who it is for · what it is about — enter has the rest */}
+        <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none" flexShrink={0}>
           {selected ? (expanded ? "▾ " : "› ") : "  "}
-          <span fg={theme.warn}>{outgoingKind(p).padEnd(9)}</span>
-          <span fg={theme.dim}>→ </span>
-          {p.to}
-          <span fg={theme.dim}> · {p.title}</span>
+          <span fg={theme.warn}>{summary.kind.padEnd(9)}</span>
+          {summary.project ? <span fg={theme.dim}>{summary.project}/ </span> : null}
+          {summary.target ? (
+            <>
+              <span fg={theme.dim}>→ </span>
+              {summary.target}
+              {"  "}
+            </>
+          ) : null}
+          {summary.subject}
           {note ? <span fg={theme.dim}> · {note}</span> : null}
         </text>
         {isEditing ? (
-          <box marginLeft={4} marginBottom={1} border borderStyle="rounded" borderColor={theme.accent} paddingX={1}>
+          <box marginLeft={4} marginBottom={1} border borderStyle="rounded" borderColor={theme.accent} paddingX={1} flexShrink={0}>
             <input
               focused
               value={editing.text}
@@ -72,14 +79,16 @@ export function usePendingOutgoing() {
               }}
             />
           </box>
-        ) : expanded ? (
-          <box flexDirection="column" paddingLeft={4} marginBottom={1}>
-            <text fg={theme.dim} truncate wrapMode="none">
+        ) : expanded && body ? (
+          <box flexDirection="column" paddingLeft={4} flexShrink={0}>
+            <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
               queued {new Date(p.ts).toLocaleString()} · nothing has left this machine
             </text>
-            <text fg={theme.fg} wrapMode="word">
-              {text}
-            </text>
+            {body.map((line, i) => (
+              <text key={i} fg={theme.fg} truncate wrapMode="none" flexShrink={0}>
+                {line}
+              </text>
+            ))}
           </box>
         ) : null}
       </box>

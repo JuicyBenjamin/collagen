@@ -9,6 +9,40 @@ export type { Proposal };
 export const QUEUED_TEXT =
   "queued for your user's approval — nothing leaves this machine until they approve it in the collagen TUI (outbox section). Tell them what you queued, then stop: do not resend, and do not work around it.";
 
+/** A proposal in the pieces a row shows: what kind of thing it is, which
+ *  project it belongs to, the person it is for (nobody, when it is for the
+ *  room), and what it is about. Derived from the outgoing itself — `to` and
+ *  `title` are for logs and headings, and "the room" is not a person. */
+export interface OutgoingSummary {
+  readonly kind: string;
+  readonly project: string | null;
+  readonly target: string | null;
+  readonly subject: string;
+}
+
+export const outgoingSummary = (p: Proposal): OutgoingSummary => {
+  const o = p.outgoing;
+  const person = (name: string) => (name.startsWith("the room") ? null : name);
+  switch (o.kind) {
+    case "message":
+      return { kind: "message", project: o.project, target: o.peer, subject: o.intent };
+    case "ticket":
+      return { kind: o.ticket.kind, project: o.ticket.project, target: person(p.to), subject: o.ticket.goal };
+    case "review":
+      return o.ticket
+        ? { kind: "review", project: o.ticket.project, target: person(p.to), subject: o.ticket.goal }
+        : { kind: "review", project: null, target: person(p.to), subject: `more why · ${o.review.summary}` };
+    case "post-review":
+      return { kind: "review", project: null, target: person(p.to), subject: "your review" };
+    case "settle":
+      return { kind: "settle", project: null, target: person(p.to), subject: o.stepId };
+    case "attach":
+      return { kind: "files", project: null, target: person(p.to), subject: `${o.items.length} on "${o.goal}"` };
+    case "transcript":
+      return { kind: "transcript", project: null, target: person(p.to), subject: o.subject };
+  }
+};
+
 /** The full text of a proposal, as the person reads it before saying yes. */
 export function proposalText(p: Proposal): string {
   const o = p.outgoing;

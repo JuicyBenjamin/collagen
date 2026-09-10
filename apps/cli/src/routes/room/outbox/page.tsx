@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { BoxRenderable } from "@opentui/core";
-import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { shortRoomId } from "@collagen/p2p";
@@ -21,19 +20,24 @@ import { PENDING_HINT, usePendingOutgoing } from "../components/PendingOutgoing/
  *  waiting on the same person; the room is named on a row that is not from
  *  the one you are looking at. `y` sends, `n` drops, `e` rewrites first,
  *  `enter` shows the whole text. */
+/** How much of an unfolded proposal to show before pointing elsewhere. */
+const BODY_ROWS = 12;
+
 export function OutboxPage() {
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const all = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const);
   const outgoing = usePendingOutgoing();
   const setFocus = useAtomSet(focusAtom);
-  const { width } = useTerminalDimensions();
   const [cursor, setCursor] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const listRef = useRef<BoxRenderable>(null);
   const [viewport, setViewport] = useState(10);
+  const [boxWidth, setBoxWidth] = useState(80);
   useEffect(() => {
     const h = listRef.current?.height;
     if (h && h > 0 && h !== viewport) setViewport(h);
+    const w = listRef.current?.width;
+    if (w && w > 0 && w !== boxWidth) setBoxWidth(w);
   });
   useEffect(() => {
     setFocus("outbox");
@@ -43,11 +47,14 @@ export function OutboxPage() {
   const rows = [...all].sort((a, b) => b.ts - a.ts);
   const last = Math.max(0, rows.length - 1);
   const sel = cursor === null ? 0 : clamp(cursor, 0, last);
-  // an unfolded row is many lines tall: they come out of the window, so the
-  // list never grows past its box and shoves the page around
+  // An unfolded row is many lines tall. Wrap it HERE, to the width of the box
+  // we measured, cap it, and take exactly those rows out of the window — an
+  // estimate that came out short used to overflow the box and draw lines on
+  // top of each other. `enter` again folds it; the ticket's page has the rest.
   const open = rows.find((p) => p.id === expanded);
-  const bodyLines = open ? wrap(proposalText(open), Math.max(30, width - 30)).length + 1 : 0;
-  const window = Math.max(1, viewport - bodyLines);
+  const wrapped = open ? wrap(proposalText(open), Math.max(20, boxWidth - 6)) : [];
+  const body = wrapped.length > BODY_ROWS ? [...wrapped.slice(0, BODY_ROWS), `… ${wrapped.length - BODY_ROWS} more line(s) — the ticket's own page has all of it`] : wrapped;
+  const window = Math.max(1, viewport - (open ? body.length + 1 : 0));
   const start = clamp(sel - Math.floor(window / 2), 0, Math.max(0, rows.length - window));
 
   return (
@@ -83,7 +90,13 @@ export function OutboxPage() {
                 rows
                   .slice(start, start + window)
                   .map((p, i) =>
-                    outgoing.row(p, focused && start + i === sel, expanded === p.id, p.roomId === roomId ? undefined : `room ${shortRoomId(p.roomId)}`),
+                    outgoing.row(
+                      p,
+                      focused && start + i === sel,
+                      expanded === p.id,
+                      p.roomId === roomId ? undefined : `room ${shortRoomId(p.roomId)}`,
+                      body,
+                    ),
                   )
               )}
             </box>

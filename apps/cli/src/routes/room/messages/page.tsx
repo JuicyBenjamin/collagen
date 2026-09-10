@@ -72,7 +72,7 @@ export function MessagesPage() {
     >
       {(focused) => (
         <>
-          <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none">
+          <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none" flexShrink={0}>
             agent-to-agent trace · who → whom · newest last
             {waiting > 0 ? <span fg={theme.warn}> · {waiting} waiting for your y in the outbox [3]</span> : null}
           </text>
