@@ -35,7 +35,8 @@ sleep 2 # a negative: give anything that would leak time to arrive
 TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
 
 echo "## the queued ticket is a ticket: it is in the overview's list"
-expect "listed with the rest, by kind, as yours to approve" "$(echo "$TEXT" | grep -cE 'task .{0,8}explain the NaN.{0,6}yours to approve')" "^[1-9]"
+expect "listed with the rest, by kind, marked as yours by a glyph" "$(echo "$TEXT" | grep -cE '.{1,3} task .{0,8}explain the NaN')" "^[1-9]"
+expect "…the glyph, not a sentence" "$(echo "$TEXT" | grep -c 'yours to approve')" "^0$"
 expect "…and the section header is a count, nothing more" "$(echo "$TEXT" | grep -cE 'tickets \(1\)')" "^[1-9]"
 expect "…and n dropped it from there" "$(grep -c '✗ rejected: ticket → bob' "$LOG")" "^1$"
 expect "the cursor was in the tickets section, not a section of its own" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')" "tickets"

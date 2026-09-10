@@ -187,7 +187,8 @@ The overview tab lists **every** ticket in the room, whoever made it and whoever
 for — including the ones your agent has queued and you have not approved yet, which are
 tickets that simply have not reached the room. A row is a glance and nothing more: its
 **kind**, its **goal**, and **who has answered** (`bob✓` spoke or settled, `bob·` silent
-so far, `carol` weighed in unasked; a queued one says `yours to approve`). Order carries
+so far, `carol` weighed in unasked). A queued one carries `⧗` — the app's mark for "this
+is yours to say yes to" — and nothing else. Order carries
 the rest: what needs you first, then what is waiting, then failed, then done (dim).
 Nothing is hidden or folded away, and the header is a count. `y` / `n` on a queued row
 sends or drops it. `enter` opens the ticket's own

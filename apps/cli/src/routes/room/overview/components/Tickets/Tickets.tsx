@@ -105,15 +105,16 @@ export function Tickets() {
 }
 
 /** A ticket your agent wants to create, in the list with the rest and in the
- *  same shape. It is yours to approve before the room gets it. */
+ *  same shape. The `⧗` is the whole message — the app's mark for "this is
+ *  yours to say yes to", the same one the outbox and a ticket's own page use.
+ *  Live rows leave that column blank, so everything stays in line. */
 function QueuedRow({ ticket, selected }: { ticket: Ticket; selected: boolean }) {
   return (
     <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
-      <span fg={theme.warn}>{ticket.kind.padEnd(9)}</span>
+      <span fg={theme.warn}>⧗ </span>
+      {ticket.kind.padEnd(9)}
       {ticket.goal}
-      <span fg={theme.dim}> · </span>
-      <span fg={theme.warn}>yours to approve</span>
     </text>
   );
 }
@@ -136,6 +137,7 @@ function TicketRow({
   return (
     <text fg={selected ? theme.accent : done ? theme.dim : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
+      {"  "}
       <span fg={done ? theme.dim : s.state === "failed" ? theme.warn : theme.fg}>{t.kind.padEnd(9)}</span>
       {t.goal}
       <span fg={theme.dim}> · </span>
