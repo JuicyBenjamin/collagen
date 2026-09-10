@@ -18,7 +18,8 @@ import { OutgoingLine, OutgoingRow } from "../components/PendingOutgoing/Pending
  *  queue: your agent acts when you ask it to, and this is what it did.
  *  `enter` unfolds the text it sent, whole — the rows are one flat list of
  *  head lines plus the unfolded text's own lines, so ↑↓ (and pgup/pgdn,
- *  home/end) walk through all of it however long it is. */
+ *  home/end) walk through all of it however long it is. Reading is a place:
+ *  ← comes back out to the list instead of moving to the next tab. */
 export function OutboxPage() {
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const all = AsyncResult.getOrElse(useAtomValue(outboxAtom), () => [] as const);
@@ -63,7 +64,7 @@ export function OutboxPage() {
         id="outbox"
         hint={
           expanded !== null
-            ? "↑↓ scroll · pgup/pgdn · home/end · enter close · ←→ switch tab"
+            ? "↑↓ scroll · pgup/pgdn · home/end · ← / enter back to the list"
             : all.length > 0
               ? "↑↓ select · pgup/pgdn · home/end · enter the text it sent · ←→ switch tab"
               : "←→ switch tab"
@@ -74,6 +75,12 @@ export function OutboxPage() {
         onKey={(key) => {
           if (all.length === 0) return false;
           if (expanded !== null) {
+            const fold = () => (setExpanded(null), setScroll(0));
+            // reading is a place you go into and come back out of: ← is the way
+            // back to the list, not the way to the next tab. esc still leaves
+            // for the tab bar, and closes the record on its way out.
+            if (key.name === "left") return fold(), true;
+            if (key.name === "escape") return fold(), false;
             const to = (n: number) => (setScroll(clamp(n, 0, maxStart)), true);
             if (key.name === "up") return to(start - 1);
             if (key.name === "down") return to(start + 1);

@@ -4,7 +4,8 @@
 # — nothing waits for anyone's approval. In the pty: the overview lists the
 # ticket the moment it lands, `3` opens the outbox with all three records
 # newest first, and `enter` unfolds the text one carried — whole, scrolled
-# with ↑↓ / pgup / home / end, nothing capped, the brand above it unmoved.
+# with ↑↓ / pgup / home / end, nothing capped, the brand above it unmoved; ←
+# comes back out to the list, and only then does ← walk the tabs.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 start bob
@@ -18,7 +19,7 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\r'; sleep 2; mark M3_expanded
   printf '\033[4~'; sleep 2; mark M3b_end
   printf '\033[1~'; sleep 2; mark M3c_home
-  printf '\r'; sleep 1; mark M4_folded
+  printf '\033[D'; sleep 2; mark M4_folded
   printf '\033'; sleep 1; printf '\033[D'; sleep 1; mark M5_left_a_tab; sleep 1; printf 'q' ) | \
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows 40 cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
@@ -59,12 +60,13 @@ if [ "$HAVE_PYTE" = yes ]; then
   expect "…each line drawn once, never over its neighbour" "$(render M3b_end | grep -c 'line 40 of a body')" "^1$"
   expect "…and the records below it are still listed under the text" "$(render M3b_end)" "task     sandbox/"
   expect "home came back to the top of it" "$(render M3c_home)" "a review-sized body"
-  expect "enter folded it away again" "$(render M4_folded | grep -c 'of a body that wraps')" "^0$"
+  expect "← came back out to the list, it did not move to the next tab" "$(render M4_folded | grep -c 'of a body that wraps')" "^0$"
+  expect "…and the cursor stayed on the record you were reading" "$(render M4_folded)" "› message  sandbox/"
   expect "…with the brand still above it, not squeezed" "$(render M3b_end)" "peer-to-peer"
 else
   echo "  skip  screen-level checks (no pyte: pip install pyte, or set PYTE_PATH)"
 fi
 
 echo "## the tab bar keeps the cursor: ← walks back through the tabs, not out to the rail"
-expect "esc put the cursor back on the bar, ← moved one tab left" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | grep -v room | tr '\n' ' ')" "outbox tabs tabs"
+expect "esc put the cursor back on the bar, ← moved one tab left" "$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | grep -v room | tr '\n' ' ')" "outbox outbox tabs tabs"
 kill_all; summary
