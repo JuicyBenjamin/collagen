@@ -8,16 +8,15 @@ import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
 import { roomAtom } from "../../atoms";
-import { identityAtom, membersAtom, outboxAtom, rosterAtom, traceAtom } from "../atoms";
+import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../atoms";
 import { Arrow } from "../components/Arrow/Arrow";
 
 type Row = { readonly kind: "msg"; readonly id: string; readonly msg: RoomMessage };
 
 /** Messages tab: the room's agent-to-agent trace as its log has it — every
- *  message between members, in log order — and, at the bottom, what your
- *  agent wants to send and is waiting for your yes. ↑↓ scroll (follows the
- *  newest row until you scroll up), enter shows a row's full text; on a
- *  waiting row `y` sends, `e` edits, `n` drops. */
+ *  message between members, in log order. ↑↓ scroll (follows the newest row
+ *  until you scroll up), enter shows a row's full text. It is a trace, not a
+ *  queue: nothing here waits for the person, so nothing counts it. */
 export function MessagesPage() {
   const { height } = useTerminalDimensions();
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;

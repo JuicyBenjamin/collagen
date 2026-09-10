@@ -61,8 +61,10 @@ No files are written into your projects.
 - **outbox tab** — everything of yours that has gone out, in one list, newest first,
   from every room you are in. A row is what it was, which project (`sandbox/`), who it
   was for when it was for a person, and what it was about; `enter` unfolds the text it
-  carried (a long one is capped). There is nothing to approve here: your agent acts on
-  your word, and this is the receipt.
+  carried in full (`↑↓` scroll it, `pgup`/`pgdn`, `home`/`end`, `←` back to the list).
+  There is nothing to approve here: your agent acts on your word, and this is the
+  receipt. Neither this tab nor **messages** carries a count: both are logs that only
+  grow, so their size is not something a person acts on.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section.
 - **footer** — a short activity log, the MCP url, the room's invite id.

@@ -110,8 +110,7 @@ export function OutboxPage() {
           <>
             <text truncate wrapMode="none" flexShrink={0}>
               <span fg={focused ? theme.accent : theme.fg}>outbox</span>
-              <span fg={theme.dim}> ({all.length})</span>
-              {scrollable ? <span fg={theme.dim}>{`  ${Math.min(start + viewport, rows.length)}/${rows.length}`}</span> : null}
+              {scrollable ? <span fg={theme.dim}>{` ${Math.min(start + viewport, rows.length)}/${rows.length}`}</span> : null}
             </text>
             <box ref={listRef} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
               {all.length === 0 ? (
