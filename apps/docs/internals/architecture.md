@@ -262,10 +262,13 @@ What that needs, so nothing can brick:
 - **`RoomLog.read` never trusts the view.** Every row is decoded against its schema
   (`Ticket`, `Member`, `RoomMessage`, `Attachment`, `ReviewContext`); rows that fail are
   kept out of `LogView` and remembered as stale.
-- **`RoomLog.evictStale` is the migration.** It appends one `LogOp { op: "evict", keys }`,
-  applied by every member (`EVICTABLE` limits it to room records — never `meta/`), so the
-  cleanup replicates instead of each side hiding its own mess. `Room.refresh` calls it, so
-  it runs as soon as we are admitted; it is idempotent and its own log entry ends the loop.
+- **`migrate.ts` is the migration; `RoomLog.evictStale` is its last resort.** A row or
+  log entry in an older shape we know (protocol 2/3 tickets: no `structureAt`) is read
+  migrated in `read` and in `apply`, and `rewriteMigrated` appends it in the current shape
+  so every member's row becomes current once. `restoreOwn` walks this machine's own writer
+  core on open and re-appends any ticket of ours that has no row — the case after an
+  eviction by a build that did not yet know the shape. Only what nobody can read is
+  evicted: one `LogOp { op: "evict", keys }` that every member applies.
 - **`apply` ejects on overwrite**: an entry it cannot decode deletes the view row it
   claims (`claimedKey`), so a record from another version leaves nothing half-applied.
 - **`Swarm.protocolOf`** reads only `frame.profile.protocol` out of a frame that failed to

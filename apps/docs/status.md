@@ -172,6 +172,14 @@ alone too.
 
 ## Decisions log
 
+- **Migrate first, evict last** (2026-09-14) — one protocol version at a time still, but an
+  older record we know the shape of is rewritten into the current one on the log rather
+  than evicted; eviction is for what nobody can read. Prompted by a required field
+  (`structureAt`) wiping a live room's tickets: "we know the types all the way through so
+  we know where it should migrate from and to... where not possible we are in alpha, so it
+  is to be expected." A build that could not migrate may have evicted what a later build
+  can read, so a room restores its own tickets from the machine's own writer core on open.
+
 - **Effect everywhere** — services + layers + typed errors + spans, for observability.
 - **`@effect/atom-react`** (not effect-rx) for the React bridge.
 - **`effect/unstable/ai` McpServer** (not `@modelcontextprotocol/sdk`) — one schema system.

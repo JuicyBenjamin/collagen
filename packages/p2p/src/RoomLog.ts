@@ -6,6 +6,7 @@ import { LogAppendFailed } from "./errors";
 import { Attachment, EVICTABLE, LogOp, Member, PROTOCOL_VERSION, RoomMessage } from "./schema";
 import { ReviewContext } from "./review";
 import { mergeTicket, Ticket } from "./ticket";
+import { migrateOp, migrateRow, readTicket } from "./migrate";
 
 /** The room as derived from its log. Read whole — rooms are small. */
 export interface LogView {
@@ -32,6 +33,11 @@ export interface RoomLog {
   /** Take the rows no build of ours can read off the room, for every member
    *  (one `evict` entry on the log). Returns how many went. */
   readonly evictStale: Effect.Effect<number>;
+  /** Older records we could read, written back in the current shape. */
+  readonly rewriteMigrated: Effect.Effect<number>;
+  /** Our own tickets the view lost (an eviction before a migration existed), put
+   *  back. null when it could not run yet (not writable) — try again later. */
+  readonly restoreOwn: Effect.Effect<number | null>;
   /** Fires after the view changed or our writer status did. */
   readonly changes: Stream.Stream<void>;
 }
@@ -79,7 +85,9 @@ const claimedKey = (value: unknown): string | null => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: any): Promise<void> {
   for (const node of nodes) {
-    const op = Option.getOrUndefined(decodeOp(node.value));
+    // an entry from an older protocol is rewritten into the current shape when
+    // we know the old one (migrate.ts); only what nobody can read is ejected
+    const op = Option.getOrUndefined(decodeOp(node.value)) ?? migrateOp(node.value) ?? undefined;
     if (!op) {
       // unreadable here: eject the row it claims instead of leaving a stale one
       const key = claimedKey(node.value);
@@ -96,8 +104,10 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         break;
       }
       case "ticket": {
+        // the row we merge into may itself be an older shape: migrate it first
         const cur = await view.get(`ticket/${op.ticket.id}`);
-        await view.put(`ticket/${op.ticket.id}`, cur ? mergeTicket(cur.value as Ticket, op.ticket) : op.ticket);
+        const local = cur ? readTicket(cur.value)?.value : undefined;
+        await view.put(`ticket/${op.ticket.id}`, local ? mergeTicket(local, op.ticket) : op.ticket);
         break;
       }
       case "rename": {
@@ -193,19 +203,26 @@ export const openRoomLog = (
     // spoke another protocol version can never reach the app. Reading notes
     // those rows; `evictStale` then takes them off the room for everyone.
     let stale: ReadonlyArray<string> = [];
+    let rewrites: ReadonlyArray<LogOp> = [];
     let announced = -1;
     const read: Effect.Effect<LogView> = Effect.gen(function* () {
       const bad: string[] = [];
+      const migrated: LogOp[] = [];
       const rows = <A, E>(prefix: string, schema: Schema.Codec<A, E>) =>
         readRange(prefix).pipe(
           Effect.map((entries) =>
             entries.flatMap((e) => {
               const decoded = Schema.decodeUnknownOption(schema)(e.value);
-              if (Option.isNone(decoded)) {
-                if (EVICTABLE.test(e.key)) bad.push(e.key);
-                return [];
+              if (Option.isSome(decoded)) return [{ key: e.key, value: decoded.value }];
+              // an older shape we know: read it migrated, and queue the rewrite
+              // that makes the row current for everyone
+              const m = migrateRow(prefix, e.value);
+              if (m) {
+                if (prefix === "ticket") migrated.push({ op: "ticket", ticket: m.value as Ticket });
+                return [{ key: e.key, value: m.value as A }];
               }
-              return [{ key: e.key, value: decoded.value }];
+              if (EVICTABLE.test(e.key)) bad.push(e.key);
+              return [];
             }),
           ),
         );
@@ -216,6 +233,7 @@ export const openRoomLog = (
       const reviews = (yield* rows("review", ReviewContext)).map((e) => e.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
       stale = bad;
+      rewrites = migrated;
       if (bad.length !== announced) {
         announced = bad.length;
         if (bad.length > 0) {
@@ -242,6 +260,74 @@ export const openRoomLog = (
       stale = [];
       yield* Effect.log(`evicted ${keys.length} record(s) from an older protocol version: ${keys.join(", ")}`);
       return keys.length;
+    });
+
+    /** The other half of the migration: an older record we could read is
+     *  written back in the current shape, so the row is current for every
+     *  member and nobody else has to migrate it. Idempotent — once rewritten
+     *  it decodes, and is not queued again. */
+    const rewriteMigrated = Effect.gen(function* () {
+      const ops = rewrites;
+      if (ops.length === 0 || !base.writable) return 0;
+      let n = 0;
+      for (const op of ops) {
+        const ok = yield* append(op).pipe(
+          Effect.as(true),
+          Effect.catch((e) => Effect.logWarning(`migration rewrite failed: ${e.message}`).pipe(Effect.as(false))),
+        );
+        if (ok) n++;
+      }
+      rewrites = [];
+      if (n > 0) yield* Effect.log(`migrated ${n} record(s) from an older protocol version into protocol ${PROTOCOL_VERSION}`);
+      return n;
+    });
+
+    /** Bring back what this machine wrote and the room no longer shows: walk
+     *  our own writer core — every entry we ever appended — fold the ticket
+     *  entries (migrated as needed) and re-append any ticket that has no row
+     *  in the view. That is the case after an eviction by a build that did
+     *  not yet know how to migrate the shape: the record is on the log, the
+     *  row is gone, and a later build that does know puts it back. Only our
+     *  own writes: they are ours to restore, and the core is right here. */
+    const restoreOwn: Effect.Effect<number | null> = Effect.gen(function* () {
+      // null: could not run yet (not admitted) — the caller tries again later
+      if (!base.writable) return null;
+      const folded = yield* Effect.promise(async () => {
+        const out = new Map<string, Ticket>();
+        const core = base.local;
+        for (let i = 0; i < core.length; i++) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const msg: any = await core.get(i).catch(() => null);
+          const buf: Uint8Array | null | undefined = msg?.node?.value;
+          if (!buf) continue;
+          let raw: unknown;
+          try {
+            raw = JSON.parse(b4a.toString(buf, "utf8"));
+          } catch {
+            continue;
+          }
+          const op = migrateOp(raw) ?? Option.getOrUndefined(decodeOp(raw));
+          if (!op || op.op !== "ticket") continue;
+          const have = out.get(op.ticket.id);
+          out.set(op.ticket.id, have ? mergeTicket(have, op.ticket) : op.ticket);
+        }
+        const missing: Ticket[] = [];
+        for (const [id, t] of out) {
+          const row = await base.view.get(`ticket/${id}`);
+          if (!row) missing.push(t);
+        }
+        return missing;
+      });
+      let n = 0;
+      for (const t of folded) {
+        const ok = yield* append({ op: "ticket", ticket: t }).pipe(
+          Effect.as(true),
+          Effect.catch((e) => Effect.logWarning(`restore failed for ticket ${t.id}: ${e.message}`).pipe(Effect.as(false))),
+        );
+        if (ok) n++;
+      }
+      if (n > 0) yield* Effect.log(`restored ${n} ticket(s) from this machine's own history: ${folded.map((t) => t.id.slice(0, 8)).join(", ")}`);
+      return n;
     });
 
     const changes = Stream.callback<void>((queue) =>
@@ -294,6 +380,8 @@ export const openRoomLog = (
       append,
       read,
       evictStale,
+      rewriteMigrated,
+      restoreOwn,
       changes,
     };
   });

@@ -359,18 +359,28 @@ offline catches up on reconnect — including steps that became theirs while the
 
 ### One protocol version at a time
 
-Collagen is an alpha and carries **no compatibility paths**: a record written by a build
-that spoke an older `PROTOCOL_VERSION` is not translated, tolerated or half-shown. It is
-migrated out.
+Collagen is an alpha and carries **no compatibility paths**: the app reads one shape of
+each record, the current one. A record written by a build that spoke an older
+`PROTOCOL_VERSION` is **migrated** into it where we know the old shape — and we wrote every
+shape there has ever been — and **evicted** where we do not.
 
-- Reading the view drops any row this build cannot decode, so nothing malformed reaches
-  the app — a stale ticket can never break the room's page.
-- The rows it dropped are then **evicted**: one `evict` entry on the log names them, every
-  member applies the same deletion, and the room converges clean. The log itself is
-  append-only, so this is the equivalent of a migration — the dead record stops being part
-  of the room instead of being maintained.
-- A record from another version that overwrites a row you have also ejects that row, so
-  you never keep a half-applied ticket.
+- Reading the view never trusts a row's shape. A row this build cannot decode as it is
+  goes through `migrate.ts`, the one place that knows the older shapes: a ticket from
+  protocol 2 or 3 gains the author's clock (`structureAt`, set to its last change) and is
+  read as current.
+- A migrated row is then **rewritten** once: the current shape is appended to the log, so
+  every member's row becomes current and nobody migrates it again.
+- What cannot be migrated is **evicted**: one `evict` entry on the log names the rows,
+  every member applies the same deletion, and the room converges clean. The log is
+  append-only, so this is the equivalent of a migration too — the record stops being part
+  of the room instead of being maintained. In an alpha that is expected.
+- A log entry from another version is migrated in `apply` as well, so a replay of the log
+  reaches the same room; one that cannot be is ejected, so you never keep a half-applied
+  ticket.
+- A build that could not yet migrate a shape may have evicted rows a later build can read.
+  On opening a room, that later build walks **its own** writer core — every entry this
+  machine ever appended — and puts back any ticket of its own that has no row. Your writes
+  are yours to restore; nobody else's are touched.
 - A peer whose frames don't decode is not silently absent: their greet still says which
   version wrote it, and the log tells you which side has to update.
 - Locally, the state file is salvaged rather than discarded: an outbox record from an

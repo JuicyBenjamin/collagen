@@ -1,5 +1,6 @@
 export * from "./schema";
 export * from "./ticket";
+export * from "./migrate";
 export * from "./review";
 export * from "./errors";
 export * from "./types";

@@ -139,9 +139,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(writable, log.writable());
       yield* SubscriptionRef.set(mine, view.messages.filter((m) => m.msg.to === me));
       // records from a build speaking another protocol version never reach
-      // the app; take them off the room for everyone (a no-op when there are
-      // none, or until we are admitted). The eviction's own log entry brings
-      // us back here with nothing left to do.
+      // the app as they are. Those we know how to read are rewritten into the
+      // current shape for everyone; our own that an earlier build evicted
+      // before it knew how are put back, once per open; only what nobody can
+      // read is taken off the room. Each write's own log entry brings us back
+      // here with less left to do.
+      yield* log.rewriteMigrated;
+      if (!restoredOwn) {
+        const ran = yield* log.restoreOwn;
+        if (ran !== null) restoredOwn = true; // once — but only once it could actually run
+      }
       yield* log.evictStale;
     });
 
@@ -204,6 +211,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
      *  opened" and the app never came up. The flag is set before the first
      *  await, so nothing can slip between. */
     let attaching = false;
+    let restoredOwn = false;
     const attachLog = (key: string | null) =>
       Effect.gen(function* () {
         if (log || attaching) return;
