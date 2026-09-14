@@ -125,7 +125,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     const mine = steps.get(s.id);
     steps.set(s.id, mine ? mergeStep(mine, s) : s);
   }
-  const author = incoming.structureAt > local.structureAt ? incoming : local;
+  const author = incoming.structureAt !== local.structureAt ? (incoming.structureAt > local.structureAt ? incoming : local) : structureTiebreak(local, incoming);
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
   const { from: _lf, whenClosed: _lw, ...rest } = local;
@@ -143,6 +143,26 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     updatedAt: Math.max(local.updatedAt, incoming.updatedAt),
   };
 }
+
+/** The author-controlled structure, as one comparable string. */
+const structureKey = (t: Ticket): string => JSON.stringify([t.goal, t.kind, t.from ?? null, t.whenClosed ?? null]);
+
+/** Two author revisions in the same millisecond: pick one the same way on
+ *  every peer, whichever side it arrived from, so the merge still commutes. */
+const structureTiebreak = (a: Ticket, b: Ticket): Ticket => (structureKey(a) >= structureKey(b) ? a : b);
+
+/** Would merging `mine` into `row` change the row? Steps are compared by id
+ *  and content, structure and close by value — a ticket as data, order aside.
+ *  This is what lets every peer restore its OWN contribution to a ticket after
+ *  an eviction without any of them deleting another's: a copy that adds
+ *  nothing is left alone, one that adds a step or a state is re-appended. */
+export const contributes = (row: Ticket, mine: Ticket): boolean => canonical(mergeTicket(row, mine)) !== canonical(row);
+
+const canonical = (t: Ticket): string =>
+  JSON.stringify({
+    ...t,
+    steps: [...t.steps].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+  });
 
 export type CloseOutcome =
   /** closed, by its author */

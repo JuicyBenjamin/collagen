@@ -5,7 +5,7 @@ import b4a from "b4a";
 import { LogAppendFailed } from "./errors";
 import { Attachment, EVICTABLE, LogOp, Member, PROTOCOL_VERSION, RoomMessage } from "./schema";
 import { ReviewContext } from "./review";
-import { mergeTicket, Ticket } from "./ticket";
+import { Ticket, contributes, mergeTicket } from "./ticket";
 import { migrateOp, migrateRow, readTicket } from "./migrate";
 
 /** The room as derived from its log. Read whole — rooms are small. */
@@ -311,10 +311,15 @@ export const openRoomLog = (
           const have = out.get(op.ticket.id);
           out.set(op.ticket.id, have ? mergeTicket(have, op.ticket) : op.ticket);
         }
+        // a row that exists may still lack what WE wrote — another peer
+        // restored first from their own history, without our take or our
+        // settle — so the test is not "is there a row" but "would our copy
+        // change it"; re-appending is a merge, never a replacement
         const missing: Ticket[] = [];
         for (const [id, t] of out) {
           const row = await base.view.get(`ticket/${id}`);
-          if (!row) missing.push(t);
+          const current = row ? readTicket(row.value)?.value : undefined;
+          if (!current || contributes(current, t)) missing.push(t);
         }
         return missing;
       });
@@ -326,7 +331,7 @@ export const openRoomLog = (
         );
         if (ok) n++;
       }
-      if (n > 0) yield* Effect.log(`restored ${n} ticket(s) from this machine's own history: ${folded.map((t) => t.id.slice(0, 8)).join(", ")}`);
+      if (n > 0) yield* Effect.log(`restored this machine's own contribution to ${n} ticket(s): ${folded.map((t) => t.id.slice(0, 8)).join(", ")}`);
       return n;
     });
 

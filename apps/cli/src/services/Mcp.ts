@@ -657,7 +657,8 @@ const makeHandlers = Effect.gen(function* () {
             revised = done.ticket;
           }
           const changed = revised !== ticket;
-          if (changed) revised = { ...revised, structureAt: now, updatedAt: now };
+          // the author's clock only ever moves forward, even inside one millisecond
+          if (changed) revised = { ...revised, structureAt: Math.max(now, ticket.structureAt + 1), updatedAt: now };
 
           const owners = [...new Set(revised.steps.map((s) => s.owner).filter((o) => o !== identity.pubkey))];
           const named = owners.map(nameOf).filter((n): n is string => n !== undefined);

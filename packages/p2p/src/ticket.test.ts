@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionableSteps, closeTicket, finished, mergeTicket, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
+import { actionableSteps, closeTicket, contributes, finished, mergeTicket, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
 import { deriveThreadId } from "./topic";
 
 const step = (over: Partial<TicketStep>): TicketStep => ({
@@ -290,6 +290,28 @@ describe("a review ticket asks 0 to many people", () => {
       expect(merged.steps.find((s) => s.id === "review-bob")!.status).toBe("settled"); // his take still lands
       expect(merged.updatedAt).toBe(9);
     }
+  });
+
+  it("two author revisions in the same millisecond merge the same way from either side", () => {
+    const base = ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })], updatedAt: 1 });
+    const a = { ...base, goal: "alpha", structureAt: 5 };
+    const b = { ...base, goal: "beta", whenClosed: "mail it", structureAt: 5 };
+    const ab = mergeTicket(a, b);
+    const ba = mergeTicket(b, a);
+    expect(ab.goal).toBe(ba.goal);
+    expect(ab.whenClosed).toBe(ba.whenClosed);
+    expect(ab.structureAt).toBe(5);
+  });
+
+  it("contributes: a copy that adds a step or a state changes the row; one that adds nothing does not", () => {
+    const row = ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] });
+    expect(contributes(row, row)).toBe(false);
+    const older = { ...row, updatedAt: 0, structureAt: 0 };
+    expect(contributes(row, older)).toBe(false); // nothing new in it
+    const settled = { ...row, steps: [step({ id: "s1", owner: BOB.key, status: "settled" })] };
+    expect(contributes(row, settled)).toBe(true);
+    const another = { ...row, steps: [...row.steps, step({ id: "review-bob", owner: BOB.key, intent: "take", status: "failed" })] };
+    expect(contributes(row, another)).toBe(true);
   });
 
   it("from and whenClosed ride the ticket through a merge", () => {

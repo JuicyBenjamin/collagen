@@ -113,6 +113,23 @@ describe("RoomLog", () => {
     });
   });
 
+  it("a row another peer restored first does not hide our contribution: our settle is merged back in", async () => {
+    await withLog(async (log) => {
+      // our history: the ticket, then bob's step settled
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({}) }));
+      const settled = ticket({ updatedAt: 2, steps: [{ id: "s1", owner: "bob", intent: "investigate", description: "look", needs: [], status: "settled", result: "found it", updatedAt: 2 }] });
+      await Effect.runPromise(log.append({ op: "ticket", ticket: settled }));
+      // an older build evicts the row; someone else restores it from THEIR history — without the settle
+      await Effect.runPromise(log.append({ op: "evict", keys: ["ticket/t1"], protocol: "4", reason: "test", ts: 3 }));
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({}) }));
+      expect((await Effect.runPromise(log.read)).tickets[0]!.steps[0]!.status).toBe("pending");
+      // a row exists, but our copy contributes: it is merged back, not skipped
+      expect(await Effect.runPromise(log.restoreOwn)).toBe(1);
+      expect((await Effect.runPromise(log.read)).tickets[0]!.steps[0]!.status).toBe("settled");
+      expect(await Effect.runPromise(log.restoreOwn)).toBe(0);
+    });
+  });
+
   it("rename is last-writer-wins by ts, and messages keep log order with a running position", async () => {
     await withLog(async (log) => {
       await Effect.runPromise(log.append({ op: "rename", name: "newer", ts: 20 }));
