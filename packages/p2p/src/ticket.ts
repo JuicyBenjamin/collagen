@@ -82,6 +82,12 @@ export const Ticket = Schema.Struct({
   createdBy: Schema.String,
   kind: TicketKind,
   steps: Schema.Array(TicketStep),
+  /** When the AUTHOR last changed the ticket's structure — goal, kind, from,
+   *  whenClosed. Its own clock, apart from `updatedAt`: a peer posting a take
+   *  or settling a step also advances updatedAt while broadcasting their
+   *  whole (possibly stale) copy, and the author's latest decision must not
+   *  lose to that. Steps merge per step; structure merges by this. */
+  structureAt: Schema.Finite,
   /** Present once the author closed it: off the lists, on the log. */
   closed: Schema.optional(Closed),
   /** The tickets this one follows — a plan born of a proposal, a review of
@@ -104,7 +110,10 @@ export type Ticket = typeof Ticket.Type;
  *  - steps are unioned by id — the creator adds structure, owners never lose steps
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
  *    by updatedAt, then lexicographic result as the final tiebreak
- *  - goal follows the newer updatedAt (only the creator should edit it)
+ *  - goal, kind, from and whenClosed follow the copy with the newer
+ *    `structureAt` — the author's own clock, which only the author advances,
+ *    so a peer's take or settle (which advances updatedAt on a possibly stale
+ *    copy) can never revert the author's latest decision
  *  - closed sticks: once either copy carries it, the merge does — a copy
  *    written before the close cannot reopen it; two closes keep the earlier
  */
@@ -116,19 +125,21 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     const mine = steps.get(s.id);
     steps.set(s.id, mine ? mergeStep(mine, s) : s);
   }
-  const newer = incoming.updatedAt > local.updatedAt ? incoming : local;
+  const author = incoming.structureAt > local.structureAt ? incoming : local;
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
+  const { from: _lf, whenClosed: _lw, ...rest } = local;
   return {
-    ...local,
-    goal: newer.goal,
-    kind: newer.kind,
-    steps: [...steps.values()],
-    ...(closed ? { closed } : {}),
+    ...rest,
+    goal: author.goal,
+    kind: author.kind,
     // present wins, including an EMPTY value: `from: []` and `whenClosed: ""`
     // are how the author withdraws them, and a merge must carry that through
-    ...(newer.from !== undefined ? { from: newer.from } : local.from !== undefined ? { from: local.from } : {}),
-    ...(newer.whenClosed !== undefined ? { whenClosed: newer.whenClosed } : local.whenClosed !== undefined ? { whenClosed: local.whenClosed } : {}),
+    ...(author.from !== undefined ? { from: author.from } : {}),
+    ...(author.whenClosed !== undefined ? { whenClosed: author.whenClosed } : {}),
+    structureAt: author.structureAt,
+    steps: [...steps.values()],
+    ...(closed ? { closed } : {}),
     updatedAt: Math.max(local.updatedAt, incoming.updatedAt),
   };
 }

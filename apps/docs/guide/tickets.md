@@ -346,9 +346,13 @@ appends the whole ticket record; every member's `apply` folds it into the room's
 rules that converge regardless of order:
 
 - steps are unioned by id — the creator adds structure, owners never lose steps
-- per step, the higher status wins (`settled`/`failed` beat `suspended` beat `pending`);
-  equal ranks resolve by timestamp, then a deterministic tiebreak
-- the goal follows the newest timestamp
+- per step, the higher status wins (`settled`/`failed`/`retired` beat `suspended` beat
+  `pending`); equal ranks resolve by timestamp, then a deterministic tiebreak
+- the author's **structure** — goal, kind, `from`, `whenClosed` — follows the author's own
+  clock (`structureAt`), which only an author's revision advances. A peer posting a take or
+  settling a step advances the ticket's general timestamp while broadcasting their whole,
+  possibly stale, copy; that can never revert what the author last decided
+- `closed` sticks: a copy written before the close cannot reopen it
 
 Because it's a replicated log, tickets survive everyone restarting, and a member who was
 offline catches up on reconnect — including steps that became theirs while they were away.

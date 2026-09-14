@@ -181,6 +181,10 @@ const judgedParameters = {
 /** A work item's stable id: the one the agent gave, else its intent. Two items
  *  that would share one is a refusal, not a silent overwrite. */
 const workId = (w: { readonly id?: string; readonly intent: string }): string => (w.id ?? w.intent).trim().replace(/\s+/g, "-");
+/** A work step's id on the ticket: its own namespace, so no work item can
+ *  land on a take step ("review-bob") or the author's "address" — the same
+ *  function at creation, amendment and retirement, or they drift. */
+const workStepId = (id: string, reader: string): string => `work-${id}-${reader}`;
 const duplicateWorkId = (work: ReadonlyArray<{ readonly id?: string; readonly intent: string }>): string | null => {
   const seen = new Set<string>();
   for (const w of work) {
@@ -634,7 +638,7 @@ const makeHandlers = Effect.gen(function* () {
             for (const take of takes) {
               const who = take.id.slice("review-".length);
               for (const w of input.work) {
-                const id = `${workId(w)}-${who}`;
+                const id = workStepId(workId(w), who);
                 const at = steps.findIndex((s) => s.id === id);
                 if (at < 0) steps.push({ id, owner: take.owner, intent: w.intent, description: w.description, needs: [take.id], status: "pending" as const, updatedAt: now });
                 else if (steps[at]!.status === "pending" || steps[at]!.status === "suspended") steps[at] = { ...steps[at]!, intent: w.intent, description: w.description, updatedAt: now };
@@ -646,14 +650,14 @@ const makeHandlers = Effect.gen(function* () {
           // withdrawing work is explicit: the ids, applied to every recipient's copy
           if (kind === "proposal" && input.retireWork && input.retireWork.length > 0) {
             const takes = revised.steps.filter((s) => isTake(s));
-            const ids = takes.flatMap((take) => input.retireWork!.map((w) => `${w}-${take.id.slice("review-".length)}`));
+            const ids = takes.flatMap((take) => input.retireWork!.map((w) => workStepId(w.trim().replace(/\s+/g, "-"), take.id.slice("review-".length))));
             const done = retireSteps(revised, ids, identity.pubkey, now);
             if (done.outcome === "not-yours") return `failed: "${ticket.goal}" is not your user's ticket to revise`;
             if (done.retired.length === 0) return `failed: none of ${input.retireWork.join(", ")} is pending work on this proposal${done.kept.length > 0 ? ` (${done.kept.join(", ")} already answered — that stands)` : ""}`;
             revised = done.ticket;
           }
           const changed = revised !== ticket;
-          if (changed) revised = { ...revised, updatedAt: now };
+          if (changed) revised = { ...revised, structureAt: now, updatedAt: now };
 
           const owners = [...new Set(revised.steps.map((s) => s.owner).filter((o) => o !== identity.pubkey))];
           const named = owners.map(nameOf).filter((n): n is string => n !== undefined);
@@ -724,7 +728,7 @@ const makeHandlers = Effect.gen(function* () {
         // their own ✓ — they owe nothing until they have said yes
         const workSteps = reviewSteps.flatMap((take) =>
           (kind === "proposal" ? (input.work ?? []) : []).map((w) => ({
-            id: `${workId(w)}-${take.id.slice("review-".length)}`,
+            id: workStepId(workId(w), take.id.slice("review-".length)),
             owner: take.owner,
             intent: w.intent,
             description: w.description,
@@ -733,6 +737,13 @@ const makeHandlers = Effect.gen(function* () {
             updatedAt: now,
           })),
         );
+        {
+          const seen = new Set<string>(["address", ...reviewSteps.map((s) => s.id)]);
+          for (const w of workSteps) {
+            if (seen.has(w.id)) return `failed: work step id "${w.id}" collides with another step on this ticket — give that work item its own 'id'`;
+            seen.add(w.id);
+          }
+        }
         const ticket: Ticket = {
           id: ticketId,
           project: input.project,
@@ -741,6 +752,7 @@ const makeHandlers = Effect.gen(function* () {
           kind,
           ...(input.from && input.from.length > 0 ? { from: input.from } : {}),
           ...(input.whenClosed ? { whenClosed: input.whenClosed } : {}),
+          structureAt: now,
           updatedAt: now,
           // The author's own step is always there — it waits on everyone asked
           // (on nobody, when nobody was asked) and settling it is how the
@@ -922,6 +934,7 @@ const makeHandlers = Effect.gen(function* () {
           kind: "task",
           ...(input.from && input.from.length > 0 ? { from: input.from } : {}),
           ...(input.whenClosed ? { whenClosed: input.whenClosed } : {}),
+          structureAt: now,
           updatedAt: now,
           steps: input.steps.map((s, i) => ({
             id: s.id ?? `s${i + 1}`,

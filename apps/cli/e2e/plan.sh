@@ -91,8 +91,8 @@ expect "filed as a proposal to bob" "$PROPOSED" "proposal ticket filed, asked of
 QID=$(echo "$PROPOSED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "bob sees it" "kind: proposal" rows $B "$SB" "$QID"
 QROWS=$(rows $B "$SB" "$QID")
-expect "bob has a take step and a work step waiting on it" "$QROWS" "build-bob,bob,build,(pending|suspended),review-bob"
-expect "…the work is not his to do yet" "$(grep -c 'step build-bob actionable' "$OUT/bob.log")" "^0$"
+expect "bob has a take step and a work step waiting on it" "$QROWS" "work-build-bob,bob,build,(pending|suspended),review-bob"
+expect "…the work is not his to do yet" "$(grep -c 'step work-build-bob actionable' "$OUT/bob.log")" "^0$"
 expect "…and the proposal follows the plan" "$QROWS" "from: $PID"
 echo "## bob wants the work changed — alice revises the work on the same ticket"
 NO="{\"ticketId\":\"$QID\",\"findings\":\"a button is fine but it needs a job, not a request-time export\",\"failed\":true}"
@@ -106,17 +106,22 @@ REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"what\":\"the button enqueues a 
 REVISED=$(call $A "$SA" propose "$REWORK")
 expect "the proposal is revised, not re-filed" "$REVISED" "proposal ticket updated"
 QROWS2=$(rows $A "$SA" "$QID")
-expect "the withdrawn work is retired: on the ticket, never up" "$QROWS2" "build-bob,bob,build,retired"
-expect "the new work stands on its own id, same intent notwithstanding" "$QROWS2" "enqueue-bob,bob,build,(pending|suspended),review-bob,.{0,3}the button, enqueuing an export job"
-expect "…and so does the second" "$QROWS2" "mail-bob,bob,build,(pending|suspended),review-bob"
+expect "the withdrawn work is retired: on the ticket, never up" "$QROWS2" "work-build-bob,bob,build,retired"
+expect "the new work stands on its own id, same intent notwithstanding" "$QROWS2" "work-enqueue-bob,bob,build,(pending|suspended),review-bob,.{0,3}the button, enqueuing an export job"
+expect "…and so does the second" "$QROWS2" "work-mail-bob,bob,build,(pending|suspended),review-bob"
 expect "…his ↻ take is history, untouched" "$QROWS2" "review-bob,bob,take,failed"
 expect "an empty whenClosed withdrew the instruction" "$(echo "$QROWS2" | grep -c 'whenClosed')" "^0$"
+COLLIDE="{\"ticketId\":\"$QID\",\"work\":[{\"id\":\"review\",\"intent\":\"review\",\"description\":\"review the mailer output\"}]}"
+call $A "$SA" propose "$COLLIDE" > /dev/null
+QROWS3=$(rows $A "$SA" "$QID")
+expect "a work item called review lands in the work namespace, not on bob's take" "$QROWS3" "work-review-bob,bob,review,(pending|suspended),review-bob"
+expect "…and his take step is exactly as it was" "$QROWS3" "review-bob,bob,take,failed"
 NONE="{\"ticketId\":\"$QID\",\"retireWork\":[\"build\"]}"
 expect "retiring what is already retired is refused, saying so" "$(call $A "$SA" propose "$NONE")" "none of build is pending work"
-wait_until "bob's copy has the revised work" "enqueue-bob" rows $B "$SB" "$QID"
+wait_until "bob's copy has the revised work" "work-enqueue-bob" rows $B "$SB" "$QID"
 YES="{\"ticketId\":\"$QID\",\"findings\":\"yes, next sprint\"}"
 call $B "$SB" post-review "$YES" > /dev/null
-wait_until "bob's ✓ started the work: the enqueue step is his now" "step enqueue-bob actionable" bash -c "cat '$OUT/bob.log'"
-wait_until "…and the mailer too" "step mail-bob actionable" bash -c "cat '$OUT/bob.log'"
-expect "…but not the retired one" "$(grep -c 'step build-bob actionable' "$OUT/bob.log")" "^0$"
+wait_until "bob's ✓ started the work: the enqueue step is his now" "step work-enqueue-bob actionable" bash -c "cat '$OUT/bob.log'"
+wait_until "…and the mailer too" "step work-mail-bob actionable" bash -c "cat '$OUT/bob.log'"
+expect "…but not the retired one" "$(grep -c 'step work-build-bob actionable' "$OUT/bob.log")" "^0$"
 kill_all; summary

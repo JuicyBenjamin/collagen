@@ -18,6 +18,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   project: "sandbox",
   goal: "fix average()",
   createdBy: "alice",
+  structureAt: 1,
   kind: "task",
   steps: [],
   updatedAt: 1,
@@ -81,6 +82,7 @@ describe("actionableSteps", () => {
 describe("stepThreadId", () => {
   const t = ticket({
     createdBy: "alice",
+  structureAt: 1,
     steps: [
       step({ id: "work", owner: "bob" }),
       step({ id: "review", owner: "alice", needs: ["work"] }),
@@ -266,18 +268,33 @@ describe("a review ticket asks 0 to many people", () => {
   });
 
   it("from and whenClosed can be withdrawn: an empty value wins a merge, absence keeps", () => {
-    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets", updatedAt: 1 };
-    const cleared = { ...t, from: [], whenClosed: "", updatedAt: 2 };
+    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets", structureAt: 1, updatedAt: 1 };
+    const cleared = { ...t, from: [], whenClosed: "", structureAt: 2, updatedAt: 2 };
     expect(mergeTicket(t, cleared).from).toEqual([]);
     expect(mergeTicket(t, cleared).whenClosed).toBe("");
-    const silent = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), updatedAt: 3 };
+    const silent = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), structureAt: 0, updatedAt: 3 };
     expect(mergeTicket(t, silent).from).toEqual(["p1"]);
     expect(mergeTicket(t, silent).whenClosed).toBe("open the Jira tickets");
   });
 
+  it("a stale peer's take cannot revert the author's structure: goal, from and whenClosed follow structureAt, not updatedAt", () => {
+    const base = ticket({ createdBy: ALICE, steps: [step({ id: "review-bob", owner: BOB.key, intent: "take" })], kind: "plan" });
+    // alice withdraws the close instruction and moves the goal: her clock advances
+    const alice = { ...base, goal: "stream, paged by cursor", whenClosed: "", structureAt: 5, updatedAt: 5 };
+    // bob posts a take from his OLDER copy — later wall clock, older structure
+    const bob = postReview({ ...base, whenClosed: "open the Jira tickets", structureAt: 1 }, BOB, "fine", false, 9).ticket;
+    for (const merged of [mergeTicket(alice, bob), mergeTicket(bob, alice)]) {
+      expect(merged.goal).toBe("stream, paged by cursor");
+      expect(merged.whenClosed).toBe(""); // withdrawn stays withdrawn
+      expect(merged.structureAt).toBe(5);
+      expect(merged.steps.find((s) => s.id === "review-bob")!.status).toBe("settled"); // his take still lands
+      expect(merged.updatedAt).toBe(9);
+    }
+  });
+
   it("from and whenClosed ride the ticket through a merge", () => {
-    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets" };
-    const stale = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), updatedAt: 0 };
+    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets", structureAt: 2 };
+    const stale = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), structureAt: 0, updatedAt: 0 };
     expect(mergeTicket(stale, t).from).toEqual(["p1"]);
     expect(mergeTicket(t, stale).whenClosed).toBe("open the Jira tickets");
   });

@@ -44,6 +44,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   project: "sandbox",
   goal: "fix average()",
   createdBy: "alice",
+  structureAt: 1,
   kind: "task",
   updatedAt: 1,
   steps: [{ id: "s1", owner: "bob", intent: "investigate", description: "look", needs: [], status: "pending", updatedAt: 1 }],
