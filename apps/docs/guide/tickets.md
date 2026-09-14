@@ -166,6 +166,118 @@ for a review. What went is on the record: the outbox shows the whole text, every
 line included.
 :::
 
+||||||| Common ancestor
+## Plans and proposals: judgment before the code exists <Badge type="info" text="planned" />
+
+A review asks a colleague to judge code that exists. Two more kinds ask for judgment
+before it does — advice, input, direction. Neither is a question: a question is what your
+own agent is for. These are for the input that is not AI: a colleague's take on your
+thinking, given before your thinking has coloured theirs.
+
+| kind | what it says | the reader is asked | work steps | it ends when |
+| --- | --- | --- | --- | --- |
+| `plan` | something I intend to do myself, and how | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
+| `proposal` | work I want **someone else** to do, and why | will you do this | theirs, active on their ✓ | you close it — done, or declined |
+
+The difference is who does the work, not when the ticket comes. A proposal can open a
+chain as easily as end one; a plan can stand alone. Two tickets, not two phases of one,
+because each is simpler to reason about on its own — the phases live in the chain between
+them (below).
+
+### What sits on the ticket
+
+Three layers, and the order matters:
+
+| layer | whose | who sees it, when |
+| --- | --- | --- |
+| the **question** — the goal line, `should the export stream or buffer?` | yours | everyone, at once |
+| your **thoughts** — this, this and this, what you ruled out, why | yours, in your words | the reader, after their own take |
+| the **insight** — what your agent found, checked, or would add | your agent's, marked as such | same |
+
+The record is the review's why, with a tense: a decision's `what` / `the user:` / `the
+agent:` already separate your words from your agent's, and a plan's forks are a review's
+forks before the line exists.
+
+### The blind first take
+
+The reader is asked for their own input **before** they are shown yours. Their agent
+hands them the question and nothing else; they say what they think; that take lands on a
+step of their own (the `post-review` mechanics, unchanged); *then* the thoughts and the
+insight open up, and the agents lay the two takes side by side — where you agree, where
+you differ, what one of you saw that the other did not. That is where a real back and
+forth starts, instead of a nod at a conclusion already reached.
+
+"Ideally", not a gate: the reader can ask to see everything first, and their agent
+should say that they asked. What collagen can make structural is the reader's *agent*:
+the context tool answers with the question alone until this reader has posted a take,
+unless the person says otherwise. The log is shared, so nothing is hidden — the order is
+a courtesy the agents keep, and they say when they broke it.
+
+### Takes, revisions, agreement
+
+The marks are the ones you know: `✓` agrees, `↻` wants it changed, a bare name has not
+spoken. A ↻ hands the ticket back to you to **revise the same ticket** — never to answer
+in prose — so it keeps saying what is actually agreed; a take older than your latest
+revision is stale, and the row can say so. On a proposal, the recipient's ✓ *is* their
+acceptance: the work steps they own become theirs to do at that moment, and they owe
+nothing before it. Nothing here is a stored status — agreed, stale, accepted are all read
+off the steps and the record's revision time, like every other state in a ticket.
+
+### Answered, then closed
+
+Completion and closure are two facts here as on every ticket (see
+[in the TUI](#in-the-tui)). A plan or proposal is **answered** when the takes and the work
+steps it expected are in — and that is only the signal: the settle that answered the last
+step tells your agent "when your user says they are done, close-ticket", and nothing
+more. It is **closed** when you say so. Your close reason is the **conclusion**: what was
+agreed, in words — the durable thing later tickets refer back to, so it is worth a
+sentence.
+
+The ticket may also carry, from the day it was filed, **what happens when it is closed** —
+`when closed: open the Jira tickets for each step`. It is your instruction, written in
+advance in your own words, and it is handed to your agent in the *close* outcome, not the
+settle: acting while the ticket is still open would mean acting before you had accepted
+the conclusion, which is the one moment the whole ticket exists to protect. Your agent
+then acts on it as on anything else you asked for — saying so. Nothing runs on its own:
+the person who wrote the line is the person who closed the ticket.
+
+### Phases are tickets
+
+Nothing is decided once, and no ticket carries a phase. A proposal, accepted and closed,
+births the plan for how; the plan, agreed and closed, births the work; the work, done,
+comes back as a review — and each one **references the ones before it**. The chain is
+the phases:
+
+```
+proposal  bulk export for the backoffice            kristian ✓
+  ↳ plan  stream the rows, don't buffer them          alice ↻ → revised → alice ✓
+      ↳ task  bulk export                             kristian ✓
+          ↳ review  feat/bulk-export                  kristian ✓  alice ↻
+```
+
+A ticket carries `from`: the ids of the tickets it follows. At review time, asked why
+the export streams, the reviewer's agent walks back to the plan's conclusion and the fork
+that chose it, and to the proposal's why for who needed the export at all — so a dispute
+about the code is settled against what was agreed, not re-argued from scratch. Abundance of context, none of it pushed: `review-context`
+follows the chain only when the person asks.
+
+Everyone can weigh in at every step, so this is a product-management flow with the
+product manager, the backender and the reviewer each speaking through their own agent.
+Because nobody has to be named, it is the same flow alone: you plan, your second agent
+gives its blind take, you build it, it reviews the result.
+
+Not built. To decide first:
+
+- a take could reference the decisions it answers (`d1: agree`, `d2: change`, `missing:
+  …`) so the agreement map is data rather than the agents' prose — the same idea as
+  [structured messages](./conversations#structured-messages);
+- `from` is ticket ids on the log, plain — a child names its parents, a parent never
+  lists its children;
+- births are the person's call: closing a plan does not file the work, but the close
+  outcome says how, where the agent reads it;
+- the overview shows lineage without a tree: a `↳` and the parent's kind on the row, and
+  the ticket page names its parents in the meta line.
+
 ## The tools
 
 | Tool | Purpose |
@@ -202,6 +314,36 @@ list and stays, steps exactly as they were, where `get-tickets` still shows it
 reviewer never answered or whose work was abandoned — like merging a pull request without
 a review, it is their call. Nothing is deleted, and nobody else can close it for them.
 `enter` opens the
+||||||| Common ancestor
+<<<<<<< New base: fix(cli): a ticket row says when it is yours, and shows your own review on your 
+and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
+changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
+never in your own list). Order carries the rest: what needs you first, then what is
+waiting, then failed, then done (dim). Nothing is hidden or folded away. `enter` opens the
+||||||| Common ancestor
+and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
+changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
+never in your own list). Order carries the rest: what needs you first, then what is
+waiting, then failed. A **finished** ticket — every step answered, where a reader's ↻ on
+a review counts as an answer — is closed: it leaves the list and stays on the log, where
+`get-tickets` still shows it (`done: true`) and later tickets refer back to it. There is
+no close key and nothing is deleted; the author settling their own step is the close.
+`enter` opens the
+=======
+and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
+changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
+never in your own list). Order carries the rest: what needs you first, then what is
+waiting, then failed, then done (dim). Nothing is hidden or folded away. `enter` opens the
+||||||| Common ancestor
+and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
+changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
+never in your own list). Order carries the rest: what needs you first, then what is
+waiting, then failed. A **finished** ticket — every step answered, where a reader's ↻ on
+a review counts as an answer — is closed: it leaves the list and stays on the log, where
+`get-tickets` still shows it (`done: true`) and later tickets refer back to it. There is
+no close key and nothing is deleted; the author settling their own step is the close.
+`enter` opens the
+>>>>>>> Current commit: feat(p2p)!: plans and proposals — judgment before the code exists
 ticket's own page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header
 is the meta: goal, state, age, project, creator, and the people (`bob ↻  carol ✓`). Its body: **why**,
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening

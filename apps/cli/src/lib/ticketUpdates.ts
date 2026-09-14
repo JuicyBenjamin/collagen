@@ -1,4 +1,4 @@
-import { deriveThreadId, stepThreadId, type ReviewContext, type RoomMessage, type StepStatus, type Ticket, type TicketStep } from "@collagen/p2p";
+import { type ReviewContext, type RoomMessage, type StepStatus, type Ticket, type TicketStep, deriveThreadId, isJudged, isTake, stepThreadId } from "@collagen/p2p";
 import { aboutTicket, ticketThreads } from "./ticketSummary";
 
 /** Everyone a ticket concerns: its creator, its step owners, and anyone who
@@ -80,7 +80,7 @@ const firstLine = (s: string) => s.split("\n")[0] ?? "";
  *  in the message, its intent, or the activity line — describes the most
  *  complete kind of review there is as a breakdown. */
 export const stepUpdateWhat = (c: StepChange): string =>
-  c.ticket.kind === "review" && c.step.intent === "review" && c.to === "failed" ? "asked for changes" : c.to;
+  isJudged(c.ticket.kind) && isTake(c.step) && c.to === "failed" ? "asked for changes" : c.to;
 
 /** What a participant is told about a step that settled or failed. */
 export const stepUpdateText = (c: StepChange, actorName: string): string => {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { closeTicket, finished, postReview, settleStep, type Outgoing, type Ticket } from "@collagen/p2p";
+import { closeTicket, finished, isJudged, isTake, postReview, settleStep, type Outgoing, type Ticket } from "@collagen/p2p";
 import { ticketView } from "../lib/ticketView";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
@@ -77,17 +77,21 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // follows the write, which is where the next change starts. So both
           // instructions are said here, every time: what to tell the person,
           // and to come back when the code moves.
+          // the same record serves a review, a plan and a proposal; the words
+          // an agent reads back follow the kind
+          const kind = out.ticket?.kind ?? (yield* SubscriptionRef.get(room.tickets)).get(out.review.ticketId)?.kind ?? "review";
+          const tool = kind === "review" ? "ask-review" : kind === "plan" ? "ask-plan" : "propose";
           const say = (what: string) =>
-            `TELL YOUR USER ONLY THIS: "review ticket has been ${what}". They asked for it, so the fact that it is done is the whole report — do not read the summary, the decisions, the forks or the counts back to them, and do not list what you wrote. It is on the ticket for whoever reviews it, and their TUI shows the ticket.`;
-          const keepCurrent = `Next time this code changes — a fix, a fork taken differently, anything your user asks for — call ask-review again with ticketId "${out.review.ticketId}" and say what changed and why, in their words. What the room reads has to be what the code is.`;
+            `TELL YOUR USER ONLY THIS: "${kind} ticket has been ${what}". They asked for it, so the fact that it is done is the whole report — do not read the summary, the decisions, the forks or the counts back to them, and do not list what you wrote. It is on the ticket for whoever reads it, and their TUI shows the ticket.`;
+          const keepCurrent = `Next time this changes — ${kind === "review" ? "a fix, a fork taken differently" : "your user rethinks a part of it, a reader's take changes their mind"}, anything your user asks for — call ${tool} again with ticketId "${out.review.ticketId}" and say what changed and why, in their words: re-send the summary if it no longer holds, and repeat the id of any decision or fork that has changed. What the room reads has to be what your user means.`;
           const held = `(${decisions.length} decision(s), ${forks.length} fork(s) now on it — for your own bookkeeping, not for your user)`;
-          if (!out.ticket) return sent(`review ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
-          const reviewers = out.ticket.steps.filter((s) => s.intent === "review");
+          if (!out.ticket) return sent(`${kind} ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
+          const readers = out.ticket.steps.filter((s) => isTake(s));
           const who =
-            reviewers.length === 0
+            readers.length === 0
               ? "in the room, nobody asked in particular"
-              : `asked of ${reviewers.map((s) => nameFor(s.owner)).join(", ")}`;
-          return sent(`review ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}. ${say("filed")} ${keepCurrent}`);
+              : `asked of ${readers.map((s) => nameFor(s.owner)).join(", ")}`;
+          return sent(`${kind} ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}. ${say("filed")} ${keepCurrent}`);
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
@@ -98,7 +102,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // one rule, shared with the drive path (see p2p settleStep)
           const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now);
           if (!done || done.outcome === "not-yours") {
-            return refused(`failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${ticket.kind === "review" ? " — put your user's own review on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
+            return refused(`failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${isJudged(ticket.kind) ? " — put your user's own take on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
           }
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
@@ -121,8 +125,13 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
           const open = merged.steps.filter((s) => s.status === "pending" || s.status === "suspended").length;
+          // the author's own instruction for this moment, written when the
+          // ticket was filed — handed over now, and not a settle earlier
+          const then = merged.whenClosed
+            ? `\nWHEN CLOSED, this ticket says: "${merged.whenClosed}". Your user wrote that when they filed it; do it now, as on anything else they asked for, and tell them what you did.`
+            : "";
           return sent(
-            `closed "${merged.goal}" [ticket ${merged.id}]${out.reason ? ` — ${out.reason}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it. TELL YOUR USER ONLY THIS: "ticket closed".`,
+            `closed "${merged.goal}" [ticket ${merged.id}]${out.reason ? ` — ${out.reason}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it. TELL YOUR USER ONLY THIS: "ticket closed".${then}`,
           );
         }
         case "post-review": {
@@ -134,8 +143,9 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now);
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
-          const others = merged.steps.filter((s) => s.intent === "review" && s.owner !== identity.pubkey).length;
-          return sent(`your review is on "${ticket.goal}" as step ${stepId}${others > 0 ? ` (beside ${others} other reader(s))` : ""} — anyone else in the room can still post theirs\n${render(merged)}`);
+          const others = merged.steps.filter((s) => isTake(s) && s.owner !== identity.pubkey).length;
+          const word = ticket.kind === "review" ? "review" : "take";
+          return sent(`your ${word} is on "${ticket.goal}" as step ${stepId}${others > 0 ? ` (beside ${others} other reader(s))` : ""} — anyone else in the room can still post theirs\n${render(merged)}`);
         }
         case "attach": {
           // references go on the log; the files stay here, remembered by

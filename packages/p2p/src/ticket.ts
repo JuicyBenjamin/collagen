@@ -38,10 +38,21 @@ export const TicketStep = Schema.Struct({
 export type TicketStep = typeof TicketStep.Type;
 
 /** What kind of work the ticket is. "task" is the plain one: a goal and its
- *  steps. A "review" carries the why behind a change as well (see review.ts)
- *  — the reviewer reads the decisions and the forks, not only the diff. */
-export const TicketKind = Schema.Literals(["task", "review"]);
+ *  steps. The other three ask for JUDGMENT and carry a why record (review.ts):
+ *  a "review" of code that exists; a "plan" — something the author intends
+ *  to do, do you agree; a "proposal" — work the author wants someone else to
+ *  do, will you. Readers answer on steps of their own (`postReview`). */
+export const TicketKind = Schema.Literals(["task", "review", "plan", "proposal"]);
 export type TicketKind = typeof TicketKind.Type;
+
+/** The kinds that ask for judgment and carry a why. */
+export const isJudged = (kind: TicketKind): boolean => kind !== "task";
+
+/** A reader's answer step: "review" on a review, "take" on a plan or a
+ *  proposal. Same mechanics, different word — you review code, you take a
+ *  position on a plan. */
+export const isTake = (step: { readonly intent: string }): boolean => step.intent === "review" || step.intent === "take";
+export const takeIntent = (kind: TicketKind): string => (kind === "review" ? "review" : "take");
 
 /** The author's decision that the ticket is over — recorded, not inferred.
  *  Every step answered means it MAY be ready to close; the person may also
@@ -67,6 +78,15 @@ export const Ticket = Schema.Struct({
   steps: Schema.Array(TicketStep),
   /** Present once the author closed it: off the lists, on the log. */
   closed: Schema.optional(Closed),
+  /** The tickets this one follows — a plan born of a proposal, a review of
+   *  the work a plan agreed. A child names its parents; a parent never lists
+   *  its children (derived, like everything else). */
+  from: Schema.optional(Schema.Array(Schema.String)),
+  /** The author's instruction for the moment the ticket is CLOSED — "open
+   *  the Jira tickets for each step" — written when it was filed, handed to
+   *  their agent in the close outcome, and acted on then: not on the last
+   *  settle, because that is a reader's word, not the author's acceptance. */
+  whenClosed: Schema.optional(Schema.String),
   updatedAt: Schema.Finite,
 });
 export type Ticket = typeof Ticket.Type;
@@ -99,6 +119,8 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     kind: newer.kind,
     steps: [...steps.values()],
     ...(closed ? { closed } : {}),
+    ...(newer.from ? { from: newer.from } : local.from ? { from: local.from } : {}),
+    ...(newer.whenClosed ? { whenClosed: newer.whenClosed } : local.whenClosed ? { whenClosed: local.whenClosed } : {}),
     updatedAt: Math.max(local.updatedAt, incoming.updatedAt),
   };
 }
@@ -216,7 +238,7 @@ export function postReview(
   const step: TicketStep = {
     id,
     owner: by.key,
-    intent: "review",
+    intent: existing?.intent ?? takeIntent(ticket.kind),
     description: existing?.description ?? `${by.name}'s review of ${ticket.goal}`,
     needs: existing?.needs ?? [],
     status: failed ? "failed" : "settled",
@@ -237,7 +259,10 @@ export function postReview(
  *  incomplete left the author waiting forever for a reviewer who had already
  *  answered — which is the opposite of what a change request means. */
 const answered = (ticket: Ticket, s: TicketStep): boolean =>
-  s.status === "settled" || (ticket.kind === "review" && s.intent === "review" && s.status === "failed");
+  s.status === "settled" || (ticket.kind === "review" && isTake(s) && s.status === "failed");
+// …and only on a REVIEW. On a plan or a proposal a reader's ↻ means "revise
+// this", so the ticket is not answered until they come back with a ✓ — and a
+// proposal's work steps, which wait on that ✓, do not start.
 
 /** Is every step answered — and is there at least one, since a ticket nobody
  *  has done anything on is not finished? This is the SIGNAL that the ticket
@@ -263,12 +288,12 @@ export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && 
  *  lists both — because two implementations of one rule drift, and did. */
 export function readySteps(ticket: Ticket): TicketStep[] {
   const done = new Set(ticket.steps.filter((s) => answered(ticket, s)).map((s) => s.id));
-  const reviewed = ticket.steps.some((s) => s.intent === "review" && (s.status === "settled" || s.status === "failed"));
+  const reviewed = ticket.steps.some((s) => isTake(s) && (s.status === "settled" || s.status === "failed"));
   return ticket.steps.filter(
     (s) =>
       (s.status === "pending" || s.status === "suspended") &&
       s.needs.every((n) => done.has(n)) &&
-      !(ticket.kind === "review" && s.intent === "address" && s.needs.length === 0 && !reviewed),
+      !(isJudged(ticket.kind) && s.intent === "address" && s.needs.length === 0 && !reviewed),
   );
 }
 

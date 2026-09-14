@@ -212,6 +212,40 @@ describe("a review ticket asks 0 to many people", () => {
     expect(mergeTicket(closed, again).closed?.ts).toBe(3);
   });
 
+  it("on a plan, a reader's ↻ is not an answer: the author revises, and the ticket waits for the ✓", () => {
+    const plan = ticket({ kind: "plan", createdBy: ALICE, steps: [step({ id: "review-bob", owner: BOB.key, intent: "take" }), step({ id: "address", owner: ALICE, needs: ["review-bob"] })] });
+    const changes = postReview(plan, BOB, "buffer it instead", true, 5).ticket;
+    expect(changes.steps.find((s) => s.id === "review-bob")!.intent).toBe("take"); // the kind's word, kept
+    expect(actionableSteps(changes, ALICE)).toEqual([]); // not answered — revise
+    expect(finished(changes)).toBe(false);
+    const agreed = postReview(changes, BOB, "streaming it is", false, 9).ticket;
+    expect(actionableSteps(agreed, ALICE).map((s) => s.id)).toEqual(["address"]);
+  });
+
+  it("a proposal's work starts on the recipient's ✓ and not before", () => {
+    const proposal = ticket({
+      kind: "proposal",
+      createdBy: ALICE,
+      steps: [
+        step({ id: "review-bob", owner: BOB.key, intent: "take" }),
+        step({ id: "implement-bob", owner: BOB.key, intent: "implement", needs: ["review-bob"] }),
+        step({ id: "address", owner: ALICE, needs: ["review-bob"] }),
+      ],
+    });
+    expect(actionableSteps(proposal, BOB.key).map((s) => s.id)).toEqual(["review-bob"]); // his take is up, the work is not
+    const declined = postReview(proposal, BOB, "not like this", true, 5).ticket;
+    expect(actionableSteps(declined, BOB.key)).toEqual([]); // nothing owed after a ↻
+    const accepted = postReview(proposal, BOB, "yes", false, 5).ticket;
+    expect(actionableSteps(accepted, BOB.key).map((s) => s.id)).toEqual(["implement-bob"]);
+  });
+
+  it("from and whenClosed ride the ticket through a merge", () => {
+    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets" };
+    const stale = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), updatedAt: 0 };
+    expect(mergeTicket(stale, t).from).toEqual(["p1"]);
+    expect(mergeTicket(t, stale).whenClosed).toBe("open the Jira tickets");
+  });
+
   it("a FAILED task step still blocks what waits on it — only a review reads failure as an answer", () => {
     const task = ticket({
       createdBy: ALICE,
