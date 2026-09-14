@@ -12,10 +12,13 @@ import { compareSummaries, peopleLabel, summarize, type TicketSummary } from "..
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
-/** Shared tickets — every ticket the room has, whoever made it and whoever it
- *  is for. Ordered by what wants a person: needs-you, then waiting, then
- *  failed, then done (dim) — nothing hidden or folded away. ↑↓ select, enter
- *  opens the ticket's page. The `›` is the cursor, nothing else. */
+/** Shared tickets — every ticket the room has that is not over, whoever made
+ *  it and whoever it is for. Ordered by what wants a person: needs-you, then
+ *  waiting, then failed. A finished ticket — every step answered — is closed:
+ *  it leaves this list and stays on the log, where agents still read it and
+ *  later tickets refer back to it. There is no close key and no delete: the
+ *  author settling their own step is the close. ↑↓ select, enter opens the
+ *  ticket's page. The `›` is the cursor, nothing else. */
 export function Tickets() {
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
@@ -29,9 +32,10 @@ export function Tickets() {
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
 
-  // every ticket the room has, ordered by what wants a person
+  // every ticket the room has that is not over, ordered by what wants a person
   const shown = tickets
     .map((t) => ({ t, s: summarize(t, trace, me) }))
+    .filter((r) => r.s.state !== "done")
     .sort((a, b) => compareSummaries(a.s, b.s));
   const needsYou = shown.filter((r) => r.s.state === "needs-you").length;
 
@@ -95,13 +99,12 @@ function TicketRow({
   selected: boolean;
   nameFor: (key: string) => string;
 }) {
-  const done = s.state === "done";
   const people = peopleLabel(s, nameFor);
   return (
-    <text fg={selected ? theme.accent : done ? theme.dim : theme.fg} truncate wrapMode="none">
+    <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
       {"  "}
-      <span fg={s.mine ? (done ? theme.fg : theme.accent) : theme.dim}>{t.kind.padEnd(9)}</span>
+      <span fg={s.mine ? theme.accent : theme.dim}>{t.kind.padEnd(9)}</span>
       {t.goal}
       {people.length > 0 ? (
         <>

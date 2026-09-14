@@ -191,6 +191,14 @@ the rest: what needs you first, then what is waiting, then failed, then done (di
 Nothing is hidden or folded away, and the header is a count. `enter` opens the ticket's own
 page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:
 goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body: **why**,
+||||||| Common ancestor
+**kind** — bright when the ticket is yours, dim when it is someone else's — its **goal**,
+and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
+changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
+never in your own list). Order carries the rest: what needs you first, then what is
+waiting, then failed, then done (dim). Nothing is hidden or folded away. `enter` opens the
+ticket's own page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header
+is the meta: goal, state, age, project, creator, and the people (`bob ↻  carol ✓`). Its body: **why**,
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening
 the whole of it as a page (each decision with `the user:` and `the agent:` lines and the
 `file:line` it produced, then the forks with the road not taken);

@@ -199,6 +199,13 @@ export function postReview(
 const answered = (ticket: Ticket, s: TicketStep): boolean =>
   s.status === "settled" || (ticket.kind === "review" && s.intent === "review" && s.status === "failed");
 
+/** Is the ticket over? Every step answered — and there is at least one step,
+ *  because a ticket nobody has done anything on is not "done". This is what
+ *  closes a ticket: there is no close operation, and none is needed. The
+ *  author settling their own step is the close; the record stays on the log
+ *  for whoever refers back to it, and leaves the lists. */
+export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && ticket.steps.every((s) => answered(ticket, s));
+
 /** Steps that are up right now, whoever owns them: not settled, and
  *  everything they depend on has been answered.
  *

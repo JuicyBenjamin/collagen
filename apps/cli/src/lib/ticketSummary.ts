@@ -1,7 +1,8 @@
-import { readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { finished, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { GLYPH, type Mark } from "./glyphs";
 
-/** What a ticket wants from the person, now. */
+/** What a ticket wants from the person, now. "done" is the closed ticket:
+ *  it stays on the log and leaves the lists. */
 export type TicketState = "needs-you" | "waiting" | "failed" | "done";
 
 export interface TicketSummary {
@@ -41,10 +42,12 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   // needs-you about a ticket nobody had reviewed)
   const up = readySteps(ticket);
   const waitingOn = [...new Set(up.map((s) => s.owner))];
-  const failed = ticket.steps.some((s) => s.status === "failed");
-  // a ticket with no steps at all is not "done" — nobody has done anything
-  const allSettled = ticket.steps.length > 0 && ticket.steps.every((s) => s.status === "settled");
-  const state: TicketState = waitingOn.includes(me) ? "needs-you" : waitingOn.length > 0 ? "waiting" : failed ? "failed" : allSettled ? "done" : "waiting";
+  // done is p2p's `finished`: every step answered, where on a review a
+  // reader's ↻ is an answer. So a review the author has settled is done
+  // even when a reader asked for changes — the author acted, and said so.
+  const done = finished(ticket);
+  const failed = !done && ticket.steps.some((s) => s.status === "failed");
+  const state: TicketState = waitingOn.includes(me) ? "needs-you" : waitingOn.length > 0 ? "waiting" : failed ? "failed" : done ? "done" : "waiting";
 
   const threads = ticketThreads(ticket);
   const about = messages.filter((m) => aboutTicket(ticket, threads, m));

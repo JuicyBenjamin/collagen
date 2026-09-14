@@ -121,6 +121,11 @@ drive_until "posting again revises his own review" "on second read" $A "$SA" "$B
 expect "…still one step per reader: his own, revised" "$(rows $A "$SA" "$OPEN_TICKET")" "steps\[3\]"
 
 echo "## a step belongs to whoever owns it, and the author's step finishes the ticket"
+echo "## the author settling their own step is the close: off the lists, still on the log"
+expect "before: the open review is not done" "$(rows $A "$SA" "$OPEN_TICKET")" "done: false"
+call $A "$SA" settle-step "{\"ticketId\":\"$OPEN_TICKET\",\"stepId\":\"address\",\"result\":\"the sheen ships as it is; bob and carol both read it\"}" > /dev/null
+expect "after: every step answered, the ticket reads done — no close op, nothing deleted" "$(rows $A "$SA" "$OPEN_TICKET")" "done: true"
+expect "…and it is still there for whoever refers back to it" "$(rows $A "$SA" "$OPEN_TICKET")" "review the sheen"
 expect "post-review on a plain ticket is refused" "$(call $B "$SB" post-review "{\"ticketId\":\"$OID\",\"findings\":\"x\"}")" "is not a review ticket"
 expect "alice settles her own step: the ticket is done" "$(call $A "$SA" settle-step "{\"ticketId\":\"$OPEN_TICKET\",\"stepId\":\"address\",\"result\":\"got what I needed, thanks both\"}")" "address,alice,address,settled"
 # NOT asserted: that bob's copy shows her step settled within a minute. It

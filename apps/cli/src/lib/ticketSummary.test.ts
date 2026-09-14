@@ -106,6 +106,20 @@ describe("summarize", () => {
     expect(summarize(read, [], ALICE).state).toBe("needs-you");
   });
 
+  it("done is closed: a review the author settled is done even when a reader asked for changes", () => {
+    const review = {
+      ...ticket([
+        { ...step("review-bob", BOB, "failed"), intent: "review" },
+        { ...step("address", ALICE, "settled"), intent: "address" },
+      ]),
+      kind: "review" as const,
+    };
+    expect(summarize(review, [], ALICE).state).toBe("done");
+    // on a task, a failed step is unfinished work: not done, and it says failed
+    const task = ticket([step("s1", BOB, "failed"), step("s2", ALICE, "settled")]);
+    expect(summarize(task, [], ALICE).state).toBe("failed");
+  });
+
   it("says whose ticket it is, which is what the reader's own name used to imply", () => {
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], ALICE).mine).toBe(true);
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], BOB).mine).toBe(false);
