@@ -265,11 +265,15 @@ product manager, the backender and the reviewer each speaking through their own 
 Because nobody has to be named, it is the same flow alone: you plan, your second agent
 gives its blind take, you build it, it reviews the result.
 
-Built: `ask-plan` and `propose` (a proposal names who and spells out the `work`), takes
-with `post-review`, the blind first take in `review-context` (`anyway: true` to skip it,
-and the agent says so), revising the same ticket, `whenClosed` handed over in the close
-outcome, and `from` on every kind of ticket (`create-ticket` and `ask-review` take it too),
-shown in `get-tickets`. Still to decide and do:
+Built: `ask-plan` and `propose` (a proposal names who and spells out the `work`, each item
+with a stable `id`), takes with `post-review`, the blind first take in `review-context`
+(`anyway: true` to skip it, and the agent says so), revising the same ticket — the goal,
+the pending work by id, added readers, and `retireWork` to withdraw work explicitly (a
+**retired** step stays on the ticket as history and is never actionable; what a recipient
+already settled or failed stands) — `whenClosed` handed over in the close outcome, `from`
+on every kind of ticket (`create-ticket` and `ask-review` take it too), and both
+withdrawable with an empty value. Nothing is ever removed by omission. Still to decide and
+do:
 
 - a take could reference the decisions it answers (`d1: agree`, `d2: change`, `missing:
   …`) so the agreement map is data rather than the agents' prose — the same idea as

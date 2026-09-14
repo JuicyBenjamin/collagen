@@ -37,6 +37,7 @@ const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
   suspended: "⟳",
   settled: "✓",
   failed: "✗",
+  retired: "—",
 };
 
 /** One ticket, as a page.

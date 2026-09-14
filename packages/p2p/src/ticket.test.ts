@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionableSteps, closeTicket, finished, mergeTicket, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
+import { actionableSteps, closeTicket, finished, mergeTicket, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
 import { deriveThreadId } from "./topic";
 
 const step = (over: Partial<TicketStep>): TicketStep => ({
@@ -237,6 +237,42 @@ describe("a review ticket asks 0 to many people", () => {
     expect(actionableSteps(declined, BOB.key)).toEqual([]); // nothing owed after a ↻
     const accepted = postReview(proposal, BOB, "yes", false, 5).ticket;
     expect(actionableSteps(accepted, BOB.key).map((s) => s.id)).toEqual(["implement-bob"]);
+  });
+
+  it("retiring work is explicit and keeps history: never actionable, nothing waits on it, answered work stands", () => {
+    const proposal = ticket({
+      kind: "proposal",
+      createdBy: ALICE,
+      steps: [
+        step({ id: "review-bob", owner: BOB.key, intent: "take", status: "settled" }),
+        step({ id: "build-bob", owner: BOB.key, intent: "build", needs: ["review-bob"] }),
+        step({ id: "mail-bob", owner: BOB.key, intent: "mail", needs: ["review-bob"], status: "settled" }),
+        step({ id: "address", owner: ALICE, needs: ["review-bob"] }),
+      ],
+    });
+    expect(retireSteps(proposal, ["build-bob"], BOB.key, 5).outcome).toBe("not-yours");
+    const done = retireSteps(proposal, ["build-bob", "mail-bob", "nope-bob"], ALICE, 5);
+    expect(done.outcome).toBe("retired");
+    if (done.outcome !== "retired") throw new Error("unreachable");
+    expect(done.retired).toEqual(["build-bob"]);
+    expect(done.kept).toEqual(["mail-bob"]); // settled work is what happened
+    const build = done.ticket.steps.find((s) => s.id === "build-bob")!;
+    expect(build.status).toBe("retired");
+    expect(actionableSteps(done.ticket, BOB.key)).toEqual([]); // retired is never up
+    expect(finished(done.ticket)).toBe(false); // address still pending
+    // nothing waits on a retired step: a step needing it may go
+    const waits = { ...done.ticket, steps: [...done.ticket.steps, step({ id: "after", owner: BOB.key, needs: ["build-bob"] })] };
+    expect(actionableSteps(waits, BOB.key).map((s) => s.id)).toEqual(["after"]);
+  });
+
+  it("from and whenClosed can be withdrawn: an empty value wins a merge, absence keeps", () => {
+    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets", updatedAt: 1 };
+    const cleared = { ...t, from: [], whenClosed: "", updatedAt: 2 };
+    expect(mergeTicket(t, cleared).from).toEqual([]);
+    expect(mergeTicket(t, cleared).whenClosed).toBe("");
+    const silent = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), updatedAt: 3 };
+    expect(mergeTicket(t, silent).from).toEqual(["p1"]);
+    expect(mergeTicket(t, silent).whenClosed).toBe("open the Jira tickets");
   });
 
   it("from and whenClosed ride the ticket through a merge", () => {

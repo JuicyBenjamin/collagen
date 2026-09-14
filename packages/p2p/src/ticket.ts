@@ -8,7 +8,12 @@ import { deriveThreadId } from "./topic";
 // step is a choice the owning peer's agent makes, never something a record
 // can force.
 
-export const StepStatus = Schema.Literals(["pending", "suspended", "settled", "failed"]);
+/** "retired": the ticket's author withdrew the step before its owner did
+ *  anything — a proposal's work replaced by other work, say. It stays on the
+ *  ticket as history, never becomes actionable, and nothing waits on it. Only
+ *  a pending or suspended step can be retired: what an owner has settled or
+ *  failed is what happened. */
+export const StepStatus = Schema.Literals(["pending", "suspended", "settled", "failed", "retired"]);
 export type StepStatus = typeof StepStatus.Type;
 
 /** Later states win a merge; ties resolve by updatedAt. */
@@ -17,6 +22,7 @@ export const STATUS_RANK: Record<StepStatus, number> = {
   suspended: 1,
   settled: 2,
   failed: 2,
+  retired: 2,
 };
 
 export const TicketStep = Schema.Struct({
@@ -119,8 +125,10 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     kind: newer.kind,
     steps: [...steps.values()],
     ...(closed ? { closed } : {}),
-    ...(newer.from ? { from: newer.from } : local.from ? { from: local.from } : {}),
-    ...(newer.whenClosed ? { whenClosed: newer.whenClosed } : local.whenClosed ? { whenClosed: local.whenClosed } : {}),
+    // present wins, including an EMPTY value: `from: []` and `whenClosed: ""`
+    // are how the author withdraws them, and a merge must carry that through
+    ...(newer.from !== undefined ? { from: newer.from } : local.from !== undefined ? { from: local.from } : {}),
+    ...(newer.whenClosed !== undefined ? { whenClosed: newer.whenClosed } : local.whenClosed !== undefined ? { whenClosed: local.whenClosed } : {}),
     updatedAt: Math.max(local.updatedAt, incoming.updatedAt),
   };
 }
@@ -259,7 +267,7 @@ export function postReview(
  *  incomplete left the author waiting forever for a reviewer who had already
  *  answered — which is the opposite of what a change request means. */
 const answered = (ticket: Ticket, s: TicketStep): boolean =>
-  s.status === "settled" || (ticket.kind === "review" && isTake(s) && s.status === "failed");
+  s.status === "settled" || s.status === "retired" || (ticket.kind === "review" && isTake(s) && s.status === "failed");
 // …and only on a REVIEW. On a plan or a proposal a reader's ↻ means "revise
 // this", so the ticket is not answered until they come back with a ✓ — and a
 // proposal's work steps, which wait on that ✓, do not start.
@@ -272,6 +280,31 @@ const answered = (ticket: Ticket, s: TicketStep): boolean =>
  *  (a reviewer who never answered, work abandoned) or finished and still
  *  open (the author has not said so yet). */
 export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && ticket.steps.every((s) => answered(ticket, s));
+
+export type RetireOutcome =
+  | { readonly ticket: Ticket; readonly retired: ReadonlyArray<string>; readonly kept: ReadonlyArray<string>; readonly outcome: "retired" }
+  | { readonly ticket: Ticket; readonly outcome: "not-yours" };
+
+/** The author withdraws steps before their owners acted on them. Explicit —
+ *  a list of ids, never removal by omission, so an incomplete amendment
+ *  cannot erase work by accident. A step already settled or failed is kept
+ *  as it is and named in `kept`; the retired ones stay on the ticket. */
+export function retireSteps(ticket: Ticket, ids: ReadonlyArray<string>, by: string, now: number): RetireOutcome {
+  if (ticket.createdBy !== by) return { ticket, outcome: "not-yours" };
+  const want = new Set(ids);
+  const retired: Array<string> = [];
+  const kept: Array<string> = [];
+  const steps = ticket.steps.map((s) => {
+    if (!want.has(s.id)) return s;
+    if (s.status === "pending" || s.status === "suspended") {
+      retired.push(s.id);
+      return { ...s, status: "retired" as const, updatedAt: now };
+    }
+    kept.push(s.id);
+    return s;
+  });
+  return { ticket: retired.length > 0 ? { ...ticket, steps, updatedAt: now } : ticket, retired, kept, outcome: "retired" };
+}
 
 /** Steps that are up right now, whoever owns them: not settled, and
  *  everything they depend on has been answered.

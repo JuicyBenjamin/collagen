@@ -145,7 +145,7 @@ alone too.
 
 - [x] `plan` and `proposal`: the review record with a tense — question, thoughts, insight, forks to come (`ask-plan`, `propose`)
 - [x] the blind first take: `review-context` opens after this reader has posted, unless they ask (`anyway`)
-- [x] ↻ revises the same ticket; a proposal's work steps activate on ✓
+- [x] ↻ revises the same ticket: goal, pending work by stable id, added readers, explicit `retireWork` (retired = history, never actionable); a proposal's work steps activate on ✓
 - [ ] a take older than the latest revision reads as stale
 - [x] `whenClosed` — your instruction, handed to your agent in the close outcome, never the settle
 - [x] `from` on a ticket: the ids it follows

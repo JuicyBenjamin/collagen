@@ -98,16 +98,25 @@ echo "## bob wants the work changed — alice revises the work on the same ticke
 NO="{\"ticketId\":\"$QID\",\"findings\":\"a button is fine but it needs a job, not a request-time export\",\"failed\":true}"
 call $B "$SB" post-review "$NO" > /dev/null
 wait_until "alice hears the change request" "ticket ${QID:0:8}: bob asked for changes" bash -c "cat '$OUT/alice.log'"
-REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"what\":\"the button enqueues a job; the file comes by mail\",\"userWhy\":\"bob is right that the export is too slow for a request\"}],\"work\":[{\"intent\":\"build\",\"description\":\"the button, enqueuing an export job\"},{\"intent\":\"mail\",\"description\":\"send the finished file to the requester\"}]}"
+DUP="{\"ticketId\":\"$QID\",\"work\":[{\"intent\":\"build\",\"description\":\"a\"},{\"intent\":\"build\",\"description\":\"b\"}]}"
+expect "two work items that would share an id are refused, not collapsed" "$(call $A "$SA" propose "$DUP")" "two work items would share the id .{1,3}build"
+# the request-time build is withdrawn; a job-enqueuing button and a mail step replace it,
+# two items with the same intent kept apart by their own ids
+REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"what\":\"the button enqueues a job; the file comes by mail\",\"userWhy\":\"bob is right that the export is too slow for a request\"}],\"retireWork\":[\"build\"],\"work\":[{\"id\":\"enqueue\",\"intent\":\"build\",\"description\":\"the button, enqueuing an export job\"},{\"id\":\"mail\",\"intent\":\"build\",\"description\":\"the mailer that sends the finished file\"}],\"whenClosed\":\"\"}"
 REVISED=$(call $A "$SA" propose "$REWORK")
 expect "the proposal is revised, not re-filed" "$REVISED" "proposal ticket updated"
 QROWS2=$(rows $A "$SA" "$QID")
-expect "the pending work step now says the new thing" "$QROWS2" "build-bob,bob,build,(pending|suspended),review-bob,.{0,3}the button, enqueuing an export job"
-expect "…and the added work is a new step of bob's, waiting on his take" "$QROWS2" "mail-bob,bob,mail,(pending|suspended),review-bob"
+expect "the withdrawn work is retired: on the ticket, never up" "$QROWS2" "build-bob,bob,build,retired"
+expect "the new work stands on its own id, same intent notwithstanding" "$QROWS2" "enqueue-bob,bob,build,(pending|suspended),review-bob,.{0,3}the button, enqueuing an export job"
+expect "…and so does the second" "$QROWS2" "mail-bob,bob,build,(pending|suspended),review-bob"
 expect "…his ↻ take is history, untouched" "$QROWS2" "review-bob,bob,take,failed"
-wait_until "bob's copy has the revised work" "mail-bob" rows $B "$SB" "$QID"
+expect "an empty whenClosed withdrew the instruction" "$(echo "$QROWS2" | grep -c 'whenClosed')" "^0$"
+NONE="{\"ticketId\":\"$QID\",\"retireWork\":[\"build\"]}"
+expect "retiring what is already retired is refused, saying so" "$(call $A "$SA" propose "$NONE")" "none of build is pending work"
+wait_until "bob's copy has the revised work" "enqueue-bob" rows $B "$SB" "$QID"
 YES="{\"ticketId\":\"$QID\",\"findings\":\"yes, next sprint\"}"
 call $B "$SB" post-review "$YES" > /dev/null
-wait_until "bob's ✓ started the work: the build step is his now" "step build-bob actionable" bash -c "cat '$OUT/bob.log'"
-wait_until "…and the added step too" "step mail-bob actionable" bash -c "cat '$OUT/bob.log'"
+wait_until "bob's ✓ started the work: the enqueue step is his now" "step enqueue-bob actionable" bash -c "cat '$OUT/bob.log'"
+wait_until "…and the mailer too" "step mail-bob actionable" bash -c "cat '$OUT/bob.log'"
+expect "…but not the retired one" "$(grep -c 'step build-bob actionable' "$OUT/bob.log")" "^0$"
 kill_all; summary

@@ -6,7 +6,7 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
-import { AI_OPTIONS, DriveAction, emptyReview, isJudged, isRoomId, isTake, mergeReview, newProject, PROTOCOL_VERSION, Room, reviewStepId, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
+import { AI_OPTIONS, DriveAction, emptyReview, isJudged, isRoomId, isTake, mergeReview, newProject, PROTOCOL_VERSION, retireSteps, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -178,12 +178,25 @@ const judgedParameters = {
   ),
 };
 
+/** A work item's stable id: the one the agent gave, else its intent. Two items
+ *  that would share one is a refusal, not a silent overwrite. */
+const workId = (w: { readonly id?: string; readonly intent: string }): string => (w.id ?? w.intent).trim().replace(/\s+/g, "-");
+const duplicateWorkId = (work: ReadonlyArray<{ readonly id?: string; readonly intent: string }>): string | null => {
+  const seen = new Set<string>();
+  for (const w of work) {
+    const id = workId(w);
+    if (seen.has(id)) return id;
+    seen.add(id);
+  }
+  return null;
+};
+
 export const AskPlan = Tool.make("ask-plan", {
   description: [
     "File a PLAN: something your user intends to do, put to the room for judgment before it is built — do you agree, what would you change, what am I missing. Only when your user asks for input, advice or direction on what they mean to do (\"ask kristian what he thinks of this plan\", \"put this up for input\") — never on your own initiative. It reaches the room at once and the outbox shows what went. A question your user could have asked YOU is not a plan: this is for a colleague's judgment, the input that is not AI.",
     "'goal' is the one line everyone sees — what your user intends (\"stream the export, don't buffer it\"). 'summary' is their thinking in a paragraph. 'decisions' are the thoughts behind it, one per point: 'what' they mean to do, 'userWhy' in their words, 'agentWhy' what you found, checked or would add — marked as yours. 'forks' are the roads not taken so far, with 'at' as a pointer where there is code, or the area if there is none yet. 'peers' is 0 to many, exactly the names your user said; nobody named means the plan sits in the room for whoever has a take — including your user's own second agent.",
     "Readers give a BLIND FIRST TAKE: their agent hands them the goal alone, they say what they think (post-review; failed: true asks for changes), and only then do your user's thoughts open to them. A ↻ hands the plan back to your user to revise this same ticket (ask-plan with 'ticketId'), never to reply in prose. 'from' names tickets this plan follows (a proposal it answers); 'whenClosed' is your user's own instruction for the moment they close it (\"open the Jira tickets\"), handed back to you then.",
-    "WHAT TO TELL YOUR USER: that the plan ticket has been filed (or updated), nothing more. KEEP IT CURRENT: when their thinking moves, call ask-plan again with 'ticketId' — re-send the summary if it no longer holds, repeat the id of a changed decision. When the takes are in and your user has decided, close-ticket with the conclusion as the reason.",
+    "WHAT TO TELL YOUR USER: that the plan ticket has been filed (or updated), nothing more. KEEP IT CURRENT: when their thinking moves, call ask-plan again with 'ticketId' — re-send the summary if it no longer holds, repeat the id of a changed decision, pass a new 'goal' if the question moved; 'from: []' withdraws the lineage and 'whenClosed: \"\"' the close instruction, leaving either out keeps it. When the takes are in and your user has decided, close-ticket with the conclusion as the reason.",
   ].join("\n"),
   parameters: Schema.Struct(judgedParameters),
   success: Schema.String,
@@ -192,12 +205,14 @@ export const AskPlan = Tool.make("ask-plan", {
 export const Propose = Tool.make("propose", {
   description: [
     "File a PROPOSAL: work your user wants SOMEONE ELSE to do, with the why attached — will you do this. Only when your user asks you to propose it to a named person (\"propose to kristian that the backend streams the export\") — never on your own initiative. Not a task: a task is agreed work with owners; a proposal asks first, and the recipient owes nothing until they say yes.",
-    "'peers' is who is asked — 1 or more, exactly the names your user said. 'goal' is the one line everyone sees. 'summary', 'decisions' (the why: 'userWhy' in your user's words, 'agentWhy' yours) and 'forks' as for ask-plan. 'work' is what they are being asked to do: steps, each an intent and a description; every recipient gets those steps, waiting on their own ✓ — a ↻ hands the proposal back to your user to revise this same ticket (propose with 'ticketId'). 'from' names tickets this follows; 'whenClosed' is your user's instruction for the moment they close it.",
+    "'peers' is who is asked — 1 or more, exactly the names your user said. 'goal' is the one line everyone sees. 'summary', 'decisions' (the why: 'userWhy' in your user's words, 'agentWhy' yours) and 'forks' as for ask-plan. 'work' is what they are being asked to do: steps, each an 'id' (stable — give one whenever two items could share an intent; it defaults to the intent), an intent and a description; every recipient gets those steps, waiting on their own ✓ — a ↻ hands the proposal back to your user to revise this same ticket (propose with 'ticketId'). 'from' names tickets this follows; 'whenClosed' is your user's instruction for the moment they close it.",
+    "REVISING (propose with 'ticketId'): 'work' updates a pending step's text by id and adds new ids as new steps; nothing is ever removed by omission. To withdraw work, pass 'retireWork' with the ids — those steps are retired: kept on the ticket as history, never actionable, and what a recipient already settled or failed is left as it is. 'from: []' withdraws the lineage and 'whenClosed: \"\"' withdraws the close instruction; leaving either out leaves it as it was.",
     "Readers give a BLIND FIRST TAKE (see ask-plan). WHAT TO TELL YOUR USER: that the proposal has been filed (or updated), nothing more. KEEP IT CURRENT with propose and 'ticketId'. When the work is done or declined and your user is done with it, close-ticket with the conclusion as the reason.",
   ].join("\n"),
   parameters: Schema.Struct({
     ...judgedParameters,
-    work: Schema.optional(Schema.Array(Schema.Struct({ intent: Schema.String, description: Schema.String }))),
+    work: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String), intent: Schema.String, description: Schema.String }))),
+    retireWork: Schema.optional(Schema.Array(Schema.String)),
   }),
   success: Schema.String,
 });
@@ -533,7 +548,8 @@ const makeHandlers = Effect.gen(function* () {
       
         from?: ReadonlyArray<string>;
         whenClosed?: string;
-        work?: ReadonlyArray<{ readonly intent: string; readonly description: string }>;
+        work?: ReadonlyArray<{ readonly id?: string; readonly intent: string; readonly description: string }>;
+        retireWork?: ReadonlyArray<string>;
       }) {
         const { id: roomId, room } = yield* focusedRoom;
         const myName = yield* SubscriptionRef.get(nameRef);
@@ -558,8 +574,20 @@ const makeHandlers = Effect.gen(function* () {
           if (existing && existing.author !== identity.pubkey) {
             return `failed: that review's why is ${existing.authorName}'s to write — your user's own reading of the code goes to them with send-to-peer (pass ticketId so it lands on the ticket)`;
           }
-          const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, true);
-          if (gap) return gap;
+          // an amendment may move the why, the ticket, or both — but not nothing
+          const whyMoves = delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base;
+          const ticketMoves =
+            input.goal !== undefined ||
+            input.from !== undefined ||
+            input.whenClosed !== undefined ||
+            (input.work?.length ?? 0) > 0 ||
+            (input.retireWork?.length ?? 0) > 0 ||
+            (input.peers?.length ?? 0) > 0;
+          if (!whyMoves && !ticketMoves) return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
+          if (whyMoves) {
+            const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, true);
+            if (gap) return gap;
+          }
           const review = mergeReview(existing ?? emptyReview(input.ticketId, identity.pubkey, myName), {
             ...delta,
             ...(input.branch ? { branch: input.branch } : {}),
@@ -576,8 +604,9 @@ const makeHandlers = Effect.gen(function* () {
           // lineage, the close instruction, the pending work, and who is asked.
           let revised: Ticket = ticket;
           if (input.goal && input.goal !== ticket.goal) revised = { ...revised, goal: input.goal };
-          if (input.from && input.from.length > 0) revised = { ...revised, from: input.from };
-          if (input.whenClosed) revised = { ...revised, whenClosed: input.whenClosed };
+          // present means set — and an empty value means withdraw; absent means keep
+          if (input.from !== undefined) revised = { ...revised, from: input.from };
+          if (input.whenClosed !== undefined) revised = { ...revised, whenClosed: input.whenClosed };
           const newReaders = (input.peers ?? [])
             .map((n) => n.trim())
             .filter((n) => n.length > 0)
@@ -598,19 +627,30 @@ const makeHandlers = Effect.gen(function* () {
             };
           }
           if (kind === "proposal" && input.work && input.work.length > 0) {
+            const dup = duplicateWorkId(input.work);
+            if (dup) return `failed: two work items would share the id "${dup}" — give each its own 'id' (they default to the intent)`;
             const takes = revised.steps.filter((s) => isTake(s));
             const steps = [...revised.steps];
             for (const take of takes) {
               const who = take.id.slice("review-".length);
               for (const w of input.work) {
-                const id = `${w.intent}-${who}`;
+                const id = `${workId(w)}-${who}`;
                 const at = steps.findIndex((s) => s.id === id);
                 if (at < 0) steps.push({ id, owner: take.owner, intent: w.intent, description: w.description, needs: [take.id], status: "pending" as const, updatedAt: now });
-                else if (steps[at]!.status === "pending" || steps[at]!.status === "suspended") steps[at] = { ...steps[at]!, description: w.description, updatedAt: now };
-                // settled or failed work is what happened; a revision does not rewrite it
+                else if (steps[at]!.status === "pending" || steps[at]!.status === "suspended") steps[at] = { ...steps[at]!, intent: w.intent, description: w.description, updatedAt: now };
+                // settled, failed or retired work is what happened; a revision does not rewrite it
               }
             }
             revised = { ...revised, steps };
+          }
+          // withdrawing work is explicit: the ids, applied to every recipient's copy
+          if (kind === "proposal" && input.retireWork && input.retireWork.length > 0) {
+            const takes = revised.steps.filter((s) => isTake(s));
+            const ids = takes.flatMap((take) => input.retireWork!.map((w) => `${w}-${take.id.slice("review-".length)}`));
+            const done = retireSteps(revised, ids, identity.pubkey, now);
+            if (done.outcome === "not-yours") return `failed: "${ticket.goal}" is not your user's ticket to revise`;
+            if (done.retired.length === 0) return `failed: none of ${input.retireWork.join(", ")} is pending work on this proposal${done.kept.length > 0 ? ` (${done.kept.join(", ")} already answered — that stands)` : ""}`;
+            revised = done.ticket;
           }
           const changed = revised !== ticket;
           if (changed) revised = { ...revised, updatedAt: now };
@@ -642,6 +682,8 @@ const makeHandlers = Effect.gen(function* () {
         // a proposal asks someone to DO something: it needs them named, and the work spelled out
         if (kind === "proposal" && reviewers.length === 0) return "failed: a proposal is work your user wants someone else to do — pass 'peers' (who), from list-room";
         if (kind === "proposal" && (input.work ?? []).length === 0) return "failed: a proposal needs 'work': the steps your user is asking them to do, each an intent and a description";
+        const dupWork = duplicateWorkId(input.work ?? []);
+        if (dupWork) return `failed: two work items would share the id "${dupWork}" — give each its own 'id' (they default to the intent)`;
         if (kind !== "review" && !input.goal) return `failed: pass 'goal' — the one line everyone sees: ${kind === "plan" ? "what your user intends to do" : "what your user is asking them to do"}`;
         const project = roomProjects(yield* store.get, roomId).find((p) => p.name === input.project);
         if (!project) {
@@ -682,7 +724,7 @@ const makeHandlers = Effect.gen(function* () {
         // their own ✓ — they owe nothing until they have said yes
         const workSteps = reviewSteps.flatMap((take) =>
           (kind === "proposal" ? (input.work ?? []) : []).map((w) => ({
-            id: `${w.intent}-${take.id.slice("review-".length)}`,
+            id: `${workId(w)}-${take.id.slice("review-".length)}`,
             owner: take.owner,
             intent: w.intent,
             description: w.description,
