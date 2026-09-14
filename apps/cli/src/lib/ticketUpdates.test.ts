@@ -12,6 +12,7 @@ const t: Ticket = {
   project: "sandbox",
   goal: "fix NaN",
   createdBy: ALICE,
+  structureAt: 1,
   kind: "task",
   updatedAt: 1,
   steps: [

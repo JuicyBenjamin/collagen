@@ -22,7 +22,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "3";
+export const PROTOCOL_VERSION = "4";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,

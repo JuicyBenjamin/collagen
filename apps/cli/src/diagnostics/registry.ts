@@ -10,6 +10,9 @@ export interface DiagnosticDeps {
   readonly rooms: Rooms["Service"];
   readonly transcripts: Transcripts["Service"];
   readonly attachments: Attachments["Service"];
+  /** Whose machine this runs on (pubkey) — a diagnostic that behaves
+   *  differently for a ticket's author and for a reader needs to know. */
+  readonly me: string;
 }
 
 /** Where the person (or agent) is when they run it. */

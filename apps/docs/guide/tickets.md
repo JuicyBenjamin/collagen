@@ -166,6 +166,125 @@ for a review. What went is on the record: the outbox shows the whole text, every
 line included.
 :::
 
+## Plans and proposals: judgment before the code exists <Badge type="tip" text="alpha" />
+
+A review asks a colleague to judge code that exists. Two more kinds ask for judgment
+before it does — advice, input, direction. Neither is a question: a question is what your
+own agent is for. These are for the input that is not AI: a colleague's take on your
+thinking, given before your thinking has coloured theirs.
+
+| kind | what it says | the reader is asked | work steps | it ends when |
+| --- | --- | --- | --- | --- |
+| `plan` | something I intend to do myself, and how | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
+| `proposal` | work I want **someone else** to do, and why | will you do this | theirs, active on their ✓ | you close it — done, or declined |
+
+The difference is who does the work, not when the ticket comes. A proposal can open a
+chain as easily as end one; a plan can stand alone. Two tickets, not two phases of one,
+because each is simpler to reason about on its own — the phases live in the chain between
+them (below).
+
+### What sits on the ticket
+
+Three layers, and the order matters:
+
+| layer | whose | who sees it, when |
+| --- | --- | --- |
+| the **question** — the goal line, `should the export stream or buffer?` | yours | everyone, at once |
+| your **thoughts** — this, this and this, what you ruled out, why | yours, in your words | the reader, after their own take |
+| the **insight** — what your agent found, checked, or would add | your agent's, marked as such | same |
+
+The record is the review's why, with a tense: a decision's `what` / `the user:` / `the
+agent:` already separate your words from your agent's, and a plan's forks are a review's
+forks before the line exists.
+
+### The blind first take
+
+The reader is asked for their own input **before** they are shown yours. Their agent
+hands them the question and nothing else; they say what they think; that take lands on a
+step of their own (the `post-review` mechanics, unchanged); *then* the thoughts and the
+insight open up, and the agents lay the two takes side by side — where you agree, where
+you differ, what one of you saw that the other did not. That is where a real back and
+forth starts, instead of a nod at a conclusion already reached.
+
+"Ideally", not a gate: the reader can ask to see everything first, and their agent
+should say that they asked. What collagen can make structural is the reader's *agent*:
+the context tool answers with the question alone until this reader has posted a take,
+unless the person says otherwise. The log is shared, so nothing is hidden — the order is
+a courtesy the agents keep, and they say when they broke it.
+
+### Takes, revisions, agreement
+
+The marks are the ones you know: `✓` agrees, `↻` wants it changed, a bare name has not
+spoken. A ↻ hands the ticket back to you to **revise the same ticket** — never to answer
+in prose — so it keeps saying what is actually agreed; a take older than your latest
+revision is stale, and the row can say so. On a proposal, the recipient's ✓ *is* their
+acceptance: the work steps they own become theirs to do at that moment, and they owe
+nothing before it. Nothing here is a stored status — agreed, stale, accepted are all read
+off the steps and the record's revision time, like every other state in a ticket.
+
+### Answered, then closed
+
+Completion and closure are two facts here as on every ticket (see
+[in the TUI](#in-the-tui)). A plan or proposal is **answered** when the takes and the work
+steps it expected are in — and that is only the signal: the settle that answered the last
+step tells your agent "when your user says they are done, close-ticket", and nothing
+more. It is **closed** when you say so. Your close reason is the **conclusion**: what was
+agreed, in words — the durable thing later tickets refer back to, so it is worth a
+sentence.
+
+The ticket may also carry, from the day it was filed, **what happens when it is closed** —
+`when closed: open the Jira tickets for each step`. It is your instruction, written in
+advance in your own words, and it is handed to your agent in the *close* outcome, not the
+settle: acting while the ticket is still open would mean acting before you had accepted
+the conclusion, which is the one moment the whole ticket exists to protect. Your agent
+then acts on it as on anything else you asked for — saying so. Nothing runs on its own:
+the person who wrote the line is the person who closed the ticket.
+
+### Phases are tickets
+
+Nothing is decided once, and no ticket carries a phase. A proposal, accepted and closed,
+births the plan for how; the plan, agreed and closed, births the work; the work, done,
+comes back as a review — and each one **references the ones before it**. The chain is
+the phases:
+
+```
+proposal  bulk export for the backoffice            kristian ✓
+  ↳ plan  stream the rows, don't buffer them          alice ↻ → revised → alice ✓
+      ↳ task  bulk export                             kristian ✓
+          ↳ review  feat/bulk-export                  kristian ✓  alice ↻
+```
+
+A ticket carries `from`: the ids of the tickets it follows. At review time, asked why
+the export streams, the reviewer's agent walks back to the plan's conclusion and the fork
+that chose it, and to the proposal's why for who needed the export at all — so a dispute
+about the code is settled against what was agreed, not re-argued from scratch. Abundance of context, none of it pushed: `review-context`
+follows the chain only when the person asks.
+
+Everyone can weigh in at every step, so this is a product-management flow with the
+product manager, the backender and the reviewer each speaking through their own agent.
+Because nobody has to be named, it is the same flow alone: you plan, your second agent
+gives its blind take, you build it, it reviews the result.
+
+Built: `ask-plan` and `propose` (a proposal names who and spells out the `work`, each item
+with a stable `id`), takes with `post-review`, the blind first take in `review-context`
+(`anyway: true` to skip it, and the agent says so), revising the same ticket — the goal,
+the pending work by id, added readers, and `retireWork` to withdraw work explicitly (a
+**retired** step stays on the ticket as history and is never actionable; what a recipient
+already settled or failed stands) — `whenClosed` handed over in the close outcome, `from`
+on every kind of ticket (`create-ticket` and `ask-review` take it too), and both
+withdrawable with an empty value. Nothing is ever removed by omission. Still to decide and
+do:
+
+- a take could reference the decisions it answers (`d1: agree`, `d2: change`, `missing:
+  …`) so the agreement map is data rather than the agents' prose — the same idea as
+  [structured messages](./conversations#structured-messages);
+- `review-context` walking the `from` chain on request, so one call answers "why" across
+  a proposal, its plan and the review of the work;
+- births are the person's call: closing a plan does not file the work, but the close
+  outcome could say how, where the agent reads it;
+- the overview shows lineage without a tree: a `↳` and the parent's kind on the row, and
+  the ticket page names its parents in the meta line.
+
 ## The tools
 
 | Tool | Purpose |
@@ -227,27 +346,41 @@ appends the whole ticket record; every member's `apply` folds it into the room's
 rules that converge regardless of order:
 
 - steps are unioned by id — the creator adds structure, owners never lose steps
-- per step, the higher status wins (`settled`/`failed` beat `suspended` beat `pending`);
-  equal ranks resolve by timestamp, then a deterministic tiebreak
-- the goal follows the newest timestamp
+- per step, the higher status wins (`settled`/`failed`/`retired` beat `suspended` beat
+  `pending`); equal ranks resolve by timestamp, then a deterministic tiebreak
+- the author's **structure** — goal, kind, `from`, `whenClosed` — follows the author's own
+  clock (`structureAt`), which only an author's revision advances. A peer posting a take or
+  settling a step advances the ticket's general timestamp while broadcasting their whole,
+  possibly stale, copy; that can never revert what the author last decided
+- `closed` sticks: a copy written before the close cannot reopen it
 
 Because it's a replicated log, tickets survive everyone restarting, and a member who was
 offline catches up on reconnect — including steps that became theirs while they were away.
 
 ### One protocol version at a time
 
-Collagen is an alpha and carries **no compatibility paths**: a record written by a build
-that spoke an older `PROTOCOL_VERSION` is not translated, tolerated or half-shown. It is
-migrated out.
+Collagen is an alpha and carries **no compatibility paths**: the app reads one shape of
+each record, the current one. A record written by a build that spoke an older
+`PROTOCOL_VERSION` is **migrated** into it where we know the old shape — and we wrote every
+shape there has ever been — and **evicted** where we do not.
 
-- Reading the view drops any row this build cannot decode, so nothing malformed reaches
-  the app — a stale ticket can never break the room's page.
-- The rows it dropped are then **evicted**: one `evict` entry on the log names them, every
-  member applies the same deletion, and the room converges clean. The log itself is
-  append-only, so this is the equivalent of a migration — the dead record stops being part
-  of the room instead of being maintained.
-- A record from another version that overwrites a row you have also ejects that row, so
-  you never keep a half-applied ticket.
+- Reading the view never trusts a row's shape. A row this build cannot decode as it is
+  goes through `migrate.ts`, the one place that knows the older shapes: a ticket from
+  protocol 2 or 3 gains the author's clock (`structureAt`, set to its last change) and is
+  read as current.
+- A migrated row is then **rewritten** once: the current shape is appended to the log, so
+  every member's row becomes current and nobody migrates it again.
+- What cannot be migrated is **evicted**: one `evict` entry on the log names the rows,
+  every member applies the same deletion, and the room converges clean. The log is
+  append-only, so this is the equivalent of a migration too — the record stops being part
+  of the room instead of being maintained. In an alpha that is expected.
+- A log entry from another version is migrated in `apply` as well, so a replay of the log
+  reaches the same room; one that cannot be is ejected, so you never keep a half-applied
+  ticket.
+- A build that could not yet migrate a shape may have evicted rows a later build can read.
+  On opening a room, that later build walks **its own** writer core — every entry this
+  machine ever appended — and puts back any ticket of its own that has no row. Your writes
+  are yours to restore; nobody else's are touched.
 - A peer whose frames don't decode is not silently absent: their greet still says which
   version wrote it, and the log tells you which side has to update.
 - Locally, the state file is salvaged rather than discarded: an outbox record from an

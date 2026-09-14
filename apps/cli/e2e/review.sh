@@ -71,7 +71,7 @@ echo "## a plain ticket has no why to read"
 OTHER=$(call $A "$SA" create-ticket '{"goal":"why does the render flicker","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"look at the frame"}]}')
 OID=$(echo "$OTHER" | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 wait_until "bob sees the plain ticket too" "flicker" goals $B "$SB"
-expect "review-context says it is not a review ticket" "$(call $B "$SB" review-context "{\"ticketId\":\"$OID\"}")" "is not a review ticket"
+expect "review-context says a task carries no why" "$(call $B "$SB" review-context "{\"ticketId\":\"$OID\"}")" "is a task, not a review, plan or proposal"
 
 echo "## the why grows as the work does — and only its author writes it"
 AMEND_BOB="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"what\":\"bob's own idea\",\"agentWhy\":\"mine\"}]}"

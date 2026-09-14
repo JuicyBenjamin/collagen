@@ -8,7 +8,12 @@ import { deriveThreadId } from "./topic";
 // step is a choice the owning peer's agent makes, never something a record
 // can force.
 
-export const StepStatus = Schema.Literals(["pending", "suspended", "settled", "failed"]);
+/** "retired": the ticket's author withdrew the step before its owner did
+ *  anything — a proposal's work replaced by other work, say. It stays on the
+ *  ticket as history, never becomes actionable, and nothing waits on it. Only
+ *  a pending or suspended step can be retired: what an owner has settled or
+ *  failed is what happened. */
+export const StepStatus = Schema.Literals(["pending", "suspended", "settled", "failed", "retired"]);
 export type StepStatus = typeof StepStatus.Type;
 
 /** Later states win a merge; ties resolve by updatedAt. */
@@ -17,6 +22,7 @@ export const STATUS_RANK: Record<StepStatus, number> = {
   suspended: 1,
   settled: 2,
   failed: 2,
+  retired: 2,
 };
 
 export const TicketStep = Schema.Struct({
@@ -38,10 +44,21 @@ export const TicketStep = Schema.Struct({
 export type TicketStep = typeof TicketStep.Type;
 
 /** What kind of work the ticket is. "task" is the plain one: a goal and its
- *  steps. A "review" carries the why behind a change as well (see review.ts)
- *  — the reviewer reads the decisions and the forks, not only the diff. */
-export const TicketKind = Schema.Literals(["task", "review"]);
+ *  steps. The other three ask for JUDGMENT and carry a why record (review.ts):
+ *  a "review" of code that exists; a "plan" — something the author intends
+ *  to do, do you agree; a "proposal" — work the author wants someone else to
+ *  do, will you. Readers answer on steps of their own (`postReview`). */
+export const TicketKind = Schema.Literals(["task", "review", "plan", "proposal"]);
 export type TicketKind = typeof TicketKind.Type;
+
+/** The kinds that ask for judgment and carry a why. */
+export const isJudged = (kind: TicketKind): boolean => kind !== "task";
+
+/** A reader's answer step: "review" on a review, "take" on a plan or a
+ *  proposal. Same mechanics, different word — you review code, you take a
+ *  position on a plan. */
+export const isTake = (step: { readonly intent: string }): boolean => step.intent === "review" || step.intent === "take";
+export const takeIntent = (kind: TicketKind): string => (kind === "review" ? "review" : "take");
 
 /** The author's decision that the ticket is over — recorded, not inferred.
  *  Every step answered means it MAY be ready to close; the person may also
@@ -65,8 +82,23 @@ export const Ticket = Schema.Struct({
   createdBy: Schema.String,
   kind: TicketKind,
   steps: Schema.Array(TicketStep),
+  /** When the AUTHOR last changed the ticket's structure — goal, kind, from,
+   *  whenClosed. Its own clock, apart from `updatedAt`: a peer posting a take
+   *  or settling a step also advances updatedAt while broadcasting their
+   *  whole (possibly stale) copy, and the author's latest decision must not
+   *  lose to that. Steps merge per step; structure merges by this. */
+  structureAt: Schema.Finite,
   /** Present once the author closed it: off the lists, on the log. */
   closed: Schema.optional(Closed),
+  /** The tickets this one follows — a plan born of a proposal, a review of
+   *  the work a plan agreed. A child names its parents; a parent never lists
+   *  its children (derived, like everything else). */
+  from: Schema.optional(Schema.Array(Schema.String)),
+  /** The author's instruction for the moment the ticket is CLOSED — "open
+   *  the Jira tickets for each step" — written when it was filed, handed to
+   *  their agent in the close outcome, and acted on then: not on the last
+   *  settle, because that is a reader's word, not the author's acceptance. */
+  whenClosed: Schema.optional(Schema.String),
   updatedAt: Schema.Finite,
 });
 export type Ticket = typeof Ticket.Type;
@@ -78,7 +110,10 @@ export type Ticket = typeof Ticket.Type;
  *  - steps are unioned by id — the creator adds structure, owners never lose steps
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
  *    by updatedAt, then lexicographic result as the final tiebreak
- *  - goal follows the newer updatedAt (only the creator should edit it)
+ *  - goal, kind, from and whenClosed follow the copy with the newer
+ *    `structureAt` — the author's own clock, which only the author advances,
+ *    so a peer's take or settle (which advances updatedAt on a possibly stale
+ *    copy) can never revert the author's latest decision
  *  - closed sticks: once either copy carries it, the merge does — a copy
  *    written before the close cannot reopen it; two closes keep the earlier
  */
@@ -90,18 +125,44 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     const mine = steps.get(s.id);
     steps.set(s.id, mine ? mergeStep(mine, s) : s);
   }
-  const newer = incoming.updatedAt > local.updatedAt ? incoming : local;
+  const author = incoming.structureAt !== local.structureAt ? (incoming.structureAt > local.structureAt ? incoming : local) : structureTiebreak(local, incoming);
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
+  const { from: _lf, whenClosed: _lw, ...rest } = local;
   return {
-    ...local,
-    goal: newer.goal,
-    kind: newer.kind,
+    ...rest,
+    goal: author.goal,
+    kind: author.kind,
+    // present wins, including an EMPTY value: `from: []` and `whenClosed: ""`
+    // are how the author withdraws them, and a merge must carry that through
+    ...(author.from !== undefined ? { from: author.from } : {}),
+    ...(author.whenClosed !== undefined ? { whenClosed: author.whenClosed } : {}),
+    structureAt: author.structureAt,
     steps: [...steps.values()],
     ...(closed ? { closed } : {}),
     updatedAt: Math.max(local.updatedAt, incoming.updatedAt),
   };
 }
+
+/** The author-controlled structure, as one comparable string. */
+const structureKey = (t: Ticket): string => JSON.stringify([t.goal, t.kind, t.from ?? null, t.whenClosed ?? null]);
+
+/** Two author revisions in the same millisecond: pick one the same way on
+ *  every peer, whichever side it arrived from, so the merge still commutes. */
+const structureTiebreak = (a: Ticket, b: Ticket): Ticket => (structureKey(a) >= structureKey(b) ? a : b);
+
+/** Would merging `mine` into `row` change the row? Steps are compared by id
+ *  and content, structure and close by value — a ticket as data, order aside.
+ *  This is what lets every peer restore its OWN contribution to a ticket after
+ *  an eviction without any of them deleting another's: a copy that adds
+ *  nothing is left alone, one that adds a step or a state is re-appended. */
+export const contributes = (row: Ticket, mine: Ticket): boolean => canonical(mergeTicket(row, mine)) !== canonical(row);
+
+const canonical = (t: Ticket): string =>
+  JSON.stringify({
+    ...t,
+    steps: [...t.steps].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+  });
 
 export type CloseOutcome =
   /** closed, by its author */
@@ -216,7 +277,7 @@ export function postReview(
   const step: TicketStep = {
     id,
     owner: by.key,
-    intent: "review",
+    intent: existing?.intent ?? takeIntent(ticket.kind),
     description: existing?.description ?? `${by.name}'s review of ${ticket.goal}`,
     needs: existing?.needs ?? [],
     status: failed ? "failed" : "settled",
@@ -237,7 +298,10 @@ export function postReview(
  *  incomplete left the author waiting forever for a reviewer who had already
  *  answered — which is the opposite of what a change request means. */
 const answered = (ticket: Ticket, s: TicketStep): boolean =>
-  s.status === "settled" || (ticket.kind === "review" && s.intent === "review" && s.status === "failed");
+  s.status === "settled" || s.status === "retired" || (ticket.kind === "review" && isTake(s) && s.status === "failed");
+// …and only on a REVIEW. On a plan or a proposal a reader's ↻ means "revise
+// this", so the ticket is not answered until they come back with a ✓ — and a
+// proposal's work steps, which wait on that ✓, do not start.
 
 /** Is every step answered — and is there at least one, since a ticket nobody
  *  has done anything on is not finished? This is the SIGNAL that the ticket
@@ -247,6 +311,31 @@ const answered = (ticket: Ticket, s: TicketStep): boolean =>
  *  (a reviewer who never answered, work abandoned) or finished and still
  *  open (the author has not said so yet). */
 export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && ticket.steps.every((s) => answered(ticket, s));
+
+export type RetireOutcome =
+  | { readonly ticket: Ticket; readonly retired: ReadonlyArray<string>; readonly kept: ReadonlyArray<string>; readonly outcome: "retired" }
+  | { readonly ticket: Ticket; readonly outcome: "not-yours" };
+
+/** The author withdraws steps before their owners acted on them. Explicit —
+ *  a list of ids, never removal by omission, so an incomplete amendment
+ *  cannot erase work by accident. A step already settled or failed is kept
+ *  as it is and named in `kept`; the retired ones stay on the ticket. */
+export function retireSteps(ticket: Ticket, ids: ReadonlyArray<string>, by: string, now: number): RetireOutcome {
+  if (ticket.createdBy !== by) return { ticket, outcome: "not-yours" };
+  const want = new Set(ids);
+  const retired: Array<string> = [];
+  const kept: Array<string> = [];
+  const steps = ticket.steps.map((s) => {
+    if (!want.has(s.id)) return s;
+    if (s.status === "pending" || s.status === "suspended") {
+      retired.push(s.id);
+      return { ...s, status: "retired" as const, updatedAt: now };
+    }
+    kept.push(s.id);
+    return s;
+  });
+  return { ticket: retired.length > 0 ? { ...ticket, steps, updatedAt: now } : ticket, retired, kept, outcome: "retired" };
+}
 
 /** Steps that are up right now, whoever owns them: not settled, and
  *  everything they depend on has been answered.
@@ -263,12 +352,12 @@ export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && 
  *  lists both — because two implementations of one rule drift, and did. */
 export function readySteps(ticket: Ticket): TicketStep[] {
   const done = new Set(ticket.steps.filter((s) => answered(ticket, s)).map((s) => s.id));
-  const reviewed = ticket.steps.some((s) => s.intent === "review" && (s.status === "settled" || s.status === "failed"));
+  const reviewed = ticket.steps.some((s) => isTake(s) && (s.status === "settled" || s.status === "failed"));
   return ticket.steps.filter(
     (s) =>
       (s.status === "pending" || s.status === "suspended") &&
       s.needs.every((n) => done.has(n)) &&
-      !(ticket.kind === "review" && s.intent === "address" && s.needs.length === 0 && !reviewed),
+      !(isJudged(ticket.kind) && s.intent === "address" && s.needs.length === 0 && !reviewed),
   );
 }
 

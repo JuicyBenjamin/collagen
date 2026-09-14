@@ -258,6 +258,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     project: action.project,
                     goal: action.goal,
                     createdBy: identity.pubkey,
+                    structureAt: now,
                     kind: "task",
                     updatedAt: now,
                     steps: action.steps.map((st, i) => ({

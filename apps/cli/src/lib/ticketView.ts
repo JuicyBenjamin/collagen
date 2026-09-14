@@ -11,6 +11,9 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   kind: ticket.kind,
   goal: ticket.goal,
   createdBy: nameFor(ticket.createdBy),
+  /** the tickets this one follows; walk them with review-context when your user asks why */
+  ...(ticket.from && ticket.from.length > 0 ? { from: ticket.from.join(" ") } : {}),
+  ...(ticket.whenClosed ? { whenClosed: ticket.whenClosed } : {}),
   /** every step answered — ready for its author to close, if they say so */
   answered: finished(ticket),
   /** the author's decision, recorded: off the lists, still here to refer back to */

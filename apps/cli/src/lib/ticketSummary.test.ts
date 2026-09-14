@@ -8,7 +8,7 @@ const CAROL = "c".repeat(64);
 const names: Record<string, string> = { [ALICE]: "you", [BOB]: "bob", [CAROL]: "carol" };
 const nameFor = (k: string) => names[k] ?? k.slice(0, 8);
 
-const ticket = (steps: Ticket["steps"], updatedAt = 1000): Ticket => ({ id: "t1", project: "sandbox", goal: "fix NaN", createdBy: ALICE, kind: "task", updatedAt, steps });
+const ticket = (steps: Ticket["steps"], updatedAt = 1000): Ticket => ({ id: "t1", project: "sandbox", goal: "fix NaN", createdBy: ALICE, kind: "task", structureAt: updatedAt, updatedAt, steps });
 const step = (id: string, owner: string, status: Ticket["steps"][number]["status"], needs: string[] = []): Ticket["steps"][number] => ({
   id,
   owner,

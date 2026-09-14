@@ -1,4 +1,4 @@
-import { finished, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { finished, isJudged, isTake, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { GLYPH, type Mark } from "./glyphs";
 
 /** What a ticket wants from the person, now. "done": every step answered
@@ -80,11 +80,11 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   };
   for (const key of weighedIn.keys()) put(key, "spoke");
   for (const step of ticket.steps) {
-    // on a review, only a REVIEW step is a take: the author's own address step
+    // on a judged ticket, only a TAKE is a mark: the author's own address step
     // settling is them acting, not them approving their own change
-    if (ticket.kind === "review" && step.intent !== "review") continue;
+    if (isJudged(ticket.kind) && !isTake(step)) continue;
     if (step.status === "settled") put(step.owner, "approved");
-    if (step.status === "failed") put(step.owner, ticket.kind === "review" && step.intent === "review" ? "changes" : "failed");
+    if (step.status === "failed") put(step.owner, isJudged(ticket.kind) && isTake(step) ? "changes" : "failed");
   }
 
   return {

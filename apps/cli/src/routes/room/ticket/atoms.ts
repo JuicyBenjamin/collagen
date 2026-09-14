@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { diagnostics, type DiagnosticContext } from "../../../diagnostics";
 import { Attachments } from "../../../services/Attachments";
 import { Rooms } from "../../../services/Rooms";
+import { IdentityService } from "../../../services/Identity";
 import { Transcripts } from "../../../services/Transcripts";
 import { runtimeAtom } from "../../../app/runtime";
 
@@ -13,6 +14,7 @@ export const runDiagnosticAtom = runtimeAtom.fn(
     const rooms = yield* Rooms;
     const transcripts = yield* Transcripts;
     const attachments = yield* Attachments;
-    return yield* d.run(params, ctx, { rooms, transcripts, attachments });
+    const { identity } = yield* IdentityService;
+    return yield* d.run(params, ctx, { rooms, transcripts, attachments, me: identity.pubkey });
   }),
 );

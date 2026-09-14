@@ -44,6 +44,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   project: "sandbox",
   goal: "fix average()",
   createdBy: "alice",
+  structureAt: 1,
   kind: "task",
   updatedAt: 1,
   steps: [{ id: "s1", owner: "bob", intent: "investigate", description: "look", needs: [], status: "pending", updatedAt: 1 }],
@@ -78,6 +79,54 @@ describe("RoomLog", () => {
       expect(view.tickets).toHaveLength(1);
       expect(view.tickets[0]!.steps[0]!.status).toBe("settled");
       expect(view.tickets[0]!.steps[0]!.result).toBe("found it");
+    });
+  });
+
+  it("a log entry from an older protocol is migrated in apply: the row is current, nothing to rewrite or evict", async () => {
+    await withLog(async (log) => {
+      // protocol 2/3 wrote no structureAt; apply knows that shape and writes the row current
+      const { structureAt: _s, ...old } = ticket({ updatedAt: 7 });
+      await Effect.runPromise(log.append({ op: "ticket", ticket: old as unknown as Ticket }));
+      const view = await Effect.runPromise(log.read);
+      expect(view.tickets).toHaveLength(1);
+      expect(view.tickets[0]!.structureAt).toBe(7); // the author's clock starts at the last change it had
+      // apply already made the row current, so the read side has nothing to rewrite —
+      // that path is for rows a build before this one left in the old shape (migrate.test)
+      expect(await Effect.runPromise(log.rewriteMigrated)).toBe(0);
+      expect(await Effect.runPromise(log.evictStale)).toBe(0);
+    });
+  });
+
+  it("what an earlier build evicted before it could migrate comes back from our own history", async () => {
+    await withLog(async (log) => {
+      const { structureAt: _s, ...old } = ticket({ updatedAt: 3 });
+      await Effect.runPromise(log.append({ op: "ticket", ticket: old as unknown as Ticket }));
+      // the build before this one could not read it and took the row off the room
+      await Effect.runPromise(log.append({ op: "evict", keys: ["ticket/t1"], protocol: "4", reason: "test", ts: 4 }));
+      expect((await Effect.runPromise(log.read)).tickets).toHaveLength(0);
+      // this build knows the shape: our own writes are walked and the ticket put back, migrated
+      expect(await Effect.runPromise(log.restoreOwn)).toBe(1);
+      const back = await Effect.runPromise(log.read);
+      expect(back.tickets.map((t) => [t.id, t.structureAt])).toEqual([["t1", 3]]);
+      // and a second pass has nothing to do
+      expect(await Effect.runPromise(log.restoreOwn)).toBe(0);
+    });
+  });
+
+  it("a row another peer restored first does not hide our contribution: our settle is merged back in", async () => {
+    await withLog(async (log) => {
+      // our history: the ticket, then bob's step settled
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({}) }));
+      const settled = ticket({ updatedAt: 2, steps: [{ id: "s1", owner: "bob", intent: "investigate", description: "look", needs: [], status: "settled", result: "found it", updatedAt: 2 }] });
+      await Effect.runPromise(log.append({ op: "ticket", ticket: settled }));
+      // an older build evicts the row; someone else restores it from THEIR history — without the settle
+      await Effect.runPromise(log.append({ op: "evict", keys: ["ticket/t1"], protocol: "4", reason: "test", ts: 3 }));
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({}) }));
+      expect((await Effect.runPromise(log.read)).tickets[0]!.steps[0]!.status).toBe("pending");
+      // a row exists, but our copy contributes: it is merged back, not skipped
+      expect(await Effect.runPromise(log.restoreOwn)).toBe(1);
+      expect((await Effect.runPromise(log.read)).tickets[0]!.steps[0]!.status).toBe("settled");
+      expect(await Effect.runPromise(log.restoreOwn)).toBe(0);
     });
   });
 

@@ -83,7 +83,7 @@ describe("the outbox — what went out", () => {
           title: "collagen · review · review opening",
           outgoing: {
             kind: "review",
-            ticket: { id: "t1", project: "collagen", goal: "review opening", createdBy: "me", kind: "review", updatedAt: 1, steps: [] },
+            ticket: { id: "t1", project: "collagen", goal: "review opening", createdBy: "me", kind: "review", structureAt: 1, updatedAt: 1, steps: [] },
             review: { ticketId: "t1", author: "me", authorName: "benjamin", summary: "the opening animation", decisions: [], forks: [], ts: 1 },
           },
         });
