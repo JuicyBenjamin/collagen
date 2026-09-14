@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.9.0-alpha...cli-v0.9.1-alpha) (2026-09-14)
+
+
+### Bug Fixes
+
+* **cli:** closing is the author's decision, recorded — and marks say what was said, not who ([e14518f](https://github.com/JuicyBenjamin/collagen/commit/e14518ff713f1e0b532e24435727d96854ae3aa9))
+
 ## [0.9.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.8.0-alpha...cli-v0.9.0-alpha) (2026-09-10)
 
 
