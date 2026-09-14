@@ -3,7 +3,7 @@
 A living snapshot of what works, what's in flight, and what's next. Update this as we go —
 it's the "where did we leave off" page.
 
-_Last updated: 2026-09-10._
+_Last updated: 2026-09-14._
 
 ## Working today
 
@@ -134,7 +134,21 @@ it with the why attached. Filing that review works today; the nudge does not.
 - [ ] Know which agent called a tool, or the nudge loops back to its author
 - [ ] Say which of your own agents did a thing, in the trace and the outbox
 
-### 5. Identity & devices — [spec](/guide/identity)
+### 5. Plans & proposals — [spec](/guide/tickets#plans-and-proposals-judgment-before-the-code-exists)
+
+Judgment before the code exists. `plan`: here is something I want to do — do you agree?
+`proposal`: now I want something from you — will you? A question everyone sees, your
+thoughts and your agent's insight behind it, the reader's own take *before* they see
+either. Phases are the chain of tickets, never a status. Works alone too.
+
+- [ ] `plan` and `proposal`: the review record with a tense — question, thoughts, insight, forks to come
+- [ ] the blind first take: the context tool opens after this reader has posted, unless they ask
+- [ ] ↻ revises the same ticket; a take older than the revision is stale; a proposal's work steps activate on ✓
+- [ ] `when complete:` — your instruction, handed to your agent in the settle outcome
+- [ ] `from` on a ticket: the ids it follows; `review-context` walks the chain on request
+- [ ] the row and the ticket page say what a ticket follows
+
+### 6. Identity & devices — [spec](/guide/identity)
 
 - [ ] Log out / log in via recovery phrase
 - [ ] Second device (phrase first, device pairing later)

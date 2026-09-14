@@ -166,6 +166,109 @@ for a review. What went is on the record: the outbox shows the whole text, every
 line included.
 :::
 
+## Plans and proposals: judgment before the code exists <Badge type="info" text="planned" />
+
+A review asks a colleague to judge code that exists. Two more kinds ask for judgment
+before it does — advice, input, direction. Neither is a question: a question is what your
+own agent is for. These are for the input that is not AI: a colleague's take on your
+thinking, given before your thinking has coloured theirs.
+
+| kind | what it says | the reader is asked | work steps | it ends when |
+| --- | --- | --- | --- | --- |
+| `plan` | here is something I want to do | do you agree, what would you change, what am I missing | yours, or none yet | you have folded the takes in and decided |
+| `proposal` | now I want something from you | will you do this, here is why | theirs, active on their ✓ | done, or declined |
+
+Two tickets, not two phases of one: a plan that is agreed and built can be followed by a
+proposal for what should happen next, and each is simpler to reason about on its own.
+The phases live in the chain between them (below).
+
+### What sits on the ticket
+
+Three layers, and the order matters:
+
+| layer | whose | who sees it, when |
+| --- | --- | --- |
+| the **question** — the goal line, `should the export stream or buffer?` | yours | everyone, at once |
+| your **thoughts** — this, this and this, what you ruled out, why | yours, in your words | the reader, after their own take |
+| the **insight** — what your agent found, checked, or would add | your agent's, marked as such | same |
+
+The record is the review's why, with a tense: a decision's `what` / `the user:` / `the
+agent:` already separate your words from your agent's, and a plan's forks are a review's
+forks before the line exists.
+
+### The blind first take
+
+The reader is asked for their own input **before** they are shown yours. Their agent
+hands them the question and nothing else; they say what they think; that take lands on a
+step of their own (the `post-review` mechanics, unchanged); *then* the thoughts and the
+insight open up, and the agents lay the two takes side by side — where you agree, where
+you differ, what one of you saw that the other did not. That is where a real back and
+forth starts, instead of a nod at a conclusion already reached.
+
+"Ideally", not a gate: the reader can ask to see everything first, and their agent
+should say that they asked. What collagen can make structural is the reader's *agent*:
+the context tool answers with the question alone until this reader has posted a take,
+unless the person says otherwise. The log is shared, so nothing is hidden — the order is
+a courtesy the agents keep, and they say when they broke it.
+
+### Takes, revisions, agreement
+
+The marks are the ones you know: `✓` agrees, `↻` wants it changed, a bare name has not
+spoken. A ↻ hands the ticket back to you to **revise the same ticket** — never to answer
+in prose — so it keeps saying what is actually agreed; a take older than your latest
+revision is stale, and the row can say so. On a proposal, the recipient's ✓ *is* their
+acceptance: the work steps they own become theirs to do at that moment, and they owe
+nothing before it. Nothing here is a stored status — agreed, stale, accepted are all read
+off the steps and the record's revision time, like every other state in a ticket.
+
+### When it completes
+
+Your settle result is the **conclusion**: what was agreed, in words. It is what later
+tickets refer back to, so it is worth a sentence.
+
+The ticket may also carry, from the day it was filed, **what happens on completion** —
+`when complete: open the Jira tickets for each step`. It is your instruction, written in
+advance in your own words; when you settle the ticket your agent receives it in the
+tool's outcome, at the moment it is needed, and acts on it as on anything else you asked
+for — saying so. Nothing runs on its own: the person who wrote the line is the person
+who settled the ticket.
+
+### Phases are tickets
+
+Nothing is decided once, and no ticket carries a phase. A plan, agreed, births the work;
+the work, done, births a proposal for what comes next, or comes back as a review — and
+each one **references the ones before it**. The chain is the phases:
+
+```
+plan  stream the export, don't buffer it            kristian ✓  alice ↻ → revised → alice ✓
+  ↳ task  bulk export for the backoffice             kristian ✓
+      ↳ review  feat/bulk-export                     kristian ✓  alice ↻
+          ↳ proposal  expose it in the backoffice UI  alice ✓
+```
+
+A ticket carries `from`: the ids of the tickets it follows. At review time, asked why
+the export streams, the reviewer's agent walks back to the plan's conclusion and the fork
+that chose it — so a dispute about the code is settled against what was agreed, not
+re-argued from scratch. Abundance of context, none of it pushed: `review-context`
+follows the chain only when the person asks.
+
+Everyone can weigh in at every step, so this is a product-management flow with the
+product manager, the backender and the reviewer each speaking through their own agent.
+Because nobody has to be named, it is the same flow alone: you plan, your second agent
+gives its blind take, you build it, it reviews the result.
+
+Not built. To decide first:
+
+- a take could reference the decisions it answers (`d1: agree`, `d2: change`, `missing:
+  …`) so the agreement map is data rather than the agents' prose — the same idea as
+  [structured messages](./conversations#structured-messages);
+- `from` is ticket ids on the log, plain — a child names its parents, a parent never
+  lists its children;
+- births are the person's call: completing a plan does not file the work, but the
+  outcome text says how, where the agent reads it;
+- the overview shows lineage without a tree: a `↳` and the parent's kind on the row, and
+  the ticket page names its parents in the meta line.
+
 ## The tools
 
 | Tool | Purpose |
@@ -185,12 +288,13 @@ dependency order is enforced by delivery, not by remembering.
 
 The overview tab lists **every** ticket in the room, whoever made it and whoever it is
 for. A row is a glance and nothing more: its
-**kind**, its **goal**, and **who has answered** (`bob✓` spoke or settled, `bob·` silent
-so far, `carol` weighed in unasked).  Order carries
-the rest: what needs you first, then what is waiting, then failed, then done (dim).
-Nothing is hidden or folded away, and the header is a count. `enter` opens the ticket's own
-page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:
-goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body: **why**,
+**kind** — bright when the ticket is yours, dim when it is someone else's — its **goal**,
+and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
+changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
+never in your own list). Order carries the rest: what needs you first, then what is
+waiting, then failed, then done (dim). Nothing is hidden or folded away. `enter` opens the
+ticket's own page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header
+is the meta: goal, state, age, project, creator, and the people (`bob ↻  carol ✓`). Its body: **why**,
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening
 the whole of it as a page (each decision with `the user:` and `the agent:` lines and the
 `file:line` it produced, then the forks with the road not taken);
