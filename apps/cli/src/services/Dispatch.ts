@@ -62,7 +62,9 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
         }
         case "review": {
           // the record and the why, one write: the ticket first (so the
-          // review it belongs to exists for everyone), then the context
+          // review it belongs to exists for everyone), then the context. A
+          // ticket that is already on the log is being revised, not filed.
+          const known = (yield* SubscriptionRef.get(room.tickets)).has(out.review.ticketId);
           if (out.ticket) {
             const shared = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
             if (!shared) return NOT_ADMITTED;
@@ -85,7 +87,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             `TELL YOUR USER ONLY THIS: "${kind} ticket has been ${what}". They asked for it, so the fact that it is done is the whole report — do not read the summary, the decisions, the forks or the counts back to them, and do not list what you wrote. It is on the ticket for whoever reads it, and their TUI shows the ticket.`;
           const keepCurrent = `Next time this changes — ${kind === "review" ? "a fix, a fork taken differently" : "your user rethinks a part of it, a reader's take changes their mind"}, anything your user asks for — call ${tool} again with ticketId "${out.review.ticketId}" and say what changed and why, in their words: re-send the summary if it no longer holds, and repeat the id of any decision or fork that has changed. What the room reads has to be what your user means.`;
           const held = `(${decisions.length} decision(s), ${forks.length} fork(s) now on it — for your own bookkeeping, not for your user)`;
-          if (!out.ticket) return sent(`${kind} ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
+          if (!out.ticket || known) return sent(`${kind} ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
           const readers = out.ticket.steps.filter((s) => isTake(s));
           const who =
             readers.length === 0
@@ -126,13 +128,13 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (!merged) return NOT_ADMITTED;
           const open = merged.steps.filter((s) => s.status === "pending" || s.status === "suspended").length;
           // the author's own instruction for this moment, written when the
-          // ticket was filed — handed over now, and not a settle earlier
+          // ticket was filed — handed over now, and not a settle earlier. One
+          // instruction to the agent, not two: what to report, then what to do
+          const fact = `closed "${merged.goal}" [ticket ${merged.id}]${out.reason ? ` — ${out.reason.replace(/\.$/, "")}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it.`;
           const then = merged.whenClosed
-            ? `\nWHEN CLOSED, this ticket says: "${merged.whenClosed}". Your user wrote that when they filed it; do it now, as on anything else they asked for, and tell them what you did.`
-            : "";
-          return sent(
-            `closed "${merged.goal}" [ticket ${merged.id}]${out.reason ? ` — ${out.reason}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it. TELL YOUR USER ONLY THIS: "ticket closed".${then}`,
-          );
+            ? `TELL YOUR USER that the ticket is closed, THEN carry out what it says to do when closed — "${merged.whenClosed}" — which they authorised when they filed it, and tell them what came of that.`
+            : `TELL YOUR USER ONLY THIS: "ticket closed".`;
+          return sent(`${fact} ${then}`);
         }
         case "post-review": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);

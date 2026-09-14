@@ -6,7 +6,7 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
-import { AI_OPTIONS, DriveAction, emptyReview, isJudged, isRoomId, mergeReview, newProject, PROTOCOL_VERSION, Room, reviewStepId, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
+import { AI_OPTIONS, DriveAction, emptyReview, isJudged, isRoomId, isTake, mergeReview, newProject, PROTOCOL_VERSION, Room, reviewStepId, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -565,14 +565,65 @@ const makeHandlers = Effect.gen(function* () {
             ...(input.branch ? { branch: input.branch } : {}),
             ...(input.link ? { link: input.link } : {}),
           }, now);
-          const owners = [...new Set(ticket.steps.map((s) => s.owner).filter((o) => o !== identity.pubkey))];
           const present = yield* SubscriptionRef.get(room.roster);
           const known = yield* SubscriptionRef.get(room.members);
-          const named = owners
-            .map((o) => present.find((p) => p.key === o)?.name ?? known.find((m) => m.key === o)?.name)
-            .filter((n): n is string => n !== undefined);
+          const nameOf = (o: string) => present.find((p) => p.key === o)?.name ?? known.find((m) => m.key === o)?.name;
+
+          // "revise the same ticket" has to mean the TICKET too, not only the
+          // why behind it: a recipient who asked for changes to a proposal's
+          // work is asking for different steps. Takes and settled work are
+          // history and stay as they are; what can move is the goal, the
+          // lineage, the close instruction, the pending work, and who is asked.
+          let revised: Ticket = ticket;
+          if (input.goal && input.goal !== ticket.goal) revised = { ...revised, goal: input.goal };
+          if (input.from && input.from.length > 0) revised = { ...revised, from: input.from };
+          if (input.whenClosed) revised = { ...revised, whenClosed: input.whenClosed };
+          const newReaders = (input.peers ?? [])
+            .map((n) => n.trim())
+            .filter((n) => n.length > 0)
+            .map((name) => ({ name, key: (present.find((p) => p.name === name) ?? known.find((m) => m.name === name))?.key }));
+          const unknownReader = newReaders.find((r) => r.key === undefined);
+          if (unknownReader) return `failed: no peer named ${unknownReader.name} — see list-room`;
+          const takenNow = new Map(revised.steps.map((s) => [s.id, s.owner]));
+          for (const r of newReaders) {
+            if (r.key === undefined || r.key === identity.pubkey || revised.steps.some((s) => isTake(s) && s.owner === r.key)) continue;
+            const id = reviewStepId(r.name, r.key, takenNow);
+            takenNow.set(id, r.key);
+            revised = {
+              ...revised,
+              steps: [
+                ...revised.steps.map((s) => (s.id === "address" ? { ...s, needs: [...s.needs, id], updatedAt: now } : s)),
+                { id, owner: r.key, intent: takeIntent(kind), description: `${r.name}'s ${kind === "review" ? "review" : "take"} on ${revised.goal}`, needs: [], status: "pending" as const, updatedAt: now },
+              ],
+            };
+          }
+          if (kind === "proposal" && input.work && input.work.length > 0) {
+            const takes = revised.steps.filter((s) => isTake(s));
+            const steps = [...revised.steps];
+            for (const take of takes) {
+              const who = take.id.slice("review-".length);
+              for (const w of input.work) {
+                const id = `${w.intent}-${who}`;
+                const at = steps.findIndex((s) => s.id === id);
+                if (at < 0) steps.push({ id, owner: take.owner, intent: w.intent, description: w.description, needs: [take.id], status: "pending" as const, updatedAt: now });
+                else if (steps[at]!.status === "pending" || steps[at]!.status === "suspended") steps[at] = { ...steps[at]!, description: w.description, updatedAt: now };
+                // settled or failed work is what happened; a revision does not rewrite it
+              }
+            }
+            revised = { ...revised, steps };
+          }
+          const changed = revised !== ticket;
+          if (changed) revised = { ...revised, updatedAt: now };
+
+          const owners = [...new Set(revised.steps.map((s) => s.owner).filter((o) => o !== identity.pubkey))];
+          const named = owners.map(nameOf).filter((n): n is string => n !== undefined);
           const to = named.length > 0 ? named.join(", ") : "the room";
-          return yield* outbox.tell({ roomId, to, title: `${ticket.goal} · more why`, outgoing: { kind: "review", review } });
+          return yield* outbox.tell({
+            roomId,
+            to,
+            title: `${revised.goal} · ${changed ? "revised" : "more why"}`,
+            outgoing: { kind: "review", ...(changed ? { ticket: revised } : {}), review },
+          });
         }
 
         // a new review: who is asked (0 to many), which project, and the why

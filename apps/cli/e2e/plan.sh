@@ -51,10 +51,11 @@ R3=$(call $B "$SB" review-context "$J3")
 expect "now the thoughts open to him" "$R3" "times out on big customers"
 wait_until "alice's side: bob asked for changes, in those words" "bob asked for changes" bash -c "cat '$OUT/alice.log'"
 expect "alice's address step is not up: a ↻ on a plan means revise, not act" "$(rows $A "$SA" "$PID")" "answered: false"
-AMEND="{\"ticketId\":\"$PID\",\"summary\":\"stream rows, paged by cursor not by id\",\"decisions\":[{\"id\":\"d1\",\"what\":\"stream the rows, paged by cursor\",\"userWhy\":\"he said the backoffice export times out on big customers\",\"agentWhy\":\"bob is right that the id is composite; a cursor on (created_at, id) pages cleanly\"}]}"
+AMEND="{\"ticketId\":\"$PID\",\"goal\":\"stream the export, paged by cursor\",\"summary\":\"stream rows, paged by cursor not by id\",\"decisions\":[{\"id\":\"d1\",\"what\":\"stream the rows, paged by cursor\",\"userWhy\":\"he said the backoffice export times out on big customers\",\"agentWhy\":\"bob is right that the id is composite; a cursor on (created_at, id) pages cleanly\"}]}"
 J4="$AMEND"  # built first: bash 3.2 mangles \" nested in "$( )"
 R4=$(call $A "$SA" ask-plan "$J4")
 expect "alice revises the same ticket" "$R4" "plan ticket updated"
+expect "…and the ticket itself moved, not only the why: the goal is the revised one" "$(rows $A "$SA" "$PID")" "goal: .{0,3}stream the export, paged by cursor"
 wait_until "bob is told the plan moved" "revised the why" bash -c "cat '$OUT/bob.log'"
 J5="{\"ticketId\":\"$PID\",\"findings\":\"cursor paging — yes\"}"  # built first: bash 3.2 mangles \" nested in "$( )"
 R5=$(call $B "$SB" post-review "$J5")
@@ -66,8 +67,9 @@ SETTLED=$(call $A "$SA" settle-step "{\"ticketId\":\"$PID\",\"stepId\":\"address
 expect "the settle offers the close and nothing else" "$SETTLED" "When your user says they are done with it .{1,6} and only then .{1,6} call close-ticket"
 expect "…the when-closed line is NOT handed over on a settle" "$(echo "$SETTLED" | grep -c 'WHEN CLOSED')" "^0$"
 CLOSED=$(call $A "$SA" close-ticket "{\"ticketId\":\"$PID\",\"reason\":\"agreed: stream rows paged by cursor\"}")
-expect "alice closes with the conclusion as the reason" "$CLOSED" "closed .{1,3}stream the export.{1,80} .{1,3} agreed: stream rows paged by cursor"
-expect "…and only now is her instruction handed back to her agent" "$CLOSED" "WHEN CLOSED, this ticket says: .{1,3}open a Jira ticket for the export work"
+expect "alice closes with the conclusion as the reason" "$CLOSED" "closed .{1,3}stream the export, paged by cursor.{1,60} .{1,3} agreed: stream rows paged by cursor"
+expect "…and only now is her instruction handed back to her agent — one instruction: report the close, then act" "$CLOSED" "TELL YOUR USER that the ticket is closed, THEN carry out what it says to do when closed .{1,6} .{1,3}open a Jira ticket for the export work"
+expect "…not two: no bare 'ticket closed' line beside it" "$(echo "$CLOSED" | grep -c 'ONLY THIS')" "^0$"
 
 echo "## the work follows the plan, and says so"
 TASK=$(call $A "$SA" create-ticket "{\"goal\":\"bulk export, streamed\",\"project\":\"sandbox\",\"from\":[\"$PID\"],\"steps\":[{\"owner\":\"bob\",\"intent\":\"implement\",\"description\":\"cursor-paged export\"}]}")
@@ -92,7 +94,20 @@ QROWS=$(rows $B "$SB" "$QID")
 expect "bob has a take step and a work step waiting on it" "$QROWS" "build-bob,bob,build,(pending|suspended),review-bob"
 expect "…the work is not his to do yet" "$(grep -c 'step build-bob actionable' "$OUT/bob.log")" "^0$"
 expect "…and the proposal follows the plan" "$QROWS" "from: $PID"
+echo "## bob wants the work changed — alice revises the work on the same ticket"
+NO="{\"ticketId\":\"$QID\",\"findings\":\"a button is fine but it needs a job, not a request-time export\",\"failed\":true}"
+call $B "$SB" post-review "$NO" > /dev/null
+wait_until "alice hears the change request" "ticket ${QID:0:8}: bob asked for changes" bash -c "cat '$OUT/alice.log'"
+REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"what\":\"the button enqueues a job; the file comes by mail\",\"userWhy\":\"bob is right that the export is too slow for a request\"}],\"work\":[{\"intent\":\"build\",\"description\":\"the button, enqueuing an export job\"},{\"intent\":\"mail\",\"description\":\"send the finished file to the requester\"}]}"
+REVISED=$(call $A "$SA" propose "$REWORK")
+expect "the proposal is revised, not re-filed" "$REVISED" "proposal ticket updated"
+QROWS2=$(rows $A "$SA" "$QID")
+expect "the pending work step now says the new thing" "$QROWS2" "build-bob,bob,build,(pending|suspended),review-bob,.{0,3}the button, enqueuing an export job"
+expect "…and the added work is a new step of bob's, waiting on his take" "$QROWS2" "mail-bob,bob,mail,(pending|suspended),review-bob"
+expect "…his ↻ take is history, untouched" "$QROWS2" "review-bob,bob,take,failed"
+wait_until "bob's copy has the revised work" "mail-bob" rows $B "$SB" "$QID"
 YES="{\"ticketId\":\"$QID\",\"findings\":\"yes, next sprint\"}"
 call $B "$SB" post-review "$YES" > /dev/null
 wait_until "bob's ✓ started the work: the build step is his now" "step build-bob actionable" bash -c "cat '$OUT/bob.log'"
+wait_until "…and the added step too" "step mail-bob actionable" bash -c "cat '$OUT/bob.log'"
 kill_all; summary
