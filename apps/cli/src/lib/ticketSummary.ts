@@ -22,6 +22,9 @@ export interface TicketSummary {
   readonly mine: boolean;
   /** Whose view this is — so a row can leave them out of its own people. */
   readonly me: string;
+  /** The reader posted a review step on this ticket (their own second agent,
+   *  when it is their ticket). */
+  readonly reviewedByMe: boolean;
   /** Newest of the ticket's own update and its last message. */
   readonly lastActivity: number;
 }
@@ -61,13 +64,16 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   // review ticket a failed step is not a failure, it is changes asked for.
   // Someone who has done nothing gets no entry: their name stands alone.
   const marks = new Map<string, Mark>();
-  const rank: Record<Mark, number> = { changes: 3, failed: 3, approved: 2, spoke: 1 };
+  const rank: Record<Mark, number> = { changes: 3, failed: 3, approved: 2, spoke: 1, yours: 0 }; // `yours` is a row mark, never a person's
   const put = (key: string, mark: Mark) => {
     const had = marks.get(key);
     if (had === undefined || rank[mark] > rank[had]) marks.set(key, mark);
   };
   for (const key of weighedIn.keys()) put(key, "spoke");
   for (const step of ticket.steps) {
+    // on a review, only a REVIEW step is a take: the author's own address step
+    // settling is them acting, not them approving their own change
+    if (ticket.kind === "review" && step.intent !== "review") continue;
     if (step.status === "settled") put(step.owner, "approved");
     if (step.status === "failed") put(step.owner, ticket.kind === "review" && step.intent === "review" ? "changes" : "failed");
   }
@@ -81,6 +87,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     marks,
     mine: ticket.createdBy === me,
     me,
+    reviewedByMe: ticket.steps.some((st) => st.owner === me && st.intent === "review" && (st.status === "settled" || st.status === "failed")),
     lastActivity,
   };
 }
@@ -106,7 +113,12 @@ export function peopleLabel(s: TicketSummary, nameFor: (key: string) => string):
     const mark = s.marks.get(key);
     return mark === undefined ? nameFor(key) : `${nameFor(key)} ${GLYPH[mark]}`;
   };
-  const others = s.asked.filter((k) => k !== s.me);
+  // the reader is left out as the AUTHOR waiting to act — that is every row of
+  // theirs and says nothing. A review they posted on their own ticket is a
+  // different thing: that is their second agent speaking (the solo case), and
+  // hiding it left a request for changes with no trace on screen.
+  const meAsReader = s.reviewedByMe && (s.marks.get(s.me) === "approved" || s.marks.get(s.me) === "changes");
+  const others = s.asked.filter((k) => k !== s.me || meAsReader);
   const unasked = [...s.weighedIn.keys()].filter((k) => k !== s.me && !s.asked.includes(k));
   return [...others, ...unasked].map(one).join("  ");
 }

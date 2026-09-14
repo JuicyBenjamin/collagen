@@ -7,7 +7,7 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { LEGEND } from "../../../../../lib/glyphs";
+import { GLYPH, LEGEND } from "../../../../../lib/glyphs";
 import { compareSummaries, peopleLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
@@ -100,10 +100,14 @@ function TicketRow({
   nameFor: (key: string) => string;
 }) {
   const people = peopleLabel(s, nameFor);
+  const yours = s.state === "needs-you";
   return (
     <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
-      {"  "}
+      {/* the row's own mark: it is yours to act on. Carried here and not only
+          in the people's colour, because on your own ticket the people list can
+          be empty — and then a change request had no trace on screen at all */}
+      <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
       <span fg={s.mine ? theme.accent : theme.dim}>{t.kind.padEnd(9)}</span>
       {t.goal}
       {people.length > 0 ? (

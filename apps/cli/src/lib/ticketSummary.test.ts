@@ -120,6 +120,22 @@ describe("summarize", () => {
     expect(summarize(task, [], ALICE).state).toBe("failed");
   });
 
+  it("a review you posted on your own ticket is shown: that is your second agent speaking", () => {
+    const solo = {
+      ...ticket([
+        { ...step("address", ALICE, "pending"), intent: "address" },
+        { ...step("review-alice", ALICE, "failed"), intent: "review" },
+      ]),
+      kind: "review" as const,
+    };
+    expect(peopleLabel(summarize(solo, [], ALICE), nameFor)).toBe("you ↻");
+    // …but settling your own address step is acting, not approving your own change
+    const acted = { ...solo, steps: solo.steps.map((s) => (s.id === "address" ? { ...s, status: "settled" as const } : s)) };
+    expect(peopleLabel(summarize(acted, [], ALICE), nameFor)).toBe("you ↻");
+    const plain = { ...ticket([{ ...step("address", ALICE, "settled"), intent: "address" }]), kind: "review" as const };
+    expect(peopleLabel(summarize(plain, [], ALICE), nameFor)).toBe("");
+  });
+
   it("says whose ticket it is, which is what the reader's own name used to imply", () => {
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], ALICE).mine).toBe(true);
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], BOB).mine).toBe(false);
