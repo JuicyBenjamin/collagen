@@ -8,17 +8,18 @@ import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
 import { GLYPH, LEGEND } from "../../../../../lib/glyphs";
-import { compareSummaries, peopleLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { compareSummaries, marksLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
-/** Shared tickets — every ticket the room has that is not over, whoever made
- *  it and whoever it is for. Ordered by what wants a person: needs-you, then
- *  waiting, then failed. A finished ticket — every step answered — is closed:
- *  it leaves this list and stays on the log, where agents still read it and
- *  later tickets refer back to it. There is no close key and no delete: the
- *  author settling their own step is the close. ↑↓ select, enter opens the
- *  ticket's page. The `›` is the cursor, nothing else. */
+/** Shared tickets — every ticket the room has that its author has not
+ *  closed, whoever made it and whoever it is for. Ordered by what wants a
+ *  person: needs-you, then waiting, then failed, then finished-but-open (dim:
+ *  every step answered, its author has not said it is over). A CLOSED ticket
+ *  — the author's recorded decision, close-ticket — leaves this list and
+ *  stays on the log with its steps as they were, where agents still read it
+ *  and later tickets refer back to it. Nothing is deleted. ↑↓ select, enter
+ *  opens the ticket's page. The `›` is the cursor, nothing else. */
 export function Tickets() {
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
@@ -35,7 +36,7 @@ export function Tickets() {
   // every ticket the room has that is not over, ordered by what wants a person
   const shown = tickets
     .map((t) => ({ t, s: summarize(t, trace, me) }))
-    .filter((r) => r.s.state !== "done")
+    .filter((r) => r.s.state !== "closed")
     .sort((a, b) => compareSummaries(a.s, b.s));
   const needsYou = shown.filter((r) => r.s.state === "needs-you").length;
 
@@ -79,9 +80,9 @@ export function Tickets() {
 }
 
 /** One ticket at a glance: whose it is, what kind it is, what it is about,
- *  and what each of the OTHER people on it did — `bob ✓` asked for no
- *  changes, `dave ↻` asked for some, a bare name means nothing from them yet
- *  (lib/glyphs, spelled out in the hint line).
+ *  and what has been said on it — `↻` changes were asked for, `✓` someone
+ *  approved, one glyph per kind of answer however many gave it (lib/glyphs,
+ *  spelled out in the hint line). Not who: that is the ticket page's job.
  *
  *  The kind carries the ownership: bright when this person started the
  *  ticket, dim when somebody else did, and it keeps that colour under the
@@ -99,10 +100,11 @@ function TicketRow({
   selected: boolean;
   nameFor: (key: string) => string;
 }) {
-  const people = peopleLabel(s, nameFor);
+  const people = marksLabel(s);
   const yours = s.state === "needs-you";
+  const dim = s.state === "done";
   return (
-    <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
+    <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
       {selected ? "› " : "  "}
       {/* the row's own mark: it is yours to act on. Carried here and not only
           in the people's colour, because on your own ticket the people list can

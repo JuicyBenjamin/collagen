@@ -208,6 +208,16 @@ export const SettleStep = Tool.make("settle-step", {
   success: Schema.String,
 });
 
+export const CloseTicket = Tool.make("close-ticket", {
+  description:
+    "Close a ticket your user created — only when they say they are done with it, never because you decided it is over. Closing is the author's decision, separate from completion: a ticket whose every step is answered is READY to close (settle-step tells you so), but the person closes it; and they may close one whose reviewer never answered or whose work was abandoned. The ticket leaves the overview and stays on the room's log with its steps exactly as they were, so later tickets can still refer to it; get-tickets keeps showing it with closed: true. Pass 'reason' when the close needs explaining (abandoned, superseded, done differently) — it goes on the record. Somebody else's ticket is refused: say what your user thinks with send-to-peer instead.",
+  parameters: Schema.Struct({
+    ticketId: Schema.String,
+    reason: Schema.optional(Schema.String),
+  }),
+  success: Schema.String,
+});
+
 export const DrivePeer = Tool.make("drive-peer", {
   description:
     "TESTING ONLY: remote-control a mock peer (one whose ai starts with 'mock:') so a single machine can exercise the full cross-peer flow. The driven peer performs the action as itself, so everything arrives back through the real pipeline. 'action' is the action object, tagged by 'kind': {kind:'send-message', project, intent, findings, ticketId?} (the peer sends YOU a message; reusing a project continues the same thread), {kind:'create-ticket', project, goal, steps:[{intent, description, mine}]} (mine=true → the mock owns the step, mine=false → you own it and your agent is triggered), {kind:'settle-step', ticketId, stepId, result} (the peer settles a step it owns), {kind:'post-review', ticketId, result, failed?} (the peer puts its review on a review ticket; failed:true asks for changes). Real peers ignore drive requests.",
@@ -309,6 +319,7 @@ export const CollagenToolkit = Toolkit.make(
   AskReview,
   PostReview,
   SettleStep,
+  CloseTicket,
   GetTickets,
   AddProject,
   RemoveProject,
@@ -339,6 +350,7 @@ export const DevCollagenToolkit = Toolkit.make(
   AskReview,
   PostReview,
   SettleStep,
+  CloseTicket,
   GetTickets,
   AddProject,
   RemoveProject,
@@ -740,6 +752,17 @@ const makeHandlers = Effect.gen(function* () {
           to: author,
           title: `${ticket.goal} · your review`,
           outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false },
+        });
+      }),
+      "close-ticket": Effect.fn("Mcp.closeTicket")(function* (input: { ticketId: string; reason?: string }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
+        if (!ticket) return yield* Effect.die(`no ticket ${input.ticketId} — check get-tickets`);
+        return yield* outbox.tell({
+          roomId,
+          to: "the room",
+          title: `${ticket.goal} · closed`,
+          outgoing: { kind: "close", ticketId: input.ticketId, ...(input.reason ? { reason: input.reason } : {}) },
         });
       }),
       "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {

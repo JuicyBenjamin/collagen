@@ -43,6 +43,20 @@ export type TicketStep = typeof TicketStep.Type;
 export const TicketKind = Schema.Literals(["task", "review"]);
 export type TicketKind = typeof TicketKind.Type;
 
+/** The author's decision that the ticket is over — recorded, not inferred.
+ *  Every step answered means it MAY be ready to close; the person may also
+ *  close a ticket whose reviewer never answered, or abandon one whose work
+ *  stalled. Steps keep whatever state they had: closing is history, not a
+ *  tidy-up. Like merging a pull request without a review: the author's call. */
+export const Closed = Schema.Struct({
+  /** Pubkey (hex) of who closed it — the author. */
+  by: Schema.String,
+  ts: Schema.Finite,
+  /** Why, when a close needs explaining (abandoned, superseded, done differently). */
+  reason: Schema.optional(Schema.String),
+});
+export type Closed = typeof Closed.Type;
+
 export const Ticket = Schema.Struct({
   id: Schema.String,
   project: Schema.String,
@@ -51,6 +65,8 @@ export const Ticket = Schema.Struct({
   createdBy: Schema.String,
   kind: TicketKind,
   steps: Schema.Array(TicketStep),
+  /** Present once the author closed it: off the lists, on the log. */
+  closed: Schema.optional(Closed),
   updatedAt: Schema.Finite,
 });
 export type Ticket = typeof Ticket.Type;
@@ -63,6 +79,8 @@ export type Ticket = typeof Ticket.Type;
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
  *    by updatedAt, then lexicographic result as the final tiebreak
  *  - goal follows the newer updatedAt (only the creator should edit it)
+ *  - closed sticks: once either copy carries it, the merge does — a copy
+ *    written before the close cannot reopen it; two closes keep the earlier
  */
 export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
   if (local.id !== incoming.id) return local;
@@ -73,12 +91,34 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     steps.set(s.id, mine ? mergeStep(mine, s) : s);
   }
   const newer = incoming.updatedAt > local.updatedAt ? incoming : local;
+  const closed =
+    local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
   return {
     ...local,
     goal: newer.goal,
     kind: newer.kind,
     steps: [...steps.values()],
+    ...(closed ? { closed } : {}),
     updatedAt: Math.max(local.updatedAt, incoming.updatedAt),
+  };
+}
+
+export type CloseOutcome =
+  /** closed, by its author */
+  | "closed"
+  /** somebody else's ticket: refused, nothing changed */
+  | "not-yours"
+  /** it was closed already */
+  | "already";
+
+/** Close a ticket, as one rule for every caller: the author's decision, the
+ *  steps untouched. Returns the closed ticket, or why not. */
+export function closeTicket(ticket: Ticket, by: string, reason: string | undefined, now: number): { readonly ticket: Ticket; readonly outcome: CloseOutcome } {
+  if (ticket.createdBy !== by) return { ticket, outcome: "not-yours" };
+  if (ticket.closed) return { ticket, outcome: "already" };
+  return {
+    ticket: { ...ticket, closed: { by, ts: now, ...(reason ? { reason } : {}) }, updatedAt: now },
+    outcome: "closed",
   };
 }
 
@@ -199,11 +239,13 @@ export function postReview(
 const answered = (ticket: Ticket, s: TicketStep): boolean =>
   s.status === "settled" || (ticket.kind === "review" && s.intent === "review" && s.status === "failed");
 
-/** Is the ticket over? Every step answered — and there is at least one step,
- *  because a ticket nobody has done anything on is not "done". This is what
- *  closes a ticket: there is no close operation, and none is needed. The
- *  author settling their own step is the close; the record stays on the log
- *  for whoever refers back to it, and leaves the lists. */
+/** Is every step answered — and is there at least one, since a ticket nobody
+ *  has done anything on is not finished? This is the SIGNAL that the ticket
+ *  may be ready to close, not the close: the author's agent is told "when your
+ *  user is done with it, close it", and the person decides. Completion and
+ *  closure are two different facts, and a ticket can be closed unfinished
+ *  (a reviewer who never answered, work abandoned) or finished and still
+ *  open (the author has not said so yet). */
 export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && ticket.steps.every((s) => answered(ticket, s));
 
 /** Steps that are up right now, whoever owns them: not settled, and

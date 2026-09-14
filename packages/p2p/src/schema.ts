@@ -22,7 +22,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "2";
+export const PROTOCOL_VERSION = "3";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -352,6 +352,12 @@ export const Outgoing = Schema.Union([
     stepId: Schema.String,
     result: Schema.String,
     failed: Schema.Boolean,
+  }),
+  /** The author closes their ticket: off the lists, on the log, steps as they were. */
+  Schema.Struct({
+    kind: Schema.Literal("close"),
+    ticketId: Schema.String,
+    reason: Schema.optional(Schema.String),
   }),
   /** Attach files you hold to a ticket: references go on the log; the files
    *  go to members who fetch them while you are online. */

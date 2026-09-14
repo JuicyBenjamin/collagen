@@ -1,9 +1,11 @@
 import { finished, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { GLYPH, type Mark } from "./glyphs";
 
-/** What a ticket wants from the person, now. "done" is the closed ticket:
- *  it stays on the log and leaves the lists. */
-export type TicketState = "needs-you" | "waiting" | "failed" | "done";
+/** What a ticket wants from the person, now. "done": every step answered
+ *  and the author has not closed it yet — theirs to close, so on their own
+ *  ticket it is needs-you. "closed": the author's decision, recorded; off the
+ *  lists, on the log. */
+export type TicketState = "needs-you" | "waiting" | "failed" | "done" | "closed";
 
 export interface TicketSummary {
   readonly state: TicketState;
@@ -20,16 +22,11 @@ export interface TicketSummary {
   readonly marks: ReadonlyMap<string, Mark>;
   /** Did this person start it? The lists colour their own tickets. */
   readonly mine: boolean;
-  /** Whose view this is — so a row can leave them out of its own people. */
-  readonly me: string;
-  /** The reader posted a review step on this ticket (their own second agent,
-   *  when it is their ticket). */
-  readonly reviewedByMe: boolean;
   /** Newest of the ticket's own update and its last message. */
   readonly lastActivity: number;
 }
 
-const ORDER: Record<TicketState, number> = { "needs-you": 0, waiting: 1, failed: 2, done: 3 };
+const ORDER: Record<TicketState, number> = { "needs-you": 0, waiting: 1, failed: 2, done: 3, closed: 4 };
 
 /** Is this message part of the ticket's conversation? Tagged with it, or on
  *  one of the threads its steps travel on. */
@@ -45,12 +42,24 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   // needs-you about a ticket nobody had reviewed)
   const up = readySteps(ticket);
   const waitingOn = [...new Set(up.map((s) => s.owner))];
-  // done is p2p's `finished`: every step answered, where on a review a
-  // reader's ↻ is an answer. So a review the author has settled is done
-  // even when a reader asked for changes — the author acted, and said so.
+  // completion is p2p's `finished`: every step answered, where on a review a
+  // reader's ↻ is an answer. Closure is the author's recorded decision. A
+  // finished ticket the author has not closed is theirs to close — needs-you
+  // on their own row, "done" on everyone else's.
+  const mine = ticket.createdBy === me;
   const done = finished(ticket);
   const failed = !done && ticket.steps.some((s) => s.status === "failed");
-  const state: TicketState = waitingOn.includes(me) ? "needs-you" : waitingOn.length > 0 ? "waiting" : failed ? "failed" : done ? "done" : "waiting";
+  const state: TicketState = ticket.closed
+    ? "closed"
+    : waitingOn.includes(me) || (done && mine)
+      ? "needs-you"
+      : waitingOn.length > 0
+        ? "waiting"
+        : failed
+          ? "failed"
+          : done
+            ? "done"
+            : "waiting";
 
   const threads = ticketThreads(ticket);
   const about = messages.filter((m) => aboutTicket(ticket, threads, m));
@@ -85,9 +94,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     weighedIn,
     settledBy,
     marks,
-    mine: ticket.createdBy === me,
-    me,
-    reviewedByMe: ticket.steps.some((st) => st.owner === me && st.intent === "review" && (st.status === "settled" || st.status === "failed")),
+    mine,
     lastActivity,
   };
 }
@@ -96,31 +103,15 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
 export const compareSummaries = (a: TicketSummary, b: TicketSummary): number =>
   ORDER[a.state] - ORDER[b.state] || b.lastActivity - a.lastActivity;
 
-/** `bob ✓  carol ✓  dave ↻` — the OTHER people on the ticket and what each of
- *  them did (see lib/glyphs), so two approvals and one asking for changes can
- *  be counted at a glance. Asked people first, then anyone who weighed in
- *  unasked.
- *
- *  The reader is not in their own list. "you" said only that they own a step
- *  here, which on a review they always do — it was true of every row and so
- *  told nobody anything; whether a row wants them is said by its place in the
- *  list and its colour. Whose ticket it is, is said by the colour of the kind.
- *
- *  A mark is its own word, a space off the name: `bob✓` reads as one token,
- *  and on a review it read as if bob had approved his own change. */
-export function peopleLabel(s: TicketSummary, nameFor: (key: string) => string): string {
-  const one = (key: string) => {
-    const mark = s.marks.get(key);
-    return mark === undefined ? nameFor(key) : `${nameFor(key)} ${GLYPH[mark]}`;
-  };
-  // the reader is left out as the AUTHOR waiting to act — that is every row of
-  // theirs and says nothing. A review they posted on their own ticket is a
-  // different thing: that is their second agent speaking (the solo case), and
-  // hiding it left a request for changes with no trace on screen.
-  const meAsReader = s.reviewedByMe && (s.marks.get(s.me) === "approved" || s.marks.get(s.me) === "changes");
-  const others = s.asked.filter((k) => k !== s.me || meAsReader);
-  const unasked = [...s.weighedIn.keys()].filter((k) => k !== s.me && !s.asked.includes(k));
-  return [...others, ...unasked].map(one).join("  ");
+/** `↻ ✓` — what has been said on the ticket, not by whom: changes were
+ *  asked for, someone approved, a step failed, someone spoke. One glyph per
+ *  kind of answer however many gave it, in the order that demands attention.
+ *  Names were here and came out: at a glance it is what was said that
+ *  matters, and "you ↻" read as the reader having asked themselves for
+ *  changes. Who said what is on the ticket's page, step by step. */
+export function marksLabel(s: TicketSummary): string {
+  const present = new Set(s.marks.values());
+  return (["changes", "failed", "approved", "spoke"] as const).filter((m) => present.has(m)).map((m) => GLYPH[m]).join(" ");
 }
 
 /** "2m" · "3h" · "5d" — compact, for a list column. */
@@ -132,4 +123,4 @@ export function age(ts: number, now: number): string {
   return `${Math.round(s / 86400)}d`;
 }
 
-export const STATE_LABEL: Record<TicketState, string> = { "needs-you": "needs you", waiting: "waiting", failed: "failed", done: "done" };
+export const STATE_LABEL: Record<TicketState, string> = { "needs-you": "needs you", waiting: "waiting", failed: "failed", done: "done", closed: "closed" };

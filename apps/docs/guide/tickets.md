@@ -185,18 +185,23 @@ dependency order is enforced by delivery, not by remembering.
 
 The overview tab lists **every** ticket in the room, whoever made it and whoever it is
 for. A row is a glance and nothing more: its
-**kind**, its **goal**, and **who has answered** (`bob✓` spoke or settled, `bob·` silent
-so far, `carol` weighed in unasked).  Order carries
-the rest: what needs you first, then what is waiting, then failed, then done (dim).
-Nothing is hidden or folded away, and the header is a count. `enter` opens the ticket's own
-page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header is the meta:
-goal, state, age, project, creator, and the people (`bob✓ carol you·`). Its body: **why**,
-||||||| Common ancestor
 **kind** — bright when the ticket is yours, dim when it is someone else's — its **goal**,
-and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
-changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
-never in your own list). Order carries the rest: what needs you first, then what is
-waiting, then failed, then done (dim). Nothing is hidden or folded away. `enter` opens the
+a `▸` when it is yours to act on, and **what has been said** on it: `↻` changes were
+asked for, `✓` someone approved, `✕` a step failed, `…` someone spoke — one glyph per kind
+of answer however many gave it, and no names, because at a glance it is what was said
+that matters; the ticket's page says who. Order carries the rest: what needs you first,
+then what is waiting, then failed, then finished-but-open (dim).
+
+**Completion and closure are two facts.** A ticket is *finished* when every step is
+answered — a reader's ↻ on a review counts as an answer — and that is a signal, not an
+end: it makes the ticket its author's to act on, and the settle that finished it tells
+their agent "when your user says they are done with it, `close-ticket`". *Closing* is the
+author's decision, recorded on the log with an optional reason: the ticket leaves the
+list and stays, steps exactly as they were, where `get-tickets` still shows it
+(`closed: true`) and later tickets refer back to it. The author can close a ticket whose
+reviewer never answered or whose work was abandoned — like merging a pull request without
+a review, it is their call. Nothing is deleted, and nobody else can close it for them.
+`enter` opens the
 ticket's own page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header
 is the meta: goal, state, age, project, creator, and the people (`bob ↻  carol ✓`). Its body: **why**,
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening
