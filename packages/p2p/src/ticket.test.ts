@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionableSteps, closeTicket, finished, mergeTicket, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
+import { actionableSteps, closeTicket, contributes, finished, mergeTicket, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
 import { deriveThreadId } from "./topic";
 
 const step = (over: Partial<TicketStep>): TicketStep => ({
@@ -18,6 +18,7 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
   project: "sandbox",
   goal: "fix average()",
   createdBy: "alice",
+  structureAt: 1,
   kind: "task",
   steps: [],
   updatedAt: 1,
@@ -81,6 +82,7 @@ describe("actionableSteps", () => {
 describe("stepThreadId", () => {
   const t = ticket({
     createdBy: "alice",
+  structureAt: 1,
     steps: [
       step({ id: "work", owner: "bob" }),
       step({ id: "review", owner: "alice", needs: ["work"] }),
@@ -210,6 +212,113 @@ describe("a review ticket asks 0 to many people", () => {
     // two closes: the earlier one is the record
     const again = { ...open, closed: { by: ALICE, ts: 3 } };
     expect(mergeTicket(closed, again).closed?.ts).toBe(3);
+  });
+
+  it("on a plan, a reader's ↻ is not an answer: the author revises, and the ticket waits for the ✓", () => {
+    const plan = ticket({ kind: "plan", createdBy: ALICE, steps: [step({ id: "review-bob", owner: BOB.key, intent: "take" }), step({ id: "address", owner: ALICE, needs: ["review-bob"] })] });
+    const changes = postReview(plan, BOB, "buffer it instead", true, 5).ticket;
+    expect(changes.steps.find((s) => s.id === "review-bob")!.intent).toBe("take"); // the kind's word, kept
+    expect(actionableSteps(changes, ALICE)).toEqual([]); // not answered — revise
+    expect(finished(changes)).toBe(false);
+    const agreed = postReview(changes, BOB, "streaming it is", false, 9).ticket;
+    expect(actionableSteps(agreed, ALICE).map((s) => s.id)).toEqual(["address"]);
+  });
+
+  it("a proposal's work starts on the recipient's ✓ and not before", () => {
+    const proposal = ticket({
+      kind: "proposal",
+      createdBy: ALICE,
+      steps: [
+        step({ id: "review-bob", owner: BOB.key, intent: "take" }),
+        step({ id: "implement-bob", owner: BOB.key, intent: "implement", needs: ["review-bob"] }),
+        step({ id: "address", owner: ALICE, needs: ["review-bob"] }),
+      ],
+    });
+    expect(actionableSteps(proposal, BOB.key).map((s) => s.id)).toEqual(["review-bob"]); // his take is up, the work is not
+    const declined = postReview(proposal, BOB, "not like this", true, 5).ticket;
+    expect(actionableSteps(declined, BOB.key)).toEqual([]); // nothing owed after a ↻
+    const accepted = postReview(proposal, BOB, "yes", false, 5).ticket;
+    expect(actionableSteps(accepted, BOB.key).map((s) => s.id)).toEqual(["implement-bob"]);
+  });
+
+  it("retiring work is explicit and keeps history: never actionable, nothing waits on it, answered work stands", () => {
+    const proposal = ticket({
+      kind: "proposal",
+      createdBy: ALICE,
+      steps: [
+        step({ id: "review-bob", owner: BOB.key, intent: "take", status: "settled" }),
+        step({ id: "build-bob", owner: BOB.key, intent: "build", needs: ["review-bob"] }),
+        step({ id: "mail-bob", owner: BOB.key, intent: "mail", needs: ["review-bob"], status: "settled" }),
+        step({ id: "address", owner: ALICE, needs: ["review-bob"] }),
+      ],
+    });
+    expect(retireSteps(proposal, ["build-bob"], BOB.key, 5).outcome).toBe("not-yours");
+    const done = retireSteps(proposal, ["build-bob", "mail-bob", "nope-bob"], ALICE, 5);
+    expect(done.outcome).toBe("retired");
+    if (done.outcome !== "retired") throw new Error("unreachable");
+    expect(done.retired).toEqual(["build-bob"]);
+    expect(done.kept).toEqual(["mail-bob"]); // settled work is what happened
+    const build = done.ticket.steps.find((s) => s.id === "build-bob")!;
+    expect(build.status).toBe("retired");
+    expect(actionableSteps(done.ticket, BOB.key)).toEqual([]); // retired is never up
+    expect(finished(done.ticket)).toBe(false); // address still pending
+    // nothing waits on a retired step: a step needing it may go
+    const waits = { ...done.ticket, steps: [...done.ticket.steps, step({ id: "after", owner: BOB.key, needs: ["build-bob"] })] };
+    expect(actionableSteps(waits, BOB.key).map((s) => s.id)).toEqual(["after"]);
+  });
+
+  it("from and whenClosed can be withdrawn: an empty value wins a merge, absence keeps", () => {
+    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets", structureAt: 1, updatedAt: 1 };
+    const cleared = { ...t, from: [], whenClosed: "", structureAt: 2, updatedAt: 2 };
+    expect(mergeTicket(t, cleared).from).toEqual([]);
+    expect(mergeTicket(t, cleared).whenClosed).toBe("");
+    const silent = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), structureAt: 0, updatedAt: 3 };
+    expect(mergeTicket(t, silent).from).toEqual(["p1"]);
+    expect(mergeTicket(t, silent).whenClosed).toBe("open the Jira tickets");
+  });
+
+  it("a stale peer's take cannot revert the author's structure: goal, from and whenClosed follow structureAt, not updatedAt", () => {
+    const base = ticket({ createdBy: ALICE, steps: [step({ id: "review-bob", owner: BOB.key, intent: "take" })], kind: "plan" });
+    // alice withdraws the close instruction and moves the goal: her clock advances
+    const alice = { ...base, goal: "stream, paged by cursor", whenClosed: "", structureAt: 5, updatedAt: 5 };
+    // bob posts a take from his OLDER copy — later wall clock, older structure
+    const bob = postReview({ ...base, whenClosed: "open the Jira tickets", structureAt: 1 }, BOB, "fine", false, 9).ticket;
+    for (const merged of [mergeTicket(alice, bob), mergeTicket(bob, alice)]) {
+      expect(merged.goal).toBe("stream, paged by cursor");
+      expect(merged.whenClosed).toBe(""); // withdrawn stays withdrawn
+      expect(merged.structureAt).toBe(5);
+      expect(merged.steps.find((s) => s.id === "review-bob")!.status).toBe("settled"); // his take still lands
+      expect(merged.updatedAt).toBe(9);
+    }
+  });
+
+  it("two author revisions in the same millisecond merge the same way from either side", () => {
+    const base = ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })], updatedAt: 1 });
+    const a = { ...base, goal: "alpha", structureAt: 5 };
+    const b = { ...base, goal: "beta", whenClosed: "mail it", structureAt: 5 };
+    const ab = mergeTicket(a, b);
+    const ba = mergeTicket(b, a);
+    expect(ab.goal).toBe(ba.goal);
+    expect(ab.whenClosed).toBe(ba.whenClosed);
+    expect(ab.structureAt).toBe(5);
+  });
+
+  it("contributes: a copy that adds a step or a state changes the row; one that adds nothing does not", () => {
+    const row = ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] });
+    expect(contributes(row, row)).toBe(false);
+    const older = { ...row, updatedAt: 0, structureAt: 0 };
+    expect(contributes(row, older)).toBe(false); // nothing new in it
+    const settled = { ...row, steps: [step({ id: "s1", owner: BOB.key, status: "settled" })] };
+    expect(contributes(row, settled)).toBe(true);
+    const another = { ...row, steps: [...row.steps, step({ id: "review-bob", owner: BOB.key, intent: "take", status: "failed" })] };
+    expect(contributes(row, another)).toBe(true);
+  });
+
+  it("from and whenClosed ride the ticket through a merge", () => {
+    const t = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), from: ["p1"], whenClosed: "open the Jira tickets", structureAt: 2 };
+    const stale = { ...ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] }), structureAt: 0, updatedAt: 0 };
+    expect(mergeTicket(stale, t).from).toEqual(["p1"]);
+    expect(mergeTicket(t, stale).whenClosed).toBe("open the Jira tickets");
   });
 
   it("a FAILED task step still blocks what waits on it — only a review reads failure as an answer", () => {

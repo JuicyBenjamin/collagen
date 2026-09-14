@@ -134,7 +134,26 @@ it with the why attached. Filing that review works today; the nudge does not.
 - [ ] Know which agent called a tool, or the nudge loops back to its author
 - [ ] Say which of your own agents did a thing, in the trace and the outbox
 
-### 5. Identity & devices — [spec](/guide/identity)
+### 5. Plans & proposals — [spec](/guide/tickets#plans-and-proposals-judgment-before-the-code-exists)
+
+Judgment before the code exists. `plan`: something I intend to do myself — do you agree?
+`proposal`: work I want someone else to do — will you? Who does the work, not when. A
+question everyone sees, your thoughts and your agent's insight behind it, the reader's
+own take *before* they see either. Answered is the signal, closed is the decision, the
+close reason is the conclusion. Phases are the chain of tickets, never a status. Works
+alone too.
+
+- [x] `plan` and `proposal`: the review record with a tense — question, thoughts, insight, forks to come (`ask-plan`, `propose`)
+- [x] the blind first take: `review-context` opens after this reader has posted, unless they ask (`anyway`)
+- [x] ↻ revises the same ticket: goal, pending work by stable id, added readers, explicit `retireWork` (retired = history, never actionable); a proposal's work steps activate on ✓
+- [ ] a take older than the latest revision reads as stale
+- [x] `whenClosed` — your instruction, handed to your agent in the close outcome, never the settle
+- [x] `from` on a ticket: the ids it follows
+- [ ] `review-context` walks the `from` chain on request
+- [ ] the row and the ticket page say what a ticket follows
+- [ ] reopen a closed ticket — a second explicit record, if it turns out to be needed
+
+### 6. Identity & devices — [spec](/guide/identity)
 
 - [ ] Log out / log in via recovery phrase
 - [ ] Second device (phrase first, device pairing later)
@@ -152,6 +171,14 @@ it with the why attached. Filing that review works today; the nudge does not.
 - [ ] **More AI adapters** — beyond `claude-code` / `codex`.
 
 ## Decisions log
+
+- **Migrate first, evict last** (2026-09-14) — one protocol version at a time still, but an
+  older record we know the shape of is rewritten into the current one on the log rather
+  than evicted; eviction is for what nobody can read. Prompted by a required field
+  (`structureAt`) wiping a live room's tickets: "we know the types all the way through so
+  we know where it should migrate from and to... where not possible we are in alpha, so it
+  is to be expected." A build that could not migrate may have evicted what a later build
+  can read, so a room restores its own tickets from the machine's own writer core on open.
 
 - **Effect everywhere** — services + layers + typed errors + spans, for observability.
 - **`@effect/atom-react`** (not effect-rx) for the React bridge.
