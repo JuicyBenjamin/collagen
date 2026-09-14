@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.9.1-alpha...cli-v0.10.0-alpha) (2026-09-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** plans and proposals — judgment before the code exists
+
+### Features
+
+* **p2p:** plans and proposals — judgment before the code exists ([e59d508](https://github.com/JuicyBenjamin/collagen/commit/e59d5087f11a5b418f1d1f2b0f39b45194277d65))
+
 ## [0.9.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.9.0-alpha...cli-v0.9.1-alpha) (2026-09-14)
 
 
