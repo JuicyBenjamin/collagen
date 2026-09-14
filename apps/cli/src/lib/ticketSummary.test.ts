@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
-import { age, compareSummaries, peopleLabel, summarize } from "./ticketSummary";
+import { age, compareSummaries, marksLabel, summarize } from "./ticketSummary";
 
 const ALICE = "a".repeat(64);
 const BOB = "b".repeat(64);
@@ -41,8 +41,9 @@ describe("summarize", () => {
     expect(later.state).toBe("needs-you");
   });
 
-  it("done when every step settled; failed when one failed and nothing is up", () => {
-    expect(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE).state).toBe("done");
+  it("finished when every step is answered: the author's to close, done to everyone else; failed when one failed and nothing is up", () => {
+    expect(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE).state).toBe("needs-you");
+    expect(summarize(ticket([step("s1", BOB, "settled")]), [], BOB).state).toBe("done");
     expect(summarize(ticket([step("s1", BOB, "failed")]), [], ALICE).state).toBe("failed");
   });
 
@@ -61,17 +62,15 @@ describe("summarize", () => {
     expect(s.lastActivity).toBe(2000);
   });
 
-  it("peopleLabel: the other people, each with what they did — the reader is not in their own list", () => {
+  it("marksLabel: what was said, not by whom — one glyph per kind of answer", () => {
     const t = ticket([step("s1", BOB, "pending"), step("s2", ALICE, "pending", ["s1"])]);
-    // alice is reading: she is left out, bob has done nothing (a bare name),
-    // carol spoke without being asked
-    expect(peopleLabel(summarize(t, [msg(CAROL, { ticketId: "t1" })], ALICE), nameFor)).toBe("bob  carol …");
-    expect(peopleLabel(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE), nameFor)).toBe("bob ✓");
-    // …and from bob's side the same ticket leaves bob out instead
-    expect(peopleLabel(summarize(t, [], BOB), nameFor)).toBe("you");
+    // nobody has answered; carol spoke without being asked
+    expect(marksLabel(summarize(t, [msg(CAROL, { ticketId: "t1" })], ALICE))).toBe("…");
+    expect(marksLabel(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE))).toBe("✓");
+    expect(marksLabel(summarize(t, [], ALICE))).toBe("");
   });
 
-  it("counts at a glance: two approvals and one asking for changes", () => {
+  it("two approvals and one change request read as ↻ ✓ — the count is not the point", () => {
     const review = {
       ...ticket([
         step("review-bob", BOB, "settled"),
@@ -82,15 +81,15 @@ describe("summarize", () => {
       kind: "review" as const,
     };
     const withIntents = { ...review, steps: review.steps.map((s) => (s.id.startsWith("review-") ? { ...s, intent: "review" } : s)) };
-    expect(peopleLabel(summarize(withIntents, [], ALICE), nameFor)).toBe("bob ✓  carol ✓  dddddddd ↻");
+    expect(marksLabel(summarize(withIntents, [], ALICE))).toBe("↻ ✓");
   });
 
   it("a review asking for changes is not a tick and not a failure: ↻", () => {
     const asked = { ...ticket([step("s1", BOB, "failed")]), kind: "review" as const };
     const reviewStep = { ...asked, steps: [{ ...asked.steps[0]!, intent: "review" }] };
-    expect(peopleLabel(summarize(reviewStep, [], ALICE), nameFor)).toBe("bob ↻");
+    expect(marksLabel(summarize(reviewStep, [], ALICE))).toBe("↻");
     // the same failed status on a task step is a failure, and says so
-    expect(peopleLabel(summarize(ticket([step("s1", BOB, "failed")]), [], ALICE), nameFor)).toBe("bob ✕");
+    expect(marksLabel(summarize(ticket([step("s1", BOB, "failed")]), [], ALICE))).toBe("✕");
   });
 
   it("the overview agrees with the agent nudges: an open review is not needs-you", () => {
@@ -106,6 +105,39 @@ describe("summarize", () => {
     expect(summarize(read, [], ALICE).state).toBe("needs-you");
   });
 
+  it("completion is a signal, closure is a decision: finished-but-open is the author's to close", () => {
+    const review = {
+      ...ticket([
+        { ...step("review-bob", BOB, "failed"), intent: "review" },
+        { ...step("address", ALICE, "settled"), intent: "address" },
+      ]),
+      kind: "review" as const,
+    };
+    // every step answered, not closed: needs the author (to close), "done" to anyone else
+    expect(summarize(review, [], ALICE).state).toBe("needs-you");
+    expect(summarize(review, [], BOB).state).toBe("done");
+    // closed: off the lists for everyone, whatever the steps say
+    const closed = { ...review, closed: { by: ALICE, ts: 9 } };
+    expect(summarize(closed, [], ALICE).state).toBe("closed");
+    expect(summarize(closed, [], BOB).state).toBe("closed");
+    // on a task, a failed step is unfinished work: not done, and it says failed
+    const task = ticket([step("s1", BOB, "failed"), step("s2", ALICE, "settled")]);
+    expect(summarize(task, [], ALICE).state).toBe("failed");
+  });
+
+  it("your own review on your own ticket shows as a mark like any other; settling your address step is not a tick", () => {
+    const solo = {
+      ...ticket([
+        { ...step("address", ALICE, "settled"), intent: "address" },
+        { ...step("review-alice", ALICE, "failed"), intent: "review" },
+      ]),
+      kind: "review" as const,
+    };
+    expect(marksLabel(summarize(solo, [], ALICE))).toBe("↻");
+    const plain = { ...ticket([{ ...step("address", ALICE, "settled"), intent: "address" }]), kind: "review" as const };
+    expect(marksLabel(summarize(plain, [], ALICE))).toBe("");
+  });
+
   it("says whose ticket it is, which is what the reader's own name used to imply", () => {
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], ALICE).mine).toBe(true);
     expect(summarize(ticket([step("s1", BOB, "pending")]), [], BOB).mine).toBe(false);
@@ -115,7 +147,7 @@ describe("summarize", () => {
     const a = summarize(ticket([step("s1", ALICE, "pending")], 10), [], ALICE);
     const b = summarize(ticket([step("s1", BOB, "pending")], 50), [], ALICE);
     const c = summarize(ticket([step("s1", BOB, "pending")], 90), [], ALICE);
-    const d = summarize(ticket([step("s1", BOB, "settled")], 99), [], ALICE);
+    const d = summarize(ticket([step("s1", BOB, "settled")], 99), [], BOB); // finished, and not bob's to close: done
     expect([d, b, a, c].sort(compareSummaries).map((s) => s.lastActivity)).toEqual([10, 90, 50, 99]);
   });
 
@@ -142,7 +174,9 @@ describe("a review nobody was asked for", () => {
     expect(summarize(read, [], ALICE).state).toBe("needs-you");
     expect(summarize(read, [], ALICE).settledBy.has(BOB)).toBe(true);
     const acted: Ticket = { ...ticket([step("review-bob", BOB, "settled"), step("address", ALICE, "settled")]), kind: "review" };
-    expect(summarize(acted, [], ALICE).state).toBe("done");
+    // finished — and so the author's to close; done, to bob
+    expect(summarize(acted, [], ALICE).state).toBe("needs-you");
+    expect(summarize(acted, [], BOB).state).toBe("done");
   });
 
   it("a ticket with no steps at all is not done", () => {

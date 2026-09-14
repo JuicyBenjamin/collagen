@@ -121,6 +121,21 @@ drive_until "posting again revises his own review" "on second read" $A "$SA" "$B
 expect "…still one step per reader: his own, revised" "$(rows $A "$SA" "$OPEN_TICKET")" "steps\[3\]"
 
 echo "## a step belongs to whoever owns it, and the author's step finishes the ticket"
+echo "## completion is a signal, closure is the author's decision"
+expect "before: not every step is answered, not closed" "$(rows $A "$SA" "$OPEN_TICKET")" "answered: false"
+SETTLED=$(call $A "$SA" settle-step "{\"ticketId\":\"$OPEN_TICKET\",\"stepId\":\"address\",\"result\":\"the sheen ships as it is; bob and carol both read it\"}")
+expect "settling the last step says the ticket is ready to close — and that the person decides" "$SETTLED" "Every step on this ticket is answered. When your user says they are done with it .{1,6} and only then .{1,6} call close-ticket"
+expect "after: answered, still open — it did not close itself" "$(rows $A "$SA" "$OPEN_TICKET")" "answered: true"
+expect "…" "$(rows $A "$SA" "$OPEN_TICKET")" "closed: false"
+expect "bob cannot close alice's ticket" "$(call $B "$SB" close-ticket "{\"ticketId\":\"$OPEN_TICKET\"}")" "is alice.s ticket to close"
+CLOSED=$(call $A "$SA" close-ticket "{\"ticketId\":\"$OPEN_TICKET\",\"reason\":\"shipped as reviewed\"}")
+expect "alice closes it, with a reason on the record" "$CLOSED" "closed .{1,3}review the sheen.{1,3} .ticket [0-9a-f-]{36}. .{1,3} shipped as reviewed"
+expect "…and is told what to report: ticket closed, nothing more" "$CLOSED" "TELL YOUR USER ONLY THIS: .{1,3}ticket closed"
+expect "the record says so, reason included, steps as they were" "$(rows $A "$SA" "$OPEN_TICKET")" "closed: true"
+expect "…" "$(rows $A "$SA" "$OPEN_TICKET")" "closedBecause: shipped as reviewed"
+expect "closing twice is refused" "$(call $A "$SA" close-ticket "{\"ticketId\":\"$OPEN_TICKET\"}")" "was already closed by alice"
+wait_until "bob's copy is closed too, and nothing of his was touched" "closed: true" rows $B "$SB" "$OPEN_TICKET"
+expect "…his review step still reads as it did" "$(rows $B "$SB" "$OPEN_TICKET")" "review-bob,bob,review,settled"
 expect "post-review on a plain ticket is refused" "$(call $B "$SB" post-review "{\"ticketId\":\"$OID\",\"findings\":\"x\"}")" "is not a review ticket"
 expect "alice settles her own step: the ticket is done" "$(call $A "$SA" settle-step "{\"ticketId\":\"$OPEN_TICKET\",\"stepId\":\"address\",\"result\":\"got what I needed, thanks both\"}")" "address,alice,address,settled"
 # NOT asserted: that bob's copy shows her step settled within a minute. It

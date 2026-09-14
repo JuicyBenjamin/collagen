@@ -1,4 +1,4 @@
-import type { ReviewContext, Ticket } from "@collagen/p2p";
+import { finished, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { reviewHeadline } from "./review";
 
 /** A ticket as the agent reads it: keys resolved to names, needs joined. A
@@ -11,6 +11,11 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   kind: ticket.kind,
   goal: ticket.goal,
   createdBy: nameFor(ticket.createdBy),
+  /** every step answered — ready for its author to close, if they say so */
+  answered: finished(ticket),
+  /** the author's decision, recorded: off the lists, still here to refer back to */
+  closed: ticket.closed !== undefined,
+  ...(ticket.closed?.reason ? { closedBecause: ticket.closed.reason } : {}),
   ...(review
     ? { review: `${reviewHeadline(review)} — call review-context {ticketId} when your user asks why something is the way it is` }
     : {}),

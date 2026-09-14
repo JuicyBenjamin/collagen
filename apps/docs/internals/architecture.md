@@ -160,8 +160,8 @@ Two plain HTTP routes exist for harnesses without a convenient blocking tool cal
 ### `Outbox`: one door out, and a receipt
 
 Every tool that writes to a room's log on the agent's behalf — `send-to-peer`,
-`create-ticket`, `ask-review`, `post-review`, `settle-step`, `attach-files` — goes through
-one door. Each validates its input (unknown peer or step fails at once) and hands
+`create-ticket`, `ask-review`, `post-review`, `settle-step`, `close-ticket`,
+`attach-files` — goes through one door. Each validates its input (unknown peer or step fails at once) and hands
 `Outbox.send` a `Proposal`: room, recipient, title, and an `Outgoing` — plain data
 (`packages/p2p/src/schema.ts`): a message by peer *name*, a full ticket record, a review
 with its why, a step settlement, files, a transcript.
