@@ -136,15 +136,17 @@ it with the why attached. Filing that review works today; the nudge does not.
 
 ### 5. Plans & proposals — [spec](/guide/tickets#plans-and-proposals-judgment-before-the-code-exists)
 
-Judgment before the code exists. `plan`: here is something I want to do — do you agree?
-`proposal`: now I want something from you — will you? A question everyone sees, your
-thoughts and your agent's insight behind it, the reader's own take *before* they see
-either. Phases are the chain of tickets, never a status. Works alone too.
+Judgment before the code exists. `plan`: something I intend to do myself — do you agree?
+`proposal`: work I want someone else to do — will you? Who does the work, not when. A
+question everyone sees, your thoughts and your agent's insight behind it, the reader's
+own take *before* they see either. Answered is the signal, closed is the decision, the
+close reason is the conclusion. Phases are the chain of tickets, never a status. Works
+alone too.
 
 - [ ] `plan` and `proposal`: the review record with a tense — question, thoughts, insight, forks to come
 - [ ] the blind first take: the context tool opens after this reader has posted, unless they ask
 - [ ] ↻ revises the same ticket; a take older than the revision is stale; a proposal's work steps activate on ✓
-- [ ] `when complete:` — your instruction, handed to your agent in the settle outcome
+- [ ] `when closed:` — your instruction, handed to your agent in the close outcome, never the settle
 - [ ] `from` on a ticket: the ids it follows; `review-context` walks the chain on request
 - [ ] the row and the ticket page say what a ticket follows
 

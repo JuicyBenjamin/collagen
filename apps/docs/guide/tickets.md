@@ -175,12 +175,13 @@ thinking, given before your thinking has coloured theirs.
 
 | kind | what it says | the reader is asked | work steps | it ends when |
 | --- | --- | --- | --- | --- |
-| `plan` | here is something I want to do | do you agree, what would you change, what am I missing | yours, or none yet | you have folded the takes in and decided |
-| `proposal` | now I want something from you | will you do this, here is why | theirs, active on their ✓ | done, or declined |
+| `plan` | something I intend to do myself, and how | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
+| `proposal` | work I want **someone else** to do, and why | will you do this | theirs, active on their ✓ | you close it — done, or declined |
 
-Two tickets, not two phases of one: a plan that is agreed and built can be followed by a
-proposal for what should happen next, and each is simpler to reason about on its own.
-The phases live in the chain between them (below).
+The difference is who does the work, not when the ticket comes. A proposal can open a
+chain as easily as end one; a plan can stand alone. Two tickets, not two phases of one,
+because each is simpler to reason about on its own — the phases live in the chain between
+them (below).
 
 ### What sits on the ticket
 
@@ -221,35 +222,42 @@ acceptance: the work steps they own become theirs to do at that moment, and they
 nothing before it. Nothing here is a stored status — agreed, stale, accepted are all read
 off the steps and the record's revision time, like every other state in a ticket.
 
-### When it completes
+### Answered, then closed
 
-Your settle result is the **conclusion**: what was agreed, in words. It is what later
-tickets refer back to, so it is worth a sentence.
+Completion and closure are two facts here as on every ticket (see
+[in the TUI](#in-the-tui)). A plan or proposal is **answered** when the takes and the work
+steps it expected are in — and that is only the signal: the settle that answered the last
+step tells your agent "when your user says they are done, close-ticket", and nothing
+more. It is **closed** when you say so. Your close reason is the **conclusion**: what was
+agreed, in words — the durable thing later tickets refer back to, so it is worth a
+sentence.
 
-The ticket may also carry, from the day it was filed, **what happens on completion** —
-`when complete: open the Jira tickets for each step`. It is your instruction, written in
-advance in your own words; when you settle the ticket your agent receives it in the
-tool's outcome, at the moment it is needed, and acts on it as on anything else you asked
-for — saying so. Nothing runs on its own: the person who wrote the line is the person
-who settled the ticket.
+The ticket may also carry, from the day it was filed, **what happens when it is closed** —
+`when closed: open the Jira tickets for each step`. It is your instruction, written in
+advance in your own words, and it is handed to your agent in the *close* outcome, not the
+settle: acting while the ticket is still open would mean acting before you had accepted
+the conclusion, which is the one moment the whole ticket exists to protect. Your agent
+then acts on it as on anything else you asked for — saying so. Nothing runs on its own:
+the person who wrote the line is the person who closed the ticket.
 
 ### Phases are tickets
 
-Nothing is decided once, and no ticket carries a phase. A plan, agreed, births the work;
-the work, done, births a proposal for what comes next, or comes back as a review — and
-each one **references the ones before it**. The chain is the phases:
+Nothing is decided once, and no ticket carries a phase. A proposal, accepted and closed,
+births the plan for how; the plan, agreed and closed, births the work; the work, done,
+comes back as a review — and each one **references the ones before it**. The chain is
+the phases:
 
 ```
-plan  stream the export, don't buffer it            kristian ✓  alice ↻ → revised → alice ✓
-  ↳ task  bulk export for the backoffice             kristian ✓
-      ↳ review  feat/bulk-export                     kristian ✓  alice ↻
-          ↳ proposal  expose it in the backoffice UI  alice ✓
+proposal  bulk export for the backoffice            kristian ✓
+  ↳ plan  stream the rows, don't buffer them          alice ↻ → revised → alice ✓
+      ↳ task  bulk export                             kristian ✓
+          ↳ review  feat/bulk-export                  kristian ✓  alice ↻
 ```
 
 A ticket carries `from`: the ids of the tickets it follows. At review time, asked why
 the export streams, the reviewer's agent walks back to the plan's conclusion and the fork
-that chose it — so a dispute about the code is settled against what was agreed, not
-re-argued from scratch. Abundance of context, none of it pushed: `review-context`
+that chose it, and to the proposal's why for who needed the export at all — so a dispute
+about the code is settled against what was agreed, not re-argued from scratch. Abundance of context, none of it pushed: `review-context`
 follows the chain only when the person asks.
 
 Everyone can weigh in at every step, so this is a product-management flow with the
@@ -264,8 +272,8 @@ Not built. To decide first:
   [structured messages](./conversations#structured-messages);
 - `from` is ticket ids on the log, plain — a child names its parents, a parent never
   lists its children;
-- births are the person's call: completing a plan does not file the work, but the
-  outcome text says how, where the agent reads it;
+- births are the person's call: closing a plan does not file the work, but the close
+  outcome says how, where the agent reads it;
 - the overview shows lineage without a tree: a `↳` and the parent's kind on the row, and
   the ticket page names its parents in the meta line.
 
