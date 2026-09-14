@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { postReview, settleStep, type Outgoing, type Ticket } from "@collagen/p2p";
+import { closeTicket, finished, postReview, settleStep, type Outgoing, type Ticket } from "@collagen/p2p";
 import { ticketView } from "../lib/ticketView";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
@@ -101,7 +101,29 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             return refused(`failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${ticket.kind === "review" ? " — put your user's own review on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
           }
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
-          return merged ? sent(render(merged)) : NOT_ADMITTED;
+          if (!merged) return NOT_ADMITTED;
+          // completion is a signal, closure is a decision: when this settle
+          // answered the last step of the author's own ticket, the author's
+          // agent is told where the decision now lies — and only told
+          const offer =
+            merged.createdBy === identity.pubkey && !merged.closed && finished(merged)
+              ? `\nEvery step on this ticket is answered. When your user says they are done with it — and only then — call close-ticket with ticketId "${merged.id}"; it leaves the lists and stays on the log.`
+              : "";
+          return sent(render(merged) + offer);
+        }
+        case "close": {
+          const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
+          if (!ticket) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
+          const now = yield* Clock.currentTimeMillis;
+          const done = closeTicket(ticket, identity.pubkey, out.reason, now);
+          if (done.outcome === "not-yours") return refused(`failed: "${ticket.goal}" is ${nameFor(ticket.createdBy)}'s ticket to close — say what your user thinks with send-to-peer (pass ticketId)`);
+          if (done.outcome === "already") return refused(`failed: "${ticket.goal}" was already closed by ${nameFor(ticket.closed!.by)}`);
+          const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+          if (!merged) return NOT_ADMITTED;
+          const open = merged.steps.filter((s) => s.status === "pending" || s.status === "suspended").length;
+          return sent(
+            `closed "${merged.goal}" [ticket ${merged.id}]${out.reason ? ` — ${out.reason}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it. TELL YOUR USER ONLY THIS: "ticket closed".`,
+          );
         }
         case "post-review": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);

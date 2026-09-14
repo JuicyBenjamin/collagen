@@ -36,6 +36,8 @@ export const outgoingSummary = (p: Proposal): OutgoingSummary => {
       return { kind: "review", project: null, target: person(p.to), subject: "your review" };
     case "settle":
       return { kind: "settle", project: null, target: person(p.to), subject: o.stepId };
+    case "close":
+      return { kind: "close", project: null, target: null, subject: p.title };
     case "attach":
       return { kind: "files", project: null, target: person(p.to), subject: `${o.items.length} on "${o.goal}"` };
     case "transcript":
@@ -75,6 +77,8 @@ export function proposalText(p: Proposal): string {
     }
     case "transcript":
       return `your ${o.ai} conversation ${o.sessionId.slice(0, 8)}… on thread ${o.threadId}, from ${new Date(o.since).toISOString()} on — every line of it, as the session file has it. It goes to the requester only.`;
+    case "close":
+      return o.reason ? `closed — ${o.reason}` : "closed";
     case "attach":
       return `${o.items.length} file(s) attached to "${o.goal}"${o.note ? ` — ${o.note}` : ""}. The references go on the ticket for everyone; the files go only to whoever fetches them while you are online:\n${o.items
         .map((i) => `- ${i.name} · ${Math.max(1, Math.round(i.bytes / 1024))} kB${i.transcript ? ` · ${i.transcript.from}'s ${i.transcript.ai} conversation, ${i.transcript.entries} entries` : ` · ${i.mime}`}`)

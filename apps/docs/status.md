@@ -3,7 +3,7 @@
 A living snapshot of what works, what's in flight, and what's next. Update this as we go —
 it's the "where did we leave off" page.
 
-_Last updated: 2026-09-10._
+_Last updated: 2026-09-14._
 
 ## Working today
 

@@ -54,8 +54,9 @@ No files are written into your projects.
 - **rooms rail** (left) — one avatar per room. Pill = the room you're in, dot = messages
   waiting for you elsewhere, corner number = people online there. `+` joins or creates.
 - **overview tab** — who's here (with their AI and its auth badge; `○ (away)` for peers
-  looking at another room), every ticket in the room — whoever made it and whoever it is
-  for, finished ones dim at the end — and the projects section. A ticket row says whose
+  looking at another room), every ticket in the room its author has not closed — whoever
+  made it and whoever it is for; a closed one has left the list and stays on the log — and
+  the projects section. A ticket row says whose
   it is by the colour of its kind (bright for yours, dim for somebody else's) and lists
   the *other* people on it with what each did: `✓` asked for no changes, `↻` asked for
   changes, `✕` a step failed, `…` said something, a bare name means nothing from them

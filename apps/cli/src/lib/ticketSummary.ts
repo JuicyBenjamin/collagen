@@ -1,8 +1,11 @@
-import { readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { finished, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { GLYPH, type Mark } from "./glyphs";
 
-/** What a ticket wants from the person, now. */
-export type TicketState = "needs-you" | "waiting" | "failed" | "done";
+/** What a ticket wants from the person, now. "done": every step answered
+ *  and the author has not closed it yet — theirs to close, so on their own
+ *  ticket it is needs-you. "closed": the author's decision, recorded; off the
+ *  lists, on the log. */
+export type TicketState = "needs-you" | "waiting" | "failed" | "done" | "closed";
 
 export interface TicketSummary {
   readonly state: TicketState;
@@ -19,13 +22,11 @@ export interface TicketSummary {
   readonly marks: ReadonlyMap<string, Mark>;
   /** Did this person start it? The lists colour their own tickets. */
   readonly mine: boolean;
-  /** Whose view this is — so a row can leave them out of its own people. */
-  readonly me: string;
   /** Newest of the ticket's own update and its last message. */
   readonly lastActivity: number;
 }
 
-const ORDER: Record<TicketState, number> = { "needs-you": 0, waiting: 1, failed: 2, done: 3 };
+const ORDER: Record<TicketState, number> = { "needs-you": 0, waiting: 1, failed: 2, done: 3, closed: 4 };
 
 /** Is this message part of the ticket's conversation? Tagged with it, or on
  *  one of the threads its steps travel on. */
@@ -41,10 +42,24 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   // needs-you about a ticket nobody had reviewed)
   const up = readySteps(ticket);
   const waitingOn = [...new Set(up.map((s) => s.owner))];
-  const failed = ticket.steps.some((s) => s.status === "failed");
-  // a ticket with no steps at all is not "done" — nobody has done anything
-  const allSettled = ticket.steps.length > 0 && ticket.steps.every((s) => s.status === "settled");
-  const state: TicketState = waitingOn.includes(me) ? "needs-you" : waitingOn.length > 0 ? "waiting" : failed ? "failed" : allSettled ? "done" : "waiting";
+  // completion is p2p's `finished`: every step answered, where on a review a
+  // reader's ↻ is an answer. Closure is the author's recorded decision. A
+  // finished ticket the author has not closed is theirs to close — needs-you
+  // on their own row, "done" on everyone else's.
+  const mine = ticket.createdBy === me;
+  const done = finished(ticket);
+  const failed = !done && ticket.steps.some((s) => s.status === "failed");
+  const state: TicketState = ticket.closed
+    ? "closed"
+    : waitingOn.includes(me) || (done && mine)
+      ? "needs-you"
+      : waitingOn.length > 0
+        ? "waiting"
+        : failed
+          ? "failed"
+          : done
+            ? "done"
+            : "waiting";
 
   const threads = ticketThreads(ticket);
   const about = messages.filter((m) => aboutTicket(ticket, threads, m));
@@ -58,13 +73,16 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   // review ticket a failed step is not a failure, it is changes asked for.
   // Someone who has done nothing gets no entry: their name stands alone.
   const marks = new Map<string, Mark>();
-  const rank: Record<Mark, number> = { changes: 3, failed: 3, approved: 2, spoke: 1 };
+  const rank: Record<Mark, number> = { changes: 3, failed: 3, approved: 2, spoke: 1, yours: 0 }; // `yours` is a row mark, never a person's
   const put = (key: string, mark: Mark) => {
     const had = marks.get(key);
     if (had === undefined || rank[mark] > rank[had]) marks.set(key, mark);
   };
   for (const key of weighedIn.keys()) put(key, "spoke");
   for (const step of ticket.steps) {
+    // on a review, only a REVIEW step is a take: the author's own address step
+    // settling is them acting, not them approving their own change
+    if (ticket.kind === "review" && step.intent !== "review") continue;
     if (step.status === "settled") put(step.owner, "approved");
     if (step.status === "failed") put(step.owner, ticket.kind === "review" && step.intent === "review" ? "changes" : "failed");
   }
@@ -76,8 +94,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     weighedIn,
     settledBy,
     marks,
-    mine: ticket.createdBy === me,
-    me,
+    mine,
     lastActivity,
   };
 }
@@ -86,26 +103,15 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
 export const compareSummaries = (a: TicketSummary, b: TicketSummary): number =>
   ORDER[a.state] - ORDER[b.state] || b.lastActivity - a.lastActivity;
 
-/** `bob ✓  carol ✓  dave ↻` — the OTHER people on the ticket and what each of
- *  them did (see lib/glyphs), so two approvals and one asking for changes can
- *  be counted at a glance. Asked people first, then anyone who weighed in
- *  unasked.
- *
- *  The reader is not in their own list. "you" said only that they own a step
- *  here, which on a review they always do — it was true of every row and so
- *  told nobody anything; whether a row wants them is said by its place in the
- *  list and its colour. Whose ticket it is, is said by the colour of the kind.
- *
- *  A mark is its own word, a space off the name: `bob✓` reads as one token,
- *  and on a review it read as if bob had approved his own change. */
-export function peopleLabel(s: TicketSummary, nameFor: (key: string) => string): string {
-  const one = (key: string) => {
-    const mark = s.marks.get(key);
-    return mark === undefined ? nameFor(key) : `${nameFor(key)} ${GLYPH[mark]}`;
-  };
-  const others = s.asked.filter((k) => k !== s.me);
-  const unasked = [...s.weighedIn.keys()].filter((k) => k !== s.me && !s.asked.includes(k));
-  return [...others, ...unasked].map(one).join("  ");
+/** `↻ ✓` — what has been said on the ticket, not by whom: changes were
+ *  asked for, someone approved, a step failed, someone spoke. One glyph per
+ *  kind of answer however many gave it, in the order that demands attention.
+ *  Names were here and came out: at a glance it is what was said that
+ *  matters, and "you ↻" read as the reader having asked themselves for
+ *  changes. Who said what is on the ticket's page, step by step. */
+export function marksLabel(s: TicketSummary): string {
+  const present = new Set(s.marks.values());
+  return (["changes", "failed", "approved", "spoke"] as const).filter((m) => present.has(m)).map((m) => GLYPH[m]).join(" ");
 }
 
 /** "2m" · "3h" · "5d" — compact, for a list column. */
@@ -117,4 +123,4 @@ export function age(ts: number, now: number): string {
   return `${Math.round(s / 86400)}d`;
 }
 
-export const STATE_LABEL: Record<TicketState, string> = { "needs-you": "needs you", waiting: "waiting", failed: "failed", done: "done" };
+export const STATE_LABEL: Record<TicketState, string> = { "needs-you": "needs you", waiting: "waiting", failed: "failed", done: "done", closed: "closed" };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionableSteps, mergeTicket, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
+import { actionableSteps, closeTicket, finished, mergeTicket, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
 import { deriveThreadId } from "./topic";
 
 const step = (over: Partial<TicketStep>): TicketStep => ({
@@ -176,6 +176,40 @@ describe("a review ticket asks 0 to many people", () => {
     // and the same when he is happy with it
     const fine = postReview(asked, BOB, "looks right", false, 5).ticket;
     expect(actionableSteps(fine, ALICE).map((s) => s.id)).toEqual(["address"]);
+  });
+
+  it("finished is the close: every step answered, a reader's ↻ included; no steps is not finished", () => {
+    const open = ticket({ kind: "review", createdBy: ALICE, steps: [step({ id: "address", owner: ALICE, intent: "address" })] });
+    expect(finished(open)).toBe(false);
+    const read = postReview(open, BOB, "wants changes", true, 5).ticket;
+    expect(finished(read)).toBe(false); // the author has not acted yet
+    const closed = { ...read, steps: read.steps.map((s) => (s.id === "address" ? { ...s, status: "settled" as const } : s)) };
+    expect(finished(closed)).toBe(true);
+    expect(finished(ticket({ createdBy: ALICE, steps: [] }))).toBe(false);
+    expect(finished(ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key, status: "failed" })] }))).toBe(false);
+  });
+
+  it("closing is the author's decision, recorded, with the steps as they were", () => {
+    const open = ticket({ kind: "review", createdBy: ALICE, steps: [step({ id: "review-bob", owner: BOB.key, intent: "review" }), step({ id: "address", owner: ALICE, needs: ["review-bob"] })] });
+    // bob never answered; alice closes anyway
+    expect(closeTicket(open, BOB.key, undefined, 5).outcome).toBe("not-yours");
+    const { ticket: closed, outcome } = closeTicket(open, ALICE, "superseded by the streaming plan", 5);
+    expect(outcome).toBe("closed");
+    expect(closed.closed).toEqual({ by: ALICE, ts: 5, reason: "superseded by the streaming plan" });
+    expect(closed.steps.find((s) => s.id === "review-bob")!.status).toBe("pending"); // untouched
+    expect(finished(closed)).toBe(false); // completion and closure are two facts
+    expect(closeTicket(closed, ALICE, undefined, 9).outcome).toBe("already");
+  });
+
+  it("closed sticks through a merge: a copy written before the close cannot reopen it", () => {
+    const open = ticket({ createdBy: ALICE, steps: [step({ id: "s1", owner: BOB.key })] });
+    const closed = closeTicket(open, ALICE, undefined, 5).ticket;
+    const stale = { ...open, updatedAt: 7 }; // newer clock, no close
+    expect(mergeTicket(closed, stale).closed).toEqual(closed.closed);
+    expect(mergeTicket(stale, closed).closed).toEqual(closed.closed);
+    // two closes: the earlier one is the record
+    const again = { ...open, closed: { by: ALICE, ts: 3 } };
+    expect(mergeTicket(closed, again).closed?.ts).toBe(3);
   });
 
   it("a FAILED task step still blocks what waits on it — only a review reads failure as an answer", () => {

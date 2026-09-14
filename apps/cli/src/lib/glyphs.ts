@@ -10,6 +10,8 @@
  *  Whoever adds a state here adds it to `LEGEND` too, or the reader is left
  *  guessing at a symbol. */
 export type Mark =
+  /** on the ROW, not on a person: this ticket is yours to act on now */
+  | "yours"
   /** settled their step; on a review, read it and asked for nothing */
   | "approved"
   /** read it and asked for changes — a failed review step */
@@ -20,6 +22,7 @@ export type Mark =
   | "spoke";
 
 export const GLYPH: Record<Mark, string> = {
+  yours: "▸",
   approved: "✓",
   changes: "↻",
   failed: "✕",
@@ -29,13 +32,14 @@ export const GLYPH: Record<Mark, string> = {
 /** For the hint line: every glyph on screen, in the order a reader meets
  *  them. It shares one row with the section's own keys, so it is terse on
  *  purpose — a legend that gets truncated teaches nobody anything. */
-export const LEGEND = `${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed · ${GLYPH.spoke} spoke`;
+export const LEGEND = `${GLYPH.yours} yours now · ${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed · ${GLYPH.spoke} spoke`;
 // and a name with no glyph: nothing from them yet. Left unsaid on purpose —
 // it is what the absence of a mark obviously means, and spelling it out cost
 // the row more than it fits.
 
 /** What the mark means in words — for anything an agent reads. */
 export const MARK_WORDS: Record<Mark, string> = {
+  yours: "yours to act on now",
   approved: "no changes asked",
   changes: "changes asked",
   failed: "failed",

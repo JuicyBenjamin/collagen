@@ -5,7 +5,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import type { Ticket } from "@collagen/p2p";
 import { diagnostics } from "../../../diagnostics";
-import { aboutTicket, age, peopleLabel, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
+import { aboutTicket, age, marksLabel, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
 import { Focusable } from "../../../components/Focusable";
 import { focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
@@ -125,8 +125,8 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
     return params === null ? [] : [{ d, params }];
   });
   const done = ticket.steps.filter((s) => s.status === "settled").length;
-  // the other people on it and what each did; the reader is not in the list
-  const people = peopleLabel(summary, nameFor);
+  // what has been said on it, not by whom — the steps below say who
+  const people = marksLabel(summary);
   const glyph = summary.state === "done" ? "✓" : summary.state === "failed" ? "✗" : "⧉";
   const glyphColor = summary.state === "done" ? theme.ok : theme.warn;
   const stateText = summary.state === "waiting" ? `waiting on ${summary.waitingOn.map(nameFor).join(", ")}` : STATE_LABEL[summary.state];

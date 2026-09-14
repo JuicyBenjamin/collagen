@@ -15,7 +15,7 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/ticket-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M0_tickets
   printf '\r'; sleep 2; mark M1_opened
-  printf '\033[B'; sleep 1; mark M1a_attachments
+  printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M1a_attachments   # two steps now: s1, s2, then out
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M2_diagnostics
   printf '\r'; sleep 3; mark M3_ran
   printf '\033[C'; sleep 1; printf '\r'; sleep 2; mark M4_transcripts
@@ -29,7 +29,9 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
 echo "## bob creates a ticket (a mock: no outbox on his side)"
-call $A "$SA" drive-peer '{"peer":"bob","action":{"kind":"create-ticket","project":"sandbox","goal":"explain average()","steps":[{"intent":"investigate","description":"what does average() do","mine":true}]}}' > /dev/null
+# bob's step his mock settles at once; alice's keeps the ticket open — a
+# ticket whose every step is answered is finished and leaves the overview
+call $A "$SA" drive-peer '{"peer":"bob","action":{"kind":"create-ticket","project":"sandbox","goal":"explain average()","steps":[{"intent":"investigate","description":"what does average() do","mine":true},{"intent":"confirm","description":"alice checks the answer","mine":false}]}}' > /dev/null
 wait_until "the ticket is on alice's log" "explain average" goals $A "$SA"
 TICKET=$(call $A "$SA" get-tickets '{}' | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 call $A "$SA" drive-peer "{\"peer\":\"bob\",\"action\":{\"kind\":\"send-message\",\"project\":\"sandbox\",\"intent\":\"two-cents\",\"findings\":\"average divides by length, so an empty list gives NaN — guard it first.\",\"ticketId\":\"$TICKET\"}}" > /dev/null
@@ -58,7 +60,7 @@ await_mark M6_back; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 expect "↓↓↓ from the tab bar reached the tickets list" "$KEYS" "tickets"
 expect "enter opened the ticket: the cursor landed on its steps" "$KEYS" "ticket-steps"
-expect "↓ from the steps landed on the attachments" "$KEYS" "ticket-attachments"
+expect "↓ past the last step landed on the attachments" "$KEYS" "ticket-attachments"
 expect "the attachments section shows the file as here (we hold it), readable" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'here.{0,12}enter reads it')" "^[1-9]"
 expect "↓↓ walked on to the diagnostics section" "$KEYS" "ticket-diagnostics"
 expect "enter ran the transcripts diagnostic against the ticket (bob was asked)" "$(grep -c 'transcripts: asked 1 peer(s) about ticket-' "$LOG")" "^1$"
