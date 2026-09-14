@@ -166,8 +166,7 @@ for a review. What went is on the record: the outbox shows the whole text, every
 line included.
 :::
 
-||||||| Common ancestor
-## Plans and proposals: judgment before the code exists <Badge type="info" text="planned" />
+## Plans and proposals: judgment before the code exists <Badge type="tip" text="alpha" />
 
 A review asks a colleague to judge code that exists. Two more kinds ask for judgment
 before it does — advice, input, direction. Neither is a question: a question is what your
@@ -266,15 +265,19 @@ product manager, the backender and the reviewer each speaking through their own 
 Because nobody has to be named, it is the same flow alone: you plan, your second agent
 gives its blind take, you build it, it reviews the result.
 
-Not built. To decide first:
+Built: `ask-plan` and `propose` (a proposal names who and spells out the `work`), takes
+with `post-review`, the blind first take in `review-context` (`anyway: true` to skip it,
+and the agent says so), revising the same ticket, `whenClosed` handed over in the close
+outcome, and `from` on every kind of ticket (`create-ticket` and `ask-review` take it too),
+shown in `get-tickets`. Still to decide and do:
 
 - a take could reference the decisions it answers (`d1: agree`, `d2: change`, `missing:
   …`) so the agreement map is data rather than the agents' prose — the same idea as
   [structured messages](./conversations#structured-messages);
-- `from` is ticket ids on the log, plain — a child names its parents, a parent never
-  lists its children;
+- `review-context` walking the `from` chain on request, so one call answers "why" across
+  a proposal, its plan and the review of the work;
 - births are the person's call: closing a plan does not file the work, but the close
-  outcome says how, where the agent reads it;
+  outcome could say how, where the agent reads it;
 - the overview shows lineage without a tree: a `↳` and the parent's kind on the row, and
   the ticket page names its parents in the meta line.
 
@@ -314,36 +317,6 @@ list and stays, steps exactly as they were, where `get-tickets` still shows it
 reviewer never answered or whose work was abandoned — like merging a pull request without
 a review, it is their call. Nothing is deleted, and nobody else can close it for them.
 `enter` opens the
-||||||| Common ancestor
-<<<<<<< New base: fix(cli): a ticket row says when it is yours, and shows your own review on your 
-and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
-changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
-never in your own list). Order carries the rest: what needs you first, then what is
-waiting, then failed, then done (dim). Nothing is hidden or folded away. `enter` opens the
-||||||| Common ancestor
-and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
-changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
-never in your own list). Order carries the rest: what needs you first, then what is
-waiting, then failed. A **finished** ticket — every step answered, where a reader's ↻ on
-a review counts as an answer — is closed: it leaves the list and stays on the log, where
-`get-tickets` still shows it (`done: true`) and later tickets refer back to it. There is
-no close key and nothing is deleted; the author settling their own step is the close.
-`enter` opens the
-=======
-and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
-changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
-never in your own list). Order carries the rest: what needs you first, then what is
-waiting, then failed, then done (dim). Nothing is hidden or folded away. `enter` opens the
-||||||| Common ancestor
-and the **other people** on it with what each did (`bob ✓` no changes asked, `dave ↻`
-changes asked, `✕` a step failed, `…` said something, a bare name nothing yet; you are
-never in your own list). Order carries the rest: what needs you first, then what is
-waiting, then failed. A **finished** ticket — every step answered, where a reader's ↻ on
-a review counts as an answer — is closed: it leaves the list and stays on the log, where
-`get-tickets` still shows it (`done: true`) and later tickets refer back to it. There is
-no close key and nothing is deleted; the author settling their own step is the close.
-`enter` opens the
->>>>>>> Current commit: feat(p2p)!: plans and proposals — judgment before the code exists
 ticket's own page — the tab bar gives way to a `‹ overview › ticket …` crumb. Its header
 is the meta: goal, state, age, project, creator, and the people (`bob ↻  carol ✓`). Its body: **why**,
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening
