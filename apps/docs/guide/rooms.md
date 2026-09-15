@@ -15,7 +15,7 @@ identity is:
 
 | Part | What it is |
 | --- | --- |
-| id | an unguessable uuid (v7). The swarm topic derives from it, so **the id is the invite and the secret**. Fixed for the room's life; `c` copies it. |
+| id | an unguessable uuid (v7). The swarm topic derives from it, so **the id is the invite and the secret**. Fixed for the room's life; `c` copies it. A room made by collagen running from source is on [devnet](/internals/development#mainnet-and-devnet) and hands out `devnet-<uuid>`; the installed app tells you so if you paste one. |
 | name | shared state — rename it and everyone in the room sees the new name (last writer wins). Joiners see a short hash until the name reaches them. |
 
 Nobody lands in your room by guessing a cute name; they need the id you handed them.

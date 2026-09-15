@@ -172,6 +172,15 @@ alone too.
 
 ## Decisions log
 
+- **Mainnet and devnet** (2026-09-15) — a run from source is on devnet: its own config
+  dir, its own swarm topic salt, its own MCP server name and port, all derived from
+  `IS_RELEASE`. Still the public DHT, so anyone who pulls the branch joins the devnet
+  room; nobody on the release can. No escape hatch onto mainnet from source — a
+  hot-reloading build in a real room is what wiped one ("anyone could enter and
+  immediately be out of date"). Invites carry the net (`devnet-<uuid>`), so the other net
+  refuses them with a sentence rather than waiting on a topic nobody is on — a p2p app
+  cannot tell "never created" from "everyone offline", so the invite has to say.
+
 - **Migrate first, evict last** (2026-09-14) — one protocol version at a time still, but an
   older record we know the shape of is rewritten into the current one on the log rather
   than evicted; eviction is for what nobody can read. Prompted by a required field
