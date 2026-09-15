@@ -1,6 +1,8 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { to } from "../app/router";
+import { attachmentsDir } from "../services/Attachments";
+import { transcriptsDir } from "../services/Transcripts";
 import { diagnostic } from "./registry";
 
 /** Attach files the user holds to a ticket: references on the log, the files
@@ -29,7 +31,7 @@ export const fetchAttachments = diagnostic<{ readonly ticketId: string; readonly
   id: "fetch-attachments",
   title: "attachments",
   summary:
-    "The files attached to a ticket (name, type, size, who holds it, a note; for a transcript whose conversation and which agent) and, for each, the local path if the user already has it. Files not held are asked from their holder — they arrive only while the holder is online and are filed under ~/.config/collagen/attachments/ticket-<id>/ (transcripts under ~/.config/collagen/transcripts/ticket-<id>/). Read the path to look at the file. Pass ticketId; attachmentId to fetch one.",
+    `The files attached to a ticket (name, type, size, who holds it, a note; for a transcript whose conversation and which agent) and, for each, the local path if the user already has it. Files not held are asked from their holder — they arrive only while the holder is online and are filed under ${attachmentsDir}/ticket-<id>/ (transcripts under ${transcriptsDir}/ticket-<id>/). Read the path to look at the file. Pass ticketId; attachmentId to fetch one.`,
   params: Schema.Struct({ ticketId: Schema.String, attachmentId: Schema.optional(Schema.String) }),
   // the ticket page has its own attachments section — nothing to add there
   fromContext: () => null,

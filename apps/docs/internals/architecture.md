@@ -151,7 +151,7 @@ a given peer should act on now.
 ## The MCP server
 
 `Mcp` (`apps/cli/src/services/Mcp.ts`) builds an `effect/unstable/ai` `McpServer` served
-over Streamable HTTP on a deterministic per-profile port (`portForProfile`, 41000–44999,
+over Streamable HTTP on a deterministic per-profile port (`portForProfile`, 41000–44999 on mainnet, 45000–48999 on devnet,
 ephemeral fallback logged with its reason). Tools are `Schema`-typed and grouped: room,
 messages, tickets, settings, scripting — see [Using the CLI](/guide/using-the-cli#your-agents-side).
 Dev runs (`COLLAGEN_DEV=1`) add `drive-peer`; a production build never registers it.
