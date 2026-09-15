@@ -46,8 +46,9 @@
     "prepack": "pnpm build && cp ../../README.md README.md"
   },
   "dependencies": {
-    "@effect/atom-react": "4.0.0-rc.112",
-    "@effect/platform-node": "4.0.0-rc.112",
+    "@effect/atom-react": "4.0.0-rc.115",
+    "@effect/platform-node": "4.0.0-rc.115",
+    "@effect/platform-node-shared": "4.0.0-rc.115",
     "@opentui/core": "catalog:",
     "@opentui/react": "catalog:",
     "@toon-format/toon": "^4.1.1",
@@ -56,7 +57,7 @@
     "callscript": "^0.1.0",
     "compact-encoding": "^3.4.0",
     "corestore": "^7.12.3",
-    "effect": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.115",
     "hyperbee": "^2.27.3",
     "hypercore-crypto": "^3.7.0",
     "hyperdht": "^6.32.0",
