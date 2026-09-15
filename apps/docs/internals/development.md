@@ -79,6 +79,32 @@ pnpm --filter @collagen/docs build    # static build (also our "typecheck")
 
 ## Running the app
 
+### Mainnet and devnet
+
+A run from source is never on the same net as the installed app. Both derive from one
+fact, `IS_RELEASE` (`apps/cli/src/app/net.ts`): a release is on **mainnet**, everything
+else — `pnpm dev`, `tsx`, the e2e harness — is on **devnet**. Three things hang off it:
+
+| | mainnet (release) | devnet (source) |
+| --- | --- | --- |
+| Config dir | `~/.config/collagen/` | `~/.config/collagen-devnet/` |
+| Swarm topic | `sha256("collagen:" + roomId)` | `sha256("collagen-devnet:" + roomId)` |
+| MCP server | `collagen` on `port(profile)` | `collagen-devnet` on `port(profile + "@devnet")` |
+
+So the same invite id names two different rooms, one per net, and the two never meet: a
+build from source reshaping the log (a protocol bump, a new required field) cannot touch
+a room the installed app is in, and nobody on the release walks into your half-built one.
+Devnet is still the **public DHT**: anyone who pulls the branch and runs from source joins
+your devnet room. That is the intended way to try unreleased work with someone. Run the
+installed app alongside; different dir, different port, no clash. The TUI footer says
+`devnet` when you are on it. (The local hyperdht **testnet** below is a third, private
+thing: a DHT on this machine only, for two peers on one host.)
+
+Invites carry the net: a devnet room's invite reads `devnet-<uuid>`, a mainnet room's is
+the bare uuid. Paste one into the other net and the app says which net it is for and how
+to get there, instead of opening a room view and waiting on a topic nobody announces on.
+(`--room` takes a bare id and trusts you — it is the scripting path.)
+
 Collagen is peer-to-peer, so testing means **two instances**. On one machine we simulate
 two peers with separate **profiles** (each gets its own identity, state file, and MCP
 port).
@@ -91,7 +117,8 @@ The public DHT hairpins on localhost, so dev uses a local one:
 pnpm --filter @collagen/cli dev:net
 ```
 
-This writes `~/.config/collagen/dev-bootstrap.json`, which clients auto-detect. A client
+This writes `~/.config/collagen-devnet/dev-bootstrap.json`, which clients auto-detect (the
+file lives in the devnet dir, so it can never strand the installed app). A client
 that finds it builds its DHT node with `firewalled: false` (everything is on this host —
 the same thing hyperdht's testnet helper does for its own nodes); two local peers then
 connect in well under a second. If they don't, read the `swarm connection … closed`
@@ -141,12 +168,15 @@ machine can exercise both sides of a flow; real peers ignore drive requests.
 
 | Concept | Where |
 | --- | --- |
-| Identity (seed + name) | `~/.config/collagen/identity-<profile>.json` |
-| Local state (AI, projects, adopted threads, inbox cursors) | `~/.config/collagen/state-<profile>.json` |
-| Corestore (the rooms' logs) | `~/.config/collagen/store-<profile>/` |
-| Dev bootstrap | `~/.config/collagen/dev-bootstrap.json` |
-| MCP port | `portForProfile(profile)` → 41000–44999 |
-| MCP server name | `collagen` (default) or `collagen-<profile>` |
+| Identity (seed + name) | `<dir>/identity-<profile>.json` |
+| Local state (AI, projects, adopted threads, inbox cursors) | `<dir>/state-<profile>.json` |
+| Corestore (the rooms' logs) | `<dir>/store-<profile>/` |
+| Dev bootstrap | `<dir>/dev-bootstrap.json` |
+| MCP port | `portForProfile(profile, net)` → 41000–44999 |
+| MCP server name | `collagen` / `collagen-devnet`, `-<profile>` appended for any profile but `default` |
+
+`<dir>` is `~/.config/collagen` for a release and `~/.config/collagen-devnet` for a run from
+source (see "Mainnet and devnet" above).
 
 ## UI code layout (apps/cli/src)
 

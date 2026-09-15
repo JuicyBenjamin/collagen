@@ -13,8 +13,9 @@ npx @collagen/cli          # run it
 npm i -g @collagen/cli     # or install once, then: collagen
 ```
 
-Working on collagen itself? `pnpm --filter @collagen/cli dev` runs it from source — see
-[local development](/internals/development).
+Working on collagen itself? `pnpm --filter @collagen/cli dev` runs it from source, on
+[devnet](/internals/development#mainnet-and-devnet) — separate config dir, separate swarm
+topic, separate MCP server — so it never touches the rooms the installed app is in.
 
 First run is a two-step wizard: **who are you**, then **join or create a room**. Both
 persist per profile. Flags exist as overrides for scripting and same-machine testing:

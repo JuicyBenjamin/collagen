@@ -2,6 +2,7 @@ import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } f
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
+import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
@@ -347,6 +348,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       const scope = yield* Scope.make();
       const config: Context.Service.Shape<typeof RoomConfig> = {
         roomName: entry.id,
+        net: NET,
         roomLabel: { name: entry.name, ts: entry.nameTs ?? 0 },
         getProfile: profileFor(entry.id),
         // only an explicit flag makes us the creator: `nameTs` is also set when a

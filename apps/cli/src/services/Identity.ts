@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Context, Effect, Layer, Option, Schema, SubscriptionRef } from "effect";
 import { FileSystem } from "effect";
 import { keyPairFromSeed, pubkeyHex, randomSeedHex, type Identity } from "@collagen/p2p";
+import { NET } from "../app/net";
 import { CliArgs } from "./CliArgs";
 
 const RoomEntry = Schema.Struct({
@@ -26,7 +27,10 @@ const IdentityFile = Schema.fromJsonString(
   }),
 );
 
-export const configDir = join(homedir(), ".config", "collagen");
+/** `~/.config/collagen` for a release, `~/.config/collagen-devnet` for a run from
+ *  source: identity, state, store, attachments, transcripts all live under it,
+ *  so a run from source never writes into the installed app's rooms. */
+export const configDir = join(homedir(), ".config", NET === "devnet" ? "collagen-devnet" : "collagen");
 
 /** Loads (or creates) the per-profile identity: persisted seed + display name.
  *  `--name` overrides and re-persists the stored name. */

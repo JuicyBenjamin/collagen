@@ -1,3 +1,5 @@
+import { formatInvite } from "@collagen/p2p";
+import { NET } from "../../app/net";
 import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
@@ -59,7 +61,7 @@ export function SettingsPage() {
         <input focused={field === "room"} value={label} onInput={setLabel} onSubmit={submit} placeholder="renames the room for the whole room" />
       </box>
       <text fg={theme.dim} truncate wrapMode="none">
-        invite id: <span fg={theme.fg}>{room.id}</span> (fixed — press c in the room to copy)
+        invite id: <span fg={theme.fg}>{formatInvite(room.id, NET)}</span> (fixed — press c in the room to copy)
       </text>
       <text fg={theme.dim}>tab switch field · enter next/confirm</text>
       <text fg={theme.warn}>{saved ? "saved — applies now" : "changes apply live · esc back"}</text>
