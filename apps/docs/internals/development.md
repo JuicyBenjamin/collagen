@@ -89,7 +89,7 @@ else — `pnpm dev`, `tsx`, the e2e harness — is on **devnet**. Three things h
 | --- | --- | --- |
 | Config dir | `~/.config/collagen/` | `~/.config/collagen-devnet/` |
 | Swarm topic | `sha256("collagen:" + roomId)` | `sha256("collagen-devnet:" + roomId)` |
-| MCP server | `collagen` on `port(profile)` | `collagen-devnet` on `port(profile + "@devnet")` |
+| MCP server | `collagen`, port in 41000–44999 | `collagen-devnet`, port in 45000–48999 |
 
 So the same invite id names two different rooms, one per net, and the two never meet: a
 build from source reshaping the log (a protocol bump, a new required field) cannot touch
@@ -172,7 +172,7 @@ machine can exercise both sides of a flow; real peers ignore drive requests.
 | Local state (AI, projects, adopted threads, inbox cursors) | `<dir>/state-<profile>.json` |
 | Corestore (the rooms' logs) | `<dir>/store-<profile>/` |
 | Dev bootstrap | `<dir>/dev-bootstrap.json` |
-| MCP port | `portForProfile(profile, net)` → 41000–44999 |
+| MCP port | `portForProfile(profile, net)` → 41000–44999 on mainnet, 45000–48999 on devnet |
 | MCP server name | `collagen` / `collagen-devnet`, `-<profile>` appended for any profile but `default` |
 
 `<dir>` is `~/.config/collagen` for a release and `~/.config/collagen-devnet` for a run from

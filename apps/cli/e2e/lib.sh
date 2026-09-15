@@ -1,7 +1,7 @@
 #!/bin/bash
 # Shared plumbing for the end-to-end scenarios. Source it from a scenario.
 #
-# Every scenario is an island: its own HOME (so its own ~/.config/collagen,
+# Every scenario is an island: its own HOME (so its own ~/.config/collagen-devnet,
 # ~/.codex, ~/.claude — nothing of the developer's is read or written), its
 # own profiles (alice / bob / carol, suffixed with the scenario name so their
 # MCP ports never clash), its own local hyperdht testnet. That is what lets
@@ -34,15 +34,15 @@ export COLLAGEN_BOOTSTRAP_FILE="$OUT/dev-bootstrap.json"
 # Test instances register their MCP server with no agent: nothing runs codex or claude.
 export COLLAGEN_REGISTER=0
 
-# Profiles are per scenario; MCP ports derive from the profile name and the
-# net — "@devnet" here, since instances run from source (services/mcpAddress.ts)
-# — so scenarios running side by side never collide.
+# Profiles are per scenario; MCP ports derive from the profile name, in the
+# devnet range (45000–48999) since instances run from source
+# (services/mcpAddress.ts) — so scenarios running side by side never collide.
 profile() { echo "$1-$SCN"; }
 port_of() {
   python3 -c 'import sys
 h = 0
-for c in sys.argv[1] + "@devnet": h = (h * 31 + ord(c)) & 0xffffffff
-print(41000 + h % 4000)' "$1"
+for c in sys.argv[1]: h = (h * 31 + ord(c)) & 0xffffffff
+print(45000 + h % 4000)' "$1"
 }
 A=http://127.0.0.1:$(port_of "$(profile alice)")/mcp
 B=http://127.0.0.1:$(port_of "$(profile bob)")/mcp

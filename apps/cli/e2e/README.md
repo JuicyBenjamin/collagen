@@ -16,7 +16,7 @@ COLLAGEN_E2E_OUT=/tmp/x bash …           # where output goes (default $TMPDIR/
 
 Prerequisites: `pnpm install`, `python3`. Nothing of yours is touched: every
 scenario is an island with its own `HOME` under `$COLLAGEN_E2E_OUT/<scenario>/home`
-(so its own `~/.config/collagen`, `~/.codex`, `~/.claude`), its own generated profiles
+(so its own `~/.config/collagen-devnet` — a run from source is on devnet — `~/.codex`, `~/.claude`), its own generated profiles
 (`alice-<scenario>`, `bob-<scenario>`; `carol` is created on the fly), and its own
 testnet. Profile names decide MCP ports, so scenarios never collide and run in
 parallel. Instances start with `COLLAGEN_REGISTER=0`: no agent CLI is ever run to
@@ -66,7 +66,7 @@ Not in `run-all.sh` — they need something the machine may not have.
   `outbox.sh`).
 - Wait for the condition, never for a duration: `SA=$(mcp $A)` blocks until alice is up,
   `wait_for_peer` / `admitted bob` until bob is present and writing, `wait_until` for the
-  rest. Files live under `$CFG` (the scenario's `~/.config/collagen`), never `$HOME`.
+  rest. Files live under `$CFG` (the scenario's `~/.config/collagen-devnet`), never `$HOME`.
 - Paths and the TUI: `HOME="$SHOME" … script -F -q "$PTY" bash -c "stty …; $TUI"` — `$TUI`
   is alice's TUI command for this scenario. Wait for the app to have PAINTED before the
   first key (`wait_pty "$PTY" tickets`): the opening animation mounts the app only once it

@@ -1,6 +1,7 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { to } from "../app/router";
+import { transcriptsDir } from "../services/Transcripts";
 import { diagnostic } from "./registry";
 
 /** Ask everyone present for their agents' conversations on a ticket (or one thread). */
@@ -8,7 +9,7 @@ export const requestTranscripts = diagnostic<{ readonly ticketId?: string; reado
   id: "request-transcripts",
   title: "collect transcripts",
   summary:
-    "Collect how the agents behaved around a ticket (or one thread). Everyone present in the room is asked for their agent's conversation on the threads involved; on each machine the ask waits for that person's word (share-transcripts) and covers only what happened after they adopted the thread — nothing arrives by itself. Answers are filed under ~/.config/collagen/transcripts/<subject>/ — see list-transcripts. The user's own adopted conversations on those threads are filed at once. Pass ticketId (from get-tickets) or threadId (from pending-threads).",
+    `Collect how the agents behaved around a ticket (or one thread). Everyone present in the room is asked for their agent's conversation on the threads involved; on each machine the ask waits for that person's word (share-transcripts) and covers only what happened after they adopted the thread — nothing arrives by itself. Answers are filed under ${transcriptsDir}/<subject>/ — see list-transcripts. The user's own adopted conversations on those threads are filed at once. Pass ticketId (from get-tickets) or threadId (from pending-threads).`,
   params: Schema.Struct({ ticketId: Schema.optional(Schema.String), threadId: Schema.optional(Schema.String) }),
   fromContext: (ctx) => (ctx.ticketId ? { ticketId: ctx.ticketId } : null),
   run: ({ ticketId, threadId }, ctx, { rooms, transcripts }) =>
