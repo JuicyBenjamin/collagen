@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.10.0-alpha...p2p-v0.10.1-alpha) (2026-09-15)
+
+
+### Bug Fixes
+
+* **cli:** pin every [@effect](https://github.com/effect) package exact and move to rc.115 ([1fe6dce](https://github.com/JuicyBenjamin/collagen/commit/1fe6dce963f81e397b400444fe0e1499054fd371))
+
 ## [0.10.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.9.1-alpha...p2p-v0.10.0-alpha) (2026-09-14)
 
 
