@@ -34,10 +34,11 @@ export function Footer() {
   // the local fallback for terminals that block OSC 52.
   useKeyboard((key) => {
     if (captured !== null || key.name !== "c") return;
-    renderer.copyToClipboardOSC52(formatInvite(room.id, NET));
+    const invite = formatInvite(room.id, NET);
+    renderer.copyToClipboardOSC52(invite);
     if (process.platform === "darwin") {
       const child = execFile("pbcopy");
-      child.stdin?.end(room.id);
+      child.stdin?.end(invite);
     }
     setCopied(true);
   });

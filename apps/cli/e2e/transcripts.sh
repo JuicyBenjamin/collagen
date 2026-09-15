@@ -4,7 +4,7 @@
 # file lives in a temp CODEX_HOME. The ask does NOT answer itself — a session
 # is the one thing nobody asked their own agent to send — so bob's side waits
 # until his agent is told to share it; then the slice from adoption on goes to
-# alice directly and is filed under ~/.config/collagen/transcripts/<subject>/.
+# alice directly and is filed under ~/.config/collagen-devnet/transcripts/<subject>/.
 # No CLI runs.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet

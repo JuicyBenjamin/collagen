@@ -173,7 +173,7 @@ alone too.
 ## Decisions log
 
 - **Mainnet and devnet** (2026-09-15) — a run from source is on devnet: its own config
-  dir, its own swarm topic salt, its own MCP server name and port, all derived from
+  dir, its own swarm topic salt, its own MCP server name and port range, all derived from
   `IS_RELEASE`. Still the public DHT, so anyone who pulls the branch joins the devnet
   room; nobody on the release can. No escape hatch onto mainnet from source — a
   hot-reloading build in a real room is what wiped one ("anyone could enter and
