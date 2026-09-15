@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.10.1-alpha...p2p-v0.11.0-alpha) (2026-09-15)
+
+
+### Features
+
+* **cli:** a run from source is on devnet, a release on mainnet ([b450790](https://github.com/JuicyBenjamin/collagen/commit/b45079007509062c03b8c4a24a466117a935fd79))
+
 ## [0.10.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.10.0-alpha...p2p-v0.10.1-alpha) (2026-09-15)
 
 

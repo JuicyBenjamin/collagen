@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.10.1-alpha...cli-v0.11.0-alpha) (2026-09-15)
+
+
+### Features
+
+* **cli:** a run from source is on devnet, a release on mainnet ([b450790](https://github.com/JuicyBenjamin/collagen/commit/b45079007509062c03b8c4a24a466117a935fd79))
+
+
+### Bug Fixes
+
+* **cli:** disjoint port ranges per net, one invite on both clipboards, net-aware tool paths ([bddff27](https://github.com/JuicyBenjamin/collagen/commit/bddff27221cdd513941d0c7b01ea61ed434f56a8))
+
 ## [0.10.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.10.0-alpha...cli-v0.10.1-alpha) (2026-09-15)
 
 
