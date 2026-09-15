@@ -16,12 +16,14 @@ import {
 import { NotWritable, PeerNotConnected } from "./errors";
 import type { ReviewContext } from "./review";
 import type { Ticket } from "./ticket";
-import { deriveThreadId, roomTopic } from "./topic";
+import { deriveThreadId, roomTopic, type Net } from "./topic";
 import { openRoomLog, type RoomLog } from "./RoomLog";
 import { Swarm, type TopicHooks } from "./Swarm";
 
 export class RoomConfig extends Context.Service<RoomConfig, {
   readonly roomName: string;
+  /** live (a release) or dev (a run from source) — picks the swarm topic salt. */
+  readonly net: Net;
   /** The room's display name as we last knew it (shown until the log says otherwise). */
   readonly roomLabel: RoomMeta;
   /** Re-evaluated on every broadcast, so profile changes are picked up live. */
@@ -367,7 +369,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       },
     };
 
-    topicHex = yield* swarm.join(roomTopic(config.roomName), hooks);
+    topicHex = yield* swarm.join(roomTopic(config.roomName, config.net), hooks);
 
     // A join request can land on a member who can't serve it yet (or get lost
     // with a connection); keep asking everyone present until admitted.

@@ -6,7 +6,9 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/unstable/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
-import { AI_OPTIONS, DriveAction, emptyReview, isJudged, isRoomId, isTake, mergeReview, newProject, PROTOCOL_VERSION, retireSteps, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
+import { NET } from "../app/net";
+import { checkInvite } from "../lib/invite";
+import { AI_OPTIONS, DriveAction, emptyReview, formatInvite, isJudged, isTake, mergeReview, newProject, PROTOCOL_VERSION, retireSteps, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -527,7 +529,7 @@ const makeHandlers = Effect.gen(function* () {
         online: r.online,
         unread: r.unread,
         lookingAt: r.focused,
-        inviteId: f.rooms?.find((x) => x.id === r.id)?.id ?? r.id,
+        inviteId: formatInvite(f.rooms?.find((x) => x.id === r.id)?.id ?? r.id, NET),
       }));
     });
 
@@ -1106,12 +1108,13 @@ const makeHandlers = Effect.gen(function* () {
           if (n.length === 0) return "failed: empty room name";
           const entry = newRoomEntry(n);
           yield* rooms.join(entry, true);
-          return `created room "${n}" [${shortRoomId(entry.id)}] — you are in it now. Invite id to share: ${entry.id}`;
+          return `created room "${n}" [${shortRoomId(entry.id)}] — you are in it now. Invite id to share: ${formatInvite(entry.id, NET)}`;
         }).pipe(Effect.withSpan("Mcp.createRoom")),
       "join-room": ({ inviteId, name }: { inviteId: string; name?: string }) =>
         Effect.gen(function* () {
-          const id = inviteId.trim();
-          if (!isRoomId(id)) return "failed: that is not a room invite id (expected a uuid)";
+          const check = checkInvite(inviteId);
+          if (!check.ok) return `failed: ${check.reason}`;
+          const id = check.id;
           const entry = invitedRoomEntry(id);
           yield* rooms.join(name?.trim() ? { ...entry, name: name.trim() } : entry, true);
           return `joined room [${shortRoomId(id)}] — you are in it now; its shared name arrives from the peers`;

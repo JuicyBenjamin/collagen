@@ -4,6 +4,7 @@ import { Effect, Layer, Option, Sink, Stream, SubscriptionRef } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import type { LocalState, RoomMessage } from "@collagen/p2p";
 import { Adapters, type Adapter } from "./Adapters";
+import { mcpServerName } from "./mcpAddress";
 import { AgentRunner } from "./AgentRunner";
 import { cliArgsLayer } from "./CliArgs";
 import { Inbox } from "./Inbox";
@@ -168,7 +169,7 @@ describe("AgentRunner", () => {
       "fresh",
       "thread-1",
       "http://127.0.0.1:9/mcp",
-      "collagen-testprof",
+      mcpServerName("testprof"),
     ]);
     expect(calls[0]!.cwd).toBe("/tmp/fake-project");
   });

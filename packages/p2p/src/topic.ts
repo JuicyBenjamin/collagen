@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
 
-/** Derive a 32-byte swarm topic from a room name. */
-export function roomTopic(roomName: string): Buffer {
-  return createHash("sha256").update(`collagen:${roomName}`).digest();
+/** Which net a run is on. A release is on mainnet; a run from source is on
+ *  devnet. Same invite id, different topic, so the two never meet: nobody on
+ *  the release walks into a room whose log is being reshaped by unreleased
+ *  code, and anyone who pulls the branch joins it. */
+export type Net = "mainnet" | "devnet";
+
+/** Derive a 32-byte swarm topic from a room name, salted by net. */
+export function roomTopic(roomName: string, net: Net = "mainnet"): Buffer {
+  const salt = net === "devnet" ? "collagen-devnet" : "collagen";
+  return createHash("sha256").update(`${salt}:${roomName}`).digest();
 }
 
 /** Short, human-pasteable room identifier for LOCAL disambiguation (agents,
@@ -19,6 +26,23 @@ export function shortRoomId(roomId: string): string {
 export function deriveThreadId(a: string, b: string, project: string): string {
   const [lo, hi] = a < b ? [a, b] : [b, a];
   return createHash("sha256").update(`${lo}|${hi}|${project}`).digest("hex").slice(0, 16);
+}
+
+/** An invite as people see and paste it: the room id, prefixed `devnet-` when
+ *  the room is on devnet. The prefix is what lets the other net say
+ *  "not here" at once, instead of waiting on a topic nobody announces on. */
+export function formatInvite(roomId: string, net: Net): string {
+  return net === "devnet" ? `devnet-${roomId}` : roomId;
+}
+
+export type ParsedInvite = { readonly id: string; readonly net: Net };
+
+/** The inverse of formatInvite; null when the text is not an invite at all. */
+export function parseInvite(s: string): ParsedInvite | null {
+  const t = s.trim();
+  const dev = t.startsWith("devnet-");
+  const id = dev ? t.slice(7) : t;
+  return isRoomId(id) ? { id, net: dev ? "devnet" : "mainnet" } : null;
 }
 
 /** A room id (= the invite) is a uuid, v7 in practice. Anything else is

@@ -70,8 +70,10 @@ nothing restarts. `join` opens a room live; `summaryChanges` streams one line pe
 ## The p2p core: `Swarm` and `Room`
 
 `Swarm` (`packages/p2p/src/Swarm.ts`) is **one Hyperswarm per identity** — one DHT node
-per keypair, however many rooms. A room is a **topic** on it; a peer you share several
-rooms with is **one connection** carrying frames for each. (The first design ran one
+per keypair, however many rooms. A room is a **topic** on it — `sha256(salt + ":" + roomId)`,
+the salt `collagen` for a release and `collagen-devnet` for a run from source, so the two
+nets never meet on the DHT ([mainnet and devnet](/internals/development#mainnet-and-devnet)); a peer
+you share several rooms with is **one connection** carrying frames for each. (The first design ran one
 swarm per room; two DHT nodes announcing the same key made relayed handshakes land on
 the wrong node and connections time out for minutes — found 2026-09-07.)
 

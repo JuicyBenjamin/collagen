@@ -4,10 +4,11 @@ import { useKeyboard, useRenderer } from "@opentui/react";
 import { useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { shortRoomId } from "@collagen/p2p";
+import { formatInvite, shortRoomId } from "@collagen/p2p";
 import { captureAtom } from "../../../../components/focus";
 import { theme } from "../../../../app/theme";
 import { IS_RELEASE, VERSION } from "../../../../app/version";
+import { NET } from "../../../../app/net";
 import { roomAtom } from "../../../atoms";
 import { logsAtom, mcpUrlAtom } from "./atoms";
 
@@ -33,7 +34,7 @@ export function Footer() {
   // the local fallback for terminals that block OSC 52.
   useKeyboard((key) => {
     if (captured !== null || key.name !== "c") return;
-    renderer.copyToClipboardOSC52(room.id);
+    renderer.copyToClipboardOSC52(formatInvite(room.id, NET));
     if (process.platform === "darwin") {
       const child = execFile("pbcopy");
       child.stdin?.end(room.id);
@@ -53,11 +54,11 @@ export function Footer() {
       </box>
       <box flexDirection="column" flexShrink={0}>
         <text fg={theme.dim} truncate wrapMode="none">
-          collagen {VERSION}{IS_RELEASE ? "" : " (source)"} · mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
+          collagen {VERSION}{IS_RELEASE ? "" : " · devnet"} · mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
         </text>
         <text fg={theme.dim} truncate wrapMode="none">
           room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] · invite id:{" "}
-          <span fg={theme.fg}>{room.id}</span>
+          <span fg={theme.fg}>{formatInvite(room.id, NET)}</span>
           {copied ? <span fg={theme.ok}>  ✓ copied</span> : <span fg={theme.dim}>  (c to copy)</span>}
         </text>
       </box>

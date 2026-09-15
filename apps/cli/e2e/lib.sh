@@ -17,7 +17,7 @@ SCN="$(basename "$0" .sh)"
 ROOT_OUT="${COLLAGEN_E2E_OUT:-${TMPDIR:-/tmp}/collagen-e2e}"
 OUT="$ROOT_OUT/$SCN"
 SHOME="$OUT/home"            # the instances' HOME
-CFG="$SHOME/.config/collagen" # …and so their config dir
+CFG="$SHOME/.config/collagen-devnet" # …and so their config dir (a run from source is on devnet)
 mkdir -p "$OUT"
 cd "$ROOT"
 
@@ -34,13 +34,14 @@ export COLLAGEN_BOOTSTRAP_FILE="$OUT/dev-bootstrap.json"
 # Test instances register their MCP server with no agent: nothing runs codex or claude.
 export COLLAGEN_REGISTER=0
 
-# Profiles are per scenario; MCP ports derive from the profile name
-# (services/mcpAddress.ts), so scenarios running side by side never collide.
+# Profiles are per scenario; MCP ports derive from the profile name and the
+# net — "@devnet" here, since instances run from source (services/mcpAddress.ts)
+# — so scenarios running side by side never collide.
 profile() { echo "$1-$SCN"; }
 port_of() {
   python3 -c 'import sys
 h = 0
-for c in sys.argv[1]: h = (h * 31 + ord(c)) & 0xffffffff
+for c in sys.argv[1] + "@devnet": h = (h * 31 + ord(c)) & 0xffffffff
 print(41000 + h % 4000)' "$1"
 }
 A=http://127.0.0.1:$(port_of "$(profile alice)")/mcp

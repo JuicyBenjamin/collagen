@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
-import { isRoomId } from "@collagen/p2p";
+import { checkInvite } from "../../../lib/invite";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 
@@ -36,12 +36,12 @@ export function RoomChooser({
     onDone({ mode: "create", name: roomName.trim() });
   };
   const submitJoin = () => {
-    const id = inviteId.trim();
-    if (!isRoomId(id)) {
-      setError("that doesn't look like a room id — it should be a uuid like 019904c3-…-…");
+    const check = checkInvite(inviteId);
+    if (!check.ok) {
+      setError(check.reason);
       return;
     }
-    onDone({ mode: "join", inviteId: id });
+    onDone({ mode: "join", inviteId: check.id });
   };
 
   useKeyboard((key) => {
