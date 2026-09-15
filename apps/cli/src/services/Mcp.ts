@@ -1220,7 +1220,7 @@ export const McpLive = Layer.unwrap(
       Effect.gen(function* () {
         const server = yield* HttpServer.HttpServer;
         const addr = server.address;
-        if (addr._tag === "TcpAddress") {
+        if (addr._tag === "InetAddressV4" || addr._tag === "InetAddressV6") {
           yield* mcpInfo.set(`http://127.0.0.1:${addr.port}/mcp`);
         }
       }),

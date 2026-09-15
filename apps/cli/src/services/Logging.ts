@@ -22,7 +22,7 @@ export class LogBuffer extends Context.Service<LogBuffer>()("cli/LogBuffer", {
 export const LoggerLive = Layer.unwrap(
   Effect.gen(function* () {
     const buffer = yield* LogBuffer;
-    const file = Option.getOrUndefined(yield* Config.option(Config.string("COLLAGEN_LOG")));
+    const file = Option.getOrUndefined(yield* Config.option(Config.String("COLLAGEN_LOG")));
     const logger = Logger.make(({ date, logLevel, message, cause }) => {
       const text = Array.isArray(message) ? message.map(String).join(" ") : String(message);
       const rendered = cause === undefined ? "" : String(cause);
