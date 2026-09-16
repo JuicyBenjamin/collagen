@@ -86,11 +86,15 @@ const canonical = (v: unknown): string =>
           .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
           .join(",")}}`
       : JSON.stringify(v);
-/** The entry's identity: its content without the two envelope fields that a
- *  replay rewrites (`protocol`, `replays`), so the raw entry a peer kept and
- *  the replay of it hash alike. The full digest — this is what data lives on. */
+/** The entry's identity: its content, protocol included, without the one
+ *  field a replay adds (`replays`) — so the raw entry a peer kept and the
+ *  replay of it hash alike (a replay keeps the entry's own protocol), while
+ *  the same body written under two protocols is two entries: the same wire
+ *  shape can mean different things in different versions, and a decodable
+ *  copy must never be swallowed by one that is not. The full digest — this
+ *  is what data lives on. */
 const entryHash = (value: unknown): string => {
-  const { protocol: _p, replays: _r, ...content } = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  const { replays: _r, ...content } = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
   return createHash("sha256").update(canonical(content)).digest("hex");
 };
 const unseenKey = (claimed: string | null, value: unknown) => `${UNSEEN}${claimed ?? "op"}/${entryHash(value)}`;
