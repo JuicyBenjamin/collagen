@@ -45,9 +45,9 @@ export type TicketStep = typeof TicketStep.Type;
 
 /** What kind of work the ticket is. "task" is the plain one: a goal and its
  *  steps. The other three ask for JUDGMENT and carry a why record (review.ts):
- *  a "review" of code that exists; a "plan" — something the author intends
- *  to do, do you agree; a "proposal" — work the author wants someone else to
- *  do, will you. Readers answer on steps of their own (`postReview`). */
+ *  a "proposal" — an idea written down, owed to no one, is it worth doing; a
+ *  "plan" — how the author means to do something, do you agree; a "review"
+ *  of code that exists. Readers answer on steps of their own (`postReview`). */
 export const TicketKind = Schema.Literals(["task", "review", "plan", "proposal"]);
 export type TicketKind = typeof TicketKind.Type;
 
