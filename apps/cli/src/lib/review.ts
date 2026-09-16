@@ -120,6 +120,9 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
   // a proposal's outline is searched like the rest: "bob" finds the item he
   // is suggested for, "mailer" the item about the mailer
   const outline = keep(r.outline ?? []);
+  // the bug report is one block: it is in the answer when nothing is asked
+  // about, or when the question touches any of its words
+  const bug = r.bug && (q.length === 0 || hayBug(r.bug).includes(q)) ? r.bug : undefined;
   return {
     review: {
       by: r.authorName,
@@ -131,7 +134,7 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       ...(q.length > 0
         ? {
             about: q,
-            matched: `${decisions.length} of ${r.decisions.length} decisions, ${forks.length} of ${r.forks.length} forks${r.outline && r.outline.length > 0 ? `, ${outline.length} of ${r.outline.length} outline items` : ""}`,
+            matched: `${decisions.length} of ${r.decisions.length} decisions, ${forks.length} of ${r.forks.length} forks${r.outline && r.outline.length > 0 ? `, ${outline.length} of ${r.outline.length} outline items` : ""}${r.bug ? `, the bug report ${bug ? "matched" : "did not match"}` : ""}`,
           }
         : {}),
     },
@@ -147,9 +150,15 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
     // author's suggestion, binding on nobody; a plan lifts it into real steps
     ...(outline.length > 0 ? { outline: outline.map((o) => ({ id: o.id, intent: o.intent, description: o.description, owner: o.owner ?? "" })) } : {}),
     // a bug's report, whole: the symptom is the fact, the rest the reporter's reading
-    ...(r.bug ? { bug: bugRows(r.bug) } : {}),
+    ...(bug ? { bug: bugRows(bug) } : {}),
   };
 };
+
+const hayBug = (b: BugReport): string =>
+  [b.symptom, b.cause?.what, ...(b.cause?.where ?? []), b.importance?.effect, b.suggestion?.what, ...(b.suggestion?.requirements ?? []), b.remedy, b.remedy ? REMEDY_WORDS[b.remedy] : ""]
+    .filter((x): x is string => typeof x === "string")
+    .join(" ")
+    .toLowerCase();
 
 /** The report as a reader gets it: the score with its anchor spelled out, so
  *  "3" reads as "3 — wrong: a feature fails for some" and not as a number. */

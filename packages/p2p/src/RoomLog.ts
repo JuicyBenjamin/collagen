@@ -70,10 +70,13 @@ const wireProtocol = (value: unknown): number | null => {
  *  then raises it to play the update — nothing in the app touches it. */
 export const protocolForTests = { ours: Number(PROTOCOL_VERSION) };
 const UNSEEN = "unseen/";
-/** What is replayed once readable: keyed records, where applying twice is
- *  applying once. A message has no key and would land twice; a member or
- *  rename re-announces itself anyway. */
-const REPLAYABLE = /^unseen\/(ticket|review|attachment)\//;
+/** Where a newer build's entry is kept raw: under the key it claims (or `op`
+ *  when it claims none) and its position in arrival order, so several
+ *  updates to one ticket are all kept and replayed in the order they came.
+ *  Zero-padded so the view's key order is log order. */
+const unseenKey = (claimed: string | null, n: number) => `${UNSEEN}${claimed ?? "op"}/${String(n).padStart(12, "0")}`;
+/** The claimed key an unseen row was filed under: `unseen/ticket/t1/000000000007` → `ticket/t1`. */
+const unseenClaim = (rowKey: string): string => rowKey.slice(UNSEEN.length).replace(/\/\d{12}$/, "");
 const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
 
 /** The view key an entry we CANNOT read would have written, when the entry is
@@ -115,10 +118,9 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
     // count it, so the room loses nothing while this side has not updated
     const wire = wireProtocol(node.value);
     if (wire !== null && wire > protocolForTests.ours) {
-      const claimed = claimedKey(node.value);
-      const n = ((await view.get("state/unseen")) ?.value ?? 0) as number;
+      const n = ((await view.get("state/unseen"))?.value ?? 0) as number;
       await view.put("state/unseen", n + 1);
-      await view.put(`${UNSEEN}${claimed ?? `op/${n}`}`, { protocol: wire, raw: node.value });
+      await view.put(unseenKey(claimedKey(node.value), n), { protocol: wire, raw: node.value });
       continue;
     }
     // an entry from an older protocol is rewritten into the current shape when
@@ -126,9 +128,26 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
     const op = Option.getOrUndefined(decodeOp(node.value)) ?? migrateOp(node.value) ?? undefined;
     {
       // the record this entry writes is readable now: whatever an older pass
-      // of this view kept raw under it is superseded
+      // of this view kept raw under it is superseded — all of it. An entry
+      // that claims no key (a message, a member, a writer) is cleared by
+      // content: the replay re-appends the same op, stamped anew, so the raw
+      // row whose op matches is done.
       const claimed = claimedKey(node.value);
-      if (claimed && (await view.get(`${UNSEEN}${claimed}`))) await view.del(`${UNSEEN}${claimed}`);
+      if (!claimed) {
+        const { protocol: _p, ...bare } = (node.value ?? {}) as Record<string, unknown>;
+        const want = JSON.stringify(bare);
+        const gone: string[] = [];
+        for await (const row of view.createReadStream({ gte: `${UNSEEN}op/`, lt: `${UNSEEN}op0` })) {
+          const { protocol: _q, ...theirs } = (row.value?.raw ?? {}) as Record<string, unknown>;
+          if (JSON.stringify(theirs) === want) gone.push(row.key);
+        }
+        for (const k of gone) await view.del(k);
+      }
+      if (claimed) {
+        const gone: string[] = [];
+        for await (const row of view.createReadStream({ gte: `${UNSEEN}${claimed}/`, lt: `${UNSEEN}${claimed}0` })) gone.push(row.key);
+        for (const k of gone) await view.del(k);
+      }
     }
     if (!op) {
       // unreadable here: eject the row it claims instead of leaving a stale one
@@ -158,9 +177,13 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         break;
       }
       case "msg": {
+        // one copy per id: a message replayed after an update, or re-appended
+        // by two peers replaying the same entry, lands once
+        if (await view.get(`msgid/${op.msg.id}`)) break;
         const count = (await view.get("state/msgs"))?.value ?? 0;
         await view.put(MSG_KEY(count), op.msg);
         await view.put("state/msgs", count + 1);
+        await view.put(`msgid/${op.msg.id}`, count);
         break;
       }
       case "attachment": {
@@ -277,15 +300,19 @@ export const openRoomLog = (
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
       // entries a build behind kept raw: list them, and queue for replay the
       // ones this build can read — once appended they apply like any entry
+      // entries a build behind kept raw, in arrival order: replay every one
+      // this build can decode now (apply is idempotent per record — tickets
+      // merge, a review's later ts wins, a message lands once by id, a writer
+      // is admitted once); list the rest once per claimed key
       const unseenRows = yield* readRange("unseen");
-      const unseen: Unseen[] = [];
+      const stillUnseen = new Map<string, number>();
       for (const row of unseenRows) {
         const v = row.value as { protocol?: number; raw?: unknown };
-        const key = row.key.slice(UNSEEN.length);
         const op = v.protocol !== undefined && v.protocol <= protocolForTests.ours ? Option.getOrUndefined(decodeOp(v.raw)) : undefined;
-        if (op && REPLAYABLE.test(row.key)) migrated.push(op);
-        else unseen.push({ key, protocol: v.protocol ?? 0 });
+        if (op) migrated.push(op);
+        else stillUnseen.set(unseenClaim(row.key), Math.max(stillUnseen.get(unseenClaim(row.key)) ?? 0, v.protocol ?? 0));
       }
+      const unseen: Unseen[] = [...stillUnseen].map(([key, protocol]) => ({ key, protocol }));
       stale = bad;
       rewrites = migrated;
       if (bad.length !== announced) {
