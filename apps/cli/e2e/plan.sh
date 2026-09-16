@@ -97,47 +97,44 @@ wait_until "her own take is a settled take step on her ticket" "review-alice,ali
 ACCEPT="{\"ticketId\":\"$IID\",\"stepId\":\"address\",\"result\":\"worth doing\"}"
 ACCEPTED=$(call $A "$SA" settle-step "$ACCEPT")
 expect "accepting points at the plan that would come next, and assigns nothing" "$ACCEPTED" "ask-plan with from.*accepting assigns nothing"
-echo "## a proposal to bob: his ✓ is what starts the work"
+echo "## a proposal to bob: he is asked, not assigned — the work stays an outline, his take says whether he would"
 NOWORK='{"peers":["bob"],"project":"sandbox","goal":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
 J8="$NOWORK"
 expect "a proposal to someone needs no work spelled out either" "$(call $A "$SA" propose "$J8")" "proposal ticket filed, asked of bob"
-PROP="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"expose the export in the backoffice UI\",\"summary\":\"a button on the customer page\",\"decisions\":[{\"what\":\"a download button on the customer page\",\"userWhy\":\"support keeps asking for the file by mail\"}],\"forks\":[],\"from\":[\"$PID\"],\"work\":[{\"intent\":\"build\",\"description\":\"the button and the download\"}]}"
+PROP="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"expose the export in the backoffice UI\",\"summary\":\"a button on the customer page\",\"decisions\":[{\"what\":\"a download button on the customer page\",\"userWhy\":\"support keeps asking for the file by mail\"}],\"forks\":[],\"from\":[\"$PID\"],\"work\":[{\"intent\":\"build\",\"description\":\"the button and the download\",\"owner\":\"bob\"}]}"
 PROPOSED=$(call $A "$SA" propose "$PROP")
 expect "filed as a proposal to bob" "$PROPOSED" "proposal ticket filed, asked of bob"
 QID=$(echo "$PROPOSED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "bob sees it" "kind: proposal" rows $B "$SB" "$QID"
 QROWS=$(rows $B "$SB" "$QID")
-expect "bob has a take step and a work step waiting on it" "$QROWS" "work-build-bob,bob,build,(pending|suspended),review-bob"
-expect "…the work is not his to do yet" "$(grep -c 'step work-build-bob actionable' "$OUT/bob.log")" "^0$"
+expect "bob has a take step" "$QROWS" "review-bob,bob,take,(pending|suspended)"
+expect "…and no work step: naming him asked him, it did not assign him" "$(echo "$QROWS" | grep -c 'work-')" "^0$"
 expect "…and the proposal follows the plan" "$QROWS" "from: $PID"
-echo "## bob wants the work changed — alice revises the work on the same ticket"
+echo "## bob wants the idea changed — alice revises the outline on the same ticket"
 NO="{\"ticketId\":\"$QID\",\"findings\":\"a button is fine but it needs a job, not a request-time export\",\"failed\":true}"
 call $B "$SB" post-review "$NO" > /dev/null
 wait_until "alice hears the change request" "ticket ${QID:0:8}: bob asked for changes" bash -c "cat '$OUT/alice.log'"
 DUP="{\"ticketId\":\"$QID\",\"work\":[{\"intent\":\"build\",\"description\":\"a\"},{\"intent\":\"build\",\"description\":\"b\"}]}"
-expect "two work items that would share an id are refused, not collapsed" "$(call $A "$SA" propose "$DUP")" "two work items would share the id .{1,3}build"
+expect "two outline items that would share an id are refused, not collapsed" "$(call $A "$SA" propose "$DUP")" "two work items would share the id .{1,3}build"
 # the request-time build is withdrawn; a job-enqueuing button and a mail step replace it,
 # two items with the same intent kept apart by their own ids
-REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"what\":\"the button enqueues a job; the file comes by mail\",\"userWhy\":\"bob is right that the export is too slow for a request\"}],\"retireWork\":[\"build\"],\"work\":[{\"id\":\"enqueue\",\"intent\":\"build\",\"description\":\"the button, enqueuing an export job\"},{\"id\":\"mail\",\"intent\":\"build\",\"description\":\"the mailer that sends the finished file\"}],\"whenClosed\":\"\"}"
+REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"what\":\"the button enqueues a job; the file comes by mail\",\"userWhy\":\"bob is right that the export is too slow for a request\"}],\"retireWork\":[\"build\"],\"work\":[{\"id\":\"enqueue\",\"intent\":\"build\",\"description\":\"the button, enqueuing an export job\"},{\"id\":\"mail\",\"intent\":\"build\",\"description\":\"the mailer that sends the finished file\",\"owner\":\"bob\"}],\"whenClosed\":\"\"}"
 REVISED=$(call $A "$SA" propose "$REWORK")
 expect "the proposal is revised, not re-filed" "$REVISED" "proposal ticket updated"
+QWHY=$(call $A "$SA" review-context "{\"ticketId\":\"$QID\"}")
+expect "the withdrawn item is gone from the outline: intent, not history" "$(echo "$QWHY" | grep -c 'the button and the download')" "^0$"
+expect "the new item stands on its own id, same intent notwithstanding" "$QWHY" "enqueue,build,.{0,3}the button, enqueuing an export job"
+expect "…and so does the second, with its suggested owner" "$QWHY" "mail,build,the mailer that sends the finished file,bob"
 QROWS2=$(rows $A "$SA" "$QID")
-expect "the withdrawn work is retired: on the ticket, never up" "$QROWS2" "work-build-bob,bob,build,retired"
-expect "the new work stands on its own id, same intent notwithstanding" "$QROWS2" "work-enqueue-bob,bob,build,(pending|suspended),review-bob,.{0,3}the button, enqueuing an export job"
-expect "…and so does the second" "$QROWS2" "work-mail-bob,bob,build,(pending|suspended),review-bob"
+expect "still no step was made from any of it" "$(echo "$QROWS2" | grep -c 'work-')" "^0$"
 expect "…his ↻ take is history, untouched" "$QROWS2" "review-bob,bob,take,failed"
 expect "an empty whenClosed withdrew the instruction" "$(echo "$QROWS2" | grep -c 'whenClosed')" "^0$"
-COLLIDE="{\"ticketId\":\"$QID\",\"work\":[{\"id\":\"review\",\"intent\":\"review\",\"description\":\"review the mailer output\"}]}"
-call $A "$SA" propose "$COLLIDE" > /dev/null
-QROWS3=$(rows $A "$SA" "$QID")
-expect "a work item called review lands in the work namespace, not on bob's take" "$QROWS3" "work-review-bob,bob,review,(pending|suspended),review-bob"
-expect "…and his take step is exactly as it was" "$QROWS3" "review-bob,bob,take,failed"
 NONE="{\"ticketId\":\"$QID\",\"retireWork\":[\"build\"]}"
-expect "retiring what is already retired is refused, saying so" "$(call $A "$SA" propose "$NONE")" "none of build is pending work"
-wait_until "bob's copy has the revised work" "work-enqueue-bob" rows $B "$SB" "$QID"
+expect "withdrawing what is already gone is refused, saying so" "$(call $A "$SA" propose "$NONE")" "none of build is on this proposal"
 YES="{\"ticketId\":\"$QID\",\"findings\":\"yes, next sprint\"}"
 call $B "$SB" post-review "$YES" > /dev/null
-wait_until "bob's ✓ started the work: the enqueue step is his now" "step work-enqueue-bob actionable" bash -c "cat '$OUT/bob.log'"
-wait_until "…and the mailer too" "step work-mail-bob actionable" bash -c "cat '$OUT/bob.log'"
-expect "…but not the retired one" "$(grep -c 'step work-build-bob actionable' "$OUT/bob.log")" "^0$"
+wait_until "bob's ✓ is on the ticket" "review-bob,bob,take,settled" rows $A "$SA" "$QID"
+expect "…and it started nothing: nobody is assigned by accepting" "$(grep -c 'step work-' "$OUT/bob.log")" "^0$"
+ACCEPT2="{\"ticketId\":\"$QID\",\"stepId\":\"address\",\"result\":\"agreed, bob will take it in a plan\"}"
+expect "alice's settle points at the plan that binds bob, not at bob" "$(call $A "$SA" settle-step "$ACCEPT2")" "ask-plan with from.*accepting assigns nothing"
 kill_all; summary

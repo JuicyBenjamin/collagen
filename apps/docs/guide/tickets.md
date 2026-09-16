@@ -175,13 +175,15 @@ thinking, given before your thinking has coloured theirs — or your own take, a
 
 | kind | what it says | the reader is asked | work steps | it ends when |
 | --- | --- | --- | --- | --- |
-| `proposal` | an idea, written down; owed to no one | is it worth doing — and, if someone is named, would you do it, or should I | none, unless someone is named: then theirs, active on their ✓ | you close it — a plan grew out of it, or it is dropped |
+| `proposal` | an idea, written down; owed to no one | is it worth doing — and, if someone is named, would you do it, or should I | none — the work is an outline; willingness goes in the take, a plan binds | you close it — a plan grew out of it, or it is dropped |
 | `plan` | something I intend to do, and how | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
 
 A proposal is the **cheap** kind: alone on your own project you get ideas and want them
 kept without committing to them. It goes in with a goal and one thought; a summary, a
 non-binding **outline** of the work (what it might involve, who might do it) and named
-peers are all optional. Nobody owes anything until a plan names them. A plan is how it
+peers are all optional. No step is ever made from the outline, named peers included: a
+peer says in their take whether they would do it, and nobody owes anything until a plan
+names them. A plan is how it
 gets done; it may grow out of a proposal (its `from` says so) and a proposal that never
 becomes a plan is expected. Two tickets, not two phases of one — the phases live in the
 chain between them (below).
@@ -275,8 +277,8 @@ Because nobody has to be named, it is the same flow alone: you plan, your second
 gives its blind take, you build it, it reviews the result.
 
 Built: `ask-plan` and `propose` (peers and `work` optional; `work` is an outline on the
-why, each item with a stable `id` and an optional suggested `owner`, and becomes steps
-only for a recipient who is named), takes with `post-review` — your own included,
+why, each item with a stable `id` and an optional suggested `owner`, never a step;
+`retireWork` withdraws items by id), takes with `post-review` — your own included,
 attributed on the row as `self ✓` — the blind first take in `review-context`
 (`anyway: true` to skip it, and the agent says so), revising the same ticket — the goal,
 the pending work by id, added readers, and `retireWork` to withdraw work explicitly (a

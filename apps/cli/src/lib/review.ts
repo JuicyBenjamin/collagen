@@ -28,6 +28,9 @@ export interface ReviewInput {
   readonly link?: string;
   readonly decisions?: ReadonlyArray<DecisionInput>;
   readonly forks?: ReadonlyArray<ForkInput>;
+  /** A proposal's outline, and the ids withdrawn from it — changes to the why too. */
+  readonly outline?: ReadonlyArray<unknown>;
+  readonly retireOutline?: ReadonlyArray<string>;
 }
 
 const blank = (s: string | undefined): boolean => (s ?? "").trim().length === 0;
@@ -55,7 +58,8 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
       ? "failed: pass the decisions behind the change. Read back over THIS conversation and take them from it: what your user asked for, what they prefaced, what they ruled out, what you chose on your own and why. A review with no why is the review they already get from a diff."
       : `failed: pass at least one decision — a thought behind the ${kind}: 'what' your user means, 'userWhy' in their words, or 'agentWhy' as yours. ${kind === "proposal" ? "One is enough: an idea written down is still an idea with a reason." : "Read back over THIS conversation and take them from it."}`;
   }
-  if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link)) {
+  const outlineMoves = (input.outline?.length ?? 0) > 0 || (input.retireOutline?.length ?? 0) > 0;
+  if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
   }
   for (const [i, d] of decisions.entries()) {
