@@ -46,6 +46,8 @@ TICKET=$(echo "$ASKED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 echo "## bob's side: a review ticket whose headline says where the code is"
 wait_until "bob sees it, named for the branch alice is on" "review feat/opening-animation" goals $B "$SB"
+# the ticket and its why are two log ops; the headline needs the second
+wait_until "…and the why has landed beside it" "2 decisions" call $B "$SB" get-tickets '{}'
 TICKETS=$(call $B "$SB" get-tickets '{}')
 expect "the ticket knows it is a review" "$TICKETS" "kind: review"
 expect "…the branch off main and the link, read from alice's repo — she passed neither" "$TICKETS" "feat/opening-animation .{1,6} main.{1,20}github.com/JuicyBenjamin/collagen/tree/feat/opening-animation"

@@ -171,17 +171,26 @@ line included.
 A review asks a colleague to judge code that exists. Two more kinds ask for judgment
 before it does — advice, input, direction. Neither is a question: a question is what your
 own agent is for. These are for the input that is not AI: a colleague's take on your
-thinking, given before your thinking has coloured theirs.
+thinking, given before your thinking has coloured theirs — or your own take, a day later.
 
 | kind | what it says | the reader is asked | work steps | it ends when |
 | --- | --- | --- | --- | --- |
-| `plan` | something I intend to do myself, and how | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
-| `proposal` | work I want **someone else** to do, and why | will you do this | theirs, active on their ✓ | you close it — done, or declined |
+| `proposal` | an idea, written down; owed to no one | is it worth doing — and, if someone is named, would you do it, or should I | none, unless someone is named: then theirs, active on their ✓ | you close it — a plan grew out of it, or it is dropped |
+| `plan` | something I intend to do, and how | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
 
-The difference is who does the work, not when the ticket comes. A proposal can open a
-chain as easily as end one; a plan can stand alone. Two tickets, not two phases of one,
-because each is simpler to reason about on its own — the phases live in the chain between
-them (below).
+A proposal is the **cheap** kind: alone on your own project you get ideas and want them
+kept without committing to them. It goes in with a goal and one thought; a summary, a
+non-binding **outline** of the work (what it might involve, who might do it) and named
+peers are all optional. Nobody owes anything until a plan names them. A plan is how it
+gets done; it may grow out of a proposal (its `from` says so) and a proposal that never
+becomes a plan is expected. Two tickets, not two phases of one — the phases live in the
+chain between them (below).
+
+You may take your own proposal: `post-review` on your own ticket is allowed, and the row
+says so — `self ✓` — so a colleague's ✓ and a self-approval never read alike, and others
+can still add theirs. Accepting is judgment, not work: the settle outcome points your
+agent at the plan that would come next (`ask-plan` with `from` the proposal, the outline
+and suggested owners as prefills) and assigns nothing on its own.
 
 ### What sits on the ticket
 
@@ -265,8 +274,10 @@ product manager, the backender and the reviewer each speaking through their own 
 Because nobody has to be named, it is the same flow alone: you plan, your second agent
 gives its blind take, you build it, it reviews the result.
 
-Built: `ask-plan` and `propose` (a proposal names who and spells out the `work`, each item
-with a stable `id`), takes with `post-review`, the blind first take in `review-context`
+Built: `ask-plan` and `propose` (peers and `work` optional; `work` is an outline on the
+why, each item with a stable `id` and an optional suggested `owner`, and becomes steps
+only for a recipient who is named), takes with `post-review` — your own included,
+attributed on the row as `self ✓` — the blind first take in `review-context`
 (`anyway: true` to skip it, and the agent says so), revising the same ticket — the goal,
 the pending work by id, added readers, and `retireWork` to withdraw work explicitly (a
 **retired** step stays on the ticket as history and is never actionable; what a recipient

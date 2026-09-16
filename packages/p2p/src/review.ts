@@ -38,6 +38,18 @@ export const ReviewFork = Schema.Struct({
 });
 export type ReviewFork = typeof ReviewFork.Type;
 
+/** One item of a proposal's outline: what the work MIGHT involve and who
+ *  MIGHT do it, as the author sees it. Non-binding — nobody owes anything
+ *  until a plan names them. Kept by id so a revision can correct one line. */
+export const OutlineItem = Schema.Struct({
+  id: Schema.String,
+  intent: Schema.String,
+  description: Schema.String,
+  /** A suggested owner, by name; a suggestion only. */
+  owner: Schema.optional(Schema.String),
+});
+export type OutlineItem = typeof OutlineItem.Type;
+
 /** Everything the reviewer needs that a diff does not carry. One per ticket. */
 export const ReviewContext = Schema.Struct({
   ticketId: Schema.String,
@@ -53,6 +65,8 @@ export const ReviewContext = Schema.Struct({
   link: Schema.optional(Schema.String),
   decisions: Schema.Array(ReviewDecision),
   forks: Schema.Array(ReviewFork),
+  /** A proposal's idea of the work, when its author has one (see OutlineItem). */
+  outline: Schema.optional(Schema.Array(OutlineItem)),
   ts: Schema.Finite,
 });
 export type ReviewContext = typeof ReviewContext.Type;
@@ -80,6 +94,10 @@ export interface ReviewDelta {
     readonly why: string;
     readonly by?: "user" | "agent";
   }>;
+  /** Outline items, merged by id like decisions. */
+  readonly outline?: ReadonlyArray<OutlineItem>;
+  /** Outline ids withdrawn — an outline is intent, not history, so they go. */
+  readonly retireOutline?: ReadonlyArray<string>;
 }
 
 const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
@@ -110,6 +128,15 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     if (at === -1) forks.push(entry);
     else forks[at] = entry;
   }
+  let outline = base.outline === undefined && delta.outline === undefined ? undefined : [...(base.outline ?? [])];
+  if (outline !== undefined) {
+    for (const o of delta.outline ?? []) {
+      const at = outline.findIndex((x) => x.id === o.id);
+      if (at === -1) outline.push(o);
+      else outline[at] = o;
+    }
+    if (delta.retireOutline && delta.retireOutline.length > 0) outline = outline.filter((x) => !delta.retireOutline!.includes(x.id));
+  }
   return {
     ...base,
     summary: delta.summary ?? base.summary,
@@ -118,6 +145,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     ...(delta.link ?? base.link ? { link: delta.link ?? base.link } : {}),
     decisions,
     forks,
+    ...(outline !== undefined ? { outline } : {}),
     ts,
   };
 };

@@ -136,14 +136,15 @@ it with the why attached. Filing that review works today; the nudge does not.
 
 ### 5. Plans & proposals — [spec](/guide/tickets#plans-and-proposals-judgment-before-the-code-exists)
 
-Judgment before the code exists. `plan`: something I intend to do myself — do you agree?
-`proposal`: work I want someone else to do — will you? Who does the work, not when. A
+Judgment before the code exists. `proposal`: an idea written down, owed to no one — worth
+doing? `plan`: how it gets done — do you agree? A proposal may grow into a plan, or not. A
 question everyone sees, your thoughts and your agent's insight behind it, the reader's
 own take *before* they see either. Answered is the signal, closed is the decision, the
 close reason is the conclusion. Phases are the chain of tickets, never a status. Works
 alone too.
 
 - [x] `plan` and `proposal`: the review record with a tense — question, thoughts, insight, forks to come (`ask-plan`, `propose`)
+- [x] a proposal is the cheap kind: peers, summary and work optional; `work` is a non-binding outline on the why (suggested `owner` by name); self-takes allowed and attributed (`self ✓`); accepting points at the plan, assigns nothing
 - [x] the blind first take: `review-context` opens after this reader has posted, unless they ask (`anyway`)
 - [x] ↻ revises the same ticket: goal, pending work by stable id, added readers, explicit `retireWork` (retired = history, never actionable); a proposal's work steps activate on ✓
 - [ ] a take older than the latest revision reads as stale
@@ -171,6 +172,14 @@ alone too.
 - [ ] **More AI adapters** — beyond `claude-code` / `codex`.
 
 ## Decisions log
+
+- **A proposal is an idea, a plan is how** (2026-09-16) — proposal was "work I want someone
+  else to do" and refused without peers and work; now it is the first, uncommitted
+  write-down of an idea, owed to no one, with peers, summary and a non-binding work
+  outline all optional. "You get ideas and you want these ideas written down, but you're
+  not committed to them per se, so it's a proposal still." Self-approval is allowed and
+  shows as the author's on the row. Accepting is judgment: the next step is a plan with
+  `from` the proposal, confirmed by the person; nothing is assigned by accepting.
 
 - **Mainnet and devnet** (2026-09-15) — a run from source is on devnet: its own config
   dir, its own swarm topic salt, its own MCP server name and port range, all derived from

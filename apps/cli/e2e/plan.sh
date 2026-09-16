@@ -76,15 +76,31 @@ TASK=$(call $A "$SA" create-ticket "{\"goal\":\"bulk export, streamed\",\"projec
 TID=$(echo "$TASK" | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 expect "the task names the plan it follows" "$(rows $A "$SA" "$TID")" "from: $PID"
 
-echo "## a proposal: work alice wants bob to do — his ✓ is what starts it"
-NOPEER='{"project":"sandbox","goal":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[],"work":[{"intent":"do","description":"it"}]}'
-J6="$NOPEER"  # built first: bash 3.2 mangles \" nested in "$( )"
+echo "## a proposal is an idea written down, owed to no one — cheap, and it can be alice's alone"
+IDEA='{"project":"sandbox","goal":"a nightly export instead of on demand","decisions":[{"what":"run it at 03:00","userWhy":"nobody needs it fresher than a day"}],"forks":[],"work":[{"intent":"schedule","description":"a cron job for the export","owner":"bob"}]}'
+J6="$IDEA"  # built first: bash 3.2 mangles \" nested in "$( )"
 R6=$(call $A "$SA" propose "$J6")
-expect "a proposal with nobody asked is refused: it is work for someone" "$R6" "failed: a proposal is work your user wants someone else to do"
+expect "a proposal with nobody asked and no summary is filed, in the room" "$R6" "proposal ticket filed, in the room, nobody asked"
+IID=$(echo "$R6" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+IROWS=$(rows $A "$SA" "$IID")
+expect "…with nobody named, the work made no step for anyone" "$(echo "$IROWS" | grep -c 'work-')" "^0$"
+expect "…only the author's own address step" "$IROWS" "address,alice,address"
+OUTLINE=$(call $A "$SA" review-context "{\"ticketId\":\"$IID\"}")
+expect "…the work is an outline on the why, with the suggested owner, binding on nobody" "$OUTLINE" "outline.*schedule.*a cron job for the export.*bob"
+NOTHOUGHT='{"project":"sandbox","goal":"x","decisions":[],"forks":[]}'
+J7="$NOTHOUGHT"
+expect "an idea still needs one thought behind it" "$(call $A "$SA" propose "$J7")" "failed: pass at least one decision"
+echo "## alice takes her own idea — allowed, and the ticket says it was hers"
+SELF="{\"ticketId\":\"$IID\",\"findings\":\"still think so a day later\"}"
+call $A "$SA" post-review "$SELF" > /dev/null
+wait_until "her own take is a settled take step on her ticket" "review-alice,alice,take,settled" rows $A "$SA" "$IID"
+ACCEPT="{\"ticketId\":\"$IID\",\"stepId\":\"address\",\"result\":\"worth doing\"}"
+ACCEPTED=$(call $A "$SA" settle-step "$ACCEPT")
+expect "accepting points at the plan that would come next, and assigns nothing" "$ACCEPTED" "ask-plan with from.*accepting assigns nothing"
+echo "## a proposal to bob: his ✓ is what starts the work"
 NOWORK='{"peers":["bob"],"project":"sandbox","goal":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
-J7="$NOWORK"  # built first: bash 3.2 mangles \" nested in "$( )"
-R7=$(call $A "$SA" propose "$J7")
-expect "…and without the work spelled out" "$R7" "failed: a proposal needs .work."
+J8="$NOWORK"
+expect "a proposal to someone needs no work spelled out either" "$(call $A "$SA" propose "$J8")" "proposal ticket filed, asked of bob"
 PROP="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"expose the export in the backoffice UI\",\"summary\":\"a button on the customer page\",\"decisions\":[{\"what\":\"a download button on the customer page\",\"userWhy\":\"support keeps asking for the file by mail\"}],\"forks\":[],\"from\":[\"$PID\"],\"work\":[{\"intent\":\"build\",\"description\":\"the button and the download\"}]}"
 PROPOSED=$(call $A "$SA" propose "$PROP")
 expect "filed as a proposal to bob" "$PROPOSED" "proposal ticket filed, asked of bob"
