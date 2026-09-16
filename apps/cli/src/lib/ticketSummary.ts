@@ -20,6 +20,11 @@ export interface TicketSummary {
   /** What each person did, as a mark: see lib/glyphs. Nobody appears here
    *  who has done nothing — a bare name says that. */
   readonly marks: ReadonlyMap<string, Mark>;
+  /** The author's own take on their own ticket, when they gave one — a
+   *  self-approval is allowed, and shown as the author's so nobody reads it
+   *  as a colleague's. */
+  readonly authorMark: Mark | null;
+  readonly author: string;
   /** Did this person start it? The lists colour their own tickets. */
   readonly mine: boolean;
   /** Newest of the ticket's own update and its last message. */
@@ -94,6 +99,8 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     weighedIn,
     settledBy,
     marks,
+    authorMark: marks.get(ticket.createdBy) ?? null,
+    author: ticket.createdBy,
     mine,
     lastActivity,
   };
@@ -110,8 +117,12 @@ export const compareSummaries = (a: TicketSummary, b: TicketSummary): number =>
  *  matters, and "you ↻" read as the reader having asked themselves for
  *  changes. Who said what is on the ticket's page, step by step. */
 export function marksLabel(s: TicketSummary): string {
-  const present = new Set(s.marks.values());
-  return (["changes", "failed", "approved", "spoke"] as const).filter((m) => present.has(m)).map((m) => GLYPH[m]).join(" ");
+  const others = new Set<Mark>();
+  for (const [who, m] of s.marks) if (who !== s.author) others.add(m);
+  const said = (["changes", "failed", "approved", "spoke"] as const).filter((m) => others.has(m)).map((m) => GLYPH[m]);
+  // the author's own take is attributed — "self ✓" — the one place a word
+  // stays beside a glyph: a colleague's ✓ and a self-approval must not read alike
+  return [...said, ...(s.authorMark !== null ? [`self ${GLYPH[s.authorMark]}`] : [])].join(" ");
 }
 
 /** "2m" · "3h" · "5d" — compact, for a list column. */
