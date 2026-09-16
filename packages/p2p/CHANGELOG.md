@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.11.0-alpha...p2p-v0.12.0-alpha) (2026-09-16)
+
+
+### Features
+
+* **cli:** a proposal is an idea owed to no one; a plan is how it gets done ([3633def](https://github.com/JuicyBenjamin/collagen/commit/3633def9d37e7d1f1c13366770d843f987c9e22f))
+
+
+### Bug Fixes
+
+* **cli:** review-context searches a proposal's outline; two stale sentences ([d0eaf86](https://github.com/JuicyBenjamin/collagen/commit/d0eaf861640b75cabbef335a275c43b2494c313c))
+
 ## [0.11.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.10.1-alpha...p2p-v0.11.0-alpha) (2026-09-15)
 
 
