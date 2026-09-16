@@ -79,8 +79,9 @@ content, the same on every peer. A ticket among them shows on the overview as ki
 collagen to see this ticket"; the rest are a count under the list. Autobase never re-runs
 `apply` on old entries, so the update alone would not bring them back: `read` replays every
 entry the build can now decode (`rewriteMigrated` appends them in order), each replay
-naming the raw row it came from (`replays`), and `apply` deletes exactly that row once the
-entry has applied — nothing else ever clears a kept row, so an older peer writing the same
+naming the raw row it came from (`replays`) — a marker `apply` does not trust: it recomputes
+the row key from the entry it just applied (claimed key + full SHA-256 of the content, envelope
+fields stripped) and deletes only on an exact match — once the entry has applied — nothing else ever clears a kept row, so an older peer writing the same
 ticket, or the first of several replays, cannot erase what is kept; and because the key is
 the content, a replay published by one peer cannot retire a different entry another peer
 happened to keep at the same position. Applying twice is applying
