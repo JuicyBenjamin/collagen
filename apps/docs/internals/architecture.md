@@ -77,9 +77,10 @@ not; an entry from a **newer** build is kept **raw** — not applied, not evicte
 all survive. A ticket among them shows on the overview as kind `unknown` with "update
 collagen to see this ticket"; the rest are a count under the list. Autobase never re-runs
 `apply` on old entries, so the update alone would not bring them back: `read` replays every
-entry the build can now decode (`rewriteMigrated` appends them in order) and `apply` clears
-the raw rows once the record they claim is written readably — by key for tickets, reviews
-and attachments, by content for a message, a member or a writer. Applying twice is applying
+entry the build can now decode (`rewriteMigrated` appends them in order), each replay
+naming the raw row it came from (`replays`), and `apply` deletes exactly that row once the
+entry has applied — nothing else ever clears a kept row, so an older peer writing the same
+ticket, or the first of several replays, cannot erase what is kept. Applying twice is applying
 once: tickets merge, a review's later `ts` wins, an attachment is first-write-wins, a message
 lands once by id (`msgid/<id>`), a writer is admitted once.
 

@@ -325,18 +325,26 @@ describe("RoomLog", () => {
     }
   });
 
-  it("a newer entry the room later writes readably clears its unknown row", async () => {
+  it("an older peer writing the same ticket does not touch what a newer build wrote: the kept rows stay until the update replays them", async () => {
     const ours = protocolForTests.ours;
     try {
       await withLog(async (log) => {
         protocolForTests.ours = ours - 1;
-        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: ticket({ id: "t9" }) }));
+        const future = { ...ticket({ id: "t9", updatedAt: 9 }), steps: ticket({ id: "t9" }).steps.map((s) => ({ ...s, status: "settled" as const, result: "from the future", updatedAt: 9 })) };
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: future }));
         expect((await Effect.runPromise(log.read)).unseen.map((u) => u.key)).toEqual(["ticket/t9"]);
-        // a peer on our (older) build writes the same ticket in a shape we read
-        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours - 1), ticket: ticket({ id: "t9" }) }));
+        // a peer on our (older) build writes the same ticket in a shape we read: applied, and the kept row is NOT cleared
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours - 1), ticket: ticket({ id: "t9", updatedAt: 3 }) }));
         const view = await Effect.runPromise(log.read);
-        expect(view.tickets.map((t) => t.id)).toEqual(["t9"]);
-        expect(view.unseen).toEqual([]);
+        expect(view.tickets.map((t) => [t.id, t.steps[0]!.status])).toEqual([["t9", "pending"]]);
+        expect(view.unseen.map((u) => u.key)).toEqual(["ticket/t9"]);
+        // the update: the replay merges the future's settle in and retires exactly its row
+        protocolForTests.ours = ours;
+        await Effect.runPromise(log.read);
+        expect(await Effect.runPromise(log.rewriteMigrated)).toBe(1);
+        const after = await Effect.runPromise(log.read);
+        expect(after.tickets.map((t) => [t.id, t.steps[0]!.status])).toEqual([["t9", "settled"]]);
+        expect(after.unseen).toEqual([]);
       });
     } finally {
       protocolForTests.ours = ours;

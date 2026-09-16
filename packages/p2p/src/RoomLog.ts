@@ -126,29 +126,6 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
     // an entry from an older protocol is rewritten into the current shape when
     // we know the old one (migrate.ts); only what nobody can read is ejected
     const op = Option.getOrUndefined(decodeOp(node.value)) ?? migrateOp(node.value) ?? undefined;
-    {
-      // the record this entry writes is readable now: whatever an older pass
-      // of this view kept raw under it is superseded — all of it. An entry
-      // that claims no key (a message, a member, a writer) is cleared by
-      // content: the replay re-appends the same op, stamped anew, so the raw
-      // row whose op matches is done.
-      const claimed = claimedKey(node.value);
-      if (!claimed) {
-        const { protocol: _p, ...bare } = (node.value ?? {}) as Record<string, unknown>;
-        const want = JSON.stringify(bare);
-        const gone: string[] = [];
-        for await (const row of view.createReadStream({ gte: `${UNSEEN}op/`, lt: `${UNSEEN}op0` })) {
-          const { protocol: _q, ...theirs } = (row.value?.raw ?? {}) as Record<string, unknown>;
-          if (JSON.stringify(theirs) === want) gone.push(row.key);
-        }
-        for (const k of gone) await view.del(k);
-      }
-      if (claimed) {
-        const gone: string[] = [];
-        for await (const row of view.createReadStream({ gte: `${UNSEEN}${claimed}/`, lt: `${UNSEEN}${claimed}0` })) gone.push(row.key);
-        for (const k of gone) await view.del(k);
-      }
-    }
     if (!op) {
       // unreadable here: eject the row it claims instead of leaving a stale one
       const key = claimedKey(node.value);
@@ -210,6 +187,10 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         break;
       }
     }
+    // a replayed entry names the raw row it came from: that row, and only
+    // that row, is done — and only now that the entry has applied
+    const replays = (node.value as { replays?: unknown }).replays;
+    if (typeof replays === "string" && replays.startsWith(UNSEEN)) await view.del(replays);
   }
 }
 
@@ -309,7 +290,8 @@ export const openRoomLog = (
       for (const row of unseenRows) {
         const v = row.value as { protocol?: number; raw?: unknown };
         const op = v.protocol !== undefined && v.protocol <= protocolForTests.ours ? Option.getOrUndefined(decodeOp(v.raw)) : undefined;
-        if (op) migrated.push(op);
+        // the replay carries its row's key, so apply can retire exactly that row
+        if (op) migrated.push({ ...op, replays: row.key });
         else stillUnseen.set(unseenClaim(row.key), Math.max(stillUnseen.get(unseenClaim(row.key)) ?? 0, v.protocol ?? 0));
       }
       const unseen: Unseen[] = [...stillUnseen].map(([key, protocol]) => ({ key, protocol }));
