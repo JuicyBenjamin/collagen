@@ -36,14 +36,24 @@ const blank = (s: string | undefined): boolean => (s ?? "").trim().length === 0;
  *  to go and do. A review without the why is the status quo, so the tool
  *  refuses it rather than sending half of one. `amending` relaxes the
  *  wholesale checks: a later call adds to a review that already stands. */
-export const reviewGaps = (input: ReviewInput, amending: boolean): string | null => {
+export type JudgedKind = "review" | "plan" | "proposal";
+
+/** What is missing before this is worth a reader's time. A review without a
+ *  summary and a why is the status quo, so it is refused. A plan's summary is
+ *  its thinking in a paragraph; a proposal is the cheap kind — an idea is a
+ *  goal and at least one thought, nothing more is demanded. */
+export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKind = "review"): string | null => {
   const decisions = input.decisions ?? [];
   const forks = input.forks ?? [];
-  if (!amending && blank(input.summary)) {
-    return "failed: pass a summary — what the change does, in your user's terms, not a commit list";
+  if (!amending && kind !== "proposal" && blank(input.summary)) {
+    return kind === "review"
+      ? "failed: pass a summary — what the change does, in your user's terms, not a commit list"
+      : "failed: pass a summary — your user's thinking in a paragraph: what they intend and how, in their terms";
   }
   if (!amending && decisions.length === 0) {
-    return "failed: pass the decisions behind the change. Read back over THIS conversation and take them from it: what your user asked for, what they prefaced, what they ruled out, what you chose on your own and why. A review with no why is the review they already get from a diff.";
+    return kind === "review"
+      ? "failed: pass the decisions behind the change. Read back over THIS conversation and take them from it: what your user asked for, what they prefaced, what they ruled out, what you chose on your own and why. A review with no why is the review they already get from a diff."
+      : `failed: pass at least one decision — a thought behind the ${kind}: 'what' your user means, 'userWhy' in their words, or 'agentWhy' as yours. ${kind === "proposal" ? "One is enough: an idea written down is still an idea with a reason." : "Read back over THIS conversation and take them from it."}`;
   }
   if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link)) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
@@ -107,5 +117,10 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       where: d.where.join(" "),
     })),
     forks: forks.map((f) => ({ id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
+    // a proposal's outline: what the work might be and who might do it — the
+    // author's suggestion, binding on nobody; a plan lifts it into real steps
+    ...(r.outline && r.outline.length > 0 && q.length === 0
+      ? { outline: r.outline.map((o) => ({ id: o.id, intent: o.intent, description: o.description, owner: o.owner ?? "" })) }
+      : {}),
   };
 };

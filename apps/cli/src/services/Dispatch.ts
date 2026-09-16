@@ -111,9 +111,15 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // completion is a signal, closure is a decision: when this settle
           // answered the last step of the author's own ticket, the author's
           // agent is told where the decision now lies — and only told
+          // a proposal that is accepted has decided nothing about who does what:
+          // the plan that grows out of it is where ownership becomes binding
+          const next =
+            merged.kind === "proposal"
+              ? ` If the idea is accepted, the obvious next step is a plan: ask-plan with from ["${merged.id}"] — the outline and any suggested owners on review-context are prefills, and your user confirms that plan; accepting assigns nothing.`
+              : "";
           const offer =
             merged.createdBy === identity.pubkey && !merged.closed && finished(merged)
-              ? `\nEvery step on this ticket is answered. When your user says they are done with it — and only then — call close-ticket with ticketId "${merged.id}"; it leaves the lists and stays on the log.`
+              ? `\nEvery step on this ticket is answered.${next} When your user says they are done with it — and only then — call close-ticket with ticketId "${merged.id}"; it leaves the lists and stays on the log.`
               : "";
           return sent(render(merged) + offer);
         }

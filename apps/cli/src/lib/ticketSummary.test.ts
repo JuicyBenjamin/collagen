@@ -125,7 +125,7 @@ describe("summarize", () => {
     expect(summarize(task, [], ALICE).state).toBe("failed");
   });
 
-  it("your own review on your own ticket shows as a mark like any other; settling your address step is not a tick", () => {
+  it("your own review on your own ticket is a mark, said as yours; settling your address step is not a tick", () => {
     const solo = {
       ...ticket([
         { ...step("address", ALICE, "settled"), intent: "address" },
@@ -133,9 +133,27 @@ describe("summarize", () => {
       ]),
       kind: "review" as const,
     };
-    expect(marksLabel(summarize(solo, [], ALICE))).toBe("↻");
+    expect(marksLabel(summarize(solo, [], ALICE))).toBe("self ↻");
     const plain = { ...ticket([{ ...step("address", ALICE, "settled"), intent: "address" }]), kind: "review" as const };
     expect(marksLabel(summarize(plain, [], ALICE))).toBe("");
+  });
+
+  it("the author's own take is theirs on the row: self ✓, never mistaken for a colleague's", () => {
+    // alice proposes, takes her own idea, and bob asks for changes
+    const own = {
+      ...ticket([
+        { ...step("review-you", ALICE, "settled"), intent: "take" },
+        { ...step("review-bob", BOB, "failed"), intent: "take" },
+        { ...step("address", ALICE, "pending"), intent: "address" },
+      ]),
+      kind: "proposal" as const,
+    };
+    expect(marksLabel(summarize(own, [], ALICE))).toBe("↻ self ✓");
+    // seen from bob's side the words are the same: it is about the author, not the viewer
+    expect(marksLabel(summarize(own, [], BOB))).toBe("↻ self ✓");
+    // alone, a self-approval is only that
+    const solo = { ...own, steps: own.steps.filter((s) => s.owner === ALICE) };
+    expect(marksLabel(summarize(solo, [], ALICE))).toBe("self ✓");
   });
 
   it("says whose ticket it is, which is what the reader's own name used to imply", () => {
