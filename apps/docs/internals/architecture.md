@@ -72,9 +72,13 @@ nothing restarts. `join` opens a room live; `summaryChanges` streams one line pe
 Every log entry carries the `PROTOCOL_VERSION` of the build that wrote it (`append` stamps
 it). Three cases on read: an entry this build decodes is applied; an entry from an **older**
 build is migrated when the shape is known (`migrate.ts`) and evicted for everyone when it is
-not; an entry from a **newer** build is left alone — not applied, not evicted, counted in
-`fromNewer` — and the footer says the room holds records this build cannot see until it
-updates. Before protocol 5 the third case did not exist, and "cannot decode" meant "evict".
+not; an entry from a **newer** build is kept **raw** under `unseen/<key>` — not applied, not
+evicted. A ticket among them shows on the overview as kind `unknown` with "update collagen
+to see this ticket"; the rest are a count under the list. Autobase never re-runs `apply` on
+old entries, so the update alone would not bring them back: `read` replays what the build
+can now decode (`rewriteMigrated` appends it, keyed records only — a message would land
+twice) and `apply` clears the raw row when the record it claims is written readably. Before
+protocol 5 the third case did not exist, and "cannot decode" meant "evict".
 
 ## The p2p core: `Swarm` and `Room`
 

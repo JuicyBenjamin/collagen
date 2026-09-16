@@ -179,7 +179,10 @@ alone too.
   unapplied and counted, never evicted, and is told to update. Until now "cannot decode"
   meant "evict for everyone", so the first peer who had not updated would have wiped every
   `bug` ticket in the room. Protocol 5. Builds before 5 still evict what they cannot read —
-  the guard protects from here on.
+  the guard protects from here on. The person sees it too: a ticket from a newer build is a
+  row of kind `unknown` saying to update collagen; other records are a count. After the
+  update the kept entries are replayed into the view ("update collagen to see this ticket"
+  is a promise, not a shrug).
 - **The bug kind** (2026-09-16) — a fifth judged kind. The symptom is the one fact and the
   one required field; cause, importance, suggestion and remedy are the reporter's reading,
   each optional, merged field by field. Two things the take asked for: the importance scale

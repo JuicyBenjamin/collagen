@@ -86,6 +86,14 @@ export const reviewsAtom = runtimeAtom.atom(
   })),
 );
 
+/** Records a newer collagen wrote into the focused room that this build
+ *  cannot read yet — a ticket among them is a row saying to update. */
+export const unseenAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.unseen));
+  })),
+);
+
 /** Files attached to the focused room's tickets — references on the log. */
 export const attachmentsAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {

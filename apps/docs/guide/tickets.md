@@ -213,6 +213,10 @@ Judging a bug assigns nothing. When the takes are in, what comes next names the 
 `from`: a plan when the fix needs deciding, the fix's review when it is done — and the
 reviewers read the symptom, cause and suggestion beside the review's why.
 
+A ticket written by a **newer collagen** than yours shows as kind `unknown` with one line:
+update collagen to see this ticket. Nothing is lost — the record is kept and read once you
+have updated. Other records you cannot read yet are a count under the list.
+
 You may take your own proposal: `post-review` on your own ticket is allowed, and the row
 says so — `self ✓` — so a colleague's ✓ and a self-approval never read alike, and others
 can still add theirs. Accepting is judgment, not work: the settle outcome points your

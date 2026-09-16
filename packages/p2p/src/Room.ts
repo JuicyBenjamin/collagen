@@ -17,7 +17,7 @@ import { NotWritable, PeerNotConnected } from "./errors";
 import type { ReviewContext } from "./review";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic, type Net } from "./topic";
-import { openRoomLog, type RoomLog } from "./RoomLog";
+import { openRoomLog, type RoomLog, type Unseen } from "./RoomLog";
 import { Swarm, type TopicHooks } from "./Swarm";
 
 export class RoomConfig extends Context.Service<RoomConfig, {
@@ -90,6 +90,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const attachments = yield* SubscriptionRef.make<ReadonlyArray<Attachment>>([]);
     // The why behind review tickets, as the log has it.
     const reviews = yield* SubscriptionRef.make<ReadonlyArray<ReviewContext>>([]);
+    // records a newer build wrote that this one cannot read yet (RoomLog.Unseen)
+    const unseen = yield* SubscriptionRef.make<ReadonlyArray<Unseen>>([]);
     const fetchRequests = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; attachmentId: string }>(),
       (p) => PubSub.shutdown(p),
@@ -136,6 +138,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(trace, view.messages.map((m) => m.msg));
       yield* SubscriptionRef.set(attachments, view.attachments);
       yield* SubscriptionRef.set(reviews, view.reviews);
+      yield* SubscriptionRef.set(unseen, view.unseen);
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (cur) => (name.ts > cur.ts ? name : cur));
       yield* SubscriptionRef.set(writable, log.writable());
@@ -483,6 +486,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       shareTicket,
       /** The why behind each review ticket (as the log's view has it). */
       reviews,
+      unseen,
       shareReview,
       /** Messages for us, in log order with their position. Each subscriber
        *  sees every one exactly once — the ones already on the log first. */

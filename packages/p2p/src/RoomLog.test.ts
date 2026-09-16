@@ -7,7 +7,7 @@ import Corestore from "corestore";
 import Autobase from "autobase";
 import Hyperbee from "hyperbee";
 import b4a from "b4a";
-import { openRoomLog, type RoomLog } from "./RoomLog";
+import { openRoomLog, protocolForTests, type RoomLog } from "./RoomLog";
 import type { Ticket } from "./ticket";
 
 // A real Corestore in a temp dir: the point is to exercise Autobase's apply
@@ -245,10 +245,53 @@ describe("RoomLog", () => {
       await Effect.runPromise(log.append(future as unknown as Parameters<typeof log.append>[0]));
       const view = await Effect.runPromise(log.read);
       expect(view.tickets.map((t) => t.id)).toEqual(["mine"]);
-      expect(view.fromNewer).toBe(1);
+      expect(view.unseen).toEqual([{ key: "ticket/theirs", protocol: 99 }]);
       // nothing is stale: the newer entry never touched the view, so there is nothing to take off the room
       expect(await Effect.runPromise(log.evictStale)).toBe(0);
     });
+  });
+
+  it("after the update, what a newer build wrote is replayed into the view and the unknown row goes", async () => {
+    const ours = protocolForTests.ours;
+    try {
+      await withLog(async (log) => {
+        // this build is one behind: a peer's ticket entry is kept raw, shown as unknown
+        protocolForTests.ours = ours - 1;
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: ticket({ id: "ahead" }) }));
+        const before = await Effect.runPromise(log.read);
+        expect(before.tickets).toHaveLength(0);
+        expect(before.unseen.map((u) => u.key)).toEqual(["ticket/ahead"]);
+        // the update: the same view, read by a build that speaks the protocol
+        protocolForTests.ours = ours;
+        const seen = await Effect.runPromise(log.read);
+        expect(seen.tickets).toHaveLength(0); // not yet: the replay is an append, not a read
+        expect(seen.unseen).toEqual([]); // but it is no longer unknown — it is queued
+        expect(await Effect.runPromise(log.rewriteMigrated)).toBe(1);
+        const after = await Effect.runPromise(log.read);
+        expect(after.tickets.map((t) => t.id)).toEqual(["ahead"]);
+        expect(after.unseen).toEqual([]);
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
+  });
+
+  it("a newer entry the room later writes readably clears its unknown row", async () => {
+    const ours = protocolForTests.ours;
+    try {
+      await withLog(async (log) => {
+        protocolForTests.ours = ours - 1;
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: ticket({ id: "t9" }) }));
+        expect((await Effect.runPromise(log.read)).unseen.map((u) => u.key)).toEqual(["ticket/t9"]);
+        // a peer on our (older) build writes the same ticket in a shape we read
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours - 1), ticket: ticket({ id: "t9" }) }));
+        const view = await Effect.runPromise(log.read);
+        expect(view.tickets.map((t) => t.id)).toEqual(["t9"]);
+        expect(view.unseen).toEqual([]);
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
   });
 
   it("every entry we write says which build wrote it", async () => {

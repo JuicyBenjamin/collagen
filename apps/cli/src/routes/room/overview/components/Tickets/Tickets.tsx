@@ -9,7 +9,7 @@ import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
 import { GLYPH, LEGEND } from "../../../../../lib/glyphs";
 import { compareSummaries, marksLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
-import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../../../atoms";
+import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
@@ -26,6 +26,11 @@ export function Tickets() {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
+  // what a newer collagen wrote here that this build cannot read: a ticket
+  // among them gets a row of its own, the rest a count — both say to update
+  const unseen = AsyncResult.getOrElse(useAtomValue(unseenAtom), () => [] as const);
+  const unknownTickets = unseen.filter((u) => u.key.startsWith("ticket/"));
+  const unseenOther = unseen.length - unknownTickets.length;
   const { navigate } = useRouter();
   const [cursor, setCursor] = useState(0);
 
@@ -66,13 +71,25 @@ export function Tickets() {
             <span fg={focused ? theme.accent : theme.dim}>tickets</span>
             <span fg={needsYou > 0 ? theme.warn : theme.dim}> ({shown.length})</span>
           </text>
-          {shown.length === 0 ? (
+          {shown.length === 0 && unknownTickets.length === 0 ? (
             <text fg={theme.dim} truncate wrapMode="none">
               {"  "}none
             </text>
           ) : (
             shown.map((r, i) => <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} />)
           )}
+          {unknownTickets.map((u) => (
+            <text key={u.key} fg={theme.dim} truncate wrapMode="none">
+              {"    "}
+              {"unknown".padEnd(9)}update collagen to see this ticket
+            </text>
+          ))}
+          {unseenOther > 0 ? (
+            <text fg={theme.dim} truncate wrapMode="none">
+              {"  "}
+              {unseenOther} more record{unseenOther === 1 ? "" : "s"} here need{unseenOther === 1 ? "s" : ""} a newer collagen
+            </text>
+          ) : null}
         </>
       )}
     </Focusable>
