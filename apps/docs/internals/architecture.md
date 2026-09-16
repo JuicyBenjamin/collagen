@@ -73,14 +73,17 @@ Every log entry carries the `PROTOCOL_VERSION` of the build that wrote it (`appe
 it). Three cases on read: an entry this build decodes is applied; an entry from an **older**
 build is migrated when the shape is known (`migrate.ts`) and evicted for everyone when it is
 not; an entry from a **newer** build is kept **raw** — not applied, not evicted — under
-`unseen/<claimed key>/<n>`, every entry in arrival order, so several updates to one ticket
-all survive. A ticket among them shows on the overview as kind `unknown` with "update
+`unseen/<claimed key>/<content hash>`, arrival order kept in the row, so several updates to
+one ticket all survive and the same entry seen twice is one row. The key names the entry's
+content, the same on every peer. A ticket among them shows on the overview as kind `unknown` with "update
 collagen to see this ticket"; the rest are a count under the list. Autobase never re-runs
 `apply` on old entries, so the update alone would not bring them back: `read` replays every
 entry the build can now decode (`rewriteMigrated` appends them in order), each replay
 naming the raw row it came from (`replays`), and `apply` deletes exactly that row once the
 entry has applied — nothing else ever clears a kept row, so an older peer writing the same
-ticket, or the first of several replays, cannot erase what is kept. Applying twice is applying
+ticket, or the first of several replays, cannot erase what is kept; and because the key is
+the content, a replay published by one peer cannot retire a different entry another peer
+happened to keep at the same position. Applying twice is applying
 once: tickets merge, a review's later `ts` wins, an attachment is first-write-wins, a message
 lands once by id (`msgid/<id>`), a writer is admitted once.
 
