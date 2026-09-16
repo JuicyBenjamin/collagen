@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Clock, Effect, Option, Queue, Schema, Stream } from "effect";
 import Autobase from "autobase";
 import Hyperbee from "hyperbee";
@@ -71,12 +72,14 @@ const wireProtocol = (value: unknown): number | null => {
 export const protocolForTests = { ours: Number(PROTOCOL_VERSION) };
 const UNSEEN = "unseen/";
 /** Where a newer build's entry is kept raw: under the key it claims (or `op`
- *  when it claims none) and its position in arrival order, so several
- *  updates to one ticket are all kept and replayed in the order they came.
- *  Zero-padded so the view's key order is log order. */
-const unseenKey = (claimed: string | null, n: number) => `${UNSEEN}${claimed ?? "op"}/${String(n).padStart(12, "0")}`;
-/** The claimed key an unseen row was filed under: `unseen/ticket/t1/000000000007` → `ticket/t1`. */
-const unseenClaim = (rowKey: string): string => rowKey.slice(UNSEEN.length).replace(/\/\d{12}$/, "");
+ *  when it claims none) and a HASH OF ITS CONTENT — so the row key names the
+ *  entry itself, the same on every peer, and a replay that carries it can
+ *  never retire a different entry that happened to land at the same local
+ *  position. Arrival order is kept in the row (`n`) and restored on read. */
+const contentHash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+const unseenKey = (claimed: string | null, value: unknown) => `${UNSEEN}${claimed ?? "op"}/${contentHash(value)}`;
+/** The claimed key an unseen row was filed under: `unseen/ticket/t1/9f2c…` → `ticket/t1`. */
+const unseenClaim = (rowKey: string): string => rowKey.slice(UNSEEN.length).replace(/\/[0-9a-f]{16}$/, "");
 const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
 
 /** The view key an entry we CANNOT read would have written, when the entry is
@@ -120,7 +123,9 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
     if (wire !== null && wire > protocolForTests.ours) {
       const n = ((await view.get("state/unseen"))?.value ?? 0) as number;
       await view.put("state/unseen", n + 1);
-      await view.put(unseenKey(claimedKey(node.value), n), { protocol: wire, raw: node.value });
+      // the same entry seen twice (two writers replaying it) is one row
+      const key = unseenKey(claimedKey(node.value), node.value);
+      if (!(await view.get(key))) await view.put(key, { protocol: wire, raw: node.value, n });
       continue;
     }
     // an entry from an older protocol is rewritten into the current shape when
@@ -188,7 +193,9 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
       }
     }
     // a replayed entry names the raw row it came from: that row, and only
-    // that row, is done — and only now that the entry has applied
+    // that row, is done — and only now that the entry has applied. The key is
+    // the entry's content hash, so on a peer where that row holds anything
+    // else the hash would differ and nothing is touched.
     const replays = (node.value as { replays?: unknown }).replays;
     if (typeof replays === "string" && replays.startsWith(UNSEEN)) await view.del(replays);
   }
@@ -285,10 +292,12 @@ export const openRoomLog = (
       // this build can decode now (apply is idempotent per record — tickets
       // merge, a review's later ts wins, a message lands once by id, a writer
       // is admitted once); list the rest once per claimed key
-      const unseenRows = yield* readRange("unseen");
+      const unseenRows = [...(yield* readRange("unseen"))].sort(
+        (a, b) => ((a.value as { n?: number }).n ?? 0) - ((b.value as { n?: number }).n ?? 0),
+      );
       const stillUnseen = new Map<string, number>();
       for (const row of unseenRows) {
-        const v = row.value as { protocol?: number; raw?: unknown };
+        const v = row.value as { protocol?: number; raw?: unknown; n?: number };
         const op = v.protocol !== undefined && v.protocol <= protocolForTests.ours ? Option.getOrUndefined(decodeOp(v.raw)) : undefined;
         // the replay carries its row's key, so apply can retire exactly that row
         if (op) migrated.push({ ...op, replays: row.key });
