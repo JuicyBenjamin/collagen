@@ -141,6 +141,8 @@ export interface ReviewDelta {
   readonly retireOutline?: ReadonlyArray<string>;
   /** A bug report, whole or in part: fields given replace, fields left out keep. */
   readonly bug?: Partial<BugReport>;
+  /** Optional report fields withdrawn — a disproven cause, a score that no longer holds. */
+  readonly retireBug?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
 }
 
 const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
@@ -182,15 +184,20 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
   }
   // a bug report merges field by field: the symptom is corrected by giving
   // it again, a cause arrives when it is known, importance when it is judged
+  // a bug report merges field by field: a field given replaces, a field left
+  // out keeps, a field named in retireBug goes — a cause disproven or a score
+  // that no longer holds must be withdrawable, not only overwritten
+  const gone = new Set(delta.retireBug ?? []);
+  const merged = delta.bug === undefined && gone.size === 0 ? undefined : { ...(base.bug ?? { symptom: "" }), ...(delta.bug ?? {}) };
   const bug: BugReport | undefined =
-    delta.bug === undefined
+    merged === undefined
       ? base.bug
       : {
-          symptom: delta.bug.symptom ?? base.bug?.symptom ?? "",
-          ...((delta.bug.cause ?? base.bug?.cause) ? { cause: delta.bug.cause ?? base.bug?.cause } : {}),
-          ...((delta.bug.importance ?? base.bug?.importance) ? { importance: delta.bug.importance ?? base.bug?.importance } : {}),
-          ...((delta.bug.suggestion ?? base.bug?.suggestion) ? { suggestion: delta.bug.suggestion ?? base.bug?.suggestion } : {}),
-          ...((delta.bug.remedy ?? base.bug?.remedy) ? { remedy: delta.bug.remedy ?? base.bug?.remedy } : {}),
+          symptom: merged.symptom ?? "",
+          ...(merged.cause && !gone.has("cause") ? { cause: merged.cause } : {}),
+          ...(merged.importance && !gone.has("importance") ? { importance: merged.importance } : {}),
+          ...(merged.suggestion && !gone.has("suggestion") ? { suggestion: merged.suggestion } : {}),
+          ...(merged.remedy && !gone.has("remedy") ? { remedy: merged.remedy } : {}),
         };
   return {
     ...base,

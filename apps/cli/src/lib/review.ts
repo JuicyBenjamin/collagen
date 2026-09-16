@@ -31,8 +31,9 @@ export interface ReviewInput {
   /** A proposal's outline, and the ids withdrawn from it — changes to the why too. */
   readonly outline?: ReadonlyArray<unknown>;
   readonly retireOutline?: ReadonlyArray<string>;
-  /** A bug report, whole or in part. */
+  /** A bug report, whole or in part, and the optional fields withdrawn. */
   readonly bug?: Partial<BugReport>;
+  readonly retireBug?: ReadonlyArray<string>;
 }
 
 const blank = (s: string | undefined): boolean => (s ?? "").trim().length === 0;
@@ -58,7 +59,7 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
     if (bug.importance && blank(bug.importance.effect)) return `failed: importance needs the effect in words beside the score (${bug.importance.score} means "${IMPORTANCE[bug.importance.score]}") — a number alone is a guess`;
     if (bug.cause && blank(bug.cause.what)) return "failed: cause needs 'what' — what is actually happening; 'where' is the project and file:line it happens in";
     if (bug.suggestion && blank(bug.suggestion.what)) return "failed: suggestion needs 'what' — how or what could fix it; loose requirements go in 'requirements'";
-    const moved = Object.keys(bug).length > 0 || decisions.length > 0 || forks.length > 0 || !blank(input.summary);
+    const moved = Object.keys(bug).length > 0 || (input.retireBug?.length ?? 0) > 0 || decisions.length > 0 || forks.length > 0 || !blank(input.summary);
     if (amending && !moved) return "failed: nothing to amend — pass the part of the report that changed, or a decision";
   }
   if (!amending && kind !== "proposal" && kind !== "bug" && blank(input.summary)) {
@@ -72,7 +73,7 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
       : `failed: pass at least one decision — a thought behind the ${kind}: 'what' your user means, 'userWhy' in their words, or 'agentWhy' as yours. ${kind === "proposal" ? "One is enough: an idea written down is still an idea with a reason." : "Read back over THIS conversation and take them from it."}`;
   }
   const outlineMoves = (input.outline?.length ?? 0) > 0 || (input.retireOutline?.length ?? 0) > 0;
-  const bugMoves = Object.keys(input.bug ?? {}).length > 0;
+  const bugMoves = Object.keys(input.bug ?? {}).length > 0 || (input.retireBug?.length ?? 0) > 0;
   if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
   }
@@ -154,11 +155,9 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
   };
 };
 
-const hayBug = (b: BugReport): string =>
-  [b.symptom, b.cause?.what, ...(b.cause?.where ?? []), b.importance?.effect, b.suggestion?.what, ...(b.suggestion?.requirements ?? []), b.remedy, b.remedy ? REMEDY_WORDS[b.remedy] : ""]
-    .filter((x): x is string => typeof x === "string")
-    .join(" ")
-    .toLowerCase();
+/** Searched exactly as rendered — the score and its anchor included, so
+ *  "4" and "blocking" find the report the reader would see them in. */
+const hayBug = (b: BugReport): string => Object.values(bugRows(b)).join(" ").toLowerCase();
 
 /** The report as a reader gets it: the score with its anchor spelled out, so
  *  "3" reads as "3 — wrong: a feature fails for some" and not as a number. */
