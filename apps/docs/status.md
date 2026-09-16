@@ -144,9 +144,9 @@ close reason is the conclusion. Phases are the chain of tickets, never a status.
 alone too.
 
 - [x] `plan` and `proposal`: the review record with a tense — question, thoughts, insight, forks to come (`ask-plan`, `propose`)
-- [x] a proposal is the cheap kind: peers, summary and work optional; `work` is a non-binding outline on the why (suggested `owner` by name); self-takes allowed and attributed (`self ✓`); accepting points at the plan, assigns nothing
+- [x] a proposal is the cheap kind: peers, summary and work optional; `work` is a non-binding outline on the why (suggested `owner` by name), never a step — a named peer says in their take whether they would; self-takes allowed and attributed (`self ✓`); accepting points at the plan, assigns nothing
 - [x] the blind first take: `review-context` opens after this reader has posted, unless they ask (`anyway`)
-- [x] ↻ revises the same ticket: goal, pending work by stable id, added readers, explicit `retireWork` (retired = history, never actionable); a proposal's work steps activate on ✓
+- [x] ↻ revises the same ticket: goal, the outline by stable id, added readers, explicit `retireWork` (an outline item withdrawn is gone; a step retired stays as history)
 - [ ] a take older than the latest revision reads as stale
 - [x] `whenClosed` — your instruction, handed to your agent in the close outcome, never the settle
 - [x] `from` on a ticket: the ids it follows
@@ -179,7 +179,9 @@ alone too.
   outline all optional. "You get ideas and you want these ideas written down, but you're
   not committed to them per se, so it's a proposal still." Self-approval is allowed and
   shows as the author's on the row. Accepting is judgment: the next step is a plan with
-  `from` the proposal, confirmed by the person; nothing is assigned by accepting.
+  `from` the proposal, confirmed by the person; nothing is assigned by accepting — so the
+  outline never becomes a step, not even for a named peer (the earlier "their ✓ starts the
+  work" went with it; the review of this change found the two could not both hold).
 
 - **Mainnet and devnet** (2026-09-15) — a run from source is on devnet: its own config
   dir, its own swarm topic salt, its own MCP server name and port range, all derived from
