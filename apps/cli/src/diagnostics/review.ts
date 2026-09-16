@@ -39,7 +39,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
         }
       }
       const rows = reviewRows(review, about);
-      if (about && rows.decisions.length === 0 && rows.forks.length === 0) {
+      if (about && rows.decisions.length === 0 && rows.forks.length === 0 && (rows.outline?.length ?? 0) === 0) {
         return `nothing in the why mentions "${about}" — call review-context without 'about' for all ${review.decisions.length} decision(s) and ${review.forks.length} fork(s), or ask ${review.authorName} through their person (send-to-peer, with this ticketId)`;
       }
       return toToon(rows);
