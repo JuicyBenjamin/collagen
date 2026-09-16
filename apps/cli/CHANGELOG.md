@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.13.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.12.0-alpha...cli-v0.13.0-alpha) (2026-09-16)
+
+
+### Features
+
+* **p2p:** the bug kind, and a log that leaves a newer build's records alone ([594f0a9](https://github.com/JuicyBenjamin/collagen/commit/594f0a9971657bdea1498249f97eb08830ad2bc1))
+
+
+### Bug Fixes
+
+* **cli:** a bug report's fields can be withdrawn; search what the reader sees; count unknown rows ([d724603](https://github.com/JuicyBenjamin/collagen/commit/d72460309095e0af59f97740849ab818ffc5b299))
+* **p2p:** keep a newer build's records raw and replay them after the update; show them as unknown ([5f91ec5](https://github.com/JuicyBenjamin/collagen/commit/5f91ec5494f12abe6f5c9b0e8dab1ea6fb794647))
+* **p2p:** keep every newer entry in order and replay them all; the bug report answers 'about' ([65fdb5a](https://github.com/JuicyBenjamin/collagen/commit/65fdb5aa34b2e34b3c9ffd4e0411b891080be64c))
+
 ## [0.12.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.11.0-alpha...cli-v0.12.0-alpha) (2026-09-16)
 
 
