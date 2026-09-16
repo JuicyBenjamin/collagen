@@ -348,6 +348,29 @@ describe("RoomLog", () => {
     }
   });
 
+  it("a replays marker is not trusted: a valid entry carrying another entry's key erases nothing", async () => {
+    const ours = protocolForTests.ours;
+    try {
+      await withLog(async (log) => {
+        protocolForTests.ours = ours - 1;
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: ticket({ id: "kept" }) }));
+        const [row] = (await Effect.runPromise(log.read)).unseen;
+        expect(row?.key).toBe("ticket/kept");
+        // find the raw row's full key the way a hostile or buggy peer would: by listing — here by rebuilding it
+        const before = await Effect.runPromise(log.read);
+        expect(before.unseen).toHaveLength(1);
+        // a valid, unrelated entry on OUR protocol that claims to replay the kept row
+        const forged = { op: "ticket", protocol: String(ours - 1), replays: `unseen/ticket/kept/${"0".repeat(64)}`, ticket: ticket({ id: "other" }) };
+        await Effect.runPromise(log.append(forged as unknown as Parameters<typeof log.append>[0]));
+        const after = await Effect.runPromise(log.read);
+        expect(after.tickets.map((t) => t.id)).toEqual(["other"]); // the entry itself applies
+        expect(after.unseen.map((u) => u.key)).toEqual(["ticket/kept"]); // the kept row is untouched
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
+  });
+
   it("an older peer writing the same ticket does not touch what a newer build wrote: the kept rows stay until the update replays them", async () => {
     const ours = protocolForTests.ours;
     try {
