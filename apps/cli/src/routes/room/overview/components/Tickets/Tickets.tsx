@@ -69,7 +69,7 @@ export function Tickets() {
         <>
           <text truncate wrapMode="none" flexShrink={0}>
             <span fg={focused ? theme.accent : theme.dim}>tickets</span>
-            <span fg={needsYou > 0 ? theme.warn : theme.dim}> ({shown.length})</span>
+            <span fg={needsYou > 0 ? theme.warn : theme.dim}> ({shown.length + unknownTickets.length})</span>
           </text>
           {shown.length === 0 && unknownTickets.length === 0 ? (
             <text fg={theme.dim} truncate wrapMode="none">

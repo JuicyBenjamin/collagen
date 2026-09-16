@@ -44,7 +44,7 @@ export const TicketStep = Schema.Struct({
 export type TicketStep = typeof TicketStep.Type;
 
 /** What kind of work the ticket is. "task" is the plain one: a goal and its
- *  steps. The other three ask for JUDGMENT and carry a why record (review.ts):
+ *  steps. The other four ask for JUDGMENT and carry a why record (review.ts):
  *  a "proposal" — an idea written down, owed to no one, is it worth doing; a
  *  "plan" — how the author means to do something, do you agree; a "bug" — a
  *  symptom, with the reporter's reading of cause, importance and remedy, what
@@ -56,9 +56,9 @@ export type TicketKind = typeof TicketKind.Type;
 /** The kinds that ask for judgment and carry a why. */
 export const isJudged = (kind: TicketKind): boolean => kind !== "task";
 
-/** A reader's answer step: "review" on a review, "take" on a plan or a
- *  proposal. Same mechanics, different word — you review code, you take a
- *  position on a plan. */
+/** A reader's answer step: "review" on a review, "take" on a plan, a
+ *  proposal or a bug. Same mechanics, different word — you review code, you
+ *  take a position on a plan, you give your diagnosis of a bug. */
 export const isTake = (step: { readonly intent: string }): boolean => step.intent === "review" || step.intent === "take";
 export const takeIntent = (kind: TicketKind): string => (kind === "review" ? "review" : "take");
 

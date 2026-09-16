@@ -199,7 +199,7 @@ rest is your reading and arrives as it is known, a field at a time:
 | --- | --- |
 | `cause` | what is actually happening, and where — project and `file:line` |
 | `importance` | a **score 1–5** and the **effect** in words, neither alone. The scale is anchored so a 3 means the same to everyone: 1 cosmetic (nobody blocked) · 2 annoying (a workaround exists) · 3 wrong (a feature fails for some) · 4 blocking (a feature fails for everyone) · 5 breaking (data loss, a security hole, nothing works) |
-| `suggestion` | how or what could fix it, with **loose requirements** — a bug is never filed with requirements; a plan lifts these into real ones |
+| `suggestion` | how or what could fix it, with **loose requirements** — a bug carries no formal requirements; a plan lifts these into real ones |
 | `remedy` | how big the fix is, the reporter's coarse guess, kept apart from where the symptom lives: `line` a local fix · `system` an existing system does the wrong thing · `refactor` right in intent, wrong in shape · `new` the system that should handle this does not exist |
 
 Readers give the blind first take **on the symptom alone**: their agent hands them the
@@ -207,7 +207,8 @@ symptom, they say what they make of it, and only then does your cause, importanc
 suggestion and remedy open to them. A second independent diagnosis is the most valuable
 thing a bug report collects; showing yours first would throw it away. Revising the report
 (`report-bug` with `ticketId`) changes only the fields you pass — a cause found a day later
-leaves the score where it was.
+leaves the score where it was — and `retire` withdraws a field that no longer holds, by name:
+a disproven cause, a score that was wrong.
 
 Judging a bug assigns nothing. When the takes are in, what comes next names the bug in
 `from`: a plan when the fix needs deciding, the fix's review when it is done — and the
