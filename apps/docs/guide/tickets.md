@@ -281,9 +281,9 @@ why, each item with a stable `id` and an optional suggested `owner`, never a ste
 `retireWork` withdraws items by id), takes with `post-review` — your own included,
 attributed on the row as `self ✓` — the blind first take in `review-context`
 (`anyway: true` to skip it, and the agent says so), revising the same ticket — the goal,
-the pending work by id, added readers, and `retireWork` to withdraw work explicitly (a
-**retired** step stays on the ticket as history and is never actionable; what a recipient
-already settled or failed stands) — `whenClosed` handed over in the close outcome, `from`
+the outline by id (a repeated id corrects the item, a new one adds it), added readers,
+and `retireWork` to withdraw an item explicitly (an outline is intent, not history, so it
+goes) — `whenClosed` handed over in the close outcome, `from`
 on every kind of ticket (`create-ticket` and `ask-review` take it too), and both
 withdrawable with an empty value. Nothing is ever removed by omission. Still to decide and
 do:

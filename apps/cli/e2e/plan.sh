@@ -125,6 +125,9 @@ QWHY=$(call $A "$SA" review-context "{\"ticketId\":\"$QID\"}")
 expect "the withdrawn item is gone from the outline: intent, not history" "$(echo "$QWHY" | grep -c 'the button and the download')" "^0$"
 expect "the new item stands on its own id, same intent notwithstanding" "$QWHY" "enqueue,build,.{0,3}the button, enqueuing an export job"
 expect "…and so does the second, with its suggested owner" "$QWHY" "mail,build,the mailer that sends the finished file,bob"
+ABOUTBOB=$(call $A "$SA" review-context "{\"ticketId\":\"$QID\",\"about\":\"bob\"}")
+expect "asking the why about bob finds the outline item he is suggested for" "$ABOUTBOB" "mail,build,the mailer that sends the finished file,bob"
+expect "…and the match count says so" "$ABOUTBOB" "1 of 2 outline items"
 QROWS2=$(rows $A "$SA" "$QID")
 expect "still no step was made from any of it" "$(echo "$QROWS2" | grep -c 'work-')" "^0$"
 expect "…his ↻ take is history, untouched" "$QROWS2" "review-bob,bob,take,failed"

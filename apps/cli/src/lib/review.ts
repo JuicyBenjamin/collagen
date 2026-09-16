@@ -1,4 +1,4 @@
-import type { ReviewContext, ReviewDecision, ReviewFork } from "@collagen/p2p";
+import type { OutlineItem, ReviewContext, ReviewDecision, ReviewFork } from "@collagen/p2p";
 
 /** A review's why, as the agent hands it over and as a reader gets it back.
  *  The point of the whole thing: a diff shows the what, and the reviewer has
@@ -87,7 +87,7 @@ export const reviewHeadline = (r: ReviewContext, opts?: { readonly link?: boolea
     .join(" · ");
 };
 
-const hay = (d: ReviewDecision | ReviewFork): string =>
+const hay = (d: ReviewDecision | ReviewFork | OutlineItem): string =>
   Object.values(d)
     .flatMap((v) => (Array.isArray(v) ? v : [v]))
     .filter((v): v is string => typeof v === "string")
@@ -99,10 +99,13 @@ const hay = (d: ReviewDecision | ReviewFork): string =>
  *  a big review answerable one question at a time. */
 export const reviewRows = (r: ReviewContext, about?: string) => {
   const q = (about ?? "").trim().toLowerCase();
-  const keep = <T extends ReviewDecision | ReviewFork>(xs: ReadonlyArray<T>): ReadonlyArray<T> =>
+  const keep = <T extends ReviewDecision | ReviewFork | OutlineItem>(xs: ReadonlyArray<T>): ReadonlyArray<T> =>
     q.length === 0 ? xs : xs.filter((x) => hay(x).includes(q));
   const decisions = keep(r.decisions);
   const forks = keep(r.forks);
+  // a proposal's outline is searched like the rest: "bob" finds the item he
+  // is suggested for, "mailer" the item about the mailer
+  const outline = keep(r.outline ?? []);
   return {
     review: {
       by: r.authorName,
@@ -111,7 +114,12 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       summary: r.summary,
       // reviews outlive the first read: this is the why as it stands NOW
       updated: new Date(r.ts).toISOString(),
-      ...(q.length > 0 ? { about: q, matched: `${decisions.length} of ${r.decisions.length} decisions, ${forks.length} of ${r.forks.length} forks` } : {}),
+      ...(q.length > 0
+        ? {
+            about: q,
+            matched: `${decisions.length} of ${r.decisions.length} decisions, ${forks.length} of ${r.forks.length} forks${r.outline && r.outline.length > 0 ? `, ${outline.length} of ${r.outline.length} outline items` : ""}`,
+          }
+        : {}),
     },
     decisions: decisions.map((d) => ({
       id: d.id,
@@ -123,8 +131,6 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
     forks: forks.map((f) => ({ id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
     // a proposal's outline: what the work might be and who might do it — the
     // author's suggestion, binding on nobody; a plan lifts it into real steps
-    ...(r.outline && r.outline.length > 0 && q.length === 0
-      ? { outline: r.outline.map((o) => ({ id: o.id, intent: o.intent, description: o.description, owner: o.owner ?? "" })) }
-      : {}),
+    ...(outline.length > 0 ? { outline: outline.map((o) => ({ id: o.id, intent: o.intent, description: o.description, owner: o.owner ?? "" })) } : {}),
   };
 };
