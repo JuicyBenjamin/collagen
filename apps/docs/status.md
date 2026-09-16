@@ -144,6 +144,7 @@ close reason is the conclusion. Phases are the chain of tickets, never a status.
 alone too.
 
 - [x] `plan` and `proposal`: the review record with a tense — question, thoughts, insight, forks to come (`ask-plan`, `propose`)
+- [x] `bug`: symptom required; cause / importance {score 1–5 anchored, effect} / suggestion {what, loose requirements} / remedy {line, system, refactor, new} optional and merged field by field; the blind take shows the symptom alone; judging assigns nothing, the settle points at a plan or the fix's review with `from` (`report-bug`)
 - [x] a proposal is the cheap kind: peers, summary and work optional; `work` is a non-binding outline on the why (suggested `owner` by name), never a step — a named peer says in their take whether they would; self-takes allowed and attributed (`self ✓`); accepting points at the plan, assigns nothing
 - [x] the blind first take: `review-context` opens after this reader has posted, unless they ask (`anyway`)
 - [x] ↻ revises the same ticket: goal, the outline by stable id, added readers, explicit `retireWork` (an outline item withdrawn is gone; a step retired stays as history)
@@ -172,6 +173,18 @@ alone too.
 - [ ] **More AI adapters** — beyond `claude-code` / `codex`.
 
 ## Decisions log
+
+- **A newer build's record is not "unreadable"** (2026-09-16) — every log entry now carries
+  the protocol of the build that wrote it; a reader on an older build leaves a newer entry
+  unapplied and counted, never evicted, and is told to update. Until now "cannot decode"
+  meant "evict for everyone", so the first peer who had not updated would have wiped every
+  `bug` ticket in the room. Protocol 5. Builds before 5 still evict what they cannot read —
+  the guard protects from here on.
+- **The bug kind** (2026-09-16) — a fifth judged kind. The symptom is the one fact and the
+  one required field; cause, importance, suggestion and remedy are the reporter's reading,
+  each optional, merged field by field. Two things the take asked for: the importance scale
+  is anchored in words (1 cosmetic … 5 breaking), and "area of effect" became `remedy`, the
+  coarse guess at the fix, kept apart from where the symptom lives (`cause.where`).
 
 - **A proposal is an idea, a plan is how** (2026-09-16) — proposal was "work I want someone
   else to do" and refused without peers and work; now it is the first, uncommitted

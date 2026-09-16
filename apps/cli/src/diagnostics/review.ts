@@ -35,11 +35,16 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       if (ticket && isJudged(ticket.kind) && ticket.kind !== "review" && ticket.createdBy !== me && !anyway) {
         const taken = ticket.steps.some((s) => isTake(s) && s.owner === me && (s.status === "settled" || s.status === "failed"));
         if (!taken) {
+          // on a bug the fact is shown and the reading is not: the symptom, then
+          // your person's own diagnosis, then the reporter's cause and suggestion
+          if (ticket.kind === "bug" && review.bug) {
+            return `bug: "${ticket.goal}"\nsymptom: ${review.bug.symptom}\n\nThis is the blind first take. ${review.authorName}'s reading of it (cause, importance, suggestion, remedy) is on this ticket, but your user has not given theirs yet. Ask them what THEY make of the symptom — what is happening, how bad, what would fix it — and post it with post-review (failed: true asks the reporter for changes) — then call review-context again and the reporter's reading opens. If they would rather read everything first, call review-context with anyway: true and tell them you skipped the blind take.`;
+          }
           return `${ticket.kind}: "${ticket.goal}"\n\nThis is the blind first take. ${review.authorName}'s thoughts (${review.decisions.length} decision(s), ${review.forks.length} fork(s)) are on this ticket, but your user has not taken a position yet. Ask them what THEY think of "${ticket.goal}" and post it with post-review (failed: true asks for changes) — then call review-context again and the thoughts open. If they would rather read everything first, call review-context with anyway: true and tell them you skipped the blind take.`;
         }
       }
       const rows = reviewRows(review, about);
-      if (about && rows.decisions.length === 0 && rows.forks.length === 0 && (rows.outline?.length ?? 0) === 0) {
+      if (about && rows.decisions.length === 0 && rows.forks.length === 0 && (rows.outline?.length ?? 0) === 0 && !rows.bug) {
         return `nothing in the why mentions "${about}" — call review-context without 'about' for all ${review.decisions.length} decision(s) and ${review.forks.length} fork(s), or ask ${review.authorName} through their person (send-to-peer, with this ticketId)`;
       }
       return toToon(rows);

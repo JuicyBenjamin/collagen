@@ -237,6 +237,28 @@ describe("RoomLog", () => {
     });
   });
 
+  it("an entry from a NEWER build is left alone: not applied, not evicted, counted — the room loses nothing while this side is behind", async () => {
+    await withLog(async (log) => {
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({ id: "mine" }) }));
+      // a peer on a later protocol wrote a ticket of a kind this build has never heard of
+      const future = { op: "ticket", protocol: "99", ticket: { ...ticket({ id: "theirs" }), kind: "hologram" } };
+      await Effect.runPromise(log.append(future as unknown as Parameters<typeof log.append>[0]));
+      const view = await Effect.runPromise(log.read);
+      expect(view.tickets.map((t) => t.id)).toEqual(["mine"]);
+      expect(view.fromNewer).toBe(1);
+      // nothing is stale: the newer entry never touched the view, so there is nothing to take off the room
+      expect(await Effect.runPromise(log.evictStale)).toBe(0);
+    });
+  });
+
+  it("every entry we write says which build wrote it", async () => {
+    await withLog(async (log) => {
+      await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({ id: "stamped" }) }));
+      const view = await Effect.runPromise(log.read);
+      expect(view.tickets).toHaveLength(1); // decodes with the stamp on it
+    });
+  });
+
   it("a record this build cannot read ejects the row it claims — no half-applied ticket", async () => {
     await withLog(async (log) => {
       await Effect.runPromise(log.append({ op: "ticket", ticket: ticket({}) }));
