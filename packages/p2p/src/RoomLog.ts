@@ -76,10 +76,26 @@ const UNSEEN = "unseen/";
  *  entry itself, the same on every peer, and a replay that carries it can
  *  never retire a different entry that happened to land at the same local
  *  position. Arrival order is kept in the row (`n`) and restored on read. */
-const contentHash = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
-const unseenKey = (claimed: string | null, value: unknown) => `${UNSEEN}${claimed ?? "op"}/${contentHash(value)}`;
+/** Key-sorted JSON, so two encodings of one entry hash the same. */
+const canonical = (v: unknown): string =>
+  Array.isArray(v)
+    ? `[${v.map(canonical).join(",")}]`
+    : typeof v === "object" && v !== null
+      ? `{${Object.keys(v as Record<string, unknown>)
+          .sort()
+          .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+          .join(",")}}`
+      : JSON.stringify(v);
+/** The entry's identity: its content without the two envelope fields that a
+ *  replay rewrites (`protocol`, `replays`), so the raw entry a peer kept and
+ *  the replay of it hash alike. The full digest — this is what data lives on. */
+const entryHash = (value: unknown): string => {
+  const { protocol: _p, replays: _r, ...content } = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  return createHash("sha256").update(canonical(content)).digest("hex");
+};
+const unseenKey = (claimed: string | null, value: unknown) => `${UNSEEN}${claimed ?? "op"}/${entryHash(value)}`;
 /** The claimed key an unseen row was filed under: `unseen/ticket/t1/9f2c…` → `ticket/t1`. */
-const unseenClaim = (rowKey: string): string => rowKey.slice(UNSEEN.length).replace(/\/[0-9a-f]{16}$/, "");
+const unseenClaim = (rowKey: string): string => rowKey.slice(UNSEEN.length).replace(/\/[0-9a-f]{64}$/, "");
 const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
 
 /** The view key an entry we CANNOT read would have written, when the entry is
@@ -193,11 +209,12 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
       }
     }
     // a replayed entry names the raw row it came from: that row, and only
-    // that row, is done — and only now that the entry has applied. The key is
-    // the entry's content hash, so on a peer where that row holds anything
-    // else the hash would differ and nothing is touched.
+    // that row, is done — and only now that the entry has applied. The marker
+    // is not trusted: the row it may retire is recomputed from THIS entry's
+    // claimed key and content, and must match exactly, so no entry can carry
+    // another entry's key and erase what a peer kept.
     const replays = (node.value as { replays?: unknown }).replays;
-    if (typeof replays === "string" && replays.startsWith(UNSEEN)) await view.del(replays);
+    if (typeof replays === "string" && replays === unseenKey(claimedKey(node.value), node.value)) await view.del(replays);
   }
 }
 
