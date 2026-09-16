@@ -50,6 +50,8 @@ expect "…and the remedy, named" "$FULL" "remedy: .{0,3}system .{1,3} an existi
 ABOUT=$(call $B "$SB" review-context "{\"ticketId\":\"$BID\",\"about\":\"planner\"}")
 expect "asking about a word in the report finds the report" "$ABOUT" "cause: the cursor page size overflows"
 expect "…and the match line says the report matched" "$ABOUT" "the bug report matched"
+ABOUT4=$(call $B "$SB" review-context "{\"ticketId\":\"$BID\",\"about\":\"blocking\"}")
+expect "…and a word from the score's anchor finds it too: the search is what the reader sees" "$ABOUT4" "the bug report matched"
 NOPE=$(call $B "$SB" review-context "{\"ticketId\":\"$BID\",\"about\":\"zebra\"}")
 expect "asking about a word nowhere in it says so" "$NOPE" "nothing in the why mentions .{0,3}zebra"
 
@@ -60,6 +62,11 @@ AFTER=$(call $A "$SA" review-context "{\"ticketId\":\"$BID\"}")
 expect "the cause is the new one" "$AFTER" "cause: the planner falls back to a full scan"
 expect "…the remedy moved to a line fix" "$AFTER" "remedy: .{0,3}line .{1,3} a local fix"
 expect "…and the importance alice did not mention is still there" "$AFTER" "importance: .{0,3}4 .{1,3} blocking"
+RETIRE="{\"ticketId\":\"$BID\",\"retire\":[\"importance\"]}"
+expect "a field that no longer holds is withdrawn by name" "$(call $A "$SA" report-bug "$RETIRE")" "bug ticket updated"
+GONE=$(call $A "$SA" review-context "{\"ticketId\":\"$BID\"}")
+expect "…the importance is gone" "$(echo "$GONE" | grep -c 'importance:')" "^0$"
+expect "…and the cause alice did not touch is still there" "$GONE" "cause: the planner falls back to a full scan"
 NOTHING="{\"ticketId\":\"$BID\"}"
 expect "an amendment that says nothing is refused" "$(call $A "$SA" report-bug "$NOTHING")" "failed: nothing to amend"
 
