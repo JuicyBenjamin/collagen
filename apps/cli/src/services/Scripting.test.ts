@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, PubSub, Stream, SubscriptionRef } from "effect";
-import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext } from "@collagen/p2p";
+import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext, type Unseen } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
 import { Rooms, type RoomHandle } from "./Rooms";
@@ -72,6 +72,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
         tickets,
         shareTicket: (ticket: Ticket) => Effect.succeed(ticket),
         reviews,
+        unseen: yield* SubscriptionRef.make<ReadonlyArray<Unseen>>([]),
         shareReview: () => Effect.succeed(undefined),
         messages: Stream.fromPubSub(inbound).pipe(Stream.map((msg) => ({ seq: 0, msg }))),
         sendTo,
