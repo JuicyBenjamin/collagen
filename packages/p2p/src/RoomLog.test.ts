@@ -325,6 +325,29 @@ describe("RoomLog", () => {
     }
   });
 
+  it("the kept row is the entry's content: the same newer entry seen twice is one row, and a replay can only retire its own", async () => {
+    const ours = protocolForTests.ours;
+    try {
+      await withLog(async (log) => {
+        protocolForTests.ours = ours - 1;
+        const t = ticket({ id: "t3" });
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: t }));
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: t })); // a second writer replayed the same entry
+        const other = { ...t, updatedAt: 8, structureAt: t.structureAt + 1, goal: "another update, same ticket" }; // the author moved the goal: a later structureAt wins the merge
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: other }));
+        expect((await Effect.runPromise(log.read)).unseen).toEqual([{ key: "ticket/t3", protocol: ours }]);
+        protocolForTests.ours = ours;
+        await Effect.runPromise(log.read);
+        expect(await Effect.runPromise(log.rewriteMigrated)).toBe(2); // two distinct entries, not three
+        const after = await Effect.runPromise(log.read);
+        expect(after.tickets.map((x) => x.goal)).toEqual(["another update, same ticket"]);
+        expect(after.unseen).toEqual([]);
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
+  });
+
   it("an older peer writing the same ticket does not touch what a newer build wrote: the kept rows stay until the update replays them", async () => {
     const ours = protocolForTests.ours;
     try {
