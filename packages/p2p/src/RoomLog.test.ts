@@ -276,6 +276,55 @@ describe("RoomLog", () => {
     }
   });
 
+  it("several newer entries for one ticket are all kept, in order, and all replay — the last does not eat the first", async () => {
+    const ours = protocolForTests.ours;
+    try {
+      await withLog(async (log) => {
+        protocolForTests.ours = ours - 1;
+        const first = ticket({ id: "t2", updatedAt: 5 });
+        // a later entry from the same future: one step settled
+        const second = { ...first, updatedAt: 6, steps: first.steps.map((s) => ({ ...s, status: "settled" as const, result: "done", updatedAt: 6 })) };
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: first }));
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: second }));
+        const before = await Effect.runPromise(log.read);
+        expect(before.unseen).toEqual([{ key: "ticket/t2", protocol: ours }]); // listed once, kept twice
+        protocolForTests.ours = ours;
+        await Effect.runPromise(log.read);
+        expect(await Effect.runPromise(log.rewriteMigrated)).toBe(2);
+        const after = await Effect.runPromise(log.read);
+        expect(after.tickets.map((t) => [t.id, t.steps[0]!.status])).toEqual([["t2", "settled"]]);
+        expect(after.unseen).toEqual([]);
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
+  });
+
+  it("a newer message is replayed once — by id — and its raw row goes; a newer writer is admitted", async () => {
+    const ours = protocolForTests.ours;
+    try {
+      await withLog(async (log) => {
+        protocolForTests.ours = ours - 1;
+        const msg = { id: "m1", threadId: "th", from: "a".repeat(64), fromName: "alice", to: "b".repeat(64), project: "sandbox", intent: "hello", findings: "hi", ts: 1 };
+        await Effect.runPromise(log.append({ op: "msg", protocol: String(ours), msg }));
+        await Effect.runPromise(log.append({ op: "add-writer", protocol: String(ours), key: "c".repeat(64) }));
+        const before = await Effect.runPromise(log.read);
+        expect(before.messages).toHaveLength(0);
+        expect(before.unseen.map((u) => u.key)).toEqual(["op"]);
+        protocolForTests.ours = ours;
+        await Effect.runPromise(log.read);
+        expect(await Effect.runPromise(log.rewriteMigrated)).toBe(2);
+        // a second peer replays the same message: it must not land twice
+        await Effect.runPromise(log.append({ op: "msg", msg }));
+        const after = await Effect.runPromise(log.read);
+        expect(after.messages.map((m) => m.msg.id)).toEqual(["m1"]);
+        expect(after.unseen).toEqual([]);
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
+  });
+
   it("a newer entry the room later writes readably clears its unknown row", async () => {
     const ours = protocolForTests.ours;
     try {

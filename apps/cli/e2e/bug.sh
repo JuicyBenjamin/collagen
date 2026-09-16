@@ -47,6 +47,11 @@ expect "…and the effect" "$FULL" "effect: the two biggest customers"
 expect "…the suggestion" "$FULL" "suggestion: .{0,3}page by id"
 expect "…with its loose requirements" "$FULL" "requirements: must stay under the 30s request budget"
 expect "…and the remedy, named" "$FULL" "remedy: .{0,3}system .{1,3} an existing system does the wrong thing"
+ABOUT=$(call $B "$SB" review-context "{\"ticketId\":\"$BID\",\"about\":\"planner\"}")
+expect "asking about a word in the report finds the report" "$ABOUT" "cause: the cursor page size overflows"
+expect "…and the match line says the report matched" "$ABOUT" "the bug report matched"
+NOPE=$(call $B "$SB" review-context "{\"ticketId\":\"$BID\",\"about\":\"zebra\"}")
+expect "asking about a word nowhere in it says so" "$NOPE" "nothing in the why mentions .{0,3}zebra"
 
 echo "## the report grows a field at a time — what alice leaves out keeps its value"
 AMEND="{\"ticketId\":\"$BID\",\"cause\":{\"what\":\"the planner falls back to a full scan above 10k rows and the request times out\",\"where\":[\"apps/api/src/export.ts:88\",\"apps/api/src/db.ts:12\"]},\"remedy\":\"line\"}"
