@@ -8,7 +8,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
-import { AI_OPTIONS, DriveAction, emptyReview, formatInvite, isJudged, isTake, mergeReview, newProject, PROTOCOL_VERSION, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
+import { AI_OPTIONS, DriveAction, emptyReview, formatInvite, ImportanceScore, isJudged, isTake, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -180,6 +180,13 @@ const judgedParameters = {
   ),
 };
 
+/** A bug's goal when the agent gave none: the symptom's first sentence, cut
+ *  to a line. The symptom itself stays whole on the report. */
+const headline = (symptom: string): string => {
+  const first = symptom.trim().split(/(?<=[.!?])\s+/)[0] ?? symptom.trim();
+  return first.length > 96 ? `${first.slice(0, 93).trimEnd()}…` : first;
+};
+
 /** A work item's stable id: the one the agent gave, else its intent. Two items
  *  that would share one is a refusal, not a silent overwrite. */
 const workId = (w: { readonly id?: string; readonly intent: string }): string => (w.id ?? w.intent).trim().replace(/\s+/g, "-");
@@ -215,6 +222,24 @@ export const Propose = Tool.make("propose", {
     ...judgedParameters,
     work: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String), intent: Schema.String, description: Schema.String, owner: Schema.optional(Schema.String) }))),
     retireWork: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  success: Schema.String,
+});
+
+export const ReportBug = Tool.make("report-bug", {
+  description: [
+    "File a BUG: a symptom, with your user's reading of it — what is happening, how bad, what could fix it — put to the room for judgment before anyone decides how to go about it. Only when your user says so (\"file that as a bug\", \"report this\") — never on your own initiative. Everyone involved then decides: usually someone opens a Jira ticket, fixes it, and files the fix's review with 'from' this bug, so the reviewers read the report beside the why.",
+    "'symptom' is the one required field: what is wrong, as experienced, in your user's words. 'goal' is the one line everyone sees and defaults to the symptom's first sentence. Everything else is the reporter's reading and arrives as it is known: 'cause' {what is actually happening, where: project and file:line}; 'importance' {score 1–5, effect in words} — the scale is anchored: 1 cosmetic (nobody blocked), 2 annoying (a workaround exists), 3 wrong (a feature fails for some), 4 blocking (a feature fails for everyone), 5 breaking (data loss, a security hole, nothing works); 'suggestion' {what could fix it, requirements: loose — a bug is never filed with requirements, a plan lifts these into real ones}; 'remedy' — how big the fix is, the reporter's coarse guess, apart from where the symptom lives: line (a local fix), system (an existing system does the wrong thing), refactor (right in intent, wrong in shape), new (the system that should handle this does not exist). 'decisions' and 'forks' are optional here; 'peers' 0 to many, exactly the names your user said; 'from' and 'whenClosed' as elsewhere.",
+    "Readers give a BLIND FIRST TAKE on the symptom alone: their agent hands them the symptom, they say what they make of it (post-review; failed: true asks the reporter for changes), and only then does the reporter's cause, importance, suggestion and remedy open to them — a second, independent diagnosis is the most valuable thing a bug report collects. REVISING (report-bug with 'ticketId'): pass the part of the report that changed — a cause once found, a new score — fields left out keep their value; 'from: []' and 'whenClosed: \"\"' withdraw.",
+    "WHAT TO TELL YOUR USER: that the bug ticket has been filed (or updated), nothing more. KEEP IT CURRENT with report-bug and 'ticketId'. When the takes are in and your user has decided what happens to it — a plan, a fix and its review, or nothing — close-ticket with the conclusion as the reason.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    ...judgedParameters,
+    symptom: Schema.optional(Schema.String),
+    cause: Schema.optional(Schema.Struct({ what: Schema.String, where: Schema.optional(Schema.Array(Schema.String)) })),
+    importance: Schema.optional(Schema.Struct({ score: ImportanceScore, effect: Schema.String })),
+    suggestion: Schema.optional(Schema.Struct({ what: Schema.String, requirements: Schema.optional(Schema.Array(Schema.String)) })),
+    remedy: Schema.optional(Remedy),
   }),
   success: Schema.String,
 });
@@ -404,6 +429,7 @@ export const CollagenToolkit = Toolkit.make(
   AskReview,
   AskPlan,
   Propose,
+  ReportBug,
   PostReview,
   SettleStep,
   CloseTicket,
@@ -437,6 +463,7 @@ export const DevCollagenToolkit = Toolkit.make(
   AskReview,
   AskPlan,
   Propose,
+  ReportBug,
   PostReview,
   SettleStep,
   CloseTicket,
@@ -535,7 +562,7 @@ const makeHandlers = Effect.gen(function* () {
      *  the author settles); what differs — code facts read from git, work
      *  steps for a recipient, the words a reader's agent is handed — turns on
      *  `kind` here, in one place, instead of three copies drifting apart. */
-    const fileJudged = Effect.fn("Mcp.fileJudged")(function* (kind: "review" | "plan" | "proposal", input: {
+    const fileJudged = Effect.fn("Mcp.fileJudged")(function* (kind: "review" | "plan" | "proposal" | "bug", input: {
         peers?: ReadonlyArray<string>;
         project?: string;
         ticketId?: string;
@@ -552,6 +579,11 @@ const makeHandlers = Effect.gen(function* () {
         whenClosed?: string;
         work?: ReadonlyArray<{ readonly id?: string; readonly intent: string; readonly description: string; readonly owner?: string }>;
         retireWork?: ReadonlyArray<string>;
+        symptom?: string;
+        cause?: { readonly what: string; readonly where?: ReadonlyArray<string> };
+        importance?: { readonly score: ImportanceScore; readonly effect: string };
+        suggestion?: { readonly what: string; readonly requirements?: ReadonlyArray<string> };
+        remedy?: Remedy;
       }) {
         const { id: roomId, room } = yield* focusedRoom;
         const myName = yield* SubscriptionRef.get(nameRef);
@@ -562,6 +594,19 @@ const makeHandlers = Effect.gen(function* () {
             ? input.work.map((w) => ({ id: workId(w), intent: w.intent, description: w.description, ...(w.owner?.trim() ? { owner: w.owner.trim() } : {}) }))
             : undefined;
         const retireOutline = kind === "proposal" && input.retireWork && input.retireWork.length > 0 ? input.retireWork.map((w) => w.trim().replace(/\s+/g, "-")) : undefined;
+        // a bug's report: only the fields given travel, so an amendment that
+        // says "the cause is X" leaves the symptom and the score as they were
+        const bug =
+          kind === "bug"
+            ? {
+                ...(input.symptom?.trim() ? { symptom: input.symptom.trim() } : {}),
+                ...(input.cause ? { cause: { what: input.cause.what, where: input.cause.where ?? [] } } : {}),
+                ...(input.importance ? { importance: input.importance } : {}),
+                ...(input.suggestion ? { suggestion: { what: input.suggestion.what, requirements: input.suggestion.requirements ?? [] } } : {}),
+                ...(input.remedy ? { remedy: input.remedy } : {}),
+              }
+            : undefined;
+        const bugMoves = bug !== undefined && Object.keys(bug).length > 0;
         const delta = {
           ...(input.summary ? { summary: input.summary } : {}),
           ...(input.base ? { base: input.base } : {}),
@@ -569,6 +614,7 @@ const makeHandlers = Effect.gen(function* () {
           forks: input.forks ?? [],
           ...(outline ? { outline } : {}),
           ...(retireOutline ? { retireOutline } : {}),
+          ...(bugMoves ? { bug } : {}),
         };
 
         // amending a review already on a ticket: only its author writes it
@@ -586,7 +632,7 @@ const makeHandlers = Effect.gen(function* () {
           }
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
-            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined;
+            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves;
           const ticketMoves = input.goal !== undefined || input.from !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
           if (!whyMoves && !ticketMoves) return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
           if (whyMoves) {
@@ -672,7 +718,7 @@ const makeHandlers = Effect.gen(function* () {
         }
         const dupWork = duplicateWorkId(input.work ?? []);
         if (dupWork) return `failed: two work items would share the id "${dupWork}" — give each its own 'id' (they default to the intent)`;
-        if (kind !== "review" && !input.goal) return `failed: pass 'goal' — the one line everyone sees: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
+        if (kind !== "review" && kind !== "bug" && !input.goal) return `failed: pass 'goal' — the one line everyone sees: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
         const project = roomProjects(yield* store.get, roomId).find((p) => p.name === input.project);
         if (!project) {
           const mine = roomProjects(yield* store.get, roomId).map((p) => p.name).join(", ");
@@ -685,7 +731,7 @@ const makeHandlers = Effect.gen(function* () {
         const branch = kind === "review" ? (input.branch ?? branchOf(project.path) ?? undefined) : input.branch;
         const link = kind === "review" ? (input.link ?? (branch ? (branchLink(project.path, branch) ?? undefined) : undefined)) : input.link;
         const ticketId = crypto.randomUUID();
-        const goal = input.goal ?? `review ${branch ?? input.project}`;
+        const goal = input.goal ?? (kind === "bug" && bug?.symptom ? headline(bug.symptom) : `review ${branch ?? input.project}`);
         const where = [branch ? `branch ${branch}${input.base ? ` off ${input.base}` : ""}` : "", link ?? ""].filter((x) => x.length > 0).join(" · ");
         // A step per person asked — and only people: a review nobody was asked
         // for has no placeholder step, it is simply a ticket with the why on
@@ -699,7 +745,9 @@ const makeHandlers = Effect.gen(function* () {
             input.focus ? `what your user wants looked at: ${input.focus}` : "",
             kind === "review"
               ? `the why behind it is on this ticket: ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s), with what steered each one. Read it with review-context {ticketId} when your person asks why something is the way it is — and review nothing on your own.`
-              : `${delta.decisions.length} thought(s) and ${delta.forks.length} fork(s) are on this ticket. Ask your person for THEIR OWN take FIRST — post it with post-review (failed: true asks for changes) — and only then read the author's thoughts with review-context {ticketId}. The blind first take is the point: their view before the author's has coloured it. Never take a position on your own.`,
+              : kind === "bug"
+                ? `symptom: ${bug?.symptom ?? goal}\nThe reporter's reading of it (cause, importance, suggestion, remedy) is on this ticket. Ask your person for THEIR OWN diagnosis FIRST — what is happening, how bad, what would fix it — and post it with post-review (failed: true asks the reporter for changes); only then read the reporter's reading with review-context {ticketId}. A second independent diagnosis is the point. Never take a position on your own.`
+                : `${delta.decisions.length} thought(s) and ${delta.forks.length} fork(s) are on this ticket. Ask your person for THEIR OWN take FIRST — post it with post-review (failed: true asks for changes) — and only then read the author's thoughts with review-context {ticketId}. The blind first take is the point: their view before the author's has coloured it. Never take a position on your own.`,
           ]
             .filter((x) => x.length > 0)
             .join("\n");
@@ -918,6 +966,7 @@ const makeHandlers = Effect.gen(function* () {
       "ask-review": (input: Parameters<typeof fileJudged>[1]) => fileJudged("review", input),
       "ask-plan": (input: Parameters<typeof fileJudged>[1]) => fileJudged("plan", input),
       propose: (input: Parameters<typeof fileJudged>[1]) => fileJudged("proposal", input),
+      "report-bug": (input: Parameters<typeof fileJudged>[1]) => fileJudged("bug", input),
       "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean }) {
         const { id: roomId, room } = yield* focusedRoom;
         const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);

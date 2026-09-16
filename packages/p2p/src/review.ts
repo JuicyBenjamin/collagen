@@ -50,6 +50,45 @@ export const OutlineItem = Schema.Struct({
 });
 export type OutlineItem = typeof OutlineItem.Type;
 
+/** How big the fix is, as the reporter guesses it — a coarse estimate of the
+ *  REMEDY, kept apart from where the symptom lives (that is `cause.where`).
+ *  line: a local fix. system: an existing system does the wrong thing, fix it
+ *  where it is. refactor: right in intent, wrong in shape. new: the system
+ *  that should handle this does not exist. A take may disagree. */
+export const Remedy = Schema.Literals(["line", "system", "refactor", "new"]);
+export type Remedy = typeof Remedy.Type;
+
+/** Importance, anchored so two reporters mean the same by a 3:
+ *  1 cosmetic — nobody is blocked; 2 annoying — a workaround exists;
+ *  3 wrong — a feature fails for some; 4 blocking — a feature fails for all;
+ *  5 breaking — data loss, a security hole, or nothing works. */
+export const IMPORTANCE = {
+  1: "cosmetic — nobody is blocked",
+  2: "annoying — a workaround exists",
+  3: "wrong — a feature fails for some",
+  4: "blocking — a feature fails for everyone",
+  5: "breaking — data loss, a security hole, or nothing works",
+} as const;
+export const ImportanceScore = Schema.Literals([1, 2, 3, 4, 5]);
+export type ImportanceScore = typeof ImportanceScore.Type;
+
+/** A bug as reported: the symptom is the one fact and the only required
+ *  field; the rest is the reporter's reading, each an answer a fixer and,
+ *  later, a reviewer will ask for. */
+export const BugReport = Schema.Struct({
+  /** What is wrong, as experienced. */
+  symptom: Schema.String,
+  /** What is actually happening, and where — project and file:line. */
+  cause: Schema.optional(Schema.Struct({ what: Schema.String, where: Schema.Array(Schema.String) })),
+  /** A score on the anchored scale, and the effect in words. Neither alone. */
+  importance: Schema.optional(Schema.Struct({ score: ImportanceScore, effect: Schema.String })),
+  /** How or what could fix it; `requirements` are loose — a bug is never
+   *  filed with requirements, a plan lifts these into real ones. */
+  suggestion: Schema.optional(Schema.Struct({ what: Schema.String, requirements: Schema.Array(Schema.String) })),
+  remedy: Schema.optional(Remedy),
+});
+export type BugReport = typeof BugReport.Type;
+
 /** Everything the reviewer needs that a diff does not carry. One per ticket. */
 export const ReviewContext = Schema.Struct({
   ticketId: Schema.String,
@@ -67,6 +106,8 @@ export const ReviewContext = Schema.Struct({
   forks: Schema.Array(ReviewFork),
   /** A proposal's idea of the work, when its author has one (see OutlineItem). */
   outline: Schema.optional(Schema.Array(OutlineItem)),
+  /** A bug ticket's report (see BugReport). */
+  bug: Schema.optional(BugReport),
   ts: Schema.Finite,
 });
 export type ReviewContext = typeof ReviewContext.Type;
@@ -98,6 +139,8 @@ export interface ReviewDelta {
   readonly outline?: ReadonlyArray<OutlineItem>;
   /** Outline ids withdrawn — an outline is intent, not history, so they go. */
   readonly retireOutline?: ReadonlyArray<string>;
+  /** A bug report, whole or in part: fields given replace, fields left out keep. */
+  readonly bug?: Partial<BugReport>;
 }
 
 const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
@@ -137,6 +180,18 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     }
     if (delta.retireOutline && delta.retireOutline.length > 0) outline = outline.filter((x) => !delta.retireOutline!.includes(x.id));
   }
+  // a bug report merges field by field: the symptom is corrected by giving
+  // it again, a cause arrives when it is known, importance when it is judged
+  const bug: BugReport | undefined =
+    delta.bug === undefined
+      ? base.bug
+      : {
+          symptom: delta.bug.symptom ?? base.bug?.symptom ?? "",
+          ...((delta.bug.cause ?? base.bug?.cause) ? { cause: delta.bug.cause ?? base.bug?.cause } : {}),
+          ...((delta.bug.importance ?? base.bug?.importance) ? { importance: delta.bug.importance ?? base.bug?.importance } : {}),
+          ...((delta.bug.suggestion ?? base.bug?.suggestion) ? { suggestion: delta.bug.suggestion ?? base.bug?.suggestion } : {}),
+          ...((delta.bug.remedy ?? base.bug?.remedy) ? { remedy: delta.bug.remedy ?? base.bug?.remedy } : {}),
+        };
   return {
     ...base,
     summary: delta.summary ?? base.summary,
@@ -146,6 +201,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     decisions,
     forks,
     ...(outline !== undefined ? { outline } : {}),
+    ...(bug !== undefined ? { bug } : {}),
     ts,
   };
 };
