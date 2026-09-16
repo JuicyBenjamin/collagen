@@ -348,6 +348,27 @@ describe("RoomLog", () => {
     }
   });
 
+  it("the same body under two protocols is two rows: a copy this build can read is never swallowed by one it cannot", async () => {
+    const ours = protocolForTests.ours;
+    try {
+      await withLog(async (log) => {
+        protocolForTests.ours = ours - 1;
+        const t = ticket({ id: "t5" });
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours + 1), ticket: t })); // from two versions ahead, first
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: t })); // then from one ahead — decodable after our next update
+        expect((await Effect.runPromise(log.read)).unseen).toEqual([{ key: "ticket/t5", protocol: ours + 1 }]);
+        protocolForTests.ours = ours;
+        await Effect.runPromise(log.read);
+        expect(await Effect.runPromise(log.rewriteMigrated)).toBe(1); // the protocol-ours copy replays
+        const after = await Effect.runPromise(log.read);
+        expect(after.tickets.map((x) => x.id)).toEqual(["t5"]);
+        expect(after.unseen).toEqual([{ key: "ticket/t5", protocol: ours + 1 }]); // the copy from further ahead is still kept, still unknown
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
+  });
+
   it("a replays marker is not trusted: a valid entry carrying another entry's key erases nothing", async () => {
     const ours = protocolForTests.ours;
     try {
