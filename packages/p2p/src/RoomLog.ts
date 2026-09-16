@@ -19,9 +19,17 @@ export interface LogView {
   readonly attachments: ReadonlyArray<Attachment>;
   /** The why behind each review ticket, one per ticket. */
   readonly reviews: ReadonlyArray<ReviewContext>;
-  /** Entries written by a NEWER build than this one, left unapplied: the
-   *  room has records this build cannot see until it updates. */
-  readonly fromNewer: number;
+  /** Entries written by a NEWER build than this one, kept raw and unapplied:
+   *  records this build cannot read until it updates. A ticket among them is
+   *  shown on the overview as `unknown`; the rest are counted. Once this
+   *  build can read one, `rewriteMigrated` replays it and the row goes. */
+  readonly unseen: ReadonlyArray<Unseen>;
+}
+
+export interface Unseen {
+  /** The view key the entry claims (`ticket/<id>`, `review/<id>`, …), or `op/<n>` when it claims none. */
+  readonly key: string;
+  readonly protocol: number;
 }
 
 export interface RoomLog {
@@ -58,8 +66,14 @@ const wireProtocol = (value: unknown): number | null => {
   const p = (value as Record<string, unknown>).protocol;
   return typeof p === "string" && /^\d+$/.test(p) ? Number(p) : null;
 };
-const OURS = Number(PROTOCOL_VERSION);
-const NEWER_KEY = "state/from-newer";
+/** The protocol this build reads. A test lowers it to play an older build,
+ *  then raises it to play the update — nothing in the app touches it. */
+export const protocolForTests = { ours: Number(PROTOCOL_VERSION) };
+const UNSEEN = "unseen/";
+/** What is replayed once readable: keyed records, where applying twice is
+ *  applying once. A message has no key and would land twice; a member or
+ *  rename re-announces itself anyway. */
+const REPLAYABLE = /^unseen\/(ticket|review|attachment)\//;
 const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
 
 /** The view key an entry we CANNOT read would have written, when the entry is
@@ -100,14 +114,22 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
     // an entry from a NEWER build is not ours to judge: leave it unapplied and
     // count it, so the room loses nothing while this side has not updated
     const wire = wireProtocol(node.value);
-    if (wire !== null && wire > OURS) {
-      const n = ((await view.get(NEWER_KEY))?.value ?? 0) as number;
-      await view.put(NEWER_KEY, n + 1);
+    if (wire !== null && wire > protocolForTests.ours) {
+      const claimed = claimedKey(node.value);
+      const n = ((await view.get("state/unseen")) ?.value ?? 0) as number;
+      await view.put("state/unseen", n + 1);
+      await view.put(`${UNSEEN}${claimed ?? `op/${n}`}`, { protocol: wire, raw: node.value });
       continue;
     }
     // an entry from an older protocol is rewritten into the current shape when
     // we know the old one (migrate.ts); only what nobody can read is ejected
     const op = Option.getOrUndefined(decodeOp(node.value)) ?? migrateOp(node.value) ?? undefined;
+    {
+      // the record this entry writes is readable now: whatever an older pass
+      // of this view kept raw under it is superseded
+      const claimed = claimedKey(node.value);
+      if (claimed && (await view.get(`${UNSEEN}${claimed}`))) await view.del(`${UNSEEN}${claimed}`);
+    }
     if (!op) {
       // unreadable here: eject the row it claims instead of leaving a stale one
       const key = claimedKey(node.value);
@@ -253,7 +275,17 @@ export const openRoomLog = (
       const attachments = (yield* rows("attachment", Attachment)).map((e) => e.value);
       const reviews = (yield* rows("review", ReviewContext)).map((e) => e.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
-      const fromNewer = (yield* Effect.promise(() => base.view.get(NEWER_KEY) as Promise<{ value: number } | null>))?.value ?? 0;
+      // entries a build behind kept raw: list them, and queue for replay the
+      // ones this build can read — once appended they apply like any entry
+      const unseenRows = yield* readRange("unseen");
+      const unseen: Unseen[] = [];
+      for (const row of unseenRows) {
+        const v = row.value as { protocol?: number; raw?: unknown };
+        const key = row.key.slice(UNSEEN.length);
+        const op = v.protocol !== undefined && v.protocol <= protocolForTests.ours ? Option.getOrUndefined(decodeOp(v.raw)) : undefined;
+        if (op && REPLAYABLE.test(row.key)) migrated.push(op);
+        else unseen.push({ key, protocol: v.protocol ?? 0 });
+      }
       stale = bad;
       rewrites = migrated;
       if (bad.length !== announced) {
@@ -264,11 +296,11 @@ export const openRoomLog = (
           );
         }
       }
-      if (fromNewer !== announcedNewer) {
-        announcedNewer = fromNewer;
-        if (fromNewer > 0) yield* Effect.logWarning(`${fromNewer} record(s) in this room were written by a newer collagen than this one — they are kept, unseen, until this side updates`);
+      if (unseen.length !== announcedNewer) {
+        announcedNewer = unseen.length;
+        if (unseen.length > 0) yield* Effect.logWarning(`${unseen.length} record(s) in this room were written by a newer collagen than this one — kept, unseen, until this side updates`);
       }
-      return { tickets, members, messages, attachments, reviews, name: name?.value ?? null, fromNewer };
+      return { tickets, members, messages, attachments, reviews, name: name?.value ?? null, unseen };
     });
 
     /** The migration: take the rows nobody can read off the room, for every
@@ -304,7 +336,7 @@ export const openRoomLog = (
         if (ok) n++;
       }
       rewrites = [];
-      if (n > 0) yield* Effect.log(`migrated ${n} record(s) from an older protocol version into protocol ${PROTOCOL_VERSION}`);
+      if (n > 0) yield* Effect.log(`brought ${n} record(s) into protocol ${PROTOCOL_VERSION}: migrated from an older build, or replayed from a newer one this build can read now`);
       return n;
     });
 
