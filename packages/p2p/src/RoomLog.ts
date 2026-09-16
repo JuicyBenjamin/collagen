@@ -19,6 +19,9 @@ export interface LogView {
   readonly attachments: ReadonlyArray<Attachment>;
   /** The why behind each review ticket, one per ticket. */
   readonly reviews: ReadonlyArray<ReviewContext>;
+  /** Entries written by a NEWER build than this one, left unapplied: the
+   *  room has records this build cannot see until it updates. */
+  readonly fromNewer: number;
 }
 
 export interface RoomLog {
@@ -48,6 +51,15 @@ export interface RoomLog {
 const UPDATE_PATIENCE = "5 seconds";
 
 const decodeOp = Schema.decodeUnknownOption(LogOp);
+
+/** The protocol an entry says it was written under, when it says. */
+const wireProtocol = (value: unknown): number | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const p = (value as Record<string, unknown>).protocol;
+  return typeof p === "string" && /^\d+$/.test(p) ? Number(p) : null;
+};
+const OURS = Number(PROTOCOL_VERSION);
+const NEWER_KEY = "state/from-newer";
 const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
 
 /** The view key an entry we CANNOT read would have written, when the entry is
@@ -85,6 +97,14 @@ const claimedKey = (value: unknown): string | null => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: any): Promise<void> {
   for (const node of nodes) {
+    // an entry from a NEWER build is not ours to judge: leave it unapplied and
+    // count it, so the room loses nothing while this side has not updated
+    const wire = wireProtocol(node.value);
+    if (wire !== null && wire > OURS) {
+      const n = ((await view.get(NEWER_KEY))?.value ?? 0) as number;
+      await view.put(NEWER_KEY, n + 1);
+      continue;
+    }
     // an entry from an older protocol is rewritten into the current shape when
     // we know the old one (migrate.ts); only what nobody can read is ejected
     const op = Option.getOrUndefined(decodeOp(node.value)) ?? migrateOp(node.value) ?? undefined;
@@ -205,6 +225,7 @@ export const openRoomLog = (
     let stale: ReadonlyArray<string> = [];
     let rewrites: ReadonlyArray<LogOp> = [];
     let announced = -1;
+    let announcedNewer = -1;
     const read: Effect.Effect<LogView> = Effect.gen(function* () {
       const bad: string[] = [];
       const migrated: LogOp[] = [];
@@ -232,17 +253,22 @@ export const openRoomLog = (
       const attachments = (yield* rows("attachment", Attachment)).map((e) => e.value);
       const reviews = (yield* rows("review", ReviewContext)).map((e) => e.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
+      const fromNewer = (yield* Effect.promise(() => base.view.get(NEWER_KEY) as Promise<{ value: number } | null>))?.value ?? 0;
       stale = bad;
       rewrites = migrated;
       if (bad.length !== announced) {
         announced = bad.length;
         if (bad.length > 0) {
           yield* Effect.logWarning(
-            `${bad.length} record(s) in this room were written by a build speaking another protocol version (ours: ${PROTOCOL_VERSION}) — kept out of the room and queued for eviction`,
+            `${bad.length} record(s) in this room were written by an older build nobody can read any more (ours: protocol ${PROTOCOL_VERSION}) — kept out of the room and queued for eviction`,
           );
         }
       }
-      return { tickets, members, messages, attachments, reviews, name: name?.value ?? null };
+      if (fromNewer !== announcedNewer) {
+        announcedNewer = fromNewer;
+        if (fromNewer > 0) yield* Effect.logWarning(`${fromNewer} record(s) in this room were written by a newer collagen than this one — they are kept, unseen, until this side updates`);
+      }
+      return { tickets, members, messages, attachments, reviews, name: name?.value ?? null, fromNewer };
     });
 
     /** The migration: take the rows nobody can read off the room, for every
@@ -258,7 +284,7 @@ export const openRoomLog = (
       );
       if (!ok) return 0;
       stale = [];
-      yield* Effect.log(`evicted ${keys.length} record(s) from an older protocol version: ${keys.join(", ")}`);
+      yield* Effect.log(`evicted ${keys.length} unreadable record(s) from an older build: ${keys.join(", ")}`);
       return keys.length;
     });
 
@@ -358,9 +384,12 @@ export const openRoomLog = (
      *  logged "room log opened" and then nothing). The entry is already on our
      *  core by then, so after a few seconds we carry on and let the `changes`
      *  stream bring the view up when it can. */
+    // every entry says which build wrote it, so an older reader can tell
+    // "newer than me" from "broken" (see LogOp). No caller in the app sets
+    // it; a test does, to play a peer from the future.
     const append = (op: LogOp) =>
       Effect.tryPromise({
-        try: () => base.append(op) as Promise<void>,
+        try: () => base.append({ ...op, protocol: op.protocol ?? PROTOCOL_VERSION }) as Promise<void>,
         catch: (cause) => new LogAppendFailed({ cause }),
       }).pipe(
         Effect.andThen(

@@ -22,7 +22,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "4";
+export const PROTOCOL_VERSION = "5";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -234,22 +234,28 @@ export type Frame = typeof Frame.Type;
 
 /** One entry on a room's Autobase log. Applied deterministically by every
  *  member into the room's view (see RoomLog). */
+/** Every entry carries the PROTOCOL_VERSION of the build that wrote it
+ *  (`append` stamps it; entries from before protocol 5 have none). A reader
+ *  on an OLDER build leaves a newer entry alone — not applied, not evicted —
+ *  so a room with mixed builds loses nothing; the older side is told to
+ *  update. Without this, "unreadable" meant "evict", and a new ticket kind
+ *  would have been wiped by the first peer who had not updated yet. */
 export const LogOp = Schema.Union([
   /** Admit a writer core to the log (any member may append this). */
-  Schema.Struct({ op: Schema.Literal("add-writer"), key: Schema.String }),
+  Schema.Struct({ protocol: Schema.optional(Schema.String), op: Schema.Literal("add-writer"), key: Schema.String }),
   /** A member introducing itself (so names resolve even while offline). */
-  Schema.Struct({ op: Schema.Literal("member"), key: Schema.String, name: Schema.String, ts: Schema.Finite }),
+  Schema.Struct({ protocol: Schema.optional(Schema.String), op: Schema.Literal("member"), key: Schema.String, name: Schema.String, ts: Schema.Finite }),
   /** The full ticket record; the view merges it with what it holds. */
-  Schema.Struct({ op: Schema.Literal("ticket"), ticket: Ticket }),
+  Schema.Struct({ protocol: Schema.optional(Schema.String), op: Schema.Literal("ticket"), ticket: Ticket }),
   /** The room's shared name — last writer wins by ts. */
-  Schema.Struct({ op: Schema.Literal("rename"), name: Schema.String, ts: Schema.Finite }),
+  Schema.Struct({ protocol: Schema.optional(Schema.String), op: Schema.Literal("rename"), name: Schema.String, ts: Schema.Finite }),
   /** A directed message; room-visible, delivered to `msg.to` whenever they read the log. */
-  Schema.Struct({ op: Schema.Literal("msg"), msg: RoomMessage }),
+  Schema.Struct({ protocol: Schema.optional(Schema.String), op: Schema.Literal("msg"), msg: RoomMessage }),
   /** A file attached to a ticket (the reference; the holder keeps the file). */
-  Schema.Struct({ op: Schema.Literal("attachment"), attachment: Attachment }),
+  Schema.Struct({ protocol: Schema.optional(Schema.String), op: Schema.Literal("attachment"), attachment: Attachment }),
   /** The why behind a review ticket's change — its author is its only writer,
    *  so the later ts wins (an amendment carries the whole record). */
-  Schema.Struct({ op: Schema.Literal("review"), review: ReviewContext }),
+  Schema.Struct({ protocol: Schema.optional(Schema.String), op: Schema.Literal("review"), review: ReviewContext }),
   /** The migration. The log is append-only, so a record written by a build
    *  that spoke another protocol version cannot be rewritten — this is how it
    *  stops being part of the room instead: the rows it left in the view are

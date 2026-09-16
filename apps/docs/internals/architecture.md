@@ -67,6 +67,15 @@ UI atoms follow it with `watch` (a `switchMap` over focus), so switching is inst
 nothing restarts. `join` opens a room live; `summaryChanges` streams one line per room
 (name, online, unread, focused) for the rail and `list-rooms`.
 
+## Protocol versions on the log
+
+Every log entry carries the `PROTOCOL_VERSION` of the build that wrote it (`append` stamps
+it). Three cases on read: an entry this build decodes is applied; an entry from an **older**
+build is migrated when the shape is known (`migrate.ts`) and evicted for everyone when it is
+not; an entry from a **newer** build is left alone — not applied, not evicted, counted in
+`fromNewer` — and the footer says the room holds records this build cannot see until it
+updates. Before protocol 5 the third case did not exist, and "cannot decode" meant "evict".
+
 ## The p2p core: `Swarm` and `Room`
 
 `Swarm` (`packages/p2p/src/Swarm.ts`) is **one Hyperswarm per identity** — one DHT node

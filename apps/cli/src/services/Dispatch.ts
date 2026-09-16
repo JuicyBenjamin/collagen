@@ -82,7 +82,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // the same record serves a review, a plan and a proposal; the words
           // an agent reads back follow the kind
           const kind = out.ticket?.kind ?? (yield* SubscriptionRef.get(room.tickets)).get(out.review.ticketId)?.kind ?? "review";
-          const tool = kind === "review" ? "ask-review" : kind === "plan" ? "ask-plan" : "propose";
+          const tool = kind === "review" ? "ask-review" : kind === "plan" ? "ask-plan" : kind === "bug" ? "report-bug" : "propose";
           const say = (what: string) =>
             `TELL YOUR USER ONLY THIS: "${kind} ticket has been ${what}". They asked for it, so the fact that it is done is the whole report — do not read the summary, the decisions, the forks or the counts back to them, and do not list what you wrote. It is on the ticket for whoever reads it, and their TUI shows the ticket.`;
           const keepCurrent = `Next time this changes — ${kind === "review" ? "a fix, a fork taken differently" : "your user rethinks a part of it, a reader's take changes their mind"}, anything your user asks for — call ${tool} again with ticketId "${out.review.ticketId}" and say what changed and why, in their words: re-send the summary if it no longer holds, and repeat the id of any decision or fork that has changed. What the room reads has to be what your user means.`;
@@ -116,7 +116,9 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const next =
             merged.kind === "proposal"
               ? ` If the idea is accepted, the obvious next step is a plan: ask-plan with from ["${merged.id}"] — the outline and any suggested owners on review-context are prefills, and your user confirms that plan; accepting assigns nothing.`
-              : "";
+              : merged.kind === "bug"
+                ? ` If it is to be fixed, what comes next names this bug in from: a plan (ask-plan) when the fix needs deciding, or the fix's review (ask-review) when it is done — the reviewers then read the symptom, cause and suggestion beside the why. Judging the bug assigns nothing.`
+                : "";
           const offer =
             merged.createdBy === identity.pubkey && !merged.closed && finished(merged)
               ? `\nEvery step on this ticket is answered.${next} When your user says they are done with it — and only then — call close-ticket with ticketId "${merged.id}"; it leaves the lists and stays on the log.`

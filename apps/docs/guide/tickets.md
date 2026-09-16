@@ -177,6 +177,7 @@ thinking, given before your thinking has coloured theirs — or your own take, a
 | --- | --- | --- | --- | --- |
 | `proposal` | an idea, written down; owed to no one | is it worth doing — and, if someone is named, would you do it, or should I | none — the work is an outline; willingness goes in the take, a plan binds | you close it — a plan grew out of it, or it is dropped |
 | `plan` | something I intend to do, and how | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
+| `bug` | a symptom, and my reading of it: cause, importance, suggestion, remedy | what do you make of the symptom — your diagnosis before mine | none — a plan or the fix's review follows, naming the bug in `from` | you close it — fixed, planned, or let be |
 
 A proposal is the **cheap** kind: alone on your own project you get ideas and want them
 kept without committing to them. It goes in with a goal and one thought; a summary, a
@@ -187,6 +188,30 @@ names them. A plan is how it
 gets done; it may grow out of a proposal (its `from` says so) and a proposal that never
 becomes a plan is expected. Two tickets, not two phases of one — the phases live in the
 chain between them (below).
+
+### Bugs: the symptom is the fact, the rest is a reading
+
+A **bug** is filed with `report-bug`. One field is required: the **symptom**, what is
+wrong as experienced, in your words. The goal line defaults to its first sentence. The
+rest is your reading and arrives as it is known, a field at a time:
+
+| field | what it holds |
+| --- | --- |
+| `cause` | what is actually happening, and where — project and `file:line` |
+| `importance` | a **score 1–5** and the **effect** in words, neither alone. The scale is anchored so a 3 means the same to everyone: 1 cosmetic (nobody blocked) · 2 annoying (a workaround exists) · 3 wrong (a feature fails for some) · 4 blocking (a feature fails for everyone) · 5 breaking (data loss, a security hole, nothing works) |
+| `suggestion` | how or what could fix it, with **loose requirements** — a bug is never filed with requirements; a plan lifts these into real ones |
+| `remedy` | how big the fix is, the reporter's coarse guess, kept apart from where the symptom lives: `line` a local fix · `system` an existing system does the wrong thing · `refactor` right in intent, wrong in shape · `new` the system that should handle this does not exist |
+
+Readers give the blind first take **on the symptom alone**: their agent hands them the
+symptom, they say what they make of it, and only then does your cause, importance,
+suggestion and remedy open to them. A second independent diagnosis is the most valuable
+thing a bug report collects; showing yours first would throw it away. Revising the report
+(`report-bug` with `ticketId`) changes only the fields you pass — a cause found a day later
+leaves the score where it was.
+
+Judging a bug assigns nothing. When the takes are in, what comes next names the bug in
+`from`: a plan when the fix needs deciding, the fix's review when it is done — and the
+reviewers read the symptom, cause and suggestion beside the review's why.
 
 You may take your own proposal: `post-review` on your own ticket is allowed, and the row
 says so — `self ✓` — so a colleague's ✓ and a self-approval never read alike, and others
@@ -276,7 +301,8 @@ product manager, the backender and the reviewer each speaking through their own 
 Because nobody has to be named, it is the same flow alone: you plan, your second agent
 gives its blind take, you build it, it reviews the result.
 
-Built: `ask-plan` and `propose` (peers and `work` optional; `work` is an outline on the
+Built: `report-bug` (the symptom required, the reading optional and merged field by field,
+the blind take on the symptom alone), `ask-plan` and `propose` (peers and `work` optional; `work` is an outline on the
 why, each item with a stable `id` and an optional suggested `owner`, never a step;
 `retireWork` withdraws items by id), takes with `post-review` — your own included,
 attributed on the row as `self ✓` — the blind first take in `review-context`
