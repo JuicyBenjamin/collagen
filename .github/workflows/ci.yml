@@ -21,3 +21,13 @@ jobs:
       - run: pnpm --filter @collagen/cli build
       # the published artifact must start: version banner through the bin shim
       - run: node apps/cli/bin/collagen.js --version
+      # …and it must start the way a USER gets it: the packed tarball, installed
+      # by npm into a clean prefix with no lockfile — the workspace's pinned
+      # node_modules hide what a caret range lets npm pick (an @effect peer and a
+      # 0.x callscript both shipped broken this way)
+      - name: install the tarball like a user and run it
+        run: |
+          set -eu
+          pnpm --filter @collagen/cli pack --pack-destination "$RUNNER_TEMP"
+          npm install -g --prefix "$RUNNER_TEMP/prefix" "$RUNNER_TEMP"/collagen-cli-*.tgz
+          node "$RUNNER_TEMP/prefix/lib/node_modules/@collagen/cli/bin/collagen.js" --version
