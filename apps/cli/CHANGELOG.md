@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.13.0-alpha...cli-v0.13.1-alpha) (2026-09-17)
+
+
+### Bug Fixes
+
+* **cli:** pin callscript exact; CI installs the tarball like a user ([75bc629](https://github.com/JuicyBenjamin/collagen/commit/75bc6290448ef8c72a41bd6212505bdc508ae671))
+
 ## [0.13.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.12.0-alpha...cli-v0.13.0-alpha) (2026-09-16)
 
 
