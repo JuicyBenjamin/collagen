@@ -91,6 +91,7 @@ what's natural there. Number keys work from anywhere.
 | `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
+| `g` | Cycle your [steering](./conversations#steering-how-much-your-agent-does-on-its-own): ask first → act, then tell → just do it |
 | `c` | Copy the room's invite id |
 | `s` | Settings (your name, the room's shared name) |
 | `u` | Install the newer collagen the status line announces, then restart into it |

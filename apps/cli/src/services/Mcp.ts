@@ -29,6 +29,7 @@ import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
+import { STEERING_LABEL, steeringLine, steeringOf } from "../lib/steering";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
 // `structuredContent` as an object, and Claude Code rejects array roots.
@@ -370,6 +371,13 @@ export const SetAi = Tool.make("set-ai", {
   success: Schema.String,
 });
 
+export const SetSteering = Tool.make("set-steering", {
+  description:
+    "Set your user's STEERING — how much you may do on your own with what collagen hands you (a step, a take, a peer's message): 'ask' (tell them what it asks and what you would do, and wait — the default), 'act' (start the work in their repo and tell them as you go), 'auto' (do the work and say when it is done). Only when your user says so — it is their setting, never yours to raise. Whatever the level, anything said in the room for them (a message, a take, a settle, a close) stays their word, and it gates nothing: their harness's own permission mode does that. The level is restated on every delivery you read. Applies live.",
+  parameters: Schema.Struct({ steering: Schema.Literals(["ask", "act", "auto"]) }),
+  success: Schema.String,
+});
+
 export const SetName = Tool.make("set-name", {
   description: "Change the user's display name as peers see it. Applies live.",
   parameters: Schema.Struct({ name: Schema.String }),
@@ -445,6 +453,7 @@ export const CollagenToolkit = Toolkit.make(
   AddProject,
   RemoveProject,
   SetAi,
+  SetSteering,
   SetName,
   RenameRoom,
   ListRooms,
@@ -479,6 +488,7 @@ export const DevCollagenToolkit = Toolkit.make(
   AddProject,
   RemoveProject,
   SetAi,
+  SetSteering,
   SetName,
   RenameRoom,
   ListRooms,
@@ -940,11 +950,13 @@ const makeHandlers = Effect.gen(function* () {
           return `adopted: new messages on thread ${threadId} will resume your ${agent} conversation (${sessionId})`;
         }).pipe(Effect.withSpan("Mcp.adoptThread")),
       "get-messages": ({ threadId }: { threadId: string }) =>
-        rooms.current.pipe(
-          Effect.flatMap((h) => inbox.take(h.id, threadId)),
-          Effect.map((messages) => toToon({ messages })),
-          Effect.withSpan("Mcp.getMessages"),
-        ),
+        Effect.gen(function* () {
+          const h = yield* rooms.current;
+          const messages = yield* inbox.take(h.id, threadId);
+          // the person's steering rides what the agent is about to act on
+          const steering = steeringLine(steeringOf(yield* store.get));
+          return toToon(messages.length > 0 ? { steering, messages } : { messages });
+        }).pipe(Effect.withSpan("Mcp.getMessages")),
       execute: ({ script, input }: { script: string; input?: unknown }) =>
         Effect.promise(() => scripting.execute(script, input)).pipe(
           Effect.map((result) => ({ ...result }) as Record<string, unknown>),
@@ -1144,6 +1156,11 @@ const makeHandlers = Effect.gen(function* () {
             ),
             Effect.withSpan("Mcp.setAi"),
           ),
+      "set-steering": ({ steering }: { steering: "ask" | "act" | "auto" }) =>
+        store.update((s) => ({ ...s, steering })).pipe(
+          Effect.map(() => `steering set to ${steering} — ${STEERING_LABEL[steering]}; every delivery now says so. Room-facing actions (messages, takes, settles, closes) remain your user's word.`),
+          Effect.withSpan("Mcp.setSteering"),
+        ),
       "set-name": ({ name }: { name: string }) =>
         Effect.gen(function* () {
           const n = name.trim();

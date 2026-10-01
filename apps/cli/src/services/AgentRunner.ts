@@ -8,6 +8,7 @@ import { CliArgs } from "./CliArgs";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
+import { steeringOf } from "../lib/steering";
 
 /** Auto-triggers the recipient's preferred AI on incoming messages, one run at
  *  a time per thread (concurrent resumes of one session corrupt it). */
@@ -37,8 +38,10 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
      *  record the resumable session id. Never fails — spawn errors are logged. */
     const spawn = Effect.fn("AgentRunner.spawn")(
       function* (adapter: Adapter, ctx: SpawnCtx, threadId: string) {
-        // stdin "ignore": headless agents must not wait on input
-        const proc = yield* ChildProcess.make(adapter.cmd, adapter.args(ctx), {
+        // stdin "ignore": headless agents must not wait on input. The
+        // person's steering is read now, so the nudge says the current level
+        const steered: SpawnCtx = { ...ctx, steering: steeringOf(yield* store.get) };
+        const proc = yield* ChildProcess.make(adapter.cmd, adapter.args(steered), {
           cwd: ctx.cwd,
           stdin: "ignore",
         });
@@ -80,7 +83,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       function* (codexThread: string, ctx: SpawnCtx) {
         const proc = yield* ChildProcess.make(
           "codex",
-          ["queue", "--thread", codexThread, "--message", nudgePrompt(ctx)],
+          ["queue", "--thread", codexThread, "--message", nudgePrompt({ ...ctx, steering: steeringOf(yield* store.get) })],
           { stdin: "ignore" },
         );
         const exit = yield* proc.exitCode;

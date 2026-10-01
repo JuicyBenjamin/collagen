@@ -428,8 +428,16 @@ export type Proposal = typeof Proposal.Type;
 /** Local, per-user state: preferred AI + per-room projects. A project
  *  belongs to the room it was added in (Keet-style) — the same repo shared
  *  into two rooms is two entries. */
+/** How much the person's agent may do on its own with what collagen hands
+ *  it: ask first, act then tell, or just do it (cli lib/steering). Local —
+ *  the person's own setting, never broadcast. */
+export const Steering = Schema.Literals(["ask", "act", "auto"]);
+export type Steering = typeof Steering.Type;
+
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
+  /** absent = "ask": autonomy is opted into */
+  steering: Schema.optional(Steering),
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
   /** threadId → the user's adopted conversation for it. */
   threads: Schema.optional(Schema.Record(Schema.String, AdoptedThread)),
