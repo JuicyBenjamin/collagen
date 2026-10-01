@@ -32,7 +32,7 @@ export function TabBar() {
       id="tabs"
       // one row, always: a page that grows must not push the bar off its line
       flexShrink={0}
-      hint="←→ switch tab · ↓ into the tab · 1/2/3 jump · a cycle ai · c copy invite · s settings · q quit"
+      hint="←→ switch tab · ↓ into the tab · 1/2/3 jump · a cycle ai · g steering · c copy invite · s settings · q quit"
       onKey={(key) => {
         const i = TABS.indexOf(active);
         if (key.name === "left" && i > 0) return jump(TABS[i - 1]!), true;

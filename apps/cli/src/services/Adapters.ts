@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Context, Layer, Option } from "effect";
-import type { RoomMessage } from "@collagen/p2p";
+import type { RoomMessage, Steering } from "@collagen/p2p";
+import { steeringLine } from "../lib/steering";
 
 export interface SpawnCtx {
   cwd: string;
@@ -9,6 +10,8 @@ export interface SpawnCtx {
   serverName: string;
   msg: RoomMessage;
   sessionId: Option.Option<string>;
+  /** the person's steering level (lib/steering); absent = ask */
+  steering?: Steering;
 }
 
 export interface Adapter {
@@ -35,9 +38,12 @@ export function nudgePrompt(o: SpawnCtx): string {
   const headline = o.msg.intent.startsWith("ticket-update:")
     ? `Collagen: ${o.msg.fromName} ${o.msg.intent.slice("ticket-update:".length)} on a ticket your user is part of, project "${o.msg.project}"${ticketNote}.`
     : `Collagen: ${verb} — ${o.msg.fromName} asks your user to address "${o.msg.intent}" on project "${o.msg.project}"${ticketNote}.`;
+  const level = o.steering ?? "ask";
   return [
     headline,
-    `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`,
+    level === "ask"
+      ? `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`
+      : `Tell your user exactly that, in one line. ${steeringLine(level)}`,
     `If your user asks what it says or wants more, read it with the ${o.serverName} get-messages tool, threadId "${o.msg.threadId}" (a ticket's steps: get-tickets), and relay what is there — never fill gaps from your own head.`,
     `If your user then asks something the thread does not answer, decide which it is: yours to answer from this repo under their direction, or ${o.msg.fromName}'s to answer — then draft that question for them with send-to-peer.`,
     `Anything you send is only what your user decided — it goes to the room as soon as you send it, and the collagen TUI's outbox shows them what went.`,
