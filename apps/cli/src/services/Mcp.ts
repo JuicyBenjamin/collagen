@@ -1252,6 +1252,9 @@ export const McpLive = Layer.unwrap(
         ? McpServer.toolkit(Toolkit.merge(DevCollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(DevToolHandlers, DiagnosticHandlers)))
         : McpServer.toolkit(Toolkit.merge(CollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(ToolHandlers, DiagnosticHandlers)));
 
+    // Loopback only: the tools act for this person — send, settle, attach
+    // their files, hand over their transcripts — and are for agents on this
+    // machine. Node's default would listen on every interface.
     const serve = (port: number) =>
       HttpRouter.serve(
         Layer.mergeAll(
@@ -1269,7 +1272,7 @@ export const McpLive = Layer.unwrap(
           ),
         ),
         { disableListenLog: true },
-      ).pipe(Layer.provide(NodeHttpServer.layer(() => createServer(), { port })));
+      ).pipe(Layer.provide(NodeHttpServer.layer(() => createServer(), { port, host: "127.0.0.1" })));
 
     const port = portForProfile(profile);
     // Say WHY we fell back — a silent ephemeral port makes every registered
