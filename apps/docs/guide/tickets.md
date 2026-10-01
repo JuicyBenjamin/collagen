@@ -360,13 +360,16 @@ dependency order is enforced by delivery, not by remembering.
 ## In the TUI
 
 The overview tab lists **every** ticket in the room, whoever made it and whoever it is
-for. A row is a glance and nothing more: its
-**kind** — bright when the ticket is yours, dim when it is someone else's — its **goal**,
-a `▸` when it is yours to act on, and **what has been said** on it: `↻` changes were
-asked for, `✓` someone approved, `✕` a step failed, `…` someone spoke — one glyph per kind
-of answer however many gave it, and no names, because at a glance it is what was said
-that matters; the ticket's page says who. Order carries the rest: what needs you first,
-then what is waiting, then failed, then finished-but-open (dim).
+for, **grouped**: a block per project (no header when the room has one), and inside it a
+group per kind in the order work moves through them — proposals, plans, bugs, reviews,
+then tasks — so a project reads as its pipeline. A row is a glance and nothing more:
+**whose** it is — `you`, bright, or the author's name, dim — its **goal**, a `▸` when it is
+yours to act on, and **what has been said** on it: `↻` changes were asked for, `✓` someone
+approved, `✕` a step failed, `…` someone spoke — one glyph per kind of answer however many
+gave it, and no names, because at a glance it is what was said that matters; the ticket's
+page says who. Inside a group, order carries the rest: what needs you first, then what is
+waiting, then failed, then finished-but-open (dim); a project holding something for you
+comes before one that does not. `?` spells out the kinds, the marks and the states.
 
 **Completion and closure are two facts.** A ticket is *finished* when every step is
 answered — a reader's ↻ on a review counts as an answer — and that is a signal, not an
