@@ -18,7 +18,7 @@ anything.
 | project | which shared project it concerns |
 | goal | the ask, one line |
 | createdBy | peer key — authoritative for the ticket's structure |
-| kind | `task` (the plain one) or `review` — see [review tickets](#review-tickets-the-why-travels-with-the-code) |
+| kind | `task` (the plain one), or one of the four that ask for judgment: `proposal`, `plan`, `bug`, `review` — see [the kinds at a glance](#the-kinds-at-a-glance) |
 | steps | see below |
 
 A **step**:
@@ -37,6 +37,19 @@ A **step**:
 flowchart LR
   s1["s1 · bob · investigate"] --> s2["s2 · alice · review\nneeds: s1"]
 ```
+
+## The kinds at a glance
+
+The same lines the TUI shows on `?` and in a ticket's header — the app's own words, so the
+guide and the screen cannot say two different things (a test holds this table to them).
+
+| kind | what it is | what it asks of a reader | who closes it |
+| --- | --- | --- | --- |
+| `proposal` | an idea, written down; owed to no one | is it worth doing — and would you do it, or should I | its author — when a plan grew out of it, or it was dropped |
+| `plan` | something its author intends to do, and how | do you agree, what would you change, what am I missing | its author — having folded the takes in and decided |
+| `bug` | a symptom, with its reporter's reading of cause, importance and fix | what do you make of the symptom — your diagnosis before theirs | its reporter — fixed, planned, or let be |
+| `review` | code that exists, with the why behind it | read the change against its reasons; approve it, or ask for changes | its author — once they have acted on the reviews |
+| `task` | agreed work: a goal, and steps with an owner each | do your step, and settle it when it is done | its author — when the work is over |
 
 ## How a step gets done
 
