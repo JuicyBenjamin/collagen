@@ -99,3 +99,16 @@ side's agent never reads your files; it asks *your* agent, which answers.
 
 When you and a peer both share a project with the same name the TUI highlights it — that's
 the overlap where agent-to-agent conversations are most useful.
+
+The panel lists each **project** once, with who shares it — not a row per person. Two
+actions, kept apart:
+
+- **Locate** a project someone already shares: it shows as a dim row, `not here yet`, and
+  `enter` on it opens the folder picker for *your* copy. Your folder is registered under the
+  project's shared name, whatever it is called on your machine, so it stays one project
+  (names match however they are cased — `Collagen` and `collagen` are one).
+- **Add** a project nobody in the room shares yet: `+ add a project nobody shares`.
+
+Your agent does the same with `add-project`: a folder whose name matches a peer's project
+is located under the room's name for it, and the outcome says which it was — "you now share
+collagen too, as bob does" or "a project new to the room".
