@@ -20,6 +20,7 @@ import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
+import { sharedProject } from "../lib/projects";
 import { Scripting } from "./Scripting";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -353,7 +354,7 @@ export const DrivePeer = Tool.make("drive-peer", {
 
 export const AddProject = Tool.make("add-project", {
   description:
-    "Share a local project folder into the CURRENT room on behalf of the user. 'path' must be an existing directory (absolute, or relative to the agent's cwd); 'name' defaults to the folder name. Applies live — peers see it at once and can message about it.",
+    "Share a local project folder into the CURRENT room on behalf of the user. 'path' must be an existing directory (absolute, or relative to the agent's cwd); 'name' defaults to the folder name. When that name is a project a peer already shares (however cased), this LOCATES your user's copy of it: it is registered under the room's name for the project, so it stays one project — the outcome says whether it was new to the room or is now shared by one more person. Applies live — peers see it at once and can message about it.",
   parameters: Schema.Struct({ path: Schema.String, name: Schema.optional(Schema.String) }),
   success: Schema.String,
 });
@@ -1101,9 +1102,14 @@ const makeHandlers = Effect.gen(function* () {
         );
       }),
       // ── settings ──
-      "add-project": ({ path, name }: { path: string; name?: string }) =>
+      "add-project": ({ path, name: given }: { path: string; name?: string }) =>
         Effect.gen(function* () {
-          const { id: roomId, name: roomName } = yield* focusedRoom;
+          const { id: roomId, name: roomName, room } = yield* focusedRoom;
+          // a project a peer already shares is LOCATED, not added: the copy is
+          // registered under the room's name for it, whatever the folder is
+          // called here, so one project stays one row on everyone's panel
+          const shared = sharedProject(given ?? basename(resolve(path)), yield* SubscriptionRef.get(room.roster));
+          const name = shared?.name ?? given;
           const abs = resolve(path);
           const isDir = yield* Effect.sync(() => {
             try {
@@ -1129,7 +1135,10 @@ const makeHandlers = Effect.gen(function* () {
             outcome = `sharing "${label}" (${abs}) in room ${roomName} — peers see it now`;
             return { ...s, rooms: { ...s.rooms, [roomId]: [...here, newProject(label, abs)] } };
           });
-          return outcome;
+          if (!outcome.startsWith("sharing")) return outcome;
+          return shared
+            ? `${outcome} — you now share "${shared.name}" too, as ${shared.holders.join(" and ")} ${shared.holders.length === 1 ? "does" : "do"}: your copy, located`
+            : `${outcome} — a project new to the room`;
         }).pipe(Effect.withSpan("Mcp.addProject")),
       "remove-project": ({ name }: { name: string }) =>
         Effect.gen(function* () {
