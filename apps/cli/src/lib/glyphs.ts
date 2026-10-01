@@ -29,10 +29,20 @@ export const GLYPH: Record<Mark, string> = {
   spoke: "…",
 };
 
+/** Marks about ORDER, not people (a ticket's `after`): the row follows the
+ *  one above it in its group, or still waits on one that is not answered.
+ *  Only the author ever sees a waiting row — nobody else is shown it. */
+export const STACK = { follows: "↳", waits: "⧗" } as const;
+
+export const STACK_HELP: Record<keyof typeof STACK, string> = {
+  follows: "read after the ticket above it (after) — a stacked review, a second phase",
+  waits: "yours, waiting on a ticket not yet answered: nobody else is shown it until then",
+};
+
 /** For the hint line: every glyph on screen, in the order a reader meets
  *  them. It shares one row with the section's own keys, so it is terse on
  *  purpose — a legend that gets truncated teaches nobody anything. */
-export const LEGEND = `${GLYPH.yours} yours now · ${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed · ${GLYPH.spoke} spoke`;
+export const LEGEND = `${GLYPH.yours} yours now · ${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed · ${GLYPH.spoke} spoke · ${STACK.follows} after the one above · ${STACK.waits} waiting`;
 // and a name with no glyph: nothing from them yet. Left unsaid on purpose —
 // it is what the absence of a mark obviously means, and spelling it out cost
 // the row more than it fits.

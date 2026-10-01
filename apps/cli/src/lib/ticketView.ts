@@ -5,7 +5,7 @@ import { reviewHeadline } from "./review";
  *  review ticket also says where the code is and how much why came with it —
  *  the why itself is not here on purpose: it is read on demand, when the
  *  person asks (review-context), not poured into every listing. */
-export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, review?: ReviewContext) => ({
+export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, review?: ReviewContext, heldBy: ReadonlyArray<string> = []) => ({
   id: ticket.id,
   project: ticket.project,
   kind: ticket.kind,
@@ -13,6 +13,10 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   createdBy: nameFor(ticket.createdBy),
   /** the tickets this one follows; walk them with review-context when your user asks why */
   ...(ticket.from && ticket.from.length > 0 ? { from: ticket.from.join(" ") } : {}),
+  /** the tickets this one waits on (read after them) */
+  ...(ticket.after && ticket.after.length > 0 ? { after: ticket.after.join(" ") } : {}),
+  /** still waiting: only its author is shown it, nobody is nudged, until these are answered */
+  ...(heldBy.length > 0 ? { waitingOn: `${heldBy.join(" ")} — hidden from everyone but its author until answered` } : {}),
   ...(ticket.whenClosed ? { whenClosed: ticket.whenClosed } : {}),
   /** every step answered — ready for its author to close, if they say so */
   answered: finished(ticket),

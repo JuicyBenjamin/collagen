@@ -225,7 +225,9 @@ rows() {
 import sys
 text = sys.stdin.read().replace("\\n", "\n")
 tid = sys.argv[1]
-i = text.find(tid)
+# the ticket own block first: its id may also appear on another (after, from)
+i = text.find("- id: " + tid)
+i = i if i >= 0 else text.find(tid)
 if i < 0:
     print("")
     raise SystemExit
