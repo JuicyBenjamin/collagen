@@ -1,5 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
+import { visibleTo } from "@collagen/p2p";
 import { to } from "../app/router";
 import { transcriptsDir } from "../services/Transcripts";
 import { diagnostic } from "./registry";
@@ -12,15 +13,16 @@ export const requestTranscripts = diagnostic<{ readonly ticketId?: string; reado
     `Collect how the agents behaved around a ticket (or one thread). Everyone present in the room is asked for their agent's conversation on the threads involved; on each machine the ask waits for that person's word (share-transcripts) and covers only what happened after they adopted the thread — nothing arrives by itself. Answers are filed under ${transcriptsDir}/<subject>/ — see list-transcripts. The user's own adopted conversations on those threads are filed at once. Pass ticketId (from get-tickets) or threadId (from pending-threads).`,
   params: Schema.Struct({ ticketId: Schema.optional(Schema.String), threadId: Schema.optional(Schema.String) }),
   fromContext: (ctx) => (ctx.ticketId ? { ticketId: ctx.ticketId } : null),
-  run: ({ ticketId, threadId }, ctx, { rooms, transcripts }) =>
+  run: ({ ticketId, threadId }, ctx, { rooms, transcripts, me }) =>
     Effect.gen(function* () {
       const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === ctx.roomId);
       if (!h) return "failed: that room is gone";
       let subject: string;
       let threadIds: ReadonlyArray<string>;
       if (ticketId) {
-        const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
-        if (!ticket) return `failed: no ticket ${ticketId} — check get-tickets`;
+        const all = yield* SubscriptionRef.get(h.room.tickets);
+        const ticket = all.get(ticketId);
+        if (!ticket || !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
         subject = `ticket-${ticketId.slice(0, 8)}`;
         threadIds = transcripts.threadsOfTicket(ticket);
       } else if (threadId) {

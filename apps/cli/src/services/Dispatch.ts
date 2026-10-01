@@ -95,7 +95,13 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             readers.length === 0
               ? "in the room, nobody asked in particular"
               : `asked of ${readers.map((s) => nameFor(s.owner)).join(", ")}`;
-          return sent(`${kind} ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}. ${say("filed")} ${keepCurrent}`);
+          // filed in order behind another: said to the agent, so nobody is
+          // surprised that the readers have not seen it yet
+          const waits =
+            out.ticket.after && out.ticket.after.length > 0
+              ? ` It waits on ${out.ticket.after.length} ticket(s) (after: ${out.ticket.after.join(", ")}): until they are answered nobody but your user is shown it or nudged about it; it opens to its readers by itself then.`
+              : "";
+          return sent(`${kind} ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}.${waits} ${say("filed")} ${keepCurrent}`);
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);

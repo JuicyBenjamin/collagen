@@ -3,7 +3,7 @@ import type { BoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { KINDS, type Ticket } from "@collagen/p2p";
+import { heldBy, KINDS, type Ticket } from "@collagen/p2p";
 import { diagnostics } from "../../../diagnostics";
 import { aboutTicket, age, marksLabel, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
 import { Focusable } from "../../../components/Focusable";
@@ -98,7 +98,9 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const review = reviews.find((r) => r.ticketId === ticket.id);
   const threads = ticketThreads(ticket);
   const conversation = trace.filter((m) => aboutTicket(ticket, threads, m));
-  const summary = summarize(ticket, trace, me);
+  const byId = new Map(tickets.map((t) => [t.id, t]));
+  const waitsOn = heldBy(ticket, byId);
+  const summary = summarize(ticket, trace, me, waitsOn);
   const now = Date.now();
   const rows = conversation.map((m) => ({ kind: "msg" as const, id: m.id, m }));
   // files attached to this ticket: references from the log; the file is here
@@ -163,6 +165,14 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
         {"  "}
         <span fg={theme.fg}>{ticket.kind}</span> — {KINDS[ticket.kind].what} · asks: {KINDS[ticket.kind].asks}
       </text>
+      {/* the order it keeps: read after these — and, while one is unanswered,
+          shown to nobody but its author */}
+      {ticket.after && ticket.after.length > 0 ? (
+        <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
+          {"  "}after {ticket.after.map((id) => `"${byId.get(id)?.goal ?? id.slice(0, 8)}"`).join(", ")}
+          {waitsOn.length > 0 ? <span fg={theme.warn}> · waiting: nobody else is shown it until {waitsOn.length === 1 ? "that is" : "those are"} answered</span> : null}
+        </text>
+      ) : null}
 
       {/* body: why — a review ticket carries the reasons behind the change.
           The headline here, the whole of it one enter away. */}

@@ -29,6 +29,9 @@ export interface TicketSummary {
   readonly mine: boolean;
   /** Newest of the ticket's own update and its last message. */
   readonly lastActivity: number;
+  /** The tickets in its `after` still unanswered — while there are any, it
+   *  waits on them and on nobody else (p2p heldBy). */
+  readonly held: ReadonlyArray<string>;
 }
 
 const ORDER: Record<TicketState, number> = { "needs-you": 0, waiting: 1, failed: 2, done: 3, closed: 4 };
@@ -40,12 +43,14 @@ export const aboutTicket = (ticket: Ticket, threads: ReadonlySet<string>, m: Roo
 
 export const ticketThreads = (ticket: Ticket): ReadonlySet<string> => new Set(ticket.steps.map((s) => stepThreadId(ticket, s)));
 
-export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string): TicketSummary {
+export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string, held: ReadonlyArray<string> = []): TicketSummary {
   // one readiness rule, in p2p, shared with the agent nudges: this used to
   // be a second copy of it here, and the copy was already wrong (it did not
   // know that an open review waits for a reader, so the overview said
   // needs-you about a ticket nobody had reviewed)
-  const up = readySteps(ticket);
+  // a ticket waiting on another has nothing up for anyone: nobody is
+  // delivered a step of it until the one it waits on is answered
+  const up = held.length > 0 && !ticket.closed ? [] : readySteps(ticket);
   const waitingOn = [...new Set(up.map((s) => s.owner))];
   // completion is p2p's `finished`: every step answered, where on a review a
   // reader's ↻ is an answer. Closure is the author's recorded decision. A
@@ -56,15 +61,17 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   const failed = !done && ticket.steps.some((s) => s.status === "failed");
   const state: TicketState = ticket.closed
     ? "closed"
-    : waitingOn.includes(me) || (done && mine)
-      ? "needs-you"
-      : waitingOn.length > 0
-        ? "waiting"
-        : failed
-          ? "failed"
-          : done
-            ? "done"
-            : "waiting";
+    : held.length > 0
+      ? "waiting"
+      : waitingOn.includes(me) || (done && mine)
+        ? "needs-you"
+        : waitingOn.length > 0
+          ? "waiting"
+          : failed
+            ? "failed"
+            : done
+              ? "done"
+              : "waiting";
 
   const threads = ticketThreads(ticket);
   const about = messages.filter((m) => aboutTicket(ticket, threads, m));
@@ -103,6 +110,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     author: ticket.createdBy,
     mine,
     lastActivity,
+    held,
   };
 }
 
