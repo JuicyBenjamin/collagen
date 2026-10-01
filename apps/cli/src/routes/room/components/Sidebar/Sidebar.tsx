@@ -69,7 +69,7 @@ export function Sidebar() {
               selected={hovered && i === sel}
               expanded={hovered}
               online={room.online}
-              unread={room.unread > 0}
+              needsYou={room.needsYou > 0}
             />
           ))}
           <Avatar text="+ " label="new room" selected={hovered && sel === last} expanded={hovered} />
@@ -81,7 +81,8 @@ export function Sidebar() {
 
 /** One rail entry, drawn as three rows: a 6-cell rounded "circle" holding
  *  two cells of text, the presence column to its left (▌ pill = the room you
- *  are in, ● = unread elsewhere), the online count set into the bottom-right
+ *  are in, ● = something in that room needs you: a peer wrote to you, or a
+ *  step became yours — never a ticket merely moving), the online count set into the bottom-right
  *  corner, and — when expanded — the name to the right. */
 function Avatar({
   text,
@@ -90,7 +91,7 @@ function Avatar({
   selected,
   expanded,
   online = 0,
-  unread = false,
+  needsYou = false,
 }: {
   text: string;
   label: string;
@@ -98,7 +99,7 @@ function Avatar({
   selected: boolean;
   expanded: boolean;
   online?: number;
-  unread?: boolean;
+  needsYou?: boolean;
 }) {
   const border = selected ? theme.fg : current ? theme.accent : theme.dim;
   const fg = selected || current ? theme.fg : theme.dim;
@@ -113,7 +114,7 @@ function Avatar({
           {"╭────╮"}
         </text>
         <text fg={border} wrapMode="none">
-          <span fg={unread && !current ? theme.warn : theme.accent}>{unread && !current ? "●" : pill}</span>
+          <span fg={needsYou && !current ? theme.warn : theme.accent}>{needsYou && !current ? "●" : pill}</span>
           {"│ "}
           <span fg={fg}>{text}</span>
           {" │"}

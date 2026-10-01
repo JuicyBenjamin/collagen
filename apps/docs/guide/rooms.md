@@ -32,7 +32,9 @@ Keet: many conversations, one open.
 - Switching is instant, from the rail in the TUI or `switch-room` from your agent.
 
 The TUI's left rail shows one avatar per room: a pill on the room you're in, a dot on a
-room with messages waiting for you, the number of people online in the corner. Your
+room where something needs you — a peer wrote to you, or a ticket step became yours (a
+ticket merely moving — someone else settled, took, revised — is your agent's context and
+lights nothing), the number of people online in the corner. Your
 agent gets the same picture from `list-rooms`.
 
 ## Presence
