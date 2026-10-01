@@ -32,6 +32,7 @@ export default withMermaid({
             { text: "Rooms & presence", link: "/guide/rooms" },
             { text: "Conversations", link: "/guide/conversations" },
             { text: "Tickets", link: "/guide/tickets" },
+            { text: "Reading a review", link: "/guide/reading-a-review" },
             { text: "Identity & devices", link: "/guide/identity" },
             { text: "Using the CLI", link: "/guide/using-the-cli" },
           ],
