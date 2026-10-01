@@ -11,6 +11,7 @@ import { clamp } from "../../../lib/math";
 import { wrap } from "../../../lib/wrap";
 import { identityAtom, membersAtom, reviewsAtom, rosterAtom } from "../atoms";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
+import { openReviewPageAtom } from "./atoms";
 
 interface Line {
   readonly text: string;
@@ -66,6 +67,7 @@ export function ReviewPage({ ticketId }: { ticketId: string }) {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
+  const openPage = useAtomSet(openReviewPageAtom);
   const [top, setTop] = useState(0);
   const listRef = useRef<BoxRenderable>(null);
   const [viewport, setViewport] = useState(8);
@@ -100,7 +102,7 @@ export function ReviewPage({ ticketId }: { ticketId: string }) {
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
       <Focusable
         id="ticket-review"
-        hint="↑↓ scroll · pgup/pgdn screen · home/end · ← / esc back to the ticket"
+        hint="↑↓ scroll · pgup/pgdn screen · home/end · o the diff by decision, in your browser · ← / esc back to the ticket"
         flexDirection="column"
         flexGrow={1}
         flexShrink={1}
@@ -111,6 +113,7 @@ export function ReviewPage({ ticketId }: { ticketId: string }) {
           if (key.name === "pagedown") return scroll(viewport), true;
           if (key.name === "home") return setTop(0), true;
           if (key.name === "end") return setTop(maxTop), true;
+          if (key.name === "o") return openPage({ ticketId }), true;
           return false;
         }}
       >

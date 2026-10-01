@@ -19,6 +19,7 @@ import { Arrow } from "../components/Arrow/Arrow";
 import { wrap } from "../../../lib/wrap";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { runDiagnosticAtom } from "./atoms";
+import { openReviewPageAtom } from "../review/atoms";
 
 /** A section title. Space does the chunking — two blank lines above, no
  *  box, no rule — and the title sits at the margin while its rows indent. */
@@ -70,6 +71,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
     if (h && h > 0 && h !== convHeight) setConvHeight(h);
   });
   const run = useAtomSet(runDiagnosticAtom);
+  const openPage = useAtomSet(openReviewPageAtom);
   const outcome = useAtomValue(runDiagnosticAtom);
   const [stepSel, setStepSel] = useState(0);
   const [msgSel, setMsgSel] = useState<number | null>(null);
@@ -179,10 +181,15 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
       {review ? (
         <Focusable
           id="ticket-review"
-          hint="enter reads the why — every decision, how it was steered, and the forks · esc back to the list"
+          hint="enter reads the why — every decision, how it was steered, and the forks · o the diff by decision, in your browser · esc back to the list"
           flexDirection="column"
           flexShrink={0}
-          onKey={(key) => (isEnter(key) ? (navigate(to.review(ticketId, to.ticket(ticketId))), true) : false)}
+          onKey={(key) => {
+            if (isEnter(key)) return navigate(to.review(ticketId, to.ticket(ticketId))), true;
+            // the code itself, grouped under the why — a page of its own, in the browser
+            if (key.name === "o") return openPage({ ticketId }), true;
+            return false;
+          }}
         >
           {(focused) => (
             <>
@@ -192,7 +199,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
                 {review.summary}
               </text>
               <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none">
-                {"  "}enter reads it · by {nameFor(review.author)}
+                {"  "}enter reads it · o shows the diff by decision · by {nameFor(review.author)}
               </text>
             </>
           )}
