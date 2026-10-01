@@ -8,7 +8,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
-import { AI_OPTIONS, DriveAction, emptyReview, formatInvite, ImportanceScore, isJudged, isTake, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
+import { AI_OPTIONS, DriveAction, emptyReview, formatInvite, ImportanceScore, isJudged, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -412,7 +412,7 @@ export const LeaveRoom = Tool.make("leave-room", {
 
 export const GetTickets = Tool.make("get-tickets", {
   description:
-    "All shared tickets in the room the user is looking at, merged: goal, steps with owner, status, dependencies and settled results. Read it when your user asks about a ticket or wants the steps behind a headline — relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text.",
+    `All shared tickets in the room the user is looking at, merged: goal, steps with owner, status, dependencies and settled results. Read it when your user asks about a ticket or wants the steps behind a headline — relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text. The kinds, and what each wants of you — ${kindsForAgents()}. Your user sees the same kinds explained in their TUI (? on the overview).`,
   success: Schema.String,
 });
 

@@ -8,7 +8,7 @@
  *  than a state of its own.
  *
  *  Whoever adds a state here adds it to `LEGEND` too, or the reader is left
- *  guessing at a symbol. */
+ *  guessing at a symbol — and to `MARK_HELP`, which the compiler insists on. */
 export type Mark =
   /** on the ROW, not on a person: this ticket is yours to act on now */
   | "yours"
@@ -36,6 +36,18 @@ export const LEGEND = `${GLYPH.yours} yours now · ${GLYPH.approved} no changes 
 // and a name with no glyph: nothing from them yet. Left unsaid on purpose —
 // it is what the absence of a mark obviously means, and spelling it out cost
 // the row more than it fits.
+
+/** What the mark means in a full sentence — the ? panel's line for it. */
+export const MARK_HELP: Record<Mark, string> = {
+  yours: "on the row, not a person: this ticket is yours to act on now",
+  changes: "someone read it and asked for changes",
+  failed: "a step of someone's failed",
+  approved: "someone settled their step — on a review, read it and asked for nothing",
+  spoke: "someone said something about it, and settled nothing",
+};
+
+/** The marks in the order a reader meets them on a row. */
+export const MARK_ORDER: ReadonlyArray<Mark> = ["yours", "changes", "failed", "approved", "spoke"];
 
 /** What the mark means in words — for anything an agent reads. */
 export const MARK_WORDS: Record<Mark, string> = {

@@ -3,7 +3,7 @@ import type { BoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import type { Ticket } from "@collagen/p2p";
+import { KINDS, type Ticket } from "@collagen/p2p";
 import { diagnostics } from "../../../diagnostics";
 import { aboutTicket, age, marksLabel, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
 import { Focusable } from "../../../components/Focusable";
@@ -155,6 +155,13 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
         {"  "}
         {ticket.project} · by {nameFor(ticket.createdBy)} · {done}/{ticket.steps.length} settled
         {people.length > 0 ? ` · ${people}` : ""}
+      </text>
+      {/* what kind of thing this is, in the app's own words (p2p KINDS — the
+          same line the ? panel and the tickets guide carry): "plan" alone
+          does not say "do you agree" */}
+      <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
+        {"  "}
+        <span fg={theme.fg}>{ticket.kind}</span> — {KINDS[ticket.kind].what} · asks: {KINDS[ticket.kind].asks}
       </text>
 
       {/* body: why — a review ticket carries the reasons behind the change.

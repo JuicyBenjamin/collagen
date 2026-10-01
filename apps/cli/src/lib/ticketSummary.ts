@@ -135,3 +135,15 @@ export function age(ts: number, now: number): string {
 }
 
 export const STATE_LABEL: Record<TicketState, string> = { "needs-you": "needs you", waiting: "waiting", failed: "failed", done: "done", closed: "closed" };
+
+/** What each state means, spelled out — for the ? panel. */
+export const STATE_WORDS: Record<TicketState, string> = {
+  "needs-you": "a step of yours is up — or every step of your own ticket is answered and it is yours to close",
+  waiting: "a step is up for somebody else",
+  failed: "a step failed, and nothing is up",
+  done: "every step answered; its author has not closed it yet",
+  closed: "its author closed it: off the lists, kept on the log",
+};
+
+/** The states in the order the list sorts them. */
+export const STATE_ORDER: ReadonlyArray<TicketState> = (Object.keys(ORDER) as Array<TicketState>).sort((a, b) => ORDER[a] - ORDER[b]);
