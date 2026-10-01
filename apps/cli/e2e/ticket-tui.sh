@@ -24,7 +24,8 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\r'; sleep 1; mark M4c_turn_closed
   printf '\033[D'; sleep 2; mark M4d_back_to_list
   printf '\033[D'; sleep 2; mark M5_back_to_ticket
-  printf '\033'; sleep 2; printf '\033[B'; sleep 1; mark M6_back; sleep 1; printf 'q' ) | \
+  printf '\033'; sleep 2; printf '\033[B'; sleep 1; mark M6_back
+  printf '?'; sleep 2; mark M7_help; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '\033[B'; sleep 0.2; done; sleep 1; mark M7b_scrolled; printf '?'; sleep 2; printf '\033[B'; sleep 1; mark M8_help_closed; sleep 1; printf 'q' ) | \
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
@@ -56,7 +57,7 @@ expect "alice attached the collected transcript to the ticket (a reference on th
 sleep 1
 touch "$OUT/ticket-tui.go"
 await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
-await_mark M6_back; sleep 1
+await_mark M8_help_closed; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 expect "↓↓↓ from the tab bar reached the tickets list" "$KEYS" "tickets"
 expect "enter opened the ticket: the cursor landed on its steps" "$KEYS" "ticket-steps"
@@ -74,5 +75,21 @@ expect "enter on the file opened its turns (a page of its own)" "$(echo "$KEYS" 
 expect "← from the turns went back to the list of transcripts" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-lines/,$p' | grep -v room | tr '\n' ' ')" "transcript-lines transcript-lines transcript-lines transcript-files"
 expect "← from the list went back to the ticket's diagnostics (not the rail)" "$(echo "$KEYS" | tr ' ' '\n' | sed -n '/transcript-lines/,$p' | tr '\n' ' ')" "ticket-diagnostics"
 expect "the brand introduces the build under itself: peer-to-peer and the release stage" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'peer-to-peer .{1,6} Alpha v[0-9]+\.[0-9]+\.[0-9]+')" "^[1-9]"
-expect "esc again went back to the list: the next ↓ moved in the tickets section" "$(echo "$KEYS" | tr ' ' '\n' | tail -4 | tr '\n' ' ')" "tickets"
+BEFORE_HELP=$(sed '/seq="?"/,$d' "$LOG.keys" | cut -d' ' -f2 | tr '\n' ' ')
+expect "esc again went back to the list: the next ↓ moved in the tickets section" "$(echo "$BEFORE_HELP" | tr ' ' '\n' | tail -3 | tr '\n' ' ')" "tickets"
+expect "the ticket's header says what kind of thing it is, in the app's words" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'task.{0,12}agreed work: a goal, and steps with an owner each')" "^[1-9]"
+HELP=$(python3 - "$PTY" "$MARKS" <<'PY'
+import re, sys
+marks = dict(l.split() for l in open(sys.argv[2]))
+raw = open(sys.argv[1], "rb").read()[int(marks["M6_back"]):int(marks["M7b_scrolled"])].decode("utf8", "replace")
+print(re.sub(r"\x1b\[[0-9;?]*[a-zA-Z]", "", raw))
+PY
+)
+expect "? opened the help: every kind, with what it asks and who closes it" "$HELP" "closed by its reporter"
+expect "…the plan's line" "$HELP" "something its author intends to do"
+expect "…the marks spelled out" "$HELP" "asked for changes"
+expect "…and, scrolled with ↓, the states" "$HELP" "every step answered; its author has not closed it yet"
+expect "the help held the keyboard: the ↓ under it reached no section" "$(grep -c 'room name="down" .*captured' "$LOG.keys")" "^[1-9]"
+AFTER_HELP=$(sed -n '/seq="?" captured/,$p' "$LOG.keys" | sed 1d | cut -d' ' -f2 | tr '\n' ' ')
+expect "…and ? gave the lists back: the next ↓ moved in the tickets section again" "$AFTER_HELP" "tickets"
 kill_all; summary
