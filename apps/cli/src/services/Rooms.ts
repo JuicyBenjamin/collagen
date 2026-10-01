@@ -9,6 +9,7 @@ import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
+import { steeringLine, steeringOf } from "../lib/steering";
 
 export type RoomService = Context.Service.Shape<typeof Room>;
 
@@ -119,6 +120,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     ? yield* SubscriptionRef.get(nameRef)
                     : ((yield* SubscriptionRef.get(room.roster)).find((p) => p.key === ticket.createdBy)?.name ??
                       ticket.createdBy.slice(0, 8));
+                // the person's steering, said on the step itself: the turn
+                // the agent reads it is the turn it is about to act
+                const steer = steeringLine(steeringOf(yield* store.get));
                 for (const s of mine) {
                   const settled = ticket.steps
                     .filter((x) => x.status === "settled" && s.needs.includes(x.id))
@@ -135,7 +139,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     intent: `ticket-step:${s.intent}`,
                     findings: `${creatorName} asks your user to "${s.intent}" for the ticket "${ticket.goal}" (${ticket.id}, step ${s.id}).\nThe step, in full: ${s.description}${
                       settled ? `\nSettled inputs from earlier steps:\n${settled}` : ""
-                    }\nYour user decides whether and how this gets done — do not start on it by yourself. When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${s.id}", and the result they want to send — it goes out as you call it.`,
+                    }\n${steer} When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${s.id}", and the result they want to send — it goes out as you call it.`,
                     ts: now,
                   };
                   yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${s.id} actionable`);

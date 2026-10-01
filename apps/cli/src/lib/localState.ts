@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, LocalState, Project, Proposal, TranscriptAsk } from "@collagen/p2p";
+import { AdoptedThread, LocalState, Project, Proposal, Steering, TranscriptAsk } from "@collagen/p2p";
 
 /** Reading the user's own state file must never cost them their rooms.
  *
@@ -117,9 +117,14 @@ export const salvageState = (text: string): Salvaged => {
   const preferredAi = typeof src.preferredAi === "string" ? src.preferredAi : null;
   if (src.preferredAi !== null && typeof src.preferredAi !== "string" && src.preferredAi !== undefined) dropped.push("an unreadable ai setting");
 
+  // an unreadable level falls back to the asking end, the default
+  const steering = decode(Steering, src.steering);
+  if (src.steering !== undefined && steering === null) dropped.push("an unreadable steering setting (back to: ask first)");
+
   return {
     state: {
       preferredAi,
+      ...(steering ? { steering } : {}),
       rooms,
       ...(threads ? { threads } : {}),
       ...(consumed ? { consumed } : {}),

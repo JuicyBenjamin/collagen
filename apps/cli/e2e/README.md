@@ -30,7 +30,7 @@ assertion ("nothing reached bob") is the one place a short sleep stays.
 | Scenario | Proves |
 | --- | --- |
 | `connect.sh` | two peers started together greet within seconds; the joiner is admitted to the room log |
-| `ticket-thread.sh` | a ticket step is delivered on the same thread a plain message between those peers uses |
+| `ticket-thread.sh` | a ticket step is delivered on the same thread a plain message between those peers uses; with `set-steering act` the step and `get-messages` both say so |
 | `log.sh` | admission; a mock settling its step; a message to an **offline** member delivered on return; a solo restart keeping the ticket, re-delivering the pending step, keeping the unread ack |
 | `conflict.sh` | two self-appointed creators: the lonely log yields, the ticket completes on the survivor |
 | `three-members.sh` | three indexers: the view advances with 1 and 2 offline; the absent one catches up |
