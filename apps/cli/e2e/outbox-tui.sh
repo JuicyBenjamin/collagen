@@ -43,7 +43,8 @@ HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
 TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
 
 echo "## the overview has the ticket at once — it is in the room, not in limbo"
-expect "listed by kind and goal" "$(echo "$TEXT" | grep -cE 'task .{0,8}explain the NaN')" "^[1-9]"
+expect "listed under its kind" "$(echo "$TEXT" | grep -cE 'tasks')" "^[1-9]"
+expect "…as alice's own, by its goal" "$(echo "$TEXT" | grep -cE 'you .{0,10}explain the NaN')" "^[1-9]"
 expect "nothing says it is waiting for anyone" "$(echo "$TEXT" | grep -cE 'yours to approve|not sent|waiting for your')" "^0$"
 
 echo "## the outbox lists what went, and reads at a glance"
