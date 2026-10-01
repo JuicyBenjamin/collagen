@@ -27,8 +27,12 @@ export interface RoomSummary {
   readonly name: string;
   /** People present (not away) — you included in the room you're looking at. */
   readonly online: number;
-  /** Messages for you still waiting in that room's inbox. */
+  /** Messages for you still waiting in that room's inbox — what an agent
+   *  has yet to pull, ticket-update context included. */
   readonly unread: number;
+  /** The part of `unread` that asks the person to act: a peer's message,
+   *  a step that became theirs. The rail's dot. */
+  readonly needsYou: number;
   readonly focused: boolean;
 }
 
@@ -451,7 +455,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           shortId: shortRoomId(h.id),
           name: meta.name,
           online: peers.filter((p) => !p.away).length + (h.id === f ? 1 : 0),
-          unread: counts.get(h.id) ?? 0,
+          unread: counts.get(h.id)?.unread ?? 0,
+          needsYou: counts.get(h.id)?.needsYou ?? 0,
           focused: h.id === f,
         });
       }
