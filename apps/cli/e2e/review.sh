@@ -31,7 +31,7 @@ expect "a decision with no why at all: refused, naming which" "$(call $A "$SA" a
 NOPROJ='{"peers":["bob"],"project":"nope","summary":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
 expect "a project alice does not share: refused with what she does share" "$(call $A "$SA" ask-review "$NOPROJ")" "not a project your user shares in this room .{0,10}theirs: sandbox"
 NOPEER='{"peers":["kristian"],"project":"sandbox","summary":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
-expect "someone who is not in the room: refused" "$(call $A "$SA" ask-review "$NOPEER")" "no peer named kristian"
+expect "someone who is not in the room: refused, naming who is" "$(call $A "$SA" ask-review "$NOPEER")" "no one here is called kristian — in the room: .*bob"
 
 echo "## the ask: alice's steering, her agent's reasons, and the fork it took"
 D1='{"what":"pure frame functions for the logo","userWhy":"she said make it look cool, and was fine with a longer boot for it","agentWhy":"a frame is then testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
@@ -147,15 +147,16 @@ expect "alice settles her own step: the ticket is done" "$(call $A "$SA" settle-
 
 echo "## many reviewers: one review step each, and the author waits on all"
 MANY_D='{"what":"one evict entry per sweep","userWhy":"he said never brick, migrate instead","where":["packages/p2p/src/RoomLog.ts:1"]}'
-MANY_ASK="{\"peers\":[\"bob\",\"carol\"],\"project\":\"sandbox\",\"goal\":\"review the migration\",\"summary\":\"records from an older protocol are evicted, not carried\",\"decisions\":[$MANY_D],\"forks\":[]}"
+# names however cased: the room spells them bob and carol, and so does the ticket
+MANY_ASK="{\"peers\":[\"BOB\",\" Carol\"],\"project\":\"Sandbox\",\"goal\":\"review the migration\",\"summary\":\"records from an older protocol are evicted, not carried\",\"decisions\":[$MANY_D],\"forks\":[]}"
 MANY=$(call $A "$SA" ask-review "$MANY_ASK")
-expect "both are asked" "$MANY" "review ticket filed, asked of bob, carol"
+expect "both are asked, by the names the room knows" "$MANY" "review ticket filed, asked of bob, carol"
 MANY_TICKET=$(echo "$MANY" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "each reviewer got a step of their own, named for them" "review-bob,bob" rows $A "$SA" "$MANY_TICKET"
 MANY_ROWS=$(rows $A "$SA" "$MANY_TICKET")
 expect "…carol's too" "$MANY_ROWS" "review-carol,carol"
 expect "…and the author's step waits on both" "$MANY_ROWS" "address,alice,address,pending,review-bob\+review-carol"
-expect "a name nobody in the room has is refused, with the open option offered" "$(call $A "$SA" ask-review "{\"peers\":[\"bob\",\"nobody\"],\"project\":\"sandbox\",\"summary\":\"x\",\"decisions\":[{\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "no peer named nobody.*leave .peers. out"
+expect "a name nobody in the room has is refused, with the open option offered" "$(call $A "$SA" ask-review "{\"peers\":[\"bob\",\"nobody\"],\"project\":\"sandbox\",\"summary\":\"x\",\"decisions\":[{\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "no one here is called nobody — in the room: .*leave .peers. out"
 
 echo "## uninvited readers are welcome on a review ticket, and take nobody's step"
 wait_until "carol holds the many-reviewer ticket" "review the migration" goals $C "$SC"

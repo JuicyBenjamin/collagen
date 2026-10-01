@@ -12,6 +12,7 @@ import { AI_OPTIONS, DriveAction, emptyReview, formatInvite, ImportanceScore, is
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
+import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { reviewGaps, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketView } from "../lib/ticketView";
 import { MOCK_AI_OPTIONS } from "./Adapters";
@@ -525,18 +526,19 @@ const makeHandlers = Effect.gen(function* () {
       // present peers first; then anyone the log remembers (they read it when back)
       const peers = yield* SubscriptionRef.get(room.roster);
       const members = yield* SubscriptionRef.get(room.members);
-      if (!peers.some((p) => p.name === input.peer) && !members.some((m) => m.name === input.peer)) {
-        return `failed: no peer named ${input.peer} — see list-room`;
-      }
+      const who = personNamed(input.peer, { peers, members, me: identity.pubkey });
+      if (who._tag === "refused") return who.text;
+      // the project as the room spells it, so the thread is the one that exists
+      const project = projectSpelling(input.project, peers, roomProjects(yield* store.get, roomId));
       // Outbox → Dispatch: it goes now, and is recorded as having gone
       return yield* outbox.tell({
         roomId,
-        to: input.peer,
-        title: `${input.project} · ${input.intent}`,
+        to: who.person.name,
+        title: `${project} · ${input.intent}`,
         outgoing: {
           kind: "message",
-          peer: input.peer,
-          project: input.project,
+          peer: who.person.name,
+          project,
           intent: input.intent,
           findings: input.findings,
           ...(input.ticketId ? { ticketId: input.ticketId } : {}),
@@ -662,15 +664,15 @@ const makeHandlers = Effect.gen(function* () {
           // present means set — and an empty value means withdraw; absent means keep
           if (input.from !== undefined) revised = { ...revised, from: input.from };
           if (input.whenClosed !== undefined) revised = { ...revised, whenClosed: input.whenClosed };
-          const newReaders = (input.peers ?? [])
-            .map((n) => n.trim())
-            .filter((n) => n.length > 0)
-            .map((name) => ({ name, key: (present.find((p) => p.name === name) ?? known.find((m) => m.name === name))?.key }));
-          const unknownReader = newReaders.find((r) => r.key === undefined);
-          if (unknownReader) return `failed: no peer named ${unknownReader.name} — see list-room`;
+          const newReaders: Array<Person> = [];
+          for (const n of (input.peers ?? []).map((n) => n.trim()).filter((n) => n.length > 0)) {
+            const who = personNamed(n, { peers: present, members: known, me: identity.pubkey });
+            if (who._tag === "refused") return who.text;
+            newReaders.push(who.person);
+          }
           const takenNow = new Map(revised.steps.map((s) => [s.id, s.owner]));
           for (const r of newReaders) {
-            if (r.key === undefined || r.key === identity.pubkey || revised.steps.some((s) => isTake(s) && s.owner === r.key)) continue;
+            if (r.key === identity.pubkey || revised.steps.some((s) => isTake(s) && s.owner === r.key)) continue;
             const id = reviewStepId(r.name, r.key, takenNow);
             takenNow.set(id, r.key);
             revised = {
@@ -711,31 +713,34 @@ const makeHandlers = Effect.gen(function* () {
         if (!input.project) return "failed: pass 'project' (from list-room), and 'peers' if your user has someone in mind — or 'ticketId' to add to a review you already asked for";
         const peers = yield* SubscriptionRef.get(room.roster);
         const members = yield* SubscriptionRef.get(room.members);
-        const asked = [...new Set((input.peers ?? []).map((n) => n.trim()).filter((n) => n.length > 0))];
-        const resolved = asked.map((name) => ({ name, key: (peers.find((p) => p.name === name) ?? members.find((m) => m.name === name))?.key }));
-        const unknown = resolved.filter((r) => r.key === undefined).map((r) => r.name);
-        // narrowed once, so nothing downstream needs a `!`
-        const reviewers = resolved.flatMap((r) => (r.key === undefined ? [] : [{ name: r.name, key: r.key }]));
-        if (unknown.length > 0) return `failed: no peer named ${unknown.join(", ")} — see list-room (or leave 'peers' out to open the ${kind} to whoever picks it up)`;
+        // each name as the room spells it, once however often or however cased it was said
+        const reviewers: Array<Person> = [];
+        for (const n of (input.peers ?? []).map((n) => n.trim()).filter((n) => n.length > 0)) {
+          const who = personNamed(n, { peers, members, me: identity.pubkey });
+          if (who._tag === "refused") return `${who.text} (or leave 'peers' out to open the ${kind} to whoever picks it up)`;
+          if (!reviewers.some((r) => r.key === who.person.key)) reviewers.push(who.person);
+        }
+        const asked = reviewers.map((r) => r.name);
         if (reviewers.some((r) => r.key === identity.pubkey)) {
           return `failed: a ${kind} goes to someone other than your user — leave 'peers' out to open it to whoever picks it up, including their own second agent${kind === "proposal" ? "; their own take goes on it with post-review" : ""}`;
         }
         const dupWork = duplicateWorkId(input.work ?? []);
         if (dupWork) return `failed: two work items would share the id "${dupWork}" — give each its own 'id' (they default to the intent)`;
         if (kind !== "review" && kind !== "bug" && !input.goal) return `failed: pass 'goal' — the one line everyone sees: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
-        const project = roomProjects(yield* store.get, roomId).find((p) => p.name === input.project);
-        if (!project) {
+        const project = resolveName(input.project, [roomProjects(yield* store.get, roomId)]);
+        if (project._tag !== "found") {
           const mine = roomProjects(yield* store.get, roomId).map((p) => p.name).join(", ");
           return `failed: "${input.project}" is not a project your user shares in this room (theirs: ${mine || "none"}) — add-project shares one`;
         }
+        const { path: projectPath, name: projectName } = project.value;
         const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, false, kind);
         if (gap) return gap;
         // the facts about the code come from the repo when the agent omits them
         // — for a review; a plan or a proposal has no code yet unless the agent says so
-        const branch = kind === "review" ? (input.branch ?? branchOf(project.path) ?? undefined) : input.branch;
-        const link = kind === "review" ? (input.link ?? (branch ? (branchLink(project.path, branch) ?? undefined) : undefined)) : input.link;
+        const branch = kind === "review" ? (input.branch ?? branchOf(projectPath) ?? undefined) : input.branch;
+        const link = kind === "review" ? (input.link ?? (branch ? (branchLink(projectPath, branch) ?? undefined) : undefined)) : input.link;
         const ticketId = crypto.randomUUID();
-        const goal = input.goal ?? (kind === "bug" && bug?.symptom ? headline(bug.symptom) : `review ${branch ?? input.project}`);
+        const goal = input.goal ?? (kind === "bug" && bug?.symptom ? headline(bug.symptom) : `review ${branch ?? projectName}`);
         const where = [branch ? `branch ${branch}${input.base ? ` off ${input.base}` : ""}` : "", link ?? ""].filter((x) => x.length > 0).join(" · ");
         // A step per person asked — and only people: a review nobody was asked
         // for has no placeholder step, it is simply a ticket with the why on
@@ -765,7 +770,7 @@ const makeHandlers = Effect.gen(function* () {
         // that grows out of the proposal is what binds anyone
         const ticket: Ticket = {
           id: ticketId,
-          project: input.project,
+          project: projectName,
           goal,
           createdBy: identity.pubkey,
           kind,
@@ -800,7 +805,7 @@ const makeHandlers = Effect.gen(function* () {
         return yield* outbox.tell({
           roomId,
           to: asked.length > 0 ? asked.join(", ") : "the room",
-          title: `${input.project} · ${kind} · ${goal}`,
+          title: `${projectName} · ${kind} · ${goal}`,
           outgoing: { kind: "review", ticket, review },
         });
     });
@@ -935,18 +940,19 @@ const makeHandlers = Effect.gen(function* () {
         const peers = yield* SubscriptionRef.get(room.roster);
         const members = yield* SubscriptionRef.get(room.members);
         const myName = yield* SubscriptionRef.get(nameRef);
-        // present peers, then anyone the log remembers — an owner may be offline
-        const keyFor = (name: string) =>
-          name === myName ? identity.pubkey : (peers.find((p) => p.name === name)?.key ?? members.find((m) => m.name === name)?.key);
-        const now = yield* Clock.currentTimeMillis;
-        const unknown = input.steps.map((s) => s.owner).filter((o) => keyFor(o) === undefined);
-        if (unknown.length > 0) {
-          return yield* Effect.die(`unknown step owners: ${unknown.join(", ")} — use names from list-room`);
+        // yourself, present peers, then anyone the log remembers — an owner may be offline
+        const owners: Array<Person> = [];
+        for (const s of input.steps) {
+          const who = personNamed(s.owner, { peers, members, me: identity.pubkey, self: { key: identity.pubkey, name: myName } });
+          if (who._tag === "refused") return `${who.text} — every step's owner is a person in the room, or your user`;
+          owners.push(who.person);
         }
+        const now = yield* Clock.currentTimeMillis;
+        const project = projectSpelling(input.project, peers, roomProjects(yield* store.get, roomId));
         const id = crypto.randomUUID();
         const ticket: Ticket = {
           id,
-          project: input.project,
+          project,
           goal: input.goal,
           createdBy: identity.pubkey,
           kind: "task",
@@ -956,7 +962,7 @@ const makeHandlers = Effect.gen(function* () {
           updatedAt: now,
           steps: input.steps.map((s, i) => ({
             id: s.id ?? `s${i + 1}`,
-            owner: keyFor(s.owner)!,
+            owner: owners[i]!.key,
             intent: s.intent,
             description: s.description,
             needs: s.needs ?? [],
@@ -964,8 +970,8 @@ const makeHandlers = Effect.gen(function* () {
             updatedAt: now,
           })),
         };
-        const owners = [...new Set(input.steps.map((s) => s.owner))].join(", ");
-        return yield* outbox.tell({ roomId, to: owners, title: `${input.project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
+        const to = [...new Set(owners.map((o) => o.name))].join(", ");
+        return yield* outbox.tell({ roomId, to, title: `${project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
       }),
       "ask-review": (input: Parameters<typeof fileJudged>[1]) => fileJudged("review", input),
       "ask-plan": (input: Parameters<typeof fileJudged>[1]) => fileJudged("plan", input),
@@ -1027,8 +1033,9 @@ const makeHandlers = Effect.gen(function* () {
       "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: { peer: string; action: DriveAction }) {
         const { room } = yield* focusedRoom;
         const peers = yield* SubscriptionRef.get(room.roster);
-        const target = peers.find((p) => p.name === input.peer);
-        if (!target) return `failed: no peer named ${input.peer}`;
+        const found = resolveName(input.peer, [peers], (p) => p.key);
+        if (found._tag !== "found") return noPeerNamed(input.peer, found, roomRollCall(peers, [], identity.pubkey));
+        const target = found.value;
         if (!(target.ai ?? "").startsWith("mock")) {
           return `failed: ${input.peer} runs "${target.ai ?? "no ai"}", not a mock — real peers can't be driven`;
         }
@@ -1059,7 +1066,7 @@ const makeHandlers = Effect.gen(function* () {
               outcome = `already sharing ${abs}`;
               return s;
             }
-            if (here.some((p) => p.name === label)) {
+            if (here.some((p) => sameName(p.name, label))) {
               outcome = `failed: a project named "${label}" is already shared in this room — pass a different name`;
               return s;
             }
@@ -1072,14 +1079,15 @@ const makeHandlers = Effect.gen(function* () {
         Effect.gen(function* () {
           const { id: roomId } = yield* focusedRoom;
           const before = roomProjects(yield* store.get, roomId);
-          if (!before.some((p) => p.name === name)) {
+          const hit = resolveName(name, [before]);
+          if (hit._tag !== "found") {
             return `failed: no project named "${name}" in this room (yours: ${before.map((p) => p.name).join(", ") || "none"})`;
           }
           yield* store.update((s) => ({
             ...s,
-            rooms: { ...s.rooms, [roomId]: (s.rooms[roomId] ?? []).filter((p) => p.name !== name) },
+            rooms: { ...s.rooms, [roomId]: (s.rooms[roomId] ?? []).filter((p) => p.id !== hit.value.id) },
           }));
-          return `stopped sharing "${name}"`;
+          return `stopped sharing "${hit.value.name}"`;
         }).pipe(Effect.withSpan("Mcp.removeProject")),
       "set-ai": ({ ai }: { ai: string }) =>
         store
@@ -1138,7 +1146,7 @@ const makeHandlers = Effect.gen(function* () {
       "leave-room": ({ room: which }: { room: string }) =>
         Effect.gen(function* () {
           const q = which.trim();
-          const hit = (yield* rooms.summaries).find((r) => r.id === q || r.shortId === q || r.name === q);
+          const hit = (yield* rooms.summaries).find((r) => r.id === q || r.shortId === q || sameName(r.name, q));
           if (!hit) return `failed: no room matching "${q}" — see list-rooms`;
           const outcome = yield* rooms.leave(hit.id);
           return outcome === "left" ? `left "${hit.name}" [${hit.shortId}]` : `failed: ${outcome}`;
@@ -1147,7 +1155,7 @@ const makeHandlers = Effect.gen(function* () {
         Effect.gen(function* () {
           const q = which.trim();
           const all = yield* rooms.summaries;
-          const hit = all.find((r) => r.id === q || r.shortId === q || r.name === q);
+          const hit = all.find((r) => r.id === q || r.shortId === q || sameName(r.name, q));
           if (!hit) return `failed: no room matching "${q}" — see list-rooms`;
           if (hit.focused) return `already looking at "${hit.name}"`;
           yield* rooms.setFocus(hit.id);

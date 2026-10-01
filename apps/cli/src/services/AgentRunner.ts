@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { Context, Effect, Layer, Option, Ref, Semaphore, Stream, SynchronizedRef } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { sameName } from "../lib/names";
 import { mcpServerName } from "./mcpAddress";
 import { Adapters, nudgePrompt, type Adapter, type SpawnCtx } from "./Adapters";
 import { CliArgs } from "./CliArgs";
@@ -149,7 +150,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         return null;
       }
 
-      const proj = (state.rooms[roomId] ?? []).find((p) => p.name === sample.project);
+      const proj = (state.rooms[roomId] ?? []).find((p) => sameName(p.name, sample.project));
       const ctx: SpawnCtx = {
         cwd: proj?.path ?? homedir(),
         mcpUrl,

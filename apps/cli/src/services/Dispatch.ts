@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { closeTicket, finished, isJudged, isTake, postReview, settleStep, type Outgoing, type Ticket } from "@collagen/p2p";
+import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
@@ -48,11 +49,12 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
       switch (out.kind) {
         case "message": {
           // present peers first; then anyone the log remembers (they read it when back)
-          const target = peers.find((p) => p.name === out.peer) ?? members.find((m) => m.name === out.peer);
-          if (!target) return refused(`failed: no peer named ${out.peer} — see list-room`);
+          const who = personNamed(out.peer, { peers, members, me: identity.pubkey });
+          if (who._tag === "refused") return refused(who.text);
+          const target = who.person;
           const online = peers.some((p) => p.key === target.key);
           return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}) }).pipe(
-            Effect.map(() => sent(online ? `sent to ${out.peer}` : `sent to ${out.peer} (offline — they get it when they are next online)`)),
+            Effect.map(() => sent(online ? `sent to ${target.name}` : `sent to ${target.name} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),
           );
         }
