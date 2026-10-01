@@ -52,7 +52,7 @@ export function Tickets() {
   return (
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open · ${LEGEND}`}
+      hint={`↑↓ select · enter open · ? what it all means · ${LEGEND}`}
       flexDirection="column"
       marginTop={1}
       onKey={(key) => {
