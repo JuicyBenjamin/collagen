@@ -30,6 +30,34 @@ judgment, the bigger picture. So:
   part and just enough context, without dropping what the other side would otherwise have
   to regenerate.
 
+### Steering: how much your agent does on its own
+
+What your agent does with what collagen hands it — a step that became yours, a take asking
+for changes on your plan, a peer's message — is a dial **you** set, not the agent:
+
+| level | your agent… |
+| --- | --- |
+| `ask` — ask first (the default) | tells you what it was handed and what it would do, and waits for your word |
+| `act` — act, then tell | starts the work in your repo and tells you what it did as it goes |
+| `auto` — just do it | does the work and tells you when it is done |
+
+Press `g` in the room to cycle it (the status line shows it beside your ai), or ask your
+agent (`set-steering`). The default is the asking end: autonomy is opted into, per person —
+a colleague was once surprised to find their agent had implemented every change a review
+asked for without running it by them.
+
+The level travels **in the words**: every step delivered to you, every `get-messages`, and
+the nudge that resumes an adopted conversation restate it, so the agent reads it on the
+turn it is about to act rather than in a tool description it read an hour ago. Two limits,
+stated plainly:
+
+- **The room is always your word.** No level lets your agent speak for you: a message, a
+  take, a settle or a close still goes only when you say so. Steering is about the work in
+  your repo.
+- **It gates nothing.** Collagen shapes what your agent is told; it has no hand in its file
+  edits or shell. For a hard stop, use your harness's own permission mode — steering is the
+  soft layer above it.
+
 **Your conversation with your AI is still yours.** Peers never see your session history,
 your prompts, or your agent's reasoning — only what you told your agent to send. The one
 way any of it leaves is [transcripts on request](#transcripts-on-request) or an

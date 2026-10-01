@@ -19,6 +19,7 @@ import { Sidebar } from "./components/Sidebar/Sidebar";
 import { StatusLine } from "./components/StatusLine/StatusLine";
 import { TabBar } from "./components/TabBar/TabBar";
 import { useTabs } from "./tabs";
+import { nextSteering, steeringOf } from "../../lib/steering";
 
 function nextAi(current: string | null): string | null {
   // null -> claude-code -> codex -> mock:claude-code -> mock:codex -> null …
@@ -104,6 +105,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (captured) return;
     if (key.name === "q") return onExit();
     if (key.name === "a") return updateState({ update: (s) => ({ ...s, preferredAi: nextAi(s.preferredAi) }) });
+    // steering: ask first → act, then tell → just do it — the person's own dial
+    if (key.name === "g") return updateState({ update: (s) => ({ ...s, steering: nextSteering(steeringOf(s)) }) });
     if (key.name === "s") return navigate("settings");
     if (key.name === "u") return installUpdate({});
     if (key.name === "1") return jump("room/overview");
