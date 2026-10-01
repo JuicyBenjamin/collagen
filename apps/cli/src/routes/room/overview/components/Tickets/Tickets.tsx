@@ -8,14 +8,19 @@ import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
 import { GLYPH, LEGEND } from "../../../../../lib/glyphs";
-import { compareSummaries, marksLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { marksLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { drawnOrder, groupTickets, kindHeading } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
- *  closed, whoever made it and whoever it is for. Ordered by what wants a
- *  person: needs-you, then waiting, then failed, then finished-but-open (dim:
- *  every step answered, its author has not said it is over). A CLOSED ticket
+ *  closed, whoever made it and whoever it is for. Grouped by project (a
+ *  header per project, left out when the room has one), then by kind in the
+ *  order work moves through them — proposals, plans, bugs, reviews, tasks
+ *  (lib/ticketGroups) — so a project reads as its pipeline. Inside a group,
+ *  ordered by what wants a person: needs-you, then waiting, then failed,
+ *  then finished-but-open (dim: every step answered, its author has not
+ *  said it is over). A CLOSED ticket
  *  — the author's recorded decision, close-ticket — leaves this list and
  *  stays on the log with its steps as they were, where agents still read it
  *  and later tickets refer back to it. Nothing is deleted. ↑↓ select, enter
@@ -38,12 +43,12 @@ export function Tickets() {
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
 
-  // every ticket the room has that is not over, ordered by what wants a person
-  const shown = tickets
-    .map((t) => ({ t, s: summarize(t, trace, me) }))
-    .filter((r) => r.s.state !== "closed")
-    .sort((a, b) => compareSummaries(a.s, b.s));
+  // every ticket the room has that is not over, grouped; the cursor walks
+  // the rows in the order they are drawn, headers are not stops
+  const groups = groupTickets(tickets.map((t) => ({ t, s: summarize(t, trace, me) })).filter((r) => r.s.state !== "closed"));
+  const shown = drawnOrder(groups);
   const needsYou = shown.filter((r) => r.s.state === "needs-you").length;
+  const index = new Map(shown.map((r, i) => [r.t.id, i]));
 
   const last = Math.max(0, shown.length - 1);
   const sel = clamp(cursor, 0, last);
@@ -76,7 +81,27 @@ export function Tickets() {
               {"  "}none
             </text>
           ) : (
-            shown.map((r, i) => <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && i === sel} nameFor={nameFor} />)
+            groups.map((g) => (
+              <box key={g.project} flexDirection="column" flexShrink={0}>
+                {groups.length > 1 ? (
+                  <text fg={theme.fg} truncate wrapMode="none">
+                    {"  "}
+                    {g.project}
+                  </text>
+                ) : null}
+                {g.kinds.map((k) => (
+                  <box key={k.kind} flexDirection="column" flexShrink={0}>
+                    <text fg={theme.dim} truncate wrapMode="none">
+                      {groups.length > 1 ? "    " : "  "}
+                      {kindHeading(k.kind)}
+                    </text>
+                    {k.rows.map((r) => (
+                      <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && index.get(r.t.id) === sel} nameFor={nameFor} indent={groups.length > 1 ? 4 : 2} />
+                    ))}
+                  </box>
+                ))}
+              </box>
+            ))
           )}
           {unknownTickets.map((u) => (
             <text key={u.key} fg={theme.dim} truncate wrapMode="none">
@@ -96,38 +121,44 @@ export function Tickets() {
   );
 }
 
-/** One ticket at a glance: whose it is, what kind it is, what it is about,
- *  and what has been said on it — `↻` changes were asked for, `✓` someone
- *  approved, one glyph per kind of answer however many gave it (lib/glyphs,
- *  spelled out in the hint line). Not who: that is the ticket page's job.
+/** One ticket at a glance: whose it is, what it is about, and what has been
+ *  said on it — `↻` changes were asked for, `✓` someone approved, one glyph
+ *  per kind of answer however many gave it (lib/glyphs, spelled out on `?`).
+ *  Not who said it: that is the ticket page's job. Its kind is the header
+ *  it sits under.
  *
- *  The kind carries the ownership: bright when this person started the
- *  ticket, dim when somebody else did, and it keeps that colour under the
- *  cursor — "mine or theirs" is the first thing the eye asks of a list, and
- *  the answer should not move when the selection does. Nothing else: the
+ *  The first column is whose it is — "you" bright when this person started
+ *  the ticket, the author's name dim when somebody else did — and it keeps
+ *  that colour under the cursor: "mine or theirs" is the first thing the eye
+ *  asks of a list, and the answer should not move when the selection does.
+ *  (It held the kind until the kinds became headers.) Nothing else: the
  *  ticket's own page has the rest, and an agent can read all of it. */
 function TicketRow({
   ticket: t,
   summary: s,
   selected,
   nameFor,
+  indent,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
   selected: boolean;
   nameFor: (key: string) => string;
+  /** columns before the cursor, so a row sits under its header */
+  indent: number;
 }) {
   const people = marksLabel(s);
   const yours = s.state === "needs-you";
   const dim = s.state === "done";
   return (
     <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
+      {" ".repeat(Math.max(0, indent - 2))}
       {selected ? "› " : "  "}
       {/* the row's own mark: it is yours to act on. Carried here and not only
           in the people's colour, because on your own ticket the people list can
           be empty — and then a change request had no trace on screen at all */}
       <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
-      <span fg={s.mine ? theme.accent : theme.dim}>{t.kind.padEnd(9)}</span>
+      <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
       {t.goal}
       {people.length > 0 ? (
         <>
