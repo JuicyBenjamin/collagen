@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, SubscriptionRef } from "effect";
 import { scriptEngine, tool, type AgentExecuteResult } from "callscript";
+import { noPeerNamed, resolveName, roomRollCall } from "../lib/names";
 import { Inbox } from "./Inbox";
 import { Rooms } from "./Rooms";
 
@@ -68,8 +69,9 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
           Effect.gen(function* () {
             const { room } = yield* rooms.current;
             const peers = yield* SubscriptionRef.get(room.roster);
-            const target = peers.find((p) => p.name === args.peer);
-            if (!target) return { delivered: false, detail: `no peer named ${args.peer}` };
+            const found = resolveName(args.peer, [peers], (p) => p.key);
+            if (found._tag !== "found") return { delivered: false, detail: noPeerNamed(args.peer, found, roomRollCall(peers, [], "")).replace(/^failed: /, "") };
+            const target = found.value;
             return yield* room
               .sendTo(target.key, { project: args.project, intent: args.intent, findings: args.findings })
               .pipe(
