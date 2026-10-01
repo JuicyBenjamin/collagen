@@ -1,5 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
+import { visibleTo } from "@collagen/p2p";
 import { to } from "../app/router";
 import { attachmentsDir } from "../services/Attachments";
 import { transcriptsDir } from "../services/Transcripts";
@@ -15,12 +16,13 @@ export const attachFiles = diagnostic<{ readonly ticketId: string; readonly file
   params: Schema.Struct({ ticketId: Schema.String, files: Schema.Array(Schema.String), note: Schema.optional(Schema.String) }),
   fromContext: (ctx) => (ctx.ticketId ? { ticketId: ctx.ticketId, files: [] } : null),
   open: (ctx, back) => (ctx.ticketId ? to.attach(ctx.ticketId, back) : back),
-  run: ({ ticketId, files, note }, ctx, { rooms, attachments }) =>
+  run: ({ ticketId, files, note }, ctx, { rooms, attachments, me }) =>
     Effect.gen(function* () {
       const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === ctx.roomId);
       if (!h) return "failed: that room is gone";
-      const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
-      if (!ticket) return `failed: no ticket ${ticketId} — check get-tickets`;
+      const all = yield* SubscriptionRef.get(h.room.tickets);
+      const ticket = all.get(ticketId);
+      if (!ticket || !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
       if (files.length === 0) return "failed: pass the paths of the files to attach";
       return yield* attachments.attach(ctx.roomId, ticketId, ticket.goal, files, note);
     }),

@@ -8,7 +8,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
-import { AI_OPTIONS, DriveAction, emptyReview, formatInvite, ImportanceScore, isJudged, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, type Ticket } from "@collagen/p2p";
+import { afterProblem, AI_OPTIONS, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -122,13 +122,15 @@ export const DescribeScripting = Tool.make("describe-scripting", {
 
 export const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
+    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
   parameters: Schema.Struct({
     goal: Schema.String,
     /** tickets this one follows — a plan it carries out; walked back on request */
     from: Schema.optional(Schema.Array(Schema.String)),
     /** your user's instruction for the moment they close it, handed back then */
     whenClosed: Schema.optional(Schema.String),
+    /** tickets this one waits on: nobody else is shown it until they are answered */
+    after: Schema.optional(Schema.Array(Schema.String)),
     project: Schema.String,
     steps: Schema.Array(
       Schema.Struct({
@@ -155,6 +157,7 @@ const judgedParameters = {
   summary: Schema.optional(Schema.String),
   focus: Schema.optional(Schema.String),
   from: Schema.optional(Schema.Array(Schema.String)),
+  after: Schema.optional(Schema.Array(Schema.String)),
   whenClosed: Schema.optional(Schema.String),
   decisions: Schema.optional(
     Schema.Array(
@@ -205,7 +208,7 @@ export const AskPlan = Tool.make("ask-plan", {
   description: [
     "File a PLAN: something your user intends to do, put to the room for judgment before it is built — do you agree, what would you change, what am I missing. Only when your user asks for input, advice or direction on what they mean to do (\"ask kristian what he thinks of this plan\", \"put this up for input\") — never on your own initiative. It reaches the room at once and the outbox shows what went. A question your user could have asked YOU is not a plan: this is for a colleague's judgment, the input that is not AI.",
     "'goal' is the one line everyone sees — what your user intends (\"stream the export, don't buffer it\"). 'summary' is their thinking in a paragraph. 'decisions' are the thoughts behind it, one per point: 'what' they mean to do, 'userWhy' in their words, 'agentWhy' what you found, checked or would add — marked as yours. 'forks' are the roads not taken so far, with 'at' as a pointer where there is code, or the area if there is none yet. 'peers' is 0 to many, exactly the names your user said; nobody named means the plan sits in the room for whoever has a take — including your user's own second agent.",
-    "Readers give a BLIND FIRST TAKE: their agent hands them the goal alone, they say what they think (post-review; failed: true asks for changes), and only then do your user's thoughts open to them. A ↻ hands the plan back to your user to revise this same ticket (ask-plan with 'ticketId'), never to reply in prose. 'from' names tickets this plan follows (a proposal it answers); 'whenClosed' is your user's own instruction for the moment they close it (\"open the Jira tickets\"), handed back to you then.",
+    "Readers give a BLIND FIRST TAKE: their agent hands them the goal alone, they say what they think (post-review; failed: true asks for changes), and only then do your user's thoughts open to them. A ↻ hands the plan back to your user to revise this same ticket (ask-plan with 'ticketId'), never to reply in prose. 'from' names tickets this plan follows (a proposal it answers); 'after' names tickets it WAITS on — phase two after phase one: until they are answered nobody but your user is shown it, and 'after: []' withdraws the order; 'whenClosed' is your user's own instruction for the moment they close it (\"open the Jira tickets\"), handed back to you then.",
     "WHAT TO TELL YOUR USER: that the plan ticket has been filed (or updated), nothing more. KEEP IT CURRENT: when their thinking moves, call ask-plan again with 'ticketId' — re-send the summary if it no longer holds, repeat the id of a changed decision, pass a new 'goal' if the question moved; 'from: []' withdraws the lineage and 'whenClosed: \"\"' the close instruction, leaving either out keeps it. When the takes are in and your user has decided, close-ticket with the conclusion as the reason.",
   ].join("\n"),
   parameters: Schema.Struct(judgedParameters),
@@ -252,6 +255,7 @@ export const AskReview = Tool.make("ask-review", {
     "'peers' is who is asked, and it is 0 to many — it carries exactly the names your user said, and NONE is the default. They named nobody, you name nobody: never infer a reviewer from who is in the room, who is online, or who touched the code. Name several and each gets a review step of their own. With nobody asked the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
     "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line). Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
+    "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
     "It creates a review ticket: a step per person asked (their review) and one you own (acting on what comes back). The why goes on the room's log beside it, so it is there when you are offline — and a reader's agent pulls it only when their person asks.",
     "WHAT TO TELL YOUR USER: that the review ticket has been filed (or updated), and nothing more. They asked for it, so do not read the summary, the decisions, the forks or their counts back to them — the ticket carries all of it for whoever reviews it, and their TUI shows the ticket.",
     "KEEP IT CURRENT. A review is not a snapshot: your user will change the code, before or after anyone reads it. Whenever they do, call ask-review again with 'ticketId' — add a decision for what changed and why (their words for it), correct a decision that no longer holds by repeating its id, and pass the new 'branch' or 'link' if the code moved. Everyone reading the ticket is told it was revised, so what they review is what exists. When your user has acted on the feedback, settle your own step with settle-step; if the review was open, settling it closes the invitation.",
@@ -267,6 +271,7 @@ export const AskReview = Tool.make("ask-review", {
     base: Schema.optional(Schema.String),
     link: Schema.optional(Schema.String),
     from: Schema.optional(Schema.Array(Schema.String)),
+    after: Schema.optional(Schema.Array(Schema.String)),
     whenClosed: Schema.optional(Schema.String),
     decisions: Schema.optional(
       Schema.Array(
@@ -512,7 +517,8 @@ const makeHandlers = Effect.gen(function* () {
           ? myName
           : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 12));
       const reviews = yield* SubscriptionRef.get(room.reviews);
-      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id));
+      const held = heldBy(ticket, yield* SubscriptionRef.get(room.tickets));
+      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id), held);
     });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
@@ -579,6 +585,7 @@ const makeHandlers = Effect.gen(function* () {
         forks?: ReadonlyArray<ForkInput>;
       
         from?: ReadonlyArray<string>;
+        after?: ReadonlyArray<string>;
         whenClosed?: string;
         work?: ReadonlyArray<{ readonly id?: string; readonly intent: string; readonly description: string; readonly owner?: string }>;
         retireWork?: ReadonlyArray<string>;
@@ -639,7 +646,7 @@ const makeHandlers = Effect.gen(function* () {
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
             delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves;
-          const ticketMoves = input.goal !== undefined || input.from !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
+          const ticketMoves = input.goal !== undefined || input.from !== undefined || input.after !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
           if (!whyMoves && !ticketMoves) return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
           if (whyMoves) {
             const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, true, kind);
@@ -663,6 +670,12 @@ const makeHandlers = Effect.gen(function* () {
           if (input.goal && input.goal !== ticket.goal) revised = { ...revised, goal: input.goal };
           // present means set — and an empty value means withdraw; absent means keep
           if (input.from !== undefined) revised = { ...revised, from: input.from };
+          if (input.after !== undefined) {
+            const all = yield* SubscriptionRef.get(room.tickets);
+            const problem = afterProblem(ticket.id, input.after, all, identity.pubkey);
+            if (problem) return `failed: ${problem}`;
+            revised = { ...revised, after: [...new Set(input.after)] };
+          }
           if (input.whenClosed !== undefined) revised = { ...revised, whenClosed: input.whenClosed };
           const newReaders: Array<Person> = [];
           for (const n of (input.peers ?? []).map((n) => n.trim()).filter((n) => n.length > 0)) {
@@ -735,6 +748,12 @@ const makeHandlers = Effect.gen(function* () {
         const { path: projectPath, name: projectName } = project.value;
         const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, false, kind);
         if (gap) return gap;
+        const tickets = yield* SubscriptionRef.get(room.tickets);
+        const after = input.after && input.after.length > 0 ? [...new Set(input.after)] : undefined;
+        if (after) {
+          const problem = afterProblem(undefined, after, tickets, identity.pubkey);
+          if (problem) return `failed: ${problem}`;
+        }
         // the facts about the code come from the repo when the agent omits them
         // — for a review; a plan or a proposal has no code yet unless the agent says so
         const branch = kind === "review" ? (input.branch ?? branchOf(projectPath) ?? undefined) : input.branch;
@@ -775,6 +794,7 @@ const makeHandlers = Effect.gen(function* () {
           createdBy: identity.pubkey,
           kind,
           ...(input.from && input.from.length > 0 ? { from: input.from } : {}),
+          ...(after ? { after } : {}),
           ...(input.whenClosed ? { whenClosed: input.whenClosed } : {}),
           structureAt: now,
           updatedAt: now,
@@ -802,12 +822,25 @@ const makeHandlers = Effect.gen(function* () {
           ...(branch ? { branch } : {}),
           ...(link ? { link } : {}),
         }, now);
-        return yield* outbox.tell({
+        const filed = yield* outbox.tell({
           roomId,
           to: asked.length > 0 ? asked.join(", ") : "the room",
           title: `${projectName} · ${kind} · ${goal}`,
           outgoing: { kind: "review", ticket, review },
         });
+        // a stack the author did not say out loud: noticed, never decided —
+        // an inferred order would hide this ticket from its readers as a
+        // side effect of naming a base
+        const reviews = yield* SubscriptionRef.get(room.reviews);
+        const under =
+          kind === "review" && !after && input.base
+            ? [...tickets.values()].filter(
+                (t) => t.kind === "review" && t.id !== ticketId && !t.closed && !finished(t) && visibleTo(t, tickets, identity.pubkey) && reviews.find((r) => r.ticketId === t.id)?.branch === input.base,
+              )
+            : [];
+        return under.length > 0 && !filed.startsWith("failed")
+          ? `${filed}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
+          : filed;
     });
 
     return {
@@ -927,6 +960,7 @@ const makeHandlers = Effect.gen(function* () {
         goal: string;
         project: string;
         from?: ReadonlyArray<string>;
+        after?: ReadonlyArray<string>;
         whenClosed?: string;
         steps: ReadonlyArray<{
           id?: string;
@@ -949,6 +983,11 @@ const makeHandlers = Effect.gen(function* () {
         }
         const now = yield* Clock.currentTimeMillis;
         const project = projectSpelling(input.project, peers, roomProjects(yield* store.get, roomId));
+        const after = input.after && input.after.length > 0 ? [...new Set(input.after)] : undefined;
+        if (after) {
+          const problem = afterProblem(undefined, after, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
+          if (problem) return `failed: ${problem}`;
+        }
         const id = crypto.randomUUID();
         const ticket: Ticket = {
           id,
@@ -957,6 +996,7 @@ const makeHandlers = Effect.gen(function* () {
           createdBy: identity.pubkey,
           kind: "task",
           ...(input.from && input.from.length > 0 ? { from: input.from } : {}),
+          ...(after ? { after } : {}),
           ...(input.whenClosed ? { whenClosed: input.whenClosed } : {}),
           structureAt: now,
           updatedAt: now,
@@ -979,8 +1019,11 @@ const makeHandlers = Effect.gen(function* () {
       "report-bug": (input: Parameters<typeof fileJudged>[1]) => fileJudged("bug", input),
       "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean }) {
         const { id: roomId, room } = yield* focusedRoom;
-        const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
-        if (!ticket) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ticket = all.get(input.ticketId);
+        // a ticket still waiting on another is not shown to its readers: to
+        // them it is not there yet, and the refusal says no more than that
+        if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         if (!isJudged(ticket.kind)) {
           return `failed: "${ticket.goal}" is a task, not a review, plan or proposal — settle a step your user owns with settle-step, or weigh in with send-to-peer (pass ticketId)`;
         }
@@ -1013,7 +1056,7 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ticket = all.get(input.ticketId);
-        if (!ticket) return yield* Effect.die(`no ticket ${input.ticketId} — check get-tickets`);
+        if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         if (!ticket.steps.some((s) => s.id === input.stepId)) {
           return yield* Effect.die(`no step ${input.stepId} on ticket ${input.ticketId}`);
         }
@@ -1164,7 +1207,8 @@ const makeHandlers = Effect.gen(function* () {
       "get-tickets": () =>
         focusedRoom.pipe(
           Effect.flatMap(({ room }) => SubscriptionRef.get(room.tickets)),
-          Effect.flatMap((m) => Effect.forEach([...m.values()], renderTicket)),
+          // a ticket waiting on another is its author's alone until it opens
+          Effect.flatMap((m) => Effect.forEach([...m.values()].filter((t) => visibleTo(t, m, identity.pubkey)), renderTicket)),
           Effect.map((tickets) => toToon({ tickets })),
           Effect.withSpan("Mcp.getTickets"),
         ),

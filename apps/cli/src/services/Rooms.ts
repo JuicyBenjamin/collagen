@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
@@ -97,6 +97,11 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               const redeliver = firstPass && all.size > 0;
               if (all.size > 0) firstPass = false;
               for (const ticket of all.values()) {
+                // a ticket waiting on another (after) is delivered to nobody —
+                // not its readers, who are not shown it, and not its author,
+                // whose work waits too. When the ticket it waits on is
+                // answered, this map changes and the steps go then.
+                if (gated(ticket, all)) continue;
                 const mine = actionableSteps(ticket, identity.pubkey).filter(
                   (s) => s.status === "pending" || (redeliver && s.status === "suspended"),
                 );
@@ -185,6 +190,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               const trace = yield* SubscriptionRef.get(room.trace);
               for (const c of stepChanges(prev, all)) {
                 if (c.step.owner === identity.pubkey) continue; // our own doing
+                if (!visibleTo(c.ticket, all, identity.pubkey)) continue; // not shown to us yet
                 if (!isParticipant(c.ticket, trace, identity.pubkey)) continue;
                 if (actionableSteps(c.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
                 const actorName = yield* nameOf(c.step.owner);
@@ -209,6 +215,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (r.author === identity.pubkey) continue; // our own doing
                 const ticket = tickets.get(r.ticketId);
                 if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
+                if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
                 const fresh = prev?.has(r.ticketId) !== true;
                 yield* notify(myThreadFor(ticket, trace, identity.pubkey, r.author), r.author, r.authorName, ticket, "revised the why", reviewUpdateText(ticket, r, fresh));
               }
@@ -228,6 +235,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (!m.ticketId || m.from === identity.pubkey || m.to === identity.pubkey) continue;
                 const ticket = tickets.get(m.ticketId);
                 if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
+                if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
                 yield* notify(myThreadFor(ticket, trace, identity.pubkey, m.from), m.from, m.fromName, ticket, "weighed in", weighInText(ticket, m, yield* nameOf(m.to)));
               }
             }),
@@ -291,7 +299,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 case "post-review": {
                   const all = yield* SubscriptionRef.get(room.tickets);
                   const ticket = all.get(action.ticketId);
-                  if (!ticket) return yield* Effect.logWarning(`drive review: no ticket ${action.ticketId}`);
+                  // a gated ticket is not shown to this peer: the same refusal as no ticket
+                  if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return yield* Effect.logWarning(`drive review: no ticket ${action.ticketId}`);
                   const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: yield* SubscriptionRef.get(nameRef) }, action.result, action.failed ?? false, now);
                   yield* Effect.log(`driven review: posted on step ${stepId}`);
                   yield* room.shareTicket(updated);

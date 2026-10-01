@@ -314,6 +314,37 @@ that chose it, and to the proposal's why for who needed the export at all — so
 about the code is settled against what was agreed, not re-argued from scratch. Abundance of context, none of it pushed: `review-context`
 follows the chain only when the person asks.
 
+### Tickets in order: `after`
+
+`from` says where a ticket came from; **`after`** says what it waits on. Two stacked
+reviews — a branch built on another's — must be read in order, and nothing on two open
+review tickets said so: a reader once reviewed a stacked pair backwards. A ticket filed
+with `after` (the ids of the tickets it waits on; `ask-review`, `ask-plan`, `propose`,
+`report-bug` and `create-ticket` all take it) is **gated** while any of them is
+unanswered:
+
+- its **author** sees it — on the overview dim, `⧗ after "…"`, and on its page — and keeps
+  it current while it waits;
+- **nobody else** is shown it: `get-tickets` leaves it out, `review-context` and
+  `post-review` answer as if it were not there, and no step of it is delivered to anyone
+  (its author's included — their work waits too);
+- it **opens by itself** the moment every ticket it waits on is answered: *finished* —
+  which on a review includes its author's own address step, so one reader's take does not
+  open the next review — or *closed*, so a ticket abandoned unfinished does not hold the
+  next one back forever. Then it behaves like any ticket, and its readers' steps arrive.
+
+`after` is the author's structure, like `from`: set explicitly — never inferred — and
+withdrawn with `after: []`. When a review's `base` is the branch of another open review,
+the outcome points that out and suggests the order; it does not set it, because an
+inferred order would hide a ticket from its readers as a side effect of naming a base. An
+order that could hide a ticket for good is refused when it is set: an id nobody holds (or
+someone else's ticket still waiting, which you are not shown), the ticket itself, and a
+cycle, direct or through others.
+
+On the overview a ticket that waits on another **in the same group** is drawn right under
+it with `↳`. One waiting on two sits once, under the one drawn last — never duplicated —
+and a chain stays a chain.
+
 Everyone can weigh in at every step, so this is a product-management flow with the
 product manager, the backender and the reviewer each speaking through their own agent.
 Because nobody has to be named, it is the same flow alone: you plan, your second agent
@@ -408,7 +439,7 @@ rules that converge regardless of order:
 - steps are unioned by id — the creator adds structure, owners never lose steps
 - per step, the higher status wins (`settled`/`failed`/`retired` beat `suspended` beat
   `pending`); equal ranks resolve by timestamp, then a deterministic tiebreak
-- the author's **structure** — goal, kind, `from`, `whenClosed` — follows the author's own
+- the author's **structure** — goal, kind, `from`, `after`, `whenClosed` — follows the author's own
   clock (`structureAt`), which only an author's revision advances. A peer posting a take or
   settling a step advances the ticket's general timestamp while broadcasting their whole,
   possibly stale, copy; that can never revert what the author last decided
