@@ -176,7 +176,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               ts: now,
               ticketId: ticket.id,
             };
-            yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)}: ${fromName} ${what} — telling your agent`);
+            // where it goes next is the runner's line: inbox, codex queue or a background resume
+            yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)}: ${fromName} ${what}`);
             yield* inbox.push(h.id, msg);
             yield* Effect.forkChild(runner.runThread(threadId));
           });

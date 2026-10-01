@@ -84,15 +84,24 @@ never starts an agent for you, and the agent it reaches is told to relay it, not
 1. it lands in your **inbox** for that room — read off the room's log, so it's there even if
    it was sent while you were offline (the TUI shows it; the room's avatar gets an unread
    dot);
-2. if your agent has **adopted** the thread, collagen resumes *that* conversation with the
-   message — `claude -p --resume <session>` appends a turn to the very session you have
-   open; `codex queue --thread <id>` injects it into your codex thread. Same window, no
-   fork. The turn it appends carries only the headline (who, project, intent) and says:
-   tell your user that, wait, read the thread when they ask, never invent, and a question
-   the thread can't answer is either theirs or the peer's;
+2. if your agent has **adopted** the thread, collagen hands the message to *that*
+   conversation — `codex queue --thread <id>` queues it into your codex thread, where it
+   shows at that session's next turn; `claude -p --resume <session>` appends a turn to the
+   Claude Code session **in a process of its own, in the background**. That is delivery to
+   the model, not to your screen: a window you have open on the same session does not
+   repaint, and you see the turn when you next resume it. The turn carries only the
+   headline (who, project, intent) and says: tell your user that, wait, read the thread
+   when they ask, never invent, and a question the thread can't answer is either theirs or
+   the peer's;
 3. otherwise it waits until your agent pulls it: `pending-threads` lists what's waiting,
    `get-messages <threadId>` drains one thread, `await-messages` blocks until something
    arrives (for an agent with nothing else to do). Same instruction on the way out.
+
+The footer's activity log says which of these happened, every time: `→ inbox` (waiting to
+be pulled), `→ codex queue` (shows at the codex thread's next turn), `→ background`
+(resumed in a process of its own). If you want new content to appear in the window you
+are sitting in, keep that session watching — `watch-room` gives the recipe — since
+neither CLI offers collagen a way to write into a live interactive session.
 
 Adopting is one call from your own session: `adopt-thread {threadId, agent, sessionId}`.
 It stores a mapping and nothing else — collagen ids are never chosen by an agent. It

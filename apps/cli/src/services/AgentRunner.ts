@@ -123,9 +123,15 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       // own session to pull — and adopt. Mocks are test dummies and always
       // auto-respond.
       const isMock = ai !== null && ai !== undefined && ai.startsWith("mock");
+      // Every line below says WHERE the delivery went, in the person's terms:
+      // "telling your agent" read as "it is in my window now", and none of
+      // these paths can put anything in the window the person is looking at.
+      const about = `${sample.fromName}/${sample.project}`;
       if (ai === null || ai === undefined || (!isMock && Option.isNone(sessionId))) {
         yield* Effect.log(
-          `message queued (${ai == null ? "no ai set" : "no conversation for this thread yet"}): ${sample.fromName}/${sample.project}`,
+          ai == null
+            ? `→ inbox · ${about} — no ai set; it waits until your agent pulls it`
+            : `→ inbox · ${about} — no conversation holds this thread; it waits until your agent pulls it (adopt-thread links one)`,
         );
         return null;
       }
@@ -139,7 +145,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
           msg: sample,
           sessionId: Option.some(adopted.sessionId),
         };
-        yield* Effect.log(`queue → codex · ${sample.fromName}/${sample.project}`);
+        yield* Effect.log(`→ codex queue · ${about} — shows in codex thread ${adopted.sessionId.slice(0, 8)}… at its next turn`);
         yield* queueNudge(adopted.sessionId, ctx);
         return new Set(queued.map((e) => e.msg.id));
       }
@@ -159,7 +165,9 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         sessionId,
       };
       yield* Effect.log(
-        `${Option.isSome(sessionId) ? "continue" : "start"} ${ai} · ${sample.fromName}/${sample.project}`,
+        isMock
+          ? `→ ${ai} · ${about} — the mock answers on its own`
+          : `→ background · ${about} — resuming your ${ai} conversation ${Option.getOrElse(sessionId, () => "").slice(0, 8)}… in a process of its own; an open window on it does not update`,
       );
 
       const before = new Set(queued.map((e) => e.msg.id));
