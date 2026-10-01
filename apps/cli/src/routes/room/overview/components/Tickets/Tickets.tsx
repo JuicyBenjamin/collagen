@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import type { Ticket } from "@collagen/p2p";
+import { heldBy, visibleTo, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
 import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { GLYPH, LEGEND } from "../../../../../lib/glyphs";
+import { GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
 import { marksLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, groupTickets, kindHeading } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
@@ -45,7 +45,14 @@ export function Tickets() {
 
   // every ticket the room has that is not over, grouped; the cursor walks
   // the rows in the order they are drawn, headers are not stops
-  const groups = groupTickets(tickets.map((t) => ({ t, s: summarize(t, trace, me) })).filter((r) => r.s.state !== "closed"));
+  // a ticket waiting on another (after) is its author's alone until it opens
+  const byId = new Map(tickets.map((t) => [t.id, t]));
+  const groups = groupTickets(
+    tickets
+      .filter((t) => visibleTo(t, byId, me))
+      .map((t) => ({ t, s: summarize(t, trace, me, heldBy(t, byId)) }))
+      .filter((r) => r.s.state !== "closed"),
+  );
   const shown = drawnOrder(groups);
   const needsYou = shown.filter((r) => r.s.state === "needs-you").length;
   const index = new Map(shown.map((r, i) => [r.t.id, i]));
@@ -96,7 +103,16 @@ export function Tickets() {
                       {kindHeading(k.kind)}
                     </text>
                     {k.rows.map((r) => (
-                      <TicketRow key={r.t.id} ticket={r.t} summary={r.s} selected={focused && index.get(r.t.id) === sel} nameFor={nameFor} indent={groups.length > 1 ? 4 : 2} />
+                      <TicketRow
+                        key={r.t.id}
+                        ticket={r.t}
+                        summary={r.s}
+                        selected={focused && index.get(r.t.id) === sel}
+                        nameFor={nameFor}
+                        indent={groups.length > 1 ? 4 : 2}
+                        follows={k.follows.has(r.t.id)}
+                        goalOf={(id) => byId.get(id)?.goal}
+                      />
                     ))}
                   </box>
                 ))}
@@ -139,6 +155,8 @@ function TicketRow({
   selected,
   nameFor,
   indent,
+  follows,
+  goalOf,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
@@ -146,10 +164,16 @@ function TicketRow({
   nameFor: (key: string) => string;
   /** columns before the cursor, so a row sits under its header */
   indent: number;
+  /** drawn under a ticket it is read after (same group) */
+  follows: boolean;
+  goalOf: (ticketId: string) => string | undefined;
 }) {
   const people = marksLabel(s);
   const yours = s.state === "needs-you";
-  const dim = s.state === "done";
+  // waiting on another ticket: only its author sees the row, dim, saying on what
+  const waits = s.held.length > 0;
+  const dim = s.state === "done" || waits;
+  const on = waits ? (goalOf(s.held[0]!) ?? s.held[0]!.slice(0, 8)) : "";
   return (
     <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
       {" ".repeat(Math.max(0, indent - 2))}
@@ -159,7 +183,14 @@ function TicketRow({
           be empty — and then a change request had no trace on screen at all */}
       <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
       <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
+      {follows ? <span fg={theme.dim}>{`${STACK.follows} `}</span> : null}
       {t.goal}
+      {waits ? (
+        <span fg={theme.dim}>
+          {` · ${STACK.waits} after "${on}"`}
+          {s.held.length > 1 ? ` +${s.held.length - 1}` : ""}
+        </span>
+      ) : null}
       {people.length > 0 ? (
         <>
           <span fg={theme.dim}> · </span>

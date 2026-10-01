@@ -92,7 +92,9 @@ lands once by id (`msgid/<id>`), a writer is admitted once.
 Before protocol 5 the third case did not exist and "cannot decode" meant "evict", so a peer
 still on 0.12 or older evicts a `bug` ticket the moment it sees one. That is not staged
 around: a build that old is old whether it is one version behind or three, and the alpha
-rule stands — update. From 5 on, the guard holds.
+rule stands — update. From 5 on, the guard holds. Protocol 6 added a ticket's `after` (the
+tickets it waits on): a 5 build decodes such a ticket but would drop the field when it
+re-shared its copy, so 6 is its own version and a 5 peer is told to update.
 
 ## The p2p core: `Swarm` and `Room`
 

@@ -174,6 +174,16 @@ alone too.
 
 ## Decisions log
 
+- **Tickets in order** (2026-10-01) — a ticket carries `after`, the tickets it waits on,
+  apart from `from` (lineage). While one is unanswered the ticket is its author's alone:
+  readers are not shown it, nudged about it or able to post on it, and it opens by itself
+  once they are answered — finished (a review's author has addressed it, not merely one
+  reader taken it) or closed. The take asked for validation and a DAG-safe overview: an
+  unknown id, the ticket itself and a cycle are refused when the order is set, and a ticket
+  waiting on two predecessors is drawn once, under the last of them. Explicit, never
+  inferred; a base that is another open review's branch is pointed out, not set.
+  Protocol 6: an older build would drop `after` from a ticket it re-shares.
+
 - **A newer build's record is not "unreadable"** (2026-09-16) — every log entry now carries
   the protocol of the build that wrote it; a reader on an older build leaves a newer entry
   unapplied and counted, never evicted, and is told to update. Until now "cannot decode"

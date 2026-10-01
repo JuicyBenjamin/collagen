@@ -84,7 +84,7 @@ export const Ticket = Schema.Struct({
   createdBy: Schema.String,
   kind: TicketKind,
   steps: Schema.Array(TicketStep),
-  /** When the AUTHOR last changed the ticket's structure — goal, kind, from,
+  /** When the AUTHOR last changed the ticket's structure — goal, kind, from, after,
    *  whenClosed. Its own clock, apart from `updatedAt`: a peer posting a take
    *  or settling a step also advances updatedAt while broadcasting their
    *  whole (possibly stale) copy, and the author's latest decision must not
@@ -96,6 +96,15 @@ export const Ticket = Schema.Struct({
    *  the work a plan agreed. A child names its parents; a parent never lists
    *  its children (derived, like everything else). */
   from: Schema.optional(Schema.Array(Schema.String)),
+  /** The tickets this one waits on — ordering, apart from lineage: a review
+   *  stacked on another is read after it, a plan's phase two after phase one.
+   *  While any of them is unanswered (neither finished nor closed) the
+   *  ticket is GATED: its author sees it, waiting; nobody else is shown it,
+   *  nudged about it, or able to post on it. Author's structure, like
+   *  `from`, set explicitly — never inferred — and checked when set: no
+   *  unknown ids, no self, no cycle (`afterProblem`), so a ticket cannot be
+   *  left invisible forever. `[]` withdraws it. */
+  after: Schema.optional(Schema.Array(Schema.String)),
   /** The author's instruction for the moment the ticket is CLOSED — "open
    *  the Jira tickets for each step" — written when it was filed, handed to
    *  their agent in the close outcome, and acted on then: not on the last
@@ -112,7 +121,7 @@ export type Ticket = typeof Ticket.Type;
  *  - steps are unioned by id — the creator adds structure, owners never lose steps
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
  *    by updatedAt, then lexicographic result as the final tiebreak
- *  - goal, kind, from and whenClosed follow the copy with the newer
+ *  - goal, kind, from, after and whenClosed follow the copy with the newer
  *    `structureAt` — the author's own clock, which only the author advances,
  *    so a peer's take or settle (which advances updatedAt on a possibly stale
  *    copy) can never revert the author's latest decision
@@ -130,7 +139,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
   const author = incoming.structureAt !== local.structureAt ? (incoming.structureAt > local.structureAt ? incoming : local) : structureTiebreak(local, incoming);
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
-  const { from: _lf, whenClosed: _lw, ...rest } = local;
+  const { from: _lf, after: _la, whenClosed: _lw, ...rest } = local;
   return {
     ...rest,
     goal: author.goal,
@@ -138,6 +147,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     // present wins, including an EMPTY value: `from: []` and `whenClosed: ""`
     // are how the author withdraws them, and a merge must carry that through
     ...(author.from !== undefined ? { from: author.from } : {}),
+    ...(author.after !== undefined ? { after: author.after } : {}),
     ...(author.whenClosed !== undefined ? { whenClosed: author.whenClosed } : {}),
     structureAt: author.structureAt,
     steps: [...steps.values()],
@@ -147,7 +157,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
 }
 
 /** The author-controlled structure, as one comparable string. */
-const structureKey = (t: Ticket): string => JSON.stringify([t.goal, t.kind, t.from ?? null, t.whenClosed ?? null]);
+const structureKey = (t: Ticket): string => JSON.stringify([t.goal, t.kind, t.from ?? null, t.whenClosed ?? null, t.after ?? null]);
 
 /** Two author revisions in the same millisecond: pick one the same way on
  *  every peer, whichever side it arrived from, so the merge still commutes. */
@@ -366,4 +376,62 @@ export function readySteps(ticket: Ticket): TicketStep[] {
 /** Steps a given peer should act on now: `readySteps`, theirs. */
 export function actionableSteps(ticket: Ticket, pubkey: string): TicketStep[] {
   return readySteps(ticket).filter((s) => s.owner === pubkey);
+}
+
+/** Is this ticket's turn over, for whoever waits on it? Finished (every step
+ *  answered — on a review that includes the author's own address step, so
+ *  one reader's take does not open the next review), or closed: a ticket its
+ *  author closed unfinished must not hold the next one back forever. */
+const released = (t: Ticket): boolean => t.closed !== undefined || finished(t);
+
+/** The tickets in `after` still holding this one back. A predecessor this
+ *  peer does not hold is no gate: `afterProblem` refused unknown ids when
+ *  the order was set, so a missing one was evicted, and waiting on it would
+ *  hide the ticket for good. */
+export function heldBy(ticket: Ticket, all: ReadonlyMap<string, Ticket>): ReadonlyArray<string> {
+  return (ticket.after ?? []).filter((id) => {
+    const p = all.get(id);
+    return p !== undefined && !released(p);
+  });
+}
+
+/** Waiting on a ticket that has not been answered yet. */
+export const gated = (ticket: Ticket, all: ReadonlyMap<string, Ticket>): boolean => heldBy(ticket, all).length > 0;
+
+/** May `me` be shown this ticket? Its author always — they keep it current
+ *  while it waits; anyone else once it is no longer gated. Every reader of
+ *  "is it there" for a person goes through here: the lists, the agent's
+ *  tools, the nudges. */
+export const visibleTo = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): boolean =>
+  ticket.createdBy === me || !gated(ticket, all);
+
+/** Why an `after` cannot stand, or null. The take on the ordering plan named
+ *  the three ways a ticket could otherwise become invisible for good: an id
+ *  nobody holds, waiting on itself, and a cycle (directly or through others).
+ *  `id` is the ticket being ordered (a new one has none on the log yet);
+ *  `all` is what `me` can see — someone else's gated ticket is not a ticket
+ *  you can name, or naming it would reveal it. */
+export function afterProblem(
+  id: string | undefined,
+  after: ReadonlyArray<string>,
+  all: ReadonlyMap<string, Ticket>,
+  me: string,
+): string | null {
+  for (const a of after) {
+    if (a === id) return "a ticket cannot wait on itself";
+    const t = all.get(a);
+    if (!t || !visibleTo(t, all, me)) return `no ticket ${a} — 'after' takes ids from get-tickets`;
+  }
+  if (id === undefined) return null;
+  // would any ticket we wait on, followed through its own `after`, lead back here?
+  const seen = new Set<string>();
+  const stack = [...after];
+  while (stack.length > 0) {
+    const next = stack.pop()!;
+    if (next === id) return "that order goes round in a circle: a ticket it waits on already waits on it";
+    if (seen.has(next)) continue;
+    seen.add(next);
+    stack.push(...(all.get(next)?.after ?? []));
+  }
+  return null;
 }

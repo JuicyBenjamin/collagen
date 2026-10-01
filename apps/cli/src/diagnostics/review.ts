@@ -1,6 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { isJudged, isTake } from "@collagen/p2p";
+import { isJudged, isTake, visibleTo } from "@collagen/p2p";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
 
@@ -22,7 +22,11 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === ctx.roomId);
       if (!h) return "failed: that room is gone";
       const review = (yield* SubscriptionRef.get(h.room.reviews)).find((r) => r.ticketId === ticketId);
-      const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
+      const all = yield* SubscriptionRef.get(h.room.tickets);
+      const ticket = all.get(ticketId);
+      // a ticket still waiting on another (after) is its author's alone: its
+      // readers take it in order, so to them it is not there yet
+      if (ticket && !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
       if (!review) {
         return ticket
           ? `no why on this ticket — "${ticket.goal}" is a ${ticket.kind}, not a review, plan or proposal (its author would have filed it with ask-review, ask-plan or propose)`

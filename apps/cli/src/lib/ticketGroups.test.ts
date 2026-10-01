@@ -30,3 +30,46 @@ describe("groupTickets", () => {
     expect(groupTickets(rows).map((g) => g.project)).toEqual(["alpha", "beta"]);
   });
 });
+
+describe("stacked tickets inside a group", () => {
+  const after = (r: ReturnType<typeof row>, ...ids: string[]) => ({ ...r, t: { ...r.t, after: ids } as Ticket });
+
+  it("a ticket that follows another is drawn right under it, marked as following", () => {
+    const first = row("first", "api", "review", "waiting", 1);
+    const other = row("other", "api", "review", "waiting", 5);
+    const second = after(row("second", "api", "review", "waiting", 9), "first");
+    const [g] = groupTickets([first, other, second]);
+    expect(g!.kinds[0]!.rows.map((r) => r.t.id)).toEqual(["other", "first", "second"]);
+    expect([...g!.kinds[0]!.follows]).toEqual(["second"]);
+  });
+
+  it("waiting on two, it sits once, under the one drawn last", () => {
+    const a = row("a", "api", "review", "waiting", 9);
+    const b = row("b", "api", "review", "waiting", 5);
+    const c = after(row("c", "api", "review", "waiting", 1), "a", "b");
+    const ids = groupTickets([a, b, c])[0]!.kinds[0]!.rows.map((r) => r.t.id);
+    expect(ids).toEqual(["a", "b", "c"]);
+  });
+
+  it("a chain stays a chain", () => {
+    const a = row("a", "api", "plan", "waiting", 1);
+    const b = after(row("b", "api", "plan", "waiting", 2), "a");
+    const c = after(row("c", "api", "plan", "waiting", 3), "b");
+    expect(drawnOrder(groupTickets([c, b, a])).map((r) => r.t.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("a predecessor in another group is no stack here", () => {
+    const p = row("p", "api", "proposal", "waiting");
+    const l = after(row("l", "api", "plan", "waiting"), "p");
+    const [g] = groupTickets([p, l]);
+    expect(g!.kinds.find((k) => k.kind === "plan")!.follows.size).toBe(0);
+  });
+
+  it("a cycle that arrived anyway is drawn plainly, once each", () => {
+    const a = after(row("a", "api", "plan", "waiting", 1), "b");
+    const b = after(row("b", "api", "plan", "waiting", 2), "a");
+    const k = groupTickets([a, b])[0]!.kinds[0]!;
+    expect(k.rows.map((r) => r.t.id).sort()).toEqual(["a", "b"]);
+    expect(k.follows.size).toBe(0);
+  });
+});
