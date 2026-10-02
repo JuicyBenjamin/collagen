@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, SubscriptionRef } from "effect";
-import { LanguageModel, Toolkit, type Prompt } from "effect/unstable/ai";
+import { LanguageModel, Toolkit, type Prompt } from "effect/ai";
 import { encode as toToon } from "@toon-format/toon";
 import type { LocalState, Outgoing, RoomMessage } from "@collagen/p2p";
 import { scriptedModel, type Turn } from "../test/scriptedModel";

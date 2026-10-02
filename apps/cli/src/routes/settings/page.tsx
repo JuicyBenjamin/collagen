@@ -3,7 +3,7 @@ import { NET } from "../../app/net";
 import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { writeProfileFile } from "../../config/profileFile";
 import { useRouter } from "../../app/router";
 import { useSession } from "../../app/session";

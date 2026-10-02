@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { BoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import type { ReviewContext } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
 import { focusAtom } from "../../../components/focus";

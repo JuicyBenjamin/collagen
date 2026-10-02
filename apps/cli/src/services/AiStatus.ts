@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { AiStatus as Status } from "@collagen/p2p";
 import { Adapters } from "./Adapters";
 

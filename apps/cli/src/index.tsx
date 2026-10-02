@@ -1,5 +1,5 @@
 import { Deferred, Effect, Option } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";

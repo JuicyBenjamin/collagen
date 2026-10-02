@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import type { RoomMessage } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
 import { isEnter } from "../../../components/keys";

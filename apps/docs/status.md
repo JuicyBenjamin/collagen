@@ -71,7 +71,7 @@ _Last updated: 2026-09-14._
   whoever weighed in — hears when a step settles or someone weighs in (`ticket-update`
   on the thread their agent knows it by). The overview lists tickets by what they want from
   you (needs you · waiting on … · done) with who was asked and who answered.
-- **MCP server** — `effect/unstable/ai` `McpServer` over Streamable HTTP, per-profile
+- **MCP server** — `effect/ai` `McpServer` over Streamable HTTP, per-profile
   port. Tools for the room, messages, tickets, settings (projects, ai, name, room name,
   room membership) and a CallScript `execute` engine. Auto-registered in `~/.claude.json`
   and `~/.codex/config.toml`.
@@ -218,7 +218,7 @@ alone too.
 
 - **Effect everywhere** — services + layers + typed errors + spans, for observability.
 - **`@effect/atom-react`** (not effect-rx) for the React bridge.
-- **`effect/unstable/ai` McpServer** (not `@modelcontextprotocol/sdk`) — one schema system.
+- **`effect/ai` McpServer** (not `@modelcontextprotocol/sdk`) — one schema system.
 - **pnpm + Node 26, not Bun** — the p2p stack's native bindings panic under Bun.
 - **OpenTUI + React** — Solid 2 would suit the TUI better, but `@opentui/solid` pins
   Solid 1.9; revisit when it moves.
