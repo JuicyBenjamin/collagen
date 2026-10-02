@@ -18,7 +18,7 @@ anything.
 | project | which shared project it concerns |
 | goal | the ask, one line |
 | createdBy | peer key — authoritative for the ticket's structure |
-| kind | `task` (the plain one), or one of the four that ask for judgment: `proposal`, `plan`, `bug`, `review` — see [the kinds at a glance](#the-kinds-at-a-glance) |
+| kind | `task` (the plain one), one of the four that ask for judgment: `proposal`, `plan`, `bug`, `review`, or an `epic`, a folder of the others — see [the kinds at a glance](#the-kinds-at-a-glance) |
 | steps | see below |
 
 A **step**:
@@ -45,6 +45,7 @@ guide and the screen cannot say two different things (a test holds this table to
 
 | kind | what it is | what it asks of a reader | who closes it |
 | --- | --- | --- | --- |
+| `epic` | a folder of tickets that together make one body of work | nothing of its own — its parts ask; anyone may add, move or take them out | anyone — with a reason, by default that its parts are done; reopened with one |
 | `proposal` | an idea, written down; owed to no one | is it worth doing — and would you do it, or should I | its author — when a plan grew out of it, or it was dropped |
 | `plan` | something its author intends to do, and how | do you agree, what would you change, what am I missing | its author — having folded the takes in and decided |
 | `bug` | a symptom, with its reporter's reading of cause, importance and fix | what do you make of the symptom — your diagnosis before theirs | its reporter — fixed, planned, or let be |
@@ -376,6 +377,36 @@ do:
 - the overview shows lineage without a tree: a `↳` and the parent's kind on the row, and
   the ticket page names its parents in the meta line.
 
+## Epics: a folder of work <Badge type="tip" text="alpha" />
+
+Some work is bigger than one ticket: "the review page reads more languages" is a proposal,
+then one per language, then their plans, reviews and fixes — in more than one project.
+An **epic** holds it together: a folder, a ticket of its own kind with a goal and an aim
+(its summary), no steps of its own, and its state its parts' state.
+
+- **Any ticket can be a part**, in any project of the room. A ticket lives in one epic at
+  most. A ticket that grew out of a part (`from`) lives in the epic too, without being
+  added: a proposal brings its plan, and the plan its review.
+- **Anyone in the room shapes it** — the epic belongs to the room, not to whoever started
+  it. Anyone may put a ticket in, take it out, or move it to another epic; every move is
+  kept, and the latest holds, so two people moving the same ticket at once end in the same
+  place everywhere.
+- **Closing and reopening, by anyone, with a reason.** An epic whose parts are all done
+  closes on that alone ("its parts are done"); closing it with parts left needs a reason,
+  and so does every reopen — more work found in the same area belongs in the epic that
+  already holds it. A closed epic takes nothing in until it is reopened, and its tickets
+  are drawn in their projects again.
+- **Only when asked.** Agents shape epics when their person says so (the `epic` tool). One
+  nudge: when someone files several related tickets together — grown out of the same
+  ticket, or in one project within half an hour — their agent offers, in one line, to put
+  them under an epic, and does it on their yes.
+
+On the overview an open epic is one **purple** row above the projects — `+` folded,
+`−` open, its goal and how far along it is ("1 of 3 done"), and a `▸` when a ticket inside
+is yours now, so folding never hides your work. `space` opens and folds it; open, its
+tickets are listed under it, each with its project. `enter` opens the epic's page: its
+aim, every ticket in it, and each close and reopen with who said so and why.
+
 ## The tools
 
 | Tool | Purpose |
@@ -385,7 +416,8 @@ do:
 | `get-tickets` | every ticket in the room you're looking at, merged, with owners resolved to names; a review ticket also shows its headline |
 | `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — the record and the reasons in one write. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
 | `post-review` | put your user's review on a review ticket — asked or not; it lands on a step of their own, and posting again revises it |
-| `review-context` | read the why behind a review ticket, on demand — all of it, or the part `about` a file, symbol or phrase |
+| `review-context` | read the why behind a review ticket, on demand — all of it, or the part `about` a file, symbol or phrase; on an epic, its aim and every ticket in it |
+| `epic` | the room's epics, only when asked: `create` (goal, summary, tickets to put in), `add` and `remove` tickets, `close` and `reopen` — with a reason, by anyone |
 
 Prefer a ticket over a chain of `send-to-peer` when the work has more than one step or
 more than one owner — the intermediate state stays inspectable by everyone, and the

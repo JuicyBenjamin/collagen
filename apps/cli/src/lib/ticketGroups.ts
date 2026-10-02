@@ -1,4 +1,4 @@
-import { KIND_ORDER, type Ticket, type TicketKind } from "@collagen/p2p";
+import { epicHome, KIND_ORDER, type Ticket, type TicketKind } from "@collagen/p2p";
 import { compareSummaries, type TicketSummary } from "./ticketSummary";
 
 export interface Row {
@@ -105,9 +105,43 @@ function stacked<R extends Row>(sorted: ReadonlyArray<R>): { rows: ReadonlyArray
   return { rows: out, depth, parent };
 }
 
-/** The rows in the order they are drawn — what ↑↓ walks. */
-export const drawnOrder = <R extends Row>(groups: ReadonlyArray<ProjectGroup<R>>): ReadonlyArray<R> =>
-  groups.flatMap((g) => g.kinds.flatMap((k) => k.rows));
+/** An open epic on the overview: its own row, and the tickets that live in
+ *  it — its parts and what grew out of them — which are drawn here and not
+ *  again in the project groups. */
+export interface EpicBlock<R extends Row> {
+  readonly epic: R;
+  readonly rows: ReadonlyArray<R>;
+}
+
+/** Split the overview's rows into open epics, each with the rows that live
+ *  in it (p2p epicHome), and everything else. Epics come in the order of
+ *  their most pressing row, then by goal; inside one, by project, then the
+ *  usual state order. A ticket in a closed (or unknown) epic is drawn in its
+ *  project as if it were in none. */
+export function epicBlocks<R extends Row>(rows: ReadonlyArray<R>, all: ReadonlyMap<string, Ticket>): { readonly epics: ReadonlyArray<EpicBlock<R>>; readonly rest: ReadonlyArray<R> } {
+  const open = new Map(rows.filter((r) => r.t.kind === "epic").map((r) => [r.t.id, { epic: r, rows: [] as Array<R> }]));
+  const rest: Array<R> = [];
+  for (const r of rows) {
+    if (r.t.kind === "epic") continue;
+    const home = epicHome(r.t, all);
+    const block = home ? open.get(home) : undefined;
+    if (block) block.rows.push(r);
+    else rest.push(r);
+  }
+  // an epic is as pressing as the most pressing ticket in it
+  const lead = (b: EpicBlock<R>): R => [b.epic, ...b.rows].reduce((x, y) => (compareSummaries(x.s, y.s) <= 0 ? x : y));
+  const epics = [...open.values()]
+    .map((b): EpicBlock<R> => ({ epic: b.epic, rows: [...b.rows].sort((x, y) => x.t.project.localeCompare(y.t.project) || compareSummaries(x.s, y.s)) }))
+    .sort((a, b) => compareSummaries(lead(a).s, lead(b).s) || a.epic.t.goal.localeCompare(b.epic.t.goal));
+  return { epics, rest };
+}
+
+/** The rows in the order they are drawn — what ↑↓ walks: each epic, and its
+ *  rows when it is unfolded, then the project groups. */
+export const drawnOrder = <R extends Row>(groups: ReadonlyArray<ProjectGroup<R>>, epics: ReadonlyArray<EpicBlock<R>> = [], unfolded: ReadonlySet<string> = new Set()): ReadonlyArray<R> => [
+  ...epics.flatMap((e) => [e.epic, ...(unfolded.has(e.epic.t.id) ? e.rows : [])]),
+  ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows)),
+];
 
 /** "proposals", "bugs" — a group's header. */
 export const kindHeading = (kind: TicketKind): string => `${kind}s`;

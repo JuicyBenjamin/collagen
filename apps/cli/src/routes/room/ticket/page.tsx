@@ -20,6 +20,7 @@ import { wrap } from "../../../lib/wrap";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { runDiagnosticAtom } from "./atoms";
 import { openReviewPageAtom } from "../review/atoms";
+import { EpicPage } from "./EpicPage";
 
 /** A section title. Space does the chunking — two blank lines above, no
  *  box, no rule — and the title sits at the margin while its rows indent. */
@@ -98,6 +99,11 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
   const review = reviews.find((r) => r.ticketId === ticket.id);
+  // an epic is a folder: a page of its own, its tickets rather than steps
+  if (ticket.kind === "epic") {
+    const all = new Map(tickets.map((t) => [t.id, t]));
+    return <EpicPage epic={ticket} all={all} why={review} summaries={(t) => summarize(t, trace, me, heldBy(t, all))} nameFor={nameFor} />;
+  }
   const threads = ticketThreads(ticket);
   const conversation = trace.filter((m) => aboutTicket(ticket, threads, m));
   const byId = new Map(tickets.map((t) => [t.id, t]));

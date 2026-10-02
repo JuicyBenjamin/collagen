@@ -23,6 +23,12 @@ export interface KindInfo {
 }
 
 export const KINDS: Record<TicketKind, KindInfo> = {
+  epic: {
+    what: "a folder of tickets that together make one body of work",
+    asks: "nothing of its own — its parts ask; anyone may add, move or take them out",
+    closes: "anyone — with a reason, by default that its parts are done; reopened with one",
+    agent: "a folder of tickets, shared by the room: only when your user asks, the epic tool adds, moves or removes parts and closes or reopens it, always with a reason; when your user files several related tickets together, offer to put them under one",
+  },
   proposal: {
     what: "an idea, written down; owed to no one",
     asks: "is it worth doing — and would you do it, or should I",
@@ -55,10 +61,11 @@ export const KINDS: Record<TicketKind, KindInfo> = {
   },
 };
 
-/** The kinds in the order work moves through them: an idea, how it gets
- *  done, what broke, the check on the work, then plain agreed work. The help
- *  lists them this way, so reading down is reading the pipeline. */
-export const KIND_ORDER: ReadonlyArray<TicketKind> = (["proposal", "plan", "bug", "review", "task"] as const satisfies ReadonlyArray<TicketKind>);
+/** The kinds in the order work moves through them: the body of work that
+ *  holds it all, an idea, how it gets done, what broke, the check on the
+ *  work, then plain agreed work. The help lists them this way, so reading
+ *  down is reading the pipeline. */
+export const KIND_ORDER: ReadonlyArray<TicketKind> = (["epic", "proposal", "plan", "bug", "review", "task"] as const satisfies ReadonlyArray<TicketKind>);
 
 /** Every kind's agent line, one per row — for a tool description. */
 export const kindsForAgents = (): string => KIND_ORDER.map((k) => `${k}: ${KINDS[k].agent}`).join("; ");
