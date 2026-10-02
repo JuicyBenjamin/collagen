@@ -47,7 +47,7 @@ export function TypesBanner(props: { tool: ToolId }) {
               fallback={
                 <>
                   <span>
-                    {t().error ? `Couldn't install ${t().name}: ${t().error}` : `Type hints for the ${t().name} in this review? Installs ${t().name} ${t().version} (${t().size}), once.`}
+                    {t().error ? `Couldn't install ${t().name}: ${t().error}` : `${t().language} type hints for this review? Installs ${t().name} ${t().version} (${t().size}), once.`}
                     <Show when={t().licence}>
                       {(l) => (
                         <>

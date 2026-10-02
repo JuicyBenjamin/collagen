@@ -1,21 +1,15 @@
 import { createMemo, For, Show } from "solid-js";
 import { highlightCode } from "../highlight";
-import { brief } from "../hoverText";
+import { brief, inline } from "../hoverText";
 import { popover, toolNameFor } from "../intel";
 import { CodeLine } from "./Code";
 
-/** Prose with the little markdown a doc comment uses: `code`, **strong**,
- *  and [links](…) shown by their text (they point at files on this
- *  machine, not pages). Text stays text. */
+/** Prose from a hover, its little markdown as elements (hoverText.inline).
+ *  Text stays text. */
 function Prose(props: { text: string }) {
-  const parts = () => props.text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").split(/(`[^`]+`|\*\*[^*]+\*\*)/);
   return (
     <p class="hint-text">
-      <For each={parts()}>
-        {(p) =>
-          p.startsWith("`") && p.endsWith("`") && p.length > 1 ? <code>{p.slice(1, -1)}</code> : p.startsWith("**") && p.endsWith("**") && p.length > 4 ? <strong>{p.slice(2, -2)}</strong> : p.replace(/^\*(@\w+)\*/, "$1")
-        }
-      </For>
+      <For each={inline(props.text)}>{(p) => ("code" in p ? <code>{p.code}</code> : "strong" in p ? <strong>{p.strong}</strong> : p.text)}</For>
     </p>
   );
 }
@@ -41,7 +35,9 @@ export function Popover() {
                   <>
                   <For each={brief(md()).blocks}>
                     {(b) =>
-                      "code" in b ? (
+                      "label" in b ? (
+                        <p class="hint-label">{b.label}</p>
+                      ) : "code" in b ? (
                         <pre class="hint-code">
                           <For each={highlightCode(b.code, b.lang)}>
                             {(line) => (

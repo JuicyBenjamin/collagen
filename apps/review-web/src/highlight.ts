@@ -6,6 +6,7 @@ import { js } from "@tanstack/highlight/languages/js";
 import { json } from "@tanstack/highlight/languages/json";
 import { jsx } from "@tanstack/highlight/languages/jsx";
 import { markdown } from "@tanstack/highlight/languages/markdown";
+import { php } from "@tanstack/highlight/languages/php";
 import { python } from "@tanstack/highlight/languages/python";
 import { shell } from "@tanstack/highlight/languages/shell";
 import { sql } from "@tanstack/highlight/languages/sql";
@@ -20,13 +21,14 @@ import type { Hunk } from "./data";
 // sets HTML. Only the languages a code review usually meets are registered;
 // anything else is plain text, still a readable diff.
 
-const highlighter = createHighlighter({ languages: [css, go, html, js, json, jsx, markdown, python, shell, sql, toml, ts, tsx, yaml] });
+const highlighter = createHighlighter({ languages: [css, go, html, js, json, jsx, markdown, php, python, shell, sql, toml, ts, tsx, yaml] });
 
 const BY_EXT: Record<string, string> = {
   ts: "ts", mts: "ts", cts: "ts", tsx: "tsx",
   js: "js", mjs: "js", cjs: "js", jsx: "jsx",
   json: "json", css: "css", html: "html", htm: "html",
   md: "markdown", markdown: "markdown",
+  php: "php", phtml: "php",
   py: "python", go: "go", sh: "shell", bash: "shell", zsh: "shell",
   sql: "sql", toml: "toml", yml: "yaml", yaml: "yaml",
 };

@@ -114,7 +114,7 @@ export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek> } | { reado
 
 /** The languages the review page can ask a language server about, each
  *  answered by a tool collagen installs on the reader's click. */
-export type ToolId = "typescript";
+export type ToolId = "typescript" | "php";
 
 /** Which tool answers for a file, by its extension — one table, read by the
  *  instance (which files it may be asked about) and the page (which words
@@ -122,6 +122,7 @@ export type ToolId = "typescript";
 const TOOL_OF_EXTENSION: Readonly<Record<string, ToolId>> = {
   ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
   js: "typescript", jsx: "typescript", mjs: "typescript", cjs: "typescript",
+  php: "php", phtml: "php",
 };
 export const toolOf = (file: string): ToolId | null => TOOL_OF_EXTENSION[file.split(".").pop()?.toLowerCase() ?? ""] ?? null;
 export const toolIds = (): ReadonlyArray<ToolId> => [...new Set(Object.values(TOOL_OF_EXTENSION))];
@@ -129,10 +130,13 @@ export const toolIds = (): ReadonlyArray<ToolId> => [...new Set(Object.values(TO
 /** GET/POST /review-tools/<tool> — a pinned language server the hints need:
  *  not installed yet, being installed, or ready; POST (from the page, with
  *  x-collagen: install) installs it. What the offer says comes with it: the
- *  tool's name, its size, and its licence where that is not open source.
+ *  language, the tool's name, its size, and its licence where that is not
+ *  open source.
  *  `notices` are messages the server itself asked to show the person. */
 export interface ToolState {
   readonly tool: ToolId;
+  /** the language it answers for ("PHP") and the tool itself ("Intelephense") */
+  readonly language: string;
   readonly name: string;
   readonly state: "missing" | "installing" | "ready";
   readonly version: string;
