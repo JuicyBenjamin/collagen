@@ -94,6 +94,8 @@ export interface Peek {
   readonly file: string;
   readonly where: "branch" | "package" | "typescript";
   readonly line: number;
+  /** the doc comment above it, as text (markers stripped), whole or null */
+  readonly doc: string | null;
   readonly code: string | null;
   readonly more: number;
 }
