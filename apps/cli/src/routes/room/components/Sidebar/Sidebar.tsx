@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import type { RoomSummary } from "../../../../services/Rooms";
 import { Focusable } from "../../../../components/Focusable";
 import { isEnter, isSpace } from "../../../../components/keys";

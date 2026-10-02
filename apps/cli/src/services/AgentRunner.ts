@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { Context, Effect, Layer, Option, Ref, Semaphore, Stream, SynchronizedRef } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { mcpServerName } from "./mcpAddress";
 import { Adapters, nudgePrompt, type Adapter, type SpawnCtx } from "./Adapters";
 import { CliArgs } from "./CliArgs";

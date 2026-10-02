@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import type { Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
 import { isEnter } from "../../../../../components/keys";

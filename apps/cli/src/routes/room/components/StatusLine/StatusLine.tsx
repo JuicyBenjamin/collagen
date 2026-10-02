@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { theme } from "../../../../app/theme";
 import { myNameAtom } from "../../../atoms";
 import { aiStatusAtom, appUpdateAtom, stateAtom } from "../../atoms";

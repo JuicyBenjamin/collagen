@@ -1,4 +1,4 @@
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 
 // Keyboard focus for a TUI: exactly one Focusable is hovered at a time, and
 // arrow keys move between Focusables by WHERE THEY ARE ON SCREEN — the layout

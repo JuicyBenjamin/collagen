@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { nameOption, profileOption, roomOption, stripArgSeparator } from "./config/args";
 import { AppLayer } from "./services/AppLayer";

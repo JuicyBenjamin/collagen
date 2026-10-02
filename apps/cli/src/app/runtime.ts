@@ -1,4 +1,4 @@
-import { Atom } from "effect/unstable/reactivity";
+import { Atom } from "effect/reactivity";
 import { Layer, Option } from "effect";
 import { AppLayer } from "../services/AppLayer";
 import { cliArgsLayer } from "../services/CliArgs";

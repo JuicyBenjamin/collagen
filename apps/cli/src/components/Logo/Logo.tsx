@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { fonts } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { theme } from "../../app/theme";
 import { VERSION } from "../../app/version";
 import { logoFrame } from "../../lib/logoFrame";

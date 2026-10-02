@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { basename } from "node:path";
 import { Focusable } from "../../../components/Focusable";
 import { captureAtom, focusAtom } from "../../../components/focus";
