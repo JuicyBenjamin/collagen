@@ -12,11 +12,15 @@ export const TITLE_MAX = 60;
 /** A review's summary heads its page: a sentence or two, no more. */
 export const SUMMARY_MAX = 200;
 
+/** A break, or any other control character: a headline is one line. */
+const LINE_BREAK = /[\u0000-\u001f\u007f\u2028\u2029]/;
+
 /** Why a ticket's title cannot stand, or null: it is the headline the
  *  lists show — a few words, what the ticket is for — and the goal is the
  *  line beneath it. */
 export const ticketTitleGap = (title: string | undefined): string | null => {
   const t = title?.trim() ?? "";
+  if (LINE_BREAK.test(t)) return `failed: the title runs over more than one line — a headline is one line (each break would take a row of the list); put the rest in the goal, beneath it`;
   if (t.length === 0) return `failed: pass a 'title' — the ticket's headline, a few words (${TITLE_MAX} characters at most) saying what it is for; the lists show it, and the goal is the line beneath it`;
   if (t.length > TITLE_MAX) return `failed: the title is ${t.length} characters ("${t.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most; the detail belongs in the goal, beneath it`;
   return null;
@@ -107,6 +111,7 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
     if (blank(d.title)) {
       return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'title'. Every decision needs one: its headline, a few words (${TITLE_MAX} characters at most) saying what it is for — the reader sees it before anything else, so it has to say the purpose at a glance. 'what' stays the one line beneath it.`;
     }
+    if (LINE_BREAK.test(d.title.trim())) return `failed: ${at}'s title runs over more than one line — a headline is one line; the rest belongs in 'what', beneath it`;
     if (d.title.trim().length > TITLE_MAX) {
       return `failed: ${at}'s title is ${d.title.trim().length} characters ("${d.title.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most: what the decision is for, not how. The detail belongs in 'what', beneath it.`;
     }

@@ -202,4 +202,22 @@ describe("a ticket's title", () => {
     expect(ticketName(v2)).toBe("Paged export");
     expect(ticketName({ goal: "an old one" })).toBe("an old one");
   });
+
+  it("merges the same however copies are grouped, on a tie of the author's clock too", () => {
+    const a = ticket({ id: "t1", goal: "a", title: "A", structureAt: 1 });
+    const b = ticket({ id: "t1", goal: "b", structureAt: 1 });
+    const c = ticket({ id: "t1", goal: "a", title: "B", structureAt: 1 });
+    const d = ticket({ id: "t1", goal: "c", title: "C", structureAt: 2 });
+    const head = (t: ReturnType<typeof ticket>) => [t.goal, t.title ?? null];
+    for (const set of [[a, b, c], [a, b, d], [b, c, d]]) {
+      const [x, y, z] = set as [typeof a, typeof a, typeof a];
+      const want = head(mergeTicket(mergeTicket(x, y), z));
+      for (const [p, q, r] of [[x, y, z], [x, z, y], [y, x, z], [y, z, x], [z, x, y], [z, y, x]] as const) {
+        expect(head(mergeTicket(mergeTicket(p, q), r))).toEqual(want);
+        expect(head(mergeTicket(p, mergeTicket(q, r)))).toEqual(want);
+      }
+    }
+    // a titled revision is never lost to an untitled one of the same clock
+    expect(mergeTicket(b, a).title).toBe("A");
+  });
 });

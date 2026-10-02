@@ -69,9 +69,9 @@ if [ "$HAVE_PYTE" = yes ]; then
   # name, and that the row explains its own symbols
   # bob is a mock whose ack re-settles his step, so WHICH mark is on screen at
   # this frame is a race (unit tests pin the mapping); the screen proves shape
-  expect "the row carries a mark for what was said — not a name" "$SCREEN" "review feat/opening-animation .{1,3} (↻|✓)"
-  expect "…nobody is named on the row: who said it is the ticket page's job" "$(echo "$SCREEN" | grep -cE 'opening-animation.*(bob|you)')" "^0$"
-  expect "…and the row is marked as alice's to act on" "$SCREEN" "▸ review   review feat/opening-animation"
+  expect "the row carries a mark for what was said — not a name" "$SCREEN" "The logo glides into place( · | +)(↻|✓)"
+  expect "…nobody is named on the row: who said it is the ticket page's job" "$(echo "$SCREEN" | grep -cE 'glides into place.*(bob|you)')" "^0$"
+  expect "…and the row is marked as alice's to act on" "$SCREEN" "▸ .{0,6}you +The logo glides into place"
   expect "the legend under the list spells the symbols out, whole" "$SCREEN" "✓ no changes .{1,6} ↻ changes asked .{1,6} ✕ failed"
   expect "…and it fits its row: nothing elided in the middle" "$(echo "$SCREEN" | grep -c '\.\.\.')" "^0$"
 else
