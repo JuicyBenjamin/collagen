@@ -194,7 +194,18 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     const mine = steps.get(s.id);
     steps.set(s.id, mine ? mergeStep(mine, s) : s);
   }
-  const author = incoming.structureAt !== local.structureAt ? (incoming.structureAt > local.structureAt ? incoming : local) : structureTiebreak(local, incoming);
+  // on an exact tie of the author's clock, a titled revision before an
+  // untitled one (a copy without a title never takes it away), then the
+  // tiebreak: one order over whole revisions, so the merge stays associative
+  // — borrowing a title from the other copy would make a revision nobody wrote
+  const author =
+    incoming.structureAt !== local.structureAt
+      ? incoming.structureAt > local.structureAt
+        ? incoming
+        : local
+      : (local.title === undefined) !== (incoming.title === undefined)
+        ? (local.title !== undefined ? local : incoming)
+        : structureTiebreak(local, incoming);
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
   const { from: _lf, after: _la, whenClosed: _lw, partOf: _lp, turns: _lt, order: _lo, ...rest } = local;
