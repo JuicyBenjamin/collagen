@@ -64,6 +64,7 @@
     "hyperswarm": "^4.17.0",
     "protomux": "^3.11.0",
     "react": "catalog:",
+    "string-width": "^8.2.2",
     "uuid": "^14.0.2"
   },
   "devDependencies": {

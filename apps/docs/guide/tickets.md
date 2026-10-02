@@ -420,7 +420,7 @@ epic is a block of its own above the projects, a blank line around it: one **pur
 tickets in its order. There are no headings in an epic; the glyphs say the kinds. Glyphs,
 names and titles sit on the same columns on every row, and an excluded ticket says so.
 What was said on a ticket and the epic's progress share one column, just past the longest
-title. `space` folds them away — the row then says, after its title, how many are folded
+title; in a narrow pane the titles keep their room first and the column is cut at its end. `space` folds them away — the row then says, after its title, how many are folded
 and how many of those are yours — and back.
 `enter` opens the epic's page: its aim, every ticket in it, whether it can close, and each
 close and reopen with who said so and why.
