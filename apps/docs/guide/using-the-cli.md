@@ -93,10 +93,20 @@ what's natural there. Number keys work from anywhere.
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
 | `g` | Cycle your [steering](./conversations#steering-how-much-your-agent-does-on-its-own): ask first → act, then tell → just do it |
 | `c` | Copy the room's invite id |
-| `s` | Settings (your name, the room's shared name) |
+| `s` | Settings: your name, the room's shared name, and your switches (`space` flips one) |
 | `u` | Install the newer collagen the status line announces, then restart into it |
 | `esc` | Back to the tab bar |
 | `q` | Quit |
+
+### Switches
+
+The settings page (`s`) ends with your switches, each on or off, applied the moment you
+flip one. Your agent can list and set them for you too (`set-settings`) — say you find one
+in the way.
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| Open the review page when a review starts | on | When your agent starts reading a review it was asked for (its first `review-context`), the review's page opens in your browser — once per run, and not on your own reviews. Off: it opens when you press `o` or ask your agent. |
 
 ## Your agent's side
 
@@ -106,9 +116,9 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | --- | --- |
 | Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room` |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
-| Tickets | `create-ticket`, `settle-step`, `get-tickets`, `ask-review` — a review with the why behind the change |
+| Tickets | `create-ticket`, `settle-step`, `get-tickets`, `ask-review` — a review with the why behind the change; `open-review` — a review's page in your browser, as `o` does |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks |
-| Settings | `add-project`, `remove-project`, `set-ai`, `set-name` |
+| Settings | `add-project`, `remove-project`, `set-ai`, `set-steering`, `set-name`, `set-settings` — your switches, listed or set |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 
 You use it by just asking your agent, e.g. *"check who's in my collagen room and ask

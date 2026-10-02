@@ -69,11 +69,24 @@ expect "…and not the others" "$(echo "$ABOUT" | grep -c 'make it look cool')" 
 expect "…it says how much of the review that was" "$ABOUT" "1 of 2 decisions, 0 of 1 forks"
 expect "asking about something the why never mentions says so" "$(call $B "$SB" review-context "{\"ticketId\":\"$TICKET\",\"about\":\"the database\"}")" "nothing in the why mentions .{1,3}the database"
 
+echo "## the page opens when a reader starts on the review — once, and only if they want it"
+opened() { cat "$OUT/$1.opened" 2>/dev/null | grep -c "/review/$TICKET" ; }
+expect "bob starting on the review opened its page in his browser" "$WHY" "review page opened: http://127.0.0.1:[0-9]+/review/$TICKET"
+expect "…once: reading the why again does not hand it to him again" "$(opened bob)" "^1$"
+expect "alice's own reads of her review open nothing" "$(call $A "$SA" review-context "{\"ticketId\":\"$TICKET\"}" | grep -c 'review page')" "^0$"
+expect "the switches, listed: on unless switched off" "$(call $B "$SB" set-settings '{}')" "openReviewPage: on \(default\)"
+expect "open-review opens it when asked, whatever the switch" "$(call $B "$SB" open-review "{\"ticketId\":\"$TICKET\"}")" "review page opened"
+expect "…that is a second url handed to the browser" "$(opened bob)" "^2$"
+expect "carol's agent switches it off for her" "$(call $C "$SC" set-settings '{"openReviewPage":false}')" "openReviewPage: off"
+expect "…so her starting on the review opens nothing" "$(call $C "$SC" review-context "{\"ticketId\":\"$TICKET\"}" | grep -c 'review page')" "^0$"
+expect "…and nothing was handed to a browser" "$(opened carol)" "^0$"
+
 echo "## a plain ticket has no why to read"
 OTHER=$(call $A "$SA" create-ticket '{"goal":"why does the render flicker","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"look at the frame"}]}')
 OID=$(echo "$OTHER" | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 wait_until "bob sees the plain ticket too" "flicker" goals $B "$SB"
 expect "review-context says a task carries no why" "$(call $B "$SB" review-context "{\"ticketId\":\"$OID\"}")" "is a task, not a review, plan or proposal"
+expect "open-review on a task: refused, only a review has a page" "$(call $B "$SB" open-review "{\"ticketId\":\"$OID\"}")" "is a task, not a review"
 
 echo "## the why grows as the work does — and only its author writes it"
 AMEND_BOB="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"what\":\"bob's own idea\",\"agentWhy\":\"mine\"}]}"

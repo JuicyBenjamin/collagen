@@ -39,6 +39,15 @@ describe("reading the user's state file", () => {
     expect(state.rooms["r1"]?.map((p) => p.name)).toEqual(["sandbox"]);
   });
 
+  it("unreadable switches go back to their defaults, the rest is kept", () => {
+    const kept = salvageState(JSON.stringify({ preferredAi: null, rooms: {}, settings: { openReviewPage: false } }));
+    expect(kept.state.settings).toEqual({ openReviewPage: false });
+    const { state, dropped } = salvageState(JSON.stringify({ preferredAi: "codex", rooms, settings: { openReviewPage: "sometimes" } }));
+    expect(dropped).toEqual(["unreadable settings (back to their defaults)"]);
+    expect(state.settings).toBeUndefined();
+    expect(state.preferredAi).toBe("codex");
+  });
+
   it("junk is junk: a fresh state, and it says so", () => {
     expect(salvageState("not json").dropped[0]).toMatch(/not readable JSON/);
     expect(salvageState("[]").dropped[0]).toMatch(/not a state file/);

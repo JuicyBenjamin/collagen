@@ -1,5 +1,10 @@
+import { execFile } from "node:child_process";
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
+import { focusTab } from "../lib/focusTab";
+import { settingOf } from "../lib/settings";
+import { McpInfo } from "./McpInfo";
+import { StateStore } from "./StateStore";
 import { Rooms } from "./Rooms";
 import { commitOf, localHost, reviewTree, ticketIdOk } from "./ReviewView";
 
@@ -8,12 +13,48 @@ import { commitOf, localHost, reviewTree, ticketIdOk } from "./ReviewView";
 // review's why is revised (the author's agent amends it whenever the code
 // moves), when the ticket moves, or when the branch's commit in the
 // reader's clone changes — and the page reloads its data in place. The same
-// streams tell the instance which reviews have a page open, so `o` can
-// bring that tab forward instead of opening another.
+// streams tell the instance which reviews have a page open, so `o` (and
+// the agent's open-review) can bring that tab forward instead of opening
+// another.
+
+/** The browser's own opener for this platform — or COLLAGEN_OPENER, a
+ *  program handed the url instead (a browser of the person's choosing, or a
+ *  test that must never open one). */
+const opener = (url: string): readonly [string, ReadonlyArray<string>] =>
+  process.env.COLLAGEN_OPENER
+    ? [process.env.COLLAGEN_OPENER, [url]]
+    : process.platform === "darwin"
+      ? ["open", [url]]
+      : process.platform === "win32"
+        ? ["cmd", ["/c", "start", "", url]]
+        : ["xdg-open", [url]];
 
 export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages", {
-  make: Effect.sync(() => {
+  make: Effect.gen(function* () {
+    const mcp = yield* McpInfo;
+    const store = yield* StateStore;
     const open = new Map<string, number>();
+    // reviews whose page this process opened on its own: once each, so a
+    // reader who closed it is not handed it again on every read of the why
+    const started = new Set<string>();
+    const isOpen = (id: string): boolean => (open.get(id) ?? 0) > 0;
+
+    /** Open a review's page — the diff read by intent — in the person's
+     *  browser: an open one brought forward where the platform allows,
+     *  otherwise a new tab (marked to take over from an open one, which
+     *  hands it the reader's place). Says what happened, url included, for a
+     *  machine with no browser to open. */
+    const show = Effect.fn("ReviewPages.show")(function* (ticketId: string) {
+      const url = `${(yield* mcp.awaitUrl).replace(/\/mcp$/, "")}/review/${encodeURIComponent(ticketId)}`;
+      const already = isOpen(ticketId);
+      if (already && !process.env.COLLAGEN_OPENER && (yield* Effect.promise(() => focusTab(url)))) return `review page brought forward: ${url}`;
+      const [cmd, args] = opener(already ? `${url}?take` : url);
+      const ok = yield* Effect.callback<boolean>((resume) => {
+        execFile(cmd, [...args], (err) => resume(Effect.succeed(err === null)));
+      });
+      return ok ? `review page opened: ${url}` : `review page: ${url} (could not open a browser — paste it into one)`;
+    });
+
     return {
       opened: (id: string) => open.set(id, (open.get(id) ?? 0) + 1),
       closed: (id: string) => {
@@ -22,7 +63,16 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
         else open.delete(id);
       },
       /** Is a page for this review open in a browser right now? */
-      isOpen: (id: string): boolean => (open.get(id) ?? 0) > 0,
+      isOpen,
+      show,
+      /** The person's agent has started on a review: its page opens, unless
+       *  they switched that off, it is open already, or it opened once
+       *  before in this run. Null when nothing was opened. */
+      started: Effect.fn("ReviewPages.started")(function* (ticketId: string) {
+        if (!settingOf(yield* store.get, "openReviewPage") || started.has(ticketId) || isOpen(ticketId)) return null;
+        started.add(ticketId);
+        return yield* show(ticketId);
+      }),
     } as const;
   }),
 }) {
