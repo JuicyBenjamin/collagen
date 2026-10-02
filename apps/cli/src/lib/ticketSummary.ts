@@ -61,6 +61,9 @@ export const epicProgress = (epic: Ticket, all: ReadonlyMap<string, Ticket>): Ep
 };
 
 /** "2 of 3 done" — an epic's row and page. */
+/** The same, for a row with no room to spare: "2/3". */
+export const progressShort = (p: EpicProgress): string => (p.parts === 0 ? "empty" : `${p.done}/${p.parts}`);
+
 export const progressLabel = (p: EpicProgress): string => (p.parts === 0 ? "no parts yet" : p.done === p.parts ? `all ${p.parts} done` : `${p.done} of ${p.parts} done`);
 
 export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string, held: ReadonlyArray<string> = [], all?: ReadonlyMap<string, Ticket>): TicketSummary {

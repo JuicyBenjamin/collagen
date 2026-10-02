@@ -1,3 +1,5 @@
+import type { TicketKind } from "@collagen/p2p";
+
 /** The marks the lists use, in one place, so the same thing never means two
  *  things on two screens. A glyph says what a person DID — not whether the
  *  app is pleased about it: a review asking for changes is a complete,
@@ -42,7 +44,19 @@ export const STACK_HELP: Record<keyof typeof STACK, string> = {
 /** An epic's row: a crown — a folder of work above the tickets in it. */
 export const EPIC_MARK = "♛";
 
-export const EPIC_HELP = "an epic: its tickets are listed under it, each with its project — space folds them away (a ▸ on it means one of them is yours now)";
+export const EPIC_HELP = "an epic: its tickets are listed under it, on a tree, each with its kind's glyph (ticket kinds, above) and its project — space folds them away (a ▸ on it means one of them is yours now)";
+
+/** A ticket's kind, on every row of the list: under a kind heading the
+ *  reader learns what each means, and inside an epic — which has no headings
+ *  — the glyph says it. Each hints at its kind: an idea, a list of steps, a
+ *  flag raised, a diff, a box to tick. An epic's is its crown. */
+export const KIND_GLYPH: Record<Exclude<TicketKind, "epic">, string> = {
+  proposal: "✦",
+  plan: "☰",
+  bug: "⚑",
+  review: "±",
+  task: "☐",
+};
 
 /** For the hint line: every glyph on screen, in the order a reader meets
  *  them. It shares one row with the section's own keys, so it is terse on

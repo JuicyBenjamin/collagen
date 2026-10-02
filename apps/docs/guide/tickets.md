@@ -412,13 +412,16 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
   offer one in a line when a filing suggests it — a parent's epic, or several related
   tickets filed together.
 
-On the overview an open epic is a block of its own above the projects, a blank line around
-it: one **purple** row — `♛` on the column the kind headings start on, its title and how
-far along it is ("1 of 3 done") — and under it, on the lines of a tree (`├`, `└`), in their
-own colours, its tickets in its order, names and titles on the same columns as every other
-row, each saying its kind, an excluded one marked, and `├▸` on one that is yours now.
-`space` folds them away — the row then says how many are folded, and how many of those are
-yours — and back.
+On the overview every ticket's row carries its kind's glyph — `✦` proposal, `☰` plan,
+`⚑` bug, `±` review, `☐` task (on `?` too) — so the headings above teach them. An open
+epic is a block of its own above the projects, a blank line around it: one **purple** row
+— `♛` on the column the kind headings start on, its title and how far along it is (`1/3`)
+— and under it, on a tree (`├`, `└`) dropping from the first letter of its title, its
+tickets in its order. There are no headings in an epic; the glyphs say the kinds. Glyphs,
+names and titles sit on the same columns on every row, and an excluded ticket says so.
+What was said on a ticket and the epic's progress share one column, just past the longest
+title. `space` folds them away — the row then says, after its title, how many are folded
+and how many of those are yours — and back.
 `enter` opens the epic's page: its aim, every ticket in it, whether it can close, and each
 close and reopen with who said so and why.
 
