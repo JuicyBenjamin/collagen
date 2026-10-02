@@ -7,6 +7,7 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
+import { cells, clip, fitColumns } from "../../../../../lib/columns";
 import { EPIC_MARK, GLYPH, KIND_GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
 import { epicProgress, marksLabel, progressShort, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
@@ -42,6 +43,8 @@ export function Tickets() {
   const [cursor, setCursor] = useState(0);
   // an epic shows its tickets until someone folds it, for this session
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  // the list's own width, once drawn: the columns are sized to it
+  const [pane, setPane] = useState<number | undefined>(undefined);
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
@@ -70,7 +73,7 @@ export function Tickets() {
   const width = leadWidth([
     ...epics.flatMap((e) => [
       // an epic's title starts a name's width before the rows' titles
-      " ".repeat(Math.max(0, rowTitle(e.epic.t).length + partsWidth(foldedParts(e, unfolded.has(e.epic.t.id))) + 3 * foldedParts(e, unfolded.has(e.epic.t.id)).length - KIND - NAME)),
+      " ".repeat(Math.max(0, cells(rowTitle(e.epic.t)) + partsWidth(foldedParts(e, unfolded.has(e.epic.t.id))) + 3 * foldedParts(e, unfolded.has(e.epic.t.id)).length - KIND - NAME)),
       ...(unfolded.has(e.epic.t.id) ? e.rows.map((r) => leadOf(r.t, 0, projects.size > 1 ? r.t.project : undefined)) : []),
     ]),
     ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => leadOf(r.t, k.depth.get(r.t.id) ?? 0, undefined)))),
@@ -79,11 +82,15 @@ export function Tickets() {
   const infoWidth = Math.max(
     0,
     ...epics.flatMap((e) => [
-      progressShort(epicProgress(e.epic.t, byId)).length,
+      cells(progressShort(epicProgress(e.epic.t, byId))),
       ...(unfolded.has(e.epic.t.id) ? e.rows.map((r) => partsWidth(rowInfo(r.s, undefined, nameOf, excludedFromEpic(r.t)))) : []),
     ]),
     ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(rowInfo(r.s, k.parent.get(r.t.id), nameOf, undefined))))),
   );
+  // both bounded by the pane, as it is drawn: the titles first, the info in
+  // what is left (lib/columns), truncated inside it
+  const indent = groups.length > 1 ? 4 : 2;
+  const { lead: leadCol, info: infoCol } = fitColumns({ lead: width, info: infoWidth }, pane === undefined ? undefined : pane - (indent - 2 + HEAD + NAME) - GAP);
   const index = new Map(shown.map((r, i) => [r.t.id, i]));
 
   const last = Math.max(0, shown.length - 1);
@@ -130,16 +137,22 @@ export function Tickets() {
               {"  "}none
             </text>
           ) : (
-            <>
+            <box
+              flexDirection="column"
+              flexShrink={0}
+              onSizeChange={function (this: { width: number }) {
+                setPane(this.width);
+              }}
+            >
             {epics.map((e) => (
               <EpicView
                 key={e.epic.t.id}
                 block={e}
                 open={unfolded.has(e.epic.t.id)}
                 first={epics[0] === e}
-                indent={groups.length > 1 ? 4 : 2}
-                width={width}
-                infoWidth={infoWidth}
+                indent={indent}
+                width={leadCol}
+                infoWidth={infoCol}
                 selectedId={focused ? current?.t.id : undefined}
                 progress={progressShort(epicProgress(e.epic.t, byId))}
                 nameFor={nameFor}
@@ -168,19 +181,19 @@ export function Tickets() {
                         summary={r.s}
                         selected={focused && index.get(r.t.id) === sel}
                         nameFor={nameFor}
-                        indent={groups.length > 1 ? 4 : 2}
+                        indent={indent}
                         depth={k.depth.get(r.t.id) ?? 0}
                         under={k.parent.get(r.t.id)}
                         goalOf={nameOf}
-                        width={width}
-                        infoWidth={infoWidth}
+                        width={leadCol}
+                        infoWidth={infoCol}
                       />
                     ))}
                   </box>
                 ))}
               </box>
             ))}
-            </>
+            </box>
           )}
           {unknownTickets.map((u) => (
             <text key={u.key} fg={theme.dim} truncate wrapMode="none">
@@ -279,6 +292,15 @@ function EpicView({
   );
 }
 
+/** Before the name, on every row: the cursor, the ▸, the tree, the glyph —
+ *  two columns each. */
+const HEAD = 8;
+/** The most a waiting row spends naming what it waits on. */
+const AFTER_MAX = 24;
+
+/** Between the title and the info column. */
+const GAP = 2;
+
 /** The name column: eight letters and a space. */
 const NAME = 9;
 /** Between the tree's column and the name: the kind's glyph and a space each side. */
@@ -291,11 +313,11 @@ const leadOf = (t: Ticket, depth: number, project: string | undefined): string =
 
 /** The columns a list's lead takes: the longest one shown (a title is 60 at
  *  most), so the info column sits just past it on every row. */
-const leadWidth = (leads: ReadonlyArray<string>): number => Math.max(0, ...leads.map((l) => l.length));
+const leadWidth = (leads: ReadonlyArray<string>): number => Math.max(0, ...leads.map(cells));
 
 /** What follows a row's title, in the info column. */
 type Part = { readonly text: string; readonly warn?: boolean };
-const partsWidth = (parts: ReadonlyArray<Part>): number => parts.reduce((n, p, i) => n + p.text.length + (i > 0 ? 3 : 0), 0);
+const partsWidth = (parts: ReadonlyArray<Part>): number => parts.reduce((n, p, i) => n + cells(p.text) + (i > 0 ? 3 : 0), 0);
 
 /** A ticket's info: out of its epic's progress, what holds it, what was said on it. */
 const rowInfo = (
@@ -307,7 +329,7 @@ const rowInfo = (
   // waiting on the row it is drawn under says so in one word; waiting on one
   // elsewhere (another group, or a second of two) names it
   const elsewhere = s.held.filter((id) => id !== under);
-  const on = elsewhere.length > 0 ? (goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8)) : "";
+  const on = elsewhere.length > 0 ? clip(goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8), AFTER_MAX) : "";
   const people = marksLabel(s);
   return [
     ...(excluded ? [{ text: "excluded" }] : []),
@@ -334,11 +356,20 @@ const foldedParts = (block: EpicBlock<Row>, open: boolean): ReadonlyArray<Part> 
  *  way the first time the column changed — on a fold, say.) */
 function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
   if (width === 0) return null;
+  // cut at the end, where the reader stops, not in the middle: what comes
+  // first (the kind of hold, the first mark) is what has to show
+  const fitted: Array<Part> = [];
+  let left = width;
+  for (const part of parts) {
+    const text = `${fitted.length > 0 ? " · " : ""}${part.text}`;
+    if (left <= 0) break;
+    fitted.push({ ...part, text: clip(text, left) });
+    left -= cells(text);
+  }
   return (
-    <text truncate wrapMode="none" flexBasis={width} flexShrink={0} marginLeft={2}>
-      {parts.map((part, i) => (
+    <text wrapMode="none" flexBasis={width} flexShrink={0} marginLeft={GAP}>
+      {fitted.map((part, i) => (
         <span key={i} fg={part.warn ? theme.warn : theme.dim}>
-          {i > 0 ? " · " : ""}
           {part.text}
         </span>
       ))}

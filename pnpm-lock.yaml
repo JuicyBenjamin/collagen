@@ -122,6 +122,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.8
+      string-width:
+        specifier: ^8.2.2
+        version: 8.2.2
       uuid:
         specifier: ^14.0.2
         version: 14.0.2
