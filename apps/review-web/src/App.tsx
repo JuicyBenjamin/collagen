@@ -3,6 +3,8 @@ import type { Decision, Fork as ForkData, Hunk as HunkData, ReviewPageData, Sect
 import { Fork } from "./components/Fork";
 import { Hunk } from "./components/Hunk";
 import { Popover } from "./components/Popover";
+import { TypesBanner } from "./components/TypesBanner";
+import { typed } from "./highlight";
 import { ticketId } from "./ticket";
 
 // The review page: a review ticket's diff read by intent. One section per
@@ -97,6 +99,9 @@ function Page(props: { data: ReviewPageData }) {
 
       <main>
         <Header data={props.data} />
+        <Show when={(props.data.grouped?.hunks ?? []).some((h) => typed(h.file))}>
+          <TypesBanner />
+        </Show>
         <For each={sections()}>
           {(s) => <DecisionSection section={s} hunks={hunks()} claimedBy={claimedBy()} diffed={props.data.grouped !== null} />}
         </For>

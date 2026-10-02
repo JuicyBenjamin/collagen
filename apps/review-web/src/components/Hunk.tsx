@@ -1,7 +1,7 @@
 import { createMemo, For, Show } from "solid-js";
 import type { Decision, DiffLine, Hunk as HunkData } from "../data";
 import { highlightHunk, typed } from "../highlight";
-import { markWord, peek, peekAt, pointAt, wordAt, wordEnd, type Spot } from "../intel";
+import { markWord, peek, peekAt, pointAt, typesReady, wordAt, wordEnd, type Spot } from "../intel";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
 
@@ -23,7 +23,7 @@ function charAt(x: number, y: number): { readonly col: number; readonly node: No
  *  to peek where it is declared (removed lines are the base's, not asked). */
 export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision> }) {
   const spans = createMemo(() => highlightHunk(props.hunk));
-  const asks = () => typed(props.hunk.file);
+  const asks = () => typesReady() && typed(props.hunk.file);
 
   /** The word under the pointer on this line, as a spot in the branch, and
    *  the range of text it covers (to mark it). */

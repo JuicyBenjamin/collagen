@@ -135,3 +135,9 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 .peek-toggle:hover { text-decoration: underline; }
 .peek-toggle:disabled { color: var(--faint); cursor: default; text-decoration: none; }
 .peek-rest { display: block; margin-top: 12px; }
+
+.banner { display: flex; align-items: center; gap: 12px; margin-top: 20px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--dim); font-size: 13.5px; }
+.banner span { flex: 1; }
+.banner-go { padding: 5px 12px; border: 0; border-radius: 6px; background: var(--accent); color: var(--bg); font: 600 13px -apple-system, sans-serif; cursor: pointer; }
+.banner-close { border: 0; background: none; color: var(--faint); font-size: 18px; line-height: 1; cursor: pointer; }
+.banner-close:hover { color: var(--fg); }
