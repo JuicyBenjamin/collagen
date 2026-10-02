@@ -7,7 +7,7 @@ import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { to, useRouter } from "../../../app/router";
 import { clamp } from "../../../lib/math";
-import { age, epicProgress, progressLabel, STATE_LABEL, type TicketSummary } from "../../../lib/ticketSummary";
+import { age, epicProgress, progressLabel, rowTitle, STATE_LABEL, type TicketSummary } from "../../../lib/ticketSummary";
 
 /** An epic, as a page: a folder, not a ticket with steps.
  *    header — its goal (purple, as on the list), how far along its parts
@@ -58,12 +58,18 @@ export function EpicPage({
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
       <text truncate wrapMode="none" flexShrink={0}>
-        <span fg={theme.epic}>{epic.goal}</span>
+        <span fg={theme.epic}>{rowTitle(epic)}</span>
         <span fg={theme.dim}>
           {"   "}
           {closed ? "closed" : progressLabel(progress)} · {age(epic.updatedAt, now)}
         </span>
       </text>
+      {epic.title && epic.goal !== epic.title ? (
+        <text fg={theme.fg} wrapMode="word" flexShrink={0}>
+          {"  "}
+          {epic.goal}
+        </text>
+      ) : null}
       <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
         {"  "}
         <span fg={theme.epic}>epic</span> — {KINDS.epic.what} · started by {nameFor(epic.createdBy)}
@@ -114,7 +120,7 @@ export function EpicPage({
                   {focused && i === s ? "› " : "  "}
                   <span fg={theme.dim}>{t.kind.padEnd(9)}</span>
                   <span fg={theme.dim}>{t.project} · </span>
-                  {t.goal}
+                  {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
                   <span fg={st.state === "needs-you" ? theme.warn : theme.dim}> · {STATE_LABEL[st.state]}</span>
                   {excluded ? <span fg={theme.dim}> · excluded from progress</span> : null}
                 </text>

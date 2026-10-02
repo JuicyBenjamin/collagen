@@ -32,7 +32,7 @@ TFILE="$TDIR/$SUBJECT/bob-$TID.codex.jsonl"
 wait_until "alice holds bob's conversation" "^1$" bash -c "ls '$TFILE' 2>/dev/null | wc -l | tr -d ' '"
 
 echo "## a ticket, and a screenshot on alice's disk"
-TICKET=$(call $A "$SA" create-ticket '{"goal":"why does the render flicker","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"look at the frame"}]}' | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
+TICKET=$(call $A "$SA" create-ticket '{"title":"why does the render flicker","goal":"why does the render flicker","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"look at the frame"}]}' | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 wait_until "bob sees the ticket" "flicker" goals $B "$SB"
 SHOT="$OUT/flicker shot.png"; python3 -c "import sys; sys.stdout.buffer.write(b'\x89PNG\r\n\x1a\n' + bytes(range(256)) * 40)" > "$SHOT"
 

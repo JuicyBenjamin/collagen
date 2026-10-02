@@ -3,9 +3,9 @@ import type { BoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { heldBy, KINDS, type Ticket } from "@collagen/p2p";
+import { heldBy, KINDS, ticketName, type Ticket } from "@collagen/p2p";
 import { diagnostics } from "../../../diagnostics";
-import { aboutTicket, age, marksLabel, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
+import { aboutTicket, age, marksLabel, rowTitle, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
 import { Focusable } from "../../../components/Focusable";
 import { focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
@@ -155,11 +155,16 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
       {/* header: the meta */}
       <text truncate wrapMode="none" flexShrink={0}>
         <span fg={glyphColor}>{glyph} </span>
-        <span fg={theme.fg}>{ticket.goal}</span>
+        <span fg={ticket.title ? theme.fg : theme.dim}>{rowTitle(ticket)}</span>
         <span fg={summary.state === "needs-you" ? theme.warn : theme.dim}>
           {"   "}{stateText}
         </span>
         <span fg={theme.dim}> · {age(summary.lastActivity, now)}</span>
+      </text>
+      {/* beneath the title, what the ticket is about, in full */}
+      <text fg={theme.fg} wrapMode="word" flexShrink={0}>
+        {"  "}
+        {ticket.goal}
       </text>
       <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
         {"  "}
@@ -177,7 +182,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
           shown to nobody but its author */}
       {ticket.after && ticket.after.length > 0 ? (
         <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
-          {"  "}after {ticket.after.map((id) => `"${byId.get(id)?.goal ?? id.slice(0, 8)}"`).join(", ")}
+          {"  "}after {ticket.after.map((id) => `"${byId.get(id) ? ticketName(byId.get(id)!) : id.slice(0, 8)}"`).join(", ")}
           {waitsOn.length > 0 ? <span fg={theme.warn}> · waiting: nobody else is shown it until {waitsOn.length === 1 ? "that is" : "those are"} answered</span> : null}
         </text>
       ) : null}

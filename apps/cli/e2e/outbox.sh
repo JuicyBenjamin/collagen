@@ -15,7 +15,7 @@ wait_until "bob has it" "^1$" grep -c '← alice \[sandbox/ask\]' "$OUT/bob.log"
 expect "and it is recorded as having gone" "$(grep -c '↗ message → bob · sandbox · ask' "$OUT/alice.log")" "^1$"
 
 echo "## a ticket, the same way"
-OUT2=$(call $A "$SA" create-ticket '{"goal":"explain average()","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"what does average() do"}]}')
+OUT2=$(call $A "$SA" create-ticket '{"title":"explain average()","goal":"explain average()","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"what does average() do"}]}')
 expect "create-ticket answers with the ticket itself" "$OUT2" "goal: explain average"
 wait_until "bob sees it in the room" "explain average" goals $B "$SB"
 expect "…and alice's outbox recorded it" "$(grep -c '↗ ticket → bob' "$OUT/alice.log")" "^1$"

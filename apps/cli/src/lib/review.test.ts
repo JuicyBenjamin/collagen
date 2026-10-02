@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewContext } from "@collagen/p2p";
-import { reviewGaps, reviewHeadline, reviewRows } from "./review";
+import { reviewGaps, reviewHeadline, reviewRows, ticketTitleGap } from "./review";
 
 const full = {
   summary: "the opening animation",
@@ -89,5 +89,14 @@ describe("reading a review back", () => {
     expect(byFile.review.matched).toBe("1 of 2 decisions, 0 of 1 forks");
     expect(reviewRows(record, "Timeline").forks.map((f) => f.id)).toEqual(["f1"]);
     expect(reviewRows(record, "look cool").decisions.map((d) => d.id)).toEqual(["d1"]);
+  });
+});
+
+describe("a ticket's title", () => {
+  it("is required, and a headline: a few words, 60 characters at most", () => {
+    expect(ticketTitleGap(undefined)).toMatch(/pass a 'title'/);
+    expect(ticketTitleGap("  ")).toMatch(/pass a 'title'/);
+    expect(ticketTitleGap("x".repeat(61))).toMatch(/title is 61 characters/);
+    expect(ticketTitleGap("Streamed export")).toBeNull();
   });
 });
