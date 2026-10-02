@@ -47,12 +47,17 @@ file), and where the diff came from is one line at the foot of the page.
 On TypeScript and JavaScript files the code answers to the pointer, on added and unchanged
 lines:
 
-- **rest on a word** and its type appears beside it — what a function takes and returns,
-  what a value is — with the first paragraph of its doc comment;
-- **click it** to peek where it is declared, opened right under the line: the declaration
-  itself (a function with its body, its doc comment above), coloured, with its file and
-  line. It works the same for the branch's own code and for a package's types, Effect's
-  or React's, read from your `node_modules`. `×`, Esc, or a second click folds it away.
+- a word you can ask about is underlined under the pointer, and the cursor says it can be
+  clicked;
+- **rest on it** and its type appears beside it — what a function takes and returns, what
+  a value is — with the first paragraph of its doc comment (an overloaded function shows
+  its first signature and how many more);
+- **click it** to peek where it is declared, opened right under the line: its file and
+  line, its doc comment as text (the first paragraph, "More" for the rest), then the
+  declaration itself, coloured — long ones fold after eighteen lines, and further overloads
+  or definitions fold under one line. It works the same for the branch's own code and for
+  a package's types, Effect's or Solid's, read from your `node_modules`. `×`, Esc, or a
+  second click closes it.
 
 The type checker is collagen's own: TypeScript 7 ships with the cli and runs as
 `tsc --lsp`, whatever version the project uses — or none. The project gives the code: the
