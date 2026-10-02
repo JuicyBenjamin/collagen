@@ -26,8 +26,8 @@ export const KINDS: Record<TicketKind, KindInfo> = {
   epic: {
     what: "a folder of tickets that together make one body of work",
     asks: "nothing of its own — its parts ask; anyone may add, move or take them out",
-    closes: "anyone — with a reason, by default that its parts are done; reopened with one",
-    agent: "a folder of tickets, shared by the room: only when your user asks, the epic tool adds, moves or removes parts and closes or reopens it, always with a reason; when your user files several related tickets together, offer to put them under one",
+    closes: "anyone — once everything in it is resolved; reopened with a reason",
+    agent: "a folder of tickets, shared by the room: only when your user asks, the epic tool adds, removes, excludes or orders its tickets and closes it (once everything in it is resolved) or reopens it with a reason; when a filing outcome says so, offer an epic in one line",
   },
   proposal: {
     what: "an idea, written down; owed to no one",

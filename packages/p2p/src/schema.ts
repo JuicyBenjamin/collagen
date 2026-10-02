@@ -375,6 +375,15 @@ export const Outgoing = Schema.Union([
     ticketIds: Schema.Array(Schema.String),
     epic: Schema.NullOr(Schema.String),
     goal: Schema.String,
+    /** kept in the epic but out of its progress (or, false, counted again) */
+    excluded: Schema.optional(Schema.Boolean),
+  }),
+  /** The order an epic's tickets are read in — anyone's to set; gates nothing. */
+  Schema.Struct({
+    kind: Schema.Literal("epic-order"),
+    epicId: Schema.String,
+    goal: Schema.String,
+    ticketIds: Schema.Array(Schema.String),
   }),
   /** An epic closed or reopened — anyone's to do, with its reason. */
   Schema.Struct({

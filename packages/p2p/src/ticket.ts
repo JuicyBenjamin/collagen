@@ -58,32 +58,50 @@ export type TicketKind = typeof TicketKind.Type;
 /** The kinds that ask for judgment and carry a why. */
 export const isJudged = (kind: TicketKind): boolean => kind !== "task" && kind !== "epic";
 
-/** A ticket put into an epic, or taken out of one (`epic: null`). Anyone in
- *  the room may move any ticket: an epic is shared structure, like a room's
- *  name. Every move is kept — the ticket carries them all, merged as a set —
- *  and the latest one is where it is now, so two people moving the same
- *  ticket at once end in the same place on every peer, and a ticket is in at
- *  most one epic. */
+/** A ticket put into an epic, or taken out of one (`epic: null`), or kept
+ *  in it but out of its progress (`excluded`) — work dropped, or not to be
+ *  done here. Anyone in the room may move any ticket: an epic is shared
+ *  structure, like a room's name. Every move is kept — the ticket carries
+ *  them all, merged as a set — and the latest is where it is now, so a
+ *  ticket is in at most one epic. Membership is explicit: lineage (`from`)
+ *  never puts a ticket anywhere. */
 export const PartMove = Schema.Struct({
+  /** Who and when, as one name: what a close records having seen. */
+  id: Schema.String,
   epic: Schema.NullOr(Schema.String),
+  excluded: Schema.optional(Schema.Boolean),
   /** Pubkey (hex) of who moved it. */
   by: Schema.String,
   at: Schema.Finite,
 });
 export type PartMove = typeof PartMove.Type;
 
-/** An epic closed, or reopened — by anyone in the room, and always with a
- *  reason on the record: why it is over ("its parts are done"), or why it is
- *  not ("more work found in the same area"). Kept like moves: all of them,
- *  the latest is the epic's state. An epic is never closed with `closed`,
- *  which sticks; it can be reopened. */
+/** An epic closed, or reopened — by anyone in the room, always with a
+ *  reason on the record. Each turn says what its writer had seen when they
+ *  made it: the turns before it (`knows`), and for a close the memberships
+ *  into the epic it knew of (`members`, move ids). That, not the clock, decides the
+ *  epic's state: a reopen, or a ticket put in, that a close had not seen
+ *  keeps the epic open; a close made after seeing them stands (`epicClosed`). */
 export const EpicTurn = Schema.Struct({
+  id: Schema.String,
   closed: Schema.Boolean,
   reason: Schema.String,
   by: Schema.String,
   at: Schema.Finite,
+  knows: Schema.Array(Schema.String),
+  members: Schema.optional(Schema.Array(Schema.String)),
 });
 export type EpicTurn = typeof EpicTurn.Type;
+
+/** The order an epic's tickets are read in (PHP before Rust) — for showing
+ *  and discussing them, nothing else: it hides nothing and sets no `after`.
+ *  Anyone's to set; the latest holds. */
+export const EpicOrder = Schema.Struct({
+  ids: Schema.Array(Schema.String),
+  by: Schema.String,
+  at: Schema.Finite,
+});
+export type EpicOrder = typeof EpicOrder.Type;
 
 /** A reader's answer step: "review" on a review, "take" on a plan, a
  *  proposal or a bug. Same mechanics, different word — you review code, you
@@ -134,11 +152,13 @@ export const Ticket = Schema.Struct({
    *  unknown ids, no self, no cycle (`afterProblem`), so a ticket cannot be
    *  left invisible forever. `[]` withdraws it. */
   after: Schema.optional(Schema.Array(Schema.String)),
-  /** Which epic this ticket is part of, as every move ever made — the latest
+  /** Which epic this ticket is in, as every move ever made — the latest
    *  holds (`epicOf`). Anyone's to change, so not the author's structure. */
   partOf: Schema.optional(Schema.Array(PartMove)),
-  /** An epic's closes and reopens — the latest is its state (`isClosed`). */
+  /** An epic's closes and reopens, each with what it had seen (`epicClosed`). */
   turns: Schema.optional(Schema.Array(EpicTurn)),
+  /** The order an epic's tickets are read in, every one set — the latest holds. */
+  order: Schema.optional(Schema.Array(EpicOrder)),
   /** The author's instruction for the moment the ticket is CLOSED — "open
    *  the Jira tickets for each step" — written when it was filed, handed to
    *  their agent in the close outcome, and acted on then: not on the last
@@ -173,13 +193,15 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
   const author = incoming.structureAt !== local.structureAt ? (incoming.structureAt > local.structureAt ? incoming : local) : structureTiebreak(local, incoming);
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
-  const { from: _lf, after: _la, whenClosed: _lw, partOf: _lp, turns: _lt, ...rest } = local;
-  const partOf = union(local.partOf, incoming.partOf, (m) => `${m.at}|${m.by}|${m.epic ?? ""}`);
-  const turns = union(local.turns, incoming.turns, (t) => `${t.at}|${t.by}|${t.closed}|${t.reason}`);
+  const { from: _lf, after: _la, whenClosed: _lw, partOf: _lp, turns: _lt, order: _lo, ...rest } = local;
+  const partOf = union(local.partOf, incoming.partOf, (m) => m.id);
+  const turns = union(local.turns, incoming.turns, (t) => t.id);
+  const order = union(local.order, incoming.order, (o) => `${o.at}|${o.by}|${o.ids.join(",")}`);
   return {
     ...rest,
     ...(partOf ? { partOf } : {}),
     ...(turns ? { turns } : {}),
+    ...(order ? { order } : {}),
     goal: author.goal,
     kind: author.kind,
     // present wins, including an EMPTY value: `from: []` and `whenClosed: ""`
@@ -206,43 +228,89 @@ function union<A extends { readonly at: number }>(a: ReadonlyArray<A> | undefine
 /** The latest of a set of acts (the order `union` keeps). */
 const latest = <A>(xs: ReadonlyArray<A> | undefined): A | undefined => (xs && xs.length > 0 ? xs[xs.length - 1] : undefined);
 
-/** The epic a ticket is part of now, or null. */
-export const epicOf = (ticket: Ticket): string | null => latest(ticket.partOf)?.epic ?? null;
+/** Where a ticket is now: its latest move, if it was ever moved. */
+const membership = (ticket: Ticket): PartMove | undefined => latest(ticket.partOf);
 
-/** Is the ticket closed? An epic by its latest turn, everything else by its
+/** The epic a ticket is in now, or null. Only ever where it was put. */
+export const epicOf = (ticket: Ticket): string | null => membership(ticket)?.epic ?? null;
+
+/** Kept in its epic but out of its progress — dropped, or not to be done there. */
+export const excludedFromEpic = (ticket: Ticket): boolean => membership(ticket)?.excluded === true;
+
+/** Put a ticket into an epic, or take it out (null), or keep it in but out
+ *  of progress (`excluded`). Anyone's to do. */
+export function moveToEpic(ticket: Ticket, epic: string | null, by: string, now: number, excluded = false): Ticket {
+  const move: PartMove = { id: `${by.slice(0, 16)}:${now}`, epic, ...(epic && excluded ? { excluded: true } : {}), by, at: now };
+  return { ...ticket, partOf: [...(ticket.partOf ?? []), move], updatedAt: now };
+}
+
+/** Is a ticket in an epic resolved — so the epic may close? Done (every step
+ *  answered), closed, or excluded from progress. */
+const resolved = (t: Ticket): boolean => finished(t) || (t.kind !== "epic" && t.closed !== undefined) || excludedFromEpic(t);
+
+/** The tickets in an epic now, in its reading order (the latest one set,
+ *  then the rest), and its progress: the ones done — every step answered —
+ *  against all but the excluded. Closing a ticket does not make it done:
+ *  dropped work is taken out or excluded, so 4 of 5 becomes 4 of 4. */
+export function epicParts(epic: Ticket, all: ReadonlyMap<string, Ticket>): {
+  readonly parts: ReadonlyArray<Ticket>;
+  readonly counted: number;
+  readonly done: number;
+  readonly unresolved: ReadonlyArray<Ticket>;
+} {
+  const inside = [...all.values()].filter((t) => t.kind !== "epic" && epicOf(t) === epic.id);
+  const order = latest(epic.order)?.ids ?? [];
+  const rank = (t: Ticket) => {
+    const i = order.indexOf(t.id);
+    return i === -1 ? order.length : i;
+  };
+  const parts = [...inside].sort((a, b) => rank(a) - rank(b));
+  const counted = parts.filter((t) => !excludedFromEpic(t));
+  return { parts, counted: counted.length, done: counted.filter(finished).length, unresolved: parts.filter((t) => !resolved(t)) };
+}
+
+/** The turns no other turn has seen: what the room's latest word on the
+ *  epic is, everyone's, however their clocks ran. */
+const heads = (turns: ReadonlyArray<EpicTurn>): ReadonlyArray<EpicTurn> => {
+  const seen = new Set(turns.flatMap((t) => t.knows));
+  return turns.filter((t) => !seen.has(t.id));
+};
+
+/** Is the epic closed? Only when every latest turn is a close, each of them
+ *  saw every ticket now in the epic, and every one of those is resolved. A
+ *  reopen a close had not seen — or a ticket put in that it had not seen —
+ *  keeps it open, on every peer; a close made after seeing them stands, and
+ *  an old reopen it has seen never reopens it again. */
+export function epicClosed(epic: Ticket, all: ReadonlyMap<string, Ticket>): boolean {
+  const top = heads(epic.turns ?? []);
+  if (top.length === 0 || top.some((t) => !t.closed)) return false;
+  if (epicParts(epic, all).unresolved.length > 0) return false;
+  // a ticket put in that a close had not seen undoes that close — even once
+  // it is moved out again: the close was made without it, and is made again
+  const puts = movesInto(epic, all);
+  return top.every((c) => puts.every((m) => (c.members ?? []).includes(m)));
+}
+
+/** Every move ever made into an epic, by id — what a close records as seen. */
+const movesInto = (epic: Ticket, all: ReadonlyMap<string, Ticket>): ReadonlyArray<string> =>
+  [...all.values()].flatMap((t) => (t.partOf ?? []).filter((m) => m.epic === epic.id).map((m) => m.id));
+
+/** Is the ticket closed? An epic by its turns and what is in it (pass the
+ *  room's tickets; without them, by its turns alone), everything else by its
  *  author's close. Every "is it over" goes through here. */
-export const isClosed = (ticket: Ticket): boolean => (ticket.kind === "epic" ? latest(ticket.turns)?.closed === true : ticket.closed !== undefined);
+export const isClosed = (ticket: Ticket, all?: ReadonlyMap<string, Ticket>): boolean => {
+  if (ticket.kind !== "epic") return ticket.closed !== undefined;
+  if (all) return epicClosed(ticket, all);
+  const top = heads(ticket.turns ?? []);
+  return top.length > 0 && top.every((t) => t.closed);
+};
 
-/** Why an epic is in the state it is, and who said so — its latest turn. */
+/** The epic's latest turn by time — what to show as why it is as it is. */
 export const epicTurn = (epic: Ticket): EpicTurn | undefined => latest(epic.turns);
 
-/** The epic a ticket lives in, as the room sees it: where it was moved, if
- *  anyone ever moved it (out included — taken out stays out); otherwise
- *  where the ticket it grew out of lives (`from`), so a proposal's plan and
- *  its review come with it without being moved one by one. An epic lives in
- *  none. */
-export function epicHome(ticket: Ticket, all: ReadonlyMap<string, Ticket>, seen: Set<string> = new Set()): string | null {
-  if (ticket.kind === "epic" || seen.has(ticket.id)) return null;
-  seen.add(ticket.id);
-  if (ticket.partOf && ticket.partOf.length > 0) return epicOf(ticket);
-  for (const parent of ticket.from ?? []) {
-    const p = all.get(parent);
-    const home = p ? epicHome(p, all, seen) : null;
-    if (home) return home;
-  }
-  return null;
-}
-
-/** Put a ticket into an epic, or take it out (null). Anyone's to do. */
-export function moveToEpic(ticket: Ticket, epic: string | null, by: string, now: number): Ticket {
-  return { ...ticket, partOf: [...(ticket.partOf ?? []), { epic, by, at: now }], updatedAt: now };
-}
-
-/** The tickets in an epic now, and how many of them are done (closed, or
- *  every step answered). An epic is never part of another. */
-export function epicParts(epic: Ticket, all: ReadonlyMap<string, Ticket>): { readonly parts: ReadonlyArray<Ticket>; readonly done: number } {
-  const parts = [...all.values()].filter((t) => t.kind !== "epic" && epicOf(t) === epic.id);
-  return { parts, done: parts.filter((t) => isClosed(t) || finished(t)).length };
+/** Set the order an epic's tickets are read in. Anyone's to do. */
+export function orderEpic(epic: Ticket, ids: ReadonlyArray<string>, by: string, now: number): Ticket {
+  return { ...epic, order: [...(epic.order ?? []), { ids: [...ids], by, at: now }], updatedAt: now };
 }
 
 export type TurnOutcome =
@@ -250,18 +318,20 @@ export type TurnOutcome =
   | "turned"
   /** it was in that state already */
   | "already"
-  /** a reason is needed: always to reopen, and to close while parts remain */
+  /** reopening needs a reason, always */
   | "needs-reason"
+  /** closing waits on these: resolve them, exclude them, or move them out */
+  | "unresolved"
   /** not an epic: other tickets close with closeTicket, by their author */
   | "not-an-epic";
 
-/** The reason an epic closes with when nobody gives one — only when it is
- *  true. */
+/** The reason an epic closes with when nobody gives one. */
 export const PARTS_DONE = "its parts are done";
 
-/** Close or reopen an epic, by anyone in the room — always with a reason on
- *  the record. Closing needs none when every part is done (the reason is
- *  then that they are); closing with parts left, and every reopen, does. */
+/** Close or reopen an epic, by anyone in the room, with the reason on the
+ *  record and what the writer had seen. Closing waits until every ticket in
+ *  it is resolved (the reason is then that they are, unless one is given);
+ *  reopening always needs a reason. */
 export function turnEpic(
   epic: Ticket,
   closed: boolean,
@@ -269,14 +339,23 @@ export function turnEpic(
   by: string,
   all: ReadonlyMap<string, Ticket>,
   now: number,
-): { readonly ticket: Ticket; readonly outcome: TurnOutcome } {
-  if (epic.kind !== "epic") return { ticket: epic, outcome: "not-an-epic" };
-  if (isClosed(epic) === closed) return { ticket: epic, outcome: "already" };
-  const said = reason?.trim();
-  const { parts, done } = epicParts(epic, all);
-  const why = said || (closed && parts.length > 0 && done === parts.length ? PARTS_DONE : undefined);
-  if (!why) return { ticket: epic, outcome: "needs-reason" };
-  return { ticket: { ...epic, turns: [...(epic.turns ?? []), { closed, reason: why, by, at: now }], updatedAt: now }, outcome: "turned" };
+): { readonly ticket: Ticket; readonly outcome: TurnOutcome; readonly unresolved: ReadonlyArray<Ticket> } {
+  if (epic.kind !== "epic") return { ticket: epic, outcome: "not-an-epic", unresolved: [] };
+  if (epicClosed(epic, all) === closed) return { ticket: epic, outcome: "already", unresolved: [] };
+  const { unresolved } = epicParts(epic, all);
+  if (closed && unresolved.length > 0) return { ticket: epic, outcome: "unresolved", unresolved };
+  const why = reason?.trim() || (closed ? PARTS_DONE : undefined);
+  if (!why) return { ticket: epic, outcome: "needs-reason", unresolved: [] };
+  const turn: EpicTurn = {
+    id: `${by.slice(0, 16)}:${now}:${closed ? "close" : "reopen"}`,
+    closed,
+    reason: why,
+    by,
+    at: now,
+    knows: (epic.turns ?? []).map((t) => t.id),
+    ...(closed ? { members: [...movesInto(epic, all)] } : {}),
+  };
+  return { ticket: { ...epic, turns: [...(epic.turns ?? []), turn], updatedAt: now }, outcome: "turned", unresolved: [] };
 }
 
 /** The author-controlled structure, as one comparable string. */
