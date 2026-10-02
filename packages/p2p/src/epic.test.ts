@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTicket, epicBecause, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
+import { closeTicket, ticketName, epicBecause, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
 
 const ticket = (over: Partial<Ticket>): Ticket => ({
   id: "t",
@@ -188,5 +188,18 @@ describe("from the review of the epics branch", () => {
     const said = turnEpic(closed, false, "Rust belongs here", "carol", room(closed, php, rust), 102);
     expect(said.outcome).toBe("turned");
     expect(epicBecause(epicStatus(said.ticket, room(said.ticket, php, rust)), room(said.ticket, php, rust), "carol")).toBe("Rust belongs here");
+  });
+});
+
+describe("a ticket's title", () => {
+  it("is the author's structure: the newer revision wins, either way round, and a peer's stale copy cannot drop it", () => {
+    const v1 = ticket({ id: "t1", title: "Streamed export", goal: "stream the export, do not buffer it", structureAt: 1 });
+    const v2 = { ...v1, title: "Paged export", structureAt: 2 };
+    expect(mergeTicket(v1, v2).title).toBe("Paged export");
+    expect(mergeTicket(v2, v1).title).toBe("Paged export");
+    const stale = { ...v2, title: undefined, updatedAt: 9 };
+    expect(mergeTicket(v2, { ...stale, structureAt: 2 }).title).toBe("Paged export");
+    expect(ticketName(v2)).toBe("Paged export");
+    expect(ticketName({ goal: "an old one" })).toBe("an old one");
   });
 });

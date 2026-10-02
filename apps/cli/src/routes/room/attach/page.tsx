@@ -1,3 +1,4 @@
+import { ticketName } from "@collagen/p2p";
 import { useEffect, useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
@@ -27,7 +28,8 @@ export function AttachPage({ ticketId }: { ticketId: string }) {
   const { navigate } = useRouter();
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
-  const goal = tickets.find((t) => t.id === ticketId)?.goal ?? `ticket ${ticketId.slice(0, 8)}`;
+  const ticket = tickets.find((t) => t.id === ticketId);
+  const goal = ticket ? ticketName(ticket) : `ticket ${ticketId.slice(0, 8)}`;
   const setFocus = useAtomSet(focusAtom);
   const setCaptured = useAtomSet(captureAtom);
   const loadFiles = useAtomSet(transcriptFilesAtom);

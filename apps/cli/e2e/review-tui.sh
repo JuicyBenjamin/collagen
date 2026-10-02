@@ -33,7 +33,7 @@ echo "## alice's agent asks bob for a review, with the why"
 D1='{"title":"A logo worth a look","what":"pure frame functions for the logo","userWhy":"she said make it look cool","agentWhy":"a frame is testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
 D2='{"title":"A fast boot is","what":"a fast boot is still held for one sweep","userWhy":"fine if it takes longer, for animation","where":["src/lib/opening.ts:14"]}'
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator","why":"no new dependency","by":"agent"}'
-ASK="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"summary\":\"the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
+ASK="{\"title\":\"The logo glides into place\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"summary\":\"the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
 ASKED=$(call $A "$SA" ask-review "$ASK")
 expect "the review ticket is on the log" "$ASKED" "review ticket filed, asked of bob"
 TICKET=$(echo "$ASKED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
@@ -84,7 +84,7 @@ expect "…what her agent reasoned" "$(echo "$TEXT" | grep -c 'the agent: a fram
 expect "…where the decision landed" "$(echo "$TEXT" | grep -c 'src/lib/logoFrame.ts:60')" "^[1-9]"
 expect "…and the fork, with the road not taken" "$(echo "$TEXT" | grep -c 'instead of the Timeline animator')" "^[1-9]"
 expect "…pointing at the code the choice produced" "$(echo "$TEXT" | grep -c 'f1 src/components/Logo/Logo.tsx:87')" "^[1-9]"
-expect "the crumb says why" "$(echo "$TEXT" | grep -cE 'review feat/opening-animation.{0,20}why')" "^[1-9]"
+expect "the crumb says why, under the ticket's title" "$(echo "$TEXT" | grep -cE 'The logo glides into place.{0,20}why')" "^[1-9]"
 expect "← went back to the ticket" "$(echo "$KEYS" | tr ' ' '\n' | tail -3 | tr '\n' ' ')" "ticket-review"
 expect "o on the review ticket's row opened the review page in the browser" "$(cat "$OUT/opened" 2>/dev/null)" "^http://127.0.0.1:[0-9]+/review/$TICKET$"
 kill_all; summary

@@ -10,7 +10,7 @@ echo "## 1. both up"
 start bob; start alice
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 expect "bob admitted" "$(cat "$OUT/bob.log")" "admitted to the room log"
-call $A "$SA" create-ticket '{"goal":"log survives","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"what does average() do"},{"id":"s2","owner":"alice","intent":"review","description":"check bob answer","needs":["s1"]}]}' > /dev/null
+call $A "$SA" create-ticket '{"title":"log survives","goal":"log survives","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"what does average() do"},{"id":"s2","owner":"alice","intent":"review","description":"check bob answer","needs":["s1"]}]}' > /dev/null
 wait_until "mock settled s1 → alice's review step on the pair thread" "ticket-step:review" call $A "$SA" pending-threads '{}'
 THREAD=$(call $A "$SA" pending-threads '{}' | grep -oE '[0-9a-f]{16}' | head -1)
 

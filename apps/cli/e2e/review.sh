@@ -24,20 +24,20 @@ start alice; start bob; start carol --room st-test3
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; wait_for_peer $A "$SA" carol; SB=$(mcp $B); SC=$(mcp $C); admitted bob; admitted carol
 
 echo "## a review with no why is refused before anything leaves"
-NOWHY='{"peers":["bob"],"project":"sandbox","summary":"the opening animation","decisions":[],"forks":[]}'
+NOWHY='{"title":"The opening animation","peers":["bob"],"project":"sandbox","summary":"the opening animation","decisions":[],"forks":[]}'
 expect "no decisions: refused, and told to mine the conversation" "$(call $A "$SA" ask-review "$NOWHY")" "failed: pass the decisions behind the change"
-BADWHY='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"Pure frame functions","what":"pure frame functions"}],"forks":[]}'
+BADWHY='{"title":"X","peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"Pure frame functions","what":"pure frame functions"}],"forks":[]}'
 expect "a decision with no why at all: refused, naming which" "$(call $A "$SA" ask-review "$BADWHY")" "decision 1 .{1,3}pure frame functions.{1,3} has no why"
-NOPROJ='{"peers":["bob"],"project":"nope","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
+NOPROJ='{"title":"X","peers":["bob"],"project":"nope","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
 expect "a project alice does not share: refused with what she does share" "$(call $A "$SA" ask-review "$NOPROJ")" "not a project your user shares in this room .{0,10}theirs: sandbox"
-NOPEER='{"peers":["kristian"],"project":"sandbox","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
-NOTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"what":"pure frame functions","userWhy":"b"}],"forks":[]}'
+NOPEER='{"title":"X","peers":["kristian"],"project":"sandbox","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
+NOTITLE='{"title":"X","peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"what":"pure frame functions","userWhy":"b"}],"forks":[]}'
 expect "a decision with no title: refused by the tool's own schema, which marks it required" "$(call $A "$SA" ask-review "$NOTITLE")" "Missing key.*title"
-BLANKTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":" ","what":"pure frame functions","userWhy":"b"}],"forks":[]}'
+BLANKTITLE='{"title":"X","peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":" ","what":"pure frame functions","userWhy":"b"}],"forks":[]}'
 expect "…and a blank one: refused, a headline asked for" "$(call $A "$SA" ask-review "$BLANKTITLE")" "decision 1 .{1,3}pure frame functions.{1,3} has no 'title'"
 ESSAY=$(printf 'x%.0s' $(seq 1 201))
-expect "a summary past 200 characters: refused, it is the page's headline" "$(call $A "$SA" ask-review "{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"summary\":\"$ESSAY\",\"decisions\":[{\"title\":\"a\",\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "summary is 201 characters .*200 at most"
-LONGTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"Pure frame functions so that every single frame of the logo is testable","what":"a","userWhy":"b"}],"forks":[]}'
+expect "a summary past 200 characters: refused, it is the page's headline" "$(call $A "$SA" ask-review "{\"title\":\"$ESSAY\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"summary\":\"$ESSAY\",\"decisions\":[{\"title\":\"a\",\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "summary is 201 characters .*200 at most"
+LONGTITLE='{"title":"X","peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"Pure frame functions so that every single frame of the logo is testable","what":"a","userWhy":"b"}],"forks":[]}'
 expect "a title that is a sentence: refused, 60 characters at most" "$(call $A "$SA" ask-review "$LONGTITLE")" "title is [0-9]+ characters .*60 at most"
 expect "someone who is not in the room: refused, naming who is" "$(call $A "$SA" ask-review "$NOPEER")" "no one here is called kristian — in the room: .*bob"
 
@@ -45,7 +45,7 @@ echo "## the ask: alice's steering, her agent's reasons, and the fork it took"
 D1='{"title":"A logo worth a look","what":"pure frame functions for the logo","userWhy":"she said make it look cool, and was fine with a longer boot for it","agentWhy":"a frame is then testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
 D2='{"title":"A fast boot is","what":"a fast boot is still held until the sweep is seen","userWhy":"collagen first in the middle, the tagline below, then it animates to its place","where":["src/lib/opening.ts:14"]}'
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator in @opentui/core","why":"no new dependency and the frame stays pure","by":"agent"}'
-ASK="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"focus\":\"the timing constants\",\"summary\":\"the opening animation: the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
+ASK="{\"title\":\"The opening animation: the logo starts\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"focus\":\"the timing constants\",\"summary\":\"the opening animation: the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
 ASKED=$(call $A "$SA" ask-review "$ASK")
 expect "ask-review files the ticket and says it asks bob" "$ASKED" "review ticket filed, asked of bob"
 expect "…the counts are there for the agent, marked as not for the person" "$ASKED" "2 decision\(s\), 1 fork\(s\) now on it — for your own bookkeeping, not for your user"
@@ -91,7 +91,7 @@ expect "…so her starting on the review opens nothing" "$(call $C "$SC" review-
 expect "…and nothing was handed to a browser" "$(opened carol)" "^0$"
 
 echo "## a plain ticket has no why to read"
-OTHER=$(call $A "$SA" create-ticket '{"goal":"why does the render flicker","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"look at the frame"}]}')
+OTHER=$(call $A "$SA" create-ticket '{"title":"why does the render flicker","goal":"why does the render flicker","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"look at the frame"}]}')
 OID=$(echo "$OTHER" | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 wait_until "bob sees the plain ticket too" "flicker" goals $B "$SB"
 expect "review-context says a task carries no why" "$(call $B "$SB" review-context "{\"ticketId\":\"$OID\"}")" "is a task, not a review, plan or proposal"
@@ -114,7 +114,7 @@ expect "an amendment with nothing in it is refused" "$(call $A "$SA" ask-review 
 
 echo "## 0 reviewers: the ticket sits in the room with the why on it"
 OPEN_D='{"title":"The sheen is a","what":"the sheen is a gaussian band, not a gradient sweep","userWhy":"he asked for it to look cool","where":["src/lib/logoFrame.ts:74"]}'
-OPEN_ASK="{\"project\":\"sandbox\",\"goal\":\"review the sheen\",\"summary\":\"the sheen that sweeps while the app boots\",\"decisions\":[$OPEN_D],\"forks\":[]}"
+OPEN_ASK="{\"title\":\"review the sheen\",\"project\":\"sandbox\",\"goal\":\"review the sheen\",\"summary\":\"the sheen that sweeps while the app boots\",\"decisions\":[$OPEN_D],\"forks\":[]}"
 OPENED=$(call $A "$SA" ask-review "$OPEN_ASK")
 expect "no peers named: it goes to the room, nobody in particular" "$OPENED" "review ticket filed, in the room, nobody asked in particular"
 expect "…opening one says how to keep it current, where an agent will read it" "$OPENED" "call ask-review again with ticketId"
@@ -170,7 +170,7 @@ expect "alice settles her own step: the ticket is done" "$(call $A "$SA" settle-
 echo "## many reviewers: one review step each, and the author waits on all"
 MANY_D='{"title":"One evict entry per","what":"one evict entry per sweep","userWhy":"he said never brick, migrate instead","where":["packages/p2p/src/RoomLog.ts:1"]}'
 # names however cased: the room spells them bob and carol, and so does the ticket
-MANY_ASK="{\"peers\":[\"BOB\",\" Carol\"],\"project\":\"Sandbox\",\"goal\":\"review the migration\",\"summary\":\"records from an older protocol are evicted, not carried\",\"decisions\":[$MANY_D],\"forks\":[]}"
+MANY_ASK="{\"title\":\"review the migration\",\"peers\":[\"BOB\",\" Carol\"],\"project\":\"Sandbox\",\"goal\":\"review the migration\",\"summary\":\"records from an older protocol are evicted, not carried\",\"decisions\":[$MANY_D],\"forks\":[]}"
 MANY=$(call $A "$SA" ask-review "$MANY_ASK")
 expect "both are asked, by the names the room knows" "$MANY" "review ticket filed, asked of bob, carol"
 MANY_TICKET=$(echo "$MANY" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
@@ -178,7 +178,7 @@ wait_until "each reviewer got a step of their own, named for them" "review-bob,b
 MANY_ROWS=$(rows $A "$SA" "$MANY_TICKET")
 expect "…carol's too" "$MANY_ROWS" "review-carol,carol"
 expect "…and the author's step waits on both" "$MANY_ROWS" "address,alice,address,pending,review-bob\+review-carol"
-expect "a name nobody in the room has is refused, with the open option offered" "$(call $A "$SA" ask-review "{\"peers\":[\"bob\",\"nobody\"],\"project\":\"sandbox\",\"summary\":\"x\",\"decisions\":[{\"title\":\"A\",\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "no one here is called nobody — in the room: .*leave .peers. out"
+expect "a name nobody in the room has is refused, with the open option offered" "$(call $A "$SA" ask-review "{\"title\":\"X\",\"peers\":[\"bob\",\"nobody\"],\"project\":\"sandbox\",\"summary\":\"x\",\"decisions\":[{\"title\":\"A\",\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "no one here is called nobody — in the room: .*leave .peers. out"
 
 echo "## uninvited readers are welcome on a review ticket, and take nobody's step"
 wait_until "carol holds the many-reviewer ticket" "review the migration" goals $C "$SC"

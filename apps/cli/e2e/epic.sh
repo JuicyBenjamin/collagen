@@ -17,26 +17,26 @@ SA=$(mcp $A); wait_for_peer $A "$SA" bob; SB=$(mcp $B); admitted bob
 uuid() { grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1; }
 
 echo "## three related proposals, filed together: the third offers an epic"
-P1='{"project":"sandbox","goal":"the review page reads more languages","decisions":[{"title":"More than TypeScript","what":"PHP, then Rust","userWhy":"half our stack is PHP"}]}'
+P1='{"title":"the review page reads more languages","project":"sandbox","goal":"the review page reads more languages","decisions":[{"title":"More than TypeScript","what":"PHP, then Rust","userWhy":"half our stack is PHP"}]}'
 L=$(call $A "$SA" propose "$P1" | uuid)
-P2="{\"project\":\"sandbox\",\"goal\":\"PHP on the review page\",\"from\":[\"$L\"],\"decisions\":[{\"title\":\"Intelephense\",\"what\":\"a pinned server\",\"agentWhy\":\"fast\"}]}"
+P2="{\"title\":\"PHP on the review page\",\"project\":\"sandbox\",\"goal\":\"PHP on the review page\",\"from\":[\"$L\"],\"decisions\":[{\"title\":\"Intelephense\",\"what\":\"a pinned server\",\"agentWhy\":\"fast\"}]}"
 OUT2=$(call $A "$SA" propose "$P2"); PHP=$(echo "$OUT2" | uuid)
 expect "the second is not offered an epic yet" "$(echo "$OUT2" | grep -c RELATED)" "^0$"
-P3="{\"project\":\"sandbox\",\"goal\":\"Rust on the review page\",\"from\":[\"$L\"],\"decisions\":[{\"title\":\"rust-analyzer\",\"what\":\"a pinned server\",\"agentWhy\":\"official\"}]}"
+P3="{\"title\":\"Rust on the review page\",\"project\":\"sandbox\",\"goal\":\"Rust on the review page\",\"from\":[\"$L\"],\"decisions\":[{\"title\":\"rust-analyzer\",\"what\":\"a pinned server\",\"agentWhy\":\"official\"}]}"
 OUT3=$(call $A "$SA" propose "$P3"); RUST=$(echo "$OUT3" | uuid)
 expect "the third is: offer an epic for all three, only on her yes" "$OUT3" "RELATED: your user has filed 3 related tickets together.*only on their yes"
 
 echo "## alice makes the epic, with the three in it"
-NOGOAL='{"action":"create"}'
-expect "an epic needs a goal" "$(call $A "$SA" epic "$NOGOAL")" "failed: pass the epic's goal"
-E1J="{\"action\":\"create\",\"goal\":\"More languages\",\"summary\":\"Review PHP and Rust like TypeScript.\",\"ticketIds\":[\"$L\",\"$PHP\",\"$RUST\"]}"
+NOTITLE='{"action":"create","goal":"more languages"}'
+expect "an epic needs a title" "$(call $A "$SA" epic "$NOTITLE")" "failed: pass a 'title' .{1,3} the epic's headline"
+E1J="{\"title\":\"More languages\",\"action\":\"create\",\"goal\":\"More languages\",\"summary\":\"Review PHP and Rust like TypeScript.\",\"ticketIds\":[\"$L\",\"$PHP\",\"$RUST\"]}"
 MADE=$(call $A "$SA" epic "$E1J"); E1=$(echo "$MADE" | uuid)
 expect "filed, and the three put in it" "$MADE" "epic filed: .{1,3}More languages.*put into the epic .{1,3}More languages.{1,3}: .*It now holds 3 ticket\\(s\\), 0 of 3 done"
 wait_until "bob sees the epic and what is in it" "parts: .?0 of 3 done" call $B "$SB" get-tickets '{}'
 expect "…each part names its epic" "$(call $B "$SB" get-tickets '{}' | grep -cE "epic: .?$E1")" "^[3-9]"
 
 echo "## anyone shapes it: bob adds one from another project, takes one out"
-B1='{"project":"backoffice","goal":"a PHP lint in the backoffice","decisions":[{"title":"Lint it","what":"phpstan","agentWhy":"cheap"}]}'
+B1='{"title":"a PHP lint in the backoffice","project":"backoffice","goal":"a PHP lint in the backoffice","decisions":[{"title":"Lint it","what":"phpstan","agentWhy":"cheap"}]}'
 BO=$(call $B "$SB" propose "$B1" | uuid)
 ADD="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$BO\"]}"
 expect "bob — not its author — adds a backoffice ticket to alice's epic" "$(call $B "$SB" epic "$ADD")" "put into the epic .{1,3}More languages.*It now holds 4 ticket\\(s\\)"
@@ -44,7 +44,7 @@ wait_until "alice sees four parts, across two projects" "parts: .?0 of 4 done" c
 OUTJ="{\"action\":\"remove\",\"ticketIds\":[\"$PHP\"]}"
 expect "bob takes the PHP proposal out" "$(call $B "$SB" epic "$OUTJ")" "taken out of their epic: .{1,3}PHP on the review page"
 wait_until "…and alice sees three again" "parts: .?0 of 3 done" call $A "$SA" get-tickets '{}'
-E2J='{"action":"create","goal":"Backoffice quality","summary":"Catch PHP mistakes before review."}'
+E2J='{"title":"Backoffice quality","action":"create","goal":"Backoffice quality","summary":"Catch PHP mistakes before review."}'
 E2=$(call $B "$SB" epic "$E2J" | uuid)
 MOVE="{\"action\":\"add\",\"epicId\":\"$E2\",\"ticketIds\":[\"$BO\"]}"
 expect "bob moves his ticket from alice's epic to his own" "$(call $B "$SB" epic "$MOVE")" "put into the epic .{1,3}Backoffice quality"
@@ -53,13 +53,13 @@ Q1="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$E2\"]}"
 expect "an epic is never part of another" "$(call $A "$SA" epic "$Q1")" "an epic is never part of another"
 
 echo "## what grows out of a part is offered the epic, not put in it"
-PL="{\"project\":\"sandbox\",\"goal\":\"how Rust gets its server\",\"summary\":\"download a pinned rust-analyzer\",\"from\":[\"$RUST\"],\"decisions\":[{\"title\":\"Pinned binary\",\"what\":\"a release and its hash\",\"agentWhy\":\"no npm\"}],\"forks\":[]}"
+PL="{\"title\":\"how Rust gets its server\",\"project\":\"sandbox\",\"goal\":\"how Rust gets its server\",\"summary\":\"download a pinned rust-analyzer\",\"from\":[\"$RUST\"],\"decisions\":[{\"title\":\"Pinned binary\",\"what\":\"a release and its hash\",\"agentWhy\":\"no npm\"}],\"forks\":[]}"
 PLOUT=$(call $A "$SA" ask-plan "$PL"); PLAN=$(echo "$PLOUT" | uuid)
 expect "filing it offers the Rust proposal's epic, in a line" "$PLOUT" "EPIC: it grows out of a ticket in the epic .{1,3}More languages.*not put there on its own"
 expect "…and it is not in the epic: lineage moves nothing" "$(call $A "$SA" get-tickets '{}' | grep -cE "epic: .?$E1")" "^2$"
 
 echo "## progress is a count, order is for reading"
-TASK='{"project":"sandbox","goal":"a Go grammar spike","steps":[{"id":"s1","owner":"alice","intent":"spike","description":"try it"}]}'
+TASK='{"title":"a Go grammar spike","project":"sandbox","goal":"a Go grammar spike","steps":[{"id":"s1","owner":"alice","intent":"spike","description":"try it"}]}'
 TID=$(call $A "$SA" create-ticket "$TASK" | uuid)
 ADDT="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$TID\"]}"
 expect "the task goes in too" "$(call $A "$SA" epic "$ADDT")" "It now holds 3 ticket\\(s\\), 0 of 3 done"

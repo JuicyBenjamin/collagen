@@ -12,7 +12,7 @@ SA=$(mcp $A); wait_for_peer $A "$SA" bob; wait_for_peer $A "$SA" carol; admitted
 SC=$(mcp $C); call $C "$SC" set-ai '{"ai":"mock:codex"}' > /dev/null; sleep 1
 
 echo "## a ticket bob owns; his mock settles it"
-TICKET=$(call $A "$SA" create-ticket '{"goal":"weigh-in demo","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"bob looks"}]}' | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
+TICKET=$(call $A "$SA" create-ticket '{"title":"weigh-in demo","goal":"weigh-in demo","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"bob looks"}]}' | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 expect "ticket created" "$TICKET" "^[0-9a-f-]{36}$"
 wait_until "bob settled s1" "s1,bob,investigate,settled" call $A "$SA" get-tickets '{}'
 wait_until "alice (creator, no step of her own) was told: bob settled" "^1$" grep -c "bob settled$" "$OUT/alice.log"

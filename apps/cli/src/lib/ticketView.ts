@@ -9,6 +9,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   id: ticket.id,
   project: ticket.project,
   kind: ticket.kind,
+  /** its headline in every list; the goal is the line beneath it */
+  title: ticket.title ?? "(old ticket — no title)",
   goal: ticket.goal,
   createdBy: nameFor(ticket.createdBy),
   /** the tickets this one follows; walk them with review-context when your user asks why */
