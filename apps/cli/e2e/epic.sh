@@ -94,5 +94,12 @@ expect "…each ticket's state, the excluded ones said" "$CTX" "Rust on the revi
 Q5="{\"ticketId\":\"$E1\"}"
 expect "close-ticket on an epic points at the epic tool" "$(call $A "$SA" close-ticket "$Q5")" "is an epic .{1,3} it closes \\(and reopens\\) with the epic tool"
 
+echo "## renaming: its author's, as a ticket's title is"
+RN="{\"action\":\"rename\",\"epicId\":\"$E1\",\"title\":\"Support more review languages\"}"
+expect "bob — not its author — is pointed at alice" "$(call $B "$SB" epic "$RN")" "is its author's to rename"
+expect "alice renames it" "$(call $A "$SA" epic "$RN")" "epic .{1,3}Support more review languages.{1,3} .*updated"
+wait_until "bob sees the new title, the goal with it" "Support more review languages" call $B "$SB" get-tickets '{}'
+expect "…and its parts kept" "$(call $B "$SB" get-tickets '{}' | grep -cE "epic: .?$E1")" "^[3-9]"
+
 if [ "${KEEP:-0}" = "1" ]; then summary; exit; fi
 kill_all; summary

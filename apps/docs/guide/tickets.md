@@ -435,7 +435,7 @@ close and reopen with who said so and why.
 | `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — the record and the reasons in one write. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
 | `post-review` | put your user's review on a review ticket — asked or not; it lands on a step of their own, and posting again revises it |
 | `review-context` | read the why behind a review ticket, on demand — all of it, or the part `about` a file, symbol or phrase; on an epic, its aim and every ticket in it |
-| `epic` | the room's epics, only when asked: `create` (goal, summary, tickets to put in), `add`, `remove`, `exclude`/`include` and `order` tickets, `close` (once everything in it is resolved) and `reopen` (with a reason) — by anyone |
+| `epic` | the room's epics, only when asked: `create` (title, goal, summary, tickets to put in), `add`, `remove`, `exclude`/`include` and `order` tickets, `close` (once everything in it is resolved) and `reopen` (with a reason) — by anyone; `rename` (a new title, and goal or summary if they change) — by its author, as any ticket's title is |
 
 Prefer a ticket over a chain of `send-to-peer` when the work has more than one step or
 more than one owner — the intermediate state stays inspectable by everyone, and the

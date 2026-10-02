@@ -8,7 +8,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
-import { afterProblem, AI_OPTIONS, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, visibleTo, type Ticket } from "@collagen/p2p";
+import { afterProblem, AI_OPTIONS, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -381,11 +381,11 @@ export const Epic = Tool.make("epic", {
   description: [
     "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. Filing outcomes may ask you to OFFER one: the epic of the ticket a new one grows out of, or a new epic when your user files several related tickets together — offer in one line, act on their yes.",
     "An epic belongs to the room, not to a project or a person: anyone may put a ticket in, move one from epic to epic, take one out, order them, close an epic or reopen it. A ticket is in one epic at most, and only where it was put: lineage (from) never moves anything, so a plan grown out of a part is added explicitly if it belongs. Parts may come from any project.",
-    "action 'create': title (its headline, a few words), optionally goal (the line beneath it), summary (what it aims for, a sentence or two) and ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'exclude' / 'include': epicId and ticketIds — kept in the epic but out of its progress (work dropped or not to be done there), or counted again. 'order': epicId and ticketIds in the order they are to be read — it hides nothing and sets no after. 'close': epicId — only once everything in it is done, closed or excluded; your user's reason, or by default that its parts are done. 'reopen': epicId and a reason, always.",
+    "action 'create': title (its headline, a few words), optionally goal (the line beneath it), summary (what it aims for, a sentence or two) and ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'exclude' / 'include': epicId and ticketIds — kept in the epic but out of its progress (work dropped or not to be done there), or counted again. 'order': epicId and ticketIds in the order they are to be read — it hides nothing and sets no after. 'close': epicId — only once everything in it is done, closed or excluded; your user's reason, or by default that its parts are done. 'reopen': epicId and a reason, always. 'rename': epicId and a new title, optionally goal and summary — its author's to do, as a ticket's title is its author's (anyone else asks them).",
     "Progress is a count: done against everything counted. get-tickets shows each ticket's epic and each epic's parts, progress and what still keeps it open; review-context on an epic reads its aim and its tickets. It goes out as you call it and shows in your user's outbox.",
   ].join("\n"),
   parameters: Schema.Struct({
-    action: Schema.Literals(["create", "add", "remove", "exclude", "include", "order", "close", "reopen"]),
+    action: Schema.Literals(["create", "add", "remove", "exclude", "include", "order", "close", "reopen", "rename"]),
     epicId: Schema.optional(Schema.String),
     title: Schema.optional(Schema.String),
     goal: Schema.optional(Schema.String),
@@ -1123,7 +1123,7 @@ const makeHandlers = Effect.gen(function* () {
           outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false },
         });
       }),
-      epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen"; epicId?: string; title?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
+      epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen" | "rename"; epicId?: string; title?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ids = input.ticketIds ?? [];
@@ -1190,6 +1190,24 @@ const makeHandlers = Effect.gen(function* () {
               title: `${epic.goal} · ${input.action === "close" ? "closed" : "reopened"}`,
               outgoing: { kind: "epic-turn", epicId: epic.id, closed: input.action === "close", ...(input.reason?.trim() ? { reason: input.reason.trim() } : {}) },
             });
+          }
+          case "rename": {
+            const epic = theEpic();
+            if (!epic) return noEpic;
+            // its title follows its author's copy, as every ticket's does
+            if (epic.createdBy !== identity.pubkey) return `failed: "${ticketName(epic)}" is its author's to rename — your user can ask them (send-to-peer, with this epicId)`;
+            const titleGap = ticketTitleGap(input.title);
+            if (titleGap) return titleGap.replace("the ticket's headline", "the epic's headline");
+            const title = input.title!.trim();
+            const now = yield* Clock.currentTimeMillis;
+            // the line beneath goes with it unless a new one is given: a goal that
+            // only repeated the old title would now say something else
+            const goal = input.goal?.trim() || (epic.goal === epic.title ? title : epic.goal);
+            const renamed: Ticket = { ...epic, title, goal, structureAt: Math.max(now, epic.structureAt + 1), updatedAt: now };
+            const existing = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === epic.id);
+            const myName = yield* SubscriptionRef.get(nameRef);
+            const review = mergeReview(existing ?? emptyReview(epic.id, identity.pubkey, myName), input.summary?.trim() ? { summary: input.summary.trim() } : {}, now);
+            return yield* outbox.tell({ roomId, to: "the room", title: `epic · ${ticketName(epic)} → ${title}`, outgoing: { kind: "review", ticket: renamed, review } });
           }
         }
       }),
