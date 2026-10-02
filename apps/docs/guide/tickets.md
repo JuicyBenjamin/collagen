@@ -112,7 +112,7 @@ branch and the link:
 
 | Field | What it is |
 | --- | --- |
-| summary | the purpose, in a sentence or two: what is different for whoever uses it once it lands — on the review page it is the headline |
+| summary | the purpose, in a sentence or two (200 characters at most): what is different for whoever uses it once it lands — on the review page it is the headline |
 | branch, base, link | where the code is — read from the project's own `.git` when the agent omits them (a pull request link beats the branch link collagen can derive) |
 | decisions | a `title` (required: a few words, 60 characters at most — what the decision is for, the headline a reader sees first; an old ticket's decisions, filed before titles, say "old ticket — no title"), `what` was done in one line beneath it, `userWhy` (how the person steered it — what they asked for, prefaced or ruled out, in their words where the agent has them), `agentWhy` (the agent's own reason), `where` it landed (file, or `file:line`) |
 | forks | every point where the work could have gone another way: `at` (`file:line` of the code the choice produced), `chose`, `instead`, `why`, and `by` — the person's call or the agent's |

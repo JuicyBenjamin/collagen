@@ -35,6 +35,8 @@ NOTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"what"
 expect "a decision with no title: refused by the tool's own schema, which marks it required" "$(call $A "$SA" ask-review "$NOTITLE")" "Missing key.*title"
 BLANKTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":" ","what":"pure frame functions","userWhy":"b"}],"forks":[]}'
 expect "…and a blank one: refused, a headline asked for" "$(call $A "$SA" ask-review "$BLANKTITLE")" "decision 1 .{1,3}pure frame functions.{1,3} has no 'title'"
+ESSAY=$(printf 'x%.0s' $(seq 1 201))
+expect "a summary past 200 characters: refused, it is the page's headline" "$(call $A "$SA" ask-review "{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"summary\":\"$ESSAY\",\"decisions\":[{\"title\":\"a\",\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "summary is 201 characters .*200 at most"
 LONGTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"Pure frame functions so that every single frame of the logo is testable","what":"a","userWhy":"b"}],"forks":[]}'
 expect "a title that is a sentence: refused, 60 characters at most" "$(call $A "$SA" ask-review "$LONGTITLE")" "title is [0-9]+ characters .*60 at most"
 expect "someone who is not in the room: refused, naming who is" "$(call $A "$SA" ask-review "$NOPEER")" "no one here is called kristian — in the room: .*bob"
