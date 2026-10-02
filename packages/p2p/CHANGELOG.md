@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.14.0-alpha...p2p-v0.15.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** a review's page opens when its reader starts on it, behind a switch ([1274e0a](https://github.com/JuicyBenjamin/collagen/commit/1274e0a04be7385a21982842f930678c49507acf))
+* **cli:** every decision has a short title, and a review leads with its purpose ([c316294](https://github.com/JuicyBenjamin/collagen/commit/c316294df1d81b6127e3d78f94eb907afd5544b1))
+
 ## [0.14.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.13.1-alpha...p2p-v0.14.0-alpha) (2026-10-02)
 
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.15.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.14.0-alpha...cli-v0.15.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** a review's page opens when its reader starts on it, behind a switch ([1274e0a](https://github.com/JuicyBenjamin/collagen/commit/1274e0a04be7385a21982842f930678c49507acf))
+* **cli:** a review's summary is its headline, 200 characters at most ([98cc618](https://github.com/JuicyBenjamin/collagen/commit/98cc618cf07b070c378eead9cddd12965aa39c81))
+* **cli:** every decision has a short title, and a review leads with its purpose ([c316294](https://github.com/JuicyBenjamin/collagen/commit/c316294df1d81b6127e3d78f94eb907afd5544b1))
+* **cli:** o anywhere takes over an open review tab, which hands over its place ([460dee0](https://github.com/JuicyBenjamin/collagen/commit/460dee0e3db19c6a6a54a5256410bdb68bee9d05))
+* **cli:** the review page keeps itself current, and o brings an open one forward ([2b23f30](https://github.com/JuicyBenjamin/collagen/commit/2b23f3093c1cddf0968903ec9e5948c92847ae6a))
+* **cli:** type hints install their TypeScript on the person's click, not shipped with collagen ([a80dd4a](https://github.com/JuicyBenjamin/collagen/commit/a80dd4ad53ed1daa36fb0de320a901d2e5c7b5f9))
+* **cli:** types on hover and a peek at the definition, on the review page ([bb41db7](https://github.com/JuicyBenjamin/collagen/commit/bb41db7f8b915f6230cf9d4bc27c94570f91b014))
+
+
+### Bug Fixes
+
+* **cli:** hover and peek read cleanly — the word marked, the doc as text, overloads folded ([08d5d60](https://github.com/JuicyBenjamin/collagen/commit/08d5d60d27bd6cd6ad349e224ae59a03ee90cb14))
+
 ## [0.14.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.13.1-alpha...cli-v0.14.0-alpha) (2026-10-02)
 
 
