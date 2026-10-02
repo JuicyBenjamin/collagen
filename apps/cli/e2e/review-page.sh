@@ -27,7 +27,9 @@ printf 'import { page } from "./page";\nimport { stream } from "./export";\nexpo
 sed -i.bak '25s/line/changed, and nobody said why/' "$R/src/notes.txt"; rm -f "$R/src/notes.txt.bak"
 git -C "$R" add -A; git -C "$R" commit -qm change
 
-start alice
+# the type hints need collagen's pinned TypeScript, normally installed on
+# the person's click; here the repo's own stands in, so no network is needed
+COLLAGEN_TYPESCRIPT="$ROOT/node_modules/typescript" start alice
 SA=$(mcp $A)
 D1='{"what":"stream the rows","userWhy":"she said the export times out","agentWhy":"a map keeps memory flat","where":["src/export.ts:2"]}'
 D2='{"what":"page by id","userWhy":"pages of a hundred","where":["src/page.ts"]}'
@@ -63,6 +65,9 @@ expect "an unknown ticket is a 404" "$(curl -s -o /dev/null -w '%{http_code}' "$
 expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sTCP:LISTEN 2>/dev/null | grep -c 127.0.0.1)" "^[1-9]"
 
 echo "## types and definitions, from collagen's own TypeScript 7 over the branch"
+expect "the page can see the pinned TypeScript is there" "$(curl -s "$ORIGIN/review-tools/typescript")" "\"state\":\"ready\",\"version\":\"7\."
+expect "installing is refused without the page's header (a form elsewhere cannot)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$ORIGIN/review-tools/typescript")" "^403$"
+expect "…and from another origin, header or not" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'x-collagen: install' -H 'Origin: https://evil.example' "$ORIGIN/review-tools/typescript")" "^403$"
 HOVER=$(curl -s -m 60 "$ORIGIN/review/$TICKET/hover?file=src/use.ts&line=3&col=21")
 expect "hovering a call says what it is: its signature" "$HOVER" "const stream: \\(rows"
 PEEK=$(curl -s -m 60 "$ORIGIN/review/$TICKET/definition?file=src/use.ts&line=3&col=29")

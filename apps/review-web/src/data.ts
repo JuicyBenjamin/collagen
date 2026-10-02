@@ -85,7 +85,7 @@ export interface ReviewPageData {
 /** GET /review/<ticketId>/hover?file&line&col — what the type checker says
  *  about the symbol there: markdown (a code fence with the signature, then
  *  its doc comment), nothing, or why it could not answer. */
-export type HoverResult = { readonly markdown: string } | { readonly none: true } | { readonly error: string };
+export type HoverResult = { readonly markdown: string } | { readonly none: true } | { readonly missing: true } | { readonly error: string };
 
 /** One declaration a symbol resolves to. `code` is the declaration itself (a
  *  function with its body), from `line`, cut at a length with `more` lines
@@ -101,4 +101,13 @@ export interface Peek {
 }
 
 /** GET /review/<ticketId>/definition?file&line&col */
-export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek> } | { readonly error: string };
+export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek> } | { readonly missing: true } | { readonly error: string };
+
+/** GET/POST /review-tools/typescript — the pinned TypeScript the hints need:
+ *  not installed yet, being installed, or ready; POST (from the page, with
+ *  x-collagen: install) installs it. */
+export interface ToolState {
+  readonly state: "missing" | "installing" | "ready";
+  readonly version: string;
+  readonly error?: string;
+}
