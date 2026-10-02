@@ -19,7 +19,9 @@ const remembered = (tool: ToolId): boolean => {
  *  server asked to show the person is shown here. */
 export function TypesBanner(props: { tool: ToolId }) {
   const [dismissed, setDismissed] = createSignal(remembered(props.tool));
-  const [seen, setSeen] = createSignal(false);
+  // notices are acknowledged one by one: a new one after "Got it" still shows
+  const [seen, setSeen] = createSignal<ReadonlySet<string>>(new Set());
+  const unseen = () => (toolState(props.tool)?.notices ?? []).filter((n) => !seen().has(n));
   onSettled(() => {
     void refreshTool(props.tool);
     // while an install runs, see it through; once ready, keep the server's notices current
@@ -77,13 +79,13 @@ export function TypesBanner(props: { tool: ToolId }) {
           </div>
         )}
       </Show>
-      <Show when={!seen() && toolState(props.tool)?.notices?.length ? toolState(props.tool) : null}>
+      <Show when={unseen().length > 0 ? toolState(props.tool) : null}>
         {(t) => (
           <div class="banner" role="status">
             <span>
-              <For each={t().notices}>{(n) => <span class="banner-notice">{t().name}: {n}</span>}</For>
+              <For each={unseen()}>{(n) => <span class="banner-notice">{t().name}: {n}</span>}</For>
             </span>
-            <button type="button" class="banner-close" aria-label="Got it" onClick={() => setSeen(true)}>
+            <button type="button" class="banner-close" aria-label="Got it" onClick={() => setSeen((s) => new Set([...s, ...unseen()]))}>
               ×
             </button>
           </div>

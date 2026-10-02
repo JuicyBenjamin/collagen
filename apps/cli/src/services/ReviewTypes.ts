@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { extname, isAbsolute, join, relative, sep } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
@@ -65,14 +65,21 @@ interface Session {
   readonly storage: string;
   readonly projectPath: string;
   readonly lsp: LspClient;
-  /** the server is ready to answer (its index is built) */
+  /** the server says it is ready to answer (its index is built) */
   readonly ready: Promise<void>;
+  readonly indexed: { done: boolean };
+  readonly started: number;
+  /** the clone's dependency folders linked into the tree (their real paths) */
+  readonly deps: ReadonlyArray<string>;
   readonly opened: Set<string>;
   lastUsed: number;
 }
 
-/** How long a first question waits for a server to finish indexing. */
-const READY_MS = 60_000;
+/** How long one question waits for an index before the page is told to
+ *  ask again; and how long a server that never says it is ready gets
+ *  before it is answered from anyway (its answers then marked partial). */
+const WAIT_MS = 15_000;
+const NEVER_SAYS_MS = 3 * 60_000;
 
 /** Unpack a commit of the clone at `projectPath` into `dir`: git archive into
  *  tar, nothing written to the repository. */
@@ -87,25 +94,61 @@ const unpack = (projectPath: string, commit: string, dir: string): Promise<void>
     tar.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`could not unpack ${commit} (tar exit ${code})`))));
   });
 
+/** Where a marker file says its dependencies live, relative to it: the
+ *  tool's own reading (composer.json's config.vendor-dir) or its default,
+ *  refused when it would leave the tree. */
+const depDirAt = (deps: LanguageTool["deps"], marker: string): string | null => {
+  let dir = deps.dir;
+  if (deps.dirFrom) {
+    try {
+      dir = deps.dirFrom(readFileSync(marker, "utf8")) ?? deps.dir;
+    } catch {
+      // unreadable: the default
+    }
+  }
+  return dir.length > 0 && !isAbsolute(dir) && !dir.split(/[\\/]/).includes("..") ? dir : null;
+};
+
 /** Link the clone's dependency folder (node_modules, vendor) into the
  *  unpacked tree, beside every marker file (package.json, composer.json)
  *  that has one in the clone — a monorepo has several — so imports resolve
- *  to what the reader has installed. */
-const linkDeps = (deps: LanguageTool["deps"], projectPath: string, root: string, rel = "", depth = 0): void => {
-  if (depth > 4) return;
+ *  to what the reader has installed. Returns the real paths linked. */
+const linkDeps = (deps: LanguageTool["deps"], projectPath: string, root: string, rel = "", depth = 0, linked: Array<string> = []): Array<string> => {
+  if (depth > 4) return linked;
   const here = join(root, rel);
-  if (existsSync(join(here, deps.marker))) {
-    const theirs = join(projectPath, rel, deps.dir);
-    if (existsSync(theirs) && !existsSync(join(here, deps.dir))) symlinkSync(theirs, join(here, deps.dir), "dir");
+  const dir = existsSync(join(here, deps.marker)) ? depDirAt(deps, join(here, deps.marker)) : null;
+  if (dir) {
+    const theirs = join(projectPath, rel, dir);
+    if (existsSync(theirs) && !existsSync(join(here, dir))) {
+      mkdirSync(dirname(join(here, dir)), { recursive: true });
+      symlinkSync(theirs, join(here, dir), "dir");
+      linked.push(realpathSync(theirs));
+    }
   }
   let entries: Array<string> = [];
   try {
-    entries = readdirSync(here, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== deps.dir && !d.name.startsWith(".")).map((d) => d.name);
+    entries = readdirSync(here, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.isSymbolicLink() && d.name !== deps.dir && !d.name.startsWith(".")).map((d) => d.name);
   } catch {
-    return;
+    return linked;
   }
-  for (const name of entries) linkDeps(deps, projectPath, root, join(rel, name), depth + 1);
+  for (const name of entries) linkDeps(deps, projectPath, root, join(rel, name), depth + 1, linked);
+  return linked;
 };
+
+/** A declaration's range that starts on its own doc comment (PHP's servers
+ *  do): the comment is the doc, and the code starts right after its `*\/` —
+ *  on the same line when the declaration follows it there. */
+export function splitLeadingDoc(lines: ReadonlyArray<string>, from: number, last: number): { readonly doc: string | null; readonly code: ReadonlyArray<string>; readonly line: number } | null {
+  if (!lines[from]?.trim().startsWith("/**")) return null;
+  let end = from;
+  while (end <= last && !lines[end]!.includes("*/")) end++;
+  if (end > last) return null;
+  const close = lines[end]!.indexOf("*/") + 2;
+  const comment = [...lines.slice(from, end), lines[end]!.slice(0, close)];
+  const rest = lines[end]!.slice(close);
+  const code = rest.trim() ? [rest.replace(/^\s+/, ""), ...lines.slice(end + 1, last + 1)] : lines.slice(end + 1, last + 1);
+  return { doc: docAbove([...comment, ""], comment.length), code, line: rest.trim() ? end : end + 1 };
+}
 
 /** The doc comment right above line `at`, as text — whole or not at all: a
  *  JSDoc block back to its opening, or a run of // lines. Markers stripped,
@@ -199,12 +242,17 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       rmSync(storage, { recursive: true, force: true });
       mkdirSync(storage, { recursive: true });
       await unpack(projectPath, commit, root);
-      linkDeps(tool.deps, projectPath, root);
+      const deps = linkDeps(tool.deps, projectPath, root);
+      // ready when the server says so — never on a timer: an index still
+      // being built answers "ask again", not an answer that looks final
+      const indexed = { done: !tool.readyWhen };
       let isReady = () => {};
       const ready = tool.readyWhen
         ? new Promise<void>((resolve) => {
-            isReady = resolve;
-            setTimeout(resolve, READY_MS).unref();
+            isReady = () => {
+              indexed.done = true;
+              resolve();
+            };
           })
         : Promise.resolve();
       const lsp = startLsp(process.execPath, [join(toolDir(tool), tool.bin), ...tool.args], root, {
@@ -229,7 +277,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         ...(tool.initializationOptions ? { initializationOptions: tool.initializationOptions(storage) } : {}),
       });
       lsp.notify("initialized", {});
-      return { tool, root, storage, projectPath, lsp, ready, opened: new Set(), lastUsed: Date.now() };
+      return { tool, root, storage, projectPath, lsp, ready, indexed, started: Date.now(), deps, opened: new Set(), lastUsed: Date.now() };
     };
 
     /** A language's server for a review's branch, started on first use and
@@ -263,7 +311,11 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       const path = join(s.root, file);
       if (!existsSync(path)) return { _tag: "failed", error: `${file} is not on the branch under review` } as const;
       const uri = pathToFileURL(path).href;
-      yield* Effect.promise(() => s.ready);
+      if (!s.indexed.done) {
+        const done = yield* Effect.promise(() => Promise.race([s.ready.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), WAIT_MS).unref())]));
+        if (!done && Date.now() - s.started < NEVER_SAYS_MS) return { _tag: "indexing" } as const;
+      }
+      const partial = !s.indexed.done;
       if (!s.opened.has(uri)) {
         s.lsp.notify("textDocument/didOpen", { textDocument: { uri, languageId: tool.languageId(extname(file)), version: 1, text: readFileSync(path, "utf8") } });
         s.opened.add(uri);
@@ -273,7 +325,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         try: () => s.lsp.request(method, { textDocument: { uri }, position: { line: line - 1, character: col } }),
         catch: (e) => (e instanceof Error ? e.message : String(e)),
       }).pipe(
-        Effect.map((result) => ({ _tag: "ok", result, session: s }) as const),
+        Effect.map((result) => ({ _tag: "ok", result, session: s, partial }) as const),
         Effect.catch((error) => Effect.succeed({ _tag: "failed", error } as const)),
       );
     });
@@ -281,9 +333,11 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const hover = Effect.fn("ReviewTypes.hover")(function* (ticketId: string, file: string, line: number, col: number) {
       const r = yield* ask(ticketId, file, line, col, "textDocument/hover");
       if (r._tag === "missing") return { missing: true } satisfies HoverResult;
+      if (r._tag === "indexing") return { indexing: true } satisfies HoverResult;
       if (r._tag === "failed") return { error: r.error } satisfies HoverResult;
       const markdown = hoverText(r.result);
-      return (markdown ? { markdown } : { none: true }) satisfies HoverResult;
+      const partial = r.partial ? { partial: true as const } : {};
+      return (markdown ? { markdown, ...partial } : { none: true, ...partial }) satisfies HoverResult;
     });
 
     /** Where a symbol is declared, and the declaration itself: the target's
@@ -292,6 +346,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const definition = Effect.fn("ReviewTypes.definition")(function* (ticketId: string, file: string, line: number, col: number) {
       const r = yield* ask(ticketId, file, line, col, "textDocument/definition");
       if (r._tag === "missing") return { missing: true } satisfies DefinitionResult;
+      if (r._tag === "indexing") return { indexing: true } satisfies DefinitionResult;
       if (r._tag === "failed") return { error: r.error } satisfies DefinitionResult;
       const links = (Array.isArray(r.result) ? r.result : r.result ? [r.result] : []) as Array<{
         targetUri?: string;
@@ -299,7 +354,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         targetRange?: { start: { line: number }; end: { line: number } };
         range?: { start: { line: number }; end: { line: number } };
       }>;
-      const { root, projectPath, tool } = r.session;
+      const { root, projectPath, tool, deps } = r.session;
       const realRoot = realpathSync(root);
       const realTool = (() => {
         try {
@@ -323,21 +378,20 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
           }
         })();
         const lines = readFileSync(real, "utf8").split("\n");
-        // a range that starts on the declaration's own doc comment (PHP's
-        // servers do): the comment is the doc, the code starts after it
-        let from = range.start.line;
-        if (lines[from]?.trim().startsWith("/**")) {
-          let end = from;
-          while (end < range.end.line && !lines[end]!.includes("*/")) end++;
-          if (end < range.end.line) from = end + 1;
-        }
-        const to = Math.min(range.end.line, from + PEEK_LINES - 1);
-        const body = { line: from + 1, doc: docAbove(lines, from), code: lines.slice(from, to + 1).join("\n"), more: Math.max(0, range.end.line - to) };
+        // a range that starts on its own doc comment: the comment is the doc
+        const lifted = splitLeadingDoc(lines, range.start.line, range.end.line);
+        const from = lifted ? lifted.line : range.start.line;
+        const code = lifted ? lifted.code : lines.slice(from, range.end.line + 1);
+        const shown = code.slice(0, PEEK_LINES);
+        const body = { line: from + 1, doc: lifted ? lifted.doc : docAbove(lines, from), code: shown.join("\n"), more: code.length - shown.length };
         // a file of the server itself: the language's own declarations (stubs)
         if (real.startsWith(realTool + sep)) return [{ file: relative(realTool, real).replace(/^lib\/stubs?\//, ""), where: "builtin", builtInto: tool.language, ...body }];
+        // a dependency's file by the package, not by the folder it sits in:
+        // one of the folders linked from the clone, wherever it is configured
+        const depRoot = deps.find((d) => real.startsWith(d + sep));
+        if (depRoot) return [{ file: relative(depRoot, real), where: "package", ...body }];
         const inTree = real.startsWith(realRoot + sep);
         const full = inTree ? relative(realRoot, real) : real.startsWith(projectPath + sep) ? relative(projectPath, real) : real;
-        // a dependency's file by the package, not by the folder it sits in
         const dep = `${tool.deps.dir}${sep}`;
         const inPackage = full.split(sep).includes(tool.deps.dir);
         return [{ file: inPackage ? full.slice(full.lastIndexOf(dep) + dep.length) : full, where: inPackage ? "package" : "branch", ...body }];
@@ -345,7 +399,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       // a name that is both a value and a namespace of types (Effect.fn):
       // the value — what the code calls — first
       const typesOnly = (p: Peek) => /^\s*(export\s+)?(declare\s+)?(namespace|module)\b/m.test((p.code ?? "").replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "").trimStart().split("\n")[0] ?? "");
-      return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)] } satisfies DefinitionResult;
+      return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)], ...(r.partial ? { partial: true as const } : {}) } satisfies DefinitionResult;
     });
 
     return { hover, definition, toolState: (id: ToolId) => Effect.sync(() => toolState(id)), startInstall: (id: ToolId) => Effect.sync(() => startInstall(id)) } as const;
