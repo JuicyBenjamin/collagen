@@ -81,3 +81,22 @@ export interface ReviewPageData {
   readonly grouped: Grouped | null;
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
 }
+
+/** GET /review/<ticketId>/hover?file&line&col — what the type checker says
+ *  about the symbol there: markdown (a code fence with the signature, then
+ *  its doc comment), nothing, or why it could not answer. */
+export type HoverResult = { readonly markdown: string } | { readonly none: true } | { readonly error: string };
+
+/** One declaration a symbol resolves to. `code` is the declaration itself (a
+ *  function with its body), from `line`, cut at a length with `more` lines
+ *  left; null for TypeScript's own library, which is not a file to read. */
+export interface Peek {
+  readonly file: string;
+  readonly where: "branch" | "package" | "typescript";
+  readonly line: number;
+  readonly code: string | null;
+  readonly more: number;
+}
+
+/** GET /review/<ticketId>/definition?file&line&col */
+export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek> } | { readonly error: string };

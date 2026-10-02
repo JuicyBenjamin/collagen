@@ -68,3 +68,13 @@ export function highlightHunk(hunk: Pick<Hunk, "file" | "lines">): Array<Array<S
   const after = side((k) => k !== "-");
   return hunk.lines.map((l, i) => (l.kind === "-" ? before.get(i) : after.get(i)) ?? [{ value: l.text }]);
 }
+
+/** Any code as lines of spans — a peeked declaration, a hover's signature.
+ *  `lang` is a file name or a language name (typescript, ts, tsx…). */
+export function highlightCode(code: string, lang: string): Array<Array<Span>> {
+  const asFile = lang.includes(".") ? languageOf(lang) : lang === "typescript" ? "ts" : lang === "javascript" ? "js" : lang;
+  return splitLines(highlighter.tokenize(code, { lang: asFile }).tokens);
+}
+
+/** Can the review page ask the type checker about this file? */
+export const typed = (file: string): boolean => /\.(m|c)?(ts|js)x?$/.test(file);

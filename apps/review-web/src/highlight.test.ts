@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { highlightHunk, languageOf, splitLines } from "./highlight";
+import { highlightCode, highlightHunk, languageOf, splitLines, typed } from "./highlight";
 
 describe("languageOf", () => {
   it("goes by the extension, plain text when unknown", () => {
@@ -41,5 +41,16 @@ describe("highlightHunk", () => {
   it("a string opened on one line colours the next", () => {
     const multi = highlightHunk({ file: "a.ts", lines: [{ kind: "+", text: "const s = `one" }, { kind: "+", text: "two`" }] });
     expect(multi[1]![0]).toEqual({ className: "string", value: "two`" });
+  });
+});
+
+describe("highlightCode / typed", () => {
+  it("colours a snippet by file name or language", () => {
+    expect(highlightCode("function f() {}", "typescript")[0]![0]).toEqual({ className: "keyword", value: "function" });
+    expect(highlightCode("const a = 1", "x/y.tsx")[0]![0]).toEqual({ className: "keyword", value: "const" });
+  });
+  it("asks the type checker about TypeScript and JavaScript files only", () => {
+    expect(["a.ts", "a.tsx", "a.mjs", "a.cts"].map(typed)).toEqual([true, true, true, true]);
+    expect(["a.css", "a.md", "a.py"].map(typed)).toEqual([false, false, false]);
   });
 });
