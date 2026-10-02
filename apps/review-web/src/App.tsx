@@ -2,6 +2,8 @@ import { createEffect, createMemo, createSignal, Errored, For, Loading, Show } f
 import type { Decision, Fork as ForkData, Hunk as HunkData, ReviewPageData, Section } from "./data";
 import { Fork } from "./components/Fork";
 import { Hunk } from "./components/Hunk";
+import { Popover } from "./components/Popover";
+import { ticketId } from "./ticket";
 
 // The review page: a review ticket's diff read by intent. One section per
 // decision — its title, and the code it produced, front and centre; beside
@@ -10,9 +12,6 @@ import { Hunk } from "./components/Hunk";
 // "not explained", itself a finding. Ids, pointers and where the diff came
 // from are plumbing — kept out of the reader's way. Read-only: a take goes
 // back through the person's agent (post-review).
-
-/** /review/<ticketId> — the one thing the url carries. */
-const ticketId = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] ?? "");
 
 async function load(): Promise<ReviewPageData> {
   const res = await fetch(`/review/${encodeURIComponent(ticketId)}/data`);
@@ -26,6 +25,7 @@ export function App() {
     <Errored fallback={(err) => <p class="failed">{String(err())}</p>}>
       <Loading fallback={<p class="loading">Reading the review…</p>}>
         <Page data={data()} />
+        <Popover />
       </Loading>
     </Errored>
   );
