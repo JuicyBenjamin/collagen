@@ -36,7 +36,10 @@ expect "the ticket knows it is a plan" "$ROWS" "kind: plan"
 expect "bob's step is a take, not a review" "$ROWS" "review-bob,bob,take"
 expect "…and it says: your person's own take first, then the thoughts" "$ROWS" "Ask your person for THEIR OWN take FIRST"
 expect "the when-closed line is on the ticket for everyone to see" "$ROWS" "whenClosed: open a Jira ticket for the export work"
-BLIND=$(call $B "$SB" review-context "{\"ticketId\":\"$PID\"}")
+# the ticket and its thoughts are two log ops; the blind take needs the second
+CTXJ="{\"ticketId\":\"$PID\"}"
+wait_until "…and the thoughts beside it" "blind first take" call $B "$SB" review-context "$CTXJ"
+BLIND=$(call $B "$SB" review-context "$CTXJ")
 expect "review-context hands bob's agent the question alone until bob has taken a position" "$BLIND" "blind first take"
 expect "…not the thoughts" "$(echo "$BLIND" | grep -c 'times out on big customers')" "^0$"
 J2="{\"ticketId\":\"$PID\",\"anyway\":true}"  # built first: bash 3.2 mangles \" nested in "$( )"
