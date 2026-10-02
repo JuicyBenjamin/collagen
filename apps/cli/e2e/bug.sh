@@ -20,7 +20,7 @@ expect "no symptom: refused, told it is the one thing a report always has" "$(ca
 NOEFFECT='{"project":"sandbox","symptom":"the export is empty","importance":{"score":3,"effect":""}}'
 J2="$NOEFFECT"
 expect "a score without its effect in words is refused, with the anchor spelled out" "$(call $A "$SA" report-bug "$J2")" "importance needs the effect in words beside the score .3 means .{1,3}wrong"
-BUG='{"project":"sandbox","symptom":"The export comes back empty for customers with more than 10k rows. Smaller ones are fine.","importance":{"score":4,"effect":"the two biggest customers cannot export at all"},"cause":{"what":"the cursor page size overflows the query planner limit","where":["apps/api/src/export.ts:88"]},"suggestion":{"what":"page by id, not by offset","requirements":["must stay under the 30s request budget"]},"remedy":"system"}'
+BUG='{"title":"Empty exports for big customers","project":"sandbox","symptom":"The export comes back empty for customers with more than 10k rows. Smaller ones are fine.","importance":{"score":4,"effect":"the two biggest customers cannot export at all"},"cause":{"what":"the cursor page size overflows the query planner limit","where":["apps/api/src/export.ts:88"]},"suggestion":{"what":"page by id, not by offset","requirements":["must stay under the 30s request budget"]},"remedy":"system"}'
 J3="$BUG"
 FILED=$(call $A "$SA" report-bug "$J3")
 expect "filed as a bug, in the room, nobody asked" "$FILED" "bug ticket filed, in the room, nobody asked"
@@ -78,7 +78,7 @@ SETTLED=$(call $A "$SA" settle-step "$SETTLE")
 expect "the settle points at a plan or the fix's review with from" "$SETTLED" "names this bug in from"
 expect "…and says judging assigns nothing" "$SETTLED" "Judging the bug assigns nothing"
 D1='{"title":"Page by id","what":"page by id","userWhy":"the bug report said the offset pagination overflows the planner","where":["apps/api/src/export.ts:88"]}'
-FIX="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"export: page by id\",\"summary\":\"the export pages by id, so big customers export again\",\"decisions\":[$D1],\"forks\":[],\"from\":[\"$BID\"]}"
+FIX="{\"title\":\"export: page by id\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"export: page by id\",\"summary\":\"the export pages by id, so big customers export again\",\"decisions\":[$D1],\"forks\":[],\"from\":[\"$BID\"]}"
 REVIEW=$(call $A "$SA" ask-review "$FIX")
 expect "the fix's review is filed, asked of bob" "$REVIEW" "review ticket filed, asked of bob"
 RID=$(echo "$REVIEW" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)

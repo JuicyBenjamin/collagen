@@ -71,7 +71,7 @@ export interface Grouped {
 }
 
 export interface ReviewPageData {
-  readonly ticket: { readonly id: string; readonly goal: string; readonly kind: string; readonly project: string };
+  readonly ticket: { readonly id: string; readonly title?: string; readonly goal: string; readonly kind: string; readonly project: string };
   readonly review: {
     readonly summary: string;
     readonly branch?: string;

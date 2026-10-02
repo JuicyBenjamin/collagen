@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { excludedFromEpic, heldBy, visibleTo, type Ticket } from "@collagen/p2p";
+import { excludedFromEpic, heldBy, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
 import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
 import { FOLD, GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
-import { epicProgress, marksLabel, progressLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { epicProgress, marksLabel, progressLabel, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
@@ -51,6 +51,10 @@ export function Tickets() {
   // the rows in the order they are drawn, headers are not stops
   // a ticket waiting on another (after) is its author's alone until it opens
   const byId = new Map(tickets.map((t) => [t.id, t]));
+  const nameOf = (id: string): string | undefined => {
+    const t = byId.get(id);
+    return t ? ticketName(t) : undefined;
+  };
   const rows = tickets
     .filter((t) => visibleTo(t, byId, me))
     .map((t) => ({ t, s: summarize(t, trace, me, heldBy(t, byId), byId) }))
@@ -117,7 +121,7 @@ export function Tickets() {
                 progress={progressLabel(epicProgress(e.epic.t, byId))}
                 nameFor={nameFor}
                 projects={projects.size > 1}
-                goalOf={(id) => byId.get(id)?.goal}
+                goalOf={nameOf}
               />
             ))}
             {groups.map((g) => (
@@ -144,7 +148,7 @@ export function Tickets() {
                         indent={groups.length > 1 ? 4 : 2}
                         depth={k.depth.get(r.t.id) ?? 0}
                         under={k.parent.get(r.t.id)}
-                        goalOf={(id) => byId.get(id)?.goal}
+                        goalOf={nameOf}
                       />
                     ))}
                   </box>
@@ -199,7 +203,7 @@ function EpicView({
       <text fg={theme.epic} truncate wrapMode="none">
         {selected ? "› " : "  "}
         <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
-        {open ? FOLD.open : FOLD.folded} {block.epic.t.goal}
+        {open ? FOLD.open : FOLD.folded} {rowTitle(block.epic.t)}
         <span fg={theme.dim}> · {progress}</span>
       </text>
       {open
@@ -284,7 +288,7 @@ function TicketRow({
       {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
       {depth > 0 ? <span fg={theme.dim}>{`${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} `}</span> : null}
       {project ? <span fg={theme.dim}>{project} · </span> : null}
-      {t.goal}
+      {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
       {excluded ? <span fg={theme.dim}> · excluded from progress</span> : null}
       {waits ? (
         <span fg={theme.dim}>

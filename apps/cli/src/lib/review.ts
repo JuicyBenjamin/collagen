@@ -12,6 +12,16 @@ export const TITLE_MAX = 60;
 /** A review's summary heads its page: a sentence or two, no more. */
 export const SUMMARY_MAX = 200;
 
+/** Why a ticket's title cannot stand, or null: it is the headline the
+ *  lists show — a few words, what the ticket is for — and the goal is the
+ *  line beneath it. */
+export const ticketTitleGap = (title: string | undefined): string | null => {
+  const t = title?.trim() ?? "";
+  if (t.length === 0) return `failed: pass a 'title' — the ticket's headline, a few words (${TITLE_MAX} characters at most) saying what it is for; the lists show it, and the goal is the line beneath it`;
+  if (t.length > TITLE_MAX) return `failed: the title is ${t.length} characters ("${t.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most; the detail belongs in the goal, beneath it`;
+  return null;
+};
+
 /** What an old ticket's decision, filed before titles, shows in its place. */
 export const NO_TITLE = "old ticket — no title";
 

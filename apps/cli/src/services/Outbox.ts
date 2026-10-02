@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
-import type { Outgoing, Proposal } from "@collagen/p2p";
+import { ticketName, type Outgoing, type Proposal } from "@collagen/p2p";
 import { NO_TITLE } from "../lib/review";
 import { Dispatch } from "./Dispatch";
 import { StateStore } from "./StateStore";
@@ -28,10 +28,10 @@ export const outgoingSummary = (p: Proposal): OutgoingSummary => {
     case "message":
       return { kind: "message", project: o.project, target: o.peer, subject: o.intent };
     case "ticket":
-      return { kind: o.ticket.kind, project: o.ticket.project, target: person(p.to), subject: o.ticket.goal };
+      return { kind: o.ticket.kind, project: o.ticket.project, target: person(p.to), subject: ticketName(o.ticket) };
     case "review":
       return o.ticket
-        ? { kind: "review", project: o.ticket.project, target: person(p.to), subject: o.ticket.goal }
+        ? { kind: "review", project: o.ticket.project, target: person(p.to), subject: ticketName(o.ticket) }
         : { kind: "review", project: null, target: person(p.to), subject: `more why · ${o.review.summary}` };
     case "post-review":
       return { kind: "review", project: null, target: person(p.to), subject: "your review" };
@@ -72,7 +72,7 @@ export function proposalText(p: Proposal): string {
       ].filter((x) => x.length > 0);
       // your own words are in here: this is the text to read before it goes
       return [
-        o.ticket ? `a review of "${o.ticket.goal}"` : "more why for a review already on the ticket",
+        o.ticket ? `a review of "${ticketName(o.ticket)}"` : "more why for a review already on the ticket",
         ...(head.length > 0 ? [head.join(" · ")] : []),
         r.summary,
         "",

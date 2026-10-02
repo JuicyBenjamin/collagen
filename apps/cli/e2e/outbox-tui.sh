@@ -29,7 +29,7 @@ LONG_ARGS='{"peer":"bob","project":"sandbox","intent":"ask2","findings":"a revie
 expect "the first message goes" "$(call $A "$SA" send-to-peer '{"peer":"bob","project":"sandbox","intent":"ask","findings":"the short one"}')" "sent to bob"
 # two steps: bob's, which his mock settles at once, and alice's own — a ticket
 # whose every step is answered is finished and leaves the overview
-expect "and a ticket" "$(call $A "$SA" create-ticket '{"goal":"explain the NaN","project":"sandbox","steps":[{"owner":"bob","intent":"investigate","description":"look at average()"},{"owner":"alice","intent":"confirm","description":"check the fix lands"}]}')" "goal: explain the NaN"
+expect "and a ticket" "$(call $A "$SA" create-ticket '{"title":"explain the NaN","goal":"explain the NaN","project":"sandbox","steps":[{"owner":"bob","intent":"investigate","description":"look at average()"},{"owner":"alice","intent":"confirm","description":"check the fix lands"}]}')" "goal: explain the NaN"
 expect "and last, a message with a review-sized body — newest, so it is the row the cursor starts on" "$(call $A "$SA" send-to-peer "$LONG_ARGS")" "sent to bob"
 wait_until "all three are recorded as gone" "^3$" grep -c '↗ ' "$LOG"
 touch "$OUT/outbox-tui.go"

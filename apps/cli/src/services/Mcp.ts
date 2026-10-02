@@ -13,7 +13,7 @@ import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } fro
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
-import { reviewGaps, type DecisionInput, type ForkInput } from "../lib/review";
+import { reviewGaps, ticketTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketView } from "../lib/ticketView";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
@@ -128,8 +128,11 @@ export const DescribeScripting = Tool.make("describe-scripting", {
 
 export const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
+    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. 'title' is its headline in every list — a few words, 60 characters at most, what it is for; 'goal' is the line beneath it. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
   parameters: Schema.Struct({
+    /** the headline the lists show: a few words, 60 characters at most */
+    title: Schema.String,
+    /** the line beneath it: what the work is, in full */
     goal: Schema.String,
     /** tickets this one follows — a plan it carries out; walked back on request */
     from: Schema.optional(Schema.Array(Schema.String)),
@@ -159,6 +162,7 @@ const judgedParameters = {
   peers: Schema.optional(Schema.Array(Schema.String)),
   project: Schema.optional(Schema.String),
   ticketId: Schema.optional(Schema.String),
+  title: Schema.optional(Schema.String),
   goal: Schema.optional(Schema.String),
   summary: Schema.optional(Schema.String),
   focus: Schema.optional(Schema.String),
@@ -214,7 +218,7 @@ const duplicateWorkId = (work: ReadonlyArray<{ readonly id?: string; readonly in
 export const AskPlan = Tool.make("ask-plan", {
   description: [
     "File a PLAN: something your user intends to do, put to the room for judgment before it is built — do you agree, what would you change, what am I missing. Only when your user asks for input, advice or direction on what they mean to do (\"ask kristian what he thinks of this plan\", \"put this up for input\") — never on your own initiative. It reaches the room at once and the outbox shows what went. A question your user could have asked YOU is not a plan: this is for a colleague's judgment, the input that is not AI.",
-    "'goal' is the one line everyone sees — what your user intends (\"stream the export, don't buffer it\"). 'summary' is their thinking in a paragraph. 'decisions' are the thoughts behind it, one per point: a 'title' (a few words, 60 characters at most — the headline a reader sees first: what the point is for, never how), 'what' they mean to do in one line, 'userWhy' in their words, 'agentWhy' what you found, checked or would add — marked as yours. 'forks' are the roads not taken so far, with 'at' as a pointer where there is code, or the area if there is none yet. 'peers' is 0 to many, exactly the names your user said; nobody named means the plan sits in the room for whoever has a take — including your user's own second agent.",
+    "'title' is the headline every list shows — a few words, 60 characters at most (\"Streamed export\"); required when filing. 'goal' is the line beneath it — what your user intends (\"stream the export, don't buffer it\"). 'summary' is their thinking in a paragraph. 'decisions' are the thoughts behind it, one per point: a 'title' (a few words, 60 characters at most — the headline a reader sees first: what the point is for, never how), 'what' they mean to do in one line, 'userWhy' in their words, 'agentWhy' what you found, checked or would add — marked as yours. 'forks' are the roads not taken so far, with 'at' as a pointer where there is code, or the area if there is none yet. 'peers' is 0 to many, exactly the names your user said; nobody named means the plan sits in the room for whoever has a take — including your user's own second agent.",
     "Readers give a BLIND FIRST TAKE: their agent hands them the goal alone, they say what they think (post-review; failed: true asks for changes), and only then do your user's thoughts open to them. A ↻ hands the plan back to your user to revise this same ticket (ask-plan with 'ticketId'), never to reply in prose. 'from' names tickets this plan follows (a proposal it answers); 'after' names tickets it WAITS on — phase two after phase one: until they are answered nobody but your user is shown it, and 'after: []' withdraws the order; 'whenClosed' is your user's own instruction for the moment they close it (\"open the Jira tickets\"), handed back to you then.",
     "WHAT TO TELL YOUR USER: that the plan ticket has been filed (or updated), nothing more. KEEP IT CURRENT: when their thinking moves, call ask-plan again with 'ticketId' — re-send the summary if it no longer holds, repeat the id of a changed decision, pass a new 'goal' if the question moved; 'from: []' withdraws the lineage and 'whenClosed: \"\"' the close instruction, leaving either out keeps it. When the takes are in and your user has decided, close-ticket with the conclusion as the reason.",
   ].join("\n"),
@@ -225,7 +229,7 @@ export const AskPlan = Tool.make("ask-plan", {
 export const Propose = Tool.make("propose", {
   description: [
     "File a PROPOSAL: an idea your user wants written down, owed to no one — is it worth doing, what might it involve, who might do it. The cheap kind: alone on their own project they get ideas and want them kept without committing to them, so it goes in with a 'goal' and at least one thought and nothing more is demanded. Only when your user says so (\"file that as a proposal\", \"propose to kristian that…\") — never on your own initiative. Not a task: a task is agreed work with owners; a proposal asks first, and nobody owes anything until a plan names them.",
-    "'peers' is 0 to many, exactly the names your user said — nobody named means the idea sits in the room for whoever has a take, including your user's own second agent, or your user later. A named peer may be asked any of the three questions: is the idea good, would you do it, should I. 'goal' is the one line everyone sees. 'summary' (optional here), 'decisions' (the why: each with a short 'title' — a few words, the headline — 'what' in one line, 'userWhy' in your user's words, 'agentWhy' yours) and 'forks' as for ask-plan. 'work' is optional and NON-BINDING: an outline of what the work might be — items with an 'id' (stable; defaults to the intent), an intent, a description and, if your user has one in mind, a suggested 'owner' by name. It is kept on the ticket's why for a plan to lift into real steps — no step is ever made from it, named peers included: a peer says in their take whether they would do it, and only a plan binds anyone. 'from' names tickets this follows; 'whenClosed' is your user's instruction for the moment they close it.",
+    "'peers' is 0 to many, exactly the names your user said — nobody named means the idea sits in the room for whoever has a take, including your user's own second agent, or your user later. A named peer may be asked any of the three questions: is the idea good, would you do it, should I. 'title' is the headline every list shows (a few words, 60 at most; required when filing), 'goal' the line beneath it. 'summary' (optional here), 'decisions' (the why: each with a short 'title' — a few words, the headline — 'what' in one line, 'userWhy' in your user's words, 'agentWhy' yours) and 'forks' as for ask-plan. 'work' is optional and NON-BINDING: an outline of what the work might be — items with an 'id' (stable; defaults to the intent), an intent, a description and, if your user has one in mind, a suggested 'owner' by name. It is kept on the ticket's why for a plan to lift into real steps — no step is ever made from it, named peers included: a peer says in their take whether they would do it, and only a plan binds anyone. 'from' names tickets this follows; 'whenClosed' is your user's instruction for the moment they close it.",
     "REVISING (propose with 'ticketId'): 'work' corrects an outline item by id and adds new ids; nothing is ever removed by omission. To withdraw an item, pass 'retireWork' with its ids — an outline is intent, not history, so it goes. 'from: []' withdraws the lineage and 'whenClosed: \"\"' the close instruction; leaving either out leaves it as it was.",
     "Readers give a BLIND FIRST TAKE (see ask-plan). Your user may take their own idea too — post-review on their own proposal is allowed and shows on the row as theirs, so others see it was self-approved and can still add a take. Accepting is judgment, not work: when the idea is accepted the obvious next step is a plan filed with 'from' this ticket (ask-plan), with the outline and suggested owners as prefills — your user confirms that plan, nothing is assigned by accepting. WHAT TO TELL YOUR USER: that the proposal has been filed (or updated), nothing more. KEEP IT CURRENT with propose and 'ticketId'. When your user is done with the idea — a plan grew out of it, or it is dropped — close-ticket with the conclusion as the reason.",
   ].join("\n"),
@@ -240,7 +244,7 @@ export const Propose = Tool.make("propose", {
 export const ReportBug = Tool.make("report-bug", {
   description: [
     "File a BUG: a symptom, with your user's reading of it — what is happening, how bad, what could fix it — put to the room for judgment before anyone decides how to go about it. Only when your user says so (\"file that as a bug\", \"report this\") — never on your own initiative. Everyone involved then decides: usually someone opens a Jira ticket, fixes it, and files the fix's review with 'from' this bug, so the reviewers read the report beside the why.",
-    "'symptom' is the one required field: what is wrong, as experienced, in your user's words. 'goal' is the one line everyone sees and defaults to the symptom's first sentence. Everything else is the reporter's reading and arrives as it is known: 'cause' {what is actually happening, where: project and file:line}; 'importance' {score 1–5, effect in words} — the scale is anchored: 1 cosmetic (nobody blocked), 2 annoying (a workaround exists), 3 wrong (a feature fails for some), 4 blocking (a feature fails for everyone), 5 breaking (data loss, a security hole, nothing works); 'suggestion' {what could fix it, requirements: loose — a bug carries no formal requirements, a plan lifts these into real ones}; 'remedy' — how big the fix is, the reporter's coarse guess, apart from where the symptom lives: line (a local fix), system (an existing system does the wrong thing), refactor (right in intent, wrong in shape), new (the system that should handle this does not exist). 'decisions' and 'forks' are optional here; 'peers' 0 to many, exactly the names your user said; 'from' and 'whenClosed' as elsewhere.",
+    "'symptom' is the one required field: what is wrong, as experienced, in your user's words. 'title' is the headline every list shows — a few words, 60 characters at most; required when filing. 'goal' is the line beneath it and defaults to the symptom's first sentence. Everything else is the reporter's reading and arrives as it is known: 'cause' {what is actually happening, where: project and file:line}; 'importance' {score 1–5, effect in words} — the scale is anchored: 1 cosmetic (nobody blocked), 2 annoying (a workaround exists), 3 wrong (a feature fails for some), 4 blocking (a feature fails for everyone), 5 breaking (data loss, a security hole, nothing works); 'suggestion' {what could fix it, requirements: loose — a bug carries no formal requirements, a plan lifts these into real ones}; 'remedy' — how big the fix is, the reporter's coarse guess, apart from where the symptom lives: line (a local fix), system (an existing system does the wrong thing), refactor (right in intent, wrong in shape), new (the system that should handle this does not exist). 'decisions' and 'forks' are optional here; 'peers' 0 to many, exactly the names your user said; 'from' and 'whenClosed' as elsewhere.",
     "Readers give a BLIND FIRST TAKE on the symptom alone: their agent hands them the symptom, they say what they make of it (post-review; failed: true asks the reporter for changes), and only then does the reporter's cause, importance, suggestion and remedy open to them — a second, independent diagnosis is the most valuable thing a bug report collects. REVISING (report-bug with 'ticketId'): pass the part of the report that changed — a cause once found, a new score — fields left out keep their value; to withdraw a field that no longer holds (a disproven cause, a score that was wrong) pass 'retire' with its names: cause, importance, suggestion, remedy; 'from: []' and 'whenClosed: \"\"' withdraw those.",
     "WHAT TO TELL YOUR USER: that the bug ticket has been filed (or updated), nothing more. KEEP IT CURRENT with report-bug and 'ticketId'. When the takes are in and your user has decided what happens to it — a plan, a fix and its review, or nothing — close-ticket with the conclusion as the reason.",
   ].join("\n"),
@@ -262,6 +266,7 @@ export const AskReview = Tool.make("ask-review", {
     "'peers' is who is asked, and it is 0 to many — it carries exactly the names your user said, and NONE is the default. They named nobody, you name nobody: never infer a reviewer from who is in the room, who is online, or who touched the code. Name several and each gets a review step of their own. With nobody asked the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
     "A reviewer must see what the change is FOR before anything else, so lead with purpose. 'summary' is the purpose in a sentence or two (200 characters at most — it is the headline of the review page): what is different for whoever uses this once it lands — not how it was built, not a list of the parts. Every decision needs a 'title': its headline, a few words (60 characters at most), what it achieves, in plain words — \"Big exports finish\", \"One tab per review\", \"Typos caught before merge\" — never the mechanism (\"SSE endpoint with SubscriptionRef streams\"). 'what' is the line beneath it: what was actually done, in one line. Short and sweet beats complete: the why, the forks and the code carry the rest.",
     "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line). Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
+    "'title' is the ticket's headline in every list — a few words, 60 characters at most, what the change is for; required when filing. The goal beneath it defaults to the branch.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
     "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
     "It creates a review ticket: a step per person asked (their review) and one you own (acting on what comes back). The why goes on the room's log beside it, so it is there when you are offline — and a reader's agent pulls it only when their person asks.",
@@ -272,6 +277,7 @@ export const AskReview = Tool.make("ask-review", {
     peers: Schema.optional(Schema.Array(Schema.String)),
     project: Schema.optional(Schema.String),
     ticketId: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
     goal: Schema.optional(Schema.String),
     summary: Schema.optional(Schema.String),
     focus: Schema.optional(Schema.String),
@@ -375,12 +381,13 @@ export const Epic = Tool.make("epic", {
   description: [
     "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. Filing outcomes may ask you to OFFER one: the epic of the ticket a new one grows out of, or a new epic when your user files several related tickets together — offer in one line, act on their yes.",
     "An epic belongs to the room, not to a project or a person: anyone may put a ticket in, move one from epic to epic, take one out, order them, close an epic or reopen it. A ticket is in one epic at most, and only where it was put: lineage (from) never moves anything, so a plan grown out of a part is added explicitly if it belongs. Parts may come from any project.",
-    "action 'create': goal (the one line), summary (what it aims for, a sentence or two), optionally ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'exclude' / 'include': epicId and ticketIds — kept in the epic but out of its progress (work dropped or not to be done there), or counted again. 'order': epicId and ticketIds in the order they are to be read — it hides nothing and sets no after. 'close': epicId — only once everything in it is done, closed or excluded; your user's reason, or by default that its parts are done. 'reopen': epicId and a reason, always.",
+    "action 'create': title (its headline, a few words), optionally goal (the line beneath it), summary (what it aims for, a sentence or two) and ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'exclude' / 'include': epicId and ticketIds — kept in the epic but out of its progress (work dropped or not to be done there), or counted again. 'order': epicId and ticketIds in the order they are to be read — it hides nothing and sets no after. 'close': epicId — only once everything in it is done, closed or excluded; your user's reason, or by default that its parts are done. 'reopen': epicId and a reason, always.",
     "Progress is a count: done against everything counted. get-tickets shows each ticket's epic and each epic's parts, progress and what still keeps it open; review-context on an epic reads its aim and its tickets. It goes out as you call it and shows in your user's outbox.",
   ].join("\n"),
   parameters: Schema.Struct({
     action: Schema.Literals(["create", "add", "remove", "exclude", "include", "order", "close", "reopen"]),
     epicId: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
     goal: Schema.optional(Schema.String),
     summary: Schema.optional(Schema.String),
     ticketIds: Schema.optional(Schema.Array(Schema.String)),
@@ -632,6 +639,7 @@ const makeHandlers = Effect.gen(function* () {
         peers?: ReadonlyArray<string>;
         project?: string;
         ticketId?: string;
+        title?: string;
         goal?: string;
         summary?: string;
         focus?: string;
@@ -703,7 +711,11 @@ const makeHandlers = Effect.gen(function* () {
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
             delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves;
-          const ticketMoves = input.goal !== undefined || input.from !== undefined || input.after !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
+          if (input.title !== undefined) {
+            const gap = ticketTitleGap(input.title);
+            if (gap) return gap;
+          }
+          const ticketMoves = input.title !== undefined || input.goal !== undefined || input.from !== undefined || input.after !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
           if (!whyMoves && !ticketMoves) return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
           if (whyMoves) {
             const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, true, kind);
@@ -725,6 +737,7 @@ const makeHandlers = Effect.gen(function* () {
           // lineage, the close instruction, the pending work, and who is asked.
           let revised: Ticket = ticket;
           if (input.goal && input.goal !== ticket.goal) revised = { ...revised, goal: input.goal };
+          if (input.title !== undefined && input.title.trim() !== ticket.title) revised = { ...revised, title: input.title.trim() };
           // present means set — and an empty value means withdraw; absent means keep
           if (input.from !== undefined) revised = { ...revised, from: input.from };
           if (input.after !== undefined) {
@@ -796,7 +809,7 @@ const makeHandlers = Effect.gen(function* () {
         }
         const dupWork = duplicateWorkId(input.work ?? []);
         if (dupWork) return `failed: two work items would share the id "${dupWork}" — give each its own 'id' (they default to the intent)`;
-        if (kind !== "review" && kind !== "bug" && !input.goal) return `failed: pass 'goal' — the one line everyone sees: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
+        if (kind !== "review" && kind !== "bug" && !input.goal) return `failed: pass 'goal' — the line beneath the title: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
         const project = resolveName(input.project, [roomProjects(yield* store.get, roomId)]);
         if (project._tag !== "found") {
           const mine = roomProjects(yield* store.get, roomId).map((p) => p.name).join(", ");
@@ -805,6 +818,9 @@ const makeHandlers = Effect.gen(function* () {
         const { path: projectPath, name: projectName } = project.value;
         const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, false, kind);
         if (gap) return gap;
+        // after what the kind itself asks for, so its own refusals come first
+        const titleGap = ticketTitleGap(input.title);
+        if (titleGap) return titleGap;
         const tickets = yield* SubscriptionRef.get(room.tickets);
         const after = input.after && input.after.length > 0 ? [...new Set(input.after)] : undefined;
         if (after) {
@@ -847,6 +863,7 @@ const makeHandlers = Effect.gen(function* () {
         const ticket: Ticket = {
           id: ticketId,
           project: projectName,
+          title: input.title!.trim(),
           goal,
           createdBy: identity.pubkey,
           kind,
@@ -1016,6 +1033,7 @@ const makeHandlers = Effect.gen(function* () {
       "describe-scripting": () =>
         Effect.sync(() => ({ card: scripting.describe() })).pipe(Effect.withSpan("Mcp.describeScripting")),
       "create-ticket": Effect.fn("Mcp.createTicket")(function* (input: {
+        title: string;
         goal: string;
         project: string;
         from?: ReadonlyArray<string>;
@@ -1047,10 +1065,13 @@ const makeHandlers = Effect.gen(function* () {
           const problem = afterProblem(undefined, after, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
           if (problem) return `failed: ${problem}`;
         }
+        const titleGap = ticketTitleGap(input.title);
+        if (titleGap) return titleGap;
         const id = crypto.randomUUID();
         const ticket: Ticket = {
           id,
           project,
+          title: input.title.trim(),
           goal: input.goal,
           createdBy: identity.pubkey,
           kind: "task",
@@ -1070,7 +1091,7 @@ const makeHandlers = Effect.gen(function* () {
           })),
         };
         const to = [...new Set(owners.map((o) => o.name))].join(", ");
-        return yield* outbox.tell({ roomId, to, title: `${project} · ${input.goal}`, outgoing: { kind: "ticket", ticket } });
+        return yield* outbox.tell({ roomId, to, title: `${project} · ${input.title.trim()}`, outgoing: { kind: "ticket", ticket } });
       }),
       "ask-review": (input: Parameters<typeof fileJudged>[1]) => fileJudged("review", input),
       "ask-plan": (input: Parameters<typeof fileJudged>[1]) => fileJudged("plan", input),
@@ -1100,7 +1121,7 @@ const makeHandlers = Effect.gen(function* () {
           outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false },
         });
       }),
-      epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen"; epicId?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
+      epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen"; epicId?: string; title?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ids = input.ticketIds ?? [];
@@ -1118,20 +1139,22 @@ const makeHandlers = Effect.gen(function* () {
         const noEpic = `failed: no epic ${input.epicId ?? "(pass epicId)"} — check get-tickets (kind: epic)`;
         switch (input.action) {
           case "create": {
-            const goal = input.goal?.trim() ?? "";
-            if (!goal) return "failed: pass the epic's goal — the one line everyone sees, what the body of work is";
+            const titleGap = ticketTitleGap(input.title);
+            if (titleGap) return titleGap.replace("the ticket's headline", "the epic's headline");
+            const title = input.title!.trim();
+            const goal = input.goal?.trim() || title;
             const now = yield* Clock.currentTimeMillis;
             const id = crypto.randomUUID();
-            const ticket: Ticket = { id, project: "", goal, createdBy: identity.pubkey, kind: "epic", steps: [], structureAt: now, updatedAt: now };
+            const ticket: Ticket = { id, project: "", title, goal, createdBy: identity.pubkey, kind: "epic", steps: [], structureAt: now, updatedAt: now };
             const myName = yield* SubscriptionRef.get(nameRef);
             const filed = yield* outbox.tell({
               roomId,
               to: "the room",
-              title: `epic · ${goal}`,
+              title: `epic · ${title}`,
               outgoing: { kind: "review", ticket, review: mergeReview(emptyReview(id, identity.pubkey, myName), { summary: input.summary?.trim() ?? "" }, now) },
             });
             if (ids.length === 0 || filed.startsWith("failed")) return filed;
-            return `${filed} ${yield* move({ id, goal })}`;
+            return `${filed} ${yield* move({ id, goal: title })}`;
           }
           case "add": {
             const epic = input.epicId ? all.get(input.epicId) : undefined;

@@ -71,9 +71,9 @@ function Page(props: { data: ReviewPageData }) {
     return m;
   });
   createEffect(
-    () => props.data.ticket.goal,
-    (goal) => {
-      document.title = `${goal} — review`;
+    () => props.data.ticket.title ?? props.data.ticket.goal,
+    (name) => {
+      document.title = `${name} — review`;
     },
   );
 
@@ -152,7 +152,7 @@ function Header(props: { data: ReviewPageData }) {
   return (
     <header>
       <Show when={!purposeFirst()}>
-        <h1>{props.data.ticket.goal}</h1>
+        <h1>{props.data.ticket.title ?? props.data.ticket.goal}</h1>
       </Show>
       <p class="meta">
         <Show when={props.data.review.branch}>
