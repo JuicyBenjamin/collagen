@@ -5,31 +5,29 @@ import { extname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import type { DefinitionResult, HoverResult, Peek, ToolState } from "@collagen/review-web/data";
+import { toolOf, type DefinitionResult, type HoverResult, type Peek, type ToolId, type ToolState } from "@collagen/review-web/data";
 import { startLsp, type LspClient } from "../lib/lsp";
-import { install, installed, packageDir, toolRoot, TYPESCRIPT_VERSION } from "../lib/typescriptTool";
+import { install, installed, packageDir, toolRoot, TOOLS, type LanguageTool } from "../lib/languageTools";
 import { configDir } from "./Identity";
 import { localHost, reviewTree, ticketIdOk } from "./ReviewView";
 
-// Type hints and definition peeks on the review page, for TypeScript and
-// JavaScript. The TypeScript is collagen's own — a pinned typescript 7,
-// installed on the person's word into collagen's folder (lib/typescriptTool)
-// and run as `tsc --lsp` — so a project on an older compiler, or with none
-// installed, gets the same answers. The project gives the code: the
-// branch under review, unpacked from the reader's clone into a folder of its
-// own (git archive: the clone and its working tree are never touched), with
-// the clone's node_modules linked in so imported packages have their types.
-// Nothing leaves the machine; the server stops when nobody has asked for a
-// while.
+// Type hints and definition peeks on the review page, per language: each
+// file's language has its own pinned server (lib/languageTools), installed
+// on the person's word into collagen's folder — so a project on an older
+// compiler, or with none installed, gets the same answers. The project gives
+// the code: the branch under review, unpacked from the reader's clone into a
+// folder of its own (git archive: the clone and its working tree are never
+// touched), with the clone's dependencies (node_modules, vendor) linked in
+// so imported packages have their types. Nothing leaves the machine; a
+// server stops when nobody has asked it anything for a while.
 
-/** Where collagen's own compiler is — never the project's. */
-const tsDir = (): string => packageDir(configDir);
-const tscPath = (): string => join(tsDir(), "bin", "tsc");
+/** Where a tool is installed — collagen's own, never the project's. */
+const toolDir = (tool: LanguageTool): string => packageDir(configDir, tool);
 
-const CODE = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
-/** A path from the diff: relative, inside the tree, a file TypeScript reads. */
+/** A path from the diff: relative, inside the tree, a file some language
+ *  server reads. */
 export const codePathOk = (file: string | undefined): file is string =>
-  file !== undefined && file.length < 500 && !isAbsolute(file) && !file.split(/[\\/]/).includes("..") && CODE.has(extname(file));
+  file !== undefined && file.length < 500 && !isAbsolute(file) && !file.split(/[\\/]/).includes("..") && toolOf(file) !== null;
 
 const IDLE_MS = 10 * 60_000;
 
@@ -61,12 +59,20 @@ const sweepDead = (): void => {
 const PEEK_LINES = 60;
 
 interface Session {
+  readonly tool: LanguageTool;
   readonly root: string;
+  /** what the server keeps for itself (an index), beside the tree, not in it */
+  readonly storage: string;
   readonly projectPath: string;
   readonly lsp: LspClient;
+  /** the server is ready to answer (its index is built) */
+  readonly ready: Promise<void>;
   readonly opened: Set<string>;
   lastUsed: number;
 }
+
+/** How long a first question waits for a server to finish indexing. */
+const READY_MS = 60_000;
 
 /** Unpack a commit of the clone at `projectPath` into `dir`: git archive into
  *  tar, nothing written to the repository. */
@@ -81,23 +87,24 @@ const unpack = (projectPath: string, commit: string, dir: string): Promise<void>
     tar.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`could not unpack ${commit} (tar exit ${code})`))));
   });
 
-/** Link the clone's node_modules into the unpacked tree, beside every
- *  package.json that has one in the clone (a monorepo has several), so
- *  imports resolve to the types the reader has installed. */
-const linkNodeModules = (projectPath: string, root: string, rel = "", depth = 0): void => {
+/** Link the clone's dependency folder (node_modules, vendor) into the
+ *  unpacked tree, beside every marker file (package.json, composer.json)
+ *  that has one in the clone — a monorepo has several — so imports resolve
+ *  to what the reader has installed. */
+const linkDeps = (deps: LanguageTool["deps"], projectPath: string, root: string, rel = "", depth = 0): void => {
   if (depth > 4) return;
   const here = join(root, rel);
-  if (existsSync(join(here, "package.json"))) {
-    const theirs = join(projectPath, rel, "node_modules");
-    if (existsSync(theirs) && !existsSync(join(here, "node_modules"))) symlinkSync(theirs, join(here, "node_modules"), "dir");
+  if (existsSync(join(here, deps.marker))) {
+    const theirs = join(projectPath, rel, deps.dir);
+    if (existsSync(theirs) && !existsSync(join(here, deps.dir))) symlinkSync(theirs, join(here, deps.dir), "dir");
   }
   let entries: Array<string> = [];
   try {
-    entries = readdirSync(here, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== "node_modules" && !d.name.startsWith(".")).map((d) => d.name);
+    entries = readdirSync(here, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== deps.dir && !d.name.startsWith(".")).map((d) => d.name);
   } catch {
     return;
   }
-  for (const name of entries) linkNodeModules(projectPath, root, join(rel, name), depth + 1);
+  for (const name of entries) linkDeps(deps, projectPath, root, join(rel, name), depth + 1);
 };
 
 /** The doc comment right above line `at`, as text — whole or not at all: a
@@ -135,25 +142,32 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const sessions = new Map<string, Promise<Session>>();
     yield* Effect.sync(sweepDead);
 
-    // the install, one at a time, on the person's word (POST from the page)
-    let installing: Promise<string | null> | null = null;
-    let installError: string | undefined;
-    const toolState = (): ToolState =>
-      installing
-        ? { state: "installing", version: TYPESCRIPT_VERSION }
-        : installed(tsDir())
-          ? { state: "ready", version: TYPESCRIPT_VERSION }
-          : { state: "missing", version: TYPESCRIPT_VERSION, ...(installError ? { error: installError } : {}) };
-    const startInstall = (): ToolState => {
-      if (!installing && !installed(tsDir())) {
-        installError = undefined;
-        installing = install(toolRoot(configDir)).then((error) => {
-          installing = null;
-          installError = error ?? undefined;
-          return error;
-        });
+    // each tool's install, one at a time, on the person's word (POST from
+    // the page); and what its server asked to be shown to the person
+    const installing = new Map<ToolId, Promise<string | null>>();
+    const installError = new Map<ToolId, string>();
+    const notices = new Map<ToolId, Array<string>>();
+    const toolState = (id: ToolId): ToolState => {
+      const tool = TOOLS[id];
+      const about = { tool: id, name: tool.name, version: tool.version, size: tool.size, ...(tool.licence ? { licence: tool.licence } : {}) };
+      if (installing.has(id)) return { ...about, state: "installing" };
+      if (installed(toolDir(tool), tool)) return { ...about, state: "ready", ...(notices.get(id)?.length ? { notices: notices.get(id)! } : {}) };
+      return { ...about, state: "missing", ...(installError.has(id) ? { error: installError.get(id)! } : {}) };
+    };
+    const startInstall = (id: ToolId): ToolState => {
+      const tool = TOOLS[id];
+      if (!installing.has(id) && !installed(toolDir(tool), tool)) {
+        installError.delete(id);
+        installing.set(
+          id,
+          install(toolRoot(configDir, tool), tool).then((error) => {
+            installing.delete(id);
+            if (error) installError.set(id, error);
+            return error;
+          }),
+        );
       }
-      return toolState();
+      return toolState(id);
     };
 
     const stop = (key: string) => {
@@ -162,6 +176,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       void s?.then((x) => {
         x.lsp.close();
         rmSync(x.root, { recursive: true, force: true });
+        rmSync(x.storage, { recursive: true, force: true });
       }, () => {});
     };
 
@@ -177,54 +192,80 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       }),
     );
 
-    const start = async (projectPath: string, commit: string, key: string): Promise<Session> => {
+    const start = async (tool: LanguageTool, projectPath: string, commit: string, key: string): Promise<Session> => {
       const root = join(TREES, String(process.pid), key);
+      const storage = `${root}.store`;
       rmSync(root, { recursive: true, force: true });
+      rmSync(storage, { recursive: true, force: true });
+      mkdirSync(storage, { recursive: true });
       await unpack(projectPath, commit, root);
-      linkNodeModules(projectPath, root);
-      const lsp = startLsp(process.execPath, [tscPath(), "--lsp", "--stdio"], root);
+      linkDeps(tool.deps, projectPath, root);
+      let isReady = () => {};
+      const ready = tool.readyWhen
+        ? new Promise<void>((resolve) => {
+            isReady = resolve;
+            setTimeout(resolve, READY_MS).unref();
+          })
+        : Promise.resolve();
+      const lsp = startLsp(process.execPath, [join(toolDir(tool), tool.bin), ...tool.args], root, {
+        onRequest: (method, params) =>
+          method === "workspace/configuration" ? ((params as { items?: Array<unknown> } | null)?.items ?? []).map(() => tool.settings ?? null) : null,
+        onNotification: (method, params) => {
+          if (tool.readyWhen?.(method, params)) isReady();
+          // what the server asks to show the person is shown, never swallowed
+          if (method === "window/showMessage") {
+            const text = String((params as { message?: unknown } | null)?.message ?? "").trim();
+            const seen = notices.get(tool.id) ?? [];
+            if (text && !seen.includes(text)) notices.set(tool.id, [...seen, text].slice(-5));
+          }
+        },
+      });
       const uri = pathToFileURL(root).href;
       await lsp.request("initialize", {
         processId: process.pid,
         rootUri: uri,
         workspaceFolders: [{ uri, name: "review" }],
-        capabilities: { textDocument: { hover: { contentFormat: ["markdown", "plaintext"] }, definition: { linkSupport: true } } },
+        capabilities: { textDocument: { hover: { contentFormat: ["markdown", "plaintext"] }, definition: { linkSupport: true } }, window: { workDoneProgress: true } },
+        ...(tool.initializationOptions ? { initializationOptions: tool.initializationOptions(storage) } : {}),
       });
       lsp.notify("initialized", {});
-      return { root, projectPath, lsp, opened: new Set(), lastUsed: Date.now() };
+      return { tool, root, storage, projectPath, lsp, ready, opened: new Set(), lastUsed: Date.now() };
     };
 
-    /** The language server for a review's branch, started on first use and
+    /** A language's server for a review's branch, started on first use and
      *  kept per commit — a branch that moves gets a fresh one. */
-    const session = Effect.fn("ReviewTypes.session")(function* (ticketId: string) {
+    const session = Effect.fn("ReviewTypes.session")(function* (ticketId: string, tool: LanguageTool) {
       const tree = yield* reviewTree(ticketId);
       if (typeof tree === "string") return tree;
-      const key = `${ticketId.slice(0, 8)}-${tree.commit.slice(0, 12)}`;
+      const prefix = `${ticketId.slice(0, 8)}-${tool.id}-`;
+      const key = `${prefix}${tree.commit.slice(0, 12)}`;
       if (!sessions.has(key)) {
-        for (const k of [...sessions.keys()]) if (k.startsWith(`${ticketId.slice(0, 8)}-`)) stop(k);
-        const started = start(tree.projectPath, tree.commit, key);
+        for (const k of [...sessions.keys()]) if (k.startsWith(prefix)) stop(k);
+        const started = start(tool, tree.projectPath, tree.commit, key);
         started.catch(() => sessions.delete(key));
         sessions.set(key, started);
       }
       return yield* Effect.tryPromise({ try: () => sessions.get(key)!, catch: (e) => (e instanceof Error ? e.message : String(e)) }).pipe(
-        Effect.catch((why) => Effect.succeed(`the TypeScript server could not start: ${why}`)),
+        Effect.catch((why) => Effect.succeed(`the ${tool.name} server could not start: ${why}`)),
       );
     });
 
-    /** Ask the server about a position in a file of the branch; opens the
-     *  file for it first (the server answers about open documents). */
+    /** Ask the file's server about a position in it; opens the file for it
+     *  first (a server answers about open documents). */
     const ask = Effect.fn("ReviewTypes.ask")(function* (ticketId: string, file: string, line: number, col: number, method: string) {
-      if (!installed(tsDir())) return { _tag: "missing" } as const;
-      const s = yield* session(ticketId);
+      const id = toolOf(file);
+      if (id === null) return { _tag: "failed", error: `no language server reads ${extname(file) || file}` } as const;
+      const tool = TOOLS[id];
+      if (!installed(toolDir(tool), tool)) return { _tag: "missing" } as const;
+      const s = yield* session(ticketId, tool);
       if (typeof s === "string") return { _tag: "failed", error: s } as const;
       s.lastUsed = Date.now();
       const path = join(s.root, file);
       if (!existsSync(path)) return { _tag: "failed", error: `${file} is not on the branch under review` } as const;
       const uri = pathToFileURL(path).href;
+      yield* Effect.promise(() => s.ready);
       if (!s.opened.has(uri)) {
-        const ext = extname(file);
-        const languageId = ext === ".tsx" ? "typescriptreact" : ext === ".jsx" ? "javascriptreact" : ext.includes("js") ? "javascript" : "typescript";
-        s.lsp.notify("textDocument/didOpen", { textDocument: { uri, languageId, version: 1, text: readFileSync(path, "utf8") } });
+        s.lsp.notify("textDocument/didOpen", { textDocument: { uri, languageId: tool.languageId(extname(file)), version: 1, text: readFileSync(path, "utf8") } });
         s.opened.add(uri);
       }
       // the page counts lines from 1 and characters from 0, as editors show them
@@ -247,7 +288,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
 
     /** Where a symbol is declared, and the declaration itself: the target's
      *  whole range (a function with its body), capped, with where it lives —
-     *  in the branch, in a package, or in TypeScript's own library. */
+     *  in the branch, in a dependency, or in the language itself. */
     const definition = Effect.fn("ReviewTypes.definition")(function* (ticketId: string, file: string, line: number, col: number) {
       const r = yield* ask(ticketId, file, line, col, "textDocument/definition");
       if (r._tag === "missing") return { missing: true } satisfies DefinitionResult;
@@ -258,13 +299,21 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         targetRange?: { start: { line: number }; end: { line: number } };
         range?: { start: { line: number }; end: { line: number } };
       }>;
-      const { root, projectPath } = r.session;
+      const { root, projectPath, tool } = r.session;
       const realRoot = realpathSync(root);
+      const realTool = (() => {
+        try {
+          return realpathSync(toolDir(tool));
+        } catch {
+          return toolDir(tool);
+        }
+      })();
       const peeks = links.slice(0, 8).flatMap((l): Array<Peek> => {
         const target = l.targetUri ?? l.uri ?? "";
         const range = l.targetRange ?? l.range;
         if (!range) return [];
-        if (!target.startsWith("file:")) return [{ file: target.replace(/^bundled:\/\/\/libs\//, "typescript/lib/"), where: "typescript", line: range.start.line + 1, doc: null, code: null, more: 0 }];
+        // not a file at all: the language's library, bundled in its server
+        if (!target.startsWith("file:")) return [{ file: target.replace(/^bundled:\/\/\/libs\//, "typescript/lib/"), where: "builtin", builtInto: tool.name, line: range.start.line + 1, doc: null, code: null, more: 0 }];
         const path = fileURLToPath(target);
         const real = (() => {
           try {
@@ -273,24 +322,18 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
             return path;
           }
         })();
-        const inTree = real.startsWith(realRoot + sep);
-        const full = inTree ? relative(realRoot, real) : real.startsWith(projectPath + sep) ? relative(projectPath, real) : real;
-        // a package's file by the package, not by the store it sits in
-        const inPackage = full.split(sep).includes("node_modules");
-        const shown = inPackage ? full.slice(full.lastIndexOf(`node_modules${sep}`) + `node_modules${sep}`.length) : full;
         const lines = readFileSync(real, "utf8").split("\n");
         const from = range.start.line;
         const to = Math.min(range.end.line, from + PEEK_LINES - 1);
-        return [
-          {
-            file: shown,
-            where: inPackage ? "package" : "branch",
-            line: from + 1,
-            doc: docAbove(lines, from),
-            code: lines.slice(from, to + 1).join("\n"),
-            more: Math.max(0, range.end.line - to),
-          },
-        ];
+        const body = { line: from + 1, doc: docAbove(lines, from), code: lines.slice(from, to + 1).join("\n"), more: Math.max(0, range.end.line - to) };
+        // a file of the server itself: the language's own declarations (stubs)
+        if (real.startsWith(realTool + sep)) return [{ file: relative(realTool, real).replace(/^lib\/stubs?\//, ""), where: "builtin", builtInto: tool.name, ...body }];
+        const inTree = real.startsWith(realRoot + sep);
+        const full = inTree ? relative(realRoot, real) : real.startsWith(projectPath + sep) ? relative(projectPath, real) : real;
+        // a dependency's file by the package, not by the folder it sits in
+        const dep = `${tool.deps.dir}${sep}`;
+        const inPackage = full.split(sep).includes(tool.deps.dir);
+        return [{ file: inPackage ? full.slice(full.lastIndexOf(dep) + dep.length) : full, where: inPackage ? "package" : "branch", ...body }];
       });
       // a name that is both a value and a namespace of types (Effect.fn):
       // the value — what the code calls — first
@@ -298,7 +341,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)] } satisfies DefinitionResult;
     });
 
-    return { hover, definition, toolState: Effect.sync(toolState), startInstall: Effect.sync(startInstall) } as const;
+    return { hover, definition, toolState: (id: ToolId) => Effect.sync(() => toolState(id)), startInstall: (id: ToolId) => Effect.sync(() => startInstall(id)) } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
@@ -318,17 +361,24 @@ const position = (url: string) => {
 const fromThePage = (headers: Record<string, string | undefined>): boolean =>
   headers["x-collagen"] === "install" && (headers["origin"] === undefined || /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(headers["origin"]));
 
+/** The tool a /review-tools/<tool> path names, if it is one. */
+const toolNamed = (name: string | undefined): ToolId | null => (name !== undefined && Object.hasOwn(TOOLS, name) ? (name as ToolId) : null);
+
 export const ReviewTypesRoutes = Layer.mergeAll(
-  HttpRouter.add("GET", "/review-tools/typescript", (request) =>
+  HttpRouter.add("GET", "/review-tools/:tool", (request) =>
     Effect.gen(function* () {
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).toolState);
+      const tool = toolNamed((yield* HttpRouter.params).tool);
+      if (!tool) return HttpServerResponse.text("not found", { status: 404 });
+      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).toolState(tool));
     }),
   ),
-  HttpRouter.add("POST", "/review-tools/typescript", (request) =>
+  HttpRouter.add("POST", "/review-tools/:tool", (request) =>
     Effect.gen(function* () {
       if (!localHost(request.headers["host"]) || !fromThePage(request.headers)) return HttpServerResponse.text("forbidden", { status: 403 });
-      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).startInstall);
+      const tool = toolNamed((yield* HttpRouter.params).tool);
+      if (!tool) return HttpServerResponse.text("not found", { status: 404 });
+      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).startInstall(tool));
     }),
   ),
   HttpRouter.add("GET", "/review/:ticketId/hover", (request) =>

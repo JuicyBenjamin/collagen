@@ -1,10 +1,9 @@
 import { createEffect, createMemo, createSignal, Errored, For, Loading, onSettled, Show } from "solid-js";
-import { NO_TITLE, type Decision, type Fork as ForkData, type Hunk as HunkData, type ReviewPageData, type Section } from "./data";
+import { NO_TITLE, toolOf, type Decision, type Fork as ForkData, type Hunk as HunkData, type ReviewPageData, type Section } from "./data";
 import { Fork } from "./components/Fork";
 import { Hunk } from "./components/Hunk";
 import { Popover } from "./components/Popover";
 import { TypesBanner } from "./components/TypesBanner";
-import { typed } from "./highlight";
 import { ticketId } from "./ticket";
 
 // The review page: a review ticket's diff read by intent. One section per
@@ -112,9 +111,8 @@ function Page(props: { data: ReviewPageData }) {
 
       <main>
         <Header data={props.data} />
-        <Show when={(props.data.grouped?.hunks ?? []).some((h) => typed(h.file))}>
-          <TypesBanner />
-        </Show>
+        {/* one offer per language the review's code is in */}
+        <For each={[...new Set((props.data.grouped?.hunks ?? []).map((h) => toolOf(h.file)).filter((t) => t !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
         <For each={sections()}>
           {(s) => <DecisionSection section={s} hunks={hunks()} claimedBy={claimedBy()} diffed={props.data.grouped !== null} />}
         </For>

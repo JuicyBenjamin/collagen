@@ -1,13 +1,13 @@
 import { createSignal } from "solid-js";
-import type { DefinitionResult, HoverResult, ToolState } from "./data";
+import { toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
 import { ticketId } from "./ticket";
 
-// The type checker, asked from the page: what is this symbol (hover) and
-// where is it declared (peek). The answers come from collagen's own
-// TypeScript 7 run over the branch under review (cli services/ReviewTypes);
-// the page only says where the reader is pointing — a file of the branch, a
-// line, a character — and draws what comes back. Module-level state: one
-// popover and one peek on the page at a time.
+// The language servers, asked from the page: what is this symbol (hover)
+// and where is it declared (peek). The answers come from collagen's own
+// pinned server for the file's language, run over the branch under review
+// (cli services/ReviewTypes); the page only says where the reader is
+// pointing — a file of the branch, a line, a character — and draws what
+// comes back. Module-level state: one popover and one peek at a time.
 
 /** A position in the branch: the new side of the diff, as editors count —
  *  lines from 1, characters from 0. */
@@ -17,21 +17,34 @@ export interface Spot {
   readonly col: number;
 }
 
-/** The pinned TypeScript the hints need, as the instance reports it. The
- *  page asks once, and again every second while an install runs. */
-const [tool, setTool] = createSignal<ToolState | null>(null);
-export { tool };
-export const typesReady = () => tool()?.state === "ready";
+/** Each language's pinned server, as the instance reports it. The page asks
+ *  once per language the review has, and again every second while an
+ *  install runs. */
+const [tools, setTools] = createSignal<Readonly<Partial<Record<ToolId, ToolState>>>>({});
+export const toolState = (id: ToolId): ToolState | undefined => tools()[id];
+const keep = (t: ToolState) => setTools((all) => ({ ...all, [t.tool]: t }));
 
-export async function refreshTool(): Promise<void> {
-  const r = await fetch("/review-tools/typescript");
-  if (r.ok) setTool((await r.json()) as ToolState);
+/** Can a word in this file be asked about right now? */
+export const readyFor = (file: string): boolean => {
+  const id = toolOf(file);
+  return id !== null && toolState(id)?.state === "ready";
+};
+
+/** The server's name for a file, for "Starting <name>…". */
+export const toolNameFor = (file: string): string => {
+  const id = toolOf(file);
+  return (id && toolState(id)?.name) ?? "the language server";
+};
+
+export async function refreshTool(id: ToolId): Promise<void> {
+  const r = await fetch(`/review-tools/${id}`);
+  if (r.ok) keep((await r.json()) as ToolState);
 }
 
 /** Install it — only ever on the person's click. */
-export async function installTool(): Promise<void> {
-  const r = await fetch("/review-tools/typescript", { method: "POST", headers: { "x-collagen": "install" } });
-  if (r.ok) setTool((await r.json()) as ToolState);
+export async function installTool(id: ToolId): Promise<void> {
+  const r = await fetch(`/review-tools/${id}`, { method: "POST", headers: { "x-collagen": "install" } });
+  if (r.ok) keep((await r.json()) as ToolState);
 }
 
 const key = (s: Spot) => `${s.file}:${s.line}:${s.col}`;
@@ -80,6 +93,7 @@ export const wordEnd = (text: string, start: number): number => {
 export interface Popover {
   readonly x: number;
   readonly y: number;
+  readonly file: string;
   readonly state: "loading" | "ready";
   readonly result?: HoverResult;
 }
@@ -101,11 +115,11 @@ export function pointAt(spot: Spot | null, x: number, y: number): void {
   }
   const timer = setTimeout(() => {
     // a slow first answer (the server starting) says so rather than nothing
-    const slow = setTimeout(() => pending?.spot === spot && setPopover({ x, y, state: "loading" }), 400);
+    const slow = setTimeout(() => pending?.spot === spot && setPopover({ x, y, file: spot.file, state: "loading" }), 400);
     void ask("hover", spot, hovers).then((result) => {
       clearTimeout(slow);
       if (pending?.spot !== spot) return;
-      setPopover("none" in result ? null : { x, y, state: "ready", result });
+      setPopover("none" in result ? null : { x, y, file: spot.file, state: "ready", result });
     });
   }, 220);
   pending = { spot, timer };

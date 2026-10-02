@@ -21,8 +21,8 @@ function Declaration(props: { peek: PeekData }) {
     <div class="peek-one">
       <p class="peek-file">
         {props.peek.file}:{props.peek.line}
-        <Show when={props.peek.where === "typescript"}>
-          <span class="peek-where"> · built into TypeScript</span>
+        <Show when={props.peek.where === "builtin" && props.peek.builtInto}>
+          {(lang) => <span class="peek-where"> · built into {lang()}</span>}
         </Show>
       </p>
       <Show when={props.peek.doc}>

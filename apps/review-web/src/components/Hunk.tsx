@@ -1,7 +1,7 @@
 import { createMemo, For, Show } from "solid-js";
 import type { Decision, DiffLine, Hunk as HunkData } from "../data";
-import { highlightHunk, typed } from "../highlight";
-import { markWord, peek, peekAt, pointAt, typesReady, wordAt, wordEnd, type Spot } from "../intel";
+import { highlightHunk } from "../highlight";
+import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
 import { AlsoUnder } from "./AlsoUnder";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
@@ -19,12 +19,13 @@ function charAt(x: number, y: number): { readonly col: number; readonly node: No
 
 /** One hunk: file and header, then its lines with old and new numbers, each
  *  line's code coloured by TanStack Highlight as spans of its own — never
- *  set as HTML. On a TypeScript or JavaScript file, a word on an added or
- *  unchanged line answers to the pointer: rest on it for its type, click it
- *  to peek where it is declared (removed lines are the base's, not asked). */
+ *  set as HTML. On a file a language server reads (once it is installed), a
+ *  word on an added or unchanged line answers to the pointer: rest on it for
+ *  its type, click it to peek where it is declared (removed lines are the
+ *  base's, not asked). */
 export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision> }) {
   const spans = createMemo(() => highlightHunk(props.hunk));
-  const asks = () => typesReady() && typed(props.hunk.file);
+  const asks = () => readyFor(props.hunk.file);
 
   /** The word under the pointer on this line, as a spot in the branch, and
    *  the range of text it covers (to mark it). */

@@ -1,7 +1,7 @@
 import { createMemo, For, Show } from "solid-js";
 import { highlightCode } from "../highlight";
 import { brief } from "../hoverText";
-import { popover } from "../intel";
+import { popover, toolNameFor } from "../intel";
 import { CodeLine } from "./Code";
 
 /** Prose with the little markdown a doc comment uses: `code`, **strong**,
@@ -34,7 +34,7 @@ export function Popover() {
     <Show when={popover()}>
       {(p) => (
         <div class="hint" style={style()} role="tooltip">
-          <Show when={p().state === "ready" && p().result} fallback={<p class="hint-text">Starting TypeScript…</p>}>
+          <Show when={p().state === "ready" && p().result} fallback={<p class="hint-text">Starting {toolNameFor(p().file)}…</p>}>
             {(r) => (
               <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={<p class="hint-text muted">{"error" in r() ? (r() as { error: string }).error : ""}</p>}>
                 {(md) => (
