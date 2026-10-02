@@ -1,4 +1,4 @@
 {
-  "apps/cli": "0.15.0-alpha",
-  "packages/p2p": "0.15.0-alpha"
+  "apps/cli": "0.16.0-alpha",
+  "packages/p2p": "0.16.0-alpha"
 }

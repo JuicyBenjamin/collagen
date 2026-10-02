@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.15.0-alpha...cli-v0.16.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** the review page reads PHP, coloured, with types on hover and a peek ([f192c12](https://github.com/JuicyBenjamin/collagen/commit/f192c12c6cd8aa81b007273d97093b703f5e492f))
+
+
+### Bug Fixes
+
+* **cli:** hints ask again while indexing, keep inline-doc declarations, honour vendor-dir ([feec206](https://github.com/JuicyBenjamin/collagen/commit/feec206538485291a49f8662f1c4a24ff74bb175))
+
 ## [0.15.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.14.0-alpha...cli-v0.15.0-alpha) (2026-10-02)
 
 
