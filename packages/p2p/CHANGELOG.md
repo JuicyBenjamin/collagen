@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.17.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.16.0-alpha...p2p-v0.17.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** epics follow the agreed rules — explicit, counted, ordered, closed when resolved ([e8efaa4](https://github.com/JuicyBenjamin/collagen/commit/e8efaa42c91c8d720a8f7b9a31e82695e2070eb9))
+* **cli:** epics, a folder of tickets shaped by anyone in the room ([37e1c64](https://github.com/JuicyBenjamin/collagen/commit/37e1c64f0b796cef51bdd648f39d6cd25bd61e08))
+
+
+### Bug Fixes
+
+* **cli:** an epic's explanation never names a ticket its reader may not see ([9a956eb](https://github.com/JuicyBenjamin/collagen/commit/9a956eb70a4d8d88cef908b4b7ca4fae6f771327))
+* **cli:** epic ops have unique ids, gates and readers see the real state and reason ([051ae3d](https://github.com/JuicyBenjamin/collagen/commit/051ae3dcd03fdb82f3cb22133785ca3d9ae911bc))
+
 ## [0.16.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.15.0-alpha...p2p-v0.16.0-alpha) (2026-10-02)
 
 
