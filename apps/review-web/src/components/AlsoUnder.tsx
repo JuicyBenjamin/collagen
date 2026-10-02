@@ -1,5 +1,5 @@
 import { For, onCleanup, Show } from "solid-js";
-import type { Decision } from "../data";
+import { NO_TITLE, type Decision } from "../data";
 
 /** A decision's title cut to fit one line of the file header. */
 const short = (what: string) => (what.length > 48 ? `${what.slice(0, 47)}…` : what);
@@ -16,7 +16,7 @@ export function AlsoUnder(props: { decisions: ReadonlyArray<Decision> }) {
         when={props.decisions.length > 1}
         fallback={
           <a class="also" href={`#${props.decisions[0]!.id}`}>
-            also under “{short(props.decisions[0]!.what)}”
+            also under “{short(props.decisions[0]!.title ?? NO_TITLE)}”
           </a>
         }
       >
@@ -36,7 +36,7 @@ export function AlsoUnder(props: { decisions: ReadonlyArray<Decision> }) {
               {(d) => (
                 <li>
                   <a href={`#${d.id}`} onClick={close}>
-                    {d.what}
+                    {d.title ?? NO_TITLE}
                   </a>
                 </li>
               )}

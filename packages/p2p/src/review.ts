@@ -8,13 +8,18 @@ import { Schema } from "effect";
 // its author is online, and it is READ ON DEMAND — the reviewer's agent pulls
 // it when their person asks, never on its own.
 
-/** One decision behind the change. `userWhy` is the half a diff can never
- *  show: what the person asked for, prefaced or ruled out, in their words
- *  where possible. `agentWhy` is the agent's own reason for the shape it
- *  took. `where` points at the code it produced (file, or file:line). */
+/** One decision behind the change. `title` is its headline — a few words,
+ *  what it is for — and `what` the line beneath it saying what was done.
+ *  `userWhy` is the half a diff can never show: what the person asked for,
+ *  prefaced or ruled out, in their words where possible. `agentWhy` is the
+ *  agent's own reason for the shape it took. `where` points at the code it
+ *  produced (file, or file:line). */
 export const ReviewDecision = Schema.Struct({
   /** Stable within the review ("d1", "d2" …) so a question can name it. */
   id: Schema.String,
+  /** Every decision filed now has one; absent only on an old ticket's,
+   *  which says so rather than pretending its line is a headline. */
+  title: Schema.optional(Schema.String),
   what: Schema.String,
   userWhy: Schema.optional(Schema.String),
   agentWhy: Schema.optional(Schema.String),
@@ -121,6 +126,7 @@ export interface ReviewDelta {
   readonly link?: string;
   readonly decisions?: ReadonlyArray<{
     readonly id?: string;
+    readonly title?: string;
     readonly what: string;
     readonly userWhy?: string;
     readonly agentWhy?: string;

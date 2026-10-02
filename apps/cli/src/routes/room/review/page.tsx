@@ -8,6 +8,7 @@ import { Focusable } from "../../../components/Focusable";
 import { focusAtom } from "../../../components/focus";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
+import { NO_TITLE } from "../../../lib/review";
 import { wrap } from "../../../lib/wrap";
 import { identityAtom, membersAtom, reviewsAtom, rosterAtom } from "../atoms";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
@@ -38,7 +39,9 @@ const linesOf = (r: ReviewContext, by: string, width: number): ReadonlyArray<Lin
   if (r.decisions.length === 0) out.push({ text: "    none recorded", color: theme.dim });
   for (const d of r.decisions) {
     out.push({ text: "", color: theme.dim });
-    para(`${d.id} ${d.what}`, theme.fg, "  ");
+    // the headline first, what was done beneath it
+    para(`${d.id} ${d.title ?? `(${NO_TITLE})`}`, d.title ? theme.fg : theme.dim, "  ");
+    para(d.what, theme.dim, "      ");
     if (d.userWhy) para(`the user: ${d.userWhy}`, theme.accent, "      ");
     if (d.agentWhy) para(`the agent: ${d.agentWhy}`, theme.dim, "      ");
     if (d.where.length > 0) out.push({ text: `      ${d.where.join("  ")}`, color: theme.ok });
