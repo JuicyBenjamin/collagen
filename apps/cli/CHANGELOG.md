@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.18.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.17.0-alpha...cli-v0.18.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** an epic's author can rename it ([8dc510e](https://github.com/JuicyBenjamin/collagen/commit/8dc510ee462edb3f93306781d9ed9137b4e45af5))
+* **cli:** every ticket has a short title, and its goal is the line beneath ([7dacb6f](https://github.com/JuicyBenjamin/collagen/commit/7dacb6f9b3b8d6dd6e92ae9184ac9ff59c43a166))
+
+
+### Bug Fixes
+
+* **cli:** 'filed together' goes by when tickets were filed, not last revised ([9186683](https://github.com/JuicyBenjamin/collagen/commit/9186683bf08312b4f6344556a507f94b4ea39086))
+* **cli:** a plan's glyph is ≡, one column wide in every terminal ([d74ef64](https://github.com/JuicyBenjamin/collagen/commit/d74ef64c8c262e139ff217ec1b34934377fdb001))
+* **cli:** an epic's rows keep the mark column, the tree line under its title ([d1a7fb7](https://github.com/JuicyBenjamin/collagen/commit/d1a7fb776bcc61c39e06d70433f0d4b123491eb8))
+* **cli:** an epic's rows sit on the columns every other row uses ([380dc15](https://github.com/JuicyBenjamin/collagen/commit/380dc1591192faeaa7522b750eb7ca54324c67d9))
+* **cli:** an epic's tickets sit on a tree under its crown, each with its kind ([f09b1c2](https://github.com/JuicyBenjamin/collagen/commit/f09b1c26464e16045d6c3b59130fc54244c3d9fa))
+* **cli:** an epic's tree line sits under its title, past the crown ([4bdece4](https://github.com/JuicyBenjamin/collagen/commit/4bdece4a06a8e3fdcdee2e3dd9397d96dc46921b))
+* **cli:** epics stand apart on the overview: a crown, space around, tickets shown ([d37296e](https://github.com/JuicyBenjamin/collagen/commit/d37296ef91f1b157fafa032a49bac6a166aeb8f1))
+* **cli:** every row says its kind with a glyph, and its info lines up past the titles ([141fc61](https://github.com/JuicyBenjamin/collagen/commit/141fc61a50c8a6e561ab9306559d93c91464f87b))
+* **cli:** get-tickets names an untitled epic by its goal, as the TUI does ([53dd169](https://github.com/JuicyBenjamin/collagen/commit/53dd1697da8f4581d71549e61b2df5f7210e6972))
+* **cli:** the overview's columns fit the pane, measured in terminal cells ([e6638e5](https://github.com/JuicyBenjamin/collagen/commit/e6638e57bcd0b22be815db561c33e8cf04179182))
+* **cli:** titles merge the same however copies are grouped, and stay on one line ([8c5758b](https://github.com/JuicyBenjamin/collagen/commit/8c5758b43e887fa91c103ba4d849c5ad8ab6cef3))
+
 ## [0.17.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.16.0-alpha...cli-v0.17.0-alpha) (2026-10-02)
 
 
