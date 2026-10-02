@@ -22,7 +22,8 @@ printf 'line\n%.0s' $(seq 1 30) > "$R/src/notes.txt"
 git -C "$R" add -A; git -C "$R" commit -qm base
 git -C "$R" checkout -qb feat/stream-export
 printf 'export const a = 1;\nexport const stream = (rows) => rows.map(String);\n' > "$R/src/export.ts"
-printf 'export const page = (n) => n * 100;\n' > "$R/src/page.ts"
+printf '/** A hundred rows a page. */\nexport function page(n: number): number {\n  return n * 100;\n}\n' > "$R/src/page.ts"
+printf 'import { page } from "./page";\nimport { stream } from "./export";\nexport const first = stream([page(1)]);\n' > "$R/src/use.ts"
 sed -i.bak '25s/line/changed, and nobody said why/' "$R/src/notes.txt"; rm -f "$R/src/notes.txt.bak"
 git -C "$R" add -A; git -C "$R" commit -qm change
 
@@ -60,6 +61,17 @@ expect "nothing outside the build is served as an asset" "$(curl -s -o /dev/null
 expect "a request naming another host is refused (DNS rebinding)" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$ORIGIN/review/$TICKET/data")" "^403$"
 expect "an unknown ticket is a 404" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/not-a-ticket/data")" "^404$"
 expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sTCP:LISTEN 2>/dev/null | grep -c 127.0.0.1)" "^[1-9]"
+
+echo "## types and definitions, from collagen's own TypeScript 7 over the branch"
+HOVER=$(curl -s -m 60 "$ORIGIN/review/$TICKET/hover?file=src/use.ts&line=3&col=21")
+expect "hovering a call says what it is: its signature" "$HOVER" "const stream: \\(rows"
+PEEK=$(curl -s -m 60 "$ORIGIN/review/$TICKET/definition?file=src/use.ts&line=3&col=29")
+expect "peeking it opens the declaration in its own file" "$PEEK" "\"file\":\"src/page.ts\".*export function page"
+expect "…with the doc comment above it" "$PEEK" "A hundred rows a page"
+expect "a path outside the branch is refused" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/hover?file=../../etc/passwd.ts&line=1&col=0")" "^400$"
+expect "…and so is a file the type checker does not read" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/hover?file=src/notes.txt&line=1&col=0")" "^400$"
+expect "…and a hover from another host" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$ORIGIN/review/$TICKET/hover?file=src/use.ts&line=3&col=21")" "^403$"
+expect "your clone was not touched: no worktree, nothing staged" "$(git -C "$R" worktree list | wc -l | tr -d ' ')$(git -C "$R" status --porcelain | wc -l | tr -d ' ')" "^10$"
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all; summary

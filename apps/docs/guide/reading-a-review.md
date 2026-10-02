@@ -42,6 +42,27 @@ question to the author — with any forks outside every decision's lines.
 The plumbing stays out of the way: no decision ids, no pointer lists (each hunk names its
 file), and where the diff came from is one line at the foot of the page.
 
+## Types and definitions
+
+On TypeScript and JavaScript files the code answers to the pointer, on added and unchanged
+lines:
+
+- **rest on a word** and its type appears beside it — what a function takes and returns,
+  what a value is — with the first paragraph of its doc comment;
+- **click it** to peek where it is declared, opened right under the line: the declaration
+  itself (a function with its body, its doc comment above), coloured, with its file and
+  line. It works the same for the branch's own code and for a package's types, Effect's
+  or React's, read from your `node_modules`. `×`, Esc, or a second click folds it away.
+
+The type checker is collagen's own: TypeScript 7 ships with the cli and runs as
+`tsc --lsp`, whatever version the project uses — or none. The project gives the code: the
+branch's commit is unpacked from your clone into a folder of its own (`git archive`; your
+repository and its working tree are never touched), with the clone's `node_modules` linked
+in so imports resolve to what you have installed. A branch that changes its dependencies is
+therefore checked against yours. The server starts on the first hover (a moment), stays
+for the page, and stops after ten idle minutes. Removed lines are the base's and are not
+asked about.
+
 ## Where the diff comes from
 
 **Your own clone**, which is git, which is the source of truth: the project's folder on
