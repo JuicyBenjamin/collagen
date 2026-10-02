@@ -3,6 +3,7 @@ import { createThemeBaseCss, createThemeRule } from "@tanstack/highlight/theme";
 import { githubLightTheme } from "@tanstack/highlight/themes/github-light";
 import { oneDarkProTheme } from "@tanstack/highlight/themes/one-dark-pro";
 import { App } from "./App";
+import { startHandoff } from "./handoff";
 import "./styles.css";
 
 // Token colours from TanStack Highlight's themes: GitHub Light, One Dark Pro
@@ -15,4 +16,5 @@ theme.textContent = [
 ].join("\n");
 document.head.append(theme);
 
+startHandoff();
 render(() => <App />, document.getElementById("root")!);
