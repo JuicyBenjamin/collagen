@@ -18,9 +18,9 @@ ID_RE='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 D='{"title":"The change","what":"the change","userWhy":"she asked for it"}'
 
 echo "## two stacked reviews: the second waits on the first"
-J="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"review the first\",\"branch\":\"feat/first\",\"base\":\"main\",\"summary\":\"the base of the stack\",\"decisions\":[$D],\"forks\":[]}"
+J="{\"title\":\"review the first\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"review the first\",\"branch\":\"feat/first\",\"base\":\"main\",\"summary\":\"the base of the stack\",\"decisions\":[$D],\"forks\":[]}"
 FIRST=$(call $A "$SA" ask-review "$J" | grep -oE "$ID_RE" | head -1)
-J="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"review the second\",\"branch\":\"feat/second\",\"base\":\"feat/first\",\"summary\":\"built on the first\",\"decisions\":[$D],\"forks\":[],\"after\":[\"$FIRST\"]}"
+J="{\"title\":\"review the second\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"review the second\",\"branch\":\"feat/second\",\"base\":\"feat/first\",\"summary\":\"built on the first\",\"decisions\":[$D],\"forks\":[],\"after\":[\"$FIRST\"]}"
 FILED=$(call $A "$SA" ask-review "$J")
 SECOND=$(echo "$FILED" | grep -oE "$ID_RE" | head -1)
 expect "filed in order, and the agent is told it waits" "$FILED" "waits on 1 ticket.*nobody but your user is shown it"
@@ -41,14 +41,14 @@ expect "…the first's step is in his inbox" "$INBOX" "review the first"
 expect "…and nothing of the second" "$(echo "$INBOX" | grep -c 'review the second')" "^0$"
 
 echo "## an order that would hide a ticket for good is refused"
-expect "an unknown id" "$(call $A "$SA" ask-plan '{"project":"sandbox","goal":"phase two","summary":"after phase one","decisions":[{"title":"A","what":"a","userWhy":"b"}],"after":["no-such-ticket"]}')" "failed: no ticket no-such-ticket"
+expect "an unknown id" "$(call $A "$SA" ask-plan '{"title":"phase two","project":"sandbox","goal":"phase two","summary":"after phase one","decisions":[{"title":"A","what":"a","userWhy":"b"}],"after":["no-such-ticket"]}')" "failed: no ticket no-such-ticket"
 J="{\"ticketId\":\"$SECOND\",\"after\":[\"$SECOND\"]}"
 expect "the ticket itself" "$(call $A "$SA" ask-review "$J")" "cannot wait on itself"
 J="{\"ticketId\":\"$FIRST\",\"after\":[\"$SECOND\"]}"
 expect "a cycle" "$(call $A "$SA" ask-review "$J")" "goes round in a circle"
 
 echo "## a base that is another open review's branch: pointed out, not set"
-J="{\"project\":\"sandbox\",\"goal\":\"review the third\",\"branch\":\"feat/third\",\"base\":\"feat/first\",\"summary\":\"also on the first\",\"decisions\":[$D],\"forks\":[]}"
+J="{\"title\":\"review the third\",\"project\":\"sandbox\",\"goal\":\"review the third\",\"branch\":\"feat/third\",\"base\":\"feat/first\",\"summary\":\"also on the first\",\"decisions\":[$D],\"forks\":[]}"
 THIRD_OUT=$(call $A "$SA" ask-review "$J")
 expect "the outcome names the review it may follow, and asks first" "$THIRD_OUT" "base feat/first is the branch of the open review .{1,3}review the first.*ask them first; nothing was set"
 wait_until "…and bob is shown it at once: nothing was set" "review the third" goals $B "$SB"

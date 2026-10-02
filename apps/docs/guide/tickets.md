@@ -16,7 +16,8 @@ anything.
 | --- | --- |
 | id | uuid, room-unique |
 | project | which shared project it concerns |
-| goal | the ask, one line |
+| title | its headline, required: a few words, 60 characters at most, what it is for — what every list shows (the author's, like the goal; an old ticket from before titles says so) |
+| goal | the line beneath the title: the ask, in full |
 | createdBy | peer key — authoritative for the ticket's structure |
 | kind | `task` (the plain one), one of the four that ask for judgment: `proposal`, `plan`, `bug`, `review`, or an `epic`, a folder of the others — see [the kinds at a glance](#the-kinds-at-a-glance) |
 | steps | see below |

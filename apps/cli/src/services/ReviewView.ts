@@ -145,7 +145,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       }
     }
     return {
-      ticket: { id: ticket.id, goal: ticket.goal, kind: ticket.kind, project: ticket.project },
+      ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
       review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ts: review.ts },
       source,
       grouped: diff === null ? null : groupByWhy(review, parseDiff(diff)),

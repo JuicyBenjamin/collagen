@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { AI_OPTIONS } from "@collagen/p2p";
+import { AI_OPTIONS, ticketName } from "@collagen/p2p";
 import { MOCK_AI_OPTIONS } from "../../services/Adapters";
 import { RESTART_EXIT_CODE } from "../../services/Updates";
 import { Panel } from "../../components/Panel";
@@ -40,7 +40,10 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   // a ticket is a page of its own inside the room: crumb instead of tabs
   const page = typeof route === "object" ? route : null;
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
-  const goalOf = (ticketId: string) => tickets.find((t) => t.id === ticketId)?.goal ?? `ticket ${ticketId.slice(0, 8)}`;
+  const goalOf = (ticketId: string) => {
+    const t = tickets.find((x) => x.id === ticketId);
+    return t ? ticketName(t) : `ticket ${ticketId.slice(0, 8)}`;
+  };
   // what the crumb says, and where esc / ← go from here
   // the trail of names above a route: overview › ticket › transcripts › …
   const trailOf = (r: Route): ReadonlyArray<string> =>

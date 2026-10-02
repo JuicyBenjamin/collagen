@@ -1,4 +1,10 @@
 import { epicParts, finished, isClosed, isJudged, isTake, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { NO_TITLE } from "./review";
+
+/** A ticket's line in the TUI: its title. An old ticket filed before titles
+ *  says so rather than passing its goal off as one — except an epic, whose
+ *  goal was always a name. */
+export const rowTitle = (t: Pick<Ticket, "title" | "goal" | "kind">): string => t.title ?? (t.kind === "epic" ? t.goal : `(${NO_TITLE})`);
 import { GLYPH, type Mark } from "./glyphs";
 
 /** What a ticket wants from the person, now. "done": every step answered

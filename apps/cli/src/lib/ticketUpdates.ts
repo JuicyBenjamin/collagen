@@ -1,4 +1,4 @@
-import { type ReviewContext, type RoomMessage, type StepStatus, type Ticket, type TicketStep, deriveThreadId, isJudged, isTake, stepThreadId } from "@collagen/p2p";
+import { type ReviewContext, type RoomMessage, type StepStatus, type Ticket, type TicketStep, deriveThreadId, isJudged, isTake, stepThreadId, ticketName } from "@collagen/p2p";
 import { aboutTicket, ticketThreads } from "./ticketSummary";
 
 /** Everyone a ticket concerns: its creator, its step owners, and anyone who
@@ -64,7 +64,7 @@ export function reviewChanges(
 /** What a participant is told when the why behind a review is revised. */
 export const reviewUpdateText = (ticket: Ticket, r: ReviewContext, fresh: boolean): string =>
   [
-    `${r.authorName} ${fresh ? "put the why behind" : "revised the why behind"} the ticket "${ticket.goal}" (${ticket.id})`,
+    `${r.authorName} ${fresh ? "put the why behind" : "revised the why behind"} the ticket "${ticketName(ticket)}" (${ticket.id})`,
     r.branch ? `now ${r.base ? `${r.branch} → ${r.base}` : r.branch}` : "",
     r.link ?? "",
     `${r.decisions.length} decision(s), ${r.forks.length} fork(s)`,
@@ -86,9 +86,9 @@ export const stepUpdateWhat = (c: StepChange): string =>
 export const stepUpdateText = (c: StepChange, actorName: string): string => {
   const what = stepUpdateWhat(c);
   const did = what === c.to ? `${what} step` : `${what} on`;
-  return `${actorName} ${did} ${c.step.id} (${c.step.intent}) on the ticket "${c.ticket.goal}" (${c.ticket.id}): ${firstLine(c.step.result ?? "")}`;
+  return `${actorName} ${did} ${c.step.id} (${c.step.intent}) on the ticket "${ticketName(c.ticket)}" (${c.ticket.id}): ${firstLine(c.step.result ?? "")}`;
 };
 
 /** What a participant is told when someone weighs in. */
 export const weighInText = (ticket: Ticket, m: RoomMessage, toName: string): string =>
-  `${m.fromName} weighed in on the ticket "${ticket.goal}" (${ticket.id}), to ${toName}: ${firstLine(m.findings)}`;
+  `${m.fromName} weighed in on the ticket "${ticketName(ticket)}" (${ticket.id}), to ${toName}: ${firstLine(m.findings)}`;

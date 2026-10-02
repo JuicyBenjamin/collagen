@@ -1,4 +1,4 @@
-import { epicOf, epicParts, KIND_ORDER, type Ticket, type TicketKind } from "@collagen/p2p";
+import { epicOf, epicParts, KIND_ORDER, ticketName, type Ticket, type TicketKind } from "@collagen/p2p";
 import { compareSummaries, type TicketSummary } from "./ticketSummary";
 
 export interface Row {
@@ -136,7 +136,7 @@ export function epicBlocks<R extends Row>(rows: ReadonlyArray<R>, all: ReadonlyM
       const rank = (r: R) => order.indexOf(r.t.id);
       return { epic: b.epic, rows: [...b.rows].sort((x, y) => (ordered ? rank(x) - rank(y) : 0) || x.t.project.localeCompare(y.t.project) || compareSummaries(x.s, y.s)) };
     })
-    .sort((a, b) => compareSummaries(lead(a).s, lead(b).s) || a.epic.t.goal.localeCompare(b.epic.t.goal));
+    .sort((a, b) => compareSummaries(lead(a).s, lead(b).s) || ticketName(a.epic.t).localeCompare(ticketName(b.epic.t)));
   return { epics, rest };
 }
 

@@ -126,6 +126,10 @@ export type Closed = typeof Closed.Type;
 export const Ticket = Schema.Struct({
   id: Schema.String,
   project: Schema.String,
+  /** The headline: a few words, what it is for — what the lists show. The
+   *  author's structure, like the goal. Absent only on an old ticket's. */
+  title: Schema.optional(Schema.String),
+  /** The line beneath the title: what the ticket is about, in full. */
   goal: Schema.String,
   /** Pubkey (hex) of the creator — authoritative for the ticket's structure. */
   createdBy: Schema.String,
@@ -175,7 +179,7 @@ export type Ticket = typeof Ticket.Type;
  *  - steps are unioned by id — the creator adds structure, owners never lose steps
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
  *    by updatedAt, then lexicographic result as the final tiebreak
- *  - goal, kind, from, after and whenClosed follow the copy with the newer
+ *  - title, goal, kind, from, after and whenClosed follow the copy with the newer
  *    `structureAt` — the author's own clock, which only the author advances,
  *    so a peer's take or settle (which advances updatedAt on a possibly stale
  *    copy) can never revert the author's latest decision
@@ -197,8 +201,13 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
   const partOf = union(local.partOf, incoming.partOf, (m) => m.id);
   const turns = union(local.turns, incoming.turns, (t) => t.id);
   const order = union(local.order, incoming.order, (o) => `${o.at}|${o.by}|${o.ids.join(",")}`);
+  const { title: _ltitle, ...unchanged } = rest;
+  // the author's title — and on an exact tie of their clock, whichever copy
+  // has one: a copy without a title never takes it away
+  const title = author.title ?? (incoming.structureAt === local.structureAt ? (local.title ?? incoming.title) : undefined);
   return {
-    ...rest,
+    ...unchanged,
+    ...(title !== undefined ? { title } : {}),
     ...(partOf ? { partOf } : {}),
     ...(turns ? { turns } : {}),
     ...(order ? { order } : {}),
@@ -227,6 +236,10 @@ function union<A extends { readonly at: number }>(a: ReadonlyArray<A> | undefine
 
 /** The latest of a set of acts (the order `union` keeps). */
 const latest = <A>(xs: ReadonlyArray<A> | undefined): A | undefined => (xs && xs.length > 0 ? xs[xs.length - 1] : undefined);
+
+/** What a ticket is called where there is room for one line: its title,
+ *  or — on an old ticket filed before titles — its goal. */
+export const ticketName = (t: Pick<Ticket, "title" | "goal">): string => t.title ?? t.goal;
 
 /** A move's or a turn's own name: unique, whoever writes it and however
  *  fast — two by the same person in one millisecond are two. */
@@ -408,7 +421,7 @@ export function turnEpic(
 }
 
 /** The author-controlled structure, as one comparable string. */
-const structureKey = (t: Ticket): string => JSON.stringify([t.goal, t.kind, t.from ?? null, t.whenClosed ?? null, t.after ?? null]);
+const structureKey = (t: Ticket): string => JSON.stringify([t.goal, t.kind, t.from ?? null, t.whenClosed ?? null, t.after ?? null, t.title ?? null]);
 
 /** Two author revisions in the same millisecond: pick one the same way on
  *  every peer, whichever side it arrived from, so the merge still commutes. */

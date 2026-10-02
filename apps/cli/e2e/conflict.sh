@@ -10,6 +10,6 @@ BOTH=$(cat "$OUT/alice.log" "$OUT/bob.log")
 expect "one side abandoned its lonely log" "$BOTH" "abandoning our lonely log"
 expect "the other kept its populated one" "$BOTH" "keeping ours"
 expect "the abandoner was admitted" "$BOTH" "admitted to the room log"
-call $A "$SA" create-ticket '{"goal":"after conflict","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"x"},{"id":"s2","owner":"alice","intent":"review","description":"y","needs":["s1"]}]}' > /dev/null
+call $A "$SA" create-ticket '{"title":"after conflict","goal":"after conflict","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"x"},{"id":"s2","owner":"alice","intent":"review","description":"y","needs":["s1"]}]}' > /dev/null
 wait_until "ticket completed across the surviving log" "s1,bob,investigate,settled" call $A "$SA" get-tickets '{}'
 kill_all; summary

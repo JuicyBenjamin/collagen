@@ -20,10 +20,10 @@ echo "## a plan needs a question, and is not a review"
 NOGOAL='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
 J1="$NOGOAL"  # built first: bash 3.2 mangles \" nested in "$( )"
 R1=$(call $A "$SA" ask-plan "$J1")
-expect "no goal: refused, told what the goal is" "$R1" "failed: pass .goal. .{1,6} the one line everyone sees: what your user intends to do"
+expect "no goal: refused, told what the goal is" "$R1" "failed: pass .goal. .{1,6} the line beneath the title: what your user intends to do"
 T1='{"title":"Stream the rows instead","what":"stream the rows instead of buffering the whole export","userWhy":"he said the backoffice export times out on big customers","agentWhy":"a cursor over the query keeps memory flat; the CSV writer already streams","where":["apps/api/src/export.ts"]}'
 F1='{"at":"apps/api/src/export.ts","chose":"paginate the query by id","instead":"one big query with a streaming driver","why":"the driver we have does not stream; pagination needs nothing new","by":"agent"}'
-PLAN="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"stream the export, do not buffer it\",\"summary\":\"the export should stream rows to the client as they are read\",\"decisions\":[$T1],\"forks\":[$F1],\"whenClosed\":\"open a Jira ticket for the export work\"}"
+PLAN="{\"title\":\"stream the export, do not buffer it\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"stream the export, do not buffer it\",\"summary\":\"the export should stream rows to the client as they are read\",\"decisions\":[$T1],\"forks\":[$F1],\"whenClosed\":\"open a Jira ticket for the export work\"}"
 FILED=$(call $A "$SA" ask-plan "$PLAN")
 expect "filed as a plan, asked of bob" "$FILED" "plan ticket filed, asked of bob"
 expect "…reported as a plan, nothing more" "$FILED" "TELL YOUR USER ONLY THIS: .{1,3}plan ticket has been filed"
@@ -75,12 +75,12 @@ expect "…and only now is her instruction handed back to her agent — one inst
 expect "…not two: no bare 'ticket closed' line beside it" "$(echo "$CLOSED" | grep -c 'ONLY THIS')" "^0$"
 
 echo "## the work follows the plan, and says so"
-TASK=$(call $A "$SA" create-ticket "{\"goal\":\"bulk export, streamed\",\"project\":\"sandbox\",\"from\":[\"$PID\"],\"steps\":[{\"owner\":\"bob\",\"intent\":\"implement\",\"description\":\"cursor-paged export\"}]}")
+TASK=$(call $A "$SA" create-ticket "{\"title\":\"bulk export, streamed\",\"goal\":\"bulk export, streamed\",\"project\":\"sandbox\",\"from\":[\"$PID\"],\"steps\":[{\"owner\":\"bob\",\"intent\":\"implement\",\"description\":\"cursor-paged export\"}]}")
 TID=$(echo "$TASK" | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 expect "the task names the plan it follows" "$(rows $A "$SA" "$TID")" "from: $PID"
 
 echo "## a proposal is an idea written down, owed to no one — cheap, and it can be alice's alone"
-IDEA='{"project":"sandbox","goal":"a nightly export instead of on demand","decisions":[{"title":"Run it at 03:00","what":"run it at 03:00","userWhy":"nobody needs it fresher than a day"}],"forks":[],"work":[{"intent":"schedule","description":"a cron job for the export","owner":"bob"}]}'
+IDEA='{"title":"A nightly export","project":"sandbox","goal":"a nightly export instead of on demand","decisions":[{"title":"Run it at 03:00","what":"run it at 03:00","userWhy":"nobody needs it fresher than a day"}],"forks":[],"work":[{"intent":"schedule","description":"a cron job for the export","owner":"bob"}]}'
 J6="$IDEA"  # built first: bash 3.2 mangles \" nested in "$( )"
 R6=$(call $A "$SA" propose "$J6")
 expect "a proposal with nobody asked and no summary is filed, in the room" "$R6" "proposal ticket filed, in the room, nobody asked"
@@ -102,10 +102,10 @@ ACCEPT="{\"ticketId\":\"$IID\",\"stepId\":\"address\",\"result\":\"worth doing\"
 ACCEPTED=$(call $A "$SA" settle-step "$ACCEPT")
 expect "accepting points at the plan that would come next, and assigns nothing" "$ACCEPTED" "ask-plan with from.*accepting assigns nothing"
 echo "## a proposal to bob: he is asked, not assigned — the work stays an outline, his take says whether he would"
-NOWORK='{"peers":["bob"],"project":"sandbox","goal":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
+NOWORK='{"title":"A proposal with no work","peers":["bob"],"project":"sandbox","goal":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
 J8="$NOWORK"
 expect "a proposal to someone needs no work spelled out either" "$(call $A "$SA" propose "$J8")" "proposal ticket filed, asked of bob"
-PROP="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"expose the export in the backoffice UI\",\"summary\":\"a button on the customer page\",\"decisions\":[{\"title\":\"A download button on\",\"what\":\"a download button on the customer page\",\"userWhy\":\"support keeps asking for the file by mail\"}],\"forks\":[],\"from\":[\"$PID\"],\"work\":[{\"intent\":\"build\",\"description\":\"the button and the download\",\"owner\":\"bob\"}]}"
+PROP="{\"title\":\"expose the export in the backoffice UI\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"expose the export in the backoffice UI\",\"summary\":\"a button on the customer page\",\"decisions\":[{\"title\":\"A download button on\",\"what\":\"a download button on the customer page\",\"userWhy\":\"support keeps asking for the file by mail\"}],\"forks\":[],\"from\":[\"$PID\"],\"work\":[{\"intent\":\"build\",\"description\":\"the button and the download\",\"owner\":\"bob\"}]}"
 PROPOSED=$(call $A "$SA" propose "$PROP")
 expect "filed as a proposal to bob" "$PROPOSED" "proposal ticket filed, asked of bob"
 QID=$(echo "$PROPOSED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isTake, moveToEpic, orderEpic, postReview, settleStep, turnEpic, visibleTo, type Outgoing, type Ticket } from "@collagen/p2p";
+import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isTake, moveToEpic, orderEpic, postReview, settleStep, ticketName, turnEpic, visibleTo, type Outgoing, type Ticket } from "@collagen/p2p";
 import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
@@ -112,7 +112,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
               ? ` It waits on ${out.ticket.after.length} ticket(s) (after: ${out.ticket.after.join(", ")}): until they are answered nobody but your user is shown it or nudged about it; it opens to its readers by itself then.`
               : "";
           const related = relatedHint(out.ticket, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
-          return sent(`${kind} ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}.${waits} ${say("filed")} ${keepCurrent}${related}`);
+          return sent(`${kind} ticket filed, ${who}: "${ticketName(out.ticket)}" [ticket ${out.ticket.id}] ${held}.${waits} ${say("filed")} ${keepCurrent}${related}`);
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);

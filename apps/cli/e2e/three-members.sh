@@ -8,17 +8,17 @@ echo "## A. all three up"
 start alice; start bob; start carol --room st-test3
 SA=$(mcp $A); SC=$(mcp $C); wait_for_peer $A "$SA" carol; admitted carol
 expect "carol admitted while everyone started at once" "$(cat "$OUT/carol.log")" "admitted to the room log"
-call $A "$SA" create-ticket '{"goal":"t1 all three up","project":"sandbox","steps":[{"id":"s1","owner":"carol","intent":"note","description":"carol keeps this pending"}]}' > /dev/null
+call $A "$SA" create-ticket '{"title":"t1 all three up","goal":"t1 all three up","project":"sandbox","steps":[{"id":"s1","owner":"carol","intent":"note","description":"carol keeps this pending"}]}' > /dev/null
 wait_until "carol sees t1" "t1 all three up" goals $C "$SC"
 
 echo "## B. carol offline (2 of 3 indexers)"
 stop carol
-call $A "$SA" create-ticket '{"goal":"t2 carol away","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"bob settles"},{"id":"s2","owner":"alice","intent":"review","description":"alice reviews","needs":["s1"]}]}' > /dev/null
+call $A "$SA" create-ticket '{"title":"t2 carol away","goal":"t2 carol away","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"bob settles"},{"id":"s2","owner":"alice","intent":"review","description":"alice reviews","needs":["s1"]}]}' > /dev/null
 wait_until "view advanced with one indexer offline" "s1,bob,investigate,settled" call $A "$SA" get-tickets '{}'
 
 echo "## C. bob offline too (1 of 3)"
 stop bob
-call $A "$SA" create-ticket '{"goal":"t3 alice alone","project":"sandbox","steps":[{"id":"s1","owner":"alice","intent":"note","description":"solo"}]}' > /dev/null
+call $A "$SA" create-ticket '{"title":"t3 alice alone","goal":"t3 alice alone","project":"sandbox","steps":[{"id":"s1","owner":"alice","intent":"note","description":"solo"}]}' > /dev/null
 expect "message to the absent carol accepted" "$(call $A "$SA" send-to-peer '{"peer":"carol","project":"sandbox","intent":"while-away","findings":"for carol"}')" "sent to carol"
 wait_until "alice's own append applied alone" "t3 alice alone" goals $A "$SA"
 
