@@ -413,11 +413,12 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
   tickets filed together.
 
 On the overview an open epic is a block of its own above the projects, a blank line around
-it: one **purple** row — `♛`, its title, how far along it is ("1 of 3 done"), and a `▸`
-when a ticket inside is yours now — and under it, on the lines of a tree (`├`, `└`), in
-their own colours, its tickets in its order, each with its kind and project, an excluded
-one marked. `space` folds them away (the row
-then says how many are folded) and back.
+it: one **purple** row — `♛` on the column the kind headings start on, its title and how
+far along it is ("1 of 3 done") — and under it, on the lines of a tree (`├`, `└`), in their
+own colours, its tickets in its order, names and titles on the same columns as every other
+row, each saying its kind, an excluded one marked, and `├▸` on one that is yours now.
+`space` folds them away — the row then says how many are folded, and how many of those are
+yours — and back.
 `enter` opens the epic's page: its aim, every ticket in it, whether it can close, and each
 close and reopen with who said so and why.
 
