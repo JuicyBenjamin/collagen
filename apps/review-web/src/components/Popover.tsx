@@ -38,6 +38,7 @@ export function Popover() {
             {(r) => (
               <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={<p class="hint-text muted">{"error" in r() ? (r() as { error: string }).error : ""}</p>}>
                 {(md) => (
+                  <>
                   <For each={brief(md()).blocks}>
                     {(b) =>
                       "code" in b ? (
@@ -55,11 +56,14 @@ export function Popover() {
                       )
                     }
                   </For>
+                  <Show when={brief(md()).overloads > 0}>
+                    <p class="hint-text muted">+{brief(md()).overloads} {brief(md()).overloads === 1 ? "overload" : "overloads"}</p>
+                  </Show>
+                  </>
                 )}
               </Show>
             )}
           </Show>
-          <p class="hint-foot">click to peek the definition{p().result && "markdown" in p().result! && brief((p().result as { markdown: string }).markdown).more ? " and its full documentation" : ""}</p>
         </div>
       )}
     </Show>

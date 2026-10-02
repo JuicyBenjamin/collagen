@@ -43,6 +43,23 @@ export function wordAt(text: string, col: number): number | null {
   return /[0-9]/.test(text[start]!) ? null : start;
 }
 
+/** The word under the pointer, marked in place — underlined, through the
+ *  CSS Highlight API, so no element changes — where the browser has it. */
+const marks = typeof CSS !== "undefined" && "highlights" in CSS ? (CSS as unknown as { highlights: Map<string, unknown> }).highlights : null;
+export function markWord(range: Range | null): void {
+  if (!marks) return;
+  const Highlight = (globalThis as unknown as { Highlight?: new (...r: Range[]) => unknown }).Highlight;
+  if (range && Highlight) marks.set("word", new Highlight(range));
+  else marks.delete("word");
+}
+
+/** Where a word ends, from where it starts. */
+export const wordEnd = (text: string, start: number): number => {
+  let end = start;
+  while (end < text.length && /[A-Za-z0-9_$]/.test(text[end]!)) end++;
+  return end;
+};
+
 export interface Popover {
   readonly x: number;
   readonly y: number;
