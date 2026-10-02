@@ -32,6 +32,8 @@ expect "the goal defaulted to the symptom's first sentence" "$ROWS" "goal: .{0,3
 
 echo "## bob's side: the symptom alone, until he has a diagnosis of his own"
 wait_until "bob sees the bug" "kind: bug" rows $B "$SB" "$BID"
+# the ticket and its report are two log ops; the blind take needs the second
+wait_until "…and the report beside it" "symptom: " call $B "$SB" review-context "{\"ticketId\":\"$BID\"}"
 BLIND=$(call $B "$SB" review-context "{\"ticketId\":\"$BID\"}")
 expect "review-context hands bob's agent the symptom" "$BLIND" "symptom: The export comes back empty"
 expect "…and says it is the blind first take, a diagnosis of his own first" "$BLIND" "blind first take.*THEY make of the symptom"
