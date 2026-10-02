@@ -1,5 +1,6 @@
 import { epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { reviewHeadline } from "./review";
+import { rowTitle } from "./ticketSummary";
 
 /** A ticket as the agent reads it: keys resolved to names, needs joined. A
  *  review ticket also says where the code is and how much why came with it —
@@ -10,7 +11,7 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   project: ticket.project,
   kind: ticket.kind,
   /** its headline in every list; the goal is the line beneath it */
-  title: ticket.title ?? "(old ticket — no title)",
+  title: rowTitle(ticket),
   goal: ticket.goal,
   createdBy: nameFor(ticket.createdBy),
   /** the tickets this one follows; walk them with review-context when your user asks why */
