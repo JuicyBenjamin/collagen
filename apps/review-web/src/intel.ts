@@ -121,7 +121,9 @@ export function pointAt(spot: Spot | null, x: number, y: number): void {
     void ask("hover", spot, hovers).then((result) => {
       clearTimeout(slow);
       if (pending?.spot !== spot) return;
-      setPopover("none" in result ? null : { x, y, file: spot.file, state: "ready", result });
+      // nothing to say is no popover — unless the server was still reading,
+      // when "nothing yet" is worth saying rather than looking definitive
+      setPopover("none" in result && !result.partial ? null : { x, y, file: spot.file, state: "ready", result });
     });
   }, 220);
   pending = { spot, timer };
@@ -138,15 +140,25 @@ const [peek, setPeek] = createSignal<PeekAt | null>(null);
 export { peek };
 
 /** A click on a word peeks where it is declared, under the line; a click on
- *  the same word, the ×, or Esc folds it away. */
+ *  the same word, the ×, or Esc folds it away — except while the answer is
+ *  not a final one (the server still reading, or a failure): then the same
+ *  click asks again, as the peek says. */
 export function peekAt(hunk: string, index: number, spot: Spot): void {
   const now = peek();
-  if (now && now.hunk === hunk && now.index === index && key(now.spot) === key(spot)) return closePeek();
+  const same = now !== null && now.hunk === hunk && now.index === index && key(now.spot) === key(spot);
+  if (same && now.result !== null && final(now.result)) return closePeek();
+  if (same && now.result === null) return; // still asking
   setPeek({ hunk, index, spot, result: null });
   void ask("definition", spot, definitions).then((result) => {
     const still = peek();
     if (still && key(still.spot) === key(spot)) setPeek({ ...still, result });
   });
+}
+
+/** Ask the open peek's question again (its Try again). */
+export function retryPeek(): void {
+  const now = peek();
+  if (now) peekAt(now.hunk, now.index, now.spot);
 }
 
 export function closePeek(): void {

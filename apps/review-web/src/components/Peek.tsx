@@ -1,7 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
-import type { DefinitionResult, Peek as PeekData } from "../data";
+import { stillReading, type DefinitionResult, type Peek as PeekData } from "../data";
 import { highlightCode } from "../highlight";
-import { closePeek } from "../intel";
+import { closePeek, retryPeek } from "../intel";
 import { CodeLine } from "./Code";
 
 /** Code longer than this opens folded, the rest one click away. */
@@ -60,6 +60,13 @@ function Declaration(props: { peek: PeekData }) {
   );
 }
 
+/** Ask again, for an answer that was not a final one. */
+const Retry = () => (
+  <button type="button" class="peek-toggle" onClick={() => retryPeek()}>
+    Try again
+  </button>
+);
+
 /** Where a symbol is declared, opened under the line it was clicked on: its
  *  file and line, its doc comment as text, and the declaration. A symbol
  *  with several (overloads, a value and its namespace) shows the first, the
@@ -76,8 +83,34 @@ export function Peek(props: { result: DefinitionResult | null }) {
       </button>
       <Show when={props.result} fallback={<p class="peek-note">Finding the definition…</p>}>
         {(r) => (
-          <Show when={!("error" in r()) && !("indexing" in r())} fallback={<p class="peek-note">{"indexing" in r() ? "Still reading the project — click it again in a moment." : (r() as { error: string }).error}</p>}>
-            <Show when={peeks().length > 0} fallback={<p class="peek-note">No definition found.</p>}>
+          <Show
+            when={!("error" in r()) && !("indexing" in r())}
+            fallback={
+              <p class="peek-note">
+                {"indexing" in r() ? "Still reading the project — nothing to show yet." : (r() as { error: string }).error} <Retry />
+              </p>
+            }
+          >
+            {/* an answer from a server still reading may be missing things: said, with a way to ask again */}
+            <Show when={stillReading(r()) && peeks().length > 0}>
+              <p class="peek-note">
+                May be incomplete — the project is still being read. <Retry />
+              </p>
+            </Show>
+            <Show
+              when={peeks().length > 0}
+              fallback={
+                <p class="peek-note">
+                  {stillReading(r()) ? (
+                    <>
+                      Nothing found yet — the project is still being read. <Retry />
+                    </>
+                  ) : (
+                    "No definition found."
+                  )}
+                </p>
+              }
+            >
               <Declaration peek={peeks()[0]!} />
               <Show when={others().length > 0}>
                 <Show
