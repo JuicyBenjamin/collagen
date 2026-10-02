@@ -31,7 +31,7 @@ NOGOAL='{"action":"create"}'
 expect "an epic needs a goal" "$(call $A "$SA" epic "$NOGOAL")" "failed: pass the epic's goal"
 E1J="{\"action\":\"create\",\"goal\":\"More languages\",\"summary\":\"Review PHP and Rust like TypeScript.\",\"ticketIds\":[\"$L\",\"$PHP\",\"$RUST\"]}"
 MADE=$(call $A "$SA" epic "$E1J"); E1=$(echo "$MADE" | uuid)
-expect "filed, and the three put in it" "$MADE" "epic filed: .{1,3}More languages.*put into the epic .{1,3}More languages.{1,3}: .*It now holds 3 part\\(s\\), 0 done"
+expect "filed, and the three put in it" "$MADE" "epic filed: .{1,3}More languages.*put into the epic .{1,3}More languages.{1,3}: .*It now holds 3 ticket\\(s\\), 0 of 3 done"
 wait_until "bob sees the epic and what is in it" "parts: .?0 of 3 done" call $B "$SB" get-tickets '{}'
 expect "…each part names its epic" "$(call $B "$SB" get-tickets '{}' | grep -cE "epic: .?$E1")" "^[3-9]"
 
@@ -39,7 +39,7 @@ echo "## anyone shapes it: bob adds one from another project, takes one out"
 B1='{"project":"backoffice","goal":"a PHP lint in the backoffice","decisions":[{"title":"Lint it","what":"phpstan","agentWhy":"cheap"}]}'
 BO=$(call $B "$SB" propose "$B1" | uuid)
 ADD="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$BO\"]}"
-expect "bob — not its author — adds a backoffice ticket to alice's epic" "$(call $B "$SB" epic "$ADD")" "put into the epic .{1,3}More languages.*It now holds 4 part\\(s\\)"
+expect "bob — not its author — adds a backoffice ticket to alice's epic" "$(call $B "$SB" epic "$ADD")" "put into the epic .{1,3}More languages.*It now holds 4 ticket\\(s\\)"
 wait_until "alice sees four parts, across two projects" "parts: .?0 of 4 done" call $A "$SA" get-tickets '{}'
 OUTJ="{\"action\":\"remove\",\"ticketIds\":[\"$PHP\"]}"
 expect "bob takes the PHP proposal out" "$(call $B "$SB" epic "$OUTJ")" "taken out of their epic: .{1,3}PHP on the review page"
@@ -49,30 +49,50 @@ E2=$(call $B "$SB" epic "$E2J" | uuid)
 MOVE="{\"action\":\"add\",\"epicId\":\"$E2\",\"ticketIds\":[\"$BO\"]}"
 expect "bob moves his ticket from alice's epic to his own" "$(call $B "$SB" epic "$MOVE")" "put into the epic .{1,3}Backoffice quality"
 wait_until "it is in one epic only: his" "epic: .?$E2" call $A "$SA" get-tickets '{}'
-expect "an epic is never part of another" "$(call $A "$SA" epic "{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$E2\"]}")" "an epic is never part of another"
+Q1="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$E2\"]}"
+expect "an epic is never part of another" "$(call $A "$SA" epic "$Q1")" "an epic is never part of another"
 
-echo "## what grows out of a part lives in the epic, unmoved"
+echo "## what grows out of a part is offered the epic, not put in it"
 PL="{\"project\":\"sandbox\",\"goal\":\"how Rust gets its server\",\"summary\":\"download a pinned rust-analyzer\",\"from\":[\"$RUST\"],\"decisions\":[{\"title\":\"Pinned binary\",\"what\":\"a release and its hash\",\"agentWhy\":\"no npm\"}],\"forks\":[]}"
-PLAN=$(call $A "$SA" ask-plan "$PL" | uuid)
-expect "the plan from the Rust proposal is in the epic, through it" "$(call $A "$SA" get-tickets '{}' | grep -E "epic: .?$E1" | grep -c "through the ticket it grew out of")" "^1$"
-CTX=$(call $A "$SA" review-context "{\"ticketId\":\"$E1\"}")
-expect "review-context on the epic: its aim" "$CTX" "aim: Review PHP and Rust like TypeScript"
-expect "…how far along its parts are" "$CTX" "progress: 0 of 2 parts done"
-expect "…the plan listed as there through the ticket it grew out of" "$CTX" "how Rust gets its server.*through the ticket it grew out of"
+PLOUT=$(call $A "$SA" ask-plan "$PL"); PLAN=$(echo "$PLOUT" | uuid)
+expect "filing it offers the Rust proposal's epic, in a line" "$PLOUT" "EPIC: it grows out of a ticket in the epic .{1,3}More languages.*not put there on its own"
+expect "…and it is not in the epic: lineage moves nothing" "$(call $A "$SA" get-tickets '{}' | grep -cE "epic: .?$E1")" "^2$"
+
+echo "## progress is a count, order is for reading"
+TASK='{"project":"sandbox","goal":"a Go grammar spike","steps":[{"id":"s1","owner":"alice","intent":"spike","description":"try it"}]}'
+TID=$(call $A "$SA" create-ticket "$TASK" | uuid)
+ADDT="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$TID\"]}"
+expect "the task goes in too" "$(call $A "$SA" epic "$ADDT")" "It now holds 3 ticket\\(s\\), 0 of 3 done"
+SETTLE="{\"ticketId\":\"$TID\",\"stepId\":\"s1\",\"result\":\"works\"}"
+call $A "$SA" settle-step "$SETTLE" > /dev/null
+wait_until "a done ticket counts: 1 of 3" "parts: .?1 of 3 done" call $A "$SA" get-tickets '{}'
+CLOSE0="{\"action\":\"close\",\"epicId\":\"$E1\"}"
+expect "closing waits on what is unresolved, and names it" "$(call $B "$SB" epic "$CLOSE0")" "still holds 2 unresolved ticket\\(s\\).*Rust on the review page.*exclude them from its progress"
+EXC="{\"action\":\"exclude\",\"epicId\":\"$E1\",\"ticketIds\":[\"$L\",\"$RUST\"]}"
+expect "dropped work is excluded from progress, not counted done" "$(call $B "$SB" epic "$EXC")" "kept in .{1,3}More languages.{1,3} but out of its progress.*1 of 1 done"
+ORD="{\"action\":\"order\",\"epicId\":\"$E1\",\"ticketIds\":[\"$RUST\",\"$TID\",\"$L\"]}"
+expect "anyone orders it — for reading, it sets no after" "$(call $B "$SB" epic "$ORD")" "now read in this order: .{1,3}Rust on the review page.*sets no after"
+expect "…get-tickets lists its parts in that order" "$(call $A "$SA" get-tickets '{}' | grep -oE "1 of 1 done: [0-9a-f -]+" | head -1)" "^1 of 1 done: $RUST $TID $L"
 
 echo "## closing and reopening: anyone, with a reason"
-CLOSE0="{\"action\":\"close\",\"epicId\":\"$E1\"}"
-expect "closing with parts left needs a reason" "$(call $B "$SB" epic "$CLOSE0")" "still has 2 of 2 part\\(s\\) not done .{1,3} closing it needs a reason"
-CLOSE1="{\"action\":\"close\",\"epicId\":\"$E1\",\"reason\":\"superseded by a plan per language\"}"
-expect "bob closes alice's epic, with his reason" "$(call $B "$SB" epic "$CLOSE1")" "closed the epic .{1,3}More languages.*superseded by a plan per language"
-wait_until "alice sees it closed, and why" "closedBecause: superseded by a plan per language" call $A "$SA" get-tickets '{}'
-expect "a closed epic takes nothing in: reopen it first" "$(call $A "$SA" epic "{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$PHP\"]}")" "is closed .{1,3} reopen it first"
+expect "with everything resolved it closes, on that alone" "$(call $B "$SB" epic "$CLOSE0")" "closed the epic .{1,3}More languages.*its parts are done"
+wait_until "alice sees it closed, and why" "closedBecause: its parts are done" call $A "$SA" get-tickets '{}'
+Q2="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$PLAN\"]}"
+expect "a closed epic takes nothing in: reopen it first" "$(call $A "$SA" epic "$Q2")" "is closed .{1,3} reopen it first"
 REOPEN0="{\"action\":\"reopen\",\"epicId\":\"$E1\"}"
 expect "reopening always needs a reason" "$(call $A "$SA" epic "$REOPEN0")" "reopening .{1,3}More languages.{1,3} needs a reason"
 REOPEN1="{\"action\":\"reopen\",\"epicId\":\"$E1\",\"reason\":\"more languages in the same area: Go next\"}"
 expect "alice reopens it" "$(call $A "$SA" epic "$REOPEN1")" "reopened the epic .{1,3}More languages.*Go next"
 wait_until "bob sees it open again, and why" "reopenedBecause: .?more languages in the same area: Go next" call $B "$SB" get-tickets '{}'
-expect "close-ticket on an epic points at the epic tool" "$(call $A "$SA" close-ticket "{\"ticketId\":\"$E1\"}")" "is an epic .{1,3} it closes \\(and reopens\\) with the epic tool"
+Q3="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$PLAN\"]}"
+expect "…and the plan can go in now, explicitly" "$(call $A "$SA" epic "$Q3")" "put into the epic .{1,3}More languages"
+Q4="{\"ticketId\":\"$E1\"}"
+CTX=$(call $A "$SA" review-context "$Q4")
+expect "review-context on the epic: its aim" "$CTX" "aim: Review PHP and Rust like TypeScript"
+expect "…its count, and what keeps it open" "$CTX" "progress: 1 of 2 done"
+expect "…each ticket's state, the excluded ones said" "$CTX" "Rust on the review page,excluded"
+Q5="{\"ticketId\":\"$E1\"}"
+expect "close-ticket on an epic points at the epic tool" "$(call $A "$SA" close-ticket "$Q5")" "is an epic .{1,3} it closes \\(and reopens\\) with the epic tool"
 
 if [ "${KEEP:-0}" = "1" ]; then summary; exit; fi
 kill_all; summary

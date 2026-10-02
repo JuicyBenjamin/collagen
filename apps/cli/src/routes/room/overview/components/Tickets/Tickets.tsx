@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { heldBy, visibleTo, type Ticket } from "@collagen/p2p";
+import { excludedFromEpic, heldBy, visibleTo, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
 import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
@@ -53,7 +53,7 @@ export function Tickets() {
   const byId = new Map(tickets.map((t) => [t.id, t]));
   const rows = tickets
     .filter((t) => visibleTo(t, byId, me))
-    .map((t) => ({ t, s: summarize(t, trace, me, heldBy(t, byId)) }))
+    .map((t) => ({ t, s: summarize(t, trace, me, heldBy(t, byId), byId) }))
     .filter((r) => r.s.state !== "closed");
   // open epics first, each holding its tickets; the rest by project and kind
   const { epics, rest } = epicBlocks(rows, byId);
@@ -215,6 +215,7 @@ function EpicView({
               under={undefined}
               goalOf={goalOf}
               project={projects ? r.t.project : undefined}
+              excluded={excludedFromEpic(r.t)}
             />
           ))
         : null}
@@ -244,6 +245,7 @@ function TicketRow({
   under,
   goalOf,
   project,
+  excluded,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
@@ -258,12 +260,14 @@ function TicketRow({
   goalOf: (ticketId: string) => string | undefined;
   /** its project, said before its goal — inside an epic, which spans them */
   project?: string;
+  /** in its epic but out of its progress */
+  excluded?: boolean;
 }) {
   const people = marksLabel(s);
   const yours = s.state === "needs-you";
   // waiting on another ticket: only its author sees the row, dim, saying on what
   const waits = s.held.length > 0;
-  const dim = s.state === "done" || waits;
+  const dim = s.state === "done" || waits || excluded === true;
   // waiting on the row it is drawn under says so in one word; waiting on one
   // elsewhere (another group, or a second of two) names it
   const elsewhere = s.held.filter((id) => id !== under);
@@ -281,6 +285,7 @@ function TicketRow({
       {depth > 0 ? <span fg={theme.dim}>{`${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} `}</span> : null}
       {project ? <span fg={theme.dim}>{project} · </span> : null}
       {t.goal}
+      {excluded ? <span fg={theme.dim}> · excluded from progress</span> : null}
       {waits ? (
         <span fg={theme.dim}>
           {on ? ` · ${STACK.waits} after "${on}"` : ` · ${STACK.waits} waiting`}

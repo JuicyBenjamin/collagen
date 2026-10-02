@@ -373,13 +373,13 @@ export const RemoveProject = Tool.make("remove-project", {
 
 export const Epic = Tool.make("epic", {
   description: [
-    "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. One exception: when your user files several related tickets together (a proposal and one per part of it), offer in one line to put them under an epic, and do it on their yes.",
-    "An epic belongs to the room, not to a project or a person: anyone may add a ticket to any epic, move one from epic to epic, take one out, close an epic or reopen it. A ticket lives in one epic at most; a ticket that grew out of one in an epic (from) lives there too without being added. Parts may come from any project.",
-    "action 'create': goal (the one line), summary (what it aims for, a sentence or two), and optionally ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'close': epicId, and a reason from your user unless every part is done (then that is the reason). 'reopen': epicId and a reason, always — what more there is to do in it.",
-    "get-tickets shows each ticket's epic and each epic's parts and progress; review-context on an epic reads its aim and its parts. It goes out as you call it and shows in your user's outbox.",
+    "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. Filing outcomes may ask you to OFFER one: the epic of the ticket a new one grows out of, or a new epic when your user files several related tickets together — offer in one line, act on their yes.",
+    "An epic belongs to the room, not to a project or a person: anyone may put a ticket in, move one from epic to epic, take one out, order them, close an epic or reopen it. A ticket is in one epic at most, and only where it was put: lineage (from) never moves anything, so a plan grown out of a part is added explicitly if it belongs. Parts may come from any project.",
+    "action 'create': goal (the one line), summary (what it aims for, a sentence or two), optionally ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'exclude' / 'include': epicId and ticketIds — kept in the epic but out of its progress (work dropped or not to be done there), or counted again. 'order': epicId and ticketIds in the order they are to be read — it hides nothing and sets no after. 'close': epicId — only once everything in it is done, closed or excluded; your user's reason, or by default that its parts are done. 'reopen': epicId and a reason, always.",
+    "Progress is a count: done against everything counted. get-tickets shows each ticket's epic and each epic's parts, progress and what still keeps it open; review-context on an epic reads its aim and its tickets. It goes out as you call it and shows in your user's outbox.",
   ].join("\n"),
   parameters: Schema.Struct({
-    action: Schema.Literals(["create", "add", "remove", "close", "reopen"]),
+    action: Schema.Literals(["create", "add", "remove", "exclude", "include", "order", "close", "reopen"]),
     epicId: Schema.optional(Schema.String),
     goal: Schema.optional(Schema.String),
     summary: Schema.optional(Schema.String),
@@ -1100,17 +1100,22 @@ const makeHandlers = Effect.gen(function* () {
           outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false },
         });
       }),
-      epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "close" | "reopen"; epicId?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
+      epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen"; epicId?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ids = input.ticketIds ?? [];
-        const move = (epic: { id: string; goal: string } | null) =>
+        const move = (epic: { id: string; goal: string } | null, excluded?: boolean) =>
           outbox.tell({
             roomId,
             to: "the room",
-            title: epic ? `${ids.length} into "${epic.goal}"` : `${ids.length} out of their epic`,
-            outgoing: { kind: "epic-move", ticketIds: [...ids], epic: epic?.id ?? null, goal: epic?.goal ?? "" },
+            title: epic ? `${ids.length} ${excluded === true ? "excluded in" : excluded === false ? "counted again in" : "into"} "${epic.goal}"` : `${ids.length} out of their epic`,
+            outgoing: { kind: "epic-move", ticketIds: [...ids], epic: epic?.id ?? null, goal: epic?.goal ?? "", ...(excluded !== undefined ? { excluded } : {}) },
           });
+        const theEpic = () => {
+          const e = input.epicId ? all.get(input.epicId) : undefined;
+          return e && e.kind === "epic" ? e : null;
+        };
+        const noEpic = `failed: no epic ${input.epicId ?? "(pass epicId)"} — check get-tickets (kind: epic)`;
         switch (input.action) {
           case "create": {
             const goal = input.goal?.trim() ?? "";
@@ -1137,6 +1142,19 @@ const makeHandlers = Effect.gen(function* () {
           case "remove":
             if (ids.length === 0) return "failed: pass the ticketIds to take out of their epic";
             return yield* move(null);
+          case "exclude":
+          case "include": {
+            const epic = theEpic();
+            if (!epic) return noEpic;
+            if (ids.length === 0) return `failed: pass the ticketIds to ${input.action} in its progress`;
+            return yield* move({ id: epic.id, goal: epic.goal }, input.action === "exclude");
+          }
+          case "order": {
+            const epic = theEpic();
+            if (!epic) return noEpic;
+            if (ids.length === 0) return "failed: pass the ticketIds in the order they are to be read";
+            return yield* outbox.tell({ roomId, to: "the room", title: `order of "${epic.goal}"`, outgoing: { kind: "epic-order", epicId: epic.id, goal: epic.goal, ticketIds: [...ids] } });
+          }
           case "close":
           case "reopen": {
             const epic = input.epicId ? all.get(input.epicId) : undefined;
