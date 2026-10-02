@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync } from "node:fs";
 import { defineConfig } from "tsup";
 import pkg from "./package.json" with { type: "json" };
 
@@ -21,5 +21,9 @@ export default defineConfig({
     // the mock agent is a plain script spawned by path, not an import
     mkdirSync("dist", { recursive: true });
     copyFileSync("src/dev/mock-agent.mjs", "dist/mock-agent.mjs");
+    // the review page (apps/review-web, built first by `pnpm build`): served
+    // from beside the bundle, so a release carries it in dist/review-web
+    if (!existsSync("../review-web/dist/index.html")) throw new Error("the review page is not built: pnpm --filter @collagen/review-web build");
+    cpSync("../review-web/dist", "dist/review-web", { recursive: true });
   },
 });
