@@ -434,10 +434,19 @@ export type Proposal = typeof Proposal.Type;
 export const Steering = Schema.Literals(["ask", "act", "auto"]);
 export type Steering = typeof Steering.Type;
 
+/** The person's switches (cli lib/settings): each one absent means its
+ *  default, so a new one needs no migration. Local, never broadcast. */
+export const Settings = Schema.Struct({
+  /** absent = on: a review's page opens in the browser when it is started */
+  openReviewPage: Schema.optional(Schema.Boolean),
+});
+export type Settings = typeof Settings.Type;
+
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
   /** absent = "ask": autonomy is opted into */
   steering: Schema.optional(Steering),
+  settings: Schema.optional(Settings),
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
   /** threadId → the user's adopted conversation for it. */
   threads: Schema.optional(Schema.Record(Schema.String, AdoptedThread)),

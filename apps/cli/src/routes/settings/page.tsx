@@ -8,11 +8,18 @@ import { writeProfileFile } from "../../config/profileFile";
 import { useRouter } from "../../app/router";
 import { useSession } from "../../app/session";
 import { theme } from "../../app/theme";
+import { SETTINGS, settingOf, withSetting, type SettingKey } from "../../lib/settings";
 import { myNameAtom, roomAtom } from "../atoms";
+import { stateAtom, updateStateAtom } from "../room/atoms";
 import { renameRoomAtom, setMyNameAtom } from "./atoms";
 
-/** Settings frame: your name + the room's shared name, both applied live.
- *  The room id is shown for reference only — it's the invite, never editable. */
+type Field = "name" | "room" | SettingKey;
+const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((s) => s.key)];
+
+/** Settings frame: your name + the room's shared name, both applied on
+ *  enter, then your switches, each applied the moment it is flipped (your
+ *  agent can flip them for you too — set-settings). The room id is shown
+ *  for reference only — it's the invite, never editable. */
 export function SettingsPage() {
   const { profile } = useSession();
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
@@ -24,10 +31,14 @@ export function SettingsPage() {
 
   const [name, setName] = useState(myName);
   const [label, setLabel] = useState(roomName);
-  const [field, setField] = useState<"name" | "room">("name");
+  const [field, setField] = useState<Field>("name");
   const [saved, setSaved] = useState(false);
+  const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
+  const updateState = useAtomSet(updateStateAtom);
+  const flip = (key: SettingKey) => updateState({ update: (st) => withSetting(st, key, !settingOf(st, key)) });
 
-  const next = () => setField((f) => (f === "name" ? "room" : "name"));
+  const next = () => setField((f) => FIELDS[(FIELDS.indexOf(f) + 1) % FIELDS.length]!);
+  const prev = () => setField((f) => FIELDS[(FIELDS.indexOf(f) + FIELDS.length - 1) % FIELDS.length]!);
   const submit = () => {
     const n = name.trim();
     const r = label.trim();
@@ -40,8 +51,13 @@ export function SettingsPage() {
   };
 
   useKeyboard((key) => {
-    if (key.name === "tab") return next();
+    if (key.name === "tab") return key.shift ? prev() : next();
     if (key.name === "escape") return navigate("room/overview");
+    // on a switch (not typing in a field): arrows move, space or enter flips
+    if (field === "name" || field === "room") return;
+    if (key.name === "down") return next();
+    if (key.name === "up") return prev();
+    if (key.name === "space" || key.name === "return" || key.name === "enter") return flip(field);
   });
 
   return (
@@ -60,10 +76,25 @@ export function SettingsPage() {
       >
         <input focused={field === "room"} value={label} onInput={setLabel} onSubmit={submit} placeholder="renames the room for the whole room" />
       </box>
+      <box flexDirection="column" border borderStyle="rounded" borderColor={SETTINGS.some((x) => x.key === field) ? theme.accent : theme.dim} paddingX={1} title=" switches ">
+        {SETTINGS.map((x) => {
+          const on = state ? settingOf(state, x.key) : x.default;
+          const here = field === x.key;
+          return (
+            <box key={x.key} flexDirection="column">
+              <text fg={here ? theme.accent : theme.fg}>
+                {here ? "› " : "  "}
+                {on ? "[on] " : "[off]"} {x.label}
+              </text>
+              <text fg={theme.dim}>{`        ${on ? x.on : x.off}`}</text>
+            </box>
+          );
+        })}
+      </box>
       <text fg={theme.dim} truncate wrapMode="none">
         invite id: <span fg={theme.fg}>{formatInvite(room.id, NET)}</span> (fixed — press c in the room to copy)
       </text>
-      <text fg={theme.dim}>tab switch field · enter next/confirm</text>
+      <text fg={theme.dim}>tab next field · enter next/confirm · on a switch: space flips it</text>
       <text fg={theme.warn}>{saved ? "saved — applies now" : "changes apply live · esc back"}</text>
     </box>
   );

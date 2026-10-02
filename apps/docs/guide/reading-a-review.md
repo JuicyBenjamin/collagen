@@ -16,6 +16,11 @@ full why page:
 http://127.0.0.1:<your instance's port>/review/<ticket id>
 ```
 
+It also opens by itself when your agent starts reading a review you were asked for — once,
+and only while the [switch](./using-the-cli#switches) for it is on (it is by default; your
+agent can switch it off for you). Your agent can open it on request as well
+(`open-review`).
+
 If that review's page is already open, `o` brings its tab to the front instead of opening
 another — on macOS, in Chrome, Safari, Brave, Edge, Arc, Vivaldi or Chromium, which macOS
 asks you once to allow. Anywhere else (or if you said no) it opens a new tab, and the old

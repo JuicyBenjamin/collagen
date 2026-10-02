@@ -27,12 +27,13 @@ import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes } from "./ReviewView";
 import { ReviewTypesRoutes } from "./ReviewTypes";
-import { ReviewLiveRoutes } from "./ReviewLive";
+import { ReviewLiveRoutes, ReviewPages } from "./ReviewLive";
 import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { STEERING_LABEL, steeringLine, steeringOf } from "../lib/steering";
+import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
 // `structuredContent` as an object, and Claude Code rejects array roots.
@@ -381,6 +382,20 @@ export const SetSteering = Tool.make("set-steering", {
   success: Schema.String,
 });
 
+export const SetSettings = Tool.make("set-settings", {
+  description:
+    "Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. openReviewPage (on by default): when you start on a review ticket (review-context), collagen opens its page — the diff read by intent — in their browser, once. Applies live, and the settings page in their TUI shows the same switches.",
+  parameters: Schema.Struct({ openReviewPage: Schema.optional(Schema.Boolean) }),
+  success: Schema.String,
+});
+
+export const OpenReview = Tool.make("open-review", {
+  description:
+    "Open a review ticket's page — the diff grouped under the why, with type hints and peeks — in your user's browser, the same as pressing o on it in the TUI; a page already open there is brought forward instead (on macOS) or replaced by a new tab that keeps their place. When your user asks to see the review, or to read it in the browser. It opens on its own when you start on a review, unless they switched that off (set-settings). Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Schema.Struct({ ticketId: Schema.String }),
+  success: Schema.String,
+});
+
 export const SetName = Tool.make("set-name", {
   description: "Change the user's display name as peers see it. Applies live.",
   parameters: Schema.Struct({ name: Schema.String }),
@@ -457,6 +472,8 @@ export const CollagenToolkit = Toolkit.make(
   RemoveProject,
   SetAi,
   SetSteering,
+  SetSettings,
+  OpenReview,
   SetName,
   RenameRoom,
   ListRooms,
@@ -492,6 +509,8 @@ export const DevCollagenToolkit = Toolkit.make(
   RemoveProject,
   SetAi,
   SetSteering,
+  SetSettings,
+  OpenReview,
   SetName,
   RenameRoom,
   ListRooms,
@@ -507,6 +526,7 @@ const makeHandlers = Effect.gen(function* () {
     const updates = yield* Updates;
     const store = yield* StateStore;
     const mcpInfo = yield* McpInfo;
+    const pages = yield* ReviewPages;
     const { profile } = yield* CliArgs;
     const inbox = yield* Inbox;
     const outbox = yield* Outbox;
@@ -1172,6 +1192,21 @@ const makeHandlers = Effect.gen(function* () {
           Effect.map(() => `steering set to ${steering} — ${STEERING_LABEL[steering]}; every delivery now says so. Room-facing actions (messages, takes, settles, closes) remain your user's word.`),
           Effect.withSpan("Mcp.setSteering"),
         ),
+      "set-settings": (input: { openReviewPage?: boolean }) =>
+        Effect.gen(function* () {
+          const changes = SETTINGS.filter((x) => input[x.key] !== undefined);
+          if (changes.length > 0) yield* store.update((st) => changes.reduce((acc, x) => withSetting(acc, x.key, input[x.key]!), st));
+          const now = describeSettings(yield* store.get);
+          return changes.length > 0 ? `set — applies now. Your user's switches:\n${now}` : now;
+        }).pipe(Effect.withSpan("Mcp.setSettings")),
+      "open-review": Effect.fn("Mcp.openReview")(function* ({ ticketId }: { ticketId: string }) {
+        const { room } = yield* focusedRoom;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ticket = all.get(ticketId);
+        if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${ticketId} — check get-tickets`;
+        if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review has a page (its why is in review-context)`;
+        return yield* pages.show(ticketId);
+      }),
       "set-name": ({ name }: { name: string }) =>
         Effect.gen(function* () {
           const n = name.trim();
@@ -1256,11 +1291,12 @@ const makeDiagnosticHandlers = Effect.gen(function* () {
   const rooms = yield* Rooms;
   const transcripts = yield* Transcripts;
   const attachments = yield* Attachments;
+  const pages = yield* ReviewPages;
   const handlers: Record<string, (params: unknown) => Effect.Effect<string>> = {};
   for (const d of diagnostics) {
     handlers[d.id] = (params) =>
       rooms.current.pipe(
-        Effect.flatMap((h) => d.run(params ?? {}, { roomId: h.id }, { rooms, transcripts, attachments, me: identity.pubkey })),
+        Effect.flatMap((h) => d.run(params ?? {}, { roomId: h.id }, { rooms, transcripts, attachments, me: identity.pubkey, reviewStarted: pages.started })),
         Effect.withSpan(`Mcp.${d.id}`),
       );
   }
