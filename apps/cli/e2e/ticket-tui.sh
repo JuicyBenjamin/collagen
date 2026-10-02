@@ -25,7 +25,7 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\033[D'; sleep 2; mark M4d_back_to_list
   printf '\033[D'; sleep 2; mark M5_back_to_ticket
   printf '\033'; sleep 2; printf '\033[B'; sleep 1; mark M6_back
-  printf '?'; sleep 2; mark M7_help; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf '\033[B'; sleep 0.2; done; sleep 1; mark M7b_scrolled; printf '?'; sleep 2; printf '\033[B'; sleep 1; mark M8_help_closed; sleep 1; printf 'q' ) | \
+  printf '?'; sleep 2; mark M7_help; for i in $(seq 1 20); do printf '\033[B'; sleep 0.2; done; sleep 1; mark M7b_scrolled; printf '?'; sleep 2; printf '\033[B'; sleep 1; mark M8_help_closed; sleep 1; printf 'q' ) | \
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
@@ -56,7 +56,7 @@ ATTACHED=$(call $A "$SA" attach-files "$ATTACH")
 expect "alice attached the collected transcript to the ticket (a reference on the log)" "$ATTACHED" "attached 1 file"
 sleep 1
 touch "$OUT/ticket-tui.go"
-await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
+await_mark() { local i; for i in $(seq 1 60); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
 await_mark M8_help_closed; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 expect "↓↓↓ from the tab bar reached the tickets list" "$KEYS" "tickets"
@@ -87,7 +87,9 @@ PY
 )
 expect "? opened the help: every kind, with what it asks and who closes it" "$HELP" "closed by its reporter"
 expect "…the plan's line" "$HELP" "something its author intends to do"
-expect "…the marks spelled out" "$HELP" "asked for changes"
+# a scrolled screen is redrawn by changed cells only, so a line reaches the
+# pty in pieces; this piece of the ↻ line survives whole
+expect "…the marks spelled out" "$HELP" "read it and asked"
 expect "…and, scrolled with ↓, the states" "$HELP" "every step answered; its author has not closed it yet"
 expect "the help held the keyboard: the ↓ under it reached no section" "$(grep -c 'room name="down" .*captured' "$LOG.keys")" "^[1-9]"
 AFTER_HELP=$(sed -n '/seq="?" captured/,$p' "$LOG.keys" | sed 1d | cut -d' ' -f2 | tr '\n' ' ')

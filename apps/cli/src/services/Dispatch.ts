@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { closeTicket, finished, isJudged, isTake, postReview, settleStep, type Outgoing, type Ticket } from "@collagen/p2p";
+import { closeTicket, epicOf, epicParts, finished, isClosed, isJudged, isTake, moveToEpic, postReview, settleStep, turnEpic, visibleTo, type Outgoing, type Ticket } from "@collagen/p2p";
+import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
@@ -60,7 +61,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
         }
         case "ticket": {
           const merged = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
-          return merged ? sent(render(merged)) : NOT_ADMITTED;
+          return merged ? sent(`${render(merged)}${relatedHint(merged, yield* SubscriptionRef.get(room.tickets), identity.pubkey)}`) : NOT_ADMITTED;
         }
         case "review": {
           // the record and the why, one write: the ticket first (so the
@@ -84,6 +85,15 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // the same record serves a review, a plan and a proposal; the words
           // an agent reads back follow the kind
           const kind = out.ticket?.kind ?? (yield* SubscriptionRef.get(room.tickets)).get(out.review.ticketId)?.kind ?? "review";
+          // an epic is a folder: filed, or its aim revised — no readers, no takes
+          if (kind === "epic") {
+            const goal = out.ticket?.goal ?? (yield* SubscriptionRef.get(room.tickets)).get(out.review.ticketId)?.goal ?? "";
+            return sent(
+              out.ticket && !known
+                ? `epic filed: "${goal}" [ticket ${out.review.ticketId}]. Anyone in the room can now put tickets into it (epic, action add, with ticketIds). TELL YOUR USER ONLY THIS: "epic filed".`
+                : `epic "${goal}" [ticket ${out.review.ticketId}] updated. TELL YOUR USER ONLY THIS: "epic updated".`,
+            );
+          }
           const tool = kind === "review" ? "ask-review" : kind === "plan" ? "ask-plan" : kind === "bug" ? "report-bug" : "propose";
           const say = (what: string) =>
             `TELL YOUR USER ONLY THIS: "${kind} ticket has been ${what}". They asked for it, so the fact that it is done is the whole report — do not read the summary, the decisions, the forks or the counts back to them, and do not list what you wrote. It is on the ticket for whoever reads it, and their TUI shows the ticket.`;
@@ -101,7 +111,8 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             out.ticket.after && out.ticket.after.length > 0
               ? ` It waits on ${out.ticket.after.length} ticket(s) (after: ${out.ticket.after.join(", ")}): until they are answered nobody but your user is shown it or nudged about it; it opens to its readers by itself then.`
               : "";
-          return sent(`${kind} ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}.${waits} ${say("filed")} ${keepCurrent}`);
+          const related = relatedHint(out.ticket, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
+          return sent(`${kind} ticket filed, ${who}: "${out.ticket.goal}" [ticket ${out.ticket.id}] ${held}.${waits} ${say("filed")} ${keepCurrent}${related}`);
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
@@ -128,16 +139,71 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
                 ? ` If it is to be fixed, what comes next names this bug in from: a plan (ask-plan) when the fix needs deciding, or the fix's review (ask-review) when it is done — the reviewers then read the symptom, cause and suggestion beside the why. Judging the bug assigns nothing.`
                 : "";
           const offer =
-            merged.createdBy === identity.pubkey && !merged.closed && finished(merged)
+            merged.createdBy === identity.pubkey && !isClosed(merged) && finished(merged)
               ? `\nEvery step on this ticket is answered.${next} When your user says they are done with it — and only then — call close-ticket with ticketId "${merged.id}"; it leaves the lists and stays on the log.`
               : "";
           return sent(render(merged) + offer);
+        }
+        case "epic-move": {
+          const all = yield* SubscriptionRef.get(room.tickets);
+          const target = out.epic === null ? null : all.get(out.epic);
+          if (out.epic !== null && (!target || target.kind !== "epic")) return refused(`failed: no epic ${out.epic} — check get-tickets (kind: epic)`);
+          if (target && isClosed(target)) return refused(`failed: "${target.goal}" is closed — reopen it first (epic, action reopen, with why), then add to it`);
+          const now = yield* Clock.currentTimeMillis;
+          const moved: Array<string> = [];
+          const skipped: Array<string> = [];
+          for (const [i, id] of out.ticketIds.entries()) {
+            const t = all.get(id);
+            if (!t || !visibleTo(t, all, identity.pubkey)) {
+              skipped.push(`${id} (no such ticket)`);
+              continue;
+            }
+            if (t.kind === "epic") {
+              skipped.push(`"${t.goal}" (an epic is never part of another)`);
+              continue;
+            }
+            if (epicOf(t) === out.epic && (t.partOf?.length ?? 0) > 0) {
+              skipped.push(`"${t.goal}" (already ${out.epic ? "in it" : "in none"})`);
+              continue;
+            }
+            // one millisecond apart, so moves made together keep their order
+            const merged = yield* room.shareTicket(moveToEpic(t, out.epic, identity.pubkey, now + i)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+            if (!merged) return NOT_ADMITTED;
+            moved.push(`"${t.goal}"`);
+          }
+          if (moved.length === 0) return refused(`failed: nothing moved — ${skipped.join("; ")}`);
+          const progress = target ? epicParts(target, yield* SubscriptionRef.get(room.tickets)) : null;
+          return sent(
+            `${target ? `put into the epic "${target.goal}"` : "taken out of their epic"}: ${moved.join(", ")}${skipped.length > 0 ? ` — not moved: ${skipped.join("; ")}` : ""}.${progress ? ` It now holds ${progress.parts.length} part(s), ${progress.done} done.` : ""} Anyone in the room sees it at once. TELL YOUR USER ONLY THIS: "${target ? "added to the epic" : "taken out of the epic"}".`,
+          );
+        }
+        case "epic-turn": {
+          const all = yield* SubscriptionRef.get(room.tickets);
+          const epic = all.get(out.epicId);
+          if (!epic || epic.kind !== "epic") return refused(`failed: no epic ${out.epicId} — check get-tickets (kind: epic)`);
+          const now = yield* Clock.currentTimeMillis;
+          const turned = turnEpic(epic, out.closed, out.reason, identity.pubkey, all, now);
+          if (turned.outcome === "already") return refused(`failed: "${epic.goal}" is already ${out.closed ? "closed" : "open"}`);
+          if (turned.outcome === "needs-reason") {
+            const { parts, done } = epicParts(epic, all);
+            return refused(
+              out.closed
+                ? `failed: "${epic.goal}" still has ${parts.length - done} of ${parts.length} part(s) not done — closing it needs a reason from your user (superseded, dropped, done differently); with every part done it closes on that alone`
+                : `failed: reopening "${epic.goal}" needs a reason from your user — what more there is to do in it`,
+            );
+          }
+          if (turned.outcome !== "turned") return refused(`failed: "${epic.goal}" is not an epic`);
+          const merged = yield* room.shareTicket(turned.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+          if (!merged) return NOT_ADMITTED;
+          const why = turned.ticket.turns?.at(-1)?.reason ?? "";
+          return sent(`${out.closed ? "closed" : "reopened"} the epic "${epic.goal}" [ticket ${epic.id}] — ${why}. ${out.closed ? "Its tickets are drawn in their projects again; anyone can reopen it, with a reason." : "It is back on the overview with its tickets."} TELL YOUR USER ONLY THIS: "epic ${out.closed ? "closed" : "reopened"}".`);
         }
         case "close": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
           if (!ticket) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
           const now = yield* Clock.currentTimeMillis;
           const done = closeTicket(ticket, identity.pubkey, out.reason, now);
+          if (done.outcome === "epic") return refused(`failed: "${ticket.goal}" is an epic — it closes (and reopens) with the epic tool, by anyone, with a reason`);
           if (done.outcome === "not-yours") return refused(`failed: "${ticket.goal}" is ${nameFor(ticket.createdBy)}'s ticket to close — say what your user thinks with send-to-peer (pass ticketId)`);
           if (done.outcome === "already") return refused(`failed: "${ticket.goal}" was already closed by ${nameFor(ticket.closed!.by)}`);
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
