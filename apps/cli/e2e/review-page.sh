@@ -92,6 +92,9 @@ printf 'export const more = 1;\n' > "$R/src/more.ts"; git -C "$R" add -A; git -C
 wait_until "a new commit on the branch says changed too" "^$((BEFORE + 1))$" grep -c "event: changed" "$EV"
 expect "…and the data now has it" "$(curl -s "$ORIGIN/review/$TICKET/data")" "src/more.ts"
 kill $CURL 2>/dev/null
+# o on a review open where its tab cannot be brought forward opens one
+# marked ?take, which the old tab hands over to: the marker serves the page
+expect "a tab marked to take over is the same page" "$(curl -s "$ORIGIN/review/$TICKET?take")" "<title>Review by intent</title>"
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all; summary
