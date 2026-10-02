@@ -8,8 +8,9 @@ road, `at` (`file:line`). So the review can be read **by intent**.
 
 ## Opening it
 
-On a review ticket's page in the TUI, `o` (on the **why** section, or on the full why
-page) opens the review in your browser:
+`o` opens a review ticket in your browser — on its row in the overview's ticket list (the
+hint says so when a review is selected), on the **why** section of its page, or on the
+full why page:
 
 ```
 http://127.0.0.1:<your instance's port>/review/<ticket id>
@@ -50,6 +51,18 @@ through **your own `gh` login**, and says so at the top. Hosts sit behind one sm
 interface (`HostAdapter`), GitHub the only one so far; they are also where the page's
 back-links come from (the pull request, its checks, the compare). With neither, the page
 lists the decisions and forks with their pointers, and says why there is no diff.
+
+## The page itself
+
+A small [Solid 2](https://github.com/solidjs/solid) app in `apps/review-web`, with
+[TanStack Highlight](https://github.com/TanStack/highlight) for the code: each side of a
+hunk (the old lines, the new lines) is tokenized as one block, so a string or comment that
+opens on one line colours the next, and the tokens are rendered as the page's own spans —
+nothing is ever set as HTML. About 28 KB gzipped. The cli build builds it and ships it in
+`dist/review-web`; running collagen from source serves `apps/review-web/dist`
+(`pnpm --filter @collagen/review-web build`, or `dev` to rebuild on change). The JSON it
+reads, `/review/<ticket id>/data`, is typed once in `apps/review-web/src/data.ts`, which
+the cli imports.
 
 ## Saying what you think
 

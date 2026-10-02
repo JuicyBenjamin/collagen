@@ -13,16 +13,20 @@ printf 'ref: refs/heads/feat/opening-animation\n' > "$OUT/sandbox/.git/HEAD"
 printf '[remote "origin"]\n\turl = git@github.com:JuicyBenjamin/collagen.git\n' > "$OUT/sandbox/.git/config"
 start bob
 PTY="$OUT/review-tui.out"; MARKS="$OUT/review-tui.marks"; LOG="$OUT/review-tui.log"
-rm -f "$PTY" "$MARKS" "$OUT/review-tui.go" "$LOG" "$LOG.keys"
+rm -f "$PTY" "$MARKS" "$OUT/review-tui.go" "$LOG" "$LOG.keys" "$OUT/opened"
+# a stand-in browser: o hands the review page's url to the platform opener,
+# and this one only writes down what it was given
+mkdir -p "$OUT/bin"; for b in open xdg-open; do printf '#!/bin/sh\necho "$@" >> "%s/opened"\n' "$OUT" > "$OUT/bin/$b"; chmod +x "$OUT/bin/$b"; done
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/review-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M0_tickets
+  printf 'o'; sleep 2; mark M0b_opened_in_browser
   printf '\r'; sleep 2; mark M1_opened
   printf '\033[A'; sleep 1; mark M2_why_section
   printf '\r'; sleep 2; mark M3_why_page
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M4_scrolled
   printf '\033[D'; sleep 2; mark M5_back_to_ticket; sleep 1; printf 'q' ) | \
-  HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
+  PATH="$OUT/bin:$PATH" HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
 echo "## alice's agent asks bob for a review, with the why"
@@ -80,4 +84,5 @@ expect "…and the fork, with the road not taken" "$(echo "$TEXT" | grep -c 'ins
 expect "…pointing at the code the choice produced" "$(echo "$TEXT" | grep -c 'f1 src/components/Logo/Logo.tsx:87')" "^[1-9]"
 expect "the crumb says why" "$(echo "$TEXT" | grep -cE 'review feat/opening-animation.{0,20}why')" "^[1-9]"
 expect "← went back to the ticket" "$(echo "$KEYS" | tr ' ' '\n' | tail -3 | tr '\n' ' ')" "ticket-review"
+expect "o on the review ticket's row opened the review page in the browser" "$(cat "$OUT/opened" 2>/dev/null)" "^http://127.0.0.1:[0-9]+/review/$TICKET$"
 kill_all; summary

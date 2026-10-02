@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 import { roomProjects, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { gitDir } from "../lib/gitInfo";
-import { reviewPage } from "../lib/reviewPage";
-import { groupByWhy, parseDiff, type Grouped } from "../lib/reviewView";
+import type { ReviewPageData } from "@collagen/review-web/data";
+import { groupByWhy, parseDiff } from "../lib/reviewView";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -61,14 +64,6 @@ export const github: HostAdapter = {
 
 const HOSTS: ReadonlyArray<HostAdapter> = [github];
 
-export interface ReviewPageData {
-  readonly ticket: Pick<Ticket, "id" | "goal" | "kind" | "project">;
-  readonly review: Pick<ReviewContext, "summary" | "branch" | "base" | "link" | "authorName" | "decisions" | "forks" | "ts">;
-  /** where the diff came from, in words for the page */
-  readonly source: { readonly kind: "clone" | "host" | "none"; readonly detail: string };
-  readonly grouped: Grouped | null;
-  readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
-}
 
 /** The first of `refs` the repo knows as a commit. */
 const firstRef = (cwd: string, refs: ReadonlyArray<string>) =>
@@ -145,13 +140,45 @@ const notFound = (text: string) => HttpServerResponse.text(text, { status: 404 }
 /** A ticket id as collagen makes them; anything else is not looked up. */
 const ticketIdOk = (id: string | undefined): id is string => id !== undefined && /^[0-9A-Za-z-]{1,64}$/.test(id);
 
+/** Where the built page is (apps/review-web, a Solid app): beside the
+ *  bundle in a release (dist/review-web, copied there by the cli build), or
+ *  the web app's own dist when collagen runs from source. */
+const WEB_ROOTS = [new URL("./review-web/", import.meta.url), new URL("../../../review-web/dist/", import.meta.url)].map((u) => fileURLToPath(u));
+const webRoot = (): string | null => WEB_ROOTS.find((dir) => existsSync(join(dir, "index.html"))) ?? null;
+
+const NOT_BUILT = `The review page is not built. From the collagen repo: pnpm --filter @collagen/review-web build (looked in ${WEB_ROOTS.join(", ")})`;
+
+const TYPES: Record<string, string> = {
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
+  ".map": "application/json",
+};
+
 export const ReviewRoutes = Layer.mergeAll(
+  // the page: one document for every ticket; it reads its id from the url
   HttpRouter.add("GET", "/review/:ticketId", (request) =>
     Effect.gen(function* () {
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
       const { ticketId } = yield* HttpRouter.params;
       if (!ticketIdOk(ticketId)) return notFound("no ticket");
-      return HttpServerResponse.html(reviewPage(ticketId));
+      const root = webRoot();
+      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
+      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
+    }),
+  ),
+  // its hashed assets, by bare file name only — nothing outside the bundle
+  HttpRouter.add("GET", "/review/assets/:file", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      const { file } = yield* HttpRouter.params;
+      const root = webRoot();
+      const type = file ? TYPES[extname(file)] : undefined;
+      if (!root || !file || !/^[\w.-]+$/.test(file) || !type) return notFound("no such asset");
+      const path = join(root, "assets", file);
+      if (!existsSync(path)) return notFound("no such asset");
+      return HttpServerResponse.uint8Array(readFileSync(path), { contentType: type, headers: { "cache-control": "public, max-age=31536000, immutable" } });
     }),
   ),
   HttpRouter.add("GET", "/review/:ticketId/data", (request) =>

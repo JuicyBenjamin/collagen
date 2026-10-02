@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAtomValue } from "@effect/atom-react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { heldBy, visibleTo, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
@@ -12,6 +12,7 @@ import { marksLabel, summarize, type TicketSummary } from "../../../../../lib/ti
 import { drawnOrder, groupTickets, kindHeading } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
+import { openReviewPageAtom } from "../../../review/atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
  *  closed, whoever made it and whoever it is for. Grouped by project (a
@@ -37,6 +38,7 @@ export function Tickets() {
   const unknownTickets = unseen.filter((u) => u.key.startsWith("ticket/"));
   const unseenOther = unseen.length - unknownTickets.length;
   const { navigate } = useRouter();
+  const openReviewPage = useAtomSet(openReviewPageAtom);
   const [cursor, setCursor] = useState(0);
 
   const me = identity?.pubkey ?? "";
@@ -64,7 +66,7 @@ export function Tickets() {
   return (
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open · ? what it all means · ${LEGEND}`}
+      hint={`↑↓ select · enter open${current?.t.kind === "review" ? " · o review in browser" : ""} · ? what it all means · ${LEGEND}`}
       flexDirection="column"
       marginTop={1}
       onKey={(key) => {
@@ -74,6 +76,8 @@ export function Tickets() {
           if (current) navigate(to.ticket(current.t.id));
           return true;
         }
+        // straight from the list to the diff read by intent, in the browser
+        if (key.name === "o" && current?.t.kind === "review") return openReviewPage({ ticketId: current.t.id }), true;
         return false;
       }}
     >
