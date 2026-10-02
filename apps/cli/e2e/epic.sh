@@ -83,7 +83,7 @@ REOPEN0="{\"action\":\"reopen\",\"epicId\":\"$E1\"}"
 expect "reopening always needs a reason" "$(call $A "$SA" epic "$REOPEN0")" "reopening .{1,3}More languages.{1,3} needs a reason"
 REOPEN1="{\"action\":\"reopen\",\"epicId\":\"$E1\",\"reason\":\"more languages in the same area: Go next\"}"
 expect "alice reopens it" "$(call $A "$SA" epic "$REOPEN1")" "reopened the epic .{1,3}More languages.*Go next"
-wait_until "bob sees it open again, and why" "reopenedBecause: .?more languages in the same area: Go next" call $B "$SB" get-tickets '{}'
+wait_until "bob sees it open again, and why" "openBecause: .?more languages in the same area: Go next" call $B "$SB" get-tickets '{}'
 Q3="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$PLAN\"]}"
 expect "…and the plan can go in now, explicitly" "$(call $A "$SA" epic "$Q3")" "put into the epic .{1,3}More languages"
 Q4="{\"ticketId\":\"$E1\"}"

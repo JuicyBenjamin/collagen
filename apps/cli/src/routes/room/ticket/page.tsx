@@ -102,7 +102,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   // an epic is a folder: a page of its own, its tickets rather than steps
   if (ticket.kind === "epic") {
     const all = new Map(tickets.map((t) => [t.id, t]));
-    return <EpicPage epic={ticket} all={all} why={review} summaries={(t) => summarize(t, trace, me, heldBy(t, all), all)} nameFor={nameFor} />;
+    return <EpicPage epic={ticket} all={all} why={review} summaries={(t) => summarize(t, trace, me, heldBy(t, all), all)} nameFor={nameFor} me={me} />;
   }
   const threads = ticketThreads(ticket);
   const conversation = trace.filter((m) => aboutTicket(ticket, threads, m));
