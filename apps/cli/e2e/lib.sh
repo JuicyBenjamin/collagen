@@ -95,9 +95,12 @@ testnet() {
 # start <profile> [extra args...] — headless instance, log at $OUT/<profile>.log,
 # anything it prints (a crash, a stray console.log) at $OUT/<profile>.out / .err.
 # Returns at once; `mcp` / `wait_for_peer` wait for it to be up.
+# A browser is never opened from a test: what collagen would open (a review
+# page) is written to $OUT/<who>.opened instead, one url a line.
 start() {
   local who=$1; shift
-  HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" \
+  printf '#!/bin/sh\necho "$1" >> "%s"\n' "$OUT/$who.opened" > "$OUT/$who.opener"; chmod +x "$OUT/$who.opener"
+  HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" COLLAGEN_OPENER="$OUT/$who.opener" \
     node --import tsx src/headless.ts --profile "$(profile "$who")" --name "$who" "$@" < /dev/null >> "$OUT/$who.out" 2>> "$OUT/$who.err" &
   disown # killed later by pattern; no "Killed: 9" job chatter in the output
 }

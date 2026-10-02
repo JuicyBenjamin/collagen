@@ -13,6 +13,10 @@ export interface DiagnosticDeps {
   /** Whose machine this runs on (pubkey) — a diagnostic that behaves
    *  differently for a ticket's author and for a reader needs to know. */
   readonly me: string;
+  /** The person's agent has started on a review ticket: its page opens in
+   *  their browser if their setting says so. Says what happened, or null.
+   *  Absent where no browser is the person's (the TUI's own runs). */
+  readonly reviewStarted?: (ticketId: string) => Effect.Effect<string | null>;
 }
 
 /** Where the person (or agent) is when they run it. */
