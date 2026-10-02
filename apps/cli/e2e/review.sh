@@ -177,7 +177,8 @@ expect "alice revises the why after the reviews" "$(call $A "$SA" ask-review "$R
 wait_until "bob is told the why moved, on the thread he knows the ticket by" "revised the why" bash -c "cat '$OUT/bob.log'"
 expect "…and it is the ticket he already knows, not a new one" "$(grep 'revised the why' "$OUT/bob.log" | tail -1)" "ticket ${MANY_TICKET:0:8}"
 expect "…carol too" "$(grep -c 'revised the why' "$OUT/carol.log")" "^[1-9]"
-WHY_NOW=$(call $B "$SB" review-context "{\"ticketId\":\"$MANY_TICKET\"}")
+# one line: the why is multi-line text, and these checks span its rows
+WHY_NOW=$(call $B "$SB" review-context "{\"ticketId\":\"$MANY_TICKET\"}" | tr '\n' ' ')
 expect "reading it again gives the current why" "$WHY_NOW" "per read, not per open"
 expect "…the new branch and pull request" "$WHY_NOW" "feat/evict-v2.*pull/24"
 expect "…and when it was last revised" "$WHY_NOW" "updated: .{0,3}2026"

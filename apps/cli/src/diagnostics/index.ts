@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Tool, Toolkit } from "effect/unstable/ai";
+import { Tool, Toolkit } from "effect/ai";
 import type { Diagnostic } from "./registry";
 import { attachFiles, fetchAttachments } from "./attachments";
 import { reviewContext } from "./review";

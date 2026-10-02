@@ -85,7 +85,8 @@ IID=$(echo "$R6" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 IROWS=$(rows $A "$SA" "$IID")
 expect "…with nobody named, the work made no step for anyone" "$(echo "$IROWS" | grep -c 'work-')" "^0$"
 expect "…only the author's own address step" "$IROWS" "address,alice,address"
-OUTLINE=$(call $A "$SA" review-context "{\"ticketId\":\"$IID\"}")
+# one line: the why is multi-line text, and the check spans its rows
+OUTLINE=$(call $A "$SA" review-context "{\"ticketId\":\"$IID\"}" | tr '\n' ' ')
 expect "…the work is an outline on the why, with the suggested owner, binding on nobody" "$OUTLINE" "outline.*schedule.*a cron job for the export.*bob"
 NOTHOUGHT='{"project":"sandbox","goal":"x","decisions":[],"forks":[]}'
 J7="$NOTHOUGHT"

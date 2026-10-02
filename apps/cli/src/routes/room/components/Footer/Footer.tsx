@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { useAtomValue } from "@effect/atom-react";
 import { Option } from "effect";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { formatInvite, shortRoomId } from "@collagen/p2p";
 import { captureAtom } from "../../../../components/focus";
 import { theme } from "../../../../app/theme";

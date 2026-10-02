@@ -7,7 +7,7 @@ start alice
 SA=$(mcp $A)
 expect "two rooms to begin with" "$(call $A "$SA" list-rooms '{}')" "rooms\[2\]"
 expect "leaving 'work' works" "$(call $A "$SA" leave-room '{"room":"work"}')" 'left .*work.* \[6f056449\]'
-expect "one room left, and it is the one looked at" "$(call $A "$SA" list-rooms '{}')" "rooms\[1\].*dev room,[0-9]+,[0-9]+,true"
+expect "one room left, and it is the one looked at" "$(call $A "$SA" list-rooms '{}' | tr '\n' ' ')" "rooms\[1\].*dev room,[0-9]+,[0-9]+,true"
 expect "the profile file forgot it" "$(python3 -c "import json; print([r['name'] for r in json.load(open('$CFG/identity-alice-$SCN.json'))['rooms']])")" "^\['dev room'\]$"
 expect "the last room cannot be left" "$(call $A "$SA" leave-room '{"room":"dev room"}')" "cannot leave your only room"
 kill_all; summary

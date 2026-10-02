@@ -20,7 +20,7 @@ TID=$(call $A "$SA" pending-threads '{}' | grep -oE '[0-9a-f]{16}' | head -1); e
 
 echo "## bob adopted it into a codex session; its rollout has old and new lines"
 ADOPT="{\"threadId\":\"$TID\",\"agent\":\"codex\",\"sessionId\":\"$SID\"}"
-expect "bob adopted the thread" "$(call $B "$SB" adopt-thread "$ADOPT")" "^\"adopted: new messages on thread $TID"
+expect "bob adopted the thread" "$(call $B "$SB" adopt-thread "$ADOPT")" "^\"?adopted: new messages on thread $TID"
 cat > "$CODEX_FAKE/sessions/2026/09/09/rollout-2026-09-09T10-00-00-$SID.jsonl" <<EOF
 {"timestamp":"2020-01-01T00:00:00.000Z","type":"session_meta","payload":{"id":"$SID"}}
 {"timestamp":"2020-01-01T00:01:00.000Z","type":"response_item","text":"unrelated work from before the adoption"}

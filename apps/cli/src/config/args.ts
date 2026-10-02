@@ -1,4 +1,4 @@
-import { Flag } from "effect/unstable/cli";
+import { Flag } from "effect/cli";
 
 // Shared flag definitions for both entrypoints (TUI + headless).
 export const profileOption = Flag.String("profile").pipe(
