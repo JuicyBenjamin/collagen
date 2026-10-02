@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.14.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.13.1-alpha...p2p-v0.14.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** steering — the person's dial for how much their agent does on its own ([18860a5](https://github.com/JuicyBenjamin/collagen/commit/18860a5b3486203594fff59b9c09b658ebfff6ae))
+* **cli:** the app tells the person what the ticket kinds are for ([bb90a50](https://github.com/JuicyBenjamin/collagen/commit/bb90a5028f4c04231bf21f1fc4f4108e59816293))
+* **p2p:** tickets in order — a ticket after another opens to readers once that one is answered ([1d0c4ca](https://github.com/JuicyBenjamin/collagen/commit/1d0c4cacf60065506a0a20ee6f9aa2b87cee7add))
+
 ## [0.13.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.13.0-alpha...p2p-v0.13.1-alpha) (2026-09-17)
 
 

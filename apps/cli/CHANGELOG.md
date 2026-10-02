@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.14.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.13.1-alpha...cli-v0.14.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** a project a peer already shares is located, not added again ([1fd6066](https://github.com/JuicyBenjamin/collagen/commit/1fd6066e8e5f005227eae42c80dcd240b8b79499))
+* **cli:** a review read by intent — the diff grouped under its why, in a local page ([a0d5e05](https://github.com/JuicyBenjamin/collagen/commit/a0d5e05ca2fc8dae5c4b62072e920b1298d312a6))
+* **cli:** steering — the person's dial for how much their agent does on its own ([18860a5](https://github.com/JuicyBenjamin/collagen/commit/18860a5b3486203594fff59b9c09b658ebfff6ae))
+* **cli:** the app tells the person what the ticket kinds are for ([bb90a50](https://github.com/JuicyBenjamin/collagen/commit/bb90a5028f4c04231bf21f1fc4f4108e59816293))
+* **cli:** the overview groups tickets by project, then by kind in lifecycle order ([9f1d45c](https://github.com/JuicyBenjamin/collagen/commit/9f1d45c6db7f9847b37cc7627ed6cb7c6165fd50))
+* **cli:** the review page is a Solid 2 app coloured by TanStack Highlight; o opens it from the list ([63f68cb](https://github.com/JuicyBenjamin/collagen/commit/63f68cb33426fd13d6a92baec1bae3a2a990e8b7))
+* **p2p:** tickets in order — a ticket after another opens to readers once that one is answered ([1d0c4ca](https://github.com/JuicyBenjamin/collagen/commit/1d0c4cacf60065506a0a20ee6f9aa2b87cee7add))
+
+
+### Bug Fixes
+
+* **cli:** a chain of stacked tickets is a staircase, not a flat list under its first ([802e9cb](https://github.com/JuicyBenjamin/collagen/commit/802e9cbb1d516a2fff7981e544e3b8bdcc6b59d8))
+* **cli:** a name is a name however it is cased; a miss says who is here ([67d80c0](https://github.com/JuicyBenjamin/collagen/commit/67d80c047bbb756942f11cd03aebdd3d7e01239a))
+* **cli:** the activity log says where a delivery went ([47697c4](https://github.com/JuicyBenjamin/collagen/commit/47697c495176ce7b5e446db2c59acf59bc4d0755))
+* **cli:** the MCP server listens on loopback only ([d34ae4c](https://github.com/JuicyBenjamin/collagen/commit/d34ae4c864228a82fa2bd51bef6e24a90aa3744b))
+* **cli:** the rail's dot means you must act ([e4449f7](https://github.com/JuicyBenjamin/collagen/commit/e4449f7f27cebc1015511d3831fa04f1931d2562))
+* **cli:** the review page's server imports effect/http ([c751dbc](https://github.com/JuicyBenjamin/collagen/commit/c751dbc4d9388a22fdb6e65c92ebc1b328c5e1e3))
+
 ## [0.13.1-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.13.0-alpha...cli-v0.13.1-alpha) (2026-09-17)
 
 
