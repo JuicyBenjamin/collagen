@@ -22,21 +22,25 @@ refused. The url also goes to the activity log, for a machine with no browser to
 
 ## What it shows
 
-One section per **decision**, in the order the author gave them:
+It is for a person reading code, so the code is the loudest thing on it. One section per
+**decision**, in the order the author gave them:
 
-- what was decided, **how the person steered it** (their words) and **what their agent
-  reasoned**;
-- the **hunks at its lines** — a hunk holding a `where` line, or the nearest one within a
-  few lines (line numbers drift as code is edited), or every hunk of a file when the
-  decision names a file alone. A hunk two decisions both claim shows under both, marked
-  **shared**;
-- the **forks** whose `at` falls inside those hunks: what was chosen, instead of what,
-  why, and whose call it was;
-- a `where` that matches no change is said, not dropped: the code there did not move, or
-  the why is older than the branch.
+- the decision's title, then the **hunks at its lines** — a hunk holding a `where` line, or
+  the nearest one within a few lines (line numbers drift as code is edited), or every hunk
+  of a file when the decision names a file alone. A hunk that also serves another decision
+  says so above it — "also under …", a link there;
+- beside the code, quieter, the **why**: how the person steered it (their words), what
+  their agent reasoned, and the **forks in the road** that fall in those hunks — what was
+  chosen over what, why, and whose call it was. It stays in view as you scroll the code.
+  On a narrower window it folds under the title, a click away;
+- when the why points at code the diff does not change, a quiet note says it may be older
+  than the branch.
 
-Last, **not explained**: every hunk no decision claims. That is a finding in itself — the
-why does not cover it — and forks outside every decision's lines are listed there too.
+Last, **not explained**: every change no decision covers — a finding in itself, worth a
+question to the author — with any forks outside every decision's lines.
+
+The plumbing stays out of the way: no decision ids, no pointer lists (each hunk names its
+file), and where the diff came from is one line at the foot of the page.
 
 ## Where the diff comes from
 
