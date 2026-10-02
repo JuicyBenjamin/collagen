@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Errored, For, Loading, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, Errored, For, Loading, onSettled, Show } from "solid-js";
 import type { Decision, Fork as ForkData, Hunk as HunkData, ReviewPageData, Section } from "./data";
 import { Fork } from "./components/Fork";
 import { Hunk } from "./components/Hunk";
@@ -21,8 +21,21 @@ async function load(): Promise<ReviewPageData> {
   return (await res.json()) as ReviewPageData;
 }
 
+// the instance says when the review changed — its why revised, the ticket
+// moved, the branch's commit in the clone — and the page reloads in place:
+// what is on screen stays until the new data is in
+const [version, setVersion] = createSignal(0);
+
 export function App() {
-  const data = createMemo(() => load());
+  const data = createMemo(() => {
+    version();
+    return load();
+  });
+  onSettled(() => {
+    const events = new EventSource(`/review/${encodeURIComponent(ticketId)}/events`);
+    events.addEventListener("changed", () => setVersion((v) => v + 1));
+    return () => events.close();
+  });
   return (
     <Errored fallback={(err) => <p class="failed">{String(err())}</p>}>
       <Loading fallback={<p class="loading">Reading the review…</p>}>
