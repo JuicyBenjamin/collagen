@@ -1,6 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { epicParts, epicTurn, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
+import { epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
 
@@ -30,14 +30,14 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       // an epic: its aim, and what is in it — no why to weigh, no take to give
       if (ticket?.kind === "epic") {
         const { parts, counted, done, unresolved } = epicParts(ticket, all);
-        const turn = epicTurn(ticket);
-        const closed = isClosed(ticket, all);
+        const status = epicStatus(ticket, all);
+        const closed = status.closed;
         return toToon({
           epic: {
             goal: ticket.goal,
             aim: review?.summary ?? "",
             progress: counted === 0 ? "nothing counted yet" : `${done} of ${counted} done`,
-            ...(turn ? { [closed ? "closedBecause" : "reopenedBecause"]: turn.reason } : {}),
+            ...(status.because ? { [closed ? "closedBecause" : "openBecause"]: status.because } : {}),
             ...(closed ? {} : { toClose: unresolved.length === 0 ? "everything in it is resolved: it can close" : `${unresolved.length} still to resolve, exclude or move out first` }),
           },
           tickets: parts

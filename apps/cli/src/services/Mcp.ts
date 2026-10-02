@@ -575,7 +575,7 @@ const makeHandlers = Effect.gen(function* () {
           : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 12));
       const reviews = yield* SubscriptionRef.get(room.reviews);
       const all = yield* SubscriptionRef.get(room.tickets);
-      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id), heldBy(ticket, all), all);
+      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id), heldBy(ticket, all), all, identity.pubkey);
     });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {

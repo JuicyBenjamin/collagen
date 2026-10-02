@@ -1,11 +1,11 @@
-import { epicOf, epicParts, epicTurn, excludedFromEpic, finished, isClosed, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { reviewHeadline } from "./review";
 
 /** A ticket as the agent reads it: keys resolved to names, needs joined. A
  *  review ticket also says where the code is and how much why came with it —
  *  the why itself is not here on purpose: it is read on demand, when the
  *  person asks (review-context), not poured into every listing. */
-export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, review?: ReviewContext, heldBy: ReadonlyArray<string> = [], all: ReadonlyMap<string, Ticket> = new Map()) => ({
+export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, review?: ReviewContext, heldBy: ReadonlyArray<string> = [], all: ReadonlyMap<string, Ticket> = new Map(), me = "") => ({
   id: ticket.id,
   project: ticket.project,
   kind: ticket.kind,
@@ -21,12 +21,12 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   /** the epic it was put in, if any */
   ...epicLine(ticket, all),
   /** an epic: what is in it, and how far along */
-  ...(ticket.kind === "epic" ? partsLine(ticket, all) : {}),
+  ...(ticket.kind === "epic" ? partsLine(ticket, all, me) : {}),
   /** every step answered — ready for its author to close, if they say so */
   answered: ticket.kind === "epic" ? false : finished(ticket),
   /** recorded: off the lists, still here to refer back to (an epic can be reopened) */
   closed: isClosed(ticket, all),
-  ...(ticket.kind === "epic" ? (epicTurn(ticket) ? { [isClosed(ticket, all) ? "closedBecause" : "reopenedBecause"]: epicTurn(ticket)!.reason } : {}) : ticket.closed?.reason ? { closedBecause: ticket.closed.reason } : {}),
+  ...(ticket.kind === "epic" ? epicBecause(ticket, all) : ticket.closed?.reason ? { closedBecause: ticket.closed.reason } : {}),
   ...(review
     ? { review: `${reviewHeadline(review)} — call review-context {ticketId} when your user asks why something is the way it is` }
     : {}),
@@ -51,11 +51,21 @@ function epicLine(ticket: Ticket, all: ReadonlyMap<string, Ticket>): { epic?: st
 }
 
 /** An epic's tickets by id in reading order, how many are done of those
- *  counted, and what still keeps it from closing. */
-function partsLine(epic: Ticket, all: ReadonlyMap<string, Ticket>): { parts: string; unresolved?: string } {
+ *  counted, and what still keeps it from closing. The count is the room's;
+ *  the ids are only those this reader may be shown (a ticket waiting on
+ *  another is its author's alone). */
+function partsLine(epic: Ticket, all: ReadonlyMap<string, Ticket>, me: string): { parts: string; unresolved?: string } {
   const { parts, counted, done, unresolved } = epicParts(epic, all);
+  const shown = (t: Ticket) => visibleTo(t, all, me);
   return {
-    parts: parts.length === 0 ? "none yet" : `${done} of ${counted} done: ${parts.map((p) => p.id).join(" ")}`,
-    ...(unresolved.length > 0 ? { unresolved: unresolved.map((t) => t.id).join(" ") } : {}),
+    parts: parts.length === 0 ? "none yet" : `${done} of ${counted} done: ${parts.filter(shown).map((p) => p.id).join(" ")}`,
+    ...(unresolved.length > 0 ? { unresolved: unresolved.filter(shown).map((t) => t.id).join(" ") || `${unresolved.length} not shown to you yet` } : {}),
   };
+}
+
+/** Why an epic is as it is — the reason behind its state, as epicStatus
+ *  decides it (a reopen, a close that missed an addition, the close). */
+function epicBecause(epic: Ticket, all: ReadonlyMap<string, Ticket>): { closedBecause?: string; openBecause?: string } {
+  const st = epicStatus(epic, all);
+  return st.because ? (st.closed ? { closedBecause: st.because } : { openBecause: st.because }) : {};
 }
