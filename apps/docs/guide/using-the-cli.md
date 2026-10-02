@@ -73,7 +73,8 @@ No files are written into your projects.
   receipt. Neither this tab nor **messages** carries a count: both are logs that only
   grow, so their size is not something a person acts on.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
-  section.
+  section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
+  changes asked, `✕` failed), and `?` the rest.
 - **footer** — a short activity log, the MCP url, the room's invite id.
 
 ### Navigation
