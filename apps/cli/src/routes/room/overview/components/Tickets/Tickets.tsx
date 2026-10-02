@@ -7,8 +7,8 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { EPIC_MARK, GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
-import { epicProgress, marksLabel, progressLabel, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { EPIC_MARK, GLYPH, KIND_GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
+import { epicProgress, marksLabel, progressShort, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
@@ -66,6 +66,24 @@ export function Tickets() {
   const shown = drawnOrder(groups, epics, unfolded);
   const needsYou = rows.filter((r) => r.s.state === "needs-you").length;
   const projects = new Set(rows.filter((r) => r.t.kind !== "epic").map((r) => r.t.project));
+  // one lead column for the whole list, as wide as its longest lead
+  const width = leadWidth([
+    ...epics.flatMap((e) => [
+      // an epic's title starts a name's width before the rows' titles
+      " ".repeat(Math.max(0, rowTitle(e.epic.t).length + partsWidth(foldedParts(e, unfolded.has(e.epic.t.id))) + 3 * foldedParts(e, unfolded.has(e.epic.t.id)).length - KIND - NAME)),
+      ...(unfolded.has(e.epic.t.id) ? e.rows.map((r) => leadOf(r.t, 0, projects.size > 1 ? r.t.project : undefined)) : []),
+    ]),
+    ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => leadOf(r.t, k.depth.get(r.t.id) ?? 0, undefined)))),
+  ]);
+  // and one info column, as wide as its widest info
+  const infoWidth = Math.max(
+    0,
+    ...epics.flatMap((e) => [
+      progressShort(epicProgress(e.epic.t, byId)).length,
+      ...(unfolded.has(e.epic.t.id) ? e.rows.map((r) => partsWidth(rowInfo(r.s, undefined, nameOf, excludedFromEpic(r.t)))) : []),
+    ]),
+    ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(rowInfo(r.s, k.parent.get(r.t.id), nameOf, undefined))))),
+  );
   const index = new Map(shown.map((r, i) => [r.t.id, i]));
 
   const last = Math.max(0, shown.length - 1);
@@ -120,8 +138,10 @@ export function Tickets() {
                 open={unfolded.has(e.epic.t.id)}
                 first={epics[0] === e}
                 indent={groups.length > 1 ? 4 : 2}
+                width={width}
+                infoWidth={infoWidth}
                 selectedId={focused ? current?.t.id : undefined}
-                progress={progressLabel(epicProgress(e.epic.t, byId))}
+                progress={progressShort(epicProgress(e.epic.t, byId))}
                 nameFor={nameFor}
                 projects={projects.size > 1}
                 goalOf={nameOf}
@@ -152,6 +172,8 @@ export function Tickets() {
                         depth={k.depth.get(r.t.id) ?? 0}
                         under={k.parent.get(r.t.id)}
                         goalOf={nameOf}
+                        width={width}
+                        infoWidth={infoWidth}
                       />
                     ))}
                   </box>
@@ -162,7 +184,7 @@ export function Tickets() {
           )}
           {unknownTickets.map((u) => (
             <text key={u.key} fg={theme.dim} truncate wrapMode="none">
-              {"    "}
+              {"        "}
               {"unknown".padEnd(9)}update collagen to see this ticket
             </text>
           ))}
@@ -193,6 +215,8 @@ function EpicView({
   projects,
   goalOf,
   indent,
+  width,
+  infoWidth,
 }: {
   block: EpicBlock<Row>;
   open: boolean;
@@ -205,24 +229,32 @@ function EpicView({
   nameFor: (key: string) => string;
   projects: boolean;
   goalOf: (ticketId: string) => string | undefined;
+  /** the rows' lead width, so the epic's progress sits on their info column */
+  width: number;
+  infoWidth: number;
 }) {
   const selected = selectedId === block.epic.t.id;
-  // open, each ticket carries its own ▸; folded, the row says how many are yours
-  const yours = block.rows.filter((r) => r.s.state === "needs-you").length;
   return (
     <box flexDirection="column" flexShrink={0} marginTop={first ? 1 : 0} marginBottom={1}>
-      <text truncate wrapMode="none">
-        {" ".repeat(Math.max(0, indent - 2))}
-        <span fg={selected ? theme.accent : theme.epic}>{selected ? "› " : "  "}</span>
-        <span fg={theme.epic}>
-          {EPIC_MARK} {rowTitle(block.epic.t)}
-        </span>
-        <span fg={theme.dim}>
-          {" "}· {progress}
-          {!open && block.rows.length > 0 ? ` · ${block.rows.length} folded` : ""}
-        </span>
-        {!open && yours > 0 ? <span fg={theme.warn}> · {GLYPH.yours} {yours} yours</span> : null}
-      </text>
+      <box flexDirection="row" flexShrink={0}>
+        <text wrapMode="none" flexShrink={0}>
+          {" ".repeat(Math.max(0, indent - 2))}
+          <span fg={selected ? theme.accent : theme.epic}>{selected ? "› " : "  "}</span>
+          <span fg={theme.epic}>{EPIC_MARK} </span>
+        </text>
+        {/* the title starts on the tree's column, before the glyphs and the
+            names: its column is that much wider than the rows' titles */}
+        <text fg={theme.epic} truncate wrapMode="none" flexBasis={width + KIND + NAME} flexShrink={1} minWidth={0}>
+          {rowTitle(block.epic.t)}
+          {foldedParts(block, open).map((part) => (
+            <span key={part.text} fg={part.warn ? theme.warn : theme.dim}>
+              {" · "}
+              {part.text}
+            </span>
+          ))}
+        </text>
+        <Info parts={[{ text: progress }]} width={infoWidth} />
+      </box>
       {open
         ? block.rows.map((r, i) => (
             <TicketRow
@@ -238,10 +270,79 @@ function EpicView({
               project={projects ? r.t.project : undefined}
               excluded={excludedFromEpic(r.t)}
               branch={i === block.rows.length - 1 ? "last" : "mid"}
+              width={width}
+              infoWidth={infoWidth}
             />
           ))
         : null}
     </box>
+  );
+}
+
+/** The name column: eight letters and a space. */
+const NAME = 9;
+/** Between the tree's column and the name: the kind's glyph and a space each side. */
+const KIND = 4;
+
+/** What a row says before its info column: the staircase, the project
+ *  (inside an epic) and the title — the text the info column aligns after. */
+const staircase = (depth: number): string => (depth > 0 ? `${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} ` : "");
+const leadOf = (t: Ticket, depth: number, project: string | undefined): string => `${staircase(depth)}${project ? `${project} · ` : ""}${rowTitle(t)}`;
+
+/** The columns a list's lead takes: the longest one shown (a title is 60 at
+ *  most), so the info column sits just past it on every row. */
+const leadWidth = (leads: ReadonlyArray<string>): number => Math.max(0, ...leads.map((l) => l.length));
+
+/** What follows a row's title, in the info column. */
+type Part = { readonly text: string; readonly warn?: boolean };
+const partsWidth = (parts: ReadonlyArray<Part>): number => parts.reduce((n, p, i) => n + p.text.length + (i > 0 ? 3 : 0), 0);
+
+/** A ticket's info: out of its epic's progress, what holds it, what was said on it. */
+const rowInfo = (
+  s: TicketSummary,
+  under: string | undefined,
+  goalOf: (ticketId: string) => string | undefined,
+  excluded: boolean | undefined,
+): ReadonlyArray<Part> => {
+  // waiting on the row it is drawn under says so in one word; waiting on one
+  // elsewhere (another group, or a second of two) names it
+  const elsewhere = s.held.filter((id) => id !== under);
+  const on = elsewhere.length > 0 ? (goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8)) : "";
+  const people = marksLabel(s);
+  return [
+    ...(excluded ? [{ text: "excluded" }] : []),
+    ...(s.held.length > 0 ? [{ text: `${on ? `${STACK.waits} after "${on}"` : `${STACK.waits} waiting`}${elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}` }] : []),
+    ...(people.length > 0 ? [{ text: people, warn: s.state === "needs-you" }] : []),
+  ];
+};
+
+/** Folded, an epic says after its title how many it holds and how many are
+ *  yours — there is room beside a title, and its info column keeps the progress. */
+const foldedParts = (block: EpicBlock<Row>, open: boolean): ReadonlyArray<Part> => {
+  const yours = block.rows.filter((r) => r.s.state === "needs-you").length;
+  return [
+    ...(!open && block.rows.length > 0 ? [{ text: `${block.rows.length} folded` }] : []),
+    ...(!open && yours > 0 ? [{ text: `${GLYPH.yours} ${yours} yours`, warn: true }] : []),
+  ];
+};
+
+/** The info column: two past the longest title on screen, and as wide as
+ *  the widest info — so when the list is narrower than both, every title
+ *  gives up the same columns and the info still starts on one line. (A
+ *  title's column is a flexBasis, not a width: OpenTUI turns flexShrink off
+ *  when a numeric width is set after mount, and the title would stop giving
+ *  way the first time the column changed — on a fold, say.) */
+function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
+  if (width === 0) return null;
+  return (
+    <text truncate wrapMode="none" flexBasis={width} flexShrink={0} marginLeft={2}>
+      {parts.map((part, i) => (
+        <span key={i} fg={part.warn ? theme.warn : theme.dim}>
+          {i > 0 ? " · " : ""}
+          {part.text}
+        </span>
+      ))}
+    </text>
   );
 }
 
@@ -269,6 +370,8 @@ function TicketRow({
   project,
   excluded,
   branch,
+  width,
+  infoWidth,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
@@ -285,58 +388,43 @@ function TicketRow({
   project?: string;
   /** in its epic but out of its progress */
   excluded?: boolean;
-  /** inside an epic: its line of the tree under the epic's title, and then
-   *  its kind is said on the row — there are no kind headings in an epic */
+  /** inside an epic: its line of the tree, under the epic's title */
   branch?: "mid" | "last";
+  /** the lead column's width: the info after it starts on the same column on every row */
+  width: number;
+  /** the info column's width, the widest info on screen */
+  infoWidth: number;
 }) {
-  const people = marksLabel(s);
   const yours = s.state === "needs-you";
   // waiting on another ticket: only its author sees the row, dim, saying on what
-  const waits = s.held.length > 0;
-  const dim = s.state === "done" || waits || excluded === true;
-  // waiting on the row it is drawn under says so in one word; waiting on one
-  // elsewhere (another group, or a second of two) names it
-  const elsewhere = s.held.filter((id) => id !== under);
-  const on = elsewhere.length > 0 ? (goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8)) : "";
+  const dim = s.state === "done" || s.held.length > 0 || excluded === true;
+  const fg = selected ? theme.accent : dim ? theme.dim : theme.fg;
   return (
-    <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
-      {" ".repeat(Math.max(0, indent - 2))}
-      {selected ? "› " : "  "}
-      {/* the row's own mark: it is yours to act on. Carried here and not only
-          in the people's colour, because on your own ticket the people list can
-          be empty — and then a change request had no trace on screen at all.
-          Same column on every row, an epic's tickets too */}
-      {/* inside an epic the tree line stands in the mark's column, under the
-          crown, and a ▸ hugs it — so the name stays on the column every row's
-          name is on */}
-      {branch ? (
-        <>
-          <span fg={theme.epic}>{branch === "last" ? "└" : "├"}</span>
-          <span fg={theme.warn}>{yours ? GLYPH.yours : " "}</span>
-        </>
-      ) : (
+    <box flexDirection="row" flexShrink={0}>
+      <text fg={fg} wrapMode="none" flexShrink={0}>
+        {" ".repeat(Math.max(0, indent - 2))}
+        {selected ? "› " : "  "}
+        {/* the row's own mark: it is yours to act on. Carried here and not only
+            in the people's colour, because on your own ticket the people list can
+            be empty — and then a change request had no trace on screen at all.
+            Same column on every row, an epic's tickets too */}
         <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
-      )}
-      <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
-      {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
-      {depth > 0 ? <span fg={theme.dim}>{`${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} `}</span> : null}
-      {project ? <span fg={theme.dim}>{project} · </span> : null}
-      {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
-      {/* an epic has no kind headings: each ticket in it says its kind */}
-      {branch ? <span fg={theme.dim}> · {t.kind}</span> : null}
-      {excluded ? <span fg={theme.dim}> · excluded from progress</span> : null}
-      {waits ? (
-        <span fg={theme.dim}>
-          {on ? ` · ${STACK.waits} after "${on}"` : ` · ${STACK.waits} waiting`}
-          {elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}
-        </span>
-      ) : null}
-      {people.length > 0 ? (
-        <>
-          <span fg={theme.dim}> · </span>
-          <span fg={s.state === "needs-you" ? theme.warn : theme.dim}>{people}</span>
-        </>
-      ) : null}
-    </text>
+        {/* inside an epic, its line of the tree, dropping from the first
+            letter of the epic's title; a blank of that width on every other
+            row, so the glyphs and the names keep one column throughout */}
+        {branch ? <span fg={theme.epic}>{branch === "last" ? "└ " : "├ "}</span> : "  "}
+        {/* every row's kind, as a glyph: under a heading it learns what it
+            means, and inside an epic — no headings there — it says it */}
+        <span fg={theme.dim}>{t.kind === "epic" ? "  " : `${KIND_GLYPH[t.kind]} `}</span>
+        <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, NAME - 1).padEnd(NAME)}</span>
+      </text>
+      <text fg={fg} truncate wrapMode="none" flexBasis={width} flexShrink={1} minWidth={0}>
+        {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
+        {depth > 0 ? <span fg={theme.dim}>{staircase(depth)}</span> : null}
+        {project ? <span fg={theme.dim}>{project} · </span> : null}
+        {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
+      </text>
+      <Info parts={rowInfo(s, under, goalOf, excluded)} width={infoWidth} />
+    </box>
   );
 }
