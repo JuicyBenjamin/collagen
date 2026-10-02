@@ -1,0 +1,85 @@
+/* The page's own palette (the TUI's, Tokyo Night in the dark); token colours
+   come from TanStack Highlight's themes, injected in main.tsx. */
+:root {
+  --bg: #f7f7fb;
+  --panel: #ffffff;
+  --fg: #1f2335;
+  --dim: #6b7089;
+  --line: #e3e5ee;
+  --accent: #3d59a1;
+  --ok: #33635c;
+  --warn: #8f5e15;
+  --add-bg: #e6f4ea;
+  --del-bg: #fbe9eb;
+  --sign-add: #1a7f37;
+  --sign-del: #cf222e;
+  --gutter: #9aa0b8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1b26;
+    --panel: #1f2335;
+    --fg: #c0caf5;
+    --dim: #737aa2;
+    --line: #2f3549;
+    --accent: #7aa2f7;
+    --ok: #9ece6a;
+    --warn: #e0af68;
+    --add-bg: #1e3a2a;
+    --del-bg: #3d1f29;
+    --sign-add: #9ece6a;
+    --sign-del: #f7768e;
+    --gutter: #565f89;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+a { color: var(--accent); }
+.loading { padding: 24px 16px; }
+.wrap { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; max-width: 1400px; margin: 0 auto; padding: 24px 16px 64px; }
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); }
+  nav { position: static !important; }
+}
+nav { position: sticky; top: 16px; align-self: start; font-size: 14px; }
+nav ol { list-style: none; margin: 8px 0 0; padding: 0; }
+nav li { margin: 0 0 6px; }
+nav a { text-decoration: none; display: block; padding: 4px 8px; border-radius: 6px; color: var(--fg); }
+nav a:hover { background: var(--panel); }
+nav .count { color: var(--dim); float: right; font-variant-numeric: tabular-nums; }
+header h1 { font-size: 22px; margin: 0 0 4px; }
+.meta { color: var(--dim); font-size: 14px; }
+.meta code { color: var(--fg); }
+.summary { margin: 12px 0 0; }
+.source { margin-top: 12px; font-size: 13px; color: var(--dim); overflow-wrap: anywhere; }
+.source.none { color: var(--warn); }
+section.decision { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 20px; }
+section.decision.unexplained { border-style: dashed; }
+section h2 { font-size: 17px; margin: 0 0 8px; }
+section h2 .id { color: var(--dim); font-weight: normal; margin-right: 6px; }
+.why { margin: 0 0 8px; }
+.why .who { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--dim); margin-right: 6px; }
+.why.user { color: var(--accent); }
+.why.loose { margin-top: 14px; }
+.where { font-size: 13px; color: var(--ok); margin: 6px 0 0; overflow-wrap: anywhere; }
+.unmatched { font-size: 13px; color: var(--warn); margin: 4px 0 0; }
+.hunk { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.hunk .file { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 6px 10px; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+.hunk .file .head { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { font: 11px -apple-system, sans-serif; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--warn); color: var(--warn); white-space: nowrap; }
+.code { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+td { padding: 0 10px; white-space: pre; vertical-align: top; }
+td.n { color: var(--gutter); text-align: right; user-select: none; width: 1%; padding: 0 6px; }
+td.t { color: var(--th-token, var(--fg)); }
+td .sign { user-select: none; display: inline-block; width: 1.2em; color: var(--dim); }
+tr.add td.t { background: var(--add-bg); }
+tr.del td.t { background: var(--del-bg); }
+tr.add .sign { color: var(--sign-add); }
+tr.del .sign { color: var(--sign-del); }
+.forkbox { margin-top: 12px; border-left: 3px solid var(--warn); padding: 6px 12px; background: var(--bg); border-radius: 0 6px 6px 0; }
+.forkbox .at { font: 12px ui-monospace, monospace; color: var(--ok); }
+.forkbox .instead { color: var(--dim); }
+.forkbox .by { color: var(--warn); font-size: 13px; }
+.empty { color: var(--dim); font-style: italic; margin-top: 8px; }
+.note { color: var(--dim); font-size: 13px; margin-top: 28px; }

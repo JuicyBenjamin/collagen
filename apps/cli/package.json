@@ -42,7 +42,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .turbo node_modules",
     "e2e": "bash e2e/run-all.sh",
-    "build": "tsup",
+    "build": "pnpm --filter @collagen/review-web build && tsup",
     "prepack": "pnpm build && cp ../../README.md README.md"
   },
   "dependencies": {
@@ -68,6 +68,7 @@
   },
   "devDependencies": {
     "@collagen/p2p": "workspace:*",
+    "@collagen/review-web": "workspace:*",
     "@collagen/typescript-config": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

@@ -9,6 +9,8 @@
 # prints the page's url, to look at it in a browser. No CLI runs.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
+# the page is a Solid app served from its build; build it if this checkout has not
+[ -f "$ROOT/../review-web/dist/index.html" ] || (cd "$ROOT/../review-web" && npx vite build > /dev/null 2>&1)
 
 echo "## alice's project: a repo, a branch with three changes off main"
 R="$OUT/sandbox"
@@ -50,7 +52,11 @@ expect "d2 holds the new file" "$SHAPE" "d2 hunks src/page.ts#[0-9]+ forks $"
 expect "the change nobody explained is its own finding" "$SHAPE" "unexplained src/notes.txt#[0-9]+"
 
 echo "## the page itself"
-expect "the page is served, self-contained" "$(curl -s "$ORIGIN/review/$TICKET")" "<title>Review by intent</title>"
+PAGE=$(curl -s "$ORIGIN/review/$TICKET")
+expect "the page is served: the Solid app's document" "$PAGE" "<title>Review by intent</title>"
+ASSET=$(echo "$PAGE" | grep -oE '/review/assets/[A-Za-z0-9_.-]+\.js' | head -1)
+expect "…and its script, from the build, as JavaScript" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$ORIGIN$ASSET")" "^200 text/javascript"
+expect "nothing outside the build is served as an asset" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/assets/..%2Fpackage.json")" "^404$"
 expect "a request naming another host is refused (DNS rebinding)" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$ORIGIN/review/$TICKET/data")" "^403$"
 expect "an unknown ticket is a 404" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/not-a-ticket/data")" "^404$"
 expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sTCP:LISTEN 2>/dev/null | grep -c 127.0.0.1)" "^[1-9]"
