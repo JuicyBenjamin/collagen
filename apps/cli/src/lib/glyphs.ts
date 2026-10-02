@@ -39,13 +39,10 @@ export const STACK_HELP: Record<keyof typeof STACK, string> = {
   waits: "yours, waiting on a ticket not yet answered: nobody else is shown it until then",
 };
 
-/** An epic's row: folded (its tickets inside, unseen) or open. */
-export const FOLD = { folded: "+", open: "−" } as const;
+/** An epic's row: a crown — a folder of work above the tickets in it. */
+export const EPIC_MARK = "♛";
 
-export const FOLD_HELP: Record<keyof typeof FOLD, string> = {
-  folded: "an epic, folded: its tickets are inside — space opens it (a ▸ on it means one of them is yours now)",
-  open: "an epic, open: its tickets are listed under it, each with its project — space folds it",
-};
+export const EPIC_HELP = "an epic: its tickets are listed under it, each with its project — space folds them away (a ▸ on it means one of them is yours now)";
 
 /** For the hint line: every glyph on screen, in the order a reader meets
  *  them. It shares one row with the section's own keys, so it is terse on

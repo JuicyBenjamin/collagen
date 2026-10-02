@@ -412,10 +412,11 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
   offer one in a line when a filing suggests it — a parent's epic, or several related
   tickets filed together.
 
-On the overview an open epic is one **purple** row above the projects — `+` folded,
-`−` open, its goal and how far along it is ("1 of 3 done"), and a `▸` when a ticket inside
-is yours now, so folding never hides your work. `space` opens and folds it; open, its
-tickets are listed under it in its order, each with its project, an excluded one marked.
+On the overview an open epic is a block of its own above the projects, a blank line around
+it: one **purple** row — `♛`, its title, how far along it is ("1 of 3 done"), and a `▸`
+when a ticket inside is yours now — and under it, in their own colours, its tickets in its
+order, each with its project, an excluded one marked. `space` folds them away (the row
+then says how many are folded) and back.
 `enter` opens the epic's page: its aim, every ticket in it, whether it can close, and each
 close and reopen with who said so and why.
 

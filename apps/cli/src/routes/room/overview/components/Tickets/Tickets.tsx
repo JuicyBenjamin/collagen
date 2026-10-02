@@ -7,7 +7,7 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { FOLD, GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
+import { EPIC_MARK, GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
 import { epicProgress, marksLabel, progressLabel, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
@@ -40,8 +40,8 @@ export function Tickets() {
   const { navigate } = useRouter();
   const openReviewPage = useAtomSet(openReviewPageAtom);
   const [cursor, setCursor] = useState(0);
-  // epics are folded until opened, here and for this session
-  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
+  // an epic shows its tickets until someone folds it, for this session
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
@@ -62,6 +62,7 @@ export function Tickets() {
   // open epics first, each holding its tickets; the rest by project and kind
   const { epics, rest } = epicBlocks(rows, byId);
   const groups = groupTickets(rest);
+  const unfolded = new Set(epics.map((e) => e.epic.t.id).filter((id) => !folded.has(id)));
   const shown = drawnOrder(groups, epics, unfolded);
   const needsYou = rows.filter((r) => r.s.state === "needs-you").length;
   const projects = new Set(rows.filter((r) => r.t.kind !== "epic").map((r) => r.t.project));
@@ -87,7 +88,7 @@ export function Tickets() {
         // an epic folds and unfolds where it stands
         if (key.name === "space" && current?.t.kind === "epic") {
           const id = current.t.id;
-          setUnfolded((u) => {
+          setFolded((u) => {
             const next = new Set(u);
             if (next.has(id)) next.delete(id);
             else next.add(id);
@@ -117,6 +118,7 @@ export function Tickets() {
                 key={e.epic.t.id}
                 block={e}
                 open={unfolded.has(e.epic.t.id)}
+                first={epics[0] === e}
                 selectedId={focused ? current?.t.id : undefined}
                 progress={progressLabel(epicProgress(e.epic.t, byId))}
                 nameFor={nameFor}
@@ -175,13 +177,15 @@ export function Tickets() {
   );
 }
 
-/** An open epic: one purple row — folded or open, its goal, how far along
- *  its parts are, and the ▸ when a ticket inside is yours now, so folding
- *  never hides your work — and, open, the tickets that live in it, each with
- *  its project when the room has more than one. */
+/** An open epic, set apart by space above and below: one purple row — the
+ *  crown, its title, how far along its tickets are, and the ▸ when a ticket
+ *  inside is yours now — and under it, in their own colours, the tickets
+ *  that are in it, each with its project when the room has more than one.
+ *  Folded (space), the row says how many are tucked away. */
 function EpicView({
   block,
   open,
+  first,
   selectedId,
   progress,
   nameFor,
@@ -190,6 +194,7 @@ function EpicView({
 }: {
   block: EpicBlock<Row>;
   open: boolean;
+  first: boolean;
   selectedId: string | undefined;
   progress: string;
   nameFor: (key: string) => string;
@@ -199,12 +204,17 @@ function EpicView({
   const selected = selectedId === block.epic.t.id;
   const yours = block.rows.some((r) => r.s.state === "needs-you");
   return (
-    <box flexDirection="column" flexShrink={0}>
-      <text fg={theme.epic} truncate wrapMode="none">
-        {selected ? "› " : "  "}
+    <box flexDirection="column" flexShrink={0} marginTop={first ? 1 : 0} marginBottom={1}>
+      <text truncate wrapMode="none">
+        <span fg={selected ? theme.accent : theme.epic}>{selected ? "› " : "  "}</span>
         <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
-        {open ? FOLD.open : FOLD.folded} {rowTitle(block.epic.t)}
-        <span fg={theme.dim}> · {progress}</span>
+        <span fg={theme.epic}>
+          {EPIC_MARK} {rowTitle(block.epic.t)}
+        </span>
+        <span fg={theme.dim}>
+          {" "}· {progress}
+          {!open && block.rows.length > 0 ? ` · ${block.rows.length} folded` : ""}
+        </span>
       </text>
       {open
         ? block.rows.map((r) => (
