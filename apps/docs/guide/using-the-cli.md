@@ -88,7 +88,8 @@ what's natural there. Number keys work from anywhere.
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |
-| `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) |
+| `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) — on an [epic](./tickets#epics-a-folder-of-work), its aim and every ticket in it |
+| `space` on an epic | Open or fold it on the overview: its tickets listed under it, each with its project |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
 | `g` | Cycle your [steering](./conversations#steering-how-much-your-agent-does-on-its-own): ask first → act, then tell → just do it |
@@ -116,7 +117,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | --- | --- |
 | Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room` |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
-| Tickets | `create-ticket`, `settle-step`, `get-tickets`, `ask-review` — a review with the why behind the change; `open-review` — a review's page in your browser, as `o` does |
+| Tickets | `create-ticket`, `settle-step`, `get-tickets`, `ask-review` — a review with the why behind the change; `open-review` — a review's page in your browser, as `o` does; `epic` — folders of tickets, shaped by anyone, only when asked |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks |
 | Settings | `add-project`, `remove-project`, `set-ai`, `set-steering`, `set-name`, `set-settings` — your switches, listed or set |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |

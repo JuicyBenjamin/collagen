@@ -8,7 +8,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
-import { afterProblem, AI_OPTIONS, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, visibleTo, type Ticket } from "@collagen/p2p";
+import { afterProblem, AI_OPTIONS, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -371,6 +371,24 @@ export const RemoveProject = Tool.make("remove-project", {
   success: Schema.String,
 });
 
+export const Epic = Tool.make("epic", {
+  description: [
+    "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. One exception: when your user files several related tickets together (a proposal and one per part of it), offer in one line to put them under an epic, and do it on their yes.",
+    "An epic belongs to the room, not to a project or a person: anyone may add a ticket to any epic, move one from epic to epic, take one out, close an epic or reopen it. A ticket lives in one epic at most; a ticket that grew out of one in an epic (from) lives there too without being added. Parts may come from any project.",
+    "action 'create': goal (the one line), summary (what it aims for, a sentence or two), and optionally ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'close': epicId, and a reason from your user unless every part is done (then that is the reason). 'reopen': epicId and a reason, always — what more there is to do in it.",
+    "get-tickets shows each ticket's epic and each epic's parts and progress; review-context on an epic reads its aim and its parts. It goes out as you call it and shows in your user's outbox.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    action: Schema.Literals(["create", "add", "remove", "close", "reopen"]),
+    epicId: Schema.optional(Schema.String),
+    goal: Schema.optional(Schema.String),
+    summary: Schema.optional(Schema.String),
+    ticketIds: Schema.optional(Schema.Array(Schema.String)),
+    reason: Schema.optional(Schema.String),
+  }),
+  success: Schema.String,
+});
+
 export const SetAi = Tool.make("set-ai", {
   description:
     "Set which agent CLI acts for this user: 'claude-code', 'codex', a mock ('mock:claude-code' / 'mock:codex' — test dummies, visibly labeled to peers), or 'none' (inbox mode: nothing ever auto-runs; messages wait to be pulled). Applies live; peers see the choice and its auth status.",
@@ -470,6 +488,7 @@ export const CollagenToolkit = Toolkit.make(
   PostReview,
   SettleStep,
   CloseTicket,
+  Epic,
   GetTickets,
   AddProject,
   RemoveProject,
@@ -507,6 +526,7 @@ export const DevCollagenToolkit = Toolkit.make(
   PostReview,
   SettleStep,
   CloseTicket,
+  Epic,
   GetTickets,
   AddProject,
   RemoveProject,
@@ -554,8 +574,8 @@ const makeHandlers = Effect.gen(function* () {
           ? myName
           : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 12));
       const reviews = yield* SubscriptionRef.get(room.reviews);
-      const held = heldBy(ticket, yield* SubscriptionRef.get(room.tickets));
-      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id), held);
+      const all = yield* SubscriptionRef.get(room.tickets);
+      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id), heldBy(ticket, all), all);
     });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
@@ -872,7 +892,7 @@ const makeHandlers = Effect.gen(function* () {
         const under =
           kind === "review" && !after && input.base
             ? [...tickets.values()].filter(
-                (t) => t.kind === "review" && t.id !== ticketId && !t.closed && !finished(t) && visibleTo(t, tickets, identity.pubkey) && reviews.find((r) => r.ticketId === t.id)?.branch === input.base,
+                (t) => t.kind === "review" && t.id !== ticketId && !isClosed(t) && !finished(t) && visibleTo(t, tickets, identity.pubkey) && reviews.find((r) => r.ticketId === t.id)?.branch === input.base,
               )
             : [];
         return under.length > 0 && !filed.startsWith("failed")
@@ -1079,6 +1099,56 @@ const makeHandlers = Effect.gen(function* () {
           title: `${ticket.goal} · your ${ticket.kind === "review" ? "review" : "take"}`,
           outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false },
         });
+      }),
+      epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "close" | "reopen"; epicId?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ids = input.ticketIds ?? [];
+        const move = (epic: { id: string; goal: string } | null) =>
+          outbox.tell({
+            roomId,
+            to: "the room",
+            title: epic ? `${ids.length} into "${epic.goal}"` : `${ids.length} out of their epic`,
+            outgoing: { kind: "epic-move", ticketIds: [...ids], epic: epic?.id ?? null, goal: epic?.goal ?? "" },
+          });
+        switch (input.action) {
+          case "create": {
+            const goal = input.goal?.trim() ?? "";
+            if (!goal) return "failed: pass the epic's goal — the one line everyone sees, what the body of work is";
+            const now = yield* Clock.currentTimeMillis;
+            const id = crypto.randomUUID();
+            const ticket: Ticket = { id, project: "", goal, createdBy: identity.pubkey, kind: "epic", steps: [], structureAt: now, updatedAt: now };
+            const myName = yield* SubscriptionRef.get(nameRef);
+            const filed = yield* outbox.tell({
+              roomId,
+              to: "the room",
+              title: `epic · ${goal}`,
+              outgoing: { kind: "review", ticket, review: mergeReview(emptyReview(id, identity.pubkey, myName), { summary: input.summary?.trim() ?? "" }, now) },
+            });
+            if (ids.length === 0 || filed.startsWith("failed")) return filed;
+            return `${filed} ${yield* move({ id, goal })}`;
+          }
+          case "add": {
+            const epic = input.epicId ? all.get(input.epicId) : undefined;
+            if (!epic || epic.kind !== "epic") return `failed: no epic ${input.epicId ?? "(pass epicId)"} — check get-tickets (kind: epic)`;
+            if (ids.length === 0) return "failed: pass the ticketIds to put into it";
+            return yield* move({ id: epic.id, goal: epic.goal });
+          }
+          case "remove":
+            if (ids.length === 0) return "failed: pass the ticketIds to take out of their epic";
+            return yield* move(null);
+          case "close":
+          case "reopen": {
+            const epic = input.epicId ? all.get(input.epicId) : undefined;
+            if (!epic || epic.kind !== "epic") return `failed: no epic ${input.epicId ?? "(pass epicId)"} — check get-tickets (kind: epic)`;
+            return yield* outbox.tell({
+              roomId,
+              to: "the room",
+              title: `${epic.goal} · ${input.action === "close" ? "closed" : "reopened"}`,
+              outgoing: { kind: "epic-turn", epicId: epic.id, closed: input.action === "close", ...(input.reason?.trim() ? { reason: input.reason.trim() } : {}) },
+            });
+          }
+        }
       }),
       "close-ticket": Effect.fn("Mcp.closeTicket")(function* (input: { ticketId: string; reason?: string }) {
         const { id: roomId, room } = yield* focusedRoom;

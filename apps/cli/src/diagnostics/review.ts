@@ -1,6 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { isJudged, isTake, visibleTo } from "@collagen/p2p";
+import { epicHome, epicParts, epicTurn, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
 
@@ -27,6 +27,28 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       // a ticket still waiting on another (after) is its author's alone: its
       // readers take it in order, so to them it is not there yet
       if (ticket && !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
+      // an epic: its aim, and what is in it — no why to weigh, no take to give
+      if (ticket?.kind === "epic") {
+        const { parts, done } = epicParts(ticket, all);
+        const inside = [...all.values()].filter((t) => epicHome(t, all) === ticket.id && visibleTo(t, all, me));
+        const turn = epicTurn(ticket);
+        return toToon({
+          epic: {
+            goal: ticket.goal,
+            aim: review?.summary ?? "",
+            progress: parts.length === 0 ? "no parts yet" : `${done} of ${parts.length} parts done`,
+            ...(turn ? { [isClosed(ticket) ? "closedBecause" : "reopenedBecause"]: turn.reason } : {}),
+          },
+          tickets: inside.map((t) => ({
+            id: t.id,
+            kind: t.kind,
+            project: t.project,
+            goal: t.goal,
+            state: isClosed(t) ? "closed" : finished(t) ? "done" : "open",
+            in: parts.some((p) => p.id === t.id) ? "part" : "through the ticket it grew out of",
+          })),
+        });
+      }
       if (!review) {
         return ticket
           ? `no why on this ticket — "${ticket.goal}" is a ${ticket.kind}, not a review, plan or proposal (its author would have filed it with ask-review, ask-plan or propose)`

@@ -1,4 +1,4 @@
-import { finished, isJudged, isTake, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { epicParts, finished, isClosed, isJudged, isTake, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { GLYPH, type Mark } from "./glyphs";
 
 /** What a ticket wants from the person, now. "done": every step answered
@@ -43,6 +43,20 @@ export const aboutTicket = (ticket: Ticket, threads: ReadonlySet<string>, m: Roo
 
 export const ticketThreads = (ticket: Ticket): ReadonlySet<string> => new Set(ticket.steps.map((s) => stepThreadId(ticket, s)));
 
+/** How far along an epic is: its parts, and how many are done. */
+export interface EpicProgress {
+  readonly parts: number;
+  readonly done: number;
+}
+
+export const epicProgress = (epic: Ticket, all: ReadonlyMap<string, Ticket>): EpicProgress => {
+  const { parts, done } = epicParts(epic, all);
+  return { parts: parts.length, done };
+};
+
+/** "2 of 3 done" — an epic's row and page. */
+export const progressLabel = (p: EpicProgress): string => (p.parts === 0 ? "no parts yet" : p.done === p.parts ? `all ${p.parts} done` : `${p.done} of ${p.parts} done`);
+
 export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string, held: ReadonlyArray<string> = []): TicketSummary {
   // one readiness rule, in p2p, shared with the agent nudges: this used to
   // be a second copy of it here, and the copy was already wrong (it did not
@@ -50,7 +64,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   // needs-you about a ticket nobody had reviewed)
   // a ticket waiting on another has nothing up for anyone: nobody is
   // delivered a step of it until the one it waits on is answered
-  const up = held.length > 0 && !ticket.closed ? [] : readySteps(ticket);
+  const up = held.length > 0 && !isClosed(ticket) ? [] : readySteps(ticket);
   const waitingOn = [...new Set(up.map((s) => s.owner))];
   // completion is p2p's `finished`: every step answered, where on a review a
   // reader's ↻ is an answer. Closure is the author's recorded decision. A
@@ -59,7 +73,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   const mine = ticket.createdBy === me;
   const done = finished(ticket);
   const failed = !done && ticket.steps.some((s) => s.status === "failed");
-  const state: TicketState = ticket.closed
+  const state: TicketState = isClosed(ticket)
     ? "closed"
     : held.length > 0
       ? "waiting"

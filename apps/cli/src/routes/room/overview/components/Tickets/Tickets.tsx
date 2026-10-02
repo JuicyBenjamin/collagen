@@ -7,9 +7,9 @@ import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
-import { GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
-import { marksLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
-import { drawnOrder, groupTickets, kindHeading } from "../../../../../lib/ticketGroups";
+import { FOLD, GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
+import { epicProgress, marksLabel, progressLabel, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { ticketsAtom } from "./atoms";
 import { openReviewPageAtom } from "../../../review/atoms";
@@ -40,6 +40,8 @@ export function Tickets() {
   const { navigate } = useRouter();
   const openReviewPage = useAtomSet(openReviewPageAtom);
   const [cursor, setCursor] = useState(0);
+  // epics are folded until opened, here and for this session
+  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
@@ -49,14 +51,16 @@ export function Tickets() {
   // the rows in the order they are drawn, headers are not stops
   // a ticket waiting on another (after) is its author's alone until it opens
   const byId = new Map(tickets.map((t) => [t.id, t]));
-  const groups = groupTickets(
-    tickets
-      .filter((t) => visibleTo(t, byId, me))
-      .map((t) => ({ t, s: summarize(t, trace, me, heldBy(t, byId)) }))
-      .filter((r) => r.s.state !== "closed"),
-  );
-  const shown = drawnOrder(groups);
-  const needsYou = shown.filter((r) => r.s.state === "needs-you").length;
+  const rows = tickets
+    .filter((t) => visibleTo(t, byId, me))
+    .map((t) => ({ t, s: summarize(t, trace, me, heldBy(t, byId)) }))
+    .filter((r) => r.s.state !== "closed");
+  // open epics first, each holding its tickets; the rest by project and kind
+  const { epics, rest } = epicBlocks(rows, byId);
+  const groups = groupTickets(rest);
+  const shown = drawnOrder(groups, epics, unfolded);
+  const needsYou = rows.filter((r) => r.s.state === "needs-you").length;
+  const projects = new Set(rows.filter((r) => r.t.kind !== "epic").map((r) => r.t.project));
   const index = new Map(shown.map((r, i) => [r.t.id, i]));
 
   const last = Math.max(0, shown.length - 1);
@@ -66,7 +70,7 @@ export function Tickets() {
   return (
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open${current?.t.kind === "review" ? " · o review in browser" : ""} · ? what it all means · ${LEGEND}`}
+      hint={`↑↓ select · enter open${current?.t.kind === "epic" ? ` · space ${unfolded.has(current.t.id) ? "fold" : "unfold"}` : ""}${current?.t.kind === "review" ? " · o review in browser" : ""} · ? what it all means · ${LEGEND}`}
       flexDirection="column"
       marginTop={1}
       onKey={(key) => {
@@ -74,6 +78,17 @@ export function Tickets() {
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
         if (isEnter(key)) {
           if (current) navigate(to.ticket(current.t.id));
+          return true;
+        }
+        // an epic folds and unfolds where it stands
+        if (key.name === "space" && current?.t.kind === "epic") {
+          const id = current.t.id;
+          setUnfolded((u) => {
+            const next = new Set(u);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          });
           return true;
         }
         // straight from the list to the diff read by intent, in the browser
@@ -85,14 +100,27 @@ export function Tickets() {
         <>
           <text truncate wrapMode="none" flexShrink={0}>
             <span fg={focused ? theme.accent : theme.dim}>tickets</span>
-            <span fg={needsYou > 0 ? theme.warn : theme.dim}> ({shown.length + unknownTickets.length})</span>
+            <span fg={needsYou > 0 ? theme.warn : theme.dim}> ({rows.length + unknownTickets.length})</span>
           </text>
           {shown.length === 0 && unknownTickets.length === 0 ? (
             <text fg={theme.dim} truncate wrapMode="none">
               {"  "}none
             </text>
           ) : (
-            groups.map((g) => (
+            <>
+            {epics.map((e) => (
+              <EpicView
+                key={e.epic.t.id}
+                block={e}
+                open={unfolded.has(e.epic.t.id)}
+                selectedId={focused ? current?.t.id : undefined}
+                progress={progressLabel(epicProgress(e.epic.t, byId))}
+                nameFor={nameFor}
+                projects={projects.size > 1}
+                goalOf={(id) => byId.get(id)?.goal}
+              />
+            ))}
+            {groups.map((g) => (
               <box key={g.project} flexDirection="column" flexShrink={0}>
                 {groups.length > 1 ? (
                   <text fg={theme.fg} truncate wrapMode="none">
@@ -122,7 +150,8 @@ export function Tickets() {
                   </box>
                 ))}
               </box>
-            ))
+            ))}
+            </>
           )}
           {unknownTickets.map((u) => (
             <text key={u.key} fg={theme.dim} truncate wrapMode="none">
@@ -139,6 +168,57 @@ export function Tickets() {
         </>
       )}
     </Focusable>
+  );
+}
+
+/** An open epic: one purple row — folded or open, its goal, how far along
+ *  its parts are, and the ▸ when a ticket inside is yours now, so folding
+ *  never hides your work — and, open, the tickets that live in it, each with
+ *  its project when the room has more than one. */
+function EpicView({
+  block,
+  open,
+  selectedId,
+  progress,
+  nameFor,
+  projects,
+  goalOf,
+}: {
+  block: EpicBlock<Row>;
+  open: boolean;
+  selectedId: string | undefined;
+  progress: string;
+  nameFor: (key: string) => string;
+  projects: boolean;
+  goalOf: (ticketId: string) => string | undefined;
+}) {
+  const selected = selectedId === block.epic.t.id;
+  const yours = block.rows.some((r) => r.s.state === "needs-you");
+  return (
+    <box flexDirection="column" flexShrink={0}>
+      <text fg={theme.epic} truncate wrapMode="none">
+        {selected ? "› " : "  "}
+        <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
+        {open ? FOLD.open : FOLD.folded} {block.epic.t.goal}
+        <span fg={theme.dim}> · {progress}</span>
+      </text>
+      {open
+        ? block.rows.map((r) => (
+            <TicketRow
+              key={r.t.id}
+              ticket={r.t}
+              summary={r.s}
+              selected={selectedId === r.t.id}
+              nameFor={nameFor}
+              indent={4}
+              depth={0}
+              under={undefined}
+              goalOf={goalOf}
+              project={projects ? r.t.project : undefined}
+            />
+          ))
+        : null}
+    </box>
   );
 }
 
@@ -163,6 +243,7 @@ function TicketRow({
   depth,
   under,
   goalOf,
+  project,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
@@ -175,6 +256,8 @@ function TicketRow({
   /** the ticket it is drawn under, when it is */
   under: string | undefined;
   goalOf: (ticketId: string) => string | undefined;
+  /** its project, said before its goal — inside an epic, which spans them */
+  project?: string;
 }) {
   const people = marksLabel(s);
   const yours = s.state === "needs-you";
@@ -196,6 +279,7 @@ function TicketRow({
       <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
       {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
       {depth > 0 ? <span fg={theme.dim}>{`${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} `}</span> : null}
+      {project ? <span fg={theme.dim}>{project} · </span> : null}
       {t.goal}
       {waits ? (
         <span fg={theme.dim}>

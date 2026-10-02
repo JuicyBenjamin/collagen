@@ -5,4 +5,6 @@ export const theme = {
   dim: "#565f89",
   ok: "#9ece6a",
   warn: "#e0af68",
+  /** epics, and only epics — so a folder of work reads apart from its tickets */
+  epic: "#bb9af7",
 } as const;

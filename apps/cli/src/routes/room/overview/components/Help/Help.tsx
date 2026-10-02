@@ -3,7 +3,7 @@ import type { BoxRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { KIND_ORDER, KINDS } from "@collagen/p2p";
 import { theme } from "../../../../../app/theme";
-import { GLYPH, MARK_HELP, MARK_ORDER, STACK, STACK_HELP } from "../../../../../lib/glyphs";
+import { FOLD, FOLD_HELP, GLYPH, MARK_HELP, MARK_ORDER, STACK, STACK_HELP } from "../../../../../lib/glyphs";
 import { clamp } from "../../../../../lib/math";
 import { STATE_LABEL, STATE_ORDER, STATE_WORDS } from "../../../../../lib/ticketSummary";
 
@@ -66,6 +66,18 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
           {"  "}
           <span fg={theme.fg}>{STACK[k].padEnd(COL)}</span>
           <span fg={theme.dim}>{STACK_HELP[k]}</span>
+        </>
+      ),
+    });
+  }
+  for (const k of ["folded", "open"] as const) {
+    out.push({
+      key: `fold-${k}`,
+      node: (
+        <>
+          {"  "}
+          <span fg={theme.epic}>{FOLD[k].padEnd(COL)}</span>
+          <span fg={theme.dim}>{FOLD_HELP[k]}</span>
         </>
       ),
     });
