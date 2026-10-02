@@ -26,16 +26,22 @@ SA=$(mcp $A); wait_for_peer $A "$SA" bob; wait_for_peer $A "$SA" carol; SB=$(mcp
 echo "## a review with no why is refused before anything leaves"
 NOWHY='{"peers":["bob"],"project":"sandbox","summary":"the opening animation","decisions":[],"forks":[]}'
 expect "no decisions: refused, and told to mine the conversation" "$(call $A "$SA" ask-review "$NOWHY")" "failed: pass the decisions behind the change"
-BADWHY='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"what":"pure frame functions"}],"forks":[]}'
+BADWHY='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"Pure frame functions","what":"pure frame functions"}],"forks":[]}'
 expect "a decision with no why at all: refused, naming which" "$(call $A "$SA" ask-review "$BADWHY")" "decision 1 .{1,3}pure frame functions.{1,3} has no why"
-NOPROJ='{"peers":["bob"],"project":"nope","summary":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
+NOPROJ='{"peers":["bob"],"project":"nope","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
 expect "a project alice does not share: refused with what she does share" "$(call $A "$SA" ask-review "$NOPROJ")" "not a project your user shares in this room .{0,10}theirs: sandbox"
-NOPEER='{"peers":["kristian"],"project":"sandbox","summary":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
+NOPEER='{"peers":["kristian"],"project":"sandbox","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
+NOTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"what":"pure frame functions","userWhy":"b"}],"forks":[]}'
+expect "a decision with no title: refused by the tool's own schema, which marks it required" "$(call $A "$SA" ask-review "$NOTITLE")" "Missing key.*title"
+BLANKTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":" ","what":"pure frame functions","userWhy":"b"}],"forks":[]}'
+expect "…and a blank one: refused, a headline asked for" "$(call $A "$SA" ask-review "$BLANKTITLE")" "decision 1 .{1,3}pure frame functions.{1,3} has no 'title'"
+LONGTITLE='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"Pure frame functions so that every single frame of the logo is testable","what":"a","userWhy":"b"}],"forks":[]}'
+expect "a title that is a sentence: refused, 60 characters at most" "$(call $A "$SA" ask-review "$LONGTITLE")" "title is [0-9]+ characters .*60 at most"
 expect "someone who is not in the room: refused, naming who is" "$(call $A "$SA" ask-review "$NOPEER")" "no one here is called kristian — in the room: .*bob"
 
 echo "## the ask: alice's steering, her agent's reasons, and the fork it took"
-D1='{"what":"pure frame functions for the logo","userWhy":"she said make it look cool, and was fine with a longer boot for it","agentWhy":"a frame is then testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
-D2='{"what":"a fast boot is still held until the sweep is seen","userWhy":"collagen first in the middle, the tagline below, then it animates to its place","where":["src/lib/opening.ts:14"]}'
+D1='{"title":"A logo worth a look","what":"pure frame functions for the logo","userWhy":"she said make it look cool, and was fine with a longer boot for it","agentWhy":"a frame is then testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
+D2='{"title":"A fast boot is","what":"a fast boot is still held until the sweep is seen","userWhy":"collagen first in the middle, the tagline below, then it animates to its place","where":["src/lib/opening.ts:14"]}'
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator in @opentui/core","why":"no new dependency and the frame stays pure","by":"agent"}'
 ASK="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"focus\":\"the timing constants\",\"summary\":\"the opening animation: the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
 ASKED=$(call $A "$SA" ask-review "$ASK")
@@ -57,6 +63,7 @@ expect "…and what alice wants looked at" "$TICKETS" "the timing constants"
 
 echo "## the why, on demand"
 WHY=$(call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}")
+expect "the decision's headline" "$WHY" "A logo worth a look"
 expect "what alice asked for, in her words" "$WHY" "she said make it look cool"
 expect "what her agent reasoned" "$WHY" "testable without a terminal"
 expect "where the decision landed" "$WHY" "src/lib/logoFrame.ts:60"
@@ -89,22 +96,22 @@ expect "review-context says a task carries no why" "$(call $B "$SB" review-conte
 expect "open-review on a task: refused, only a review has a page" "$(call $B "$SB" open-review "{\"ticketId\":\"$OID\"}")" "is a task, not a review"
 
 echo "## the why grows as the work does — and only its author writes it"
-AMEND_BOB="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"what\":\"bob's own idea\",\"agentWhy\":\"mine\"}]}"
+AMEND_BOB="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"title\":\"Bob's own idea\",\"what\":\"bob's own idea\",\"agentWhy\":\"mine\"}]}"
 expect "bob cannot write alice's why (his reading goes to her as a message)" "$(call $B "$SB" ask-review "$AMEND_BOB")" "is alice's to write"
-AMEND="{\"ticketId\":\"$TICKET\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/23\",\"decisions\":[{\"what\":\"the sheen sweeps until the app is up\",\"userWhy\":\"she asked for the wait to look intentional, not stuck\",\"where\":[\"src/lib/logoFrame.ts:74\"]}]}"
+AMEND="{\"ticketId\":\"$TICKET\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/23\",\"decisions\":[{\"title\":\"The sheen sweeps until\",\"what\":\"the sheen sweeps until the app is up\",\"userWhy\":\"she asked for the wait to look intentional, not stuck\",\"where\":[\"src/lib/logoFrame.ts:74\"]}]}"
 AMENDED=$(call $A "$SA" ask-review "$AMEND")
 expect "alice adds a third decision" "$AMENDED" "review ticket updated .*3 decision\(s\)"
 expect "…reported as updated, with the contents left off" "$AMENDED" "TELL YOUR USER ONLY THIS: .{1,3}review ticket has been updated"
 expect "…and the outcome itself says to come back when the code moves" "$AMENDED" "call ask-review again with ticketId"
 wait_until "bob sees it, and the link is the pull request now" "look intentional, not stuck" call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}"
 expect "…the pull request link replaced the branch link" "$(call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}")" "pull/23"
-FIX="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"id\":\"d1\",\"what\":\"pure frame functions for the logo\",\"userWhy\":\"she said make it look cool, and later: fine if it takes longer for animation\",\"where\":[\"src/lib/logoFrame.ts:60\"]}]}"
+FIX="{\"ticketId\":\"$TICKET\",\"decisions\":[{\"id\":\"d1\",\"title\":\"Pure frame functions for\",\"what\":\"pure frame functions for the logo\",\"userWhy\":\"she said make it look cool, and later: fine if it takes longer for animation\",\"where\":[\"src/lib/logoFrame.ts:60\"]}]}"
 expect "a correction by id replaces the decision, it does not pile up" "$(call $A "$SA" ask-review "$FIX")" "review ticket updated .*3 decision\(s\)"
 wait_until "bob reads the corrected words" "fine if it takes longer for animation" call $B "$SB" review-context "{\"ticketId\":\"$TICKET\"}"
 expect "an amendment with nothing in it is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\"}")" "nothing to amend"
 
 echo "## 0 reviewers: the ticket sits in the room with the why on it"
-OPEN_D='{"what":"the sheen is a gaussian band, not a gradient sweep","userWhy":"he asked for it to look cool","where":["src/lib/logoFrame.ts:74"]}'
+OPEN_D='{"title":"The sheen is a","what":"the sheen is a gaussian band, not a gradient sweep","userWhy":"he asked for it to look cool","where":["src/lib/logoFrame.ts:74"]}'
 OPEN_ASK="{\"project\":\"sandbox\",\"goal\":\"review the sheen\",\"summary\":\"the sheen that sweeps while the app boots\",\"decisions\":[$OPEN_D],\"forks\":[]}"
 OPENED=$(call $A "$SA" ask-review "$OPEN_ASK")
 expect "no peers named: it goes to the room, nobody in particular" "$OPENED" "review ticket filed, in the room, nobody asked in particular"
@@ -159,7 +166,7 @@ expect "alice settles her own step: the ticket is done" "$(call $A "$SA" settle-
 # rules are covered above and in the unit tests.
 
 echo "## many reviewers: one review step each, and the author waits on all"
-MANY_D='{"what":"one evict entry per sweep","userWhy":"he said never brick, migrate instead","where":["packages/p2p/src/RoomLog.ts:1"]}'
+MANY_D='{"title":"One evict entry per","what":"one evict entry per sweep","userWhy":"he said never brick, migrate instead","where":["packages/p2p/src/RoomLog.ts:1"]}'
 # names however cased: the room spells them bob and carol, and so does the ticket
 MANY_ASK="{\"peers\":[\"BOB\",\" Carol\"],\"project\":\"Sandbox\",\"goal\":\"review the migration\",\"summary\":\"records from an older protocol are evicted, not carried\",\"decisions\":[$MANY_D],\"forks\":[]}"
 MANY=$(call $A "$SA" ask-review "$MANY_ASK")
@@ -169,7 +176,7 @@ wait_until "each reviewer got a step of their own, named for them" "review-bob,b
 MANY_ROWS=$(rows $A "$SA" "$MANY_TICKET")
 expect "…carol's too" "$MANY_ROWS" "review-carol,carol"
 expect "…and the author's step waits on both" "$MANY_ROWS" "address,alice,address,pending,review-bob\+review-carol"
-expect "a name nobody in the room has is refused, with the open option offered" "$(call $A "$SA" ask-review "{\"peers\":[\"bob\",\"nobody\"],\"project\":\"sandbox\",\"summary\":\"x\",\"decisions\":[{\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "no one here is called nobody — in the room: .*leave .peers. out"
+expect "a name nobody in the room has is refused, with the open option offered" "$(call $A "$SA" ask-review "{\"peers\":[\"bob\",\"nobody\"],\"project\":\"sandbox\",\"summary\":\"x\",\"decisions\":[{\"title\":\"A\",\"what\":\"a\",\"userWhy\":\"b\"}],\"forks\":[]}")" "no one here is called nobody — in the room: .*leave .peers. out"
 
 echo "## uninvited readers are welcome on a review ticket, and take nobody's step"
 wait_until "carol holds the many-reviewer ticket" "review the migration" goals $C "$SC"
@@ -186,7 +193,7 @@ wait_until "carol, the other reader, hears it as a change request" "bob asked fo
 expect "…and nobody is told bob failed" "$(grep -c 'bob failed' "$OUT/carol.log")" "^0$"
 
 echo "## the ticket keeps up with the code: a revision reaches its readers"
-REV="{\"ticketId\":\"$MANY_TICKET\",\"branch\":\"feat/evict-v2\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/24\",\"decisions\":[{\"what\":\"the sweep is per read, not per open\",\"userWhy\":\"he asked after bob's read: never brick\",\"where\":[\"packages/p2p/src/RoomLog.ts:150\"]}]}"
+REV="{\"ticketId\":\"$MANY_TICKET\",\"branch\":\"feat/evict-v2\",\"link\":\"https://github.com/JuicyBenjamin/collagen/pull/24\",\"decisions\":[{\"title\":\"The sweep is per\",\"what\":\"the sweep is per read, not per open\",\"userWhy\":\"he asked after bob's read: never brick\",\"where\":[\"packages/p2p/src/RoomLog.ts:150\"]}]}"
 expect "alice revises the why after the reviews" "$(call $A "$SA" ask-review "$REV")" "review ticket updated .*2 decision\(s\)"
 wait_until "bob is told the why moved, on the thread he knows the ticket by" "revised the why" bash -c "cat '$OUT/bob.log'"
 expect "…and it is the ticket he already knows, not a new one" "$(grep 'revised the why' "$OUT/bob.log" | tail -1)" "ticket ${MANY_TICKET:0:8}"

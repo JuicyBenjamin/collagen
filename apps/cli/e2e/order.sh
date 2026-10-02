@@ -15,7 +15,7 @@ python3 -c 'import json,sys; json.dump({"preferredAi":None,"rooms":{"st-test3":[
 start alice; start bob
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; SB=$(mcp $B); admitted bob
 ID_RE='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-D='{"what":"the change","userWhy":"she asked for it"}'
+D='{"title":"The change","what":"the change","userWhy":"she asked for it"}'
 
 echo "## two stacked reviews: the second waits on the first"
 J="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"review the first\",\"branch\":\"feat/first\",\"base\":\"main\",\"summary\":\"the base of the stack\",\"decisions\":[$D],\"forks\":[]}"
@@ -41,7 +41,7 @@ expect "…the first's step is in his inbox" "$INBOX" "review the first"
 expect "…and nothing of the second" "$(echo "$INBOX" | grep -c 'review the second')" "^0$"
 
 echo "## an order that would hide a ticket for good is refused"
-expect "an unknown id" "$(call $A "$SA" ask-plan '{"project":"sandbox","goal":"phase two","summary":"after phase one","decisions":[{"what":"a","userWhy":"b"}],"after":["no-such-ticket"]}')" "failed: no ticket no-such-ticket"
+expect "an unknown id" "$(call $A "$SA" ask-plan '{"project":"sandbox","goal":"phase two","summary":"after phase one","decisions":[{"title":"A","what":"a","userWhy":"b"}],"after":["no-such-ticket"]}')" "failed: no ticket no-such-ticket"
 J="{\"ticketId\":\"$SECOND\",\"after\":[\"$SECOND\"]}"
 expect "the ticket itself" "$(call $A "$SA" ask-review "$J")" "cannot wait on itself"
 J="{\"ticketId\":\"$FIRST\",\"after\":[\"$SECOND\"]}"

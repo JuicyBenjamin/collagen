@@ -1,5 +1,6 @@
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import type { Outgoing, Proposal } from "@collagen/p2p";
+import { NO_TITLE } from "../lib/review";
 import { Dispatch } from "./Dispatch";
 import { StateStore } from "./StateStore";
 
@@ -70,7 +71,7 @@ export function proposalText(p: Proposal): string {
         r.summary,
         "",
         "why it is the way it is — this goes on the room's log for everyone in it:",
-        ...r.decisions.map((d) => `- ${d.id} ${d.what}${d.userWhy ? `\n    you: ${d.userWhy}` : ""}${d.agentWhy ? `\n    agent: ${d.agentWhy}` : ""}${d.where.length > 0 ? `\n    ${d.where.join(", ")}` : ""}`),
+        ...r.decisions.map((d) => `- ${d.id} ${d.title ?? `(${NO_TITLE})`}\n    ${d.what}${d.userWhy ? `\n    you: ${d.userWhy}` : ""}${d.agentWhy ? `\n    agent: ${d.agentWhy}` : ""}${d.where.length > 0 ? `\n    ${d.where.join(", ")}` : ""}`),
         ...(r.forks.length > 0 ? ["", "forks in the road:"] : []),
         ...r.forks.map((f) => `- ${f.id} ${f.at}: chose ${f.chose} over ${f.instead} — ${f.why}${f.by ? ` (${f.by}'s call)` : ""}`),
       ].join("\n");

@@ -38,6 +38,12 @@ describe("a review's why, amended as the work goes on", () => {
     expect(second.ts).toBe(20);
   });
 
+  it("a correction replaces the decision, title and all", () => {
+    const first = mergeReview(base, { decisions: [{ title: "Exports stream", what: "rows are mapped one at a time", where: [] }] }, 1);
+    const fixed = mergeReview(first, { decisions: [{ id: "d1", title: "Big exports finish", what: "rows are mapped as they are read", where: [] }] }, 2);
+    expect(fixed.decisions).toEqual([{ id: "d1", title: "Big exports finish", what: "rows are mapped as they are read", where: [] }]);
+  });
+
   it("numbering skips ids the author chose itself", () => {
     const r = mergeReview(base, { decisions: [{ id: "d7", what: "x", where: [] }, { what: "y", where: [] }] }, 1);
     expect(r.decisions.map((d) => d.id)).toEqual(["d7", "d2"]);

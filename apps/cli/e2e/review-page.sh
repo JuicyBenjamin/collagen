@@ -31,8 +31,8 @@ git -C "$R" add -A; git -C "$R" commit -qm change
 # the person's click; here the repo's own stands in, so no network is needed
 COLLAGEN_TYPESCRIPT="$ROOT/node_modules/typescript" start alice
 SA=$(mcp $A)
-D1='{"what":"stream the rows","userWhy":"she said the export times out","agentWhy":"a map keeps memory flat","where":["src/export.ts:2"]}'
-D2='{"what":"page by id","userWhy":"pages of a hundred","where":["src/page.ts"]}'
+D1='{"title":"Stream the rows","what":"stream the rows","userWhy":"she said the export times out","agentWhy":"a map keeps memory flat","where":["src/export.ts:2"]}'
+D2='{"title":"Page by id","what":"page by id","userWhy":"pages of a hundred","where":["src/page.ts"]}'
 F1='{"at":"src/export.ts:2","chose":"map to strings","instead":"a csv library","why":"no new dependency","by":"agent"}'
 ASK="{\"project\":\"sandbox\",\"base\":\"main\",\"summary\":\"stream the export\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
 TICKET=$(call $A "$SA" ask-review "$ASK" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
@@ -83,7 +83,7 @@ EV="$OUT/events.txt"; rm -f "$EV"
 curl -s -N -m 40 "$ORIGIN/review/$TICKET/events" > "$EV" &
 CURL=$!; disown
 wait_until "the stream is open" "retry:" cat "$EV"
-D3='{"what":"the export streams in pages","userWhy":"she asked for it"}'
+D3='{"title":"The export streams in","what":"the export streams in pages","userWhy":"she asked for it"}'
 AMEND="{\"ticketId\":\"$TICKET\",\"decisions\":[$D3]}"
 call $A "$SA" ask-review "$AMEND" > /dev/null
 wait_until "revising the why says changed" "event: changed" cat "$EV"

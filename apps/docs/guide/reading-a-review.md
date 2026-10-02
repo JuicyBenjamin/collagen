@@ -38,10 +38,13 @@ refused. The url also goes to the activity log, for a machine with no browser to
 
 ## What it shows
 
-It is for a person reading code, so the code is the loudest thing on it. One section per
-**decision**, in the order the author gave them:
+It is for a person reading code, so the code is the loudest thing on it — after the
+purpose. A review's summary heads the page (where the code is sits above it, small), so you
+know what the change is for before reading any of it. Then one section per **decision**, in
+the order the author gave them:
 
-- the decision's title, then the **hunks at its lines** — a hunk holding a `where` line, or
+- the decision's **title** — a few words, what it is for — with what was done in a line
+  beneath it, then the **hunks at its lines** — a hunk holding a `where` line, or
   the nearest one within a few lines (line numbers drift as code is edited), or every hunk
   of a file when the decision names a file alone. A hunk that also serves another decision
   says so above it — "also under …", a link there;

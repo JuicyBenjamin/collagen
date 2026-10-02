@@ -75,7 +75,7 @@ SETTLE="{\"ticketId\":\"$BID\",\"stepId\":\"address\",\"result\":\"agreed: a lin
 SETTLED=$(call $A "$SA" settle-step "$SETTLE")
 expect "the settle points at a plan or the fix's review with from" "$SETTLED" "names this bug in from"
 expect "…and says judging assigns nothing" "$SETTLED" "Judging the bug assigns nothing"
-D1='{"what":"page by id","userWhy":"the bug report said the offset pagination overflows the planner","where":["apps/api/src/export.ts:88"]}'
+D1='{"title":"Page by id","what":"page by id","userWhy":"the bug report said the offset pagination overflows the planner","where":["apps/api/src/export.ts:88"]}'
 FIX="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"export: page by id\",\"summary\":\"the export pages by id, so big customers export again\",\"decisions\":[$D1],\"forks\":[],\"from\":[\"$BID\"]}"
 REVIEW=$(call $A "$SA" ask-review "$FIX")
 expect "the fix's review is filed, asked of bob" "$REVIEW" "review ticket filed, asked of bob"

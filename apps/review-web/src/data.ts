@@ -24,9 +24,15 @@ export interface Hunk {
   readonly lines: ReadonlyArray<DiffLine>;
 }
 
+/** What an old ticket's decision, filed before titles, shows in its place. */
+export const NO_TITLE = "Old ticket — no title";
+
 /** A decision behind the change, as the review's why records it. */
 export interface Decision {
   readonly id: string;
+  /** Its headline, a few words; absent only on an old ticket's. */
+  readonly title?: string;
+  /** What was done, in a line — beneath the title. */
   readonly what: string;
   readonly userWhy?: string;
   readonly agentWhy?: string;
