@@ -1,5 +1,5 @@
 import { Effect, Layer, Ref, Stream } from "effect";
-import { LanguageModel, type Prompt, type Response } from "effect/unstable/ai";
+import { LanguageModel, type Prompt, type Response } from "effect/ai";
 
 /** One model turn, decided in advance: tool calls to make, text to say. */
 export interface Turn {

@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, Sink, Stream, SubscriptionRef } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { LocalState, RoomMessage } from "@collagen/p2p";
 import { Adapters, type Adapter } from "./Adapters";
 import { mcpServerName } from "./mcpAddress";

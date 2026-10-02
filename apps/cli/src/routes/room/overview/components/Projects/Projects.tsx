@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { homedir } from "node:os";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { newProject } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
 import { FS_PICKER_HINT, FsPicker } from "../../../../../components/FsPicker";

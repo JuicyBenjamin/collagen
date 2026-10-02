@@ -52,7 +52,7 @@ flowchart TD
 All of these are merged into a single **`AppLayer`** (`apps/cli/src/services/AppLayer.ts`),
 which requires only `CliArgs`. Both entrypoints provide it:
 
-- **`index.tsx`** — the TUI (`effect/unstable/cli` + `NodeRuntime.runMain`; needs
+- **`index.tsx`** — the TUI (`effect/cli` + `NodeRuntime.runMain`; needs
   `--experimental-ffi` for OpenTUI).
 - **`headless.ts`** — the same app without a terminal, for dev and headless hosts.
 
@@ -177,7 +177,7 @@ a given peer should act on now.
 
 ## The MCP server
 
-`Mcp` (`apps/cli/src/services/Mcp.ts`) builds an `effect/unstable/ai` `McpServer` served
+`Mcp` (`apps/cli/src/services/Mcp.ts`) builds an `effect/ai` `McpServer` served
 over Streamable HTTP on a deterministic per-profile port (`portForProfile`, 41000–44999 on mainnet, 45000–48999 on devnet,
 ephemeral fallback logged with its reason). Tools are `Schema`-typed and grouped: room,
 messages, tickets, settings, scripting — see [Using the CLI](/guide/using-the-cli#your-agents-side).

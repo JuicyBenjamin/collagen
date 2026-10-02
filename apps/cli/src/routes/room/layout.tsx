@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 import { AI_OPTIONS } from "@collagen/p2p";
 import { MOCK_AI_OPTIONS } from "../../services/Adapters";
 import { RESTART_EXIT_CODE } from "../../services/Updates";
