@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTicket, epicClosed, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
+import { closeTicket, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
 
 const ticket = (over: Partial<Ticket>): Ticket => ({
   id: "t",
@@ -133,5 +133,47 @@ describe("turns made at once, offline from each other", () => {
     const c3 = turnEpic(merged, true, "Go done too", "alice", room(merged, php), 40).ticket;
     expect(epicClosed(c3, room(c3, php))).toBe(true);
     expect(epicClosed(mergeTicket(c3, r1), room(php))).toBe(true);
+  });
+});
+
+describe("from the review of the epics branch", () => {
+  it("every move has its own id: two by one person in one millisecond merge the same in either order", () => {
+    const base = open("php");
+    const a = moveToEpic(base, "e1", "bob", 10);
+    const b = moveToEpic(base, "e2", "bob", 10);
+    expect(a.partOf![0]!.id).not.toBe(b.partOf![0]!.id);
+    expect(epicOf(mergeTicket(a, b))).toBe(epicOf(mergeTicket(b, a)));
+    expect(mergeTicket(a, b).partOf).toHaveLength(2);
+    // and across tickets: a close that saw one of two same-millisecond moves did not see the other
+    const x = into(done("x"), 20);
+    const y = into(done("y"), 20);
+    expect(x.partOf![0]!.id).not.toBe(y.partOf![0]!.id);
+    const sawX = turnEpic(epic, true, undefined, "alice", room(epic, x), 21).ticket;
+    expect(epicClosed(sawX, room(sawX, x, y))).toBe(false);
+  });
+
+  it("an after gate on an epic uses the same rule: an unseen open ticket keeps it holding", () => {
+    const php = into(done("php"), 1);
+    const closed = turnEpic(epic, true, undefined, "alice", room(epic, php), 10).ticket;
+    const rust = into(open("rust"), 11);
+    const next = ticket({ id: "next", after: ["e1"] });
+    expect(heldBy(next, room(closed, php, next))).toEqual([]);
+    expect(heldBy(next, room(closed, php, rust, next))).toEqual(["e1"]);
+  });
+
+  it("the reason shown is the one behind the state — a slow clock's reopen, a close that missed an addition", () => {
+    const php = into(done("php"), 1);
+    const closed = turnEpic(epic, true, "shipped", "alice", room(epic, php), 100).ticket;
+    // bob's clock runs behind: his reopen, made after seeing the close, is stamped earlier
+    const reopened = turnEpic(closed, false, "Go next", "bob", room(closed, php), 50).ticket;
+    expect(epicStatus(reopened, room(reopened, php))).toMatchObject({ closed: false, because: "Go next", by: "bob" });
+    // a close that missed an addition: open, because of that ticket — and a reopen can still be recorded
+    const rust = { ...into(open("rust"), 101), goal: "Rust on the review page" };
+    const st = epicStatus(closed, room(closed, php, rust));
+    expect(st.closed).toBe(false);
+    expect(st.because).toMatch(/"Rust on the review page" was put in without the close seeing it/);
+    const said = turnEpic(closed, false, "Rust belongs here", "carol", room(closed, php, rust), 102);
+    expect(said.outcome).toBe("turned");
+    expect(epicStatus(said.ticket, room(said.ticket, php, rust)).because).toBe("Rust belongs here");
   });
 });

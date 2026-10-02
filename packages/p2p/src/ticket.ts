@@ -228,6 +228,10 @@ function union<A extends { readonly at: number }>(a: ReadonlyArray<A> | undefine
 /** The latest of a set of acts (the order `union` keeps). */
 const latest = <A>(xs: ReadonlyArray<A> | undefined): A | undefined => (xs && xs.length > 0 ? xs[xs.length - 1] : undefined);
 
+/** A move's or a turn's own name: unique, whoever writes it and however
+ *  fast — two by the same person in one millisecond are two. */
+const opId = (): string => globalThis.crypto.randomUUID();
+
 /** Where a ticket is now: its latest move, if it was ever moved. */
 const membership = (ticket: Ticket): PartMove | undefined => latest(ticket.partOf);
 
@@ -239,8 +243,8 @@ export const excludedFromEpic = (ticket: Ticket): boolean => membership(ticket)?
 
 /** Put a ticket into an epic, or take it out (null), or keep it in but out
  *  of progress (`excluded`). Anyone's to do. */
-export function moveToEpic(ticket: Ticket, epic: string | null, by: string, now: number, excluded = false): Ticket {
-  const move: PartMove = { id: `${by.slice(0, 16)}:${now}`, epic, ...(epic && excluded ? { excluded: true } : {}), by, at: now };
+export function moveToEpic(ticket: Ticket, epic: string | null, by: string, now: number, excluded = false, id: string = opId()): Ticket {
+  const move: PartMove = { id, epic, ...(epic && excluded ? { excluded: true } : {}), by, at: now };
   return { ...ticket, partOf: [...(ticket.partOf ?? []), move], updatedAt: now };
 }
 
@@ -276,20 +280,46 @@ const heads = (turns: ReadonlyArray<EpicTurn>): ReadonlyArray<EpicTurn> => {
   return turns.filter((t) => !seen.has(t.id));
 };
 
-/** Is the epic closed? Only when every latest turn is a close, each of them
- *  saw every ticket now in the epic, and every one of those is resolved. A
- *  reopen a close had not seen — or a ticket put in that it had not seen —
- *  keeps it open, on every peer; a close made after seeing them stands, and
- *  an old reopen it has seen never reopens it again. */
-export function epicClosed(epic: Ticket, all: ReadonlyMap<string, Ticket>): boolean {
-  const top = heads(epic.turns ?? []);
-  if (top.length === 0 || top.some((t) => !t.closed)) return false;
-  if (epicParts(epic, all).unresolved.length > 0) return false;
-  // a ticket put in that a close had not seen undoes that close — even once
-  // it is moved out again: the close was made without it, and is made again
-  const puts = movesInto(epic, all);
-  return top.every((c) => puts.every((m) => (c.members ?? []).includes(m)));
+/** Where an epic stands, and what decided it — the reason shown is always
+ *  the one behind the state, never just the latest by clock:
+ *  - a latest turn that is a reopen: open, for its reason;
+ *  - every latest turn a close, but a ticket put in that one of them had
+ *    not seen: open, because of that ticket — close it again once it is
+ *    resolved or moved out;
+ *  - a ticket in it not resolved: open, because of it;
+ *  - otherwise closed, for the close's reason.
+ *  An old reopen a close has seen never reopens it again. */
+export interface EpicStatus {
+  readonly closed: boolean;
+  readonly because?: string;
+  readonly by?: string;
+  readonly at?: number;
 }
+
+const newest = <A extends { readonly at: number; readonly id: string }>(xs: ReadonlyArray<A>): A | undefined =>
+  [...xs].sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).at(-1);
+
+export function epicStatus(epic: Ticket, all: ReadonlyMap<string, Ticket>): EpicStatus {
+  const top = heads(epic.turns ?? []);
+  if (top.length === 0) return { closed: false };
+  const reopen = newest(top.filter((t) => !t.closed));
+  if (reopen) return { closed: false, because: reopen.reason, by: reopen.by, at: reopen.at };
+  // every latest word is a close: did each see everything put in?
+  for (const t of all.values()) {
+    for (const m of t.partOf ?? []) {
+      if (m.epic === epic.id && top.some((c) => !(c.members ?? []).includes(m.id))) {
+        return { closed: false, because: `"${t.goal}" was put in without the close seeing it — close it again once that is resolved or moved out`, by: m.by, at: m.at };
+      }
+    }
+  }
+  const unresolved = epicParts(epic, all).unresolved[0];
+  if (unresolved) return { closed: false, because: `"${unresolved.goal}" in it is not resolved` };
+  const close = newest(top)!;
+  return { closed: true, because: close.reason, by: close.by, at: close.at };
+}
+
+/** Is the epic closed? `epicStatus`, its yes or no. */
+export const epicClosed = (epic: Ticket, all: ReadonlyMap<string, Ticket>): boolean => epicStatus(epic, all).closed;
 
 /** Every move ever made into an epic, by id — what a close records as seen. */
 const movesInto = (epic: Ticket, all: ReadonlyMap<string, Ticket>): ReadonlyArray<string> =>
@@ -304,9 +334,6 @@ export const isClosed = (ticket: Ticket, all?: ReadonlyMap<string, Ticket>): boo
   const top = heads(ticket.turns ?? []);
   return top.length > 0 && top.every((t) => t.closed);
 };
-
-/** The epic's latest turn by time — what to show as why it is as it is. */
-export const epicTurn = (epic: Ticket): EpicTurn | undefined => latest(epic.turns);
 
 /** Set the order an epic's tickets are read in. Anyone's to do. */
 export function orderEpic(epic: Ticket, ids: ReadonlyArray<string>, by: string, now: number): Ticket {
@@ -341,13 +368,17 @@ export function turnEpic(
   now: number,
 ): { readonly ticket: Ticket; readonly outcome: TurnOutcome; readonly unresolved: ReadonlyArray<Ticket> } {
   if (epic.kind !== "epic") return { ticket: epic, outcome: "not-an-epic", unresolved: [] };
-  if (epicClosed(epic, all) === closed) return { ticket: epic, outcome: "already", unresolved: [] };
+  // closing what is closed, or reopening what already has a reopen as its
+  // latest word, is nothing; reopening an epic kept open only by a conflict
+  // (a close that missed an addition) is a reopen worth recording
+  const reopened = heads(epic.turns ?? []).some((t) => !t.closed) || (epic.turns ?? []).length === 0;
+  if (closed ? epicClosed(epic, all) : reopened) return { ticket: epic, outcome: "already", unresolved: [] };
   const { unresolved } = epicParts(epic, all);
   if (closed && unresolved.length > 0) return { ticket: epic, outcome: "unresolved", unresolved };
   const why = reason?.trim() || (closed ? PARTS_DONE : undefined);
   if (!why) return { ticket: epic, outcome: "needs-reason", unresolved: [] };
   const turn: EpicTurn = {
-    id: `${by.slice(0, 16)}:${now}:${closed ? "close" : "reopen"}`,
+    id: opId(),
     closed,
     reason: why,
     by,
@@ -587,7 +618,7 @@ export function actionableSteps(ticket: Ticket, pubkey: string): TicketStep[] {
  *  answered — on a review that includes the author's own address step, so
  *  one reader's take does not open the next review), or closed: a ticket its
  *  author closed unfinished must not hold the next one back forever. */
-const released = (t: Ticket): boolean => isClosed(t) || finished(t);
+const released = (t: Ticket, all: ReadonlyMap<string, Ticket>): boolean => isClosed(t, all) || finished(t);
 
 /** The tickets in `after` still holding this one back. A predecessor this
  *  peer does not hold is no gate: `afterProblem` refused unknown ids when
@@ -596,7 +627,7 @@ const released = (t: Ticket): boolean => isClosed(t) || finished(t);
 export function heldBy(ticket: Ticket, all: ReadonlyMap<string, Ticket>): ReadonlyArray<string> {
   return (ticket.after ?? []).filter((id) => {
     const p = all.get(id);
-    return p !== undefined && !released(p);
+    return p !== undefined && !released(p, all);
   });
 }
 
