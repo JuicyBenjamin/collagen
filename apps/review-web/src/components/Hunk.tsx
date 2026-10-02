@@ -2,6 +2,7 @@ import { createMemo, For, Show } from "solid-js";
 import type { Decision, DiffLine, Hunk as HunkData } from "../data";
 import { highlightHunk, typed } from "../highlight";
 import { markWord, peek, peekAt, pointAt, typesReady, wordAt, wordEnd, type Spot } from "../intel";
+import { AlsoUnder } from "./AlsoUnder";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
 
@@ -44,14 +45,7 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
     <div class="hunk">
       <div class="file">
         <span class="head">{props.hunk.file}</span>
-        {/* the same code serves more than one decision: say which, and go there */}
-        <For each={props.alsoUnder.slice(0, 1)}>
-          {(d) => (
-            <a class="also" href={`#${d.id}`} title={props.alsoUnder.map((x) => x.what).join("\n")}>
-              also under “{d.what.length > 48 ? `${d.what.slice(0, 47)}…` : d.what}”{props.alsoUnder.length > 1 ? ` +${props.alsoUnder.length - 1}` : ""}
-            </a>
-          )}
-        </For>
+        <AlsoUnder decisions={props.alsoUnder} />
       </div>
       <div class="code">
         <table>
