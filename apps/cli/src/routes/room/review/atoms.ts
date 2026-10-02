@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { Effect } from "effect";
 import { McpInfo } from "../../../services/McpInfo";
+import { ReviewPages } from "../../../services/ReviewLive";
+import { focusTab } from "../../../lib/focusTab";
 import { runtimeAtom } from "../../../app/runtime";
 
 /** The browser's own opener for this platform. */
@@ -14,6 +16,11 @@ export const openReviewPageAtom = runtimeAtom.fn(
   Effect.fnUntraced(function* ({ ticketId }: { ticketId: string }) {
     const mcp = yield* (yield* McpInfo).awaitUrl;
     const url = `${mcp.replace(/\/mcp$/, "")}/review/${encodeURIComponent(ticketId)}`;
+    // already open in a browser: bring that tab forward rather than another
+    if ((yield* ReviewPages).isOpen(ticketId) && (yield* Effect.promise(() => focusTab(url)))) {
+      yield* Effect.log(`review page brought forward: ${url}`);
+      return;
+    }
     const [cmd, args] = opener(url);
     const ok = yield* Effect.callback<boolean>((resume) => {
       execFile(cmd, [...args], (err) => resume(Effect.succeed(err === null)));

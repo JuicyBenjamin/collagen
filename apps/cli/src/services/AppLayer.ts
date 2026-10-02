@@ -21,6 +21,7 @@ import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { ReviewTypes } from "./ReviewTypes";
+import { ReviewPages } from "./ReviewLive";
 
 /** Process-wide background rules (per-room ones live in Rooms): re-probe the
  *  agent CLI when the preferred ai changes; register our MCP server with the
@@ -62,6 +63,7 @@ const SwarmLive = Swarm.layer.pipe(
  *  (Rooms: every joined room live, one focused, on one swarm). */
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(ReviewTypes.layer),
+  Layer.provideMerge(ReviewPages.layer),
   Layer.provideMerge(Updates.layer),
   Layer.provideMerge(Attachments.layer),
   Layer.provideMerge(Transcripts.layer),
