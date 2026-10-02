@@ -414,8 +414,9 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
 
 On the overview an open epic is a block of its own above the projects, a blank line around
 it: one **purple** row — `♛`, its title, how far along it is ("1 of 3 done"), and a `▸`
-when a ticket inside is yours now — and under it, in their own colours, its tickets in its
-order, each with its project, an excluded one marked. `space` folds them away (the row
+when a ticket inside is yours now — and under it, on the lines of a tree (`├`, `└`), in
+their own colours, its tickets in its order, each with its kind and project, an excluded
+one marked. `space` folds them away (the row
 then says how many are folded) and back.
 `enter` opens the epic's page: its aim, every ticket in it, whether it can close, and each
 close and reopen with who said so and why.
