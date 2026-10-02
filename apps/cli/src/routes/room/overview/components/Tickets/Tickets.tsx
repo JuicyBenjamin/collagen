@@ -217,7 +217,7 @@ function EpicView({
         </span>
       </text>
       {open
-        ? block.rows.map((r) => (
+        ? block.rows.map((r, i) => (
             <TicketRow
               key={r.t.id}
               ticket={r.t}
@@ -230,6 +230,7 @@ function EpicView({
               goalOf={goalOf}
               project={projects ? r.t.project : undefined}
               excluded={excludedFromEpic(r.t)}
+              branch={i === block.rows.length - 1 ? "last" : "mid"}
             />
           ))
         : null}
@@ -260,6 +261,7 @@ function TicketRow({
   goalOf,
   project,
   excluded,
+  branch,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
@@ -276,6 +278,9 @@ function TicketRow({
   project?: string;
   /** in its epic but out of its progress */
   excluded?: boolean;
+  /** inside an epic: its line of the tree under the epic's crown, and then
+   *  its kind is said on the row — there are no kind headings in an epic */
+  branch?: "mid" | "last";
 }) {
   const people = marksLabel(s);
   const yours = s.state === "needs-you";
@@ -290,11 +295,13 @@ function TicketRow({
     <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
       {" ".repeat(Math.max(0, indent - 2))}
       {selected ? "› " : "  "}
+      {branch ? <span fg={theme.epic}>{branch === "last" ? "└ " : "├ "}</span> : null}
       {/* the row's own mark: it is yours to act on. Carried here and not only
           in the people's colour, because on your own ticket the people list can
           be empty — and then a change request had no trace on screen at all */}
       <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
       <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
+      {branch ? <span fg={theme.dim}>{t.kind.padEnd(9)}</span> : null}
       {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
       {depth > 0 ? <span fg={theme.dim}>{`${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} `}</span> : null}
       {project ? <span fg={theme.dim}>{project} · </span> : null}
