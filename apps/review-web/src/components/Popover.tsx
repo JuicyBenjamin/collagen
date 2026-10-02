@@ -1,5 +1,6 @@
 import { createMemo, For, Show } from "solid-js";
 import { highlightCode } from "../highlight";
+import { stillReading } from "../data";
 import { brief, inline } from "../hoverText";
 import { popover, toolNameFor } from "../intel";
 import { CodeLine } from "./Code";
@@ -30,7 +31,17 @@ export function Popover() {
         <div class="hint" style={style()} role="tooltip">
           <Show when={p().state === "ready" && p().result} fallback={<p class="hint-text">Starting {toolNameFor(p().file)}…</p>}>
             {(r) => (
-              <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={<p class="hint-text muted">{"indexing" in r() ? `${toolNameFor(p().file)} is still reading the project — rest on it again in a moment.` : "error" in r() ? (r() as { error: string }).error : ""}</p>}>
+              <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={
+                  <p class="hint-text muted">
+                    {"indexing" in r()
+                      ? `${toolNameFor(p().file)} is still reading the project — move off the word and back to ask again.`
+                      : "none" in r()
+                        ? `Nothing yet — ${toolNameFor(p().file)} is still reading the project; move off the word and back to ask again.`
+                        : "error" in r()
+                          ? (r() as { error: string }).error
+                          : ""}
+                  </p>
+                }>
                 {(md) => (
                   <>
                   <For each={brief(md()).blocks}>
@@ -52,6 +63,9 @@ export function Popover() {
                       )
                     }
                   </For>
+                  <Show when={stillReading(r())}>
+                    <p class="hint-text muted">May be incomplete — {toolNameFor(p().file)} is still reading the project.</p>
+                  </Show>
                   <Show when={brief(md()).overloads > 0}>
                     <p class="hint-text muted">+{brief(md()).overloads} {brief(md()).overloads === 1 ? "overload" : "overloads"}</p>
                   </Show>

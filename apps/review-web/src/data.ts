@@ -121,6 +121,11 @@ export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek>; readonly p
 /** An answer that may change if asked again — the server was still
  *  indexing (`indexing`, or `partial` from a server that never said it was
  *  done), or something failed — is not one to keep. */
+/** The server was still reading the project when it answered: no answer
+ *  yet (`indexing`), or one that may be incomplete (`partial`). Said on the
+ *  page, never shown as if it were the whole answer. */
+export const stillReading = (r: HoverResult | DefinitionResult): boolean => "indexing" in r || ("partial" in r && r.partial === true);
+
 export const final = (r: HoverResult | DefinitionResult): boolean => !("indexing" in r) && !("error" in r) && !("missing" in r) && !("partial" in r && r.partial);
 
 /** The languages the review page can ask a language server about, each
