@@ -99,4 +99,11 @@ describe("a ticket's title", () => {
     expect(ticketTitleGap("x".repeat(61))).toMatch(/title is 61 characters/);
     expect(ticketTitleGap("Streamed export")).toBeNull();
   });
+
+  it("is one line: a break or a control character would take rows of the list", () => {
+    expect(ticketTitleGap("First line\nSecond line")).toMatch(/more than one line/);
+    expect(ticketTitleGap("tab\there")).toMatch(/more than one line/);
+    expect(ticketTitleGap("a\u2028b")).toMatch(/more than one line/);
+    expect(ticketTitleGap("  Streamed export\n")).toBeNull();
+  });
 });
