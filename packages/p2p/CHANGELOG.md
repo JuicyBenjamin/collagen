@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.18.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.17.0-alpha...p2p-v0.18.0-alpha) (2026-10-02)
+
+
+### Features
+
+* **cli:** every ticket has a short title, and its goal is the line beneath ([7dacb6f](https://github.com/JuicyBenjamin/collagen/commit/7dacb6f9b3b8d6dd6e92ae9184ac9ff59c43a166))
+
+
+### Bug Fixes
+
+* **cli:** 'filed together' goes by when tickets were filed, not last revised ([9186683](https://github.com/JuicyBenjamin/collagen/commit/9186683bf08312b4f6344556a507f94b4ea39086))
+* **cli:** titles merge the same however copies are grouped, and stay on one line ([8c5758b](https://github.com/JuicyBenjamin/collagen/commit/8c5758b43e887fa91c103ba4d849c5ad8ab6cef3))
+
 ## [0.17.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.16.0-alpha...p2p-v0.17.0-alpha) (2026-10-02)
 
 
