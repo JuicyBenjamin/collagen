@@ -18,7 +18,9 @@ http://127.0.0.1:<your instance's port>/review/<ticket id>
 
 If that review's page is already open, `o` brings its tab to the front instead of opening
 another — on macOS, in Chrome, Safari, Brave, Edge, Arc, Vivaldi or Chromium, which macOS
-asks you once to allow; anywhere else it opens a tab as before.
+asks you once to allow. Anywhere else (or if you said no) it opens a new tab, and the old
+one hands it your place — the section and how far down you were — and closes itself. A
+browser that won't let the old tab close leaves you with two.
 
 The page keeps itself current: your collagen tells it when the review's why is revised (the
 author's agent amends it whenever the code moves), when the ticket moves, or when the
