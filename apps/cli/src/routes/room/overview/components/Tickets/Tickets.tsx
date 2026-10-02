@@ -119,6 +119,7 @@ export function Tickets() {
                 block={e}
                 open={unfolded.has(e.epic.t.id)}
                 first={epics[0] === e}
+                indent={groups.length > 1 ? 4 : 2}
                 selectedId={focused ? current?.t.id : undefined}
                 progress={progressLabel(epicProgress(e.epic.t, byId))}
                 nameFor={nameFor}
@@ -191,10 +192,14 @@ function EpicView({
   nameFor,
   projects,
   goalOf,
+  indent,
 }: {
   block: EpicBlock<Row>;
   open: boolean;
   first: boolean;
+  /** the columns before the cursor that every other row has, so the crown
+   *  sits on the headings' column and the title on the names' */
+  indent: number;
   selectedId: string | undefined;
   progress: string;
   nameFor: (key: string) => string;
@@ -202,12 +207,13 @@ function EpicView({
   goalOf: (ticketId: string) => string | undefined;
 }) {
   const selected = selectedId === block.epic.t.id;
-  const yours = block.rows.some((r) => r.s.state === "needs-you");
+  // open, each ticket carries its own ▸; folded, the row says how many are yours
+  const yours = block.rows.filter((r) => r.s.state === "needs-you").length;
   return (
     <box flexDirection="column" flexShrink={0} marginTop={first ? 1 : 0} marginBottom={1}>
       <text truncate wrapMode="none">
+        {" ".repeat(Math.max(0, indent - 2))}
         <span fg={selected ? theme.accent : theme.epic}>{selected ? "› " : "  "}</span>
-        <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
         <span fg={theme.epic}>
           {EPIC_MARK} {rowTitle(block.epic.t)}
         </span>
@@ -215,6 +221,7 @@ function EpicView({
           {" "}· {progress}
           {!open && block.rows.length > 0 ? ` · ${block.rows.length} folded` : ""}
         </span>
+        {!open && yours > 0 ? <span fg={theme.warn}> · {GLYPH.yours} {yours} yours</span> : null}
       </text>
       {open
         ? block.rows.map((r, i) => (
@@ -224,7 +231,7 @@ function EpicView({
               summary={r.s}
               selected={selectedId === r.t.id}
               nameFor={nameFor}
-              indent={2}
+              indent={indent}
               depth={0}
               under={undefined}
               goalOf={goalOf}
@@ -299,15 +306,24 @@ function TicketRow({
           in the people's colour, because on your own ticket the people list can
           be empty — and then a change request had no trace on screen at all.
           Same column on every row, an epic's tickets too */}
-      <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
-      {/* inside an epic: the tree line under the first letter of its title */}
-      {branch ? <span fg={theme.epic}>{branch === "last" ? "  └ " : "  ├ "}</span> : null}
+      {/* inside an epic the tree line stands in the mark's column, under the
+          crown, and a ▸ hugs it — so the name stays on the column every row's
+          name is on */}
+      {branch ? (
+        <>
+          <span fg={theme.epic}>{branch === "last" ? "└" : "├"}</span>
+          <span fg={theme.warn}>{yours ? GLYPH.yours : " "}</span>
+        </>
+      ) : (
+        <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
+      )}
       <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
-      {branch ? <span fg={theme.dim}>{t.kind.padEnd(9)}</span> : null}
       {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
       {depth > 0 ? <span fg={theme.dim}>{`${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} `}</span> : null}
       {project ? <span fg={theme.dim}>{project} · </span> : null}
       {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
+      {/* an epic has no kind headings: each ticket in it says its kind */}
+      {branch ? <span fg={theme.dim}> · {t.kind}</span> : null}
       {excluded ? <span fg={theme.dim}> · excluded from progress</span> : null}
       {waits ? (
         <span fg={theme.dim}>
