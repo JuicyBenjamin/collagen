@@ -224,7 +224,7 @@ function EpicView({
               summary={r.s}
               selected={selectedId === r.t.id}
               nameFor={nameFor}
-              indent={4}
+              indent={2}
               depth={0}
               under={undefined}
               goalOf={goalOf}
@@ -295,12 +295,13 @@ function TicketRow({
     <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
       {" ".repeat(Math.max(0, indent - 2))}
       {selected ? "› " : "  "}
-      {/* under the first letter of the epic's title, past its crown */}
-      {branch ? <span fg={theme.epic}>{branch === "last" ? "  └ " : "  ├ "}</span> : null}
       {/* the row's own mark: it is yours to act on. Carried here and not only
           in the people's colour, because on your own ticket the people list can
-          be empty — and then a change request had no trace on screen at all */}
+          be empty — and then a change request had no trace on screen at all.
+          Same column on every row, an epic's tickets too */}
       <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
+      {/* inside an epic: the tree line under the first letter of its title */}
+      {branch ? <span fg={theme.epic}>{branch === "last" ? "  └ " : "  ├ "}</span> : null}
       <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
       {branch ? <span fg={theme.dim}>{t.kind.padEnd(9)}</span> : null}
       {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
