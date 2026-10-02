@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import type { DefinitionResult, HoverResult } from "./data";
+import type { DefinitionResult, HoverResult, ToolState } from "./data";
 import { ticketId } from "./ticket";
 
 // The type checker, asked from the page: what is this symbol (hover) and
@@ -15,6 +15,23 @@ export interface Spot {
   readonly file: string;
   readonly line: number;
   readonly col: number;
+}
+
+/** The pinned TypeScript the hints need, as the instance reports it. The
+ *  page asks once, and again every second while an install runs. */
+const [tool, setTool] = createSignal<ToolState | null>(null);
+export { tool };
+export const typesReady = () => tool()?.state === "ready";
+
+export async function refreshTool(): Promise<void> {
+  const r = await fetch("/review-tools/typescript");
+  if (r.ok) setTool((await r.json()) as ToolState);
+}
+
+/** Install it — only ever on the person's click. */
+export async function installTool(): Promise<void> {
+  const r = await fetch("/review-tools/typescript", { method: "POST", headers: { "x-collagen": "install" } });
+  if (r.ok) setTool((await r.json()) as ToolState);
 }
 
 const key = (s: Spot) => `${s.file}:${s.line}:${s.col}`;
