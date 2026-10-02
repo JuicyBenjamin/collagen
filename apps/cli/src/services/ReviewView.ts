@@ -108,10 +108,13 @@ export const reviewTree = Effect.fn("ReviewView.tree")(function* (ticketId: stri
     const ref = yield* firstRef(project.path, [review.branch, `origin/${review.branch}`]);
     const commit = ref ? (yield* run("git", ["rev-parse", `${ref}^{commit}`], project.path, 5_000))?.trim() : undefined;
     if (!commit) return `the branch ${review.branch} is not in your clone`;
-    return { projectPath: project.path, commit };
+    return { projectPath: project.path, commit, ref: ref! };
   }
   return `no review ticket ${ticketId} in your rooms`;
 });
+
+/** The commit `ref` names in the clone at `path`, now — or null. */
+export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((s) => s?.trim() || null));
 
 export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: string) {
   const rooms = yield* Rooms;
