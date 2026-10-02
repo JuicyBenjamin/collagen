@@ -278,7 +278,7 @@ function TicketRow({
   project?: string;
   /** in its epic but out of its progress */
   excluded?: boolean;
-  /** inside an epic: its line of the tree under the epic's crown, and then
+  /** inside an epic: its line of the tree under the epic's title, and then
    *  its kind is said on the row — there are no kind headings in an epic */
   branch?: "mid" | "last";
 }) {
@@ -295,7 +295,8 @@ function TicketRow({
     <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
       {" ".repeat(Math.max(0, indent - 2))}
       {selected ? "› " : "  "}
-      {branch ? <span fg={theme.epic}>{branch === "last" ? "└ " : "├ "}</span> : null}
+      {/* under the first letter of the epic's title, past its crown */}
+      {branch ? <span fg={theme.epic}>{branch === "last" ? "  └ " : "  ├ "}</span> : null}
       {/* the row's own mark: it is yours to act on. Carried here and not only
           in the people's colour, because on your own ticket the people list can
           be empty — and then a change request had no trace on screen at all */}
