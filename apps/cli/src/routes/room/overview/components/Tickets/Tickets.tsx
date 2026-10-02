@@ -110,7 +110,8 @@ export function Tickets() {
                         selected={focused && index.get(r.t.id) === sel}
                         nameFor={nameFor}
                         indent={groups.length > 1 ? 4 : 2}
-                        follows={k.follows.has(r.t.id)}
+                        depth={k.depth.get(r.t.id) ?? 0}
+                        under={k.parent.get(r.t.id)}
                         goalOf={(id) => byId.get(id)?.goal}
                       />
                     ))}
@@ -155,7 +156,8 @@ function TicketRow({
   selected,
   nameFor,
   indent,
-  follows,
+  depth,
+  under,
   goalOf,
 }: {
   ticket: Ticket;
@@ -164,8 +166,10 @@ function TicketRow({
   nameFor: (key: string) => string;
   /** columns before the cursor, so a row sits under its header */
   indent: number;
-  /** drawn under a ticket it is read after (same group) */
-  follows: boolean;
+  /** levels under the ticket it is read after, in its group (0: none) */
+  depth: number;
+  /** the ticket it is drawn under, when it is */
+  under: string | undefined;
   goalOf: (ticketId: string) => string | undefined;
 }) {
   const people = marksLabel(s);
@@ -173,7 +177,10 @@ function TicketRow({
   // waiting on another ticket: only its author sees the row, dim, saying on what
   const waits = s.held.length > 0;
   const dim = s.state === "done" || waits;
-  const on = waits ? (goalOf(s.held[0]!) ?? s.held[0]!.slice(0, 8)) : "";
+  // waiting on the row it is drawn under says so in one word; waiting on one
+  // elsewhere (another group, or a second of two) names it
+  const elsewhere = s.held.filter((id) => id !== under);
+  const on = elsewhere.length > 0 ? (goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8)) : "";
   return (
     <text fg={selected ? theme.accent : dim ? theme.dim : theme.fg} truncate wrapMode="none">
       {" ".repeat(Math.max(0, indent - 2))}
@@ -183,12 +190,13 @@ function TicketRow({
           be empty — and then a change request had no trace on screen at all */}
       <span fg={theme.warn}>{yours ? `${GLYPH.yours} ` : "  "}</span>
       <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, 8).padEnd(9)}</span>
-      {follows ? <span fg={theme.dim}>{`${STACK.follows} `}</span> : null}
+      {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
+      {depth > 0 ? <span fg={theme.dim}>{`${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} `}</span> : null}
       {t.goal}
       {waits ? (
         <span fg={theme.dim}>
-          {` · ${STACK.waits} after "${on}"`}
-          {s.held.length > 1 ? ` +${s.held.length - 1}` : ""}
+          {on ? ` · ${STACK.waits} after "${on}"` : ` · ${STACK.waits} waiting`}
+          {elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}
         </span>
       ) : null}
       {people.length > 0 ? (

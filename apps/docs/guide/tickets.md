@@ -341,9 +341,12 @@ order that could hide a ticket for good is refused when it is set: an id nobody 
 someone else's ticket still waiting, which you are not shown), the ticket itself, and a
 cycle, direct or through others.
 
-On the overview a ticket that waits on another **in the same group** is drawn right under
-it with `↳`. One waiting on two sits once, under the one drawn last — never duplicated —
-and a chain stays a chain.
+On the overview a ticket that waits on another **in the same group** is drawn under it,
+one level deeper, with `↳` — so a chain of stacked reviews reads as a staircase, each
+under the one it follows. Two waiting on the same ticket are siblings at one depth. One
+waiting on two sits once, under the one drawn last — never duplicated. A waiting row says
+`⧗ waiting` when what it waits on is the row it sits under, and `⧗ after "…"` when it is
+elsewhere.
 
 Everyone can weigh in at every step, so this is a product-management flow with the
 product manager, the backender and the reviewer each speaking through their own agent.

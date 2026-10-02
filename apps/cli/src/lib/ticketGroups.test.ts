@@ -40,7 +40,8 @@ describe("stacked tickets inside a group", () => {
     const second = after(row("second", "api", "review", "waiting", 9), "first");
     const [g] = groupTickets([first, other, second]);
     expect(g!.kinds[0]!.rows.map((r) => r.t.id)).toEqual(["other", "first", "second"]);
-    expect([...g!.kinds[0]!.follows]).toEqual(["second"]);
+    expect(g!.kinds[0]!.depth.get("second")).toBe(1);
+    expect(g!.kinds[0]!.parent.get("second")).toBe("first");
   });
 
   it("waiting on two, it sits once, under the one drawn last", () => {
@@ -51,18 +52,30 @@ describe("stacked tickets inside a group", () => {
     expect(ids).toEqual(["a", "b", "c"]);
   });
 
-  it("a chain stays a chain", () => {
+  it("a chain is a staircase: each one a level under the one it waits on", () => {
     const a = row("a", "api", "plan", "waiting", 1);
     const b = after(row("b", "api", "plan", "waiting", 2), "a");
     const c = after(row("c", "api", "plan", "waiting", 3), "b");
-    expect(drawnOrder(groupTickets([c, b, a])).map((r) => r.t.id)).toEqual(["a", "b", "c"]);
+    const k = groupTickets([c, b, a])[0]!.kinds[0]!;
+    expect(k.rows.map((r) => r.t.id)).toEqual(["a", "b", "c"]);
+    expect(["a", "b", "c"].map((id) => k.depth.get(id))).toEqual([0, 1, 2]);
+  });
+
+  it("two waiting on one are siblings at one depth, each subtree kept whole", () => {
+    const a = row("a", "api", "plan", "waiting", 1);
+    const b = after(row("b", "api", "plan", "waiting", 9), "a");
+    const b2 = after(row("b2", "api", "plan", "waiting", 8), "b");
+    const c = after(row("c", "api", "plan", "waiting", 5), "a");
+    const k = groupTickets([a, b, b2, c])[0]!.kinds[0]!;
+    expect(k.rows.map((r) => r.t.id)).toEqual(["a", "b", "b2", "c"]);
+    expect(["a", "b", "b2", "c"].map((id) => k.depth.get(id))).toEqual([0, 1, 2, 1]);
   });
 
   it("a predecessor in another group is no stack here", () => {
     const p = row("p", "api", "proposal", "waiting");
     const l = after(row("l", "api", "plan", "waiting"), "p");
     const [g] = groupTickets([p, l]);
-    expect(g!.kinds.find((k) => k.kind === "plan")!.follows.size).toBe(0);
+    expect(g!.kinds.find((k) => k.kind === "plan")!.depth.get("l")).toBe(0);
   });
 
   it("a cycle that arrived anyway is drawn plainly, once each", () => {
@@ -70,6 +83,6 @@ describe("stacked tickets inside a group", () => {
     const b = after(row("b", "api", "plan", "waiting", 2), "a");
     const k = groupTickets([a, b])[0]!.kinds[0]!;
     expect(k.rows.map((r) => r.t.id).sort()).toEqual(["a", "b"]);
-    expect(k.follows.size).toBe(0);
+    expect([k.depth.get("a"), k.depth.get("b")]).toEqual([0, 0]);
   });
 });
