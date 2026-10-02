@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
+import { HttpRouter, HttpServerResponse } from "effect/http";
 import { roomProjects, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { gitDir } from "../lib/gitInfo";
 import type { ReviewPageData } from "@collagen/review-web/data";
