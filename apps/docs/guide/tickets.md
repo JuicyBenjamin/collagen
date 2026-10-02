@@ -412,7 +412,7 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
   offer one in a line when a filing suggests it — a parent's epic, or several related
   tickets filed together.
 
-On the overview every ticket's row carries its kind's glyph — `✦` proposal, `☰` plan,
+On the overview every ticket's row carries its kind's glyph — `✦` proposal, `≡` plan,
 `⚑` bug, `±` review, `☐` task (on `?` too) — so the headings above teach them. An open
 epic is a block of its own above the projects, a blank line around it: one **purple** row
 — `♛` on the column the kind headings start on, its title and how far along it is (`1/3`)

@@ -49,10 +49,12 @@ export const EPIC_HELP = "an epic: its tickets are listed under it, on a tree, e
 /** A ticket's kind, on every row of the list: under a kind heading the
  *  reader learns what each means, and inside an epic — which has no headings
  *  — the glyph says it. Each hints at its kind: an idea, a list of steps, a
- *  flag raised, a diff, a box to tick. An epic's is its crown. */
+ *  flag raised, a diff, a box to tick. An epic's is its crown. Each is one
+ *  column in every terminal: not ☰, which Unicode 16 made two wide — the
+ *  rest of a plan's row slid a column right. */
 export const KIND_GLYPH: Record<Exclude<TicketKind, "epic">, string> = {
   proposal: "✦",
-  plan: "☰",
+  plan: "≡",
   bug: "⚑",
   review: "±",
   task: "☐",
