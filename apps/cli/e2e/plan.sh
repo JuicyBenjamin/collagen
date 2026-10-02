@@ -17,11 +17,11 @@ start alice; start bob
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; SB=$(mcp $B); admitted bob
 
 echo "## a plan needs a question, and is not a review"
-NOGOAL='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
+NOGOAL='{"peers":["bob"],"project":"sandbox","summary":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
 J1="$NOGOAL"  # built first: bash 3.2 mangles \" nested in "$( )"
 R1=$(call $A "$SA" ask-plan "$J1")
 expect "no goal: refused, told what the goal is" "$R1" "failed: pass .goal. .{1,6} the one line everyone sees: what your user intends to do"
-T1='{"what":"stream the rows instead of buffering the whole export","userWhy":"he said the backoffice export times out on big customers","agentWhy":"a cursor over the query keeps memory flat; the CSV writer already streams","where":["apps/api/src/export.ts"]}'
+T1='{"title":"Stream the rows instead","what":"stream the rows instead of buffering the whole export","userWhy":"he said the backoffice export times out on big customers","agentWhy":"a cursor over the query keeps memory flat; the CSV writer already streams","where":["apps/api/src/export.ts"]}'
 F1='{"at":"apps/api/src/export.ts","chose":"paginate the query by id","instead":"one big query with a streaming driver","why":"the driver we have does not stream; pagination needs nothing new","by":"agent"}'
 PLAN="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"stream the export, do not buffer it\",\"summary\":\"the export should stream rows to the client as they are read\",\"decisions\":[$T1],\"forks\":[$F1],\"whenClosed\":\"open a Jira ticket for the export work\"}"
 FILED=$(call $A "$SA" ask-plan "$PLAN")
@@ -51,7 +51,7 @@ R3=$(call $B "$SB" review-context "$J3")
 expect "now the thoughts open to him" "$R3" "times out on big customers"
 wait_until "alice's side: bob asked for changes, in those words" "bob asked for changes" bash -c "cat '$OUT/alice.log'"
 expect "alice's address step is not up: a ↻ on a plan means revise, not act" "$(rows $A "$SA" "$PID")" "answered: false"
-AMEND="{\"ticketId\":\"$PID\",\"goal\":\"stream the export, paged by cursor\",\"summary\":\"stream rows, paged by cursor not by id\",\"decisions\":[{\"id\":\"d1\",\"what\":\"stream the rows, paged by cursor\",\"userWhy\":\"he said the backoffice export times out on big customers\",\"agentWhy\":\"bob is right that the id is composite; a cursor on (created_at, id) pages cleanly\"}]}"
+AMEND="{\"ticketId\":\"$PID\",\"goal\":\"stream the export, paged by cursor\",\"summary\":\"stream rows, paged by cursor not by id\",\"decisions\":[{\"id\":\"d1\",\"title\":\"Stream the rows, paged\",\"what\":\"stream the rows, paged by cursor\",\"userWhy\":\"he said the backoffice export times out on big customers\",\"agentWhy\":\"bob is right that the id is composite; a cursor on (created_at, id) pages cleanly\"}]}"
 J4="$AMEND"  # built first: bash 3.2 mangles \" nested in "$( )"
 R4=$(call $A "$SA" ask-plan "$J4")
 expect "alice revises the same ticket" "$R4" "plan ticket updated"
@@ -77,7 +77,7 @@ TID=$(echo "$TASK" | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
 expect "the task names the plan it follows" "$(rows $A "$SA" "$TID")" "from: $PID"
 
 echo "## a proposal is an idea written down, owed to no one — cheap, and it can be alice's alone"
-IDEA='{"project":"sandbox","goal":"a nightly export instead of on demand","decisions":[{"what":"run it at 03:00","userWhy":"nobody needs it fresher than a day"}],"forks":[],"work":[{"intent":"schedule","description":"a cron job for the export","owner":"bob"}]}'
+IDEA='{"project":"sandbox","goal":"a nightly export instead of on demand","decisions":[{"title":"Run it at 03:00","what":"run it at 03:00","userWhy":"nobody needs it fresher than a day"}],"forks":[],"work":[{"intent":"schedule","description":"a cron job for the export","owner":"bob"}]}'
 J6="$IDEA"  # built first: bash 3.2 mangles \" nested in "$( )"
 R6=$(call $A "$SA" propose "$J6")
 expect "a proposal with nobody asked and no summary is filed, in the room" "$R6" "proposal ticket filed, in the room, nobody asked"
@@ -99,10 +99,10 @@ ACCEPT="{\"ticketId\":\"$IID\",\"stepId\":\"address\",\"result\":\"worth doing\"
 ACCEPTED=$(call $A "$SA" settle-step "$ACCEPT")
 expect "accepting points at the plan that would come next, and assigns nothing" "$ACCEPTED" "ask-plan with from.*accepting assigns nothing"
 echo "## a proposal to bob: he is asked, not assigned — the work stays an outline, his take says whether he would"
-NOWORK='{"peers":["bob"],"project":"sandbox","goal":"x","decisions":[{"what":"a","userWhy":"b"}],"forks":[]}'
+NOWORK='{"peers":["bob"],"project":"sandbox","goal":"x","decisions":[{"title":"A","what":"a","userWhy":"b"}],"forks":[]}'
 J8="$NOWORK"
 expect "a proposal to someone needs no work spelled out either" "$(call $A "$SA" propose "$J8")" "proposal ticket filed, asked of bob"
-PROP="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"expose the export in the backoffice UI\",\"summary\":\"a button on the customer page\",\"decisions\":[{\"what\":\"a download button on the customer page\",\"userWhy\":\"support keeps asking for the file by mail\"}],\"forks\":[],\"from\":[\"$PID\"],\"work\":[{\"intent\":\"build\",\"description\":\"the button and the download\",\"owner\":\"bob\"}]}"
+PROP="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"expose the export in the backoffice UI\",\"summary\":\"a button on the customer page\",\"decisions\":[{\"title\":\"A download button on\",\"what\":\"a download button on the customer page\",\"userWhy\":\"support keeps asking for the file by mail\"}],\"forks\":[],\"from\":[\"$PID\"],\"work\":[{\"intent\":\"build\",\"description\":\"the button and the download\",\"owner\":\"bob\"}]}"
 PROPOSED=$(call $A "$SA" propose "$PROP")
 expect "filed as a proposal to bob" "$PROPOSED" "proposal ticket filed, asked of bob"
 QID=$(echo "$PROPOSED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
@@ -119,7 +119,7 @@ DUP="{\"ticketId\":\"$QID\",\"work\":[{\"intent\":\"build\",\"description\":\"a\
 expect "two outline items that would share an id are refused, not collapsed" "$(call $A "$SA" propose "$DUP")" "two work items would share the id .{1,3}build"
 # the request-time build is withdrawn; a job-enqueuing button and a mail step replace it,
 # two items with the same intent kept apart by their own ids
-REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"what\":\"the button enqueues a job; the file comes by mail\",\"userWhy\":\"bob is right that the export is too slow for a request\"}],\"retireWork\":[\"build\"],\"work\":[{\"id\":\"enqueue\",\"intent\":\"build\",\"description\":\"the button, enqueuing an export job\"},{\"id\":\"mail\",\"intent\":\"build\",\"description\":\"the mailer that sends the finished file\",\"owner\":\"bob\"}],\"whenClosed\":\"\"}"
+REWORK="{\"ticketId\":\"$QID\",\"decisions\":[{\"title\":\"The button enqueues a\",\"what\":\"the button enqueues a job; the file comes by mail\",\"userWhy\":\"bob is right that the export is too slow for a request\"}],\"retireWork\":[\"build\"],\"work\":[{\"id\":\"enqueue\",\"intent\":\"build\",\"description\":\"the button, enqueuing an export job\"},{\"id\":\"mail\",\"intent\":\"build\",\"description\":\"the mailer that sends the finished file\",\"owner\":\"bob\"}],\"whenClosed\":\"\"}"
 REVISED=$(call $A "$SA" propose "$REWORK")
 expect "the proposal is revised, not re-filed" "$REVISED" "proposal ticket updated"
 QWHY=$(call $A "$SA" review-context "{\"ticketId\":\"$QID\"}")

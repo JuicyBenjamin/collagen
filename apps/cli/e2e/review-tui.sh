@@ -30,8 +30,8 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
 echo "## alice's agent asks bob for a review, with the why"
-D1='{"what":"pure frame functions for the logo","userWhy":"she said make it look cool","agentWhy":"a frame is testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
-D2='{"what":"a fast boot is still held for one sweep","userWhy":"fine if it takes longer, for animation","where":["src/lib/opening.ts:14"]}'
+D1='{"title":"A logo worth a look","what":"pure frame functions for the logo","userWhy":"she said make it look cool","agentWhy":"a frame is testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
+D2='{"title":"A fast boot is","what":"a fast boot is still held for one sweep","userWhy":"fine if it takes longer, for animation","where":["src/lib/opening.ts:14"]}'
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator","why":"no new dependency","by":"agent"}'
 ASK="{\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"summary\":\"the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
 ASKED=$(call $A "$SA" ask-review "$ASK")
@@ -78,6 +78,8 @@ else
   echo "  skip  screen-level glyph checks (no pyte: pip install pyte, or set PYTE_PATH)"
 fi
 expect "enter opened the why in full: how she steered it" "$(echo "$TEXT" | grep -c 'the user: she said make it look cool')" "^[1-9]"
+expect "…each decision headed by its title" "$(echo "$TEXT" | grep -c 'd1 A logo worth a look')" "^[1-9]"
+expect "…what was done beneath it" "$(echo "$TEXT" | grep -c 'pure frame functions for the logo')" "^[1-9]"
 expect "…what her agent reasoned" "$(echo "$TEXT" | grep -c 'the agent: a frame is testable')" "^[1-9]"
 expect "…where the decision landed" "$(echo "$TEXT" | grep -c 'src/lib/logoFrame.ts:60')" "^[1-9]"
 expect "…and the fork, with the road not taken" "$(echo "$TEXT" | grep -c 'instead of the Timeline animator')" "^[1-9]"

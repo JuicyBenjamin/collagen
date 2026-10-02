@@ -6,8 +6,15 @@ import { IMPORTANCE, type BugReport, type OutlineItem, type ReviewContext, type 
  *  agent's reasoning, plus every fork where the work could have gone another
  *  way, each pointing at the code it produced. */
 
+/** A decision's title is a headline, not a sentence: longer is refused. */
+export const TITLE_MAX = 60;
+
+/** What an old ticket's decision, filed before titles, shows in its place. */
+export const NO_TITLE = "old ticket — no title";
+
 export interface DecisionInput {
   readonly id?: string;
+  readonly title: string;
   readonly what: string;
   readonly userWhy?: string;
   readonly agentWhy?: string;
@@ -80,6 +87,12 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
   for (const [i, d] of decisions.entries()) {
     const at = d.id ?? `decision ${i + 1}`;
     if (blank(d.what)) return `failed: ${at} has no 'what' — say what was decided in one line`;
+    if (blank(d.title)) {
+      return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'title'. Every decision needs one: its headline, a few words (${TITLE_MAX} characters at most) saying what it is for — the reader sees it before anything else, so it has to say the purpose at a glance. 'what' stays the one line beneath it.`;
+    }
+    if (d.title.trim().length > TITLE_MAX) {
+      return `failed: ${at}'s title is ${d.title.trim().length} characters ("${d.title.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most: what the decision is for, not how. The detail belongs in 'what', beneath it.`;
+    }
     if (blank(d.userWhy) && blank(d.agentWhy)) {
       return `failed: ${at} ("${d.what.slice(0, 40)}") has no why. 'userWhy' is how your user steered it — what they asked for or ruled out, in their words where you have them; 'agentWhy' is your own reason. One of them at least, or the reviewer is guessing again.`;
     }
@@ -141,6 +154,7 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
     },
     decisions: decisions.map((d) => ({
       id: d.id,
+      title: d.title ?? NO_TITLE,
       what: d.what,
       userWhy: d.userWhy ?? "",
       agentWhy: d.agentWhy ?? "",
@@ -177,3 +191,4 @@ export const REMEDY_WORDS = {
   refactor: "right in intent, wrong in shape",
   new: "the system that should handle this does not exist",
 } as const;
+

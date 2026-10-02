@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, Errored, For, Loading, onSettled, Show } from "solid-js";
-import type { Decision, Fork as ForkData, Hunk as HunkData, ReviewPageData, Section } from "./data";
+import { NO_TITLE, type Decision, type Fork as ForkData, type Hunk as HunkData, type ReviewPageData, type Section } from "./data";
 import { Fork } from "./components/Fork";
 import { Hunk } from "./components/Hunk";
 import { Popover } from "./components/Popover";
@@ -87,7 +87,7 @@ function Page(props: { data: ReviewPageData }) {
             {(s) => (
               <li>
                 <a href={`#${s.decision.id}`}>
-                  <span class="nav-what">{s.decision.what}</span>
+                  <span class={["nav-what", { untitled: !s.decision.title }]}>{s.decision.title ?? NO_TITLE}</span>
                   <Show when={props.data.grouped}>
                     <span class="count">{changes(s.hunks.length)}</span>
                   </Show>
@@ -147,9 +147,15 @@ function Page(props: { data: ReviewPageData }) {
 }
 
 function Header(props: { data: ReviewPageData }) {
+  // a review's goal is its branch's name unless someone wrote one; its
+  // summary is the purpose — so on a review the purpose is the headline and
+  // where the code is sits above it, small
+  const purposeFirst = () => props.data.ticket.kind === "review" && props.data.review.summary.trim().length > 0;
   return (
     <header>
-      <h1>{props.data.ticket.goal}</h1>
+      <Show when={!purposeFirst()}>
+        <h1>{props.data.ticket.goal}</h1>
+      </Show>
       <p class="meta">
         <Show when={props.data.review.branch}>
           {(branch) => (
@@ -170,7 +176,9 @@ function Header(props: { data: ReviewPageData }) {
           )}
         </For>
       </p>
-      <p class="summary">{props.data.review.summary}</p>
+      <Show when={purposeFirst()} fallback={<p class="summary">{props.data.review.summary}</p>}>
+        <h1 class="purpose">{props.data.review.summary}</h1>
+      </Show>
     </header>
   );
 }
@@ -215,7 +223,11 @@ function DecisionSection(props: { section: Section; hunks: ReadonlyMap<string, H
   const others = (id: string) => (props.claimedBy.get(id) ?? []).filter((d) => d.id !== props.section.decision.id);
   return (
     <section class="decision" id={props.section.decision.id}>
-      <h2>{props.section.decision.what}</h2>
+      {/* the headline, and what was done beneath it */}
+      <div class="decision-head">
+        <h2 class={{ untitled: !props.section.decision.title }}>{props.section.decision.title ?? NO_TITLE}</h2>
+        <p class="decision-what">{props.section.decision.what}</p>
+      </div>
       <div class="decision-main">
         <For each={props.section.hunks}>{(id) => <Show when={props.hunks.get(id)}>{(h) => <Hunk hunk={h()} alsoUnder={others(id)} />}</Show>}</For>
         <Show when={props.diffed && props.section.hunks.length === 0}>

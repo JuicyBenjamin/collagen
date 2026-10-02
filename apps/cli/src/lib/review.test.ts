@@ -4,7 +4,7 @@ import { reviewGaps, reviewHeadline, reviewRows } from "./review";
 
 const full = {
   summary: "the opening animation",
-  decisions: [{ what: "pure frame functions", userWhy: "she said make it look cool", where: ["src/lib/logoFrame.ts:60"] }],
+  decisions: [{ title: "A logo worth a look", what: "pure frame functions", userWhy: "she said make it look cool", where: ["src/lib/logoFrame.ts:60"] }],
   forks: [{ at: "src/components/Logo/Logo.tsx:87", chose: "setInterval 30 fps", instead: "the Timeline animator", why: "no dependency, and testable" }],
 };
 
@@ -35,10 +35,16 @@ describe("what a review must carry", () => {
   });
 
   it("a decision with no why at all is refused, naming which", () => {
-    const gap = reviewGaps({ ...full, decisions: [{ what: "pure frame functions", where: [] }] }, false);
+    const gap = reviewGaps({ ...full, decisions: [{ title: "A logo worth a look", what: "pure frame functions", where: [] }] }, false);
     expect(gap).toMatch(/decision 1 \("pure frame functions"\) has no why/);
     // one of the two whys is enough
-    expect(reviewGaps({ ...full, decisions: [{ what: "x", agentWhy: "mine", where: [] }] }, false)).toBe(null);
+    expect(reviewGaps({ ...full, decisions: [{ title: "x", what: "x", agentWhy: "mine", where: [] }] }, false)).toBe(null);
+  });
+
+  it("every decision has a title, and a title is a headline, not a sentence", () => {
+    expect(reviewGaps({ ...full, decisions: [{ title: " ", what: "pure frame functions", agentWhy: "mine", where: [] }] }, false)).toMatch(/decision 1 \("pure frame functions"\) has no 'title'/);
+    const long = "Pure frame functions so that every frame of the logo can be tested without a terminal";
+    expect(reviewGaps({ ...full, decisions: [{ title: long, what: "pure frame functions", agentWhy: "mine", where: [] }] }, false)).toMatch(/title is \d+ characters .* 60 at most/);
   });
 
   it("a fork needs both roads, a why, and a pointer", () => {
