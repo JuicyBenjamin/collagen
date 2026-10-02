@@ -1,0 +1,41 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { toolIds, toolOf } from "@collagen/review-web/data";
+import { installArgs, installed, packageDir, toolRoot, TOOLS } from "./languageTools";
+
+const ts = TOOLS.typescript;
+
+describe("the pinned language tools", () => {
+  it("every language the page knows has a tool, and every file finds its own", () => {
+    for (const id of toolIds()) expect(TOOLS[id].id).toBe(id);
+    expect(toolOf("src/a.ts")).toBe("typescript");
+    expect(toolOf("src/A.TSX")).toBe("typescript");
+    expect(toolOf("src/a.css")).toBeNull();
+  });
+
+  it("lives under collagen's own folder, by package and version", () => {
+    expect(toolRoot("/cfg", ts)).toBe(`/cfg/tools/typescript-${ts.version}`);
+    expect(packageDir("/cfg", ts, {})).toBe(`/cfg/tools/typescript-${ts.version}/node_modules/typescript`);
+    expect(packageDir("/cfg", ts, { COLLAGEN_TYPESCRIPT: "/elsewhere/typescript" })).toBe("/elsewhere/typescript");
+  });
+
+  it("installs exactly the pinned version, without running install scripts", () => {
+    const args = installArgs("/r", ts);
+    expect(args).toContain(`typescript@${ts.version}`);
+    expect(args).toContain("--ignore-scripts");
+    expect(args.slice(0, 3)).toEqual(["install", "--prefix", "/r"]);
+  });
+
+  it("is installed only when the pinned version is there", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lang-tool-"));
+    expect(installed(dir, ts, {})).toBe(false);
+    mkdirSync(dirname(join(dir, ts.bin)), { recursive: true });
+    writeFileSync(join(dir, ts.bin), "");
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ version: "6.0.0" }));
+    expect(installed(dir, ts, {})).toBe(false);
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ version: ts.version }));
+    expect(installed(dir, ts, {})).toBe(true);
+  });
+});
