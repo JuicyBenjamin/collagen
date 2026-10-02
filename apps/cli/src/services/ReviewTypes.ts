@@ -1,28 +1,30 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
+import { extname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import type { DefinitionResult, HoverResult, Peek } from "@collagen/review-web/data";
+import type { DefinitionResult, HoverResult, Peek, ToolState } from "@collagen/review-web/data";
 import { startLsp, type LspClient } from "../lib/lsp";
+import { install, installed, packageDir, toolRoot, TYPESCRIPT_VERSION } from "../lib/typescriptTool";
+import { configDir } from "./Identity";
 import { localHost, reviewTree, ticketIdOk } from "./ReviewView";
 
 // Type hints and definition peeks on the review page, for TypeScript and
-// JavaScript. The TypeScript is collagen's own — typescript 7 is a dependency
-// of the cli, run as `tsc --lsp` — so a project on an older compiler, or with
-// none installed, gets the same answers. The project gives the code: the
+// JavaScript. The TypeScript is collagen's own — a pinned typescript 7,
+// installed on the person's word into collagen's folder (lib/typescriptTool)
+// and run as `tsc --lsp` — so a project on an older compiler, or with none
+// installed, gets the same answers. The project gives the code: the
 // branch under review, unpacked from the reader's clone into a folder of its
 // own (git archive: the clone and its working tree are never touched), with
 // the clone's node_modules linked in so imported packages have their types.
 // Nothing leaves the machine; the server stops when nobody has asked for a
 // while.
 
-/** Where the bundled compiler is: resolved from the cli's own dependencies,
- *  never the project's. */
-const tscPath = (): string => join(dirname(createRequire(import.meta.url).resolve("typescript/package.json")), "bin", "tsc");
+/** Where collagen's own compiler is — never the project's. */
+const tsDir = (): string => packageDir(configDir);
+const tscPath = (): string => join(tsDir(), "bin", "tsc");
 
 const CODE = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 /** A path from the diff: relative, inside the tree, a file TypeScript reads. */
@@ -133,6 +135,27 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const sessions = new Map<string, Promise<Session>>();
     yield* Effect.sync(sweepDead);
 
+    // the install, one at a time, on the person's word (POST from the page)
+    let installing: Promise<string | null> | null = null;
+    let installError: string | undefined;
+    const toolState = (): ToolState =>
+      installing
+        ? { state: "installing", version: TYPESCRIPT_VERSION }
+        : installed(tsDir())
+          ? { state: "ready", version: TYPESCRIPT_VERSION }
+          : { state: "missing", version: TYPESCRIPT_VERSION, ...(installError ? { error: installError } : {}) };
+    const startInstall = (): ToolState => {
+      if (!installing && !installed(tsDir())) {
+        installError = undefined;
+        installing = install(toolRoot(configDir)).then((error) => {
+          installing = null;
+          installError = error ?? undefined;
+          return error;
+        });
+      }
+      return toolState();
+    };
+
     const stop = (key: string) => {
       const s = sessions.get(key);
       sessions.delete(key);
@@ -191,6 +214,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     /** Ask the server about a position in a file of the branch; opens the
      *  file for it first (the server answers about open documents). */
     const ask = Effect.fn("ReviewTypes.ask")(function* (ticketId: string, file: string, line: number, col: number, method: string) {
+      if (!installed(tsDir())) return { _tag: "missing" } as const;
       const s = yield* session(ticketId);
       if (typeof s === "string") return { _tag: "failed", error: s } as const;
       s.lastUsed = Date.now();
@@ -215,6 +239,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
 
     const hover = Effect.fn("ReviewTypes.hover")(function* (ticketId: string, file: string, line: number, col: number) {
       const r = yield* ask(ticketId, file, line, col, "textDocument/hover");
+      if (r._tag === "missing") return { missing: true } satisfies HoverResult;
       if (r._tag === "failed") return { error: r.error } satisfies HoverResult;
       const markdown = hoverText(r.result);
       return (markdown ? { markdown } : { none: true }) satisfies HoverResult;
@@ -225,6 +250,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
      *  in the branch, in a package, or in TypeScript's own library. */
     const definition = Effect.fn("ReviewTypes.definition")(function* (ticketId: string, file: string, line: number, col: number) {
       const r = yield* ask(ticketId, file, line, col, "textDocument/definition");
+      if (r._tag === "missing") return { missing: true } satisfies DefinitionResult;
       if (r._tag === "failed") return { error: r.error } satisfies DefinitionResult;
       const links = (Array.isArray(r.result) ? r.result : r.result ? [r.result] : []) as Array<{
         targetUri?: string;
@@ -272,7 +298,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)] } satisfies DefinitionResult;
     });
 
-    return { hover, definition } as const;
+    return { hover, definition, toolState: Effect.sync(toolState), startInstall: Effect.sync(startInstall) } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
@@ -286,7 +312,25 @@ const position = (url: string) => {
   return codePathOk(file) && Number.isInteger(line) && line > 0 && Number.isInteger(col) && col >= 0 ? { file, line, col } : null;
 };
 
+/** Asked from the page itself, not from anywhere a browser can be sent: a
+ *  cross-site form or fetch cannot set this header without a CORS preflight
+ *  this server never answers, and a page elsewhere is not localhost. */
+const fromThePage = (headers: Record<string, string | undefined>): boolean =>
+  headers["x-collagen"] === "install" && (headers["origin"] === undefined || /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(headers["origin"]));
+
 export const ReviewTypesRoutes = Layer.mergeAll(
+  HttpRouter.add("GET", "/review-tools/typescript", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).toolState);
+    }),
+  ),
+  HttpRouter.add("POST", "/review-tools/typescript", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"]) || !fromThePage(request.headers)) return HttpServerResponse.text("forbidden", { status: 403 });
+      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).startInstall);
+    }),
+  ),
   HttpRouter.add("GET", "/review/:ticketId/hover", (request) =>
     Effect.gen(function* () {
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });

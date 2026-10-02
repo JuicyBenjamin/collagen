@@ -59,14 +59,20 @@ lines:
   a package's types, Effect's or Solid's, read from your `node_modules`. `×`, Esc, or a
   second click closes it.
 
-The type checker is collagen's own: TypeScript 7 ships with the cli and runs as
-`tsc --lsp`, whatever version the project uses — or none. The project gives the code: the
-branch's commit is unpacked from your clone into a folder of its own (`git archive`; your
-repository and its working tree are never touched), with the clone's `node_modules` linked
-in so imports resolve to what you have installed. A branch that changes its dependencies is
-therefore checked against yours. The server starts on the first hover (a moment), stays
-for the page, and stops after ten idle minutes. Removed lines are the base's and are not
-asked about.
+The type checker is collagen's own, not the project's: a pinned TypeScript 7
+(`7.0.2`), run as `tsc --lsp`, whatever version the project uses — or none. It is not
+shipped with collagen. The first time a review has TypeScript or JavaScript in it, the page
+offers it — "Type hints for this review? Installs TypeScript 7.0.2 (about 30 MB), once." —
+and only your click installs it: that exact version, from npm's registry, its install
+scripts not run, into collagen's own folder (`~/.config/collagen/tools/typescript-7.0.2`).
+`×` puts the offer away in that browser. Nothing changes for anyone who never clicks.
+
+The project gives the code: the branch's commit is unpacked from your clone into a folder
+of its own (`git archive`; your repository and its working tree are never touched), with
+the clone's `node_modules` linked in so imports resolve to what you have installed. A
+branch that changes its dependencies is therefore checked against yours. The server starts
+on the first hover (a moment), stays for the page, and stops after ten idle minutes.
+Removed lines are the base's and are not asked about.
 
 ## Where the diff comes from
 
