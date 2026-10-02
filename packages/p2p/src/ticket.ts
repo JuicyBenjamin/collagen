@@ -280,20 +280,26 @@ const heads = (turns: ReadonlyArray<EpicTurn>): ReadonlyArray<EpicTurn> => {
   return turns.filter((t) => !seen.has(t.id));
 };
 
-/** Where an epic stands, and what decided it — the reason shown is always
- *  the one behind the state, never just the latest by clock:
+/** Where an epic stands, and what decided it — the cause is always the one
+ *  behind the state, never just the latest turn by clock:
  *  - a latest turn that is a reopen: open, for its reason;
  *  - every latest turn a close, but a ticket put in that one of them had
  *    not seen: open, because of that ticket — close it again once it is
  *    resolved or moved out;
  *  - a ticket in it not resolved: open, because of it;
  *  - otherwise closed, for the close's reason.
- *  An old reopen a close has seen never reopens it again. */
+ *  An old reopen a close has seen never reopens it again. The state is the
+ *  room's, decided on every ticket; how the cause is SAID depends on who
+ *  reads it (`epicBecause`): a ticket they may not be shown is not named. */
+export type EpicCause =
+  | { readonly kind: "reopen"; readonly reason: string; readonly by: string; readonly at: number }
+  | { readonly kind: "close"; readonly reason: string; readonly by: string; readonly at: number }
+  | { readonly kind: "unseen-add"; readonly ticket: string; readonly by: string; readonly at: number }
+  | { readonly kind: "unresolved"; readonly ticket: string };
+
 export interface EpicStatus {
   readonly closed: boolean;
-  readonly because?: string;
-  readonly by?: string;
-  readonly at?: number;
+  readonly cause?: EpicCause;
 }
 
 const newest = <A extends { readonly at: number; readonly id: string }>(xs: ReadonlyArray<A>): A | undefined =>
@@ -303,19 +309,31 @@ export function epicStatus(epic: Ticket, all: ReadonlyMap<string, Ticket>): Epic
   const top = heads(epic.turns ?? []);
   if (top.length === 0) return { closed: false };
   const reopen = newest(top.filter((t) => !t.closed));
-  if (reopen) return { closed: false, because: reopen.reason, by: reopen.by, at: reopen.at };
+  if (reopen) return { closed: false, cause: { kind: "reopen", reason: reopen.reason, by: reopen.by, at: reopen.at } };
   // every latest word is a close: did each see everything put in?
   for (const t of all.values()) {
     for (const m of t.partOf ?? []) {
       if (m.epic === epic.id && top.some((c) => !(c.members ?? []).includes(m.id))) {
-        return { closed: false, because: `"${t.goal}" was put in without the close seeing it — close it again once that is resolved or moved out`, by: m.by, at: m.at };
+        return { closed: false, cause: { kind: "unseen-add", ticket: t.id, by: m.by, at: m.at } };
       }
     }
   }
   const unresolved = epicParts(epic, all).unresolved[0];
-  if (unresolved) return { closed: false, because: `"${unresolved.goal}" in it is not resolved` };
+  if (unresolved) return { closed: false, cause: { kind: "unresolved", ticket: unresolved.id } };
   const close = newest(top)!;
-  return { closed: true, because: close.reason, by: close.by, at: close.at };
+  return { closed: true, cause: { kind: "close", reason: close.reason, by: close.by, at: close.at } };
+}
+
+/** The cause of an epic's state, in words for one reader: a ticket they may
+ *  be shown is named; one waiting unseen (its author's alone) is not —
+ *  the explanation never reveals what the lists hide. */
+export function epicBecause(status: EpicStatus, all: ReadonlyMap<string, Ticket>, me: string): string | undefined {
+  const c = status.cause;
+  if (!c) return undefined;
+  if (c.kind === "reopen" || c.kind === "close") return c.reason;
+  const t = all.get(c.ticket);
+  const named = t && visibleTo(t, all, me) ? `"${t.goal}"` : "a ticket you are not shown yet";
+  return c.kind === "unseen-add" ? `${named} was put in without the close seeing it — close it again once that is resolved or moved out` : `${named} in it is not resolved`;
 }
 
 /** Is the epic closed? `epicStatus`, its yes or no. */
