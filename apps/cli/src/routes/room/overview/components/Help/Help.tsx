@@ -3,7 +3,7 @@ import type { BoxRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { KIND_ORDER, KINDS } from "@collagen/p2p";
 import { theme } from "../../../../../app/theme";
-import { EPIC_HELP, EPIC_MARK, GLYPH, MARK_HELP, MARK_ORDER, STACK, STACK_HELP } from "../../../../../lib/glyphs";
+import { EPIC_HELP, EPIC_MARK, GLYPH, KIND_GLYPH, MARK_HELP, MARK_ORDER, STACK, STACK_HELP } from "../../../../../lib/glyphs";
 import { clamp } from "../../../../../lib/math";
 import { STATE_LABEL, STATE_ORDER, STATE_WORDS } from "../../../../../lib/ticketSummary";
 
@@ -25,13 +25,15 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
       node: (
         <>
           {"  "}
+          {/* the glyph an epic's tickets carry for their kind; the epic's is its crown */}
+          <span fg={kind === "epic" ? theme.epic : theme.dim}>{kind === "epic" ? EPIC_MARK : KIND_GLYPH[kind]} </span>
           <span fg={theme.fg}>{kind.padEnd(COL)}</span>
           <span fg={theme.fg}>{k.what}</span>
         </>
       ),
     });
-    out.push({ key: `${kind}-asks`, node: <span fg={theme.dim}>{`  ${pad}asks: ${k.asks}`}</span> });
-    out.push({ key: `${kind}-closes`, node: <span fg={theme.dim}>{`  ${pad}closed by ${k.closes}`}</span> });
+    out.push({ key: `${kind}-asks`, node: <span fg={theme.dim}>{`    ${pad}asks: ${k.asks}`}</span> });
+    out.push({ key: `${kind}-closes`, node: <span fg={theme.dim}>{`    ${pad}closed by ${k.closes}`}</span> });
   }
   gap("g-marks");
   head("h-marks", "marks");
@@ -80,6 +82,7 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
       </>
     ),
   });
+
   gap("g-states");
   head("h-states", "states");
   for (const s of STATE_ORDER) {
