@@ -1,6 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
+import { epicBecause, epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
 
@@ -37,7 +37,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
             goal: ticket.goal,
             aim: review?.summary ?? "",
             progress: counted === 0 ? "nothing counted yet" : `${done} of ${counted} done`,
-            ...(status.because ? { [closed ? "closedBecause" : "openBecause"]: status.because } : {}),
+            ...(epicBecause(status, all, me) ? { [closed ? "closedBecause" : "openBecause"]: epicBecause(status, all, me)! } : {}),
             ...(closed ? {} : { toClose: unresolved.length === 0 ? "everything in it is resolved: it can close" : `${unresolved.length} still to resolve, exclude or move out first` }),
           },
           tickets: parts

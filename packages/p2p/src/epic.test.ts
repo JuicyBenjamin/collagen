@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { closeTicket, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
+import { closeTicket, epicBecause, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
 
 const ticket = (over: Partial<Ticket>): Ticket => ({
   id: "t",
@@ -137,6 +137,19 @@ describe("turns made at once, offline from each other", () => {
 });
 
 describe("from the review of the epics branch", () => {
+  it("a close against an addition gated by after: the reader who may not see it is not told its name", () => {
+    const php = into(done("php"), 1);
+    const closed = turnEpic(epic, true, undefined, "alice", room(epic, php), 10).ticket;
+    const gate = ticket({ id: "gate", steps: [...step("pending")] });
+    const secret = { ...into(ticket({ id: "secret", goal: "Secret gated work", after: ["gate"], steps: [...step("pending")] }), 11, "alice") };
+    const all = room(closed, php, gate, secret);
+    const st = epicStatus(closed, all);
+    expect(st).toMatchObject({ closed: false, cause: { kind: "unseen-add", ticket: "secret" } });
+    expect(epicBecause(st, all, "alice")).toMatch(/"Secret gated work" was put in/);
+    expect(epicBecause(st, all, "bob")).toMatch(/^a ticket you are not shown yet was put in/);
+    expect(epicBecause(st, all, "bob")).not.toMatch(/Secret/);
+  });
+
   it("every move has its own id: two by one person in one millisecond merge the same in either order", () => {
     const base = open("php");
     const a = moveToEpic(base, "e1", "bob", 10);
@@ -166,14 +179,14 @@ describe("from the review of the epics branch", () => {
     const closed = turnEpic(epic, true, "shipped", "alice", room(epic, php), 100).ticket;
     // bob's clock runs behind: his reopen, made after seeing the close, is stamped earlier
     const reopened = turnEpic(closed, false, "Go next", "bob", room(closed, php), 50).ticket;
-    expect(epicStatus(reopened, room(reopened, php))).toMatchObject({ closed: false, because: "Go next", by: "bob" });
+    expect(epicStatus(reopened, room(reopened, php))).toMatchObject({ closed: false, cause: { kind: "reopen", reason: "Go next", by: "bob" } });
     // a close that missed an addition: open, because of that ticket — and a reopen can still be recorded
     const rust = { ...into(open("rust"), 101), goal: "Rust on the review page" };
     const st = epicStatus(closed, room(closed, php, rust));
     expect(st.closed).toBe(false);
-    expect(st.because).toMatch(/"Rust on the review page" was put in without the close seeing it/);
+    expect(epicBecause(st, room(closed, php, rust), "alice")).toMatch(/"Rust on the review page" was put in without the close seeing it/);
     const said = turnEpic(closed, false, "Rust belongs here", "carol", room(closed, php, rust), 102);
     expect(said.outcome).toBe("turned");
-    expect(epicStatus(said.ticket, room(said.ticket, php, rust)).because).toBe("Rust belongs here");
+    expect(epicBecause(epicStatus(said.ticket, room(said.ticket, php, rust)), room(said.ticket, php, rust), "carol")).toBe("Rust belongs here");
   });
 });

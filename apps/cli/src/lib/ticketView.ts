@@ -1,4 +1,4 @@
-import { epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { reviewHeadline } from "./review";
 
 /** A ticket as the agent reads it: keys resolved to names, needs joined. A
@@ -26,7 +26,7 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   answered: ticket.kind === "epic" ? false : finished(ticket),
   /** recorded: off the lists, still here to refer back to (an epic can be reopened) */
   closed: isClosed(ticket, all),
-  ...(ticket.kind === "epic" ? epicBecause(ticket, all) : ticket.closed?.reason ? { closedBecause: ticket.closed.reason } : {}),
+  ...(ticket.kind === "epic" ? becauseLine(ticket, all, me) : ticket.closed?.reason ? { closedBecause: ticket.closed.reason } : {}),
   ...(review
     ? { review: `${reviewHeadline(review)} — call review-context {ticketId} when your user asks why something is the way it is` }
     : {}),
@@ -63,9 +63,10 @@ function partsLine(epic: Ticket, all: ReadonlyMap<string, Ticket>, me: string): 
   };
 }
 
-/** Why an epic is as it is — the reason behind its state, as epicStatus
- *  decides it (a reopen, a close that missed an addition, the close). */
-function epicBecause(epic: Ticket, all: ReadonlyMap<string, Ticket>): { closedBecause?: string; openBecause?: string } {
+/** Why an epic is as it is — the cause behind its state, as epicStatus
+ *  decides it, said for this reader (a ticket they may not see is unnamed). */
+function becauseLine(epic: Ticket, all: ReadonlyMap<string, Ticket>, me: string): { closedBecause?: string; openBecause?: string } {
   const st = epicStatus(epic, all);
-  return st.because ? (st.closed ? { closedBecause: st.because } : { openBecause: st.because }) : {};
+  const why = epicBecause(st, all, me);
+  return why ? (st.closed ? { closedBecause: why } : { openBecause: why }) : {};
 }
