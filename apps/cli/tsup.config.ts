@@ -2,8 +2,9 @@ import { copyFileSync, cpSync, existsSync, mkdirSync } from "node:fs";
 import { defineConfig } from "tsup";
 import pkg from "./package.json" with { type: "json" };
 
-// One publishable package: the cli's two entries with @collagen/p2p bundled
-// in (it is a workspace package, never published on its own). Everything
+// One publishable package: the cli's two entries with @collagen/p2p (and the
+// review page's data contract) bundled in — workspace packages, never
+// published on their own. Everything
 // else stays a dependency — the p2p stack's native addons ship prebuilds and
 // must be installed, not bundled.
 export default defineConfig({
@@ -15,7 +16,8 @@ export default defineConfig({
   clean: true,
   splitting: false,
   sourcemap: true,
-  noExternal: ["@collagen/p2p"],
+  // the review page's contract (its data.ts) is read by the instance too
+  noExternal: ["@collagen/p2p", "@collagen/review-web"],
   define: { __COLLAGEN_VERSION__: JSON.stringify(pkg.version) },
   onSuccess: async () => {
     // the mock agent is a plain script spawned by path, not an import

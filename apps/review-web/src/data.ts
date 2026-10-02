@@ -95,10 +95,13 @@ export type HoverResult = { readonly markdown: string } | { readonly none: true 
 
 /** One declaration a symbol resolves to. `code` is the declaration itself (a
  *  function with its body), from `line`, cut at a length with `more` lines
- *  left; null for TypeScript's own library, which is not a file to read. */
+ *  left; null where there is no file to read (TypeScript's own library). */
 export interface Peek {
   readonly file: string;
-  readonly where: "branch" | "package" | "typescript";
+  /** in the branch, in a dependency (node_modules, vendor), or part of the
+   *  language itself — then `builtInto` names it */
+  readonly where: "branch" | "package" | "builtin";
+  readonly builtInto?: string;
   readonly line: number;
   /** the doc comment above it, as text (markers stripped), whole or null */
   readonly doc: string | null;
@@ -109,11 +112,32 @@ export interface Peek {
 /** GET /review/<ticketId>/definition?file&line&col */
 export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek> } | { readonly missing: true } | { readonly error: string };
 
-/** GET/POST /review-tools/typescript — the pinned TypeScript the hints need:
+/** The languages the review page can ask a language server about, each
+ *  answered by a tool collagen installs on the reader's click. */
+export type ToolId = "typescript";
+
+/** Which tool answers for a file, by its extension — one table, read by the
+ *  instance (which files it may be asked about) and the page (which words
+ *  answer to the pointer, which offer to show). */
+const TOOL_OF_EXTENSION: Readonly<Record<string, ToolId>> = {
+  ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
+  js: "typescript", jsx: "typescript", mjs: "typescript", cjs: "typescript",
+};
+export const toolOf = (file: string): ToolId | null => TOOL_OF_EXTENSION[file.split(".").pop()?.toLowerCase() ?? ""] ?? null;
+export const toolIds = (): ReadonlyArray<ToolId> => [...new Set(Object.values(TOOL_OF_EXTENSION))];
+
+/** GET/POST /review-tools/<tool> — a pinned language server the hints need:
  *  not installed yet, being installed, or ready; POST (from the page, with
- *  x-collagen: install) installs it. */
+ *  x-collagen: install) installs it. What the offer says comes with it: the
+ *  tool's name, its size, and its licence where that is not open source.
+ *  `notices` are messages the server itself asked to show the person. */
 export interface ToolState {
+  readonly tool: ToolId;
+  readonly name: string;
   readonly state: "missing" | "installing" | "ready";
   readonly version: string;
+  readonly size: string;
+  readonly licence?: { readonly name: string; readonly url: string };
+  readonly notices?: ReadonlyArray<string>;
   readonly error?: string;
 }

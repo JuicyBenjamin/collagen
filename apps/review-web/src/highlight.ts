@@ -76,5 +76,3 @@ export function highlightCode(code: string, lang: string): Array<Array<Span>> {
   return splitLines(highlighter.tokenize(code, { lang: asFile }).tokens);
 }
 
-/** Can the review page ask the type checker about this file? */
-export const typed = (file: string): boolean => /\.(m|c)?(ts|js)x?$/.test(file);

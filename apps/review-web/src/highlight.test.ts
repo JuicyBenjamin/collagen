@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { highlightCode, highlightHunk, languageOf, splitLines, typed } from "./highlight";
+import { toolOf } from "./data";
+import { highlightCode, highlightHunk, languageOf, splitLines } from "./highlight";
 
 describe("languageOf", () => {
   it("goes by the extension, plain text when unknown", () => {
@@ -44,13 +45,13 @@ describe("highlightHunk", () => {
   });
 });
 
-describe("highlightCode / typed", () => {
+describe("highlightCode / toolOf", () => {
   it("colours a snippet by file name or language", () => {
     expect(highlightCode("function f() {}", "typescript")[0]![0]).toEqual({ className: "keyword", value: "function" });
     expect(highlightCode("const a = 1", "x/y.tsx")[0]![0]).toEqual({ className: "keyword", value: "const" });
   });
-  it("asks the type checker about TypeScript and JavaScript files only", () => {
-    expect(["a.ts", "a.tsx", "a.mjs", "a.cts"].map(typed)).toEqual([true, true, true, true]);
-    expect(["a.css", "a.md", "a.py"].map(typed)).toEqual([false, false, false]);
+  it("asks a language server only about files one reads", () => {
+    expect(["a.ts", "a.tsx", "a.mjs", "a.cts"].map(toolOf)).toEqual(["typescript", "typescript", "typescript", "typescript"]);
+    expect(["a.css", "a.md", "a.py"].map(toolOf)).toEqual([null, null, null]);
   });
 });

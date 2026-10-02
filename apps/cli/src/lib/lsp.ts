@@ -2,10 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 
 // Just enough of the Language Server Protocol to ask a server about code:
 // JSON-RPC 2.0 over stdio, framed by Content-Length headers. The review
-// page's type hints and definition peeks go through this to the TypeScript 7
-// server collagen ships (services/ReviewTypes). Requests and replies only —
-// the server's own notifications (diagnostics and the like) are read and
-// dropped, and any request it makes of us is answered with null.
+// page's type hints and definition peeks go through this to the language
+// server of the file's language (services/ReviewTypes). A request the server
+// makes of us (its settings, a progress token) is answered by `onRequest`,
+// null by default; its notifications go to `onNotification` or are dropped.
 
 /** Split a byte stream into LSP messages: returns the complete messages in
  *  `buffer` and whatever is left of an incomplete one. Pure, so the framing
@@ -55,9 +55,17 @@ export interface LspClient {
   readonly exited: Promise<number | null>;
 }
 
+export interface LspHandlers {
+  readonly onStderr?: (line: string) => void;
+  /** answer a request the server makes of us; undefined answers null */
+  readonly onRequest?: (method: string, params: unknown) => unknown;
+  readonly onNotification?: (method: string, params: unknown) => void;
+}
+
 /** Start a language server and talk to it. `command` and `args` run with
- *  `cwd` as their working directory; stderr is handed to `onStderr`. */
-export function startLsp(command: string, args: ReadonlyArray<string>, cwd: string, onStderr: (line: string) => void = () => {}): LspClient {
+ *  `cwd` as their working directory. */
+export function startLsp(command: string, args: ReadonlyArray<string>, cwd: string, handlers: LspHandlers = {}): LspClient {
+  const { onStderr = () => {}, onRequest = () => null, onNotification = () => {} } = handlers;
   const child: ChildProcessWithoutNullStreams = spawn(command, [...args], { cwd, stdio: ["pipe", "pipe", "pipe"] });
   const pending = new Map<number, Pending>();
   let nextId = 1;
@@ -76,10 +84,20 @@ export function startLsp(command: string, args: ReadonlyArray<string>, cwd: stri
     const { messages, rest } = readFrames(Buffer.concat([buffer, chunk]));
     buffer = rest;
     for (const m of messages) {
-      const msg = m as { id?: number | string; method?: string; result?: unknown; error?: { message?: string } };
+      const msg = m as { id?: number | string; method?: string; params?: unknown; result?: unknown; error?: { message?: string } };
       if (msg.method !== undefined && msg.id !== undefined) {
-        // the server asks something of us (workspace/configuration, …): no opinion
-        child.stdin.write(frame({ jsonrpc: "2.0", id: msg.id, result: null }));
+        // the server asks something of us (workspace/configuration, …)
+        let result: unknown = null;
+        try {
+          result = onRequest(msg.method, msg.params) ?? null;
+        } catch {
+          // a handler that throws answers null rather than leaving it waiting
+        }
+        child.stdin.write(frame({ jsonrpc: "2.0", id: msg.id, result }));
+        continue;
+      }
+      if (msg.method !== undefined) {
+        onNotification(msg.method, msg.params);
         continue;
       }
       if (typeof msg.id !== "number") continue;
