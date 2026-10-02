@@ -13,6 +13,19 @@ describe("the pinned language tools", () => {
     expect(toolOf("src/a.ts")).toBe("typescript");
     expect(toolOf("src/A.TSX")).toBe("typescript");
     expect(toolOf("src/a.css")).toBeNull();
+    expect(toolOf("app/Http/Controller.php")).toBe("php");
+    expect(toolOf("views/page.phtml")).toBe("php");
+  });
+
+  it("PHP's server is Intelephense: its own licence said, vendor/ beside composer.json, telemetry off", () => {
+    const php = TOOLS.php;
+    expect(php.licence?.url).toMatch(/^https:\/\/intelephense\.com\//);
+    expect(php.deps).toEqual({ marker: "composer.json", dir: "vendor" });
+    expect(php.settings).toEqual({ telemetry: { enabled: false } });
+    expect(php.initializationOptions?.("/s")).toMatchObject({ storagePath: "/s", telemetry: { enabled: false } });
+    expect(packageDir("/cfg", php, { COLLAGEN_INTELEPHENSE: "/x/intelephense" })).toBe("/x/intelephense");
+    expect(php.readyWhen?.("$/progress", { token: "t", value: { kind: "end" } })).toBe(true);
+    expect(php.readyWhen?.("$/progress", { token: "t", value: { kind: "report" } })).toBe(false);
   });
 
   it("lives under collagen's own folder, by package and version", () => {

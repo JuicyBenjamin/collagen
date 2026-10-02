@@ -149,7 +149,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const notices = new Map<ToolId, Array<string>>();
     const toolState = (id: ToolId): ToolState => {
       const tool = TOOLS[id];
-      const about = { tool: id, name: tool.name, version: tool.version, size: tool.size, ...(tool.licence ? { licence: tool.licence } : {}) };
+      const about = { tool: id, language: tool.language, name: tool.name, version: tool.version, size: tool.size, ...(tool.licence ? { licence: tool.licence } : {}) };
       if (installing.has(id)) return { ...about, state: "installing" };
       if (installed(toolDir(tool), tool)) return { ...about, state: "ready", ...(notices.get(id)?.length ? { notices: notices.get(id)! } : {}) };
       return { ...about, state: "missing", ...(installError.has(id) ? { error: installError.get(id)! } : {}) };
@@ -313,7 +313,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         const range = l.targetRange ?? l.range;
         if (!range) return [];
         // not a file at all: the language's library, bundled in its server
-        if (!target.startsWith("file:")) return [{ file: target.replace(/^bundled:\/\/\/libs\//, "typescript/lib/"), where: "builtin", builtInto: tool.name, line: range.start.line + 1, doc: null, code: null, more: 0 }];
+        if (!target.startsWith("file:")) return [{ file: target.replace(/^bundled:\/\/\/libs\//, "typescript/lib/"), where: "builtin", builtInto: tool.language, line: range.start.line + 1, doc: null, code: null, more: 0 }];
         const path = fileURLToPath(target);
         const real = (() => {
           try {
@@ -323,11 +323,18 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
           }
         })();
         const lines = readFileSync(real, "utf8").split("\n");
-        const from = range.start.line;
+        // a range that starts on the declaration's own doc comment (PHP's
+        // servers do): the comment is the doc, the code starts after it
+        let from = range.start.line;
+        if (lines[from]?.trim().startsWith("/**")) {
+          let end = from;
+          while (end < range.end.line && !lines[end]!.includes("*/")) end++;
+          if (end < range.end.line) from = end + 1;
+        }
         const to = Math.min(range.end.line, from + PEEK_LINES - 1);
         const body = { line: from + 1, doc: docAbove(lines, from), code: lines.slice(from, to + 1).join("\n"), more: Math.max(0, range.end.line - to) };
         // a file of the server itself: the language's own declarations (stubs)
-        if (real.startsWith(realTool + sep)) return [{ file: relative(realTool, real).replace(/^lib\/stubs?\//, ""), where: "builtin", builtInto: tool.name, ...body }];
+        if (real.startsWith(realTool + sep)) return [{ file: relative(realTool, real).replace(/^lib\/stubs?\//, ""), where: "builtin", builtInto: tool.language, ...body }];
         const inTree = real.startsWith(realRoot + sep);
         const full = inTree ? relative(realRoot, real) : real.startsWith(projectPath + sep) ? relative(projectPath, real) : real;
         // a dependency's file by the package, not by the folder it sits in
