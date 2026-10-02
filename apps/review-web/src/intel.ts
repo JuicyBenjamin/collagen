@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
+import { final, toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
 import { ticketId } from "./ticket";
 
 // The language servers, asked from the page: what is this symbol (hover)
@@ -54,7 +54,9 @@ const ask = <A>(what: "hover" | "definition", s: Spot, cache: Map<string, Promis
   if (!p) {
     const q = new URLSearchParams({ file: s.file, line: String(s.line), col: String(s.col) });
     p = fetch(`/review/${encodeURIComponent(ticketId)}/${what}?${q}`).then((r) => (r.ok ? (r.json() as Promise<A>) : r.text().then((t) => ({ error: t }) as A)));
-    p.catch(() => cache.delete(k));
+    // only a final answer is kept: one given mid-index, or a failure, is
+    // asked again next time rather than standing until a reload
+    p.then((r) => !final(r as HoverResult | DefinitionResult) && cache.delete(k), () => cache.delete(k));
     cache.set(k, p);
   }
   return p;

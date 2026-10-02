@@ -76,7 +76,7 @@ export function Peek(props: { result: DefinitionResult | null }) {
       </button>
       <Show when={props.result} fallback={<p class="peek-note">Finding the definition…</p>}>
         {(r) => (
-          <Show when={!("error" in r())} fallback={<p class="peek-note">{(r() as { error: string }).error}</p>}>
+          <Show when={!("error" in r()) && !("indexing" in r())} fallback={<p class="peek-note">{"indexing" in r() ? "Still reading the project — click it again in a moment." : (r() as { error: string }).error}</p>}>
             <Show when={peeks().length > 0} fallback={<p class="peek-note">No definition found.</p>}>
               <Declaration peek={peeks()[0]!} />
               <Show when={others().length > 0}>

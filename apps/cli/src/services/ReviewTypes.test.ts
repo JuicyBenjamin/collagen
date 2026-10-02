@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codePathOk, docAbove } from "./ReviewTypes";
+import { codePathOk, docAbove, splitLeadingDoc } from "./ReviewTypes";
 
 describe("docAbove", () => {
   it("takes a JSDoc block whole, however long, as text", () => {
@@ -22,5 +22,20 @@ describe("codePathOk", () => {
     expect(codePathOk("../a.ts")).toBe(false);
     expect(codePathOk("/etc/a.ts")).toBe(false);
     expect(codePathOk("src/a.css")).toBe(false);
+  });
+});
+
+describe("splitLeadingDoc", () => {
+  it("a doc comment on the declaration's own line: the doc, and the code from right after it", () => {
+    const lines = ["/** docs */ function example(): string {", "    return 'x';", "}"];
+    expect(splitLeadingDoc(lines, 0, 2)).toEqual({ doc: "docs", code: ["function example(): string {", "    return 'x';", "}"], line: 0 });
+  });
+  it("a doc block above the declaration: the code starts on the line after it", () => {
+    const lines = ["    /**", "     * The rows.", "     * @return array", "     */", "    public function fetch(): array;"];
+    expect(splitLeadingDoc(lines, 0, 4)).toEqual({ doc: "The rows.\n@return array", code: ["    public function fetch(): array;"], line: 4 });
+  });
+  it("a range that does not start on a doc comment is left alone", () => {
+    expect(splitLeadingDoc(["function f() {}", "/** later */"], 0, 1)).toBeNull();
+    expect(splitLeadingDoc(["/** never closed", "function f() {}"], 0, 1)).toBeNull();
   });
 });

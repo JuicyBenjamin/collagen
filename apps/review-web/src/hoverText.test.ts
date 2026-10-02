@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { final } from "./data";
 import { blocks, brief, inline, signatures } from "./hoverText";
 
 describe("hover markdown", () => {
@@ -41,5 +42,17 @@ describe("signatures", () => {
     expect(signatures(code)).toHaveLength(2);
     expect(signatures(code)[0]!.endsWith("}): Element")).toBe(true);
     expect(brief("```typescript\n" + code + "\n```").overloads).toBe(1);
+  });
+});
+
+describe("which answers the page keeps", () => {
+  it("a final answer is kept; one given mid-index, partial, missing or failed is asked again", () => {
+    expect(final({ markdown: "x" })).toBe(true);
+    expect(final({ none: true })).toBe(true);
+    expect(final({ peeks: [] })).toBe(true);
+    expect(final({ indexing: true })).toBe(false);
+    expect(final({ markdown: "x", partial: true })).toBe(false);
+    expect(final({ missing: true })).toBe(false);
+    expect(final({ error: "the server exited" })).toBe(false);
   });
 });

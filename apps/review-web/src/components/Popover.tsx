@@ -30,7 +30,7 @@ export function Popover() {
         <div class="hint" style={style()} role="tooltip">
           <Show when={p().state === "ready" && p().result} fallback={<p class="hint-text">Starting {toolNameFor(p().file)}…</p>}>
             {(r) => (
-              <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={<p class="hint-text muted">{"error" in r() ? (r() as { error: string }).error : ""}</p>}>
+              <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={<p class="hint-text muted">{"indexing" in r() ? `${toolNameFor(p().file)} is still reading the project — rest on it again in a moment.` : "error" in r() ? (r() as { error: string }).error : ""}</p>}>
                 {(md) => (
                   <>
                   <For each={brief(md()).blocks}>
