@@ -91,6 +91,28 @@ const fromClone = (path: string, base: string, branch: string) =>
     return diff === null ? { diff: null, why: `git diff ${a}...${b} failed in ${path}` } : { diff, why: `${a}...${b} from your clone at ${path}` };
   });
 
+/** The code a review's branch holds, for reading it as code (type hints,
+ *  definitions): the reader's clone of the project and the branch's commit
+ *  in it — local first, then origin's, fetched by the page's data request.
+ *  Or why there is none, in words for the page. */
+export const reviewTree = Effect.fn("ReviewView.tree")(function* (ticketId: string) {
+  const rooms = yield* Rooms;
+  const store = yield* StateStore;
+  for (const h of yield* SubscriptionRef.get(rooms.handles)) {
+    const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
+    if (!ticket) continue;
+    const review = (yield* SubscriptionRef.get(h.room.reviews)).find((r) => r.ticketId === ticketId);
+    if (!review?.branch) return "this review names no branch";
+    const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+    if (!project || !gitDir(project.path)) return `no clone of "${ticket.project}" on this machine to read the code from`;
+    const ref = yield* firstRef(project.path, [review.branch, `origin/${review.branch}`]);
+    const commit = ref ? (yield* run("git", ["rev-parse", `${ref}^{commit}`], project.path, 5_000))?.trim() : undefined;
+    if (!commit) return `the branch ${review.branch} is not in your clone`;
+    return { projectPath: project.path, commit };
+  }
+  return `no review ticket ${ticketId} in your rooms`;
+});
+
 export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: string) {
   const rooms = yield* Rooms;
   const store = yield* StateStore;
@@ -133,12 +155,12 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
 /** Only this machine's own browser, by name: the server listens on loopback,
  *  and a page elsewhere that re-points a hostname at 127.0.0.1 (DNS
  *  rebinding) still arrives with its own Host header — refused. */
-const localHost = (host: string | undefined): boolean => host !== undefined && /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host);
+export const localHost = (host: string | undefined): boolean => host !== undefined && /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host);
 
 const notFound = (text: string) => HttpServerResponse.text(text, { status: 404 });
 
 /** A ticket id as collagen makes them; anything else is not looked up. */
-const ticketIdOk = (id: string | undefined): id is string => id !== undefined && /^[0-9A-Za-z-]{1,64}$/.test(id);
+export const ticketIdOk = (id: string | undefined): id is string => id !== undefined && /^[0-9A-Za-z-]{1,64}$/.test(id);
 
 /** Where the built page is (apps/review-web, a Solid app): beside the
  *  bundle in a release (dist/review-web, copied there by the cli build), or
