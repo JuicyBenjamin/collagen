@@ -45,7 +45,7 @@ guide and the screen cannot say two different things (a test holds this table to
 
 | kind | what it is | what it asks of a reader | who closes it |
 | --- | --- | --- | --- |
-| `epic` | a folder of tickets that together make one body of work | nothing of its own — its parts ask; anyone may add, move or take them out | anyone — with a reason, by default that its parts are done; reopened with one |
+| `epic` | a folder of tickets that together make one body of work | nothing of its own — its parts ask; anyone may add, move or take them out | anyone — once everything in it is resolved; reopened with a reason |
 | `proposal` | an idea, written down; owed to no one | is it worth doing — and would you do it, or should I | its author — when a plan grew out of it, or it was dropped |
 | `plan` | something its author intends to do, and how | do you agree, what would you change, what am I missing | its author — having folded the takes in and decided |
 | `bug` | a symptom, with its reporter's reading of cause, importance and fix | what do you make of the symptom — your diagnosis before theirs | its reporter — fixed, planned, or let be |
@@ -382,30 +382,41 @@ do:
 Some work is bigger than one ticket: "the review page reads more languages" is a proposal,
 then one per language, then their plans, reviews and fixes — in more than one project.
 An **epic** holds it together: a folder, a ticket of its own kind with a goal and an aim
-(its summary), no steps of its own, and its state its parts' state.
+(its summary), no steps of its own.
 
-- **Any ticket can be a part**, in any project of the room. A ticket lives in one epic at
-  most. A ticket that grew out of a part (`from`) lives in the epic too, without being
-  added: a proposal brings its plan, and the plan its review.
-- **Anyone in the room shapes it** — the epic belongs to the room, not to whoever started
-  it. Anyone may put a ticket in, take it out, or move it to another epic; every move is
-  kept, and the latest holds, so two people moving the same ticket at once end in the same
-  place everywhere.
-- **Closing and reopening, by anyone, with a reason.** An epic whose parts are all done
-  closes on that alone ("its parts are done"); closing it with parts left needs a reason,
-  and so does every reopen — more work found in the same area belongs in the epic that
-  already holds it. A closed epic takes nothing in until it is reopened, and its tickets
-  are drawn in their projects again.
-- **Only when asked.** Agents shape epics when their person says so (the `epic` tool). One
-  nudge: when someone files several related tickets together — grown out of the same
-  ticket, or in one project within half an hour — their agent offers, in one line, to put
-  them under an epic, and does it on their yes.
+- **Any ticket can be in one**, from any project of the room — in one epic at most, and
+  only where it was **put**. Lineage (`from`) never moves anything: a plan grown out of a
+  proposal in an epic is not in it until someone adds it, and moving the proposal leaves
+  the plan where it is. Filing a ticket that grows out of one in an epic *suggests* that
+  epic (or asks which, when its parents sit in different ones); the choice is stored.
+- **Progress is a count**: the tickets done — every step answered — against everything
+  counted. Closing a ticket does not make it done. Work that is dropped or will not be
+  done there is taken out, or kept in and **excluded** from progress: 4 of 5 becomes 4 of
+  4 when the fifth is dropped, not 5 of 5.
+- **Order is for reading.** Anyone may order an epic's tickets — PHP before Rust — and
+  that hides nothing: both stay visible and open for discussion. `after` stays the gate,
+  for when a later ticket really must wait unseen until the one before is answered.
+- **Anyone in the room shapes it** — puts tickets in, takes them out, moves them to
+  another epic, excludes them, orders them — and every move is kept, the latest holding.
+- **It closes once everything in it is resolved** — done, closed or excluded — by anyone,
+  with a reason ("its parts are done" when none is given); unfinished work is resolved or
+  moved out first. A closed epic leaves the overview, its history readable on its page;
+  new work in it needs a reopen, by anyone, always with a reason.
+- **Turns made at once stay open.** Every close and reopen is kept with what its writer
+  had seen. A reopen, or a ticket put in, that a close had not seen keeps the epic open on
+  every peer, the reasons on record; a close made after seeing them stands, and an old
+  reopen never reopens it again. What each side had seen decides it, not whose clock was
+  later.
+- **Only when asked.** Agents shape epics when their person says so (the `epic` tool), and
+  offer one in a line when a filing suggests it — a parent's epic, or several related
+  tickets filed together.
 
 On the overview an open epic is one **purple** row above the projects — `+` folded,
 `−` open, its goal and how far along it is ("1 of 3 done"), and a `▸` when a ticket inside
 is yours now, so folding never hides your work. `space` opens and folds it; open, its
-tickets are listed under it, each with its project. `enter` opens the epic's page: its
-aim, every ticket in it, and each close and reopen with who said so and why.
+tickets are listed under it in its order, each with its project, an excluded one marked.
+`enter` opens the epic's page: its aim, every ticket in it, whether it can close, and each
+close and reopen with who said so and why.
 
 ## The tools
 
@@ -417,7 +428,7 @@ aim, every ticket in it, and each close and reopen with who said so and why.
 | `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — the record and the reasons in one write. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
 | `post-review` | put your user's review on a review ticket — asked or not; it lands on a step of their own, and posting again revises it |
 | `review-context` | read the why behind a review ticket, on demand — all of it, or the part `about` a file, symbol or phrase; on an epic, its aim and every ticket in it |
-| `epic` | the room's epics, only when asked: `create` (goal, summary, tickets to put in), `add` and `remove` tickets, `close` and `reopen` — with a reason, by anyone |
+| `epic` | the room's epics, only when asked: `create` (goal, summary, tickets to put in), `add`, `remove`, `exclude`/`include` and `order` tickets, `close` (once everything in it is resolved) and `reopen` (with a reason) — by anyone |
 
 Prefer a ticket over a chain of `send-to-peer` when the work has more than one step or
 more than one owner — the intermediate state stays inspectable by everyone, and the

@@ -1,6 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { epicHome, epicParts, epicTurn, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
+import { epicParts, epicTurn, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
 
@@ -29,24 +29,26 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       if (ticket && !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
       // an epic: its aim, and what is in it — no why to weigh, no take to give
       if (ticket?.kind === "epic") {
-        const { parts, done } = epicParts(ticket, all);
-        const inside = [...all.values()].filter((t) => epicHome(t, all) === ticket.id && visibleTo(t, all, me));
+        const { parts, counted, done, unresolved } = epicParts(ticket, all);
         const turn = epicTurn(ticket);
+        const closed = isClosed(ticket, all);
         return toToon({
           epic: {
             goal: ticket.goal,
             aim: review?.summary ?? "",
-            progress: parts.length === 0 ? "no parts yet" : `${done} of ${parts.length} parts done`,
-            ...(turn ? { [isClosed(ticket) ? "closedBecause" : "reopenedBecause"]: turn.reason } : {}),
+            progress: counted === 0 ? "nothing counted yet" : `${done} of ${counted} done`,
+            ...(turn ? { [closed ? "closedBecause" : "reopenedBecause"]: turn.reason } : {}),
+            ...(closed ? {} : { toClose: unresolved.length === 0 ? "everything in it is resolved: it can close" : `${unresolved.length} still to resolve, exclude or move out first` }),
           },
-          tickets: inside.map((t) => ({
-            id: t.id,
-            kind: t.kind,
-            project: t.project,
-            goal: t.goal,
-            state: isClosed(t) ? "closed" : finished(t) ? "done" : "open",
-            in: parts.some((p) => p.id === t.id) ? "part" : "through the ticket it grew out of",
-          })),
+          tickets: parts
+            .filter((t) => visibleTo(t, all, me))
+            .map((t) => ({
+              id: t.id,
+              kind: t.kind,
+              project: t.project,
+              goal: t.goal,
+              state: excludedFromEpic(t) ? "excluded" : finished(t) ? "done" : isClosed(t) ? "closed unfinished" : "open",
+            })),
         });
       }
       if (!review) {

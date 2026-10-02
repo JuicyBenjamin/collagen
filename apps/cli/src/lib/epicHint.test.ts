@@ -27,6 +27,17 @@ describe("offering an epic for tickets filed together", () => {
     expect(relatedHint(c, room(t("a", { project: "other", structureAt: 1000 }), b, c), "me")).toBe("");
   });
 
+  it("a ticket grown out of one in an epic is offered that epic, not put there; parents in two epics ask which", () => {
+    const e = t("e", { kind: "epic", project: "", goal: "More languages" });
+    const php = moveToEpic(t("php"), "e", "me", 1);
+    const plan = t("plan", { from: ["php"], structureAt: 5 * HOUR });
+    expect(relatedHint(plan, room(e, php, plan), "me")).toMatch(/grows out of a ticket in the epic "More languages" \[e\].*not put there on its own/);
+    const e2 = t("e2", { kind: "epic", project: "", goal: "Backoffice" });
+    const lint = moveToEpic(t("lint"), "e2", "me", 2);
+    const both = t("both", { from: ["php", "lint"], structureAt: 9 * HOUR });
+    expect(relatedHint(both, room(e, e2, php, lint, both), "me")).toMatch(/grows out of tickets in 2 epics .*which, if any/);
+  });
+
   it("nothing once they are in an epic, or for an epic itself", () => {
     const e = t("e", { kind: "epic", project: "" });
     const a = moveToEpic(t("a", { structureAt: 1000 }), "e", "me", 1);

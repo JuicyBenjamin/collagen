@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { epicHome, epicTurn, isClosed, KINDS, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { epicParts, epicTurn, excludedFromEpic, isClosed, KINDS, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
 import { focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
@@ -39,13 +39,11 @@ export function EpicPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- on mount only
   }, [setFocus]);
 
-  // what lives in it: its parts and what grew out of them (p2p epicHome)
-  const inside = [...all.values()]
-    .filter((t) => epicHome(t, all) === epic.id)
-    .sort((a, b) => a.project.localeCompare(b.project) || b.updatedAt - a.updatedAt);
+  // what is in it — put there, in its reading order
+  const { parts: inside, unresolved } = epicParts(epic, all);
   const progress = epicProgress(epic, all);
   const turn = epicTurn(epic);
-  const closed = isClosed(epic);
+  const closed = isClosed(epic, all);
   const now = Date.now();
   const s = clamp(sel, 0, Math.max(0, inside.length - 1));
 
@@ -68,6 +66,11 @@ export function EpicPage({
           {why.summary}
         </text>
       ) : null}
+      {!closed && inside.length > 0 && unresolved.length === 0 ? (
+        <text fg={theme.dim} wrapMode="word" flexShrink={0}>
+          {"  "}everything in it is resolved — it can be closed
+        </text>
+      ) : null}
       {closed && turn ? (
         <text fg={theme.dim} wrapMode="word" flexShrink={0}>
           {"  "}closed by {nameFor(turn.by)}: {turn.reason}
@@ -76,7 +79,7 @@ export function EpicPage({
 
       <Focusable
         id="ticket-parts"
-        hint="↑↓ select · enter opens a ticket · your agent adds, moves and takes tickets out (the epic tool) · esc back to the list"
+        hint="↑↓ select · enter opens a ticket · your agent adds, orders, excludes and takes tickets out (the epic tool) · esc back to the list"
         flexDirection="column"
         flexShrink={0}
         onKey={(key) => {
@@ -94,7 +97,7 @@ export function EpicPage({
             </text>
             {inside.map((t, i) => {
               const st = summaries(t);
-              const part = t.partOf !== undefined && t.partOf.length > 0;
+              const excluded = excludedFromEpic(t);
               return (
                 <text key={t.id} fg={focused && i === s ? theme.accent : st.state === "closed" || st.state === "done" ? theme.dim : theme.fg} truncate wrapMode="none">
                   {focused && i === s ? "› " : "  "}
@@ -102,8 +105,7 @@ export function EpicPage({
                   <span fg={theme.dim}>{t.project} · </span>
                   {t.goal}
                   <span fg={st.state === "needs-you" ? theme.warn : theme.dim}> · {STATE_LABEL[st.state]}</span>
-                  {/* a ticket here because it grew out of a part, not because it was put here */}
-                  {part ? null : <span fg={theme.dim}> · via what it grew out of</span>}
+                  {excluded ? <span fg={theme.dim}> · excluded from progress</span> : null}
                 </text>
               );
             })}
