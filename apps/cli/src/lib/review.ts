@@ -9,6 +9,9 @@ import { IMPORTANCE, type BugReport, type OutlineItem, type ReviewContext, type 
 /** A decision's title is a headline, not a sentence: longer is refused. */
 export const TITLE_MAX = 60;
 
+/** A review's summary heads its page: a sentence or two, no more. */
+export const SUMMARY_MAX = 200;
+
 /** What an old ticket's decision, filed before titles, shows in its place. */
 export const NO_TITLE = "old ticket — no title";
 
@@ -71,13 +74,17 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
   }
   if (!amending && kind !== "proposal" && kind !== "bug" && blank(input.summary)) {
     return kind === "review"
-      ? "failed: pass a summary — what the change does, in your user's terms, not a commit list"
+      ? "failed: pass a summary — the purpose in a sentence or two: what is different for whoever uses it once it lands, not a commit list"
       : "failed: pass a summary — your user's thinking in a paragraph: what they intend and how, in their terms";
   }
   if (!amending && kind !== "bug" && decisions.length === 0) {
     return kind === "review"
       ? "failed: pass the decisions behind the change. Read back over THIS conversation and take them from it: what your user asked for, what they prefaced, what they ruled out, what you chose on your own and why. A review with no why is the review they already get from a diff."
       : `failed: pass at least one decision — a thought behind the ${kind}: 'what' your user means, 'userWhy' in their words, or 'agentWhy' as yours. ${kind === "proposal" ? "One is enough: an idea written down is still an idea with a reason." : "Read back over THIS conversation and take them from it."}`;
+  }
+  // a review's summary is the page's headline: the purpose, not the build
+  if (kind === "review" && input.summary !== undefined && input.summary.trim().length > SUMMARY_MAX) {
+    return `failed: the summary is ${input.summary.trim().length} characters — a review's summary is its headline, ${SUMMARY_MAX} at most: the purpose in a sentence or two, what is different for whoever uses it once it lands. How it was built belongs in the decisions; the code carries the rest.`;
   }
   const outlineMoves = (input.outline?.length ?? 0) > 0 || (input.retireOutline?.length ?? 0) > 0;
   const bugMoves = Object.keys(input.bug ?? {}).length > 0 || (input.retireBug?.length ?? 0) > 0;
