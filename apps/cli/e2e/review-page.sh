@@ -110,6 +110,15 @@ printf 'vendor/\n' > "$R/.gitignore"
 printf '{ "autoload": { "psr-4": { "App\\\\": "src/" } } }\n' > "$R/composer.json"
 printf '<?php\n\nnamespace App;\n\n/** Where the rows come from. */\ninterface Rows\n{\n    /** The rows, at most this many. */\n    public function fetch(int $limit): array;\n}\n' > "$R/src/Rows.php"
 printf '<?php\n\nnamespace App;\n\nuse Acme\\Greeter;\n\nfinal class Exporter\n{\n    public function __construct(private readonly Rows $rows, private readonly Greeter $greeter) {}\n\n    public function first(): string\n    {\n        $rows = $this->rows->fetch(1);\n        return $this->greeter->hello((string) strlen(implode(",", $rows[0] ?? [])));\n    }\n}\n' > "$R/src/Exporter.php"
+# a function documented on its own line, and a second Composer project that
+# keeps its packages somewhere else (config.vendor-dir), untracked too
+printf '<?php\n\n/** Joins the row'"'"'s cells. */ function cells(array $row): string {\n    return implode(",", $row);\n}\n' > "$R/src/helpers.php"
+printf '<?php\n\nnamespace App;\n\nfinal class Report\n{\n    public function line(array $row): string\n    {\n        return cells($row);\n    }\n}\n' > "$R/src/Report.php"
+mkdir -p "$R/jobs/src" "$R/jobs/deps/acme/clock/src"
+printf '{ "config": { "vendor-dir": "deps" } }\n' > "$R/jobs/composer.json"
+printf 'deps/\n' > "$R/jobs/.gitignore"
+printf '<?php\n\nnamespace Acme;\n\nfinal class Clock\n{\n    /** The time now, as text. */\n    public function now(): string\n    {\n        return date("c");\n    }\n}\n' > "$R/jobs/deps/acme/clock/src/Clock.php"
+printf '<?php\n\nnamespace Jobs;\n\nuse Acme\\Clock;\n\nfinal class Stamp\n{\n    public function at(Clock $clock): string\n    {\n        return $clock->now();\n    }\n}\n' > "$R/jobs/src/Stamp.php"
 git -C "$R" add -A; git -C "$R" commit -qm php
 # the column a word starts at on a line of a file of the branch (0-based)
 colof() { awk -v w="$3" -v n="$2" 'NR == n { print index($0, w) - 1 }' "$R/$1"; }
@@ -122,6 +131,9 @@ P=$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=src/Exporter.php&line=
 expect "peeking it opens the interface in its own file" "$P" "\"file\":\"src/Rows.php\",\"where\":\"branch\""
 expect "…its doc comment as the doc, the code from the declaration" "$P" "\"doc\":\"The rows, at most this many.\",\"code\":\"    public function fetch"
 expect "peeking a package's method names the package's file" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=src/Exporter.php&line=14&col=$(colof src/Exporter.php 14 hello)")" "\"file\":\"acme/greeter/src/Greeter.php\",\"where\":\"package\""
+expect "a function documented on its own line: the peek keeps its declaration, the comment as its doc" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=src/Report.php&line=9&col=$(colof src/Report.php 9 cells)")" "\"file\":\"src/helpers.php\".*\"doc\":\"Joins the row's cells.\",\"code\":\"function cells\\(array \\\$row\\): string \\{"
+expect "a project with its own vendor-dir: its package hovers" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/hover?file=jobs/src/Stamp.php&line=11&col=$(colof jobs/src/Stamp.php 11 now)")" "Clock::now.*public function now\\(\\): string"
+expect "…and peeks as the package's file" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=jobs/src/Stamp.php&line=11&col=$(colof jobs/src/Stamp.php 11 now)")" "\"file\":\"acme/clock/src/Clock.php\",\"where\":\"package\""
 expect "peeking a PHP function says it is built into PHP" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=src/Exporter.php&line=14&col=$(colof src/Exporter.php 14 strlen)")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi

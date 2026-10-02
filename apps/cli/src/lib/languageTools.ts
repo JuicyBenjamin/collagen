@@ -33,8 +33,9 @@ export interface LanguageTool {
   /** The LSP languageId of a file it is asked about. */
   readonly languageId: (ext: string) => string;
   /** Where the project keeps what its code imports, linked from the clone
-   *  into the review's tree beside each `marker` file. */
-  readonly deps: { readonly marker: string; readonly dir: string };
+   *  into the review's tree beside each `marker` file: `dir`, or what the
+   *  marker itself says (`dirFrom`, given its text). */
+  readonly deps: { readonly marker: string; readonly dir: string; readonly dirFrom?: (marker: string) => string | null };
   /** initialize's initializationOptions; `storage` is a folder of the
    *  review's own for whatever the server keeps. */
   readonly initializationOptions?: (storage: string) => unknown;
@@ -44,6 +45,16 @@ export interface LanguageTool {
    *  a first question waits, up to a minute. Absent: ready at once. */
   readonly readyWhen?: (method: string, params: unknown) => boolean;
 }
+
+/** composer.json's config.vendor-dir, when it sets one. */
+export const composerVendorDir = (text: string): string | null => {
+  try {
+    const dir = (JSON.parse(text) as { config?: { "vendor-dir"?: unknown } }).config?.["vendor-dir"];
+    return typeof dir === "string" && dir.trim() ? dir.trim().replace(/\/+$/, "") : null;
+  } catch {
+    return null;
+  }
+};
 
 export const TOOLS: Readonly<Record<ToolId, LanguageTool>> = {
   typescript: {
@@ -76,7 +87,8 @@ export const TOOLS: Readonly<Record<ToolId, LanguageTool>> = {
     bin: "lib/intelephense.js",
     args: ["--stdio"],
     languageId: () => "php",
-    deps: { marker: "composer.json", dir: "vendor" },
+    // Composer's own setting, when a project moves vendor/ elsewhere
+    deps: { marker: "composer.json", dir: "vendor", dirFrom: composerVendorDir },
     initializationOptions: (storage) => ({ storagePath: storage, globalStoragePath: join(storage, "global"), clearCache: true, telemetry: { enabled: false } }),
     settings: { telemetry: { enabled: false } },
     // it indexes the whole workspace (vendor included) before it answers well
