@@ -63,8 +63,8 @@ file), and where the diff came from is one line at the foot of the page.
 
 ## Types and definitions
 
-On TypeScript and JavaScript files the code answers to the pointer, on added and unchanged
-lines:
+On TypeScript, JavaScript and PHP files the code answers to the pointer, on added and
+unchanged lines:
 
 - a word you can ask about is underlined under the pointer, and the cursor says it can be
   clicked;
@@ -75,21 +75,33 @@ lines:
   line, its doc comment as text (the first paragraph, "More" for the rest), then the
   declaration itself, coloured — long ones fold after eighteen lines, and further overloads
   or definitions fold under one line. It works the same for the branch's own code and for
-  a package's types, Effect's or Solid's, read from your `node_modules`. `×`, Esc, or a
-  second click closes it.
+  a package's types, Effect's or Solid's from your `node_modules`, Laravel's or Symfony's
+  from your `vendor/`; a language's own functions say "built into TypeScript" or "built
+  into PHP". `×`, Esc, or a second click closes it.
 
-The type checker is collagen's own, not the project's: a pinned TypeScript 7
-(`7.0.2`), run as `tsc --lsp`, whatever version the project uses — or none. It is not
-shipped with collagen. The first time a review has TypeScript or JavaScript in it, the page
-offers it — "Type hints for this review? Installs TypeScript 7.0.2 (about 30 MB), once." —
-and only your click installs it: that exact version, from npm's registry, its install
-scripts not run, into collagen's own folder (`~/.config/collagen/tools/typescript-7.0.2`).
-`×` puts the offer away in that browser. Nothing changes for anyone who never clicks.
+Each language's server is collagen's own, not the project's, pinned to one version and
+not shipped with collagen. The first time a review has code in that language, the page
+offers it, and only your click installs it — that exact version, from npm's registry, its
+install scripts not run, into collagen's own folder (`~/.config/collagen/tools/`). `×` puts
+the offer away in that browser; nothing changes for anyone who never clicks.
+
+| Language | Server | The offer |
+| --- | --- | --- |
+| TypeScript, JavaScript | TypeScript `7.0.2`, run as `tsc --lsp` — whatever version the project uses, or none | "TypeScript type hints for this review? Installs TypeScript 7.0.2 (about 30 MB), once." |
+| PHP | Intelephense `1.18.5`, run on the Node collagen already has — no PHP install needed | "PHP type hints for this review? Installs Intelephense 1.18.5 (about 150 MB), once. Not open source: Intelephense's licence." |
+
+Intelephense is not open source. Hover and go to definition — all the page asks of it — are
+in its free tier, so no licence key or purchase is needed; installing it means agreeing to
+[its licence](https://intelephense.com/eula), which the offer links. Collagen never ships,
+changes or bundles it, keeps its telemetry off (its default), and shows on the page any
+message it asks to show you. It indexes the whole tree on start — your `vendor/` included —
+before its first answer: under a second for a small project, longer for a large `vendor/`.
 
 The project gives the code: the branch's commit is unpacked from your clone into a folder
 of its own (`git archive`; your repository and its working tree are never touched), with
-the clone's `node_modules` linked in so imports resolve to what you have installed. A
-branch that changes its dependencies is therefore checked against yours. The server starts
+the clone's `node_modules` (beside each `package.json`) and `vendor/` (beside each
+`composer.json`) linked in so imports resolve to what you have installed. A branch that
+changes its dependencies is therefore checked against yours. The server starts
 on the first hover (a moment), stays for the page, and stops after ten idle minutes.
 Removed lines are the base's and are not asked about.
 

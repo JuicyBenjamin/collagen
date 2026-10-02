@@ -29,7 +29,12 @@ git -C "$R" add -A; git -C "$R" commit -qm change
 
 # the type hints need collagen's pinned TypeScript, normally installed on
 # the person's click; here the repo's own stands in, so no network is needed
-COLLAGEN_TYPESCRIPT="$ROOT/node_modules/typescript" start alice
+# PHP's is Intelephense at its pinned version, fetched once into the test
+# output (npm's registry, the same command the page's install runs) and kept
+IP_VERSION=$(cd "$ROOT" && node --import tsx -e 'import("./src/lib/languageTools.ts").then((m) => console.log(m.TOOLS.php.version))')
+IP="$ROOT_OUT/tools/intelephense-$IP_VERSION"
+[ -f "$IP/node_modules/intelephense/lib/intelephense.js" ] || npm install --prefix "$IP" --no-save --no-package-lock --no-audit --no-fund --ignore-scripts --loglevel=error "intelephense@$IP_VERSION" > /dev/null 2>&1
+COLLAGEN_TYPESCRIPT="$ROOT/node_modules/typescript" COLLAGEN_INTELEPHENSE="$IP/node_modules/intelephense" start alice
 SA=$(mcp $A)
 D1='{"title":"Stream the rows","what":"stream the rows","userWhy":"she said the export times out","agentWhy":"a map keeps memory flat","where":["src/export.ts:2"]}'
 D2='{"title":"Page by id","what":"page by id","userWhy":"pages of a hundred","where":["src/page.ts"]}'
@@ -96,6 +101,28 @@ kill $CURL 2>/dev/null
 # o on a review open where its tab cannot be brought forward opens one
 # marked ?take, which the old tab hands over to: the marker serves the page
 expect "a tab marked to take over is the same page" "$(curl -s "$ORIGIN/review/$TICKET?take")" "<title>Review by intent</title>"
+
+echo "## PHP: Intelephense over the branch, the clone's vendor/ linked in"
+# the clone's own Composer install: untracked, as vendor/ always is
+mkdir -p "$R/vendor/acme/greeter/src"
+printf '<?php\n\nnamespace Acme;\n\nfinal class Greeter\n{\n    /** Says hello to someone. */\n    public function hello(string $name): string\n    {\n        return "hello $name";\n    }\n}\n' > "$R/vendor/acme/greeter/src/Greeter.php"
+printf 'vendor/\n' > "$R/.gitignore"
+printf '{ "autoload": { "psr-4": { "App\\\\": "src/" } } }\n' > "$R/composer.json"
+printf '<?php\n\nnamespace App;\n\n/** Where the rows come from. */\ninterface Rows\n{\n    /** The rows, at most this many. */\n    public function fetch(int $limit): array;\n}\n' > "$R/src/Rows.php"
+printf '<?php\n\nnamespace App;\n\nuse Acme\\Greeter;\n\nfinal class Exporter\n{\n    public function __construct(private readonly Rows $rows, private readonly Greeter $greeter) {}\n\n    public function first(): string\n    {\n        $rows = $this->rows->fetch(1);\n        return $this->greeter->hello((string) strlen(implode(",", $rows[0] ?? [])));\n    }\n}\n' > "$R/src/Exporter.php"
+git -C "$R" add -A; git -C "$R" commit -qm php
+# the column a word starts at on a line of a file of the branch (0-based)
+colof() { awk -v w="$3" -v n="$2" 'NR == n { print index($0, w) - 1 }' "$R/$1"; }
+expect "the page can see the pinned Intelephense is there" "$(curl -s "$ORIGIN/review-tools/php")" "\"tool\":\"php\",\"language\":\"PHP\",\"name\":\"Intelephense\".*\"licence\".*\"state\":\"ready\""
+H=$(curl -s -m 90 "$ORIGIN/review/$TICKET/hover?file=src/Exporter.php&line=13&col=$(colof src/Exporter.php 13 fetch)")
+expect "hovering a method of the branch's own interface: its name and signature" "$H" "Rows::fetch.*public function fetch\\(int \\\$limit\\): array"
+expect "hovering a Composer package's method, from the clone's vendor/" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/hover?file=src/Exporter.php&line=14&col=$(colof src/Exporter.php 14 hello)")" "Greeter::hello.*public function hello\\(string \\\$name\\): string"
+expect "hovering a PHP function: its signature, from PHP's own stubs" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/hover?file=src/Exporter.php&line=14&col=$(colof src/Exporter.php 14 strlen)")" "function strlen\\(string \\\$string\\): int"
+P=$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=src/Exporter.php&line=13&col=$(colof src/Exporter.php 13 fetch)")
+expect "peeking it opens the interface in its own file" "$P" "\"file\":\"src/Rows.php\",\"where\":\"branch\""
+expect "…its doc comment as the doc, the code from the declaration" "$P" "\"doc\":\"The rows, at most this many.\",\"code\":\"    public function fetch"
+expect "peeking a package's method names the package's file" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=src/Exporter.php&line=14&col=$(colof src/Exporter.php 14 hello)")" "\"file\":\"acme/greeter/src/Greeter.php\",\"where\":\"package\""
+expect "peeking a PHP function says it is built into PHP" "$(curl -s -m 30 "$ORIGIN/review/$TICKET/definition?file=src/Exporter.php&line=14&col=$(colof src/Exporter.php 14 strlen)")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all; summary

@@ -14,7 +14,9 @@ import type { ToolId } from "@collagen/review-web/data";
 
 export interface LanguageTool {
   readonly id: ToolId;
-  /** For the person: the offer's "Installs <name> <version> (<size>)". */
+  /** For the person: "<language> type hints for this review? Installs
+   *  <name> <version> (<size>)" — and "built into <language>". */
+  readonly language: string;
   readonly name: string;
   readonly package: string;
   /** Moving it is a change of its own: the next install fetches the new
@@ -46,6 +48,7 @@ export interface LanguageTool {
 export const TOOLS: Readonly<Record<ToolId, LanguageTool>> = {
   typescript: {
     id: "typescript",
+    language: "TypeScript",
     name: "TypeScript",
     package: "typescript",
     version: "7.0.2",
@@ -55,6 +58,31 @@ export const TOOLS: Readonly<Record<ToolId, LanguageTool>> = {
     args: ["--lsp", "--stdio"],
     languageId: (ext) => (ext === ".tsx" ? "typescriptreact" : ext === ".jsx" ? "javascriptreact" : ext.includes("js") ? "javascript" : "typescript"),
     deps: { marker: "package.json", dir: "node_modules" },
+  },
+  // Intelephense: runs on the Node collagen already has, no PHP needed. Not
+  // open source — hover and go to definition are in its free tier, and the
+  // offer says whose licence it is. Its stubs give PHP's own functions and
+  // classes; the clone's vendor/ gives Composer packages. Telemetry is off
+  // by default and kept off.
+  php: {
+    id: "php",
+    language: "PHP",
+    name: "Intelephense",
+    package: "intelephense",
+    version: "1.18.5",
+    size: "about 150 MB",
+    licence: { name: "Intelephense's licence", url: "https://intelephense.com/eula" },
+    env: "COLLAGEN_INTELEPHENSE",
+    bin: "lib/intelephense.js",
+    args: ["--stdio"],
+    languageId: () => "php",
+    deps: { marker: "composer.json", dir: "vendor" },
+    initializationOptions: (storage) => ({ storagePath: storage, globalStoragePath: join(storage, "global"), clearCache: true, telemetry: { enabled: false } }),
+    settings: { telemetry: { enabled: false } },
+    // it indexes the whole workspace (vendor included) before it answers well
+    readyWhen: (method, params) =>
+      (method === "$/progress" && (params as { value?: { kind?: string } } | null)?.value?.kind === "end") ||
+      (method === "window/logMessage" && /Indexing finished/.test(String((params as { message?: unknown } | null)?.message ?? ""))),
   },
 };
 

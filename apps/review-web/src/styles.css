@@ -125,11 +125,12 @@ section.unexplained h2 { color: var(--warn); }
 
 .note { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; display: grid; gap: 4px; }
 
-/* type hints and peeks (TypeScript and JavaScript files) */
+/* type hints and peeks (any language a server reads) */
 td.t.asks.on-word { cursor: pointer; }
 ::highlight(word) { text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 3px; }
 .hint { position: fixed; z-index: 10; max-width: 520px; padding: 8px 12px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font-size: 13px; pointer-events: none; }
 .hint-code { margin: 0; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; color: var(--th-token, var(--fg)); }
+.hint-label { margin: 0 0 4px; font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--faint); overflow-wrap: anywhere; }
 .hint-text { margin: 6px 0 0; color: var(--dim); line-height: 1.5; }
 .hint-text:first-child { margin-top: 0; }
 .hint-text code { font: 12px ui-monospace, monospace; color: var(--fg); }
