@@ -18,13 +18,16 @@ describe("offering an epic for tickets filed together", () => {
   });
 
   it("three in one project within half an hour count too; older ones, others' and other projects' do not", () => {
-    const a = t("a", { structureAt: 1000 });
-    const b = t("b", { structureAt: 2000 });
-    const c = t("c", { structureAt: 3000 });
+    const a = t("a", { filedAt: 1000 });
+    const b = t("b", { filedAt: 2000 });
+    const c = t("c", { filedAt: 3000 });
     expect(relatedHint(c, room(a, b, c), "me")).toMatch(/3 related tickets/);
-    expect(relatedHint(c, room(t("a", { structureAt: 3000 - HOUR }), b, c), "me")).toBe("");
-    expect(relatedHint(c, room(t("a", { createdBy: "bob", structureAt: 1000 }), b, c), "me")).toBe("");
-    expect(relatedHint(c, room(t("a", { project: "other", structureAt: 1000 }), b, c), "me")).toBe("");
+    expect(relatedHint(c, room(t("a", { filedAt: 3000 - HOUR }), b, c), "me")).toBe("");
+    expect(relatedHint(c, room(t("a", { createdBy: "bob", filedAt: 1000 }), b, c), "me")).toBe("");
+    expect(relatedHint(c, room(t("a", { project: "other", filedAt: 1000 }), b, c), "me")).toBe("");
+    // tickets filed long ago and only just revised (retitled) were not filed together
+    const old = (id: string) => t(id, { filedAt: 1000, structureAt: 9 * HOUR });
+    expect(relatedHint(t("new", { filedAt: 9 * HOUR }), room(old("x"), old("y"), t("new", { filedAt: 9 * HOUR })), "me")).toBe("");
   });
 
   it("a ticket grown out of one in an epic is offered that epic, not put there; parents in two epics ask which", () => {
@@ -40,9 +43,9 @@ describe("offering an epic for tickets filed together", () => {
 
   it("nothing once they are in an epic, or for an epic itself", () => {
     const e = t("e", { kind: "epic", project: "" });
-    const a = moveToEpic(t("a", { structureAt: 1000 }), "e", "me", 1);
-    const b = t("b", { structureAt: 2000 });
-    const c = t("c", { structureAt: 3000 });
+    const a = moveToEpic(t("a", { filedAt: 1000 }), "e", "me", 1);
+    const b = t("b", { filedAt: 2000 });
+    const c = t("c", { filedAt: 3000 });
     expect(relatedHint(c, room(e, a, b, c), "me")).toBe("");
     expect(relatedHint(e, room(e, b, c), "me")).toBe("");
   });
