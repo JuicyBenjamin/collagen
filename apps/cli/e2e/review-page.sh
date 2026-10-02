@@ -65,7 +65,8 @@ expect "an unknown ticket is a 404" "$(curl -s -o /dev/null -w '%{http_code}' "$
 expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sTCP:LISTEN 2>/dev/null | grep -c 127.0.0.1)" "^[1-9]"
 
 echo "## types and definitions, from collagen's own TypeScript 7 over the branch"
-expect "the page can see the pinned TypeScript is there" "$(curl -s "$ORIGIN/review-tools/typescript")" "\"state\":\"ready\",\"version\":\"7\."
+expect "the page can see the pinned TypeScript is there" "$(curl -s "$ORIGIN/review-tools/typescript")" "\"version\":\"7\.[^\"]*\".*\"state\":\"ready\""
+expect "…a tool collagen does not have is not there" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review-tools/cobol")" "^404$"
 expect "installing is refused without the page's header (a form elsewhere cannot)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$ORIGIN/review-tools/typescript")" "^403$"
 expect "…and from another origin, header or not" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'x-collagen: install' -H 'Origin: https://evil.example' "$ORIGIN/review-tools/typescript")" "^403$"
 HOVER=$(curl -s -m 60 "$ORIGIN/review/$TICKET/hover?file=src/use.ts&line=3&col=21")

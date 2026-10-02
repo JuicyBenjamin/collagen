@@ -1,58 +1,94 @@
-import { createSignal, onSettled, Show } from "solid-js";
-import { installTool, refreshTool, tool } from "../intel";
+import { createSignal, For, onSettled, Show } from "solid-js";
+import type { ToolId } from "../data";
+import { installTool, refreshTool, toolState } from "../intel";
 
-const DISMISSED = "collagen.typesBanner.dismissed";
-const remembered = (): boolean => {
+const dismissedKey = (tool: ToolId) => `collagen.typesBanner.dismissed.${tool}`;
+const remembered = (tool: ToolId): boolean => {
   try {
-    return localStorage.getItem(DISMISSED) === "1";
+    return localStorage.getItem(dismissedKey(tool)) === "1";
   } catch {
     return false;
   }
 };
 
-/** The offer, on a review with TypeScript or JavaScript in it: type hints
- *  need a pinned TypeScript, fetched once on the person's click. Gone once
- *  it is installed, or when they wave it away (remembered in this browser). */
-export function TypesBanner() {
-  const [dismissed, setDismissed] = createSignal(remembered());
+/** The offer, on a review with code in a language a server reads: type
+ *  hints need that language's pinned server, fetched once on the person's
+ *  click — and the offer says what it is, a licence included when it is not
+ *  open source. Gone once it is installed, or when they wave it away
+ *  (remembered in this browser, per language). Once installed, anything the
+ *  server asked to show the person is shown here. */
+export function TypesBanner(props: { tool: ToolId }) {
+  const [dismissed, setDismissed] = createSignal(remembered(props.tool));
+  const [seen, setSeen] = createSignal(false);
   onSettled(() => {
-    void refreshTool();
-    // while an install runs, see it through
-    const timer = setInterval(() => tool()?.state === "installing" && void refreshTool(), 1000);
+    void refreshTool(props.tool);
+    // while an install runs, see it through; once ready, keep the server's notices current
+    const timer = setInterval(() => {
+      const s = toolState(props.tool)?.state;
+      if (s === "installing" || s === "ready") void refreshTool(props.tool);
+    }, 2000);
     return () => clearInterval(timer);
   });
   const dismiss = () => {
     setDismissed(true);
     try {
-      localStorage.setItem(DISMISSED, "1");
+      localStorage.setItem(dismissedKey(props.tool), "1");
     } catch {
       // a private window: dismissed for now
     }
   };
   return (
-    <Show when={!dismissed() && tool() && tool()!.state !== "ready" ? tool() : null}>
-      {(t) => (
-        <div class="banner" role="status">
-          <Show
-            when={t().state === "installing"}
-            fallback={
-              <>
-                <span>
-                  {t().error ? `Couldn't install TypeScript: ${t().error}` : `Type hints for this review? Installs TypeScript ${t().version} (about 30 MB), once.`}
-                </span>
-                <button type="button" class="banner-go" onClick={() => void installTool()}>
-                  {t().error ? "Try again" : "Install"}
-                </button>
-                <button type="button" class="banner-close" aria-label="Not now" onClick={dismiss}>
-                  ×
-                </button>
-              </>
-            }
-          >
-            <span>Installing TypeScript {t().version}…</span>
-          </Show>
-        </div>
-      )}
-    </Show>
+    <>
+      <Show when={!dismissed() && toolState(props.tool) && toolState(props.tool)!.state !== "ready" ? toolState(props.tool) : null}>
+        {(t) => (
+          <div class="banner" role="status">
+            <Show
+              when={t().state === "installing"}
+              fallback={
+                <>
+                  <span>
+                    {t().error ? `Couldn't install ${t().name}: ${t().error}` : `Type hints for the ${t().name} in this review? Installs ${t().name} ${t().version} (${t().size}), once.`}
+                    <Show when={t().licence}>
+                      {(l) => (
+                        <>
+                          {" "}
+                          Not open source:{" "}
+                          <a href={l().url} target="_blank" rel="noreferrer">
+                            {l().name}
+                          </a>
+                          .
+                        </>
+                      )}
+                    </Show>
+                  </span>
+                  <button type="button" class="banner-go" onClick={() => void installTool(props.tool)}>
+                    {t().error ? "Try again" : "Install"}
+                  </button>
+                  <button type="button" class="banner-close" aria-label="Not now" onClick={dismiss}>
+                    ×
+                  </button>
+                </>
+              }
+            >
+              <span>
+                Installing {t().name} {t().version}…
+              </span>
+            </Show>
+          </div>
+        )}
+      </Show>
+      <Show when={!seen() && toolState(props.tool)?.notices?.length ? toolState(props.tool) : null}>
+        {(t) => (
+          <div class="banner" role="status">
+            <span>
+              <For each={t().notices}>{(n) => <span class="banner-notice">{t().name}: {n}</span>}</For>
+            </span>
+            <button type="button" class="banner-close" aria-label="Got it" onClick={() => setSeen(true)}>
+              ×
+            </button>
+          </div>
+        )}
+      </Show>
+    </>
   );
 }
