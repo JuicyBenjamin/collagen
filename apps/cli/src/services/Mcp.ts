@@ -866,6 +866,7 @@ const makeHandlers = Effect.gen(function* () {
           title: input.title!.trim(),
           goal,
           createdBy: identity.pubkey,
+          filedAt: now,
           kind,
           ...(input.from && input.from.length > 0 ? { from: input.from } : {}),
           ...(after ? { after } : {}),
@@ -1074,6 +1075,7 @@ const makeHandlers = Effect.gen(function* () {
           title: input.title.trim(),
           goal: input.goal,
           createdBy: identity.pubkey,
+          filedAt: now,
           kind: "task",
           ...(input.from && input.from.length > 0 ? { from: input.from } : {}),
           ...(after ? { after } : {}),
@@ -1145,7 +1147,7 @@ const makeHandlers = Effect.gen(function* () {
             const goal = input.goal?.trim() || title;
             const now = yield* Clock.currentTimeMillis;
             const id = crypto.randomUUID();
-            const ticket: Ticket = { id, project: "", title, goal, createdBy: identity.pubkey, kind: "epic", steps: [], structureAt: now, updatedAt: now };
+            const ticket: Ticket = { id, project: "", title, goal, createdBy: identity.pubkey, filedAt: now, kind: "epic", steps: [], structureAt: now, updatedAt: now };
             const myName = yield* SubscriptionRef.get(nameRef);
             const filed = yield* outbox.tell({
               roomId,
