@@ -1,4 +1,6 @@
-import type { ReviewContext, ReviewDecision, ReviewFork } from "@collagen/p2p";
+import type { Decision, DiffLine, Fork, Grouped, Hunk, Section } from "@collagen/review-web/data";
+
+export type { DiffLine, Grouped, Hunk, Section } from "@collagen/review-web/data";
 
 // A review read by intent, not by filename. A diff in file order spreads one
 // decision over a dozen places and puts unrelated ones side by side — worse
@@ -8,26 +10,6 @@ import type { ReviewContext, ReviewDecision, ReviewFork } from "@collagen/p2p";
 // the reviewer's own clone produced, and lay its hunks out under the
 // decisions that claim them. No model in the reader's seat, no code copied
 // anywhere — git is the source of truth (services/ReviewView).
-
-export interface DiffLine {
-  readonly kind: "+" | "-" | " ";
-  readonly text: string;
-  /** line number in the old file (context and removed lines) */
-  readonly old?: number;
-  /** line number in the new file (context and added lines) */
-  readonly new?: number;
-}
-
-export interface Hunk {
-  /** stable within one diff: `<file>#<n>` */
-  readonly id: string;
-  /** the file's new path (old path for a deletion) */
-  readonly file: string;
-  readonly header: string;
-  readonly newStart: number;
-  readonly newLines: number;
-  readonly lines: ReadonlyArray<DiffLine>;
-}
 
 /** Parse `git diff` unified output into hunks. Binary files and pure
  *  renames have no hunks and so do not appear. */
@@ -134,32 +116,11 @@ export function claimed(p: Pointer, hunks: ReadonlyArray<Hunk>): ReadonlyArray<H
   return near.slice(0, 1);
 }
 
-export interface Section {
-  readonly decision: ReviewDecision;
-  /** hunk ids, in diff order */
-  readonly hunks: ReadonlyArray<string>;
-  /** ids of hunks another decision claims too */
-  readonly shared: ReadonlyArray<string>;
-  /** the forks whose `at` falls in this section's hunks */
-  readonly forks: ReadonlyArray<ReviewFork>;
-  /** pointers that matched no change: the code there did not move, or the why is stale */
-  readonly unmatched: ReadonlyArray<string>;
-}
-
-export interface Grouped {
-  readonly sections: ReadonlyArray<Section>;
-  /** hunks no decision claims — the why does not cover them, which is a finding */
-  readonly unexplained: ReadonlyArray<string>;
-  /** forks that fall in no decision's hunks (on unexplained code, or on none) */
-  readonly looseForks: ReadonlyArray<ReviewFork>;
-  readonly hunks: ReadonlyArray<Hunk>;
-}
-
 /** Lay a diff out under the why: a section per decision with the hunks its
  *  `where` claims (a hunk two decisions claim shows under both, marked
  *  shared) and the forks whose `at` falls inside them; then every hunk
  *  nobody claimed. Deterministic: same why and diff, same page. */
-export function groupByWhy(review: Pick<ReviewContext, "decisions" | "forks">, hunks: ReadonlyArray<Hunk>): Grouped {
+export function groupByWhy(review: { readonly decisions: ReadonlyArray<Decision>; readonly forks: ReadonlyArray<Fork> }, hunks: ReadonlyArray<Hunk>): Grouped {
   const claims = new Map<string, Array<string>>(); // hunk id → decision ids
   const perDecision = review.decisions.map((d) => {
     const ids = new Set<string>();
