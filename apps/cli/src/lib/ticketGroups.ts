@@ -9,9 +9,14 @@ export interface Row {
 export interface KindGroup<R extends Row> {
   readonly kind: TicketKind;
   readonly rows: ReadonlyArray<R>;
-  /** ids of the rows that follow a ticket in this same group (`after`):
-   *  drawn under it, with ↳ */
-  readonly follows: ReadonlySet<string>;
+  /** How deep a row sits in its group's stack (`after`): 0 for a ticket
+   *  that waits on nothing here, one more than the ticket it is drawn under
+   *  otherwise — so a chain reads as a staircase, not a flat list under its
+   *  first ticket. */
+  readonly depth: ReadonlyMap<string, number>;
+  /** The ticket a row is drawn under — the last-drawn of those it waits on
+   *  in this group — when it has one. */
+  readonly parent: ReadonlyMap<string, string>;
 }
 
 export interface ProjectGroup<R extends Row> {
@@ -48,45 +53,56 @@ export function groupTickets<R extends Row>(rows: ReadonlyArray<R>): ReadonlyArr
 }
 
 /** A group's rows with the order its tickets keep (`after`) made visible:
- *  a ticket that waits on another in the same group is drawn right under
- *  it — under the last-drawn one when it waits on two, so it appears once,
- *  never duplicated — and marked as following. Everything else keeps the
- *  state order it came in. Deterministic: the same rows give the same
- *  drawing on every peer. A cycle cannot be filed (afterProblem); should one
- *  arrive anyway, its rows are drawn plainly at the end. */
-function stacked<R extends Row>(sorted: ReadonlyArray<R>): { rows: ReadonlyArray<R>; follows: ReadonlySet<string> } {
+ *  a ticket that waits on another in the same group is drawn under it, one
+ *  level deeper — under the last-drawn one when it waits on two, so it
+ *  appears once, never duplicated — after whatever is already drawn under
+ *  that one. A chain is a staircase; two tickets waiting on one are siblings
+ *  at the same depth. Everything else keeps the state order it came in.
+ *  Deterministic: the same rows give the same drawing on every peer. A
+ *  cycle cannot be filed (afterProblem); should one arrive anyway, its rows
+ *  are drawn plainly at the end. */
+function stacked<R extends Row>(sorted: ReadonlyArray<R>): { rows: ReadonlyArray<R>; depth: ReadonlyMap<string, number>; parent: ReadonlyMap<string, string> } {
   const here = new Set(sorted.map((r) => r.t.id));
   const preds = (r: R) => (r.t.after ?? []).filter((id) => here.has(id) && id !== r.t.id);
-  const follows = new Set(sorted.filter((r) => preds(r).length > 0).map((r) => r.t.id));
   const out: Array<R> = [];
+  const depth = new Map<string, number>();
+  const parent = new Map<string, string>();
+  const at = (id: string) => out.findIndex((o) => o.t.id === id);
   let pending = [...sorted];
   while (pending.length > 0) {
     const later: Array<R> = [];
     let moved = false;
     for (const r of pending) {
       const ps = preds(r);
-      if (!ps.every((p) => out.some((o) => o.t.id === p))) {
+      if (!ps.every((p) => at(p) >= 0)) {
         later.push(r);
         continue;
       }
       moved = true;
       if (ps.length === 0) {
         out.push(r);
+        depth.set(r.t.id, 0);
         continue;
       }
-      // under the last-drawn ticket it follows, after whatever already follows that one
-      let at = Math.max(...ps.map((p) => out.findIndex((o) => o.t.id === p))) + 1;
-      while (at < out.length && follows.has(out[at]!.t.id)) at++;
-      out.splice(at, 0, r);
+      // under the last-drawn ticket it waits on, past everything already under that one
+      const under = ps.reduce((a, b) => (at(a) >= at(b) ? a : b));
+      const d = depth.get(under)! + 1;
+      let i = at(under) + 1;
+      while (i < out.length && depth.get(out[i]!.t.id)! >= d) i++;
+      out.splice(i, 0, r);
+      depth.set(r.t.id, d);
+      parent.set(r.t.id, under);
     }
     if (!moved) {
-      out.push(...later);
-      for (const r of later) follows.delete(r.t.id);
+      for (const r of later) {
+        out.push(r);
+        depth.set(r.t.id, 0);
+      }
       break;
     }
     pending = later;
   }
-  return { rows: out, follows };
+  return { rows: out, depth, parent };
 }
 
 /** The rows in the order they are drawn — what ↑↓ walks. */

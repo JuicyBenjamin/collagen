@@ -35,14 +35,14 @@ export const GLYPH: Record<Mark, string> = {
 export const STACK = { follows: "↳", waits: "⧗" } as const;
 
 export const STACK_HELP: Record<keyof typeof STACK, string> = {
-  follows: "read after the ticket above it (after) — a stacked review, a second phase",
+  follows: "read after the ticket it sits under, one level deeper per step of a chain (after) — a stacked review, a second phase",
   waits: "yours, waiting on a ticket not yet answered: nobody else is shown it until then",
 };
 
 /** For the hint line: every glyph on screen, in the order a reader meets
  *  them. It shares one row with the section's own keys, so it is terse on
  *  purpose — a legend that gets truncated teaches nobody anything. */
-export const LEGEND = `${GLYPH.yours} yours now · ${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed · ${GLYPH.spoke} spoke · ${STACK.follows} after the one above · ${STACK.waits} waiting`;
+export const LEGEND = `${GLYPH.yours} yours now · ${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed · ${GLYPH.spoke} spoke · ${STACK.follows} after the one it sits under · ${STACK.waits} waiting`;
 // and a name with no glyph: nothing from them yet. Left unsaid on purpose —
 // it is what the absence of a mark obviously means, and spelling it out cost
 // the row more than it fits.
