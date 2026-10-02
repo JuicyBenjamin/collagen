@@ -100,7 +100,7 @@ export function Tickets() {
   return (
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open${current?.t.kind === "epic" ? ` · space ${unfolded.has(current.t.id) ? "fold" : "unfold"}` : ""}${current?.t.kind === "review" ? " · o review in browser" : ""} · ? what it all means · ${LEGEND}`}
+      hint={`↑↓ select · enter open${current?.t.kind === "epic" ? ` · space ${unfolded.has(current.t.id) ? "fold" : "unfold"}` : ""}${current?.t.kind === "review" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
       flexDirection="column"
       marginTop={1}
       onKey={(key) => {

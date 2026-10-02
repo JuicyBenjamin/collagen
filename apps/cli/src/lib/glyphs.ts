@@ -9,8 +9,9 @@ import type { TicketKind } from "@collagen/p2p";
  *  that, and a dot said it worse: it read as a spacer between names rather
  *  than a state of its own.
  *
- *  Whoever adds a state here adds it to `LEGEND` too, or the reader is left
- *  guessing at a symbol — and to `MARK_HELP`, which the compiler insists on. */
+ *  Whoever adds a state here adds it to `MARK_HELP`, which the compiler
+ *  insists on, or the reader is left guessing at a symbol — and to `LEGEND`
+ *  only if it is a verdict, and the row still fits. */
 export type Mark =
   /** on the ROW, not on a person: this ticket is yours to act on now */
   | "yours"
@@ -60,13 +61,13 @@ export const KIND_GLYPH: Record<Exclude<TicketKind, "epic">, string> = {
   task: "☐",
 };
 
-/** For the hint line: every glyph on screen, in the order a reader meets
- *  them. It shares one row with the section's own keys, so it is terse on
- *  purpose — a legend that gets truncated teaches nobody anything. */
-export const LEGEND = `${GLYPH.yours} yours now · ${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed · ${GLYPH.spoke} spoke · ${STACK.follows} after the one it sits under · ${STACK.waits} waiting`;
-// and a name with no glyph: nothing from them yet. Left unsaid on purpose —
-// it is what the absence of a mark obviously means, and spelling it out cost
-// the row more than it fits.
+/** For the hint line: the verdicts, the marks a reader cannot guess. It
+ *  shares one row with the section's own keys, so it holds only what fits
+ *  whole at 120 columns — a legend that gets truncated teaches nobody
+ *  anything. The rest guess well, and `?` spells every one out: `▸` sits by
+ *  `you`, `…` is someone talking, `↳` is drawn on a tree, `⧗` is waiting —
+ *  and a name with no mark has said nothing yet. */
+export const LEGEND = `${GLYPH.approved} no changes · ${GLYPH.changes} changes asked · ${GLYPH.failed} failed`;
 
 /** What the mark means in a full sentence — the ? panel's line for it. */
 export const MARK_HELP: Record<Mark, string> = {

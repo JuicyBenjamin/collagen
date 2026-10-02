@@ -453,7 +453,9 @@ approved, `✕` a step failed, `…` someone spoke — one glyph per kind of ans
 gave it, and no names, because at a glance it is what was said that matters; the ticket's
 page says who. Inside a group, order carries the rest: what needs you first, then what is
 waiting, then failed, then finished-but-open (dim); a project holding something for you
-comes before one that does not. `?` spells out the kinds, the marks and the states.
+comes before one that does not. The key line under the list spells out the verdicts —
+`✓` no changes, `↻` changes asked, `✕` failed — whole, at 120 columns; `?` spells out the
+rest: the kinds, every mark and the states.
 
 **Completion and closure are two facts.** A ticket is *finished* when every step is
 answered — a reader's ↻ on a review counts as an answer — and that is a signal, not an
