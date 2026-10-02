@@ -133,6 +133,9 @@ export const Ticket = Schema.Struct({
   goal: Schema.String,
   /** Pubkey (hex) of the creator — authoritative for the ticket's structure. */
   createdBy: Schema.String,
+  /** When it was filed — never moved by a revision (structureAt is). Absent
+   *  on a ticket filed before it was recorded. */
+  filedAt: Schema.optional(Schema.Finite),
   kind: TicketKind,
   steps: Schema.Array(TicketStep),
   /** When the AUTHOR last changed the ticket's structure — goal, kind, from, after,
@@ -212,13 +215,16 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
   const partOf = union(local.partOf, incoming.partOf, (m) => m.id);
   const turns = union(local.turns, incoming.turns, (t) => t.id);
   const order = union(local.order, incoming.order, (o) => `${o.at}|${o.by}|${o.ids.join(",")}`);
-  const { title: _ltitle, ...unchanged } = rest;
+  const { title: _ltitle, filedAt: _lfiled, ...unchanged } = rest;
   // the author's title — and on an exact tie of their clock, whichever copy
   // has one: a copy without a title never takes it away
   const title = author.title ?? (incoming.structureAt === local.structureAt ? (local.title ?? incoming.title) : undefined);
+  // when it was filed: the one both copies know, the earlier if they differ
+  const filedAt = local.filedAt !== undefined && incoming.filedAt !== undefined ? Math.min(local.filedAt, incoming.filedAt) : (local.filedAt ?? incoming.filedAt);
   return {
     ...unchanged,
     ...(title !== undefined ? { title } : {}),
+    ...(filedAt !== undefined ? { filedAt } : {}),
     ...(partOf ? { partOf } : {}),
     ...(turns ? { turns } : {}),
     ...(order ? { order } : {}),

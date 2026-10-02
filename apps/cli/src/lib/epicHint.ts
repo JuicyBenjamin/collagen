@@ -8,7 +8,8 @@ const TOGETHER_MS = 30 * 60_000;
  *  put there on its own — or, when the person files several related tickets
  *  together and none is in an epic, a new one. Once, in a line, on their yes.
  *  Related: grown out of the same ticket (or out of it), or filed in the same
- *  project within the last half hour. Three of them make the offer. */
+ *  project within the last half hour — by when each was FILED, which a
+ *  revision (a new title, a new goal) never moves. Three of them make the offer. */
 export function relatedHint(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): string {
   if (ticket.kind === "epic" || epicOf(ticket) !== null) return "";
   // grown out of a ticket in an epic: that epic is the suggestion, not a new one
@@ -31,7 +32,7 @@ export function relatedHint(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me
       t.createdBy === me &&
       !isClosed(t) &&
       epicOf(t) === null &&
-      (parents.has(t.id) || (t.from ?? []).some((p) => parents.has(p) || p === ticket.id) || (t.project === ticket.project && ticket.structureAt - t.structureAt < TOGETHER_MS && t.structureAt <= ticket.structureAt)),
+      (parents.has(t.id) || (t.from ?? []).some((p) => parents.has(p) || p === ticket.id) || (t.project === ticket.project && t.filedAt !== undefined && ticket.filedAt !== undefined && ticket.filedAt - t.filedAt < TOGETHER_MS && t.filedAt <= ticket.filedAt)),
   );
   if (related.length < 2) return "";
   return ` RELATED: your user has filed ${related.length + 1} related tickets together (${[ticket, ...related].map((t) => t.id).join(", ")}) and none is in an epic. After reporting the filing, offer them in one line to put these under one epic (epic, action create, with these ticketIds) — only on their yes, and not again if they decline.`;
