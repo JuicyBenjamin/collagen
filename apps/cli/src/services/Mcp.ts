@@ -27,6 +27,7 @@ import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes } from "./ReviewView";
 import { ReviewTypesRoutes } from "./ReviewTypes";
+import { ReviewLiveRoutes } from "./ReviewLive";
 import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
@@ -1343,6 +1344,7 @@ export const McpLive = Layer.unwrap(
           InboxRoutes,
           ReviewRoutes,
           ReviewTypesRoutes,
+          ReviewLiveRoutes,
         ).pipe(
           Layer.provideMerge(
             McpServer.layerHttp({

@@ -16,6 +16,15 @@ full why page:
 http://127.0.0.1:<your instance's port>/review/<ticket id>
 ```
 
+If that review's page is already open, `o` brings its tab to the front instead of opening
+another — on macOS, in Chrome, Safari, Brave, Edge, Arc, Vivaldi or Chromium, which macOS
+asks you once to allow; anywhere else it opens a tab as before.
+
+The page keeps itself current: your collagen tells it when the review's why is revised (the
+author's agent amends it whenever the code moves), when the ticket moves, or when the
+branch's commit in your clone changes, and it reloads its data in place — what is on screen
+stays until the new data is in.
+
 It is served by your own running collagen, beside the MCP server, on **loopback only** —
 nothing about the code leaves your machine, and a request that names another host is
 refused. The url also goes to the activity log, for a machine with no browser to open.

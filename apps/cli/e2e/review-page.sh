@@ -78,5 +78,20 @@ expect "…and so is a file the type checker does not read" "$(curl -s -o /dev/n
 expect "…and a hover from another host" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$ORIGIN/review/$TICKET/hover?file=src/use.ts&line=3&col=21")" "^403$"
 expect "your clone was not touched: no worktree, nothing staged" "$(git -C "$R" worktree list | wc -l | tr -d ' ')$(git -C "$R" status --porcelain | wc -l | tr -d ' ')" "^10$"
 
+echo "## the page is kept current: the instance says when the review changes"
+EV="$OUT/events.txt"; rm -f "$EV"
+curl -s -N -m 40 "$ORIGIN/review/$TICKET/events" > "$EV" &
+CURL=$!; disown
+wait_until "the stream is open" "retry:" cat "$EV"
+D3='{"what":"the export streams in pages","userWhy":"she asked for it"}'
+AMEND="{\"ticketId\":\"$TICKET\",\"decisions\":[$D3]}"
+call $A "$SA" ask-review "$AMEND" > /dev/null
+wait_until "revising the why says changed" "event: changed" cat "$EV"
+BEFORE=$(grep -c "event: changed" "$EV")
+printf 'export const more = 1;\n' > "$R/src/more.ts"; git -C "$R" add -A; git -C "$R" commit -qm more
+wait_until "a new commit on the branch says changed too" "^$((BEFORE + 1))$" grep -c "event: changed" "$EV"
+expect "…and the data now has it" "$(curl -s "$ORIGIN/review/$TICKET/data")" "src/more.ts"
+kill $CURL 2>/dev/null
+
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all; summary
