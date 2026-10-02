@@ -98,6 +98,29 @@ const linkNodeModules = (projectPath: string, root: string, rel = "", depth = 0)
   for (const name of entries) linkNodeModules(projectPath, root, join(rel, name), depth + 1);
 };
 
+/** The doc comment right above line `at`, as text — whole or not at all: a
+ *  JSDoc block back to its opening, or a run of // lines. Markers stripped,
+ *  so the page shows it as prose rather than as comment syntax. */
+export function docAbove(lines: ReadonlyArray<string>, at: number): string | null {
+  let end = at - 1;
+  while (end >= 0 && lines[end]!.trim() === "") end--;
+  if (end < 0) return null;
+  const last = lines[end]!.trim();
+  let start = end;
+  if (last.endsWith("*/")) {
+    while (start >= 0 && !lines[start]!.includes("/*")) start--;
+    if (start < 0 || !lines[start]!.includes("/**")) return null; // a plain /* */ block is not documentation
+  } else if (last.startsWith("//")) {
+    while (start > 0 && lines[start - 1]!.trim().startsWith("//")) start--;
+  } else return null;
+  const text = lines
+    .slice(start, end + 1)
+    .map((l) => l.replace(/^\s*\/\*\*?\s?/, "").replace(/\s*\*\/\s*$/, "").replace(/^\s*\*\s?/, "").replace(/^\s*\/\/\s?/, ""))
+    .join("\n")
+    .trim();
+  return text.length > 0 ? text : null;
+}
+
 /** A hover's markdown, from the server's reply in any of its shapes. */
 const hoverText = (result: unknown): string => {
   const contents = (result as { contents?: unknown } | null)?.contents;
@@ -211,11 +234,11 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       }>;
       const { root, projectPath } = r.session;
       const realRoot = realpathSync(root);
-      const peeks = links.slice(0, 3).flatMap((l): Array<Peek> => {
+      const peeks = links.slice(0, 8).flatMap((l): Array<Peek> => {
         const target = l.targetUri ?? l.uri ?? "";
         const range = l.targetRange ?? l.range;
         if (!range) return [];
-        if (!target.startsWith("file:")) return [{ file: target.replace(/^bundled:\/\/\/libs\//, "typescript/lib/"), where: "typescript", line: range.start.line + 1, code: null, more: 0 }];
+        if (!target.startsWith("file:")) return [{ file: target.replace(/^bundled:\/\/\/libs\//, "typescript/lib/"), where: "typescript", line: range.start.line + 1, doc: null, code: null, more: 0 }];
         const path = fileURLToPath(target);
         const real = (() => {
           try {
@@ -230,15 +253,14 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         const inPackage = full.split(sep).includes("node_modules");
         const shown = inPackage ? full.slice(full.lastIndexOf(`node_modules${sep}`) + `node_modules${sep}`.length) : full;
         const lines = readFileSync(real, "utf8").split("\n");
-        // the doc comment above a declaration is often what a reader needs most
-        let from = range.start.line;
-        while (from > 0 && range.start.line - from < 30 && /^\s*(\/\*\*?|\*|\/\/)/.test(lines[from - 1] ?? "")) from--;
+        const from = range.start.line;
         const to = Math.min(range.end.line, from + PEEK_LINES - 1);
         return [
           {
             file: shown,
             where: inPackage ? "package" : "branch",
             line: from + 1,
+            doc: docAbove(lines, from),
             code: lines.slice(from, to + 1).join("\n"),
             more: Math.max(0, range.end.line - to),
           },
