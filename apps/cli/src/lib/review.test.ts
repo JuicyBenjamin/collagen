@@ -41,6 +41,15 @@ describe("what a review must carry", () => {
     expect(reviewGaps({ ...full, decisions: [{ title: "x", what: "x", agentWhy: "mine", where: [] }] }, false)).toBe(null);
   });
 
+  it("a review's summary is a headline: a sentence or two, not the build", () => {
+    const essay = "On TypeScript and JavaScript files of a review, rest on a word for its type and click it to peek its declaration inline under the line, for the branch's code and for packages alike, with a pinned checker.";
+    expect(reviewGaps({ ...full, summary: essay }, false)).toMatch(/summary is \d+ characters .* 200 at most/);
+    expect(reviewGaps({ summary: essay }, true)).toMatch(/200 at most/);
+    expect(reviewGaps({ ...full, summary: "See an imported function's type without leaving the review." }, false)).toBe(null);
+    // a plan's summary is its thinking in a paragraph: not held to it
+    expect(reviewGaps({ ...full, summary: essay }, false, "plan")).toBe(null);
+  });
+
   it("every decision has a title, and a title is a headline, not a sentence", () => {
     expect(reviewGaps({ ...full, decisions: [{ title: " ", what: "pure frame functions", agentWhy: "mine", where: [] }] }, false)).toMatch(/decision 1 \("pure frame functions"\) has no 'title'/);
     const long = "Pure frame functions so that every frame of the logo can be tested without a terminal";
