@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Effect, Layer, Stream } from "effect";
@@ -38,37 +38,47 @@ const backend = Effect.gen(function* () {
     changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(ctx)) : Stream.empty),
     hover: (ticketId, file, line, col) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) ? on(types.hover(ticketId, file, line, col)) : Effect.succeed(bad)),
     definition: (ticketId, file, line, col) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) ? on(types.definition(ticketId, file, line, col)) : Effect.succeed(bad)),
-    tool: (tool) => (toolNamed(tool) ? types.toolState(tool) : Effect.succeed(null)),
+    tool: (tool) => (toolNamed(tool) ? types.watchTool(tool) : Stream.empty),
     install: (tool) => (toolNamed(tool) ? types.startInstall(tool) : Effect.succeed(null)),
     wholeFile: (ticketId, file) => (ticketIdOk(ticketId) && treePathOk(file) ? on(wholeFile(ticketId, file)) : Effect.succeed(bad)),
     since: (ticketId, file, from) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(from) ? on(sinceViewed(ticketId, file, from)) : Effect.succeed(bad)),
   } satisfies ReviewBackend["Service"];
 });
 
-/** The page's server bundle, loaded once and given its backend. Null when
- *  the page is not built — the page route says so already. */
-const loaded = Effect.gen(function* () {
-  const root = webRoot();
-  const path = root ? join(root, "server", "entry.js") : null;
-  if (!path || !existsSync(path)) return null;
-  const entry = yield* Effect.promise(() => import(pathToFileURL(path).href) as Promise<ServerEntry>);
-  entry.provideBackend(yield* backend);
-  return entry;
-});
+/** The page's server bundle, given its backend: loaded when a call first
+ *  needs it, and again when the page is rebuilt (its file's time moved) —
+ *  so a build while collagen runs, or collagen started before one, never
+ *  leaves the page without its functions. Null while it is not built. */
+const bundle = (impl: ReviewBackend["Service"]) => {
+  let current: { readonly at: number; readonly entry: ServerEntry } | null = null;
+  return Effect.gen(function* () {
+    const root = webRoot();
+    const path = root ? join(root, "server", "entry.js") : null;
+    if (!path || !existsSync(path)) return null;
+    const at = statSync(path).mtimeMs;
+    if (current?.at !== at) {
+      const entry = yield* Effect.promise(() => import(`${pathToFileURL(path).href}?at=${at}`) as Promise<ServerEntry>);
+      entry.provideBackend(impl);
+      current = { at, entry };
+    }
+    return current.entry;
+  });
+};
 
-const handle = (entry: ServerEntry | null) => (request: HttpServerRequest.HttpServerRequest) =>
+const handle = (load: Effect.Effect<ServerEntry | null>) => (request: HttpServerRequest.HttpServerRequest) =>
   Effect.gen(function* () {
     if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-    if (!entry) return HttpServerResponse.text("the review page is not built", { status: 503 });
+    const entry = yield* load;
+    if (!entry) return HttpServerResponse.text("the review page is not built: pnpm --filter @collagen/review-web build", { status: 503 });
     const web = yield* HttpServerRequest.toWeb(request);
     return HttpServerResponse.fromWeb(yield* Effect.promise(() => entry.handleServerFunctionRequest(web)));
   }).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.text("bad request", { status: 400 }))));
 
 export const ReviewServerRoutes = Layer.unwrap(
   Effect.gen(function* () {
-    const entry = yield* loaded;
+    const load = bundle(yield* backend);
     // the wildcard takes the endpoint itself too (POSTed calls) and what
     // is under it (a GET's /<id>, a live call's /live/<id>)
-    return HttpRouter.add("*", "/review/_server/*", handle(entry));
+    return HttpRouter.add("*", "/review/_server/*", handle(load));
   }),
 );

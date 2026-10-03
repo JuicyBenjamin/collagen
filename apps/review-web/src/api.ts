@@ -32,10 +32,14 @@ export const definitionAt = GET(async (ticketId: string, file: string, line: num
   return run((b) => b.definition(ticketId, file, line, col));
 });
 
-export const toolState = GET(async (tool: ToolId): Promise<ToolState | null> => {
-  "use server";
-  return run((b) => b.tool(tool));
-});
+/** A language server's state, live: the offer, its install, its notices
+ *  follow it as it moves. Held open while the page is. */
+export const toolStates = live(
+  GET(async (tool: ToolId): Promise<AsyncIterable<ToolState>> => {
+    "use server";
+    return stream((b) => b.tool(tool));
+  }),
+);
 
 /** Install a language server — only ever on the reader's click. */
 export const installTool = async (tool: ToolId): Promise<ToolState | null> => {
