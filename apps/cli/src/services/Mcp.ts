@@ -266,7 +266,7 @@ export const AskReview = Tool.make("ask-review", {
     "Ask for a review of your user's code, with the WHY attached — the thing a diff cannot show. Only when your user asks for a review (\"ask <peer> for a review\", \"put it up for review\") — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went, in full.",
     "'peers' is who is asked, and it is 0 to many — it carries exactly the names your user said, and NONE is the default. They named nobody, you name nobody: never infer a reviewer from who is in the room, who is online, or who touched the code. Name several and each gets a review step of their own. With nobody asked the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
     "A reviewer must see what the change is FOR before anything else, so lead with purpose. 'summary' is the purpose in a sentence or two (200 characters at most — it is the headline of the review page): what is different for whoever uses this once it lands — not how it was built, not a list of the parts. Every decision needs a 'title': its headline, a few words (60 characters at most), what it achieves, in plain words — \"Big exports finish\", \"One tab per review\", \"Typos caught before merge\" — never the mechanism (\"SSE endpoint with SubscriptionRef streams\"). 'what' is the line beneath it: what was actually done, in one line. Short and sweet beats complete: the why, the forks and the code carry the rest.",
-    "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line), and 'guidedBy' when a skill or an agent instruction file told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\"); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
+    "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line), and 'guidedBy' when a skill or an agent instruction file told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\"); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then the 'units': the change grouped into code that together makes ONE thing — a component with its sub-components, its implementation and its tests; a service with its routes — each with a 'title' (a few words, 60 characters at most) and 'where' it lives (files, or file:line for one part of a file, as for one route of a big routes file). The review page's sections are units, every piece of code shown once, read building blocks first; the decisions sit beside the units they shaped. Put a test in the unit of the code it tests. What you leave out is grouped by imports; 'retireUnits' withdraws one by id. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
     "'title' is the ticket's headline in every list — a few words, 60 characters at most, what the change is for; required when filing. The goal beneath it defaults to the branch.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
     "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
@@ -313,6 +313,16 @@ export const AskReview = Tool.make("ask-review", {
         }),
       ),
     ),
+    units: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          title: Schema.String,
+          where: Schema.Array(Schema.String),
+        }),
+      ),
+    ),
+    retireUnits: Schema.optional(Schema.Array(Schema.String)),
   }),
   success: Schema.String,
 });
@@ -662,6 +672,8 @@ const makeHandlers = Effect.gen(function* () {
         suggestion?: { readonly what: string; readonly requirements?: ReadonlyArray<string> };
         remedy?: Remedy;
         retire?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
+        units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly where: ReadonlyArray<string> }>;
+        retireUnits?: ReadonlyArray<string>;
       }) {
         const { id: roomId, room } = yield* focusedRoom;
         const myName = yield* SubscriptionRef.get(nameRef);
@@ -686,6 +698,15 @@ const makeHandlers = Effect.gen(function* () {
             : undefined;
         const retireBug = kind === "bug" && input.retire && input.retire.length > 0 ? input.retire : undefined;
         const bugMoves = (bug !== undefined && Object.keys(bug).length > 0) || retireBug !== undefined;
+        // a review's units: how its code reads, one thing at a time
+        const units = kind === "review" && input.units && input.units.length > 0 ? input.units.map((u) => ({ ...(u.id ? { id: u.id } : {}), title: u.title.trim(), where: u.where.map((w) => w.trim()).filter((w) => w.length > 0) })) : undefined;
+        const retireUnits = kind === "review" && input.retireUnits && input.retireUnits.length > 0 ? input.retireUnits : undefined;
+        for (const u of units ?? []) {
+          const gap = ticketTitleGap(u.title);
+          if (gap) return gap.replace("the ticket's headline", `unit "${u.title.slice(0, 30)}"'s headline`).replace("the goal is the line beneath it", "its code is what it holds");
+          if (u.where.length === 0) return `failed: unit "${u.title}" points at no code — give its 'where': files, or file:line for one part of a file`;
+        }
+        const unitsMove = units !== undefined || retireUnits !== undefined;
         const delta = {
           ...(input.summary ? { summary: input.summary } : {}),
           ...(input.base ? { base: input.base } : {}),
@@ -695,6 +716,8 @@ const makeHandlers = Effect.gen(function* () {
           ...(retireOutline ? { retireOutline } : {}),
           ...(bug !== undefined && Object.keys(bug).length > 0 ? { bug } : {}),
           ...(retireBug ? { retireBug } : {}),
+          ...(units ? { units } : {}),
+          ...(retireUnits ? { retireUnits } : {}),
         };
 
         // amending a review already on a ticket: only its author writes it
@@ -712,7 +735,7 @@ const makeHandlers = Effect.gen(function* () {
           }
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
-            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves;
+            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves || unitsMove;
           if (input.title !== undefined) {
             const gap = ticketTitleGap(input.title);
             if (gap) return gap;

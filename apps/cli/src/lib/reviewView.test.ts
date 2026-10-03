@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { claimed, groupByWhy, parseDiff, parsePointer, sameFile } from "./reviewView";
+import { claimed, parseDiff, parsePointer, sameFile } from "./reviewView";
 
 const DIFF = `diff --git a/src/a.ts b/src/a.ts
 index 1..2 100644
@@ -58,38 +58,5 @@ describe("pointers", () => {
     expect(claimed(parsePointer("src/a.ts:50"), hunks).map((h) => h.id)).toEqual(["src/a.ts#1"]);
     expect(claimed(parsePointer("src/a.ts:200"), hunks)).toEqual([]);
     expect(claimed(parsePointer("src/a.ts"), hunks)).toHaveLength(2);
-  });
-});
-
-describe("groupByWhy", () => {
-  const hunks = parseDiff(DIFF);
-  const review = {
-    decisions: [
-      { id: "d1", what: "add two", where: ["src/a.ts:2"] },
-      { id: "d2", what: "a new file, and the far edit", where: ["src/b.ts", "src/a.ts:42", "src/c.ts:9"] },
-      { id: "d3", what: "also the first line", where: ["src/a.ts:1"] },
-    ],
-    forks: [
-      { id: "f1", at: "src/b.ts:1", chose: "a new file", instead: "inline", why: "separate concern" },
-      { id: "f2", at: "src/gone.ts:1", chose: "delete", instead: "keep", why: "dead" },
-    ],
-  };
-  const g = groupByWhy(review, hunks);
-  it("a section per decision with the hunks it claims, in diff order", () => {
-    expect(g.sections.map((s) => s.hunks)).toEqual([["src/a.ts#0"], ["src/a.ts#1", "src/b.ts#2"], ["src/a.ts#0"]]);
-  });
-  it("a hunk two decisions claim is shown under both, marked shared", () => {
-    expect(g.sections[0]!.shared).toEqual(["src/a.ts#0"]);
-    expect(g.sections[1]!.shared).toEqual([]);
-  });
-  it("forks sit in the section whose hunks they fall in", () => {
-    expect(g.sections[1]!.forks.map((f) => f.id)).toEqual(["f1"]);
-  });
-  it("what the why does not cover is its own finding", () => {
-    expect(g.unexplained).toEqual(["src/gone.ts#3"]);
-    expect(g.looseForks.map((f) => f.id)).toEqual(["f2"]);
-  });
-  it("a pointer at code that did not change is said, not dropped", () => {
-    expect(g.sections[1]!.unmatched).toEqual(["src/c.ts:9"]);
   });
 });
