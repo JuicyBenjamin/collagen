@@ -311,6 +311,18 @@ proposal  bulk export for the backoffice            kristian ✓
           ↳ review  feat/bulk-export                  kristian ✓  alice ↻
 ```
 
+A bug opens a chain the same way — the report is the fact, the fix is judged against it:
+
+```
+bug  the export comes back empty above 10k rows       alice ✓ (diagnosis)  kristian ✓
+  ↳ plan  page by id, not by offset                   alice ✓
+      ↳ review  fix/export-paging                     alice ✓
+```
+
+Asked at review time why the pagination changed, the reviewer's agent walks back to the
+bug's symptom, cause and suggestion — the requirement the fix had to respect was a loose
+line on the report before it was a line in the plan.
+
 A ticket carries `from`: the ids of the tickets it follows. At review time, asked why
 the export streams, the reviewer's agent walks back to the plan's conclusion and the fork
 that chose it, and to the proposal's why for who needed the export at all — so a dispute
