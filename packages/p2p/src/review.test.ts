@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emptyReview, mergeReview } from "./review";
+import { Schema } from "effect";
+import { emptyReview, mergeReview, ReviewContext } from "./review";
 
 const base = emptyReview("t1", "k-alice", "alice");
 
@@ -52,10 +53,13 @@ describe("a review's why, amended as the work goes on", () => {
   });
 
   it("units merge by id: new ones numbered, a repeated id corrects one, a retired one goes", () => {
-    const first = mergeReview(base, { units: [{ title: "Export streams", where: ["src/export.ts"] }, { title: "Paging", where: ["src/page.ts"] }] }, 1);
+    const first = mergeReview(base, { units: [{ title: "Export streams", what: "rows are streamed", where: ["src/export.ts"] }, { title: "Paging", what: "a hundred a page", where: ["src/page.ts"] }] }, 1);
     expect(first.units?.map((u) => `${u.id} ${u.title}`)).toEqual(["u1 Export streams", "u2 Paging"]);
-    const fixed = mergeReview(first, { units: [{ id: "u2", title: "Paging by id", where: ["src/page.ts:3"] }], retireUnits: ["u1"] }, 2);
-    expect(fixed.units).toEqual([{ id: "u2", title: "Paging by id", where: ["src/page.ts:3"] }]);
+    const fixed = mergeReview(first, { units: [{ id: "u2", title: "Paging by id", what: "paged by id, not offset", where: ["src/page.ts:3"] }], retireUnits: ["u1"] }, 2);
+    expect(fixed.units).toEqual([{ id: "u2", title: "Paging by id", what: "paged by id, not offset", where: ["src/page.ts:3"] }]);
+    // a unit stored before units had a line beneath the title still decodes, review and all
+    const older = Schema.decodeUnknownSync(ReviewContext)({ ...fixed, units: [{ id: "u2", title: "Paging by id", where: ["src/page.ts"] }] });
+    expect(older.units?.[0]?.what).toBeUndefined();
     // a review that never named units has none
     expect(mergeReview(base, { summary: "x" }, 3).units).toBeUndefined();
   });

@@ -41,22 +41,27 @@ refused. The url also goes to the activity log, for a machine with no browser to
 It is for a person reading code, so the code is the loudest thing on it — after the
 purpose. A review's summary heads the page (where the code is sits above it, small), so you
 know what the change is for before reading any of it. Then the change in **units**: code
-that together makes one thing — a component with its sub-components, its implementation and
-its tests; a service and its routes. **Every change is shown once**, in exactly one unit; a
-unit can hold part of a file (one route of a big routes file) and another unit the rest.
+that together achieves one thing — a component with its sub-components, its implementation
+and its tests; a service and its routes — each titled by what it achieves ("Big exports
+finish"), never by a file. **Every change is shown once**, in exactly one unit; a unit can
+hold part of a file (one route of a big routes file) and another unit the rest.
 
-- **Who decides.** The author's agent names the units when it asks for the review (a title,
-  and the files — or `file:line` for one part of a file — each holds). What it leaves out
-  goes with what it belongs to by imports, and a review filed without units is grouped by
-  imports alone: a test with the code it tests (`Outbox.test.ts` with `Outbox.ts`), a
-  sub-component in a folder below with the component using it, every other file a unit of
-  its own. Those are named by their file and marked "grouped by imports".
+- **Who decides.** The author's agent names the units when it asks for the review: a title
+  saying what the unit achieves, a line beneath it on what that code does, and the files —
+  or `file:line` for one part of a file — it holds. A title that is a file name is refused,
+  and the agent is told which changes its units leave out. What they leave out (and all of
+  a review filed without units) goes under the decision that points at it most precisely —
+  the section titled by that decision — a test with the code it tests (`Outbox.test.ts`
+  with `Outbox.ts`), a sub-component in a folder below with the component using it. What
+  no decision covers is **Not explained**, read last: a finding in itself, worth a
+  question to the author.
 - **Order.** Building blocks first: a unit comes before the units that import it, so you
   read what something is made of before what uses it. Otherwise the author's order.
-- **Each unit**: its title, how many changes in how many files, then its code — a file's
-  changes under one header. A change no decision covers says so where it sits — a finding
-  in itself, worth a question to the author.
-- **Beside it, the why**: the decisions that shaped this unit — each with its title, what
+- **Each unit**: what it achieves, the line on what it does, **Why:** the decisions that
+  shaped it — each a chip that opens its full why beside the code — then how many changes
+  in how many files, and its code: a file's changes under one header. A change no decision
+  covers says so where it sits.
+- **Beside it, the why in full**: the decisions that shaped this unit — each with its title, what
   was done, "Guided by …" naming any skill or agent file (`CLAUDE.md`, `AGENTS.md`) that
   told the agent to do it that way, how the person steered it (their words) and what their
   agent reasoned. A decision that shaped other units too links them. Then the **forks in
