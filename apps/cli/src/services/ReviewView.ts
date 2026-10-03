@@ -6,7 +6,7 @@ import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { roomProjects, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { gitDir } from "../lib/gitInfo";
-import type { ReviewPageData, WholeFileResult } from "@collagen/review-web/data";
+import type { ReviewPageData, SinceResult, WholeFileResult } from "@collagen/review-web/data";
 import { groupByWhy, parseDiff } from "../lib/reviewView";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -88,7 +88,8 @@ const fromClone = (path: string, base: string, branch: string) =>
     if (!b) return { diff: null, why: `the branch ${branch} is not in your clone at ${path}, nor on its origin` };
     if (!a) return { diff: null, why: `the base ${base} is not in your clone at ${path}, nor on its origin` };
     const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${a}...${b}`], path, 30_000);
-    return diff === null ? { diff: null, why: `git diff ${a}...${b} failed in ${path}` } : { diff, why: `${a}...${b} from your clone at ${path}` };
+    const commit = (yield* run("git", ["rev-parse", `${b}^{commit}`], path, 5_000))?.trim() || undefined;
+    return diff === null ? { diff: null, why: `git diff ${a}...${b} failed in ${path}` } : { diff, why: `${a}...${b} from your clone at ${path}`, commit };
   });
 
 /** The code a review's branch holds, for reading it as code (type hints,
@@ -135,6 +136,22 @@ export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: 
   return { lines } satisfies WholeFileResult;
 });
 
+/** A commit as the page names it: a full or abbreviated hash, nothing else. */
+export const commitOk = (c: string | undefined): c is string => c !== undefined && /^[0-9a-f]{7,40}$/.test(c);
+
+/** What changed in one file from the commit the reader viewed it at to the
+ *  branch now, from the reader's clone. After a rebase this includes what
+ *  the base brought in; a commit gone with a force-push says so. */
+export const sinceViewed = Effect.fn("ReviewView.since")(function* (ticketId: string, file: string, from: string) {
+  const tree = yield* reviewTree(ticketId);
+  if (typeof tree === "string") return { error: tree } satisfies SinceResult;
+  const known = yield* run("git", ["cat-file", "-e", `${from}^{commit}`], tree.projectPath, 5_000);
+  if (known === null) return { error: "the commit you viewed it at is no longer in your clone — the branch was rewritten" } satisfies SinceResult;
+  const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", from, tree.commit, "--", file], tree.projectPath, 15_000);
+  if (diff === null) return { error: `git diff failed for ${file}` } satisfies SinceResult;
+  return { hunks: parseDiff(diff).map((h) => ({ ...h, id: `since:${h.id}` })) } satisfies SinceResult;
+});
+
 /** The commit `ref` names in the clone at `path`, now — or null. */
 export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((s) => s?.trim() || null));
 
@@ -152,10 +169,12 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const host = review.link ? HOSTS.find((x) => x.matches(review.link!)) : undefined;
     let source: ReviewPageData["source"] = { kind: "none", detail: "" };
     let diff: string | null = null;
+    let commit: string | undefined;
     if (!branch) source = { kind: "none", detail: "this review names no branch — the decisions are listed with where they landed" };
     else if (project) {
       const got = yield* fromClone(project.path, base, branch);
       diff = got.diff;
+      commit = "commit" in got ? got.commit : undefined;
       source = { kind: diff === null ? "none" : "clone", detail: got.why };
     } else source = { kind: "none", detail: `you have not located "${ticket.project}" on this machine (the projects panel)` };
     // no clone to read: the host, when the link names one and its tool is logged in
@@ -170,6 +189,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
       review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ts: review.ts },
       source,
+      ...(source.kind === "clone" && commit ? { commit } : {}),
       grouped: diff === null ? null : groupByWhy(review, parseDiff(diff)),
       links: host && review.link ? host.links(review.link, base, branch) : review.link ? [{ label: "link", url: review.link }] : [],
     } satisfies ReviewPageData;
@@ -226,6 +246,18 @@ export const ReviewRoutes = Layer.mergeAll(
       const path = join(root, "assets", file);
       if (!existsSync(path)) return notFound("no such asset");
       return HttpServerResponse.uint8Array(readFileSync(path), { contentType: type, headers: { "cache-control": "public, max-age=31536000, immutable" } });
+    }),
+  ),
+  // one file's changes since the commit the reader viewed it at
+  HttpRouter.add("GET", "/review/:ticketId/since", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      const { ticketId } = yield* HttpRouter.params;
+      const q = new URL(request.url, "http://localhost").searchParams;
+      const file = q.get("file") ?? undefined;
+      const from = q.get("from") ?? undefined;
+      if (!ticketIdOk(ticketId) || !treePathOk(file) || !commitOk(from)) return HttpServerResponse.text("bad request", { status: 400 });
+      return HttpServerResponse.jsonUnsafe(yield* sinceViewed(ticketId, file, from));
     }),
   ),
   // one file of the branch, whole — only a path inside the tree

@@ -86,6 +86,9 @@ export interface ReviewPageData {
   };
   /** where the diff came from, in words for the page */
   readonly source: { readonly kind: "clone" | "host" | "none"; readonly detail: string };
+  /** the branch's commit the diff was read at, when it came from a clone —
+   *  what a file marked as viewed remembers, to show what moved since */
+  readonly commit?: string;
   readonly grouped: Grouped | null;
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
 }
@@ -93,6 +96,11 @@ export interface ReviewPageData {
 /** GET /review/<ticketId>/file?file — the whole file as the review's
  *  branch has it, from the reader's clone, line by line; or why not. */
 export type WholeFileResult = { readonly lines: ReadonlyArray<string> } | { readonly error: string };
+
+/** GET /review/<ticketId>/since?file&from — what changed in one file from
+ *  the commit the reader viewed it at to the branch now, as hunks; or why
+ *  not (the branch was rewritten and that commit is gone, say). */
+export type SinceResult = { readonly hunks: ReadonlyArray<Hunk> } | { readonly error: string };
 
 /** GET /review/<ticketId>/hover?file&line&col — what the type checker says
  *  about the symbol there: markdown (a code fence with the signature, then
