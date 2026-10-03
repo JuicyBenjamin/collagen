@@ -203,15 +203,14 @@ function Page(props: { data: ReviewPageData }) {
 }
 
 function Header(props: { data: ReviewPageData }) {
-  // a review's goal is its branch's name unless someone wrote one; its
-  // summary is the purpose — so on a review the purpose is the headline and
-  // where the code is sits above it, small
-  const purposeFirst = () => props.data.ticket.kind === "review" && props.data.review.summary.trim().length > 0;
+  // the title leads — a few words, what the change is for — and the summary
+  // is the line beneath it. A review filed before titles has only its
+  // branch's name for a goal: its summary leads instead
+  const headline = () =>
+    props.data.ticket.title ?? (props.data.ticket.kind === "review" && props.data.review.summary.trim().length > 0 ? props.data.review.summary : props.data.ticket.goal);
+  const beneath = () => (headline() === props.data.review.summary ? "" : props.data.review.summary.trim());
   return (
     <header>
-      <Show when={!purposeFirst()}>
-        <h1>{props.data.ticket.title ?? props.data.ticket.goal}</h1>
-      </Show>
       <p class="meta">
         <Show when={props.data.review.branch}>
           {(branch) => (
@@ -232,8 +231,9 @@ function Header(props: { data: ReviewPageData }) {
           )}
         </For>
       </p>
-      <Show when={purposeFirst()} fallback={<p class="summary">{props.data.review.summary}</p>}>
-        <h1 class="purpose">{props.data.review.summary}</h1>
+      <h1 class="purpose">{headline()}</h1>
+      <Show when={beneath()}>
+        <p class="summary">{beneath()}</p>
       </Show>
     </header>
   );

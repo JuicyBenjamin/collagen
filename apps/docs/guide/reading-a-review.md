@@ -39,8 +39,9 @@ refused. The url also goes to the activity log, for a machine with no browser to
 ## What it shows
 
 It is for a person reading code, so the code is the loudest thing on it — after the
-purpose. A review's summary heads the page (where the code is sits above it, small), so you
-know what the change is for before reading any of it. Then the change in **units**: code
+purpose. A review's title heads the page — a few words, what the change is for — with its
+summary beneath it and where the code is above it, small, so you know what the change is
+for before reading any of it (a review filed before titles leads with its summary). Then the change in **units**: code
 that together achieves one thing — a component with its sub-components, its implementation
 and its tests; a service and its routes — each titled by what it achieves ("Big exports
 finish"), never by a file. **Every change is shown once**, in exactly one unit; a unit can
