@@ -1,0 +1,44 @@
+import { Context, Effect, Stream } from "effect";
+import type { DefinitionResult, HoverResult, ReviewPageData, SinceResult, ToolId, ToolState, WholeFileResult } from "../data";
+
+// What the review page's server functions (src/api.ts) ask of the collagen
+// instance that serves them. The page declares it; the instance provides it
+// (apps/cli, services/ReviewServer) when it loads this bundle — so the
+// functions run in the instance's own process, on its own services, and
+// nothing here imports the cli. Arguments arrive from the browser: the
+// instance checks every one before acting on it.
+export class ReviewBackend extends Context.Service<
+  ReviewBackend,
+  {
+    /** the review: its why, its diff laid out under it, where both came from */
+    readonly data: (ticketId: string) => Effect.Effect<ReviewPageData | null>;
+    /** the review's state as a token — its why's revision, the ticket, the
+     *  branch's commit in the clone — current first, then each time it
+     *  moves; a reconnect starts again from the current one */
+    readonly changes: (ticketId: string) => Stream.Stream<string>;
+    readonly hover: (ticketId: string, file: string, line: number, col: number) => Effect.Effect<HoverResult>;
+    readonly definition: (ticketId: string, file: string, line: number, col: number) => Effect.Effect<DefinitionResult>;
+    readonly tool: (tool: ToolId) => Effect.Effect<ToolState | null>;
+    readonly install: (tool: ToolId) => Effect.Effect<ToolState | null>;
+    readonly wholeFile: (ticketId: string, file: string) => Effect.Effect<WholeFileResult>;
+    readonly since: (ticketId: string, file: string, from: string) => Effect.Effect<SinceResult>;
+  }
+>()("review-web/ReviewBackend") {}
+
+let backend: ReviewBackend["Service"] | null = null;
+
+/** The instance hands over its implementation once, before serving. */
+export const provideBackend = (impl: ReviewBackend["Service"]): void => {
+  backend = impl;
+};
+
+const provided = (): ReviewBackend["Service"] => {
+  if (!backend) throw new Error("the review page's backend is not provided");
+  return backend;
+};
+
+/** Run an effect on the backend, for a server function. */
+export const run = <A>(f: (b: ReviewBackend["Service"]) => Effect.Effect<A>): Promise<A> => Effect.runPromise(f(provided()));
+
+/** A stream from the backend, as a live server function returns it. */
+export const stream = <A>(f: (b: ReviewBackend["Service"]) => Stream.Stream<A>): AsyncIterable<A> => Stream.toAsyncIterable(f(provided()));

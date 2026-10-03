@@ -1,6 +1,7 @@
 import { createSignal, type Accessor } from "solid-js";
 import type { SinceResult } from "./data";
 import { ticketId } from "./ticket";
+import { sinceViewed } from "./api";
 
 // What moved in a file since it was viewed, asked once per file, viewed
 // commit and branch commit — every hunk of the file reads the same answer.
@@ -12,8 +13,8 @@ export const sinceOf = (file: string, from: string, to: string): Accessor<SinceR
   if (known) return known;
   const [result, setResult] = createSignal<SinceResult | "loading">("loading");
   asked.set(key, result);
-  fetch(`/review/${encodeURIComponent(ticketId)}/since?file=${encodeURIComponent(file)}&from=${encodeURIComponent(from)}`)
-    .then(async (res) => setResult(res.ok ? ((await res.json()) as SinceResult) : { error: await res.text() }))
+  sinceViewed(ticketId, file, from)
+    .then(setResult)
     .catch((e: unknown) => setResult({ error: String(e) }));
   return result;
 };
