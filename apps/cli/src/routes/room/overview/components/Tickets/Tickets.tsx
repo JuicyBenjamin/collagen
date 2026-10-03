@@ -100,9 +100,32 @@ export function Tickets() {
   const sel = clamp(cursor, 0, last);
   const current = shown[sel];
   const currentId = current?.t.id;
+  // kept in view as the cursor moves — and as the rows move under it (an
+  // epic folded or unfolded, tickets arriving or leaving above, a resize):
+  // those are seen once laid out, as the list's content or box changes size
+  const want = useRef<{ readonly id: string; readonly first: boolean } | null>(null);
+  want.current = currentId ? { id: rowId(currentId), first: sel === 0 } : null;
+  const keep = () => {
+    if (want.current && scroller.current) keepInView(scroller.current, want.current.id, want.current.first);
+  };
+  useEffect(keep, [currentId, sel]);
   useEffect(() => {
-    if (currentId && scroller.current) keepInView(scroller.current, rowId(currentId), sel === 0);
-  }, [currentId, sel]);
+    const list = scroller.current;
+    if (!list) return;
+    // after the scrollbox's own handling (it re-measures its range there),
+    // never instead of it
+    const undo = [list.content, list.viewport].map((part) => {
+      const before = part.onSizeChange;
+      part.onSizeChange = function (this: typeof part) {
+        before?.call(this);
+        keep();
+      };
+      return () => {
+        part.onSizeChange = before;
+      };
+    });
+    return () => undo.forEach((f) => f());
+  });
 
   return (
     <Focusable
