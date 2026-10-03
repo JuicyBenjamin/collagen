@@ -9,11 +9,12 @@ import { viewed } from "./viewedNow";
 import { reviewChanges, reviewData } from "./api";
 import { diffNow } from "./diffNow";
 
-// The review page: a review ticket's diff read by intent. One section per
-// decision — its title, and the code it produced, front and centre; beside
-// it, quieter, the why (how the person steered it, what their agent
-// reasoned) and the forks in the road. Then every hunk no decision claims:
-// "not explained", itself a finding. Ids, pointers and where the diff came
+// The review page: a review ticket's diff read by purpose. One section per
+// unit — what it achieves, a line on what it does, the decisions that shaped
+// it, then its code, each change shown once; beside it, quieter, the full why
+// (how the person steered each decision, what their agent reasoned) and the
+// forks in the road. Last, the changes no decision covers: "Not explained",
+// itself a finding. Ids, pointers and where the diff came
 // from are plumbing — kept out of the reader's way. Read-only: a take goes
 // back through the person's agent (post-review).
 
@@ -108,9 +109,9 @@ function Page(props: { data: ReviewPageData }) {
             {(g) => (
               <For each={g().units}>
                 {(u) => (
-                  <li>
+                  <li class={{ "nav-unexplained": u.by === "unexplained" }}>
                     <a href={`#${u.id}`}>
-                      <span class={["nav-what", { inferred: u.by === "imports" }]}>{u.title}</span>
+                      <span class="nav-what">{u.title}</span>
                       <span class="count">
                         {changes(u.hunks.length)}
                         {u.unexplained.length > 0 ? ` · ${u.unexplained.length} not explained` : ""}
@@ -277,15 +278,23 @@ function DecisionWhy(props: { decision: Decision }) {
 /** The why beside a unit: the decisions that shaped it (one spanning other
  *  units links them), the forks that fall in it, and what no decision
  *  covers — quieter than the code, and on a narrow screen folded away. */
-function Why(props: { unit: Unit; decisions: ReadonlyArray<Decision>; unitsOf: ReadonlyMap<string, ReadonlyArray<Unit>>; unmatched: Readonly<Record<string, ReadonlyArray<string>>> }) {
-  const has = () => props.decisions.length > 0 || props.unit.forks.length > 0 || props.unit.unexplained.length > 0;
+function Why(props: {
+  unit: Unit;
+  decisions: ReadonlyArray<Decision>;
+  unitsOf: ReadonlyMap<string, ReadonlyArray<Unit>>;
+  unmatched: Readonly<Record<string, ReadonlyArray<string>>>;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+}) {
+  // what no decision covers is said by the unit itself when that is all it is
+  const has = () => props.decisions.length > 0 || props.unit.forks.length > 0 || (props.unit.unexplained.length > 0 && props.unit.by !== "unexplained");
   return (
     <Show when={has()}>
-      <details class="why" open={wide()}>
-        <summary>Why</summary>
+      <details class="why" open={props.open} onToggle={(e) => props.onToggle(e.currentTarget.open)}>
+        <summary>Why in full</summary>
         <For each={props.decisions}>
           {(d) => (
-            <div class="why-decision">
+            <div class="why-decision" id={whyId(props.unit, d)}>
               <DecisionWhy decision={d} />
               <Show when={(props.unitsOf.get(d.id) ?? []).filter((u) => u.id !== props.unit.id)}>
                 {(others) => (
@@ -315,7 +324,7 @@ function Why(props: { unit: Unit; decisions: ReadonlyArray<Decision>; unitsOf: R
           )}
         </For>
         <For each={props.unit.forks}>{(f) => <Fork fork={f} />}</For>
-        <Show when={props.unit.unexplained.length > 0}>
+        <Show when={props.unit.unexplained.length > 0 && props.unit.by !== "unexplained"}>
           <p class="stale">
             {changes(props.unit.unexplained.length)} here no decision covers — worth a question to the author.
           </p>
@@ -325,8 +334,13 @@ function Why(props: { unit: Unit; decisions: ReadonlyArray<Decision>; unitsOf: R
   );
 }
 
-/** A unit: code that together makes one thing, each change in it shown once,
- *  a file's changes under one header; the why beside it. */
+/** Where a decision's full why sits beside a unit — a chip in the unit's
+ *  header leads there. */
+const whyId = (unit: Unit, d: Decision) => `why-${unit.id}-${d.id}`;
+
+/** A unit: what it achieves, a line on what it does, the decisions that
+ *  shaped it (each a chip leading to its full why beside the code), then its
+ *  code — each change in it shown once, a file's changes under one header. */
 function UnitSection(props: {
   unit: Unit;
   hunks: ReadonlyMap<string, HunkData>;
@@ -337,13 +351,45 @@ function UnitSection(props: {
   const shaped = () => props.unit.decisions.map((id) => props.decisions.get(id)).filter((d): d is Decision => d !== undefined);
   const files = () => new Set(props.unit.hunks.map((id) => props.hunks.get(id)?.file)).size;
   const unexplained = () => new Set(props.unit.unexplained);
+  // a unit that is a decision names it in its title already: its chips are the others
+  const chips = () => shaped().filter((d) => props.unit.id !== `d-${d.id}`);
+  const [open, setOpen] = createSignal(wide());
+  createEffect(wide, (w) => {
+    setOpen(w);
+  });
+  const show = (d: Decision) => {
+    // folded under the title on a narrow screen: open it first, then go there
+    setOpen(true);
+    requestAnimationFrame(() => {
+      const at = document.getElementById(whyId(props.unit, d));
+      if (!at) return;
+      at.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      at.classList.remove("flash");
+      void at.offsetWidth;
+      at.classList.add("flash");
+    });
+  };
   return (
-    <section class="decision unit" id={props.unit.id}>
+    <section class={["decision", "unit", { unexplained: props.unit.by === "unexplained" }]} id={props.unit.id}>
       <div class="decision-head">
         <h2>{props.unit.title}</h2>
-        <p class="decision-what">
+        <Show when={props.unit.what}>
+          <p class="decision-what">{props.unit.what}</p>
+        </Show>
+        <Show when={chips().length > 0}>
+          <p class="unit-why">
+            <span class="who">Why</span>
+            <For each={chips()}>
+              {(d) => (
+                <button type="button" class={["chip", { untitled: !d.title }]} onClick={() => show(d)}>
+                  {d.title ?? NO_TITLE}
+                </button>
+              )}
+            </For>
+          </p>
+        </Show>
+        <p class="unit-size">
           {changes(props.unit.hunks.length)} in {files() === 1 ? "1 file" : `${files()} files`}
-          {props.unit.by === "imports" ? " · grouped by imports: the author named no unit for this code" : ""}
         </p>
       </div>
       <div class="decision-main">
@@ -355,7 +401,7 @@ function UnitSection(props: {
           )}
         </For>
       </div>
-      <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} />
+      <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} open={open()} onToggle={setOpen} />
     </section>
   );
 }

@@ -13,7 +13,7 @@ import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } fro
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
-import { reviewGaps, ticketTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
+import { reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketView } from "../lib/ticketView";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
@@ -25,7 +25,7 @@ import { Scripting } from "./Scripting";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
-import { ReviewRoutes } from "./ReviewView";
+import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { Transcripts } from "./Transcripts";
@@ -266,7 +266,7 @@ export const AskReview = Tool.make("ask-review", {
     "Ask for a review of your user's code, with the WHY attached — the thing a diff cannot show. Only when your user asks for a review (\"ask <peer> for a review\", \"put it up for review\") — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went, in full.",
     "'peers' is who is asked, and it is 0 to many — it carries exactly the names your user said, and NONE is the default. They named nobody, you name nobody: never infer a reviewer from who is in the room, who is online, or who touched the code. Name several and each gets a review step of their own. With nobody asked the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
     "A reviewer must see what the change is FOR before anything else, so lead with purpose. 'summary' is the purpose in a sentence or two (200 characters at most — it is the headline of the review page): what is different for whoever uses this once it lands — not how it was built, not a list of the parts. Every decision needs a 'title': its headline, a few words (60 characters at most), what it achieves, in plain words — \"Big exports finish\", \"One tab per review\", \"Typos caught before merge\" — never the mechanism (\"SSE endpoint with SubscriptionRef streams\"). 'what' is the line beneath it: what was actually done, in one line. Short and sweet beats complete: the why, the forks and the code carry the rest.",
-    "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line), and 'guidedBy' when a skill or an agent instruction file told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\"); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then the 'units': the change grouped into code that together makes ONE thing — a component with its sub-components, its implementation and its tests; a service with its routes — each with a 'title' (a few words, 60 characters at most) and 'where' it lives (files, or file:line for one part of a file, as for one route of a big routes file). The review page's sections are units, every piece of code shown once, read building blocks first; the decisions sit beside the units they shaped. Put a test in the unit of the code it tests. What you leave out is grouped by imports; 'retireUnits' withdraws one by id. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
+    "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line), and 'guidedBy' when a skill or an agent instruction file told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\"); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then the 'units': the change grouped into code that together achieves ONE thing — a component with its sub-components, its implementation and its tests; a service with its routes — each with a 'title' saying what it achieves, never a file name (\"Big exports finish\", not \"export.ts\"; 60 characters at most), a 'what' line beneath it (what that code does, in a line), and 'where' it lives (files, or file:line for one part of a file, as for one route of a big routes file). The review page's sections are units, every piece of code shown once, read building blocks first, each headed by its title, its 'what' and the decisions that shaped it. Cover every change: put a test in the unit of the code it tests; what you leave out goes under the decision pointing at it, else under \"Not explained\", and the outcome names it. 'retireUnits' withdraws one by id. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none.",
     "'title' is the ticket's headline in every list — a few words, 60 characters at most, what the change is for; required when filing. The goal beneath it defaults to the branch.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
     "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
@@ -318,6 +318,7 @@ export const AskReview = Tool.make("ask-review", {
         Schema.Struct({
           id: Schema.optional(Schema.String),
           title: Schema.String,
+          what: Schema.String,
           where: Schema.Array(Schema.String),
         }),
       ),
@@ -672,7 +673,7 @@ const makeHandlers = Effect.gen(function* () {
         suggestion?: { readonly what: string; readonly requirements?: ReadonlyArray<string> };
         remedy?: Remedy;
         retire?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
-        units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly where: ReadonlyArray<string> }>;
+        units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
         retireUnits?: ReadonlyArray<string>;
       }) {
         const { id: roomId, room } = yield* focusedRoom;
@@ -699,11 +700,11 @@ const makeHandlers = Effect.gen(function* () {
         const retireBug = kind === "bug" && input.retire && input.retire.length > 0 ? input.retire : undefined;
         const bugMoves = (bug !== undefined && Object.keys(bug).length > 0) || retireBug !== undefined;
         // a review's units: how its code reads, one thing at a time
-        const units = kind === "review" && input.units && input.units.length > 0 ? input.units.map((u) => ({ ...(u.id ? { id: u.id } : {}), title: u.title.trim(), where: u.where.map((w) => w.trim()).filter((w) => w.length > 0) })) : undefined;
+        const units = kind === "review" && input.units && input.units.length > 0 ? input.units.map((u) => ({ ...(u.id ? { id: u.id } : {}), title: u.title.trim(), what: (u.what ?? "").trim(), where: u.where.map((w) => w.trim()).filter((w) => w.length > 0) })) : undefined;
         const retireUnits = kind === "review" && input.retireUnits && input.retireUnits.length > 0 ? input.retireUnits : undefined;
         for (const u of units ?? []) {
-          const gap = ticketTitleGap(u.title);
-          if (gap) return gap.replace("the ticket's headline", `unit "${u.title.slice(0, 30)}"'s headline`).replace("the goal is the line beneath it", "its code is what it holds");
+          const gap = unitTitleGap(u.title, u.what);
+          if (gap) return gap;
           if (u.where.length === 0) return `failed: unit "${u.title}" points at no code — give its 'where': files, or file:line for one part of a file`;
         }
         const unitsMove = units !== undefined || retireUnits !== undefined;
@@ -809,12 +810,14 @@ const makeHandlers = Effect.gen(function* () {
           const owners = [...new Set(revised.steps.map((s) => s.owner).filter((o) => o !== identity.pubkey))];
           const named = owners.map(nameOf).filter((n): n is string => n !== undefined);
           const to = named.length > 0 ? named.join(", ") : "the room";
-          return yield* outbox.tell({
+          const told = yield* outbox.tell({
             roomId,
             to,
             title: `${revised.goal} · ${changed ? "revised" : "more why"}`,
             outgoing: { kind: "review", ...(changed ? { ticket: revised } : {}), review },
           });
+          const clone = unitsMove && !told.startsWith("failed") ? roomProjects(yield* store.get, roomId).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase()) : undefined;
+          return clone ? told + (yield* unitCoverageNote(clone.path, review)) : told;
         }
 
         // a new review: who is asked (0 to many), which project, and the why
@@ -938,9 +941,10 @@ const makeHandlers = Effect.gen(function* () {
                 (t) => t.kind === "review" && t.id !== ticketId && !isClosed(t) && !finished(t) && visibleTo(t, tickets, identity.pubkey) && reviews.find((r) => r.ticketId === t.id)?.branch === input.base,
               )
             : [];
+        const coverage = units && !filed.startsWith("failed") ? yield* unitCoverageNote(projectPath, review) : "";
         return under.length > 0 && !filed.startsWith("failed")
-          ? `${filed}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
-          : filed;
+          ? `${filed}${coverage}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
+          : filed + coverage;
     });
 
     return {

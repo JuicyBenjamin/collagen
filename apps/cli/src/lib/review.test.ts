@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewContext } from "@collagen/p2p";
-import { reviewGaps, reviewHeadline, reviewRows, ticketTitleGap } from "./review";
+import { reviewGaps, reviewHeadline, reviewRows, ticketTitleGap, unitTitleGap } from "./review";
 
 const full = {
   summary: "the opening animation",
@@ -95,6 +95,14 @@ describe("reading a review back", () => {
     const guided = { ...record, decisions: [{ ...record.decisions[0]!, guidedBy: ["skill: frontend-design", "CLAUDE.md"] }, record.decisions[1]!] };
     expect(reviewRows(guided).decisions.map((d) => d.guidedBy)).toEqual(["skill: frontend-design, CLAUDE.md", ""]);
     expect(reviewRows(guided, "claude.md").decisions.map((d) => d.id)).toEqual(["d1"]);
+  });
+});
+
+describe("a unit's title", () => {
+  it("says what the unit achieves, never a file or a path, with a line beneath", () => {
+    for (const t of ["Mcp.ts", "apps/cli/src", "export.ts · use.ts", "page.tsx, page.test.tsx"]) expect(unitTitleGap(t, "x")).toMatch(/titled by a file/);
+    for (const t of ["Big exports finish", "Node.js upgrade", "v1.2 release notes", "page.tsx tweaks"]) expect(unitTitleGap(t, "x")).toBeNull();
+    expect(unitTitleGap("Big exports finish", " ")).toMatch(/no 'what'/);
   });
 });
 
