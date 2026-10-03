@@ -110,12 +110,14 @@ expect "…with the doc comment above it" "$PEEK" "A hundred rows a page"
 expect "a path outside the branch is refused" "$(sfn hoverAt "[\"$TICKET\",\"../../etc/passwd.ts\",1,0]")" "bad request"
 expect "…and so is a file the type checker does not read" "$(sfn hoverAt "[\"$TICKET\",\"src/notes.txt\",1,0]")" "bad request"
 expect "…and a hover from another host" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url hoverAt "[\"$TICKET\",\"src/use.ts\",3,21]")")" "^403$"
-WHOLE=$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\"]")
+# the commit the page's diff is read at: the whole file and what moved since are of it
+SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
+WHOLE=$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"$SHOWN\"]")
 expect "a file reads whole, as the branch has it" "$WHOLE" '^\{"lines":\[.*\]\}$'
 expect "…every line of it" "$(echo "$WHOLE" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["lines"]))')" "^[3-9]$|^[1-9][0-9]+$"
-expect "…a path outside the tree is refused" "$(sfn wholeFile "[\"$TICKET\",\"../../etc/passwd\"]")" "bad request"
-expect "…a file the branch does not have says so" "$(sfn wholeFile "[\"$TICKET\",\"src/nope.ts\"]")" "not in the branch"
-expect "…and from another host it is refused" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url wholeFile "[\"$TICKET\",\"src/use.ts\"]")")" "^403$"
+expect "…a path outside the tree is refused" "$(sfn wholeFile "[\"$TICKET\",\"../../etc/passwd\",\"$SHOWN\"]")" "bad request"
+expect "…a file the branch does not have says so" "$(sfn wholeFile "[\"$TICKET\",\"src/nope.ts\",\"$SHOWN\"]")" "not in the branch"
+expect "…and from another host it is refused" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url wholeFile "[\"$TICKET\",\"src/use.ts\",\"$SHOWN\"]")")" "^403$"
 expect "your clone was not touched: no worktree, nothing staged" "$(git -C "$R" worktree list | wc -l | tr -d ' ')$(git -C "$R" status --porcelain | wc -l | tr -d ' ')" "^10$"
 
 echo "## the page is kept current: the instance says when the review changes"
@@ -136,12 +138,19 @@ expect "the page's data names the branch's commit it was read at" "$VIEWED_AT" "
 printf 'export const more = 1;\n' > "$R/src/more.ts"; printf '\nexport const later = 2;\n' >> "$R/src/use.ts"; git -C "$R" add -A; git -C "$R" commit -qm more
 wait_until "a new commit on the branch moves it too" "^$((BEFORE + 1))$" grep -c "^id:" "$EV"
 expect "…and the data now has it" "$(sfn reviewData "[\"$TICKET\"]")" "src/more.ts"
-SINCE=$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"$VIEWED_AT\"]")
+NOW=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
+SINCE=$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"$VIEWED_AT\",\"$NOW\"]")
 expect "what moved in a file since it was viewed: the new line alone" "$SINCE" '"kind":"\+","text":"export const later = 2;"'
 # the push added a blank line and the export: those two, and nothing it had before
 expect "…and nothing it had before" "$(echo "$SINCE" | python3 -c 'import json,sys; print(sum(1 for h in json.load(sys.stdin)["hunks"] for l in h["lines"] if l["kind"] != " "))')" "^2$"
-expect "…a commit that is not a hash is refused" "$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"HEAD~1\"]")" "bad request"
-expect "…a commit the clone does not have says the branch was rewritten" "$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"0000000000000000000000000000000000000000\"]")" "branch was rewritten"
+expect "…a commit that is not a hash is refused" "$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"HEAD~1\",\"$NOW\"]")" "bad request"
+expect "…a commit the clone does not have says the branch was rewritten" "$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"0000000000000000000000000000000000000000\",\"$NOW\"]")" "branch was rewritten"
+# a page still showing the older commit, while the branch has moved on: what
+# it asks for is of the commit it shows, never the branch's tip now
+expect "the whole file of the commit the page shows, not the branch's tip" "$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"$VIEWED_AT\"]" | grep -c 'later = 2')" "^0$"
+expect "…and of the tip when the page shows it" "$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"$NOW\"]")" "later = 2"
+expect "what moved since, up to the commit the page shows: nothing yet on the older page" "$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"$VIEWED_AT\",\"$VIEWED_AT\"]")" '^\{"hunks":\[\]\}$'
+expect "…a commit the page names but the clone lacks is refused, not swapped for the tip" "$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"0000000000000000000000000000000000000000\"]")" "not in your clone"
 kill $CURL 2>/dev/null
 # o on a review open where its tab cannot be brought forward opens one
 # marked ?take, which the old tab hands over to: the marker serves the page

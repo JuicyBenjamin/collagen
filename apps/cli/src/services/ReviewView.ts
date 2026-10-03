@@ -124,12 +124,14 @@ export const treePathOk = (file: string | undefined): file is string =>
  *  file or a bundle, not something a reviewer reads top to bottom. */
 const WHOLE_MAX = 1024 * 1024;
 
-/** A file whole, as the review's branch has it in the reader's clone —
- *  `git show <commit>:<path>`: the clone's working tree is never read. */
-export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: string, file: string) {
+/** A file whole at `commit` — the commit the page's diff was read at, not
+ *  the branch's tip now, so its marks and scroll target match — from the
+ *  reader's clone, `git show <commit>:<path>`: the working tree is never read. */
+export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: string, file: string, commit: string) {
   const tree = yield* reviewTree(ticketId);
   if (typeof tree === "string") return { error: tree } satisfies WholeFileResult;
-  const text = yield* run("git", ["show", `${tree.commit}:${file}`], tree.projectPath, 10_000);
+  if ((yield* run("git", ["cat-file", "-e", `${commit}^{commit}`], tree.projectPath, 5_000)) === null) return { error: "the commit this page shows is not in your clone" } satisfies WholeFileResult;
+  const text = yield* run("git", ["show", `${commit}:${file}`], tree.projectPath, 10_000);
   if (text === null) return { error: `${file} is not in the branch` } satisfies WholeFileResult;
   if (text.length > WHOLE_MAX) return { error: `${file} is over a megabyte — too big to read whole here` } satisfies WholeFileResult;
   if (text.includes("\0")) return { error: `${file} is not text` } satisfies WholeFileResult;
@@ -141,15 +143,18 @@ export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: 
 /** A commit as the page names it: a full or abbreviated hash, nothing else. */
 export const commitOk = (c: string | undefined): c is string => c !== undefined && /^[0-9a-f]{7,40}$/.test(c);
 
-/** What changed in one file from the commit the reader viewed it at to the
- *  branch now, from the reader's clone. After a rebase this includes what
- *  the base brought in; a commit gone with a force-push says so. */
-export const sinceViewed = Effect.fn("ReviewView.since")(function* (ticketId: string, file: string, from: string) {
+/** What changed in one file from the commit the reader viewed it at (`from`)
+ *  to the commit the page shows (`to`) — exactly those two, never the
+ *  branch's tip, so the changes sit where the page's hunks are. After a
+ *  rebase this includes what the base brought in; a commit gone with a
+ *  force-push says so. */
+export const sinceViewed = Effect.fn("ReviewView.since")(function* (ticketId: string, file: string, from: string, to: string) {
   const tree = yield* reviewTree(ticketId);
   if (typeof tree === "string") return { error: tree } satisfies SinceResult;
   const known = yield* run("git", ["cat-file", "-e", `${from}^{commit}`], tree.projectPath, 5_000);
   if (known === null) return { error: "the commit you viewed it at is no longer in your clone — the branch was rewritten" } satisfies SinceResult;
-  const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", from, tree.commit, "--", file], tree.projectPath, 15_000);
+  if ((yield* run("git", ["cat-file", "-e", `${to}^{commit}`], tree.projectPath, 5_000)) === null) return { error: "the commit this page shows is not in your clone" } satisfies SinceResult;
+  const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", from, to, "--", file], tree.projectPath, 15_000);
   if (diff === null) return { error: `git diff failed for ${file}` } satisfies SinceResult;
   return { hunks: parseDiff(diff).map((h) => ({ ...h, id: `since:${h.id}` })) } satisfies SinceResult;
 });
