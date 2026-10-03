@@ -62,7 +62,8 @@ export function Hunk(props: {
     if (w === null || (w !== "loading" && "error" in w)) {
       setWhole("loading");
       try {
-        setWhole(await wholeFile(ticketId, props.hunk.file));
+        const at = diffNow.commit();
+        setWhole(at ? await wholeFile(ticketId, props.hunk.file, at) : { error: "the page does not know which commit its diff is" });
       } catch (e) {
         setWhole({ error: String(e) });
       }
