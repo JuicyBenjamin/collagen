@@ -58,6 +58,11 @@ the order the author gave them:
 Last, **not explained**: every change no decision covers — a finding in itself, worth a
 question to the author — with any forks outside every decision's lines.
 
+**Whole file**, on a hunk's header, opens the file as the branch has it — read from your
+clone, never its working tree — every line numbered, this diff's added lines marked, scrolled
+to the change; types and peeks work on it as on the hunk. "Just the change" folds it back.
+It is offered when the diff came from your clone, and not on a deleted file.
+
 **Viewed**, on each file's header, marks it as read, as on GitHub: the file folds to its
 header everywhere it shows on the page, and the top of the decisions list counts how many
 of the review's files you have viewed. A mark is for the file as you read it — when the
