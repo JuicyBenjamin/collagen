@@ -106,6 +106,11 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .whole-toggle:hover { color: var(--accent); border-color: var(--accent); }
 .code.whole { max-height: 70vh; overflow: auto; }
 .whole-failed { margin: 0; padding: 6px 12px; font-size: 12.5px; color: var(--warn); border-bottom: 1px solid var(--line); }
+.since-note { margin: 0; padding: 6px 12px; font-size: 12.5px; color: var(--warn); border-bottom: 1px solid var(--line); }
+.since-add { color: var(--sign-add); font-weight: 600; }
+.since-del { color: var(--sign-del); font-weight: 600; }
+.since-none { margin: 0; padding: 8px 12px; font-size: 12.5px; color: var(--dim); font-style: italic; }
+.code.since + .code.since { border-top: 1px dashed var(--line); }
 .file-side { display: flex; align-items: baseline; gap: 14px; }
 .mark-viewed { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
 .mark-viewed input { margin: 0; accent-color: var(--accent); cursor: pointer; }
