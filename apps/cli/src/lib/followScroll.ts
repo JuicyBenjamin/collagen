@@ -16,7 +16,9 @@ export interface View {
 }
 
 /** What the list keeps in view:
- *    edge  — a row at `at`, `size` lines tall: moved only at the edges
+ *    edge  — a row at `at`, `size` lines tall: moved only at the edges (a
+ *            row taller than the view: left alone while the view is inside
+ *            it, else brought in at its top)
  *    top   — a row at `at`, put at the top (a record opened to read down from)
  *    start — the very top (the first row: what heads the list shows)
  *    end   — the very bottom (following the newest) */
@@ -34,6 +36,14 @@ export const followTop = (view: View, follow: Follow): number => {
     case "top":
       return clamp(follow.at, 0, last);
     case "edge": {
+      // a row taller than the view (an unfolded message) cannot fit: while the
+      // view is anywhere inside it, it stays (the reader is reading it); else
+      // it comes in at its top, so its header shows — one stable answer, not
+      // its top on one pass and its bottom on the next
+      if (follow.size > view.height) {
+        const inside = view.top >= follow.at && view.top + view.height <= follow.at + follow.size;
+        return clamp(inside ? view.top : follow.at, 0, last);
+      }
       if (follow.at < view.top) return clamp(follow.at, 0, last);
       if (follow.at + follow.size > view.top + view.height) return clamp(follow.at + follow.size - view.height, 0, last);
       return clamp(view.top, 0, last);
