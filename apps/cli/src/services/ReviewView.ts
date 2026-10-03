@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { roomProjects, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { gitDir } from "../lib/gitInfo";
-import type { ReviewPageData } from "@collagen/review-web/data";
+import type { ReviewPageData, WholeFileResult } from "@collagen/review-web/data";
 import { groupByWhy, parseDiff } from "../lib/reviewView";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -113,6 +113,28 @@ export const reviewTree = Effect.fn("ReviewView.tree")(function* (ticketId: stri
   return `no review ticket ${ticketId} in your rooms`;
 });
 
+/** A path from the diff: relative and inside the tree. */
+export const treePathOk = (file: string | undefined): file is string =>
+  file !== undefined && file.length > 0 && file.length < 500 && !isAbsolute(file) && !file.split(/[\\/]/).includes("..") && !file.includes("\0");
+
+/** The most of a file the page is given whole: past this it is a generated
+ *  file or a bundle, not something a reviewer reads top to bottom. */
+const WHOLE_MAX = 1024 * 1024;
+
+/** A file whole, as the review's branch has it in the reader's clone —
+ *  `git show <commit>:<path>`: the clone's working tree is never read. */
+export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: string, file: string) {
+  const tree = yield* reviewTree(ticketId);
+  if (typeof tree === "string") return { error: tree } satisfies WholeFileResult;
+  const text = yield* run("git", ["show", `${tree.commit}:${file}`], tree.projectPath, 10_000);
+  if (text === null) return { error: `${file} is not in the branch` } satisfies WholeFileResult;
+  if (text.length > WHOLE_MAX) return { error: `${file} is over a megabyte — too big to read whole here` } satisfies WholeFileResult;
+  if (text.includes("\0")) return { error: `${file} is not text` } satisfies WholeFileResult;
+  const lines = text.split("\n");
+  if (lines.at(-1) === "") lines.pop();
+  return { lines } satisfies WholeFileResult;
+});
+
 /** The commit `ref` names in the clone at `path`, now — or null. */
 export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((s) => s?.trim() || null));
 
@@ -204,6 +226,16 @@ export const ReviewRoutes = Layer.mergeAll(
       const path = join(root, "assets", file);
       if (!existsSync(path)) return notFound("no such asset");
       return HttpServerResponse.uint8Array(readFileSync(path), { contentType: type, headers: { "cache-control": "public, max-age=31536000, immutable" } });
+    }),
+  ),
+  // one file of the branch, whole — only a path inside the tree
+  HttpRouter.add("GET", "/review/:ticketId/file", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      const { ticketId } = yield* HttpRouter.params;
+      const file = new URL(request.url, "http://localhost").searchParams.get("file") ?? undefined;
+      if (!ticketIdOk(ticketId) || !treePathOk(file)) return HttpServerResponse.text("bad request", { status: 400 });
+      return HttpServerResponse.jsonUnsafe(yield* wholeFile(ticketId, file));
     }),
   ),
   HttpRouter.add("GET", "/review/:ticketId/data", (request) =>

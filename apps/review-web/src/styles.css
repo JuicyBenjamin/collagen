@@ -100,6 +100,10 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .hunk .file { border-radius: 10px 10px 0 0; }
 .hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .hunk .file .head { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whole-toggle { font: 12px -apple-system, sans-serif; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
+.whole-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.code.whole { max-height: 70vh; overflow: auto; }
+.whole-failed { margin: 0; padding: 6px 12px; font-size: 12.5px; color: var(--warn); border-bottom: 1px solid var(--line); }
 .file-side { display: flex; align-items: baseline; gap: 14px; }
 .mark-viewed { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
 .mark-viewed input { margin: 0; accent-color: var(--accent); cursor: pointer; }
