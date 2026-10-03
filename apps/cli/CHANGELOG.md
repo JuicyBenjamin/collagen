@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.19.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.18.0-alpha...cli-v0.19.0-alpha) (2026-10-03)
+
+
+### Features
+
+* **cli:** a decision names the skill or agent file that guided it ([4cb6e7a](https://github.com/JuicyBenjamin/collagen/commit/4cb6e7a9f5348c24fe515d269b22a6bbb8ac2306))
+* **cli:** a file that changed since it was viewed shows only what moved ([7090d36](https://github.com/JuicyBenjamin/collagen/commit/7090d36df86cab9f71bf1542e3e7f7aff344e5e2))
+* **cli:** read a hunk's whole file on the review page ([34b0ff3](https://github.com/JuicyBenjamin/collagen/commit/34b0ff3f3e32e29fddd694ee588e62a5f9a1a3ae))
+* **cli:** review units read by purpose, each change under a why ([a7c5a04](https://github.com/JuicyBenjamin/collagen/commit/a7c5a0491de06a330668e5b57225d97790f3cf8d))
+* **cli:** the review page reads a change in units, each change once ([b48301b](https://github.com/JuicyBenjamin/collagen/commit/b48301ba1d30e4015a633e49f07951213988f524))
+
+
+### Bug Fixes
+
+* **cli:** a decision whose code is in no change still shows on the review page ([59bc06c](https://github.com/JuicyBenjamin/collagen/commit/59bc06c9654081068d1219d77415405d2bf536db))
+* **cli:** a message arriving while details are read does not take the cursor ([11f63df](https://github.com/JuicyBenjamin/collagen/commit/11f63dff40e54b0cf916a150ff15e0a2b67099e3))
+* **cli:** a review page leads with its title, the summary beneath it ([a64e9ed](https://github.com/JuicyBenjamin/collagen/commit/a64e9ed5e8e82e87723593477ec844c40395c20a))
+* **cli:** an unfolded message taller than the list reads steadily ([b50e7e2](https://github.com/JuicyBenjamin/collagen/commit/b50e7e243271a16d379f7e51811f5673a5ddaa94))
+* **cli:** letting go of a live stream closes its connection at once ([d2b494f](https://github.com/JuicyBenjamin/collagen/commit/d2b494f0dea8cfdccfbb1c8645db7814ea3e977c))
+* **cli:** the epic offer hands the agent candidates to judge, not an order to ask ([43d5abe](https://github.com/JuicyBenjamin/collagen/commit/43d5abe0cc4c5a20defa6e8b6109b485bec45f96))
+* **cli:** the epic offer on a filing names the epic by its title ([977cb52](https://github.com/JuicyBenjamin/collagen/commit/977cb52cf35b4164397b3c9b851282c2e094ef1c))
+* **cli:** the epic tool names an epic, and the tickets it moves, by their titles ([5a4ff48](https://github.com/JuicyBenjamin/collagen/commit/5a4ff480d4adae2f5930da48d9247321804aff51))
+* **cli:** the outbox names an epic by its title too ([3135696](https://github.com/JuicyBenjamin/collagen/commit/3135696e0df06cb5db8a799a5211775016e44127))
+* **cli:** the overview list keeps the cursor in view as rows move under it ([e631d4b](https://github.com/JuicyBenjamin/collagen/commit/e631d4b9b542a1e4fb67c94fa316c2f74421b68a))
+* **cli:** the overview list scrolls only when the cursor reaches its edge ([82a3be8](https://github.com/JuicyBenjamin/collagen/commit/82a3be84ad4c21b2650c2ab2fcf343bfd979e904))
+* **cli:** the overview ticket list scrolls to the cursor instead of spilling its box ([5b57da1](https://github.com/JuicyBenjamin/collagen/commit/5b57da1002a7ff96747fb84cbb07e83f3524a7d0))
+* **cli:** the review page's tool state is live, and a rebuilt page never answers 503 ([f121ff9](https://github.com/JuicyBenjamin/collagen/commit/f121ff90a87b13d6d830e019d716c933923f5e28))
+* **cli:** the tickets hint fits 120 columns, its verdicts spelled out whole ([accd941](https://github.com/JuicyBenjamin/collagen/commit/accd941b96734a3e4cd0a51ce2cf8c9b466e932c))
+* **cli:** the whole file and what moved since are read at the commit the page shows ([aa637f9](https://github.com/JuicyBenjamin/collagen/commit/aa637f9c428b432c2070f424296c9fbb2897e061))
+* **cli:** types and peeks on the review page are of the commit the page shows ([3aa03e0](https://github.com/JuicyBenjamin/collagen/commit/3aa03e037fc3a20a67ad7c8b30714b9e271fcf4c))
+* **p2p:** a build that evicted our own why puts it back from our history ([bf0cf8c](https://github.com/JuicyBenjamin/collagen/commit/bf0cf8cc47aaa382684ad1f1d80beb2f8b55889b))
+
 ## [0.18.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.17.0-alpha...cli-v0.18.0-alpha) (2026-10-02)
 
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.19.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.18.0-alpha...p2p-v0.19.0-alpha) (2026-10-03)
+
+
+### Features
+
+* **cli:** a decision names the skill or agent file that guided it ([4cb6e7a](https://github.com/JuicyBenjamin/collagen/commit/4cb6e7a9f5348c24fe515d269b22a6bbb8ac2306))
+* **cli:** review units read by purpose, each change under a why ([a7c5a04](https://github.com/JuicyBenjamin/collagen/commit/a7c5a0491de06a330668e5b57225d97790f3cf8d))
+* **cli:** the review page reads a change in units, each change once ([b48301b](https://github.com/JuicyBenjamin/collagen/commit/b48301ba1d30e4015a633e49f07951213988f524))
+
+
+### Bug Fixes
+
+* **cli:** the outbox names an epic by its title too ([3135696](https://github.com/JuicyBenjamin/collagen/commit/3135696e0df06cb5db8a799a5211775016e44127))
+* **p2p:** a build that evicted our own why puts it back from our history ([bf0cf8c](https://github.com/JuicyBenjamin/collagen/commit/bf0cf8cc47aaa382684ad1f1d80beb2f8b55889b))
+
 ## [0.18.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.17.0-alpha...p2p-v0.18.0-alpha) (2026-10-02)
 
 
