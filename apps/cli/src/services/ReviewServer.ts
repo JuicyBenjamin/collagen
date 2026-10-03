@@ -40,8 +40,8 @@ const backend = Effect.gen(function* () {
     definition: (ticketId, file, line, col) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) ? on(types.definition(ticketId, file, line, col)) : Effect.succeed(bad)),
     tool: (tool) => (toolNamed(tool) ? types.watchTool(tool) : Stream.empty),
     install: (tool) => (toolNamed(tool) ? types.startInstall(tool) : Effect.succeed(null)),
-    wholeFile: (ticketId, file) => (ticketIdOk(ticketId) && treePathOk(file) ? on(wholeFile(ticketId, file)) : Effect.succeed(bad)),
-    since: (ticketId, file, from) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(from) ? on(sinceViewed(ticketId, file, from)) : Effect.succeed(bad)),
+    wholeFile: (ticketId, file, commit) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(commit) ? on(wholeFile(ticketId, file, commit)) : Effect.succeed(bad)),
+    since: (ticketId, file, from, to) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(from) && commitOk(to) ? on(sinceViewed(ticketId, file, from, to)) : Effect.succeed(bad)),
   } satisfies ReviewBackend["Service"];
 });
 

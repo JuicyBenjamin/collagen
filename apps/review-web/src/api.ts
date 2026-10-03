@@ -47,12 +47,17 @@ export const installTool = async (tool: ToolId): Promise<ToolState | null> => {
   return run((b) => b.install(tool));
 };
 
-export const wholeFile = GET(async (ticketId: string, file: string): Promise<WholeFileResult> => {
+/** A file whole at the commit the page shows: its added-line marks and its
+ *  scroll target come from that commit's diff, so the file must be that
+ *  commit's too — even when the branch has moved since. */
+export const wholeFile = GET(async (ticketId: string, file: string, commit: string): Promise<WholeFileResult> => {
   "use server";
-  return run((b) => b.wholeFile(ticketId, file));
+  return run((b) => b.wholeFile(ticketId, file, commit));
 });
 
-export const sinceViewed = GET(async (ticketId: string, file: string, from: string): Promise<SinceResult> => {
+/** What moved in a file from the commit it was viewed at to the commit the
+ *  page shows — exactly those two, so the changes sit where the page's hunks are. */
+export const sinceViewed = GET(async (ticketId: string, file: string, from: string, to: string): Promise<SinceResult> => {
   "use server";
-  return run((b) => b.since(ticketId, file, from));
+  return run((b) => b.since(ticketId, file, from, to));
 });

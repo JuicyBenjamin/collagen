@@ -22,8 +22,10 @@ export class ReviewBackend extends Context.Service<
      *  ready, failed, a notice it asked to show */
     readonly tool: (tool: ToolId) => Stream.Stream<ToolState>;
     readonly install: (tool: ToolId) => Effect.Effect<ToolState | null>;
-    readonly wholeFile: (ticketId: string, file: string) => Effect.Effect<WholeFileResult>;
-    readonly since: (ticketId: string, file: string, from: string) => Effect.Effect<SinceResult>;
+    /** a file whole at `commit` — the one the page's diff was read at, never the branch's tip now */
+    readonly wholeFile: (ticketId: string, file: string, commit: string) => Effect.Effect<WholeFileResult>;
+    /** a file's changes from `from` (where it was viewed) to `to` (the commit the page shows) */
+    readonly since: (ticketId: string, file: string, from: string, to: string) => Effect.Effect<SinceResult>;
   }
 >()("review-web/ReviewBackend") {}
 

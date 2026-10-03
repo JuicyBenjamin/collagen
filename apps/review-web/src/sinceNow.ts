@@ -13,7 +13,7 @@ export const sinceOf = (file: string, from: string, to: string): Accessor<SinceR
   if (known) return known;
   const [result, setResult] = createSignal<SinceResult | "loading">("loading");
   asked.set(key, result);
-  sinceViewed(ticketId, file, from)
+  sinceViewed(ticketId, file, from, to)
     .then(setResult)
     .catch((e: unknown) => setResult({ error: String(e) }));
   return result;
