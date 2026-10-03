@@ -40,25 +40,33 @@ refused. The url also goes to the activity log, for a machine with no browser to
 
 It is for a person reading code, so the code is the loudest thing on it — after the
 purpose. A review's summary heads the page (where the code is sits above it, small), so you
-know what the change is for before reading any of it. Then one section per **decision**, in
-the order the author gave them:
+know what the change is for before reading any of it. Then the change in **units**: code
+that together makes one thing — a component with its sub-components, its implementation and
+its tests; a service and its routes. **Every change is shown once**, in exactly one unit; a
+unit can hold part of a file (one route of a big routes file) and another unit the rest.
 
-- the decision's **title** — a few words, what it is for — with what was done in a line
-  beneath it, and "Guided by …" naming any skill or agent file (`CLAUDE.md`, `AGENTS.md`)
-  that told the agent to do it that way — so you see the right ones were used, and a skill
-  pointing the wrong way shows beside the code it produced, then the **hunks at its lines** — a hunk holding a `where` line, or
-  the nearest one within a few lines (line numbers drift as code is edited), or every hunk
-  of a file when the decision names a file alone. A hunk that also serves another decision
-  says so above it — "also under …", a link there;
-- beside the code, quieter, the **why**: how the person steered it (their words), what
-  their agent reasoned, and the **forks in the road** that fall in those hunks — what was
-  chosen over what, why, and whose call it was. It stays in view as you scroll the code.
-  On a narrower window it folds under the title, a click away;
-- when the why points at code the diff does not change, a quiet note says it may be older
-  than the branch.
+- **Who decides.** The author's agent names the units when it asks for the review (a title,
+  and the files — or `file:line` for one part of a file — each holds). What it leaves out
+  goes with what it belongs to by imports, and a review filed without units is grouped by
+  imports alone: a test with the code it tests (`Outbox.test.ts` with `Outbox.ts`), a
+  sub-component in a folder below with the component using it, every other file a unit of
+  its own. Those are named by their file and marked "grouped by imports".
+- **Order.** Building blocks first: a unit comes before the units that import it, so you
+  read what something is made of before what uses it. Otherwise the author's order.
+- **Each unit**: its title, how many changes in how many files, then its code — a file's
+  changes under one header. A change no decision covers says so where it sits — a finding
+  in itself, worth a question to the author.
+- **Beside it, the why**: the decisions that shaped this unit — each with its title, what
+  was done, "Guided by …" naming any skill or agent file (`CLAUDE.md`, `AGENTS.md`) that
+  told the agent to do it that way, how the person steered it (their words) and what their
+  agent reasoned. A decision that shaped other units too links them. Then the **forks in
+  the road** that fall in this unit — what was chosen over what, why, and whose call it was.
+  It stays in view as you scroll; on a narrower window it folds under the title, a click
+  away. When a decision also points at code the diff does not change, a quiet note says the
+  why may be older than the branch.
 
-Last, **not explained**: every change no decision covers — a finding in itself, worth a
-question to the author — with any forks outside every decision's lines.
+Forks that fall in no change of the diff close the page. With no diff to read, the page
+lists the decisions and where they point.
 
 **Whole file**, on a hunk's header, opens the file as the branch has it — read from your
 clone, never its working tree — every line numbered, this diff's added lines marked, scrolled

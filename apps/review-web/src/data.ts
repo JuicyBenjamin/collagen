@@ -51,25 +51,32 @@ export interface Fork {
   readonly by?: "user" | "agent";
 }
 
-export interface Section {
-  readonly decision: Decision;
-  /** hunk ids, in diff order */
+/** A unit of the change: code that together makes one thing, each hunk of
+ *  the diff in exactly one unit. Named by the author's agent, or grouped by
+ *  imports where it named none. */
+export interface Unit {
+  readonly id: string;
+  readonly title: string;
+  readonly by: "author" | "imports";
+  /** hunk ids, a file's together, in diff order */
   readonly hunks: ReadonlyArray<string>;
-  /** ids of hunks another decision claims too */
-  readonly shared: ReadonlyArray<string>;
-  /** the forks whose `at` falls in this section's hunks */
+  /** the decisions whose lines fall in this unit, by id, in the why's order */
+  readonly decisions: ReadonlyArray<string>;
+  /** the forks whose `at` falls in this unit's hunks */
   readonly forks: ReadonlyArray<Fork>;
-  /** pointers that matched no change: the code there did not move, or the why is stale */
-  readonly unmatched: ReadonlyArray<string>;
+  /** hunks here no decision covers — worth a question to the author */
+  readonly unexplained: ReadonlyArray<string>;
 }
 
 export interface Grouped {
-  readonly sections: ReadonlyArray<Section>;
-  /** hunks no decision claims — the why does not cover them, which is a finding */
-  readonly unexplained: ReadonlyArray<string>;
-  /** forks that fall in no decision's hunks (on unexplained code, or on none) */
-  readonly looseForks: ReadonlyArray<Fork>;
+  /** in reading order: what something is built from before what uses it */
+  readonly units: ReadonlyArray<Unit>;
   readonly hunks: ReadonlyArray<Hunk>;
+  /** per decision id, its pointers that matched no change: the code there
+   *  did not move, or the why is older than the branch */
+  readonly unmatched: Readonly<Record<string, ReadonlyArray<string>>>;
+  /** forks that fall in no hunk of the diff */
+  readonly looseForks: ReadonlyArray<Fork>;
 }
 
 export interface ReviewPageData {
