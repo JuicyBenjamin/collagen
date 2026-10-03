@@ -79,8 +79,17 @@ export const sendReview = async (ticketId: string, verdict: Verdict, body: strin
   return run((b) => b.review(ticketId, verdict, body));
 };
 
-/** A comment on one line of the pull request, at the commit the page shows. */
-export const sendLineComment = async (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string): Promise<HostWrite> => {
+/** A comment on a line of the pull request — or a block of lines, from
+ *  `start` to `line` — at the commit the page shows. */
+export const sendLineComment = async (
+  ticketId: string,
+  file: string,
+  line: number,
+  side: "LEFT" | "RIGHT",
+  body: string,
+  commit: string,
+  start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
+): Promise<HostWrite> => {
   "use server";
-  return run((b) => b.lineComment(ticketId, file, line, side, body, commit));
+  return run((b) => b.lineComment(ticketId, file, line, side, body, commit, start));
 };

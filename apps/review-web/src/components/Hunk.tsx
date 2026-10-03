@@ -8,7 +8,7 @@ import { highlightHunk } from "../highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
-import { LineThread } from "./LineThread";
+import { LineComposer, LineThread } from "./LineThread";
 import { hostNow } from "../hostNow";
 import { viewed } from "../viewedNow";
 import { sinceOf } from "../sinceNow";
@@ -166,7 +166,7 @@ function Lines(props: {
    *  new file's only (the whole file: its old numbers are not the diff's),
    *  or none (what moved since you viewed: numbered against that commit) */
   threads?: "all" | "new" | "none";
-  /** a click on a line's number opens a comment on it */
+  /** a line's + (on hover) opens a comment on it, or on a block dragged out from it */
   talk?: boolean;
 }) {
   const spans = createMemo(() => highlightHunk(props.hunk));
@@ -197,9 +197,29 @@ function Lines(props: {
     return at && (which === "all" || (which === "new" && at.side === "RIGHT")) ? at : null;
   };
   const talks = () => props.talk === true && hostNow.canWrite();
-  const startComment = (line: DiffLine) => {
-    const at = sideOf(line);
-    if (at && talks()) hostNow.compose(props.hunk.file, at.side, at.n);
+  // the lines picked for a comment in this hunk, first to last, while picked here
+  const picked = createMemo(() => {
+    const p = hostNow.pick();
+    return p && p.hunk === props.hunk.id ? { first: Math.min(p.anchor, p.focus), last: Math.max(p.anchor, p.focus) } : null;
+  });
+  const inPick = (i: number) => {
+    const p = picked();
+    return p !== null && i >= p.first && i <= p.last;
+  };
+  /** The composer for the pick, under its last line once the drag is over. */
+  const composerAt = (i: number) => {
+    const p = picked();
+    if (!p || p.last !== i || hostNow.dragging()) return null;
+    const from = sideOf(props.hunk.lines[p.first]!);
+    const to = sideOf(props.hunk.lines[p.last]!);
+    if (!from || !to) return null;
+    const lines = props.hunk.lines.slice(p.first, p.last + 1);
+    return { from: { side: from.side, line: from.n }, to: { side: to.side, line: to.n }, suggestable: lines.every((l) => l.kind !== "-") ? lines.map((l) => l.text) : null };
+  };
+  /** The new file's lines from `from` to `to`, as this hunk shows them — what a suggestion replaces. */
+  const codeOf = (from: number, to: number): ReadonlyArray<string> | null => {
+    const got = props.hunk.lines.filter((l) => l.kind !== "-" && l.new !== undefined && l.new >= from && l.new <= to);
+    return got.length === to - from + 1 ? got.map((l) => l.text) : null;
   };
 
   return (
@@ -208,13 +228,9 @@ function Lines(props: {
         <For each={props.hunk.lines}>
           {(line, i) => (
             <>
-              <tr class={{ add: line.kind === "+", del: line.kind === "-" }} data-new={line.new}>
-                <td class={["n", { talk: talks() }]} title={talks() ? "Comment on this line" : undefined} onClick={() => startComment(line)}>
-                  {line.old ?? ""}
-                </td>
-                <td class={["n", { talk: talks() }]} title={talks() ? "Comment on this line" : undefined} onClick={() => startComment(line)}>
-                  {line.new ?? ""}
-                </td>
+              <tr class={{ add: line.kind === "+", del: line.kind === "-", picked: inPick(i()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, i())}>
+                <td class="n">{line.old ?? ""}</td>
+                <td class="n">{line.new ?? ""}</td>
                 <td
                   class={["t", { asks: asks() && line.new !== undefined }]}
                   onMouseMove={(e) => {
@@ -239,11 +255,31 @@ function Lines(props: {
                     }
                   }}
                 >
+                  {/* GitHub's +: shown on hover; press and drag down (or shift-click
+                      another line's) for a block of lines */}
+                  <Show when={talks()}>
+                    <button
+                      type="button"
+                      class="add-comment"
+                      title="Comment on this line — drag, or shift-click another line, for several"
+                      aria-label="Comment on this line"
+                      onMouseDown={(e) => {
+                        if (e.button !== 0) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        hostNow.startPick(props.hunk.id, i(), e.shiftKey);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      +
+                    </button>
+                  </Show>
                   <span class="sign">{line.kind === " " ? " " : line.kind}</span>
                   <CodeLine spans={spans()[i()] ?? []} />
                 </td>
               </tr>
-              <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} />}</Show>
+              <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} codeOf={codeOf} />}</Show>
+              <Show when={composerAt(i())}>{(c) => <LineComposer file={props.hunk.file} from={c().from} to={c().to} suggestable={c().suggestable} />}</Show>
               <Show when={peek()?.hunk === props.hunk.id && peek()?.index === i() ? peek() : null}>
                 {(p) => (
                   <tr class="peek-row">

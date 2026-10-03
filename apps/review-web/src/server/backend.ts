@@ -31,8 +31,16 @@ export class ReviewBackend extends Context.Service<
     readonly host: (ticketId: string) => Effect.Effect<HostView>;
     /** a review on the pull request, in the reader's name (through their own gh) */
     readonly review: (ticketId: string, verdict: Verdict, body: string) => Effect.Effect<HostWrite>;
-    /** a comment on one line of the pull request, at the commit the page shows */
-    readonly lineComment: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string) => Effect.Effect<HostWrite>;
+    /** a comment on a line — or a block of lines, from `start` — of the pull request, at the commit the page shows */
+    readonly lineComment: (
+      ticketId: string,
+      file: string,
+      line: number,
+      side: "LEFT" | "RIGHT",
+      body: string,
+      commit: string,
+      start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
+    ) => Effect.Effect<HostWrite>;
   }
 >()("review-web/ReviewBackend") {}
 

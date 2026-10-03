@@ -50,6 +50,12 @@ describe("what gh answers, read for the review page", () => {
       [3, 9, "LEFT"],
     ]);
     expect(readComments({ message: "Not Found" })).toEqual([]);
+    // a block of lines says where it starts; one line does not
+    const block = readComments([[{ ...c(4, 7), start_line: 5, start_side: "RIGHT" }, { ...c(5, 7), start_line: null, start_side: null }]]);
+    expect(block.map((x) => [x.startLine, x.startSide, x.line])).toEqual([
+      [5, "RIGHT", 7],
+      [undefined, undefined, 7],
+    ]);
   });
 
   it("gh's refusal, in its own words", () => {
