@@ -106,6 +106,8 @@ describe("a review in units", () => {
     expect(byTitle.get("Import route")!.forks.map((f) => f.id)).toEqual(["f1"]);
     expect(g.looseForks.map((f) => f.id)).toEqual(["f2"]);
     expect(g.unmatched).toEqual({ d2: ["src/gone.ts:3"] });
+    // a decision whose code is in no change is not lost: it is outside the units
+    expect(g.outside).toEqual(["d2"]);
     expect(byTitle.get("Export route")!.unexplained).toEqual([]);
     expect(g.units.find((u) => u.hunks.includes("notes.txt#5"))!.unexplained).toEqual(["notes.txt#5"]);
   });

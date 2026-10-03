@@ -128,6 +128,7 @@ D3='{"title":"The export streams in","what":"the export streams in pages","userW
 AMEND="{\"ticketId\":\"$TICKET\",\"decisions\":[$D3]}"
 call $A "$SA" ask-review "$AMEND" > /dev/null
 wait_until "revising the why moves it" "^2$" grep -c "^id:" "$EV"
+expect "a decision pointing at no code is not lost: it shows outside the units" "$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print("outside", " ".join(json.load(sys.stdin)["grouped"]["outside"]))')" "^outside .*d3"
 BEFORE=$(grep -c "^id:" "$EV")
 # the commit a reader would have viewed src/use.ts at, before the next push
 VIEWED_AT=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
