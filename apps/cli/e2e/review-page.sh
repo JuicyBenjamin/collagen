@@ -97,7 +97,7 @@ expect "a call naming another host is refused (DNS rebinding)" "$(curl -s -o /de
 expect "an unknown ticket has no data" "$(sfn reviewData '["not-a-ticket"]')" "^null$"
 # a rebuilt page (its server bundle's file time moved) is taken up by the
 # running instance, no restart: the next call loads it and provides it
-touch "$ROOT/dist/review-web/server/entry.js"
+touch "$SERVER_ENTRY"
 expect "a rebuilt server bundle is taken up without a restart" "$(sfn reviewData "[\"$TICKET\"]")" '"units"'
 
 expect "the review's old routes are gone: the page talks through server functions" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/data")" "^404$"
