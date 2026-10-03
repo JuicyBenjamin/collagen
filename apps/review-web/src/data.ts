@@ -77,6 +77,10 @@ export interface Grouped {
   readonly unmatched: Readonly<Record<string, ReadonlyArray<string>>>;
   /** forks that fall in no hunk of the diff */
   readonly looseForks: ReadonlyArray<Fork>;
+  /** decisions in no unit, by id: their pointers match no change (stale
+   *  after an edit or a rebase), or they point at none — still shown, the
+   *  why is the review's whether or not the diff carries its code */
+  readonly outside: ReadonlyArray<string>;
 }
 
 export interface ReviewPageData {
