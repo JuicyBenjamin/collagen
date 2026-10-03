@@ -47,15 +47,20 @@ export const ReviewFork = Schema.Struct({
 });
 export type ReviewFork = typeof ReviewFork.Type;
 
-/** A unit of the change: code that together makes one thing — a component
- *  with its sub-components, its implementation and its tests; a service and
- *  its routes. The review page's sections are units, each piece of code shown
- *  once. `where` points at the code it holds, as a decision's does — a file,
- *  or file:line for one part of a file (one route of a big routes file).
- *  Named by the author's agent; what it leaves out is grouped by imports. */
+/** A unit of the change: code that together achieves one thing — a
+ *  component with its sub-components, its implementation and its tests; a
+ *  service and its routes. The review page's sections are units, each piece
+ *  of code shown once. `title` is what it achieves ("Big exports finish"),
+ *  never a file name; `what` is the line beneath it. `where` points at the
+ *  code it holds, as a decision's does — a file, or file:line for one part of
+ *  a file (one route of a big routes file). Named by the author's agent; what
+ *  it leaves out is grouped by the decision that points at it. */
 export const ReviewUnit = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
+  // optional as stored: units named before it existed still decode — a
+  // required field would drop each such review whole, on every peer
+  what: Schema.optional(Schema.String),
   where: Schema.Array(Schema.String),
 });
 export type ReviewUnit = typeof ReviewUnit.Type;
@@ -162,7 +167,7 @@ export interface ReviewDelta {
     readonly by?: "user" | "agent";
   }>;
   /** Units, merged by id like decisions: a repeated id corrects one. */
-  readonly units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly where: ReadonlyArray<string> }>;
+  readonly units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
   /** Unit ids withdrawn — units are how the change reads, not history. */
   readonly retireUnits?: ReadonlyArray<string>;
   /** Outline items, merged by id like decisions. */
@@ -208,7 +213,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     for (const u of delta.units ?? []) {
       const id = u.id ?? nextId("u", units.map((x) => x.id));
       const at = units.findIndex((x) => x.id === id);
-      const entry: ReviewUnit = { id, title: u.title, where: [...u.where] };
+      const entry: ReviewUnit = { id, title: u.title, what: u.what, where: [...u.where] };
       if (at === -1) units.push(entry);
       else units[at] = entry;
     }

@@ -9,7 +9,7 @@ import { gitDir } from "../lib/gitInfo";
 import type { ReviewPageData, SinceResult, WholeFileResult } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
 import { importsAmong } from "../lib/imports";
-import { groupByUnit, type Imports } from "../lib/units";
+import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -80,11 +80,11 @@ const firstRef = (cwd: string, refs: ReadonlyArray<string>) =>
 /** The diff of base...branch from the clone at `path`: fetch first (the
  *  reviewer may not have the branch yet), then the refs as they are, local
  *  or origin's. Null with the reason when it cannot. */
-const fromClone = (path: string, base: string, branch: string) =>
+const fromClone = (path: string, base: string, branch: string, fetch = true) =>
   Effect.gen(function* () {
     if (!gitDir(path)) return { diff: null, why: `${path} is not a git repository` };
     // best effort: offline, or a remote that needs a password, still has whatever is local
-    yield* run("git", ["fetch", "--quiet", "--no-tags", "origin"], path, 20_000);
+    if (fetch) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin"], path, 20_000);
     const b = yield* firstRef(path, [branch, `origin/${branch}`]);
     const a = yield* firstRef(path, [base, `origin/${base}`]);
     if (!b) return { diff: null, why: `the branch ${branch} is not in your clone at ${path}, nor on its origin` };
@@ -163,6 +163,21 @@ export const sinceViewed = Effect.fn("ReviewView.since")(function* (ticketId: st
 });
 
 /** The commit `ref` names in the clone at `path`, now — or null. */
+/** What the author's units leave out, said back to the agent that named them:
+ *  the changed files with changes in no unit, read from its own clone (not
+ *  fetched — the branch is the author's). Empty when the review names no
+ *  unit or its diff cannot be read: there is nothing to say then. */
+export const unitCoverageNote = (path: string, review: { readonly base?: string; readonly branch?: string; readonly units?: ReadonlyArray<{ readonly where: ReadonlyArray<string> }> }) =>
+  Effect.gen(function* () {
+    if (!review.branch || !review.units || review.units.length === 0) return "";
+    const got = yield* fromClone(path, review.base ?? "main", review.branch, false);
+    if (got.diff === null) return "";
+    const left = uncovered(review.units, parseDiff(got.diff));
+    if (left.length === 0) return "";
+    const shown = left.slice(0, 8).join(", ") + (left.length > 8 ? ` and ${left.length - 8} more` : "");
+    return `\nNOTE FOR YOU, NOT FOR YOUR USER: no unit covers the changes in ${shown} — the page puts them under the decision that points at them, else under "Not explained". If they belong to a unit, call ask-review with this ticketId and that unit (same id) with them in its 'where'.`;
+  });
+
 export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((s) => s?.trim() || null));
 
 export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: string) {
