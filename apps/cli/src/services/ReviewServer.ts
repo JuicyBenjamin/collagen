@@ -6,7 +6,8 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
-import { commitOk, localHost, reviewData, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
+import { commitOk, hostView, localHost, reviewData, sendLineComment, sendReview, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
+import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -27,12 +28,24 @@ interface ServerEntry {
 
 const lineOk = (line: unknown, col: unknown): boolean => Number.isInteger(line) && (line as number) > 0 && Number.isInteger(col) && (col as number) >= 0;
 const bad = { error: "bad request" } as const;
+/** What a review can say, and how long anything written to a host may be (GitHub's own limit). */
+const verdictOk = (v: unknown): v is "comment" | "approve" | "request-changes" => v === "comment" || v === "approve" || v === "request-changes";
+const bodyOk = (b: unknown): b is string => typeof b === "string" && b.length <= 65_536;
+const sideOk = (s: unknown): s is "LEFT" | "RIGHT" => s === "LEFT" || s === "RIGHT";
+/** Where a block of lines starts: none (one line), or a line on a side —
+ *  before the last one when both are on the same side, as GitHub asks. */
+const startOk = (start: unknown, line: number, side: "LEFT" | "RIGHT"): start is { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null => {
+  if (start === null) return true;
+  if (typeof start !== "object" || start === undefined) return false;
+  const s = start as { line?: unknown; side?: unknown };
+  return lineOk(s.line, 0) && sideOk(s.side) && (s.side !== side || (s.line as number) < line);
+};
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
-  const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages>();
+  const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>();
   const types = yield* ReviewTypes;
-  const on = <A, E>(e: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages>) => e.pipe(Effect.provideContext(ctx), Effect.orDie);
+  const on = <A, E>(e: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>) => e.pipe(Effect.provideContext(ctx), Effect.orDie);
   return {
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),
     changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(ctx)) : Stream.empty),
@@ -42,6 +55,12 @@ const backend = Effect.gen(function* () {
     install: (tool) => (toolNamed(tool) ? types.startInstall(tool) : Effect.succeed(null)),
     wholeFile: (ticketId, file, commit) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(commit) ? on(wholeFile(ticketId, file, commit)) : Effect.succeed(bad)),
     since: (ticketId, file, from, to) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(from) && commitOk(to) ? on(sinceViewed(ticketId, file, from, to)) : Effect.succeed(bad)),
+    host: (ticketId) => (ticketIdOk(ticketId) ? on(hostView(ticketId)) : Effect.succeed({ none: "bad request", stack: null })),
+    review: (ticketId, verdict, body) => (ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) ? on(sendReview(ticketId, verdict, body)) : Effect.succeed(bad)),
+    lineComment: (ticketId, file, line, side, body, commit, start) =>
+      ticketIdOk(ticketId) && treePathOk(file) && lineOk(line, 0) && sideOk(side) && bodyOk(body) && commitOk(commit) && startOk(start, line, side)
+        ? on(sendLineComment(ticketId, { file, line, side, commit, ...(start ? { start } : {}) }, body))
+        : Effect.succeed(bad),
   } satisfies ReviewBackend["Service"];
 });
 

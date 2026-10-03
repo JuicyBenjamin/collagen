@@ -1,5 +1,5 @@
 import { GET, live } from "@solidjs/web/server-functions";
-import type { DefinitionResult, HoverResult, ReviewPageData, SinceResult, ToolId, ToolState, WholeFileResult } from "./data";
+import type { DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -63,3 +63,33 @@ export const sinceViewed = GET(async (ticketId: string, file: string, from: stri
   "use server";
   return run((b) => b.since(ticketId, file, from, to));
 });
+
+/** The review on its host — a call of its own, so the diff never waits on
+ *  the network: who is signed in, its pull request, its line comments, the
+ *  stack its branch sits in. Read again as the review's state moves. */
+export const hostView = GET(async (ticketId: string): Promise<HostView> => {
+  "use server";
+  return run((b) => b.host(ticketId));
+});
+
+/** A review on the pull request in the reader's name — only ever on their
+ *  click. Not a read: Solid refuses it from any page but this one. */
+export const sendReview = async (ticketId: string, verdict: Verdict, body: string): Promise<HostWrite> => {
+  "use server";
+  return run((b) => b.review(ticketId, verdict, body));
+};
+
+/** A comment on a line of the pull request — or a block of lines, from
+ *  `start` to `line` — at the commit the page shows. */
+export const sendLineComment = async (
+  ticketId: string,
+  file: string,
+  line: number,
+  side: "LEFT" | "RIGHT",
+  body: string,
+  commit: string,
+  start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
+): Promise<HostWrite> => {
+  "use server";
+  return run((b) => b.lineComment(ticketId, file, line, side, body, commit, start));
+};

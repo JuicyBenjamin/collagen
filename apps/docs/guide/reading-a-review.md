@@ -148,9 +148,10 @@ code anywhere new. When the ticket names no base, `main` is assumed.
 
 When there is no clone to read — you have not located the project here, or the branch is
 not in it — and the review's link is on GitHub, the page asks GitHub for the compare
-through **your own `gh` login**, and says so at the top. Hosts sit behind one small
-interface (`HostAdapter`), GitHub the only one so far; they are also where the page's
-back-links come from (the pull request, its checks, the compare). With neither, the page
+through **your own `gh` login**, and says so at the top. Hosts sit behind one interface
+(`RepoHost`, `apps/cli/src/services/RepoHost.ts`), GitHub the only one so far; they are also
+where the page's back-links come from (the pull request, its checks, the compare), and what
+the page acts on the pull request through (below). With neither, the page
 lists the decisions and forks with their pointers, and says why there is no diff.
 
 ## The page itself
@@ -169,11 +170,46 @@ page's server bundle. Reads are `GET`s Solid can cache; the review's state is a 
 function the page holds open, so it reloads when the why, the ticket or the branch moves.
 What they answer is typed once in `apps/review-web/src/data.ts`, which the cli imports.
 Every argument is checked in collagen before it is used, calls from another origin are
-refused, and only a request naming this machine is answered.
+refused, and only a request naming this machine is answered. The e2e scenarios stand a
+fake `gh` in (`COLLAGEN_GH`), so no test ever reaches GitHub.
+
+## On GitHub
+
+When the review's code is on GitHub — its link names the repository or the pull request,
+or your clone's remote does — the page acts on the pull request through **your own `gh`
+login**. collagen keeps no token; whatever `gh` is signed in as is who the page acts as.
+
+- **Who is signed in**, top right: the avatar and name a review or comment goes out under,
+  seen before anything is sent. Not signed in, it says so and how (`gh auth login`).
+- **The pull request**: the one the review's link names, else the one whose head is the
+  review's branch (the open one, else the latest) — its number, state and decision, linked.
+- **Review**: a box like GitHub's "Review changes" — your words, and Comment, Approve or
+  Request changes (`gh pr review`). GitHub asks for words with anything but an approval,
+  and lets you only comment on your own pull request; the page says both before sending.
+- **Comments on lines**, as on GitHub: hover a line and a **+** shows at the code's edge;
+  click it to comment on that line, or press it and drag down — or shift-click another
+  line's + — for a block of lines in the same hunk, which stays marked while you write.
+  **Suggest a change** puts the picked lines in a ```` ```suggestion ```` block to edit
+  (new-side lines only, as on GitHub). The comment goes to that file and those lines **at
+  the commit the page shows** (`gh api …/pulls/N/comments`), shows at once while it is
+  sent, and stays in its box with GitHub's reason if GitHub refuses it (a line outside the
+  pull request's diff, say). Everyone's line comments on the pull request sit under their
+  (last) line; a suggested change shows as the lines it replaces and what it suggests, with
+  its code to **copy** — GitHub has no way for another app to commit one. A comment GitHub
+  no longer places on a line (the code under it moved) is left out.
+- **The stack**: when the branch is built on another branch that is itself under review — a
+  pull request whose base is another's head, or a review in the room naming that base — a
+  row under the branch line shows the chain from the trunk up, this one, and what builds on
+  it, each linked to its pull request or its review page.
+
+GitHub is a network and a login away: each part that cannot be read says why where it
+would be, and the diff never waits for any of it (it is read in a call of its own). The
+writes are not reads: Solid refuses them from any page but this one, so a site you visit
+cannot send a review in your name; collagen finds the pull request from the ticket itself
+and never takes a number from the page.
 
 ## Saying what you think
 
-The page reads; it does not write. Your review goes back the way everything in collagen
-does — through your agent, in your words, with `post-review` — so there is one path into
-the room's log, and it is yours. Marks per decision straight from the page would be a
-second path; that is a plan of its own once this one has proven the grouping.
+A review sent from the page reviews the **pull request**. Your take on the collagen ticket
+goes back the way everything in collagen does — through your agent, in your words, with
+`post-review` — so there is one path into the room's log, and it is yours.

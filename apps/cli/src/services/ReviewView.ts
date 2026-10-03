@@ -4,12 +4,15 @@ import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { roomProjects, type ReviewContext, type Ticket } from "@collagen/p2p";
-import { gitDir } from "../lib/gitInfo";
-import type { ReviewPageData, SinceResult, WholeFileResult } from "@collagen/review-web/data";
+import { isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { gitDir, repoWebUrl } from "../lib/gitInfo";
+import type { HostView, HostWrite, ReviewPageData, SinceResult, Verdict, WholeFileResult } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
+import { stackOf, type Edge } from "../lib/stack";
+import { IdentityService } from "./Identity";
+import { hostOf, type HostPull, type LineSpot, type RepoHost } from "./RepoHost";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -28,43 +31,7 @@ const run = (cmd: string, args: ReadonlyArray<string>, cwd: string | undefined, 
     return Effect.sync(() => child.kill());
   });
 
-/** Where code lives when there is no clone to read: a host adapter knows how
- *  to get a compare diff from a link, and what to link back to. The clone is
- *  the source of truth and never calls one; GitHub is the first. */
-export interface HostAdapter {
-  readonly name: string;
-  readonly matches: (link: string) => boolean;
-  readonly compare: (link: string, base: string, branch: string) => Effect.Effect<string | null>;
-  readonly links: (link: string, base: string | undefined, branch: string | undefined) => ReadonlyArray<{ readonly label: string; readonly url: string }>;
-}
 
-const githubRepo = (link: string): { owner: string; repo: string } | null => {
-  const m = link.match(/^https:\/\/github\.com\/([^/]+)\/([^/#?]+)/);
-  return m ? { owner: m[1]!, repo: m[2]!.replace(/\.git$/, "") } : null;
-};
-
-/** GitHub, through the person's own `gh` login. */
-export const github: HostAdapter = {
-  name: "GitHub",
-  matches: (link) => githubRepo(link) !== null,
-  compare: (link, base, branch) => {
-    const r = githubRepo(link);
-    if (!r) return Effect.succeed(null);
-    return run("gh", ["api", "-H", "Accept: application/vnd.github.diff", `repos/${r.owner}/${r.repo}/compare/${base}...${branch}`], undefined, 20_000);
-  },
-  links: (link, base, branch) => {
-    const r = githubRepo(link);
-    if (!r) return [];
-    const pr = /\/pull\/\d+/.test(link);
-    return [
-      { label: pr ? "pull request" : "on GitHub", url: link },
-      ...(pr ? [{ label: "checks", url: `${link.replace(/\/(files|commits|checks)\/?$/, "")}/checks` }] : []),
-      ...(base && branch ? [{ label: "compare", url: `https://github.com/${r.owner}/${r.repo}/compare/${base}...${branch}` }] : []),
-    ];
-  },
-};
-
-const HOSTS: ReadonlyArray<HostAdapter> = [github];
 
 
 /** The first of `refs` the repo knows as a commit. */
@@ -191,7 +158,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const base = review.base ?? "main";
     const branch = review.branch;
     const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
-    const host = review.link ? HOSTS.find((x) => x.matches(review.link!)) : undefined;
+    const host = review.link ? hostOf(review.link) : undefined;
     let source: ReviewPageData["source"] = { kind: "none", detail: "" };
     let diff: string | null = null;
     let commit: string | undefined;
@@ -230,6 +197,112 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     } satisfies ReviewPageData;
   }
   return null;
+});
+
+/** A review ticket on this machine: the ticket, its why, and the project's
+ *  clone when this machine has located it. */
+const reviewNamed = (ticketId: string) =>
+  Effect.gen(function* () {
+    const rooms = yield* Rooms;
+    const store = yield* StateStore;
+    for (const h of yield* SubscriptionRef.get(rooms.handles)) {
+      const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
+      if (!ticket) continue;
+      const review = (yield* SubscriptionRef.get(h.room.reviews)).find((r) => r.ticketId === ticketId);
+      if (!review) return null;
+      const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+      return { room: h.room, ticket, review, project };
+    }
+    return null;
+  });
+
+/** Where a review's code is hosted: the link it names, else the clone's own
+ *  remote — a review filed without a link is still on its host. */
+const hostLink = (review: ReviewContext, project: { readonly path: string } | undefined): string | undefined => review.link ?? (project ? (repoWebUrl(project.path) ?? undefined) : undefined);
+
+/** A pull request as the page shows it: without the branches it joins. */
+const shown = ({ branch: _branch, base: _base, ...pull }: HostPull, viewer: string | undefined) => ({ ...pull, mine: viewer !== undefined && pull.author === viewer });
+
+/** The room's own open reviews of the same project as stack edges: each
+ *  names its branch and the base it builds on — only those the reader may
+ *  see (a review waiting on another is its author's alone until then). */
+const reviewEdges = (found: { readonly room: { readonly tickets: SubscriptionRef.SubscriptionRef<ReadonlyMap<string, Ticket>>; readonly reviews: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewContext>> }; readonly ticket: Ticket }) =>
+  Effect.gen(function* () {
+    const { identity } = yield* IdentityService;
+    const all = yield* SubscriptionRef.get(found.room.tickets);
+    return (yield* SubscriptionRef.get(found.room.reviews)).flatMap((r): ReadonlyArray<Edge> => {
+      const t = all.get(r.ticketId);
+      if (!t || t.kind !== "review" || isClosed(t) || !r.branch || t.project.trim().toLowerCase() !== found.ticket.project.trim().toLowerCase() || !visibleTo(t, all, identity.pubkey)) return [];
+      return [{ branch: r.branch, base: r.base ?? "main", label: t.title ?? t.goal, url: `/review/${t.id}`, kind: "review" }];
+    });
+  });
+
+/** The review on its host, for the page: who is signed in, its pull request
+ *  and that request's line comments, and the stack its branch sits in (the
+ *  host's open pull requests and the room's reviews). Every part that cannot
+ *  be read says why in words; the diff never waits on it (a call of its own). */
+export const hostView = Effect.fn("ReviewView.host")(function* (ticketId: string) {
+  const found = yield* reviewNamed(ticketId);
+  if (!found) return { none: `no review ticket ${ticketId} in your rooms`, stack: null } satisfies HostView;
+  const branch = found.review.branch;
+  const fromRoom = yield* reviewEdges(found);
+  const stack = (pulls: ReadonlyArray<HostPull>) =>
+    branch ? stackOf(branch, found.review.base ?? "main", [...pulls.map((p): Edge => ({ branch: p.branch, base: p.base, label: p.title || p.branch, number: p.number, url: p.url, kind: "pull" })), ...fromRoom]) : null;
+  const link = hostLink(found.review, found.project);
+  if (!link) return { none: "This review names no link to where its code is hosted.", stack: stack([]) } satisfies HostView;
+  const host = hostOf(link);
+  if (!host) return { none: `collagen has no integration for ${link} yet.`, stack: stack([]) } satisfies HostView;
+  const [viewer, named, open] = yield* Effect.all([host.viewer, host.pull(link, branch), host.openPulls(link)], { concurrency: "unbounded" });
+  const login = "user" in viewer ? viewer.user.login : undefined;
+  const pull = "pull" in named ? named.pull : null;
+  const comments = pull ? yield* host.comments(link, pull.number) : [];
+  return {
+    host: host.name,
+    viewer: "user" in viewer ? viewer.user : null,
+    ...("signIn" in viewer ? { signIn: viewer.signIn } : {}),
+    pull: pull ? shown(pull, login) : null,
+    ...("none" in named ? { noPull: named.none } : {}),
+    comments,
+    stack: stack(open),
+  } satisfies HostView;
+});
+
+/** The open pull request a write goes to — found from the ticket here, never
+ *  taken from the page — and its host; or why there is none to write to. */
+const openPull = (ticketId: string) =>
+  Effect.gen(function* () {
+    const found = yield* reviewNamed(ticketId);
+    const link = found ? hostLink(found.review, found.project) : undefined;
+    const host = link ? hostOf(link) : undefined;
+    if (!found || !link || !host) return { error: "This review has no pull request collagen can reach." };
+    const named = yield* host.pull(link, found.review.branch);
+    if ("none" in named) return { error: named.none };
+    if (named.pull.state !== "open") return { error: `Pull request #${named.pull.number} is ${named.pull.state}: it takes no more reviews.` };
+    return { host, link, pull: named.pull } as { readonly host: RepoHost; readonly link: string; readonly pull: HostPull };
+  });
+
+/** A review on the pull request, in the reader's name: a comment, an
+ *  approval, or a request for changes. A host keeps you from approving your
+ *  own, and asks for words with anything but an approval — said here first. */
+export const sendReview = Effect.fn("ReviewView.sendReview")(function* (ticketId: string, verdict: Verdict, body: string) {
+  const to = yield* openPull(ticketId);
+  if ("error" in to) return to satisfies HostWrite;
+  const text = body.trim();
+  if (verdict !== "approve" && text.length === 0) return { error: verdict === "comment" ? "Write the comment first." : "Say what should change — GitHub asks for it." } satisfies HostWrite;
+  if (verdict !== "comment") {
+    const viewer = yield* to.host.viewer;
+    if ("user" in viewer && viewer.user.login === to.pull.author) return { error: "You opened this pull request: GitHub does not let you approve or request changes on your own." } satisfies HostWrite;
+  }
+  return yield* to.host.review(to.link, to.pull.number, verdict, text);
+});
+
+/** A comment on one line of the pull request, at the commit the page shows. */
+export const sendLineComment = Effect.fn("ReviewView.sendLineComment")(function* (ticketId: string, at: LineSpot, body: string) {
+  const to = yield* openPull(ticketId);
+  if ("error" in to) return to satisfies HostWrite;
+  const text = body.trim();
+  if (text.length === 0) return { error: "Write the comment first." } satisfies HostWrite;
+  return yield* to.host.comment(to.link, to.pull.number, at, text);
 });
 
 /** Only this machine's own browser, by name: the server listens on loopback,
