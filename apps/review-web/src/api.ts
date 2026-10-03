@@ -22,14 +22,16 @@ export const reviewChanges = live(
   }),
 );
 
-export const hoverAt = GET(async (ticketId: string, file: string, line: number, col: number): Promise<HoverResult> => {
+/** Types and peeks are of the code at the commit the page shows — the same
+ *  code the reader is pointing at, even after the branch has moved on. */
+export const hoverAt = GET(async (ticketId: string, file: string, line: number, col: number, commit: string): Promise<HoverResult> => {
   "use server";
-  return run((b) => b.hover(ticketId, file, line, col));
+  return run((b) => b.hover(ticketId, file, line, col, commit));
 });
 
-export const definitionAt = GET(async (ticketId: string, file: string, line: number, col: number): Promise<DefinitionResult> => {
+export const definitionAt = GET(async (ticketId: string, file: string, line: number, col: number, commit: string): Promise<DefinitionResult> => {
   "use server";
-  return run((b) => b.definition(ticketId, file, line, col));
+  return run((b) => b.definition(ticketId, file, line, col, commit));
 });
 
 /** A language server's state, live: the offer, its install, its notices

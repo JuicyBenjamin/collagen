@@ -6,6 +6,8 @@ import type { DefinitionResult } from "./data";
 // are stand-ins answering from a queue
 const answers: Array<DefinitionResult> = [];
 const definitionAt = vi.fn(async () => answers.shift() ?? { peeks: [] });
+// the page's diff is of a commit: what is asked is of that commit
+vi.mock("./diffNow", () => ({ diffNow: { commit: () => "abc1234", addedIn: () => new Set(), canReadWhole: () => false, hunksOf: () => [] } }));
 vi.mock("./api", () => ({ definitionAt, hoverAt: vi.fn(async () => ({ none: true })), toolState: vi.fn(async () => null), installTool: vi.fn(async () => null) }));
 let intel: typeof import("./intel");
 beforeAll(async () => {

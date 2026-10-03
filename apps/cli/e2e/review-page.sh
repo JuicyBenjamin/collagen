@@ -102,16 +102,17 @@ echo "## types and definitions, from collagen's own TypeScript 7 over the branch
 expect "the page follows the pinned TypeScript live: there, and ready" "$(sfn_live toolStates '["typescript"]')" "\"7\.[0-9.]+\".*\"ready\""
 expect "…a tool collagen does not have streams nothing" "$(sfn_live toolStates '["cobol"]' 2 | grep -c '^id:')" "^0$"
 expect "installing from another origin is refused (Solid's same-origin guard)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'Origin: https://evil.example' --data '["typescript"]' "$ORIGIN/review/_server/$(sfn_id installTool)")" "^403$"
-HOVER=$(sfn hoverAt "[\"$TICKET\",\"src/use.ts\",3,21]")
+# the commit the page's diff is read at: types, peeks, the whole file and
+# what moved since are all of it
+SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
+HOVER=$(sfn hoverAt "[\"$TICKET\",\"src/use.ts\",3,21,\"$SHOWN\"]")
 expect "hovering a call says what it is: its signature" "$HOVER" "const stream: \\(rows"
-PEEK=$(sfn definitionAt "[\"$TICKET\",\"src/use.ts\",3,29]")
+PEEK=$(sfn definitionAt "[\"$TICKET\",\"src/use.ts\",3,29,\"$SHOWN\"]")
 expect "peeking it opens the declaration in its own file" "$PEEK" "\"file\":\"src/page.ts\".*export function page"
 expect "…with the doc comment above it" "$PEEK" "A hundred rows a page"
-expect "a path outside the branch is refused" "$(sfn hoverAt "[\"$TICKET\",\"../../etc/passwd.ts\",1,0]")" "bad request"
-expect "…and so is a file the type checker does not read" "$(sfn hoverAt "[\"$TICKET\",\"src/notes.txt\",1,0]")" "bad request"
-expect "…and a hover from another host" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url hoverAt "[\"$TICKET\",\"src/use.ts\",3,21]")")" "^403$"
-# the commit the page's diff is read at: the whole file and what moved since are of it
-SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
+expect "a path outside the branch is refused" "$(sfn hoverAt "[\"$TICKET\",\"../../etc/passwd.ts\",1,0,\"$SHOWN\"]")" "bad request"
+expect "…and so is a file the type checker does not read" "$(sfn hoverAt "[\"$TICKET\",\"src/notes.txt\",1,0,\"$SHOWN\"]")" "bad request"
+expect "…and a hover from another host" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url hoverAt "[\"$TICKET\",\"src/use.ts\",3,21,\"$SHOWN\"]")")" "^403$"
 WHOLE=$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"$SHOWN\"]")
 expect "a file reads whole, as the branch has it" "$WHOLE" '^\{"lines":\[.*\]\}$'
 expect "…every line of it" "$(echo "$WHOLE" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["lines"]))')" "^[3-9]$|^[1-9][0-9]+$"
@@ -135,7 +136,10 @@ BEFORE=$(grep -c "^id:" "$EV")
 # the commit a reader would have viewed src/use.ts at, before the next push
 VIEWED_AT=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
 expect "the page's data names the branch's commit it was read at" "$VIEWED_AT" "^[0-9a-f]{40}$"
-printf 'export const more = 1;\n' > "$R/src/more.ts"; printf '\nexport const later = 2;\n' >> "$R/src/use.ts"; git -C "$R" add -A; git -C "$R" commit -qm more
+printf 'export const more = 1;\n' > "$R/src/more.ts"; printf '\nexport const later = 2;\n' >> "$R/src/use.ts"
+# and stream changes shape: what a type is depends on which commit is asked
+printf 'export const a = 1;\nexport const stream = (rows: number[]): number => rows.length;\n' > "$R/src/export.ts"
+git -C "$R" add -A; git -C "$R" commit -qm more
 wait_until "a new commit on the branch moves it too" "^$((BEFORE + 1))$" grep -c "^id:" "$EV"
 expect "…and the data now has it" "$(sfn reviewData "[\"$TICKET\"]")" "src/more.ts"
 NOW=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
@@ -150,6 +154,8 @@ expect "…a commit the clone does not have says the branch was rewritten" "$(sf
 expect "the whole file of the commit the page shows, not the branch's tip" "$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"$VIEWED_AT\"]" | grep -c 'later = 2')" "^0$"
 expect "…and of the tip when the page shows it" "$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"$NOW\"]")" "later = 2"
 expect "what moved since, up to the commit the page shows: nothing yet on the older page" "$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"$VIEWED_AT\",\"$VIEWED_AT\"]")" '^\{"hunks":\[\]\}$'
+expect "a type on the older page is the older code's, not the moved branch's" "$(sfn hoverAt "[\"$TICKET\",\"src/use.ts\",3,21,\"$VIEWED_AT\"]")" "const stream: \\(rows: any\\) => any"
+expect "…and on the page showing the tip, the tip's" "$(sfn hoverAt "[\"$TICKET\",\"src/use.ts\",3,21,\"$NOW\"]")" "const stream: \\(rows: number\\[\\]\\) => number"
 expect "…a commit the page names but the clone lacks is refused, not swapped for the tip" "$(sfn wholeFile "[\"$TICKET\",\"src/use.ts\",\"0000000000000000000000000000000000000000\"]")" "not in your clone"
 kill $CURL 2>/dev/null
 # o on a review open where its tab cannot be brought forward opens one
@@ -174,21 +180,22 @@ printf 'deps/\n' > "$R/jobs/.gitignore"
 printf '<?php\n\nnamespace Acme;\n\nfinal class Clock\n{\n    /** The time now, as text. */\n    public function now(): string\n    {\n        return date("c");\n    }\n}\n' > "$R/jobs/deps/acme/clock/src/Clock.php"
 printf '<?php\n\nnamespace Jobs;\n\nuse Acme\\Clock;\n\nfinal class Stamp\n{\n    public function at(Clock $clock): string\n    {\n        return $clock->now();\n    }\n}\n' > "$R/jobs/src/Stamp.php"
 git -C "$R" add -A; git -C "$R" commit -qm php
+PHPAT=$(git -C "$R" rev-parse HEAD)
 # the column a word starts at on a line of a file of the branch (0-based)
 colof() { awk -v w="$3" -v n="$2" 'NR == n { print index($0, w) - 1 }' "$R/$1"; }
 expect "the page can see the pinned Intelephense is there" "$(sfn_live toolStates '["php"]')" "\"php\".*\"PHP\".*\"Intelephense\".*\"ready\""
-H=$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch)]")
+H=$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch),\"$PHPAT\"]")
 expect "hovering a method of the branch's own interface: its name and signature" "$H" "Rows::fetch.*public function fetch\\(int \\\$limit\\): array"
-expect "hovering a Composer package's method, from the clone's vendor/" "$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 hello)]")" "Greeter::hello.*public function hello\\(string \\\$name\\): string"
-expect "hovering a PHP function: its signature, from PHP's own stubs" "$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen)]")" "function strlen\\(string \\\$string\\): int"
-P=$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch)]")
+expect "hovering a Composer package's method, from the clone's vendor/" "$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 hello),\"$PHPAT\"]")" "Greeter::hello.*public function hello\\(string \\\$name\\): string"
+expect "hovering a PHP function: its signature, from PHP's own stubs" "$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "function strlen\\(string \\\$string\\): int"
+P=$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch),\"$PHPAT\"]")
 expect "peeking it opens the interface in its own file" "$P" "\"file\":\"src/Rows.php\",\"where\":\"branch\""
 expect "…its doc comment as the doc, the code from the declaration" "$P" "\"doc\":\"The rows, at most this many.\",\"code\":\"    public function fetch"
-expect "peeking a package's method names the package's file" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 hello)]")" "\"file\":\"acme/greeter/src/Greeter.php\",\"where\":\"package\""
-expect "a function documented on its own line: the peek keeps its declaration, the comment as its doc" "$(sfn definitionAt "[\"$TICKET\",\"src/Report.php\",9,$(colof src/Report.php 9 cells)]")" "\"file\":\"src/helpers.php\".*\"doc\":\"Joins the row's cells.\",\"code\":\"function cells\\(array \\\$row\\): string \\{"
-expect "a project with its own vendor-dir: its package hovers" "$(sfn hoverAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now)]")" "Clock::now.*public function now\\(\\): string"
-expect "…and peeks as the package's file" "$(sfn definitionAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now)]")" "\"file\":\"acme/clock/src/Clock.php\",\"where\":\"package\""
-expect "peeking a PHP function says it is built into PHP" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen)]")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
+expect "peeking a package's method names the package's file" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 hello),\"$PHPAT\"]")" "\"file\":\"acme/greeter/src/Greeter.php\",\"where\":\"package\""
+expect "a function documented on its own line: the peek keeps its declaration, the comment as its doc" "$(sfn definitionAt "[\"$TICKET\",\"src/Report.php\",9,$(colof src/Report.php 9 cells),\"$PHPAT\"]")" "\"file\":\"src/helpers.php\".*\"doc\":\"Joins the row's cells.\",\"code\":\"function cells\\(array \\\$row\\): string \\{"
+expect "a project with its own vendor-dir: its package hovers" "$(sfn hoverAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now),\"$PHPAT\"]")" "Clock::now.*public function now\\(\\): string"
+expect "…and peeks as the package's file" "$(sfn definitionAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now),\"$PHPAT\"]")" "\"file\":\"acme/clock/src/Clock.php\",\"where\":\"package\""
+expect "peeking a PHP function says it is built into PHP" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all; summary
