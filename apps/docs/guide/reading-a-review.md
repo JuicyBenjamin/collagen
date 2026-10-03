@@ -67,9 +67,16 @@ It is offered when the diff came from your clone, and not on a deleted file.
 
 **Viewed**, on each file's header, marks it as read, as on GitHub: the file folds to its
 header everywhere it shows on the page, and the top of the decisions list counts how many
-of the review's files you have viewed. A mark is for the file as you read it — when the
-author pushes a change to it, it opens again and says "changed since viewed". Marks stay in
-your browser, per review.
+of the review's files you have viewed. A mark is for the file as you read it, at the branch's commit then —
+when the author pushes a change to it, it opens again and says "changed since viewed", and
+shows **only what moved since that commit**: each of its hunks shows the changes that fall in
+it, a count of lines added and removed above them, and a hunk where nothing moved stays
+folded, "unchanged since you viewed it". So three changed lines in an 800-line file are three
+lines to read, not eight hundred. "Whole change" switches back to the diff against the base;
+ticking Viewed again marks it as it is now. After a rebase the changes since include what the
+new base brought in; if the branch was rewritten and that commit is gone, the page says so and
+shows the whole change. It works when the diff came from your clone. Marks stay in your
+browser, per review.
 
 The plumbing stays out of the way: no decision ids, no pointer lists (each hunk names its
 file), and where the diff came from is one line at the foot of the page.
