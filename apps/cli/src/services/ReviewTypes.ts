@@ -8,7 +8,7 @@ import { toolOf, type DefinitionResult, type HoverResult, type Peek, type ToolId
 import { startLsp, type LspClient } from "../lib/lsp";
 import { install, installed, packageDir, toolRoot, TOOLS, type LanguageTool } from "../lib/languageTools";
 import { configDir } from "./Identity";
-import { reviewTree } from "./ReviewView";
+import { commitIn, reviewTree } from "./ReviewView";
 
 // Type hints and definition peeks on the review page, per language: each
 // file's language has its own pinned server (lib/languageTools), installed
@@ -294,16 +294,18 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       return { tool, root, storage, projectPath, lsp, ready, indexed, started: Date.now(), deps, opened: new Set(), lastUsed: Date.now() };
     };
 
-    /** A language's server for a review's branch, started on first use and
-     *  kept per commit — a branch that moves gets a fresh one. */
-    const session = Effect.fn("ReviewTypes.session")(function* (ticketId: string, tool: LanguageTool) {
+    /** A language's server for a review's code at `commit` — the commit the
+     *  page shows, never the branch's tip now, so an answer is about the code
+     *  on screen — started on first use and kept per commit. */
+    const session = Effect.fn("ReviewTypes.session")(function* (ticketId: string, tool: LanguageTool, commit: string) {
       const tree = yield* reviewTree(ticketId);
       if (typeof tree === "string") return tree;
+      if (!(yield* commitIn(tree.projectPath, commit))) return "the commit this page shows is not in your clone";
       const prefix = `${ticketId.slice(0, 8)}-${tool.id}-`;
-      const key = `${prefix}${tree.commit.slice(0, 12)}`;
+      const key = `${prefix}${commit.slice(0, 12)}`;
       if (!sessions.has(key)) {
         for (const k of [...sessions.keys()]) if (k.startsWith(prefix)) stop(k);
-        const started = start(tool, tree.projectPath, tree.commit, key);
+        const started = start(tool, tree.projectPath, commit, key);
         started.catch(() => sessions.delete(key));
         sessions.set(key, started);
       }
@@ -314,12 +316,12 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
 
     /** Ask the file's server about a position in it; opens the file for it
      *  first (a server answers about open documents). */
-    const ask = Effect.fn("ReviewTypes.ask")(function* (ticketId: string, file: string, line: number, col: number, method: string) {
+    const ask = Effect.fn("ReviewTypes.ask")(function* (ticketId: string, file: string, line: number, col: number, commit: string, method: string) {
       const id = toolOf(file);
       if (id === null) return { _tag: "failed", error: `no language server reads ${extname(file) || file}` } as const;
       const tool = TOOLS[id];
       if (!installed(toolDir(tool), tool)) return { _tag: "missing" } as const;
-      const s = yield* session(ticketId, tool);
+      const s = yield* session(ticketId, tool, commit);
       if (typeof s === "string") return { _tag: "failed", error: s } as const;
       s.lastUsed = Date.now();
       const path = join(s.root, file);
@@ -344,8 +346,8 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       );
     });
 
-    const hover = Effect.fn("ReviewTypes.hover")(function* (ticketId: string, file: string, line: number, col: number) {
-      const r = yield* ask(ticketId, file, line, col, "textDocument/hover");
+    const hover = Effect.fn("ReviewTypes.hover")(function* (ticketId: string, file: string, line: number, col: number, commit: string) {
+      const r = yield* ask(ticketId, file, line, col, commit, "textDocument/hover");
       if (r._tag === "missing") return { missing: true } satisfies HoverResult;
       if (r._tag === "indexing") return { indexing: true } satisfies HoverResult;
       if (r._tag === "failed") return { error: r.error } satisfies HoverResult;
@@ -357,8 +359,8 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     /** Where a symbol is declared, and the declaration itself: the target's
      *  whole range (a function with its body), capped, with where it lives —
      *  in the branch, in a dependency, or in the language itself. */
-    const definition = Effect.fn("ReviewTypes.definition")(function* (ticketId: string, file: string, line: number, col: number) {
-      const r = yield* ask(ticketId, file, line, col, "textDocument/definition");
+    const definition = Effect.fn("ReviewTypes.definition")(function* (ticketId: string, file: string, line: number, col: number, commit: string) {
+      const r = yield* ask(ticketId, file, line, col, commit, "textDocument/definition");
       if (r._tag === "missing") return { missing: true } satisfies DefinitionResult;
       if (r._tag === "indexing") return { indexing: true } satisfies DefinitionResult;
       if (r._tag === "failed") return { error: r.error } satisfies DefinitionResult;

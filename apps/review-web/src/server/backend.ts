@@ -16,8 +16,9 @@ export class ReviewBackend extends Context.Service<
      *  branch's commit in the clone — current first, then each time it
      *  moves; a reconnect starts again from the current one */
     readonly changes: (ticketId: string) => Stream.Stream<string>;
-    readonly hover: (ticketId: string, file: string, line: number, col: number) => Effect.Effect<HoverResult>;
-    readonly definition: (ticketId: string, file: string, line: number, col: number) => Effect.Effect<DefinitionResult>;
+    /** what the type checker says at a position — of the code at `commit`, the one the page shows */
+    readonly hover: (ticketId: string, file: string, line: number, col: number, commit: string) => Effect.Effect<HoverResult>;
+    readonly definition: (ticketId: string, file: string, line: number, col: number, commit: string) => Effect.Effect<DefinitionResult>;
     /** a language server's state, now and each time it changes — installing,
      *  ready, failed, a notice it asked to show */
     readonly tool: (tool: ToolId) => Stream.Stream<ToolState>;
