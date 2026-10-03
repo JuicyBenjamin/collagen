@@ -101,8 +101,8 @@ export function Tickets() {
   const current = shown[sel];
   const currentId = current?.t.id;
   useEffect(() => {
-    if (currentId) scroller.current?.scrollChildIntoView(rowId(currentId));
-  }, [currentId]);
+    if (currentId && scroller.current) keepInView(scroller.current, rowId(currentId), sel === 0);
+  }, [currentId, sel]);
 
   return (
     <Focusable
@@ -402,6 +402,26 @@ function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
  *  ticket's own page has the rest, and an agent can read all of it. */
 /** the id a ticket's row is drawn under, so the list can scroll to it */
 const rowId = (ticketId: string): string => `row-${ticketId}`;
+
+/** Scroll the list only as far as the cursor's row needs: not at all while
+ *  it is in view, and when it would leave, by exactly enough to bring it to
+ *  the edge it left by — so the list moves with the cursor, one row at a
+ *  time, and never jumps. At the first row, all the way up, so what heads
+ *  the list shows. The row's place is measured inside the list's content,
+ *  which does not move as it scrolls (OpenTUI's own scrollChildIntoView
+ *  measured it on screen, against a viewport that had, and drifted). */
+const keepInView = (list: ScrollBoxRenderable, id: string, first: boolean): void => {
+  if (first) {
+    list.scrollTop = 0;
+    return;
+  }
+  const row = list.content.findDescendantById(id);
+  if (!row) return;
+  const at = row.y - list.content.y;
+  const height = list.viewport.height;
+  if (at < list.scrollTop) list.scrollTop = at;
+  else if (at + row.height > list.scrollTop + height) list.scrollTop = at + row.height - height;
+};
 
 function TicketRow({
   ticket: t,
