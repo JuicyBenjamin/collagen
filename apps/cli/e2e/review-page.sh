@@ -101,9 +101,18 @@ AMEND="{\"ticketId\":\"$TICKET\",\"decisions\":[$D3]}"
 call $A "$SA" ask-review "$AMEND" > /dev/null
 wait_until "revising the why says changed" "event: changed" cat "$EV"
 BEFORE=$(grep -c "event: changed" "$EV")
-printf 'export const more = 1;\n' > "$R/src/more.ts"; git -C "$R" add -A; git -C "$R" commit -qm more
+# the commit a reader would have viewed src/use.ts at, before the next push
+VIEWED_AT=$(curl -s "$ORIGIN/review/$TICKET/data" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
+expect "the page's data names the branch's commit it was read at" "$VIEWED_AT" "^[0-9a-f]{40}$"
+printf 'export const more = 1;\n' > "$R/src/more.ts"; printf '\nexport const later = 2;\n' >> "$R/src/use.ts"; git -C "$R" add -A; git -C "$R" commit -qm more
 wait_until "a new commit on the branch says changed too" "^$((BEFORE + 1))$" grep -c "event: changed" "$EV"
 expect "…and the data now has it" "$(curl -s "$ORIGIN/review/$TICKET/data")" "src/more.ts"
+SINCE=$(curl -s "$ORIGIN/review/$TICKET/since?file=src/use.ts&from=$VIEWED_AT")
+expect "what moved in a file since it was viewed: the new line alone" "$SINCE" '"kind":"\+","text":"export const later = 2;"'
+# the push added a blank line and the export: those two, and nothing it had before
+expect "…and nothing it had before" "$(echo "$SINCE" | python3 -c 'import json,sys; print(sum(1 for h in json.load(sys.stdin)["hunks"] for l in h["lines"] if l["kind"] != " "))')" "^2$"
+expect "…a commit that is not a hash is refused" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/since?file=src/use.ts&from=HEAD~1")" "^400$"
+expect "…a commit the clone does not have says the branch was rewritten" "$(curl -s "$ORIGIN/review/$TICKET/since?file=src/use.ts&from=0000000000000000000000000000000000000000")" "branch was rewritten"
 kill $CURL 2>/dev/null
 # o on a review open where its tab cannot be brought forward opens one
 # marked ?take, which the old tab hands over to: the marker serves the page

@@ -9,6 +9,8 @@ import { AlsoUnder } from "./AlsoUnder";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
 import { viewed } from "../viewedNow";
+import { sinceOf } from "../sinceNow";
+import { moved, placeSince } from "../since";
 
 /** The character a pointer is over, in a line drawn by CodeLine: the text
  *  under the pointer, and where its span starts (data-o). */
@@ -21,20 +23,19 @@ function charAt(x: number, y: number): { readonly col: number; readonly node: No
   return { col: Number(span.getAttribute("data-o")) + offset, node, offset };
 }
 
-/** One hunk: file and header, then its lines with old and new numbers, each
- *  line's code coloured by TanStack Highlight as spans of its own — never
- *  set as HTML. On a file a language server reads (once it is installed), a
- *  word on an added or unchanged line answers to the pointer: rest on it for
- *  its type, click it to peek where it is declared (removed lines are the
- *  base's, not asked). */
+/** One hunk: file and header, then its code (Lines). Its header offers the
+ *  file whole, and a mark as viewed. A file marked as viewed folds here and
+ *  wherever else it shows; once it moves, this hunk shows only what changed
+ *  in it since the commit it was viewed at — or, where nothing did, stays
+ *  folded — and the whole change against the base is a click away. */
 export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision> }) {
   // the file whole, on the reader's word: asked once, kept while the page is
   const [whole, setWhole] = createSignal<WholeFileResult | "loading" | null>(null);
   const [open, setOpen] = createSignal(false);
   let box: HTMLDivElement | undefined;
-  const shown = createMemo((): HunkData => {
+  const wholeShown = createMemo((): HunkData | null => {
     const w = whole();
-    return open() && w && w !== "loading" && "lines" in w ? wholeHunk(props.hunk, w.lines, diffNow.addedIn(props.hunk.file)) : props.hunk;
+    return open() && w && w !== "loading" && "lines" in w ? wholeHunk(props.hunk, w.lines, diffNow.addedIn(props.hunk.file)) : null;
   });
   const failed = () => {
     const w = whole();
@@ -62,9 +63,87 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
     }
     toChange();
   };
-  const spans = createMemo(() => highlightHunk(shown()));
   // read already: the file folds to its header here and wherever else it shows
   const state = () => viewed.state(props.hunk.file);
+
+  // moved since it was viewed: what changed from the commit it was viewed at
+  // to the branch now, the part of it that falls in this hunk
+  const since = createMemo(() => {
+    const from = state() === "changed" ? viewed.viewedAt(props.hunk.file) : undefined;
+    const to = diffNow.commit();
+    return from && to && from !== to ? sinceOf(props.hunk.file, from, to)() : null;
+  });
+  const mine = createMemo((): ReadonlyArray<HunkData> | null => {
+    const r = since();
+    return r && r !== "loading" && "hunks" in r ? (placeSince(diffNow.hunksOf(props.hunk.file), r.hunks).get(props.hunk.id) ?? []) : null;
+  });
+  const sinceFailed = () => {
+    const r = since();
+    return r && r !== "loading" && "error" in r ? r.error : null;
+  };
+  const [full, setFull] = createSignal(false);
+  const sinceMode = () => !open() && !full() && mine() !== null;
+  const counts = () => moved(mine() ?? []);
+
+  return (
+    <div class={["hunk", { viewed: state() === "viewed" }]}>
+      <div class="file">
+        <span class="head">{props.hunk.file}</span>
+        <span class="file-side">
+          <AlsoUnder decisions={props.alsoUnder} />
+          <Show when={mine() !== null && !open()}>
+            <button type="button" class="whole-toggle" onClick={() => setFull(!full())} title="Switch between what changed since you viewed it and the whole change against the base">
+              {full() ? "Since you viewed" : "Whole change"}
+            </button>
+          </Show>
+          <Show when={diffNow.canReadWhole() && hasNewSide(props.hunk) && state() !== "viewed"}>
+            <button type="button" class="whole-toggle" onClick={() => void toggleWhole()} title="The whole file as the branch has it, this diff's added lines marked">
+              {open() ? (whole() === "loading" ? "Reading…" : "Just the change") : "Whole file"}
+            </button>
+          </Show>
+          <label class={["mark-viewed", { changed: state() === "changed" }]} title="Fold this file everywhere on the page, as read; it opens again if its changes move, showing what moved">
+            <input type="checkbox" checked={state() === "viewed"} onChange={() => viewed.toggle(props.hunk.file, diffNow.commit())} />
+            {state() === "changed" ? "Changed since viewed" : "Viewed"}
+          </label>
+        </span>
+      </div>
+      <Show when={state() !== "viewed"}>
+        <Show when={failed()}>{(why) => <p class="whole-failed">Could not read the whole file: {why()}</p>}</Show>
+        <Show when={sinceFailed()}>{(why) => <p class="whole-failed">Could not show what changed since you viewed it: {why()} Showing the whole change.</p>}</Show>
+        <Show
+          when={sinceMode()}
+          fallback={
+            <div class={["code", { whole: wholeShown() !== null }]} ref={box}>
+              <Lines hunk={wholeShown() ?? props.hunk} />
+            </div>
+          }
+        >
+          <Show when={(mine() ?? []).length > 0} fallback={<p class="since-none">Unchanged since you viewed it.</p>}>
+            <p class="since-note">
+              Since you viewed it: <span class="since-add">+{counts().added}</span> <span class="since-del">−{counts().removed}</span>
+            </p>
+            <For each={mine() ?? []}>
+              {(h) => (
+                <div class="code since">
+                  <Lines hunk={h} />
+                </div>
+              )}
+            </For>
+          </Show>
+        </Show>
+      </Show>
+    </div>
+  );
+}
+
+/** A hunk's lines with old and new numbers, each line's code coloured by
+ *  TanStack Highlight as spans of its own — never set as HTML. On a file a
+ *  language server reads (once it is installed), a word on an added or
+ *  unchanged line answers to the pointer: rest on it for its type, click it
+ *  to peek where it is declared (removed lines are not the branch's, not
+ *  asked). */
+function Lines(props: { hunk: HunkData }) {
+  const spans = createMemo(() => highlightHunk(props.hunk));
   const asks = () => readyFor(props.hunk.file);
 
   /** The word under the pointer on this line, as a spot in the branch, and
@@ -83,77 +162,55 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
   const spotAt = (line: DiffLine, e: MouseEvent): Spot | null => wordUnder(line, e)?.spot ?? null;
 
   return (
-    <div class={["hunk", { viewed: state() === "viewed" }]}>
-      <div class="file">
-        <span class="head">{props.hunk.file}</span>
-        <span class="file-side">
-          <AlsoUnder decisions={props.alsoUnder} />
-          <Show when={diffNow.canReadWhole() && hasNewSide(props.hunk) && state() !== "viewed"}>
-            <button type="button" class="whole-toggle" onClick={() => void toggleWhole()} title="The whole file as the branch has it, this diff's added lines marked">
-              {open() ? (whole() === "loading" ? "Reading…" : "Just the change") : "Whole file"}
-            </button>
-          </Show>
-          <label class={["mark-viewed", { changed: state() === "changed" }]} title="Fold this file everywhere on the page, as read; it opens again if its changes move">
-            <input type="checkbox" checked={state() === "viewed"} onChange={() => viewed.toggle(props.hunk.file)} />
-            {state() === "changed" ? "Changed since viewed" : "Viewed"}
-          </label>
-        </span>
-      </div>
-      <Show when={state() !== "viewed"}>
-      <Show when={failed()}>{(why) => <p class="whole-failed">Could not read the whole file: {why()}</p>}</Show>
-      <div class={["code", { whole: shown() !== props.hunk }]} ref={box}>
-        <table>
-          <tbody>
-            <For each={shown().lines}>
-              {(line, i) => (
-                <>
-                  <tr class={{ add: line.kind === "+", del: line.kind === "-" }} data-new={line.new}>
-                    <td class="n">{line.old ?? ""}</td>
-                    <td class="n">{line.new ?? ""}</td>
-                    <td
-                      class={["t", { asks: asks() && line.new !== undefined }]}
-                      onMouseMove={(e) => {
-                        const w = wordUnder(line, e);
-                        // a word is something to click: say so with the pointer and a mark
-                        e.currentTarget.classList.toggle("on-word", w !== null);
-                        markWord(w?.range ?? null);
-                        pointAt(w?.spot ?? null, e.clientX, e.clientY);
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.classList.remove("on-word");
-                        markWord(null);
-                        pointAt(null, 0, 0);
-                      }}
-                      onClick={(e) => {
-                        // a click that selected text is a selection, not a peek
-                        if (getSelection()?.toString()) return;
-                        const spot = spotAt(line, e);
-                        if (spot) {
-                          pointAt(null, 0, 0);
-                          peekAt(shown().id, i(), spot);
-                        }
-                      }}
-                    >
-                      <span class="sign">{line.kind === " " ? " " : line.kind}</span>
-                      <CodeLine spans={spans()[i()] ?? []} />
+    <table>
+      <tbody>
+        <For each={props.hunk.lines}>
+          {(line, i) => (
+            <>
+              <tr class={{ add: line.kind === "+", del: line.kind === "-" }} data-new={line.new}>
+                <td class="n">{line.old ?? ""}</td>
+                <td class="n">{line.new ?? ""}</td>
+                <td
+                  class={["t", { asks: asks() && line.new !== undefined }]}
+                  onMouseMove={(e) => {
+                    const w = wordUnder(line, e);
+                    // a word is something to click: say so with the pointer and a mark
+                    e.currentTarget.classList.toggle("on-word", w !== null);
+                    markWord(w?.range ?? null);
+                    pointAt(w?.spot ?? null, e.clientX, e.clientY);
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.classList.remove("on-word");
+                    markWord(null);
+                    pointAt(null, 0, 0);
+                  }}
+                  onClick={(e) => {
+                    // a click that selected text is a selection, not a peek
+                    if (getSelection()?.toString()) return;
+                    const spot = spotAt(line, e);
+                    if (spot) {
+                      pointAt(null, 0, 0);
+                      peekAt(props.hunk.id, i(), spot);
+                    }
+                  }}
+                >
+                  <span class="sign">{line.kind === " " ? " " : line.kind}</span>
+                  <CodeLine spans={spans()[i()] ?? []} />
+                </td>
+              </tr>
+              <Show when={peek()?.hunk === props.hunk.id && peek()?.index === i() ? peek() : null}>
+                {(p) => (
+                  <tr class="peek-row">
+                    <td colspan={3}>
+                      <Peek result={p().result} />
                     </td>
                   </tr>
-                  <Show when={peek()?.hunk === shown().id && peek()?.index === i() ? peek() : null}>
-                    {(p) => (
-                      <tr class="peek-row">
-                        <td colspan={3}>
-                          <Peek result={p().result} />
-                        </td>
-                      </tr>
-                    )}
-                  </Show>
-                </>
-              )}
-            </For>
-          </tbody>
-        </table>
-      </div>
-      </Show>
-    </div>
+                )}
+              </Show>
+            </>
+          )}
+        </For>
+      </tbody>
+    </table>
   );
 }
