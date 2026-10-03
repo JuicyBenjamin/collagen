@@ -208,6 +208,17 @@ describe("RoomLog", () => {
     });
   });
 
+  it("a review's units travel with it, an older unit without a line beneath its title too", async () => {
+    await withLog(async (log) => {
+      const units = [
+        { id: "u1", title: "Big exports finish", what: "rows are streamed", where: ["src/export.ts"] },
+        { id: "u2", title: "Pages of a hundred", where: ["src/page.ts:3"] },
+      ];
+      await Effect.runPromise(log.append({ op: "review", review: { ticketId: "t1", author: "k-alice", authorName: "alice", summary: "s", decisions: [], forks: [], units, ts: 1 } }));
+      expect((await Effect.runPromise(log.read)).reviews[0]?.units).toEqual(units);
+    });
+  });
+
   it("a settled step is not un-settled by a later copy that says otherwise", async () => {
     await withLog(async (log) => {
       const withStep = (status: "pending" | "suspended" | "settled", updatedAt: number, result?: string) =>
