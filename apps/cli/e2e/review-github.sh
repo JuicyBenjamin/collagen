@@ -84,15 +84,21 @@ expect "a write from another site is refused" "$(post sendReview "[\"$TICKET\",\
 expect "…and gh was never asked" "$(calls | wc -l | tr -d ' ')" "^$(echo $N | tr -d ' ')$"
 
 echo "## a comment on a line, at the commit the page shows"
-LINE=$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"Strings, or rows?\",\"$SHOWN\"]")
+LINE=$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"Strings, or rows?\",\"$SHOWN\",null]")
 expect "posted, and the comment comes back as GitHub has it" "$LINE" '"ok":true,"comment":\{"id":1000,"author":\{"login":"bob".*"body":"Strings, or rows\?","file":"src/export.ts","line":2,"side":"RIGHT"'
 expect "…on that file, line and side, at the commit the page shows" "$(calls | tail -1)" "\"-f\",\"body=Strings, or rows\\?\",\"-f\",\"commit_id=$SHOWN\",\"-f\",\"path=src/export.ts\",\"-F\",\"line=2\",\"-f\",\"side=RIGHT\""
 expect "…and read back with the others" "$(sfn hostView "[\"$TICKET\"]" | shape)" "^comment bob src/export.ts RIGHT 2 Strings, or rows\?$"
-expect "a line GitHub does not take is refused in its words" "$(post sendLineComment "[\"$TICKET\",\"src/notes.txt\",25,\"RIGHT\",\"hm\",\"$SHOWN\"]")" '"error":"Validation Failed"'
-expect "an empty comment is refused before GitHub is asked" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"   \",\"$SHOWN\"]")" '"error":"Write the comment first."'
-expect "a side that is not one is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"MIDDLE\",\"x\",\"$SHOWN\"]")" '"error":"bad request"'
-expect "a path out of the tree is a bad request" "$(post sendLineComment "[\"$TICKET\",\"../etc/passwd\",2,\"RIGHT\",\"x\",\"$SHOWN\"]")" '"error":"bad request"'
-expect "a commit that is not one is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"x\",\"HEAD\"]")" '"error":"bad request"'
+BLOCK_ARGS=$(python3 -c 'import json, sys; print(json.dumps([sys.argv[1], "src/page.ts", 3, "RIGHT", "Name the size:\n```suggestion\n  return n * PAGE;\n}\n```", sys.argv[2], {"line": 2, "side": "RIGHT"}]))' "$TICKET" "$SHOWN")
+BLOCK=$(post sendLineComment "$BLOCK_ARGS")
+expect "a comment on a block of lines, with a suggested change in it" "$BLOCK" '"ok":true,"comment":\{.*"file":"src/page.ts","line":3,"side":"RIGHT","startLine":2,"startSide":"RIGHT"'
+expect "…sent from its first line to its last" "$(calls | tail -1)" '"-F","line=3","-f","side=RIGHT","-F","start_line=2","-f","start_side=RIGHT"\]'
+expect "…its suggestion sent as written" "$(calls | tail -1)" 'suggestion\\n  return n \* PAGE;'
+expect "a block that starts after it ends is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/page.ts\",2,\"RIGHT\",\"x\",\"$SHOWN\",{\"line\":3,\"side\":\"RIGHT\"}]")" '"error":"bad request"'
+expect "a line GitHub does not take is refused in its words" "$(post sendLineComment "[\"$TICKET\",\"src/notes.txt\",25,\"RIGHT\",\"hm\",\"$SHOWN\",null]")" '"error":"Validation Failed"'
+expect "an empty comment is refused before GitHub is asked" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"   \",\"$SHOWN\",null]")" '"error":"Write the comment first."'
+expect "a side that is not one is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"MIDDLE\",\"x\",\"$SHOWN\",null]")" '"error":"bad request"'
+expect "a path out of the tree is a bad request" "$(post sendLineComment "[\"$TICKET\",\"../etc/passwd\",2,\"RIGHT\",\"x\",\"$SHOWN\",null]")" '"error":"bad request"'
+expect "a commit that is not one is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"x\",\"HEAD\",null]")" '"error":"bad request"'
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all; summary

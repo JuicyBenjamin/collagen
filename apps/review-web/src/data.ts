@@ -215,8 +215,10 @@ export interface PullRequest {
   readonly mine: boolean;
 }
 
-/** A comment on one line of the pull request's diff. `side`: the new file's
- *  line (RIGHT) or a removed line of the old one (LEFT). */
+/** A comment on a line, or a block of lines, of the pull request's diff.
+ *  `side`: the new file's line (RIGHT) or a removed line of the old one
+ *  (LEFT). A block runs from `startLine` on `startSide` to `line` on `side`,
+ *  and sits under its last line, as on GitHub. */
 export interface LineComment {
   readonly id: number;
   readonly author: HostUser;
@@ -224,6 +226,8 @@ export interface LineComment {
   readonly file: string;
   readonly line: number;
   readonly side: "LEFT" | "RIGHT";
+  readonly startLine?: number;
+  readonly startSide?: "LEFT" | "RIGHT";
   readonly url: string;
   readonly at: string;
   /** shown before the host has answered: the reader's own, on its way */

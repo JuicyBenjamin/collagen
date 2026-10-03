@@ -47,7 +47,7 @@ if (a === "pr" && b === "review") {
 if (a === "api" && args.includes("POST")) {
   const f = { ...fields("-f"), ...fields("-F") };
   if (!["src/export.ts", "src/page.ts", "src/use.ts"].includes(f.path)) fail("gh: Validation Failed (HTTP 422)");
-  const c = { id: 1000 + comments().length, body: f.body, path: f.path, line: Number(f.line), side: f.side, commit_id: f.commit_id };
+  const c = { id: 1000 + comments().length, body: f.body, path: f.path, line: Number(f.line), side: f.side, commit_id: f.commit_id, start_line: f.start_line ? Number(f.start_line) : null, start_side: f.start_side ?? null };
   writeFileSync(commentsFile, JSON.stringify([...comments(), c]));
   out(commentJson(c));
 }

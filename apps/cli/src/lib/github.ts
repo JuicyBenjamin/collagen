@@ -96,6 +96,8 @@ export const readComment = (v: unknown): LineComment | null => {
   const line = int(o?.line);
   const author = readUser(o?.user);
   if (!o || id === undefined || !file || line === undefined || !author) return null;
+  // a block of lines names where it starts; one line names none (null)
+  const startLine = int(o.start_line);
   return {
     id,
     author,
@@ -103,6 +105,7 @@ export const readComment = (v: unknown): LineComment | null => {
     file,
     line,
     side: o.side === "LEFT" ? "LEFT" : "RIGHT",
+    ...(startLine !== undefined && startLine !== line ? { startLine, startSide: o.start_side === "LEFT" ? ("LEFT" as const) : ("RIGHT" as const) } : {}),
     url: str(o.html_url) ?? "",
     at: str(o.created_at) ?? "",
   };
