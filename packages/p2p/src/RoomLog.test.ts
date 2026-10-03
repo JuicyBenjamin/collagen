@@ -115,14 +115,14 @@ describe("RoomLog", () => {
 
   it("our own why that a build could not read and evicted comes back, the newest of it, once", async () => {
     await withLog(async (log) => {
-      const r = { ticketId: "t1", author: "k-alice", authorName: "alice", summary: "streams the export", decisions: [], forks: [], units: [{ id: "u1", title: "Big exports finish", where: ["src/export.ts"] }], ts: 1 };
+      const r = { ticketId: "t1", author: "k-alice", authorName: "alice", summary: "streams the export", decisions: [{ id: "d1", what: "stream the rows", where: ["src/export.ts"] }], forks: [], ts: 1 };
       await Effect.runPromise(log.append({ op: "review", review: r }));
       await Effect.runPromise(log.append({ op: "review", review: { ...r, summary: "streams the export, paged", ts: 2 } }));
-      // a build that required a field these lack took the row off the room
+      // a build that could not read them took the row off the room
       await Effect.runPromise(log.append({ op: "evict", keys: ["review/t1"], protocol: "8", reason: "test", ts: 3 }));
       expect((await Effect.runPromise(log.read)).reviews).toHaveLength(0);
       expect(await Effect.runPromise(log.restoreOwn)).toBe(1);
-      expect((await Effect.runPromise(log.read)).reviews.map((x) => [x.ticketId, x.summary, x.units?.[0]?.title])).toEqual([["t1", "streams the export, paged", "Big exports finish"]]);
+      expect((await Effect.runPromise(log.read)).reviews.map((x) => [x.ticketId, x.summary, x.decisions[0]?.what])).toEqual([["t1", "streams the export, paged", "stream the rows"]]);
       expect(await Effect.runPromise(log.restoreOwn)).toBe(0);
     });
   });
