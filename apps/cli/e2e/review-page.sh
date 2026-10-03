@@ -51,22 +51,36 @@ sfn() { node "$E2E/sfn.mjs" "$(sfn_url "$1" "$2")"; }
 # a live one's first few seconds, as it streams them: one event per value
 sfn_live() { curl -s -N -m "${3:-4}" "$(sfn_url "$1" "$2" live)"; }
 
-echo "## the page's data: the diff from the clone, grouped by the why"
-wait_until "the review's data is served" "\"sections\"" sfn reviewData "[\"$TICKET\"]"
+echo "## the page's data: the diff from the clone, in units, the why beside them"
+wait_until "the review's data is served" "\"units\"" sfn reviewData "[\"$TICKET\"]"
 DATA=$(sfn reviewData "[\"$TICKET\"]")
 expect "a decision carries what guided it to the page" "$DATA" '"guidedBy":\["CLAUDE.md"\]'
-SHAPE=$(python3 -c '
+shape() { python3 -c '
 import json, sys
 d = json.loads(sys.stdin.read()); g = d["grouped"]
 print("source", d["source"]["kind"], d["source"]["detail"])
-for s in g["sections"]:
-    print(s["decision"]["id"], "hunks", " ".join(s["hunks"]), "forks", " ".join(f["id"] for f in s["forks"]))
-print("unexplained", " ".join(g["unexplained"]))' <<< "$DATA")
+for u in g["units"]:
+    print("unit", u["title"], "by", u["by"], "hunks", " ".join(u["hunks"]), "decisions", " ".join(u["decisions"]), "forks", " ".join(f["id"] for f in u["forks"]), "unexplained", " ".join(u["unexplained"]))
+every = [h for u in g["units"] for h in u["hunks"]]
+print("hunks", len(every), "once" if len(every) == len(set(every)) == len(g["hunks"]) else "NOT ONCE")
+print("order", " ".join(u["title"] for u in g["units"]))'; }
+SHAPE=$(shape <<< "$DATA")
 echo "$SHAPE" | sed 's/^/    /'
 expect "read from alice's own clone, main...branch" "$SHAPE" "source clone main...feat/stream-export from your clone"
-expect "d1 holds the export hunk, and the fork that sits in it" "$SHAPE" "d1 hunks src/export.ts#[0-9]+ forks f1"
-expect "d2 holds the new file" "$SHAPE" "d2 hunks src/page.ts#[0-9]+ forks $"
-expect "the change nobody explained is its own finding" "$SHAPE" "unexplained src/notes.txt#[0-9]+"
+expect "every change shown once, in exactly one unit" "$SHAPE" "^hunks [0-9]+ once$"
+expect "no unit named: each file its own, grouped by imports — the export with the decision and fork in it" "$SHAPE" "unit export.ts by imports hunks src/export.ts#[0-9]+ decisions d1 forks f1 unexplained $"
+expect "…the page with its decision" "$SHAPE" "unit page.ts by imports hunks src/page.ts#[0-9]+ decisions d2 forks  unexplained $"
+expect "…a change no decision covers is marked where it sits" "$SHAPE" "unit notes.txt by imports hunks src/notes.txt#[0-9]+ decisions  forks  unexplained src/notes.txt#[0-9]+"
+expect "building blocks first: what use.ts imports comes before it" "$SHAPE" "order (export.ts|page.ts) .*(export.ts|page.ts) .*use.ts"
+UNITS="{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Streaming the export\",\"where\":[\"src/export.ts\",\"src/use.ts\"]}]}"
+expect "the author's agent names a unit" "$(call $A "$SA" ask-review "$UNITS")" "review ticket .*updated|updated"
+wait_until "the page takes it up" "Streaming the export" sfn reviewData "[\"$TICKET\"]"
+SHAPE=$(sfn reviewData "[\"$TICKET\"]" | shape)
+echo "$SHAPE" | sed 's/^/    /'
+expect "…holding the code it names, the decision beside it" "$SHAPE" "unit Streaming the export by author hunks src/export.ts#[0-9]+ src/use.ts#[0-9]+ decisions d1 forks f1"
+expect "…what it leaves out still grouped by imports" "$SHAPE" "unit page.ts by imports"
+expect "…every change still once" "$SHAPE" "^hunks [0-9]+ once$"
+expect "a unit pointing at nothing is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Empty\",\"where\":[]}]}")" "points at no code"
 
 echo "## the page itself"
 PAGE=$(curl -s "$ORIGIN/review/$TICKET")
@@ -79,7 +93,7 @@ expect "an unknown ticket has no data" "$(sfn reviewData '["not-a-ticket"]')" "^
 # a rebuilt page (its server bundle's file time moved) is taken up by the
 # running instance, no restart: the next call loads it and provides it
 touch "$ROOT/dist/review-web/server/entry.js"
-expect "a rebuilt server bundle is taken up without a restart" "$(sfn reviewData "[\"$TICKET\"]")" '"sections"'
+expect "a rebuilt server bundle is taken up without a restart" "$(sfn reviewData "[\"$TICKET\"]")" '"units"'
 
 expect "the review's old routes are gone: the page talks through server functions" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/data")" "^404$"
 expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sTCP:LISTEN 2>/dev/null | grep -c 127.0.0.1)" "^[1-9]"

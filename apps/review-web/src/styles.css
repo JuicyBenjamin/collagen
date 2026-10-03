@@ -111,6 +111,17 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .since-del { color: var(--sign-del); font-weight: 600; }
 .since-none { margin: 0; padding: 8px 12px; font-size: 12.5px; color: var(--dim); font-style: italic; }
 .code.since + .code.since { border-top: 1px dashed var(--line); }
+/* a file's later changes in a unit: joined to the one above, no header of their own */
+.hunk.continued { margin-top: -10px; border-top-style: dashed; border-top-left-radius: 0; border-top-right-radius: 0; }
+.hunk .file.continued { padding: 2px 12px; min-height: 0; border-radius: 0; color: var(--faint); }
+.hunk-note { margin: 0; padding: 4px 12px; font-size: 12px; color: var(--warn); border-bottom: 1px solid var(--line); }
+/* the why beside a unit: one block per decision that shaped it */
+.why-decision { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed var(--line); }
+.why-decision:last-of-type { border-bottom: 0; }
+.why-title { margin: 0; color: var(--fg); font-weight: 600; font-size: 14px; }
+.why-what { margin: 2px 0 6px; }
+.also-in { margin: 6px 0 0; font-size: 12.5px; }
+.nav-what.inferred { font-style: italic; color: var(--dim); }
 .file-side { display: flex; align-items: baseline; gap: 14px; }
 .mark-viewed { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
 .mark-viewed input { margin: 0; accent-color: var(--accent); cursor: pointer; }
@@ -119,16 +130,6 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .hunk.viewed .file { border-bottom: 0; border-radius: 10px; }
 .nav-viewed { font-size: 12.5px; color: var(--dim); margin: -4px 0 10px; }
 .nav-viewed.done { color: var(--sign-add); }
-.also { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; text-decoration: none; }
-.also:hover { color: var(--accent); text-decoration: underline; }
-.also-menu { position: relative; }
-.also-menu summary { cursor: pointer; list-style: none; }
-.also-menu summary::-webkit-details-marker { display: none; }
-.also-menu summary::after { content: " ▾"; }
-.also-menu[open] summary { color: var(--accent); }
-.also-menu ul { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; margin: 0; padding: 6px; list-style: none; width: min(420px, 80vw); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
-.also-menu li a { display: block; padding: 6px 10px; border-radius: 6px; color: var(--fg); text-decoration: none; font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.also-menu li a:hover { background: var(--bg); color: var(--accent); }
 .code { overflow-x: auto; border-radius: 0 0 10px 10px; }
 table { border-collapse: collapse; width: 100%; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
 td { padding: 0 12px; white-space: pre; vertical-align: top; }

@@ -1,14 +1,14 @@
-import type { Decision, DiffLine, Fork, Grouped, Hunk, Section } from "@collagen/review-web/data";
+import type { DiffLine, Hunk } from "@collagen/review-web/data";
 
-export type { DiffLine, Grouped, Hunk, Section } from "@collagen/review-web/data";
+export type { DiffLine, Grouped, Hunk, Unit } from "@collagen/review-web/data";
 
 // A review read by intent, not by filename. A diff in file order spreads one
 // decision over a dozen places and puts unrelated ones side by side — worse
 // when an agent wrote the code. The review's why already carries the key to
 // regroup it: every decision names `where` it landed (file:line), every fork
-// `at` (file:line). This is the pure half of the review page: parse the diff
-// the reviewer's own clone produced, and lay its hunks out under the
-// decisions that claim them. No model in the reader's seat, no code copied
+// `at` (file:line), every unit the code it holds. This is the pure half of
+// the review page: parse the diff the reviewer's own clone produced, and
+// read the pointers that claim its hunks (lib/units lays them out). No model in the reader's seat, no code copied
 // anywhere — git is the source of truth (services/ReviewView).
 
 /** Parse `git diff` unified output into hunks. Binary files and pure
@@ -114,37 +114,4 @@ export function claimed(p: Pointer, hunks: ReadonlyArray<Hunk>): ReadonlyArray<H
   const dist = (h: Hunk) => Math.max(h.newStart - hi, lo - (h.newStart + Math.max(h.newLines, 1) - 1), 0);
   const near = inFile.filter((h) => dist(h) <= NEAR).sort((a, b) => dist(a) - dist(b));
   return near.slice(0, 1);
-}
-
-/** Lay a diff out under the why: a section per decision with the hunks its
- *  `where` claims (a hunk two decisions claim shows under both, marked
- *  shared) and the forks whose `at` falls inside them; then every hunk
- *  nobody claimed. Deterministic: same why and diff, same page. */
-export function groupByWhy(review: { readonly decisions: ReadonlyArray<Decision>; readonly forks: ReadonlyArray<Fork> }, hunks: ReadonlyArray<Hunk>): Grouped {
-  const claims = new Map<string, Array<string>>(); // hunk id → decision ids
-  const perDecision = review.decisions.map((d) => {
-    const ids = new Set<string>();
-    const unmatched: Array<string> = [];
-    for (const w of d.where) {
-      const got = claimed(parsePointer(w), hunks);
-      if (got.length === 0) unmatched.push(w);
-      for (const h of got) ids.add(h.id);
-    }
-    for (const id of ids) claims.set(id, [...(claims.get(id) ?? []), d.id]);
-    return { d, ids, unmatched };
-  });
-  const order = new Map(hunks.map((h, i) => [h.id, i]));
-  const placedForks = new Set<string>();
-  const sections: Array<Section> = perDecision.map(({ d, ids, unmatched }) => {
-    const mine = [...ids].sort((a, b) => order.get(a)! - order.get(b)!);
-    const forks = review.forks.filter((f) => claimed(parsePointer(f.at), hunks).some((h) => ids.has(h.id)));
-    for (const f of forks) placedForks.add(f.id);
-    return { decision: d, hunks: mine, shared: mine.filter((id) => (claims.get(id)?.length ?? 0) > 1), forks, unmatched };
-  });
-  return {
-    sections,
-    unexplained: hunks.filter((h) => !claims.has(h.id)).map((h) => h.id),
-    looseForks: review.forks.filter((f) => !placedForks.has(f.id)),
-    hunks,
-  };
 }

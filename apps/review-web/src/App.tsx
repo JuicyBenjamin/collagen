@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, Errored, For, Loading, Show } from "solid-js";
-import { NO_TITLE, toolOf, type Decision, type Fork as ForkData, type Hunk as HunkData, type ReviewPageData, type Section } from "./data";
+import { NO_TITLE, toolOf, type Decision, type Hunk as HunkData, type ReviewPageData, type Unit } from "./data";
 import { Fork } from "./components/Fork";
 import { Hunk } from "./components/Hunk";
 import { Popover } from "./components/Popover";
@@ -44,9 +44,6 @@ export function App() {
   );
 }
 
-/** A decision with nothing of the diff, for a review read without one. */
-const bare = (decision: Decision): Section => ({ decision, hunks: [], shared: [], forks: [], unmatched: [] });
-
 /** Below this width the why folds under the title instead of sitting beside
  *  the code — the code keeps the room (styles.css says the same). */
 const NARROW = "(max-width: 1320px)";
@@ -62,11 +59,11 @@ const changes = (n: number) => (n === 1 ? "1 change" : `${n} changes`);
 
 function Page(props: { data: ReviewPageData }) {
   const hunks = createMemo(() => new Map<string, HunkData>((props.data.grouped?.hunks ?? []).map((h) => [h.id, h])));
-  const sections = createMemo(() => props.data.grouped?.sections ?? props.data.review.decisions.map(bare));
-  // which decisions claim each hunk — a hunk under two says where else it is
-  const claimedBy = createMemo(() => {
-    const m = new Map<string, Array<Decision>>();
-    for (const s of sections()) for (const id of s.hunks) m.set(id, [...(m.get(id) ?? []), s.decision]);
+  const decisions = createMemo(() => new Map(props.data.review.decisions.map((d) => [d.id, d])));
+  // the units each decision shaped — a decision spanning units links the others
+  const unitsOf = createMemo(() => {
+    const m = new Map<string, Array<Unit>>();
+    for (const u of props.data.grouped?.units ?? []) for (const d of u.decisions) m.set(d, [...(m.get(d) ?? []), u]);
     return m;
   });
   // the files a mark can be for, as this diff has them
@@ -86,36 +83,42 @@ function Page(props: { data: ReviewPageData }) {
 
   return (
     <div class="wrap">
-      <nav aria-label="Decisions">
-        <p class="nav-title">Decisions</p>
+      <nav aria-label={props.data.grouped ? "Units" : "Decisions"}>
+        <p class="nav-title">{props.data.grouped ? "Units" : "Decisions"}</p>
         <Show when={viewed.count().files > 0}>
           <p class={["nav-viewed", { done: viewed.count().viewed === viewed.count().files }]}>
             {viewed.count().viewed} of {viewed.count().files} files viewed
           </p>
         </Show>
         <ol>
-          <For each={sections()}>
-            {(s) => (
-              <li>
-                <a href={`#${s.decision.id}`}>
-                  <span class={["nav-what", { untitled: !s.decision.title }]}>{s.decision.title ?? NO_TITLE}</span>
-                  <Show when={props.data.grouped}>
-                    <span class="count">{changes(s.hunks.length)}</span>
-                  </Show>
-                </a>
-              </li>
-            )}
-          </For>
-          <Show when={props.data.grouped}>
+          <Show
+            when={props.data.grouped}
+            fallback={
+              <For each={props.data.review.decisions}>
+                {(d) => (
+                  <li>
+                    <a href={`#${d.id}`}>
+                      <span class={["nav-what", { untitled: !d.title }]}>{d.title ?? NO_TITLE}</span>
+                    </a>
+                  </li>
+                )}
+              </For>
+            }
+          >
             {(g) => (
-              <Show when={g().unexplained.length > 0}>
-                <li class="nav-unexplained">
-                  <a href="#unexplained">
-                    <span class="nav-what">Not explained</span>
-                    <span class="count">{changes(g().unexplained.length)}</span>
-                  </a>
-                </li>
-              </Show>
+              <For each={g().units}>
+                {(u) => (
+                  <li>
+                    <a href={`#${u.id}`}>
+                      <span class={["nav-what", { inferred: u.by === "imports" }]}>{u.title}</span>
+                      <span class="count">
+                        {changes(u.hunks.length)}
+                        {u.unexplained.length > 0 ? ` · ${u.unexplained.length} not explained` : ""}
+                      </span>
+                    </a>
+                  </li>
+                )}
+              </For>
             )}
           </Show>
         </ol>
@@ -125,21 +128,33 @@ function Page(props: { data: ReviewPageData }) {
         <Header data={props.data} />
         {/* one offer per language the review's code is in */}
         <For each={[...new Set((props.data.grouped?.hunks ?? []).map((h) => toolOf(h.file)).filter((t) => t !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
-        <For each={sections()}>
-          {(s) => <DecisionSection section={s} hunks={hunks()} claimedBy={claimedBy()} diffed={props.data.grouped !== null} />}
-        </For>
         <Show
           when={props.data.grouped}
           fallback={
-            <Show when={props.data.review.forks.length > 0}>
-              <section class="decision">
-                <h2>Forks in the road</h2>
-                <For each={props.data.review.forks}>{(f) => <Fork fork={f} />}</For>
-              </section>
-            </Show>
+            <>
+              <For each={props.data.review.decisions}>{(d) => <BareDecision decision={d} />}</For>
+              <Show when={props.data.review.forks.length > 0}>
+                <section class="decision">
+                  <h2>Forks in the road</h2>
+                  <For each={props.data.review.forks}>{(f) => <Fork fork={f} />}</For>
+                </section>
+              </Show>
+            </>
           }
         >
-          {(g) => <Unexplained ids={g().unexplained} forks={g().looseForks} hunks={hunks()} />}
+          {(g) => (
+            <>
+              <For each={g().units}>{(u) => <UnitSection unit={u} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={g().unmatched} />}</For>
+              <Show when={g().looseForks.length > 0}>
+                <section class="decision">
+                  <h2>Forks outside the diff</h2>
+                  <div class="decision-main">
+                    <For each={g().looseForks}>{(f) => <Fork fork={f} />}</For>
+                  </div>
+                </section>
+              </Show>
+            </>
+          )}
         </Show>
         <footer class="note">
           <p>Read-only. Say what you think through your agent — it posts your review on the ticket.</p>
@@ -193,35 +208,86 @@ function Header(props: { data: ReviewPageData }) {
   );
 }
 
-/** The why beside the code: how the person steered it, what the agent
- *  reasoned, the forks — quieter than the code, and on a narrow screen
- *  folded away until asked for. */
-function Why(props: { section: Section }) {
-  const has = () => !!props.section.decision.userWhy || !!props.section.decision.agentWhy || props.section.forks.length > 0 || props.section.unmatched.length > 0;
+/** A decision's own words: its headline, what was done, what guided it,
+ *  how the person steered it and what the agent reasoned. */
+function DecisionWhy(props: { decision: Decision }) {
+  return (
+    <>
+      <p class={["why-title", { untitled: !props.decision.title }]}>{props.decision.title ?? NO_TITLE}</p>
+      <p class="why-what">{props.decision.what}</p>
+      {/* what told the agent to do it this way: right beside its code, so a
+          skill that points the wrong way is seen where it did */}
+      <Show when={props.decision.guidedBy?.length ? props.decision.guidedBy : null}>
+        {(by) => (
+          <p class="guided-by">
+            Guided by <For each={by()}>{(s, i) => <>{i() > 0 ? ", " : ""}<code>{s}</code></>}</For>
+          </p>
+        )}
+      </Show>
+      <Show when={props.decision.userWhy}>
+        {(why) => (
+          <div class="why-part">
+            <p class="who">The person</p>
+            <p class="quote">{why()}</p>
+          </div>
+        )}
+      </Show>
+      <Show when={props.decision.agentWhy}>
+        {(why) => (
+          <div class="why-part">
+            <p class="who">The agent</p>
+            <p>{why()}</p>
+          </div>
+        )}
+      </Show>
+    </>
+  );
+}
+
+/** The why beside a unit: the decisions that shaped it (one spanning other
+ *  units links them), the forks that fall in it, and what no decision
+ *  covers — quieter than the code, and on a narrow screen folded away. */
+function Why(props: { unit: Unit; decisions: ReadonlyArray<Decision>; unitsOf: ReadonlyMap<string, ReadonlyArray<Unit>>; unmatched: Readonly<Record<string, ReadonlyArray<string>>> }) {
+  const has = () => props.decisions.length > 0 || props.unit.forks.length > 0 || props.unit.unexplained.length > 0;
   return (
     <Show when={has()}>
       <details class="why" open={wide()}>
         <summary>Why</summary>
-        <Show when={props.section.decision.userWhy}>
-          {(why) => (
-            <div class="why-part">
-              <p class="who">The person</p>
-              <p class="quote">{why()}</p>
+        <For each={props.decisions}>
+          {(d) => (
+            <div class="why-decision">
+              <DecisionWhy decision={d} />
+              <Show when={(props.unitsOf.get(d.id) ?? []).filter((u) => u.id !== props.unit.id)}>
+                {(others) => (
+                  <Show when={others().length > 0}>
+                    <p class="also-in">
+                      Also shaped{" "}
+                      <For each={others()}>
+                        {(u, i) => (
+                          <>
+                            {i() > 0 ? ", " : ""}
+                            <a href={`#${u.id}`}>{u.title}</a>
+                          </>
+                        )}
+                      </For>
+                    </p>
+                  </Show>
+                )}
+              </Show>
+              <Show when={props.unmatched[d.id]}>
+                {(missed) => (
+                  <p class="stale" title={missed().join(", ")}>
+                    Also points at code this diff does not change — the why may be older than the branch.
+                  </p>
+                )}
+              </Show>
             </div>
           )}
-        </Show>
-        <Show when={props.section.decision.agentWhy}>
-          {(why) => (
-            <div class="why-part">
-              <p class="who">The agent</p>
-              <p>{why()}</p>
-            </div>
-          )}
-        </Show>
-        <For each={props.section.forks}>{(f) => <Fork fork={f} />}</For>
-        <Show when={props.section.unmatched.length > 0}>
-          <p class="stale" title={props.section.unmatched.join(", ")}>
-            Points at code this diff does not change — the why may be older than the branch.
+        </For>
+        <For each={props.unit.forks}>{(f) => <Fork fork={f} />}</For>
+        <Show when={props.unit.unexplained.length > 0}>
+          <p class="stale">
+            {changes(props.unit.unexplained.length)} here no decision covers — worth a question to the author.
           </p>
         </Show>
       </details>
@@ -229,51 +295,58 @@ function Why(props: { section: Section }) {
   );
 }
 
-function DecisionSection(props: { section: Section; hunks: ReadonlyMap<string, HunkData>; claimedBy: ReadonlyMap<string, ReadonlyArray<Decision>>; diffed: boolean }) {
-  const others = (id: string) => (props.claimedBy.get(id) ?? []).filter((d) => d.id !== props.section.decision.id);
+/** A unit: code that together makes one thing, each change in it shown once,
+ *  a file's changes under one header; the why beside it. */
+function UnitSection(props: {
+  unit: Unit;
+  hunks: ReadonlyMap<string, HunkData>;
+  decisions: ReadonlyMap<string, Decision>;
+  unitsOf: ReadonlyMap<string, ReadonlyArray<Unit>>;
+  unmatched: Readonly<Record<string, ReadonlyArray<string>>>;
+}) {
+  const shaped = () => props.unit.decisions.map((id) => props.decisions.get(id)).filter((d): d is Decision => d !== undefined);
+  const files = () => new Set(props.unit.hunks.map((id) => props.hunks.get(id)?.file)).size;
+  const unexplained = () => new Set(props.unit.unexplained);
   return (
-    <section class="decision" id={props.section.decision.id}>
-      {/* the headline, and what was done beneath it */}
+    <section class="decision unit" id={props.unit.id}>
       <div class="decision-head">
-        <h2 class={{ untitled: !props.section.decision.title }}>{props.section.decision.title ?? NO_TITLE}</h2>
-        <p class="decision-what">{props.section.decision.what}</p>
-        {/* what told the agent to do it this way: right beside its code, so a
-            skill that points the wrong way is seen where it did */}
-        <Show when={props.section.decision.guidedBy?.length ? props.section.decision.guidedBy : null}>
-          {(by) => (
-            <p class="guided-by">
-              Guided by <For each={by()}>{(s, i) => <>{i() > 0 ? ", " : ""}<code>{s}</code></>}</For>
-            </p>
-          )}
-        </Show>
+        <h2>{props.unit.title}</h2>
+        <p class="decision-what">
+          {changes(props.unit.hunks.length)} in {files() === 1 ? "1 file" : `${files()} files`}
+          {props.unit.by === "imports" ? " · grouped by imports: the author named no unit for this code" : ""}
+        </p>
       </div>
       <div class="decision-main">
-        <For each={props.section.hunks}>{(id) => <Show when={props.hunks.get(id)}>{(h) => <Hunk hunk={h()} alsoUnder={others(id)} />}</Show>}</For>
-        <Show when={props.diffed && props.section.hunks.length === 0}>
-          <p class="empty">No change in this diff for this decision.</p>
-        </Show>
+        <For each={props.unit.hunks}>
+          {(id, i) => (
+            <Show when={props.hunks.get(id)}>
+              {(h) => <Hunk hunk={h()} continued={i() > 0 && props.hunks.get(props.unit.hunks[i() - 1]!)?.file === h().file} unexplained={unexplained().has(id)} />}
+            </Show>
+          )}
+        </For>
       </div>
-      <Why section={props.section} />
+      <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} />
     </section>
   );
 }
 
-function Unexplained(props: { ids: ReadonlyArray<string>; forks: ReadonlyArray<ForkData>; hunks: ReadonlyMap<string, HunkData> }) {
+/** A decision on a review read without a diff: its words, no code. */
+function BareDecision(props: { decision: Decision }) {
   return (
-    <Show when={props.ids.length > 0 || props.forks.length > 0}>
-      <section class="decision unexplained" id="unexplained">
-        <h2>Not explained</h2>
-        <div class="decision-main">
-          <p class="lead">Changes no decision covers. Worth a question to the author.</p>
-          <For each={props.ids}>{(id) => <Show when={props.hunks.get(id)}>{(h) => <Hunk hunk={h()} alsoUnder={[]} />}</Show>}</For>
-        </div>
-        <Show when={props.forks.length > 0}>
-          <details class="why" open>
-            <summary>Forks outside every decision</summary>
-            <For each={props.forks}>{(f) => <Fork fork={f} />}</For>
-          </details>
+    <section class="decision" id={props.decision.id}>
+      <div class="decision-head">
+        <h2 class={{ untitled: !props.decision.title }}>{props.decision.title ?? NO_TITLE}</h2>
+        <p class="decision-what">{props.decision.what}</p>
+      </div>
+      <div class="decision-main">
+        <Show when={props.decision.where.length > 0}>
+          <p class="empty">{props.decision.where.join(", ")}</p>
         </Show>
-      </section>
-    </Show>
+      </div>
+      <details class="why" open={wide()}>
+        <summary>Why</summary>
+        <DecisionWhy decision={props.decision} />
+      </details>
+    </section>
   );
 }

@@ -51,6 +51,15 @@ describe("a review's why, amended as the work goes on", () => {
     expect(fixed.decisions[0]?.guidedBy).toBeUndefined();
   });
 
+  it("units merge by id: new ones numbered, a repeated id corrects one, a retired one goes", () => {
+    const first = mergeReview(base, { units: [{ title: "Export streams", where: ["src/export.ts"] }, { title: "Paging", where: ["src/page.ts"] }] }, 1);
+    expect(first.units?.map((u) => `${u.id} ${u.title}`)).toEqual(["u1 Export streams", "u2 Paging"]);
+    const fixed = mergeReview(first, { units: [{ id: "u2", title: "Paging by id", where: ["src/page.ts:3"] }], retireUnits: ["u1"] }, 2);
+    expect(fixed.units).toEqual([{ id: "u2", title: "Paging by id", where: ["src/page.ts:3"] }]);
+    // a review that never named units has none
+    expect(mergeReview(base, { summary: "x" }, 3).units).toBeUndefined();
+  });
+
   it("numbering skips ids the author chose itself", () => {
     const r = mergeReview(base, { decisions: [{ id: "d7", what: "x", where: [] }, { what: "y", where: [] }] }, 1);
     expect(r.decisions.map((d) => d.id)).toEqual(["d7", "d2"]);
