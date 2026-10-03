@@ -7,7 +7,9 @@ import { HttpRouter, HttpServerResponse } from "effect/http";
 import { roomProjects, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { gitDir } from "../lib/gitInfo";
 import type { ReviewPageData, SinceResult, WholeFileResult } from "@collagen/review-web/data";
-import { groupByWhy, parseDiff } from "../lib/reviewView";
+import { parseDiff } from "../lib/reviewView";
+import { importsAmong } from "../lib/imports";
+import { groupByUnit, type Imports } from "../lib/units";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -185,12 +187,22 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
         source = { kind: "host", detail: `${base}...${branch} from ${host.name} (no clone: ${source.detail})` };
       }
     }
+    // which changed files import which, as the branch has them in the clone:
+    // what groups the code no unit names, and orders the units
+    const hunks = diff === null ? [] : parseDiff(diff);
+    let imports: Imports = new Map();
+    if (project && commit && hunks.length > 0) {
+      const files = [...new Set(hunks.map((h) => h.file))];
+      const texts = new Map<string, string | null>();
+      for (const f of files) texts.set(f, yield* run("git", ["show", `${commit}:${f}`], project.path, 5_000));
+      imports = importsAmong(files, (f) => texts.get(f) ?? null);
+    }
     return {
       ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
       review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ts: review.ts },
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
-      grouped: diff === null ? null : groupByWhy(review, parseDiff(diff)),
+      grouped: diff === null ? null : groupByUnit(review, hunks, imports),
       links: host && review.link ? host.links(review.link, base, branch) : review.link ? [{ label: "link", url: review.link }] : [],
     } satisfies ReviewPageData;
   }

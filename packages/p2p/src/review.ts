@@ -47,6 +47,19 @@ export const ReviewFork = Schema.Struct({
 });
 export type ReviewFork = typeof ReviewFork.Type;
 
+/** A unit of the change: code that together makes one thing — a component
+ *  with its sub-components, its implementation and its tests; a service and
+ *  its routes. The review page's sections are units, each piece of code shown
+ *  once. `where` points at the code it holds, as a decision's does — a file,
+ *  or file:line for one part of a file (one route of a big routes file).
+ *  Named by the author's agent; what it leaves out is grouped by imports. */
+export const ReviewUnit = Schema.Struct({
+  id: Schema.String,
+  title: Schema.String,
+  where: Schema.Array(Schema.String),
+});
+export type ReviewUnit = typeof ReviewUnit.Type;
+
 /** One item of a proposal's outline: what the work MIGHT involve and who
  *  MIGHT do it, as the author sees it. Non-binding — nobody owes anything
  *  until a plan names them. Kept by id so a revision can correct one line. */
@@ -113,6 +126,8 @@ export const ReviewContext = Schema.Struct({
   link: Schema.optional(Schema.String),
   decisions: Schema.Array(ReviewDecision),
   forks: Schema.Array(ReviewFork),
+  /** The change in units, as its author's agent named them (see ReviewUnit). */
+  units: Schema.optional(Schema.Array(ReviewUnit)),
   /** A proposal's idea of the work, when its author has one (see OutlineItem). */
   outline: Schema.optional(Schema.Array(OutlineItem)),
   /** A bug ticket's report (see BugReport). */
@@ -146,6 +161,10 @@ export interface ReviewDelta {
     readonly why: string;
     readonly by?: "user" | "agent";
   }>;
+  /** Units, merged by id like decisions: a repeated id corrects one. */
+  readonly units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly where: ReadonlyArray<string> }>;
+  /** Unit ids withdrawn — units are how the change reads, not history. */
+  readonly retireUnits?: ReadonlyArray<string>;
   /** Outline items, merged by id like decisions. */
   readonly outline?: ReadonlyArray<OutlineItem>;
   /** Outline ids withdrawn — an outline is intent, not history, so they go. */
@@ -184,6 +203,17 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     if (at === -1) forks.push(entry);
     else forks[at] = entry;
   }
+  let units = base.units === undefined && delta.units === undefined ? undefined : [...(base.units ?? [])];
+  if (units !== undefined) {
+    for (const u of delta.units ?? []) {
+      const id = u.id ?? nextId("u", units.map((x) => x.id));
+      const at = units.findIndex((x) => x.id === id);
+      const entry: ReviewUnit = { id, title: u.title, where: [...u.where] };
+      if (at === -1) units.push(entry);
+      else units[at] = entry;
+    }
+    if (delta.retireUnits && delta.retireUnits.length > 0) units = units.filter((x) => !delta.retireUnits!.includes(x.id));
+  }
   let outline = base.outline === undefined && delta.outline === undefined ? undefined : [...(base.outline ?? [])];
   if (outline !== undefined) {
     for (const o of delta.outline ?? []) {
@@ -218,6 +248,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     ...(delta.link ?? base.link ? { link: delta.link ?? base.link } : {}),
     decisions,
     forks,
+    ...(units !== undefined ? { units } : {}),
     ...(outline !== undefined ? { outline } : {}),
     ...(bug !== undefined ? { bug } : {}),
     ts,
