@@ -47,8 +47,8 @@ export interface RoomLog {
   readonly evictStale: Effect.Effect<number>;
   /** Older records we could read, written back in the current shape. */
   readonly rewriteMigrated: Effect.Effect<number>;
-  /** Our own tickets the view lost (an eviction before a migration existed), put
-   *  back. null when it could not run yet (not writable) — try again later. */
+  /** Our own tickets and whys the view lost (an eviction before a migration
+   *  existed, or by a build that could not read them), put back. null when it could not run yet (not writable) — try again later. */
   readonly restoreOwn: Effect.Effect<number | null>;
   /** Fires after the view changed or our writer status did. */
   readonly changes: Stream.Stream<void>;
@@ -391,6 +391,8 @@ export const openRoomLog = (
       if (!base.writable) return null;
       const folded = yield* Effect.promise(async () => {
         const out = new Map<string, Ticket>();
+        // our own whys too: the newest we wrote for each ticket
+        const whys = new Map<string, ReviewContext>();
         const core = base.local;
         for (let i = 0; i < core.length; i++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -404,6 +406,10 @@ export const openRoomLog = (
             continue;
           }
           const op = migrateOp(raw) ?? Option.getOrUndefined(decodeOp(raw));
+          if (op?.op === "review") {
+            const had = whys.get(op.review.ticketId);
+            if (!had || op.review.ts >= had.ts) whys.set(op.review.ticketId, op.review);
+          }
           if (!op || op.op !== "ticket") continue;
           const have = out.get(op.ticket.id);
           out.set(op.ticket.id, have ? mergeTicket(have, op.ticket) : op.ticket);
@@ -418,17 +424,32 @@ export const openRoomLog = (
           const current = row ? readTicket(row.value)?.value : undefined;
           if (!current || contributes(current, t)) missing.push(t);
         }
-        return missing;
+        // a why is whole, later ts wins: ours goes back when the room has none
+        // (evicted by a build that could not read it) or an older one
+        const lostWhys: ReviewContext[] = [];
+        for (const [id, r] of whys) {
+          const row = await base.view.get(`review/${id}`);
+          if (!row || (row.value as ReviewContext).ts < r.ts) lostWhys.push(r);
+        }
+        return { missing, lostWhys };
       });
       let n = 0;
-      for (const t of folded) {
+      for (const r of folded.lostWhys) {
+        const ok = yield* append({ op: "review", review: r, protocol: PROTOCOL_VERSION }).pipe(
+          Effect.as(true),
+          Effect.catch((e) => Effect.logWarning(`restore failed for the why of ticket ${r.ticketId}: ${e.message}`).pipe(Effect.as(false))),
+        );
+        if (ok) n++;
+      }
+      if (folded.lostWhys.length > 0) yield* Effect.log(`restored this machine's own why on ${folded.lostWhys.length} ticket(s): ${folded.lostWhys.map((r) => r.ticketId.slice(0, 8)).join(", ")}`);
+      for (const t of folded.missing) {
         const ok = yield* append({ op: "ticket", ticket: t }).pipe(
           Effect.as(true),
           Effect.catch((e) => Effect.logWarning(`restore failed for ticket ${t.id}: ${e.message}`).pipe(Effect.as(false))),
         );
         if (ok) n++;
       }
-      if (n > 0) yield* Effect.log(`restored this machine's own contribution to ${n} ticket(s): ${folded.map((t) => t.id.slice(0, 8)).join(", ")}`);
+      if (folded.missing.length > 0) yield* Effect.log(`restored this machine's own contribution to ${folded.missing.length} ticket(s): ${folded.missing.map((t) => t.id.slice(0, 8)).join(", ")}`);
       return n;
     });
 

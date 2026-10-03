@@ -53,7 +53,9 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       }
       if (!review) {
         return ticket
-          ? `no why on this ticket — "${ticket.goal}" is a ${ticket.kind}, not a review, plan or proposal (its author would have filed it with ask-review, ask-plan or propose)`
+          ? isJudged(ticket.kind)
+            ? `no why on this ticket here yet — "${ticket.goal}" is a ${ticket.kind}, but the why its author filed has not reached this machine; try again once they are online`
+            : `no why on this ticket — "${ticket.goal}" is a ${ticket.kind}, not a review, plan or proposal (its author would have filed it with ask-review, ask-plan or propose)`
           : `failed: no ticket ${ticketId} — check get-tickets`;
       }
       // the blind first take: on a plan or a proposal, a reader's agent gets
