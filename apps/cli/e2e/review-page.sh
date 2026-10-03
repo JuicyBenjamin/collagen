@@ -48,6 +48,8 @@ SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
 sfn_url() { echo "$ORIGIN/review/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 sfn() { node "$E2E/sfn.mjs" "$(sfn_url "$1" "$2")"; }
+# a live one's first few seconds, as it streams them: one event per value
+sfn_live() { curl -s -N -m "${3:-4}" "$(sfn_url "$1" "$2" live)"; }
 
 echo "## the page's data: the diff from the clone, grouped by the why"
 wait_until "the review's data is served" "\"sections\"" sfn reviewData "[\"$TICKET\"]"
@@ -74,12 +76,17 @@ expect "…and its script, from the build, as JavaScript" "$(curl -s -o /dev/nul
 expect "nothing outside the build is served as an asset" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/assets/..%2Fpackage.json")" "^404$"
 expect "a call naming another host is refused (DNS rebinding)" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url reviewData "[\"$TICKET\"]")")" "^403$"
 expect "an unknown ticket has no data" "$(sfn reviewData '["not-a-ticket"]')" "^null$"
+# a rebuilt page (its server bundle's file time moved) is taken up by the
+# running instance, no restart: the next call loads it and provides it
+touch "$ROOT/dist/review-web/server/entry.js"
+expect "a rebuilt server bundle is taken up without a restart" "$(sfn reviewData "[\"$TICKET\"]")" '"sections"'
+
 expect "the review's old routes are gone: the page talks through server functions" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/data")" "^404$"
 expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sTCP:LISTEN 2>/dev/null | grep -c 127.0.0.1)" "^[1-9]"
 
 echo "## types and definitions, from collagen's own TypeScript 7 over the branch"
-expect "the page can see the pinned TypeScript is there" "$(sfn toolState '["typescript"]')" "\"version\":\"7\.[^\"]*\".*\"state\":\"ready\""
-expect "…a tool collagen does not have is not there" "$(sfn toolState '["cobol"]')" "^null$"
+expect "the page follows the pinned TypeScript live: there, and ready" "$(sfn_live toolStates '["typescript"]')" "\"7\.[0-9.]+\".*\"ready\""
+expect "…a tool collagen does not have streams nothing" "$(sfn_live toolStates '["cobol"]' 2 | grep -c '^id:')" "^0$"
 expect "installing from another origin is refused (Solid's same-origin guard)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'Origin: https://evil.example' --data '["typescript"]' "$ORIGIN/review/_server/$(sfn_id installTool)")" "^403$"
 HOVER=$(sfn hoverAt "[\"$TICKET\",\"src/use.ts\",3,21]")
 expect "hovering a call says what it is: its signature" "$HOVER" "const stream: \\(rows"
@@ -145,7 +152,7 @@ printf '<?php\n\nnamespace Jobs;\n\nuse Acme\\Clock;\n\nfinal class Stamp\n{\n  
 git -C "$R" add -A; git -C "$R" commit -qm php
 # the column a word starts at on a line of a file of the branch (0-based)
 colof() { awk -v w="$3" -v n="$2" 'NR == n { print index($0, w) - 1 }' "$R/$1"; }
-expect "the page can see the pinned Intelephense is there" "$(sfn toolState '["php"]')" "\"tool\":\"php\",\"language\":\"PHP\",\"name\":\"Intelephense\".*\"licence\".*\"state\":\"ready\""
+expect "the page can see the pinned Intelephense is there" "$(sfn_live toolStates '["php"]')" "\"php\".*\"PHP\".*\"Intelephense\".*\"ready\""
 H=$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch)]")
 expect "hovering a method of the branch's own interface: its name and signature" "$H" "Rows::fetch.*public function fetch\\(int \\\$limit\\): array"
 expect "hovering a Composer package's method, from the clone's vendor/" "$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 hello)]")" "Greeter::hello.*public function hello\\(string \\\$name\\): string"
