@@ -1,7 +1,7 @@
 #!/bin/bash
 # Epics: a folder of tickets that together make one body of work, shaped by
 # anyone in the room. alice files a languages proposal and one per language;
-# the third filing offers her an epic. She makes one with all three in it.
+# three are not enough to be offered an epic; she makes one with all three in it.
 # bob — not its author — adds a proposal from another project, takes one
 # out, and moves it to an epic of his own. A plan grown out of a part lives
 # in the epic without being added. Closing with parts left needs a reason,
@@ -24,7 +24,7 @@ OUT2=$(call $A "$SA" propose "$P2"); PHP=$(echo "$OUT2" | uuid)
 expect "the second is not offered an epic yet" "$(echo "$OUT2" | grep -c RELATED)" "^0$"
 P3="{\"title\":\"Rust on the review page\",\"project\":\"sandbox\",\"goal\":\"Rust on the review page\",\"from\":[\"$L\"],\"decisions\":[{\"title\":\"rust-analyzer\",\"what\":\"a pinned server\",\"agentWhy\":\"official\"}]}"
 OUT3=$(call $A "$SA" propose "$P3"); RUST=$(echo "$OUT3" | uuid)
-expect "the third is: offer an epic for all three, only on her yes" "$OUT3" "RELATED: your user has filed 3 related tickets together.*only on their yes"
+expect "the third is not either: three of one lineage are not enough to ask" "$(echo "$OUT3" | grep -c RELATED)" "^0$"
 
 echo "## alice makes the epic, with the three in it"
 NOTITLE='{"action":"create","goal":"more languages"}'
