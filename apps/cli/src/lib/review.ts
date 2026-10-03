@@ -26,6 +26,22 @@ export const ticketTitleGap = (title: string | undefined): string | null => {
   return null;
 };
 
+/** Why a unit's title cannot stand, or null: a unit is titled by what it
+ *  achieves — "Big exports finish" — never by a file or a path, which says
+ *  where the code is and not why it is there. The reader navigates by these. */
+export const unitTitleGap = (title: string, what: string): string | null => {
+  const gap = ticketTitleGap(title);
+  if (gap) return gap.replace("the ticket's headline", `a unit's title`).replace("the lists show it, and the goal is the line beneath it", "the review page lists units by it");
+  const t = title.trim();
+  // a path, or nothing but file names ("Mcp.ts", "export.ts · use.ts") —
+  // "Node.js upgrade" and "v1.2 release notes" are purposes and pass
+  const words = t.split(/[\s,·&+]+|\band\b/).filter((w) => w.length > 0);
+  if (/[\\/]/.test(t) || (words.length > 0 && words.every((w) => /^[\w.-]*\.[A-Za-z][A-Za-z0-9]{0,5}$/.test(w) && !/^\d/.test(w.split(".").pop()!))))
+    return `failed: unit "${t}" is titled by a file — title it by what it achieves ("Big exports finish", "Typos caught before merge"); the files go in its 'where'`;
+  if (what.trim().length === 0) return `failed: unit "${t}" has no 'what' — the line beneath its title: what that code does, in a line`;
+  return null;
+};
+
 /** What an old ticket's decision, filed before titles, shows in its place. */
 export const NO_TITLE = "old ticket — no title";
 
@@ -190,7 +206,7 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
     })),
     forks: forks.map((f) => ({ id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
     // how the change reads, as its author's agent grouped it
-    ...(r.units && r.units.length > 0 ? { units: r.units.map((u) => ({ id: u.id, title: u.title, where: u.where.join(" ") })) } : {}),
+    ...(r.units && r.units.length > 0 ? { units: r.units.map((u) => ({ id: u.id, title: u.title, ...(u.what ? { what: u.what } : {}), where: u.where.join(" ") })) } : {}),
     // a proposal's outline: what the work might be and who might do it — the
     // author's suggestion, binding on nobody; a plan lifts it into real steps
     ...(outline.length > 0 ? { outline: outline.map((o) => ({ id: o.id, intent: o.intent, description: o.description, owner: o.owner ?? "" })) } : {}),

@@ -68,19 +68,24 @@ SHAPE=$(shape <<< "$DATA")
 echo "$SHAPE" | sed 's/^/    /'
 expect "read from alice's own clone, main...branch" "$SHAPE" "source clone main...feat/stream-export from your clone"
 expect "every change shown once, in exactly one unit" "$SHAPE" "^hunks [0-9]+ once$"
-expect "no unit named: each file its own, grouped by imports — the export with the decision and fork in it" "$SHAPE" "unit export.ts by imports hunks src/export.ts#[0-9]+ decisions d1 forks f1 unexplained $"
-expect "…the page with its decision" "$SHAPE" "unit page.ts by imports hunks src/page.ts#[0-9]+ decisions d2 forks  unexplained $"
-expect "…a change no decision covers is marked where it sits" "$SHAPE" "unit notes.txt by imports hunks src/notes.txt#[0-9]+ decisions  forks  unexplained src/notes.txt#[0-9]+"
-expect "building blocks first: what use.ts imports comes before it" "$SHAPE" "order (export.ts|page.ts) .*(export.ts|page.ts) .*use.ts"
-UNITS="{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Streaming the export\",\"where\":[\"src/export.ts\",\"src/use.ts\"]}]}"
-expect "the author's agent names a unit" "$(call $A "$SA" ask-review "$UNITS")" "review ticket .*updated|updated"
-wait_until "the page takes it up" "Streaming the export" sfn reviewData "[\"$TICKET\"]"
+expect "no unit named: each change under the decision that points at it, titled by it — the export with its fork" "$SHAPE" "unit Stream the rows by decision hunks src/export.ts#[0-9]+ decisions d1 forks f1 unexplained $"
+expect "…the page under its own decision" "$SHAPE" "unit Page by id by decision hunks src/page.ts#[0-9]+ decisions d2 forks  unexplained $"
+expect "…what no decision covers under Not explained, together" "$SHAPE" "unit Not explained by unexplained hunks src/notes.txt#[0-9]+ src/use.ts#[0-9]+ decisions  forks  unexplained src/notes.txt#[0-9]+ src/use.ts#[0-9]+"
+expect "…and read last" "$SHAPE" "order .* Not explained$"
+UNITS="{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Big exports finish\",\"what\":\"Rows are streamed, so a long export no longer times out.\",\"where\":[\"src/export.ts\",\"src/use.ts\"]}]}"
+NAMED=$(call $A "$SA" ask-review "$UNITS")
+expect "the author's agent names a unit by what it achieves" "$NAMED" "review ticket .*updated|updated"
+expect "…and is told which changes no unit covers" "$NAMED" "no unit covers the changes in src/notes.txt, src/page.ts —"
+wait_until "the unit is served" "Big exports finish" sfn reviewData "[\"$TICKET\"]"
 SHAPE=$(sfn reviewData "[\"$TICKET\"]" | shape)
 echo "$SHAPE" | sed 's/^/    /'
-expect "…holding the code it names, the decision beside it" "$SHAPE" "unit Streaming the export by author hunks src/export.ts#[0-9]+ src/use.ts#[0-9]+ decisions d1 forks f1"
-expect "…what it leaves out still grouped by imports" "$SHAPE" "unit page.ts by imports"
+expect "…holding the code it names, the decision beside it" "$SHAPE" "unit Big exports finish by author hunks src/export.ts#[0-9]+ src/use.ts#[0-9]+ decisions d1 forks f1"
+expect "…its line beneath the title served with it" "$(sfn reviewData "[\"$TICKET\"]")" "Rows are streamed, so a long export no longer times out"
+expect "…what it leaves out still under its decision" "$SHAPE" "unit Page by id by decision"
 expect "…every change still once" "$SHAPE" "^hunks [0-9]+ once$"
-expect "a unit pointing at nothing is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Empty\",\"where\":[]}]}")" "points at no code"
+expect "a unit pointing at nothing is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Nothing yet\",\"what\":\"x\",\"where\":[]}]}")" "points at no code"
+expect "a unit titled by a file is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"src/page.ts\",\"what\":\"pages\",\"where\":[\"src/page.ts\"]}]}")" "titled by a file"
+expect "a unit with no line beneath its title is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Pages of a hundred\",\"what\":\" \",\"where\":[\"src/page.ts\"]}]}")" "has no 'what'"
 
 echo "## the page itself"
 PAGE=$(curl -s "$ORIGIN/review/$TICKET")
