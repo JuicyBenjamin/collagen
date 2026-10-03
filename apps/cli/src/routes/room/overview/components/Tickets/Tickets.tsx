@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ScrollBoxRenderable } from "@opentui/core";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { excludedFromEpic, heldBy, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
@@ -45,6 +46,8 @@ export function Tickets() {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   // the list's own width, once drawn: the columns are sized to it
   const [pane, setPane] = useState<number | undefined>(undefined);
+  // the rows scroll inside the pane: the cursor's row is kept in view
+  const scroller = useRef<ScrollBoxRenderable>(null);
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
@@ -96,6 +99,10 @@ export function Tickets() {
   const last = Math.max(0, shown.length - 1);
   const sel = clamp(cursor, 0, last);
   const current = shown[sel];
+  const currentId = current?.t.id;
+  useEffect(() => {
+    if (currentId) scroller.current?.scrollChildIntoView(rowId(currentId));
+  }, [currentId]);
 
   return (
     <Focusable
@@ -103,6 +110,8 @@ export function Tickets() {
       hint={`↑↓ select · enter open${current?.t.kind === "epic" ? ` · space ${unfolded.has(current.t.id) ? "fold" : "unfold"}` : ""}${current?.t.kind === "review" ? " · o review in browser" : ""} · ? what it all means · ${LEGEND}`}
       flexDirection="column"
       marginTop={1}
+      flexShrink={1}
+      minHeight={0}
       onKey={(key) => {
         if (key.name === "up" && sel > 0) return setCursor(sel - 1), true;
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
@@ -137,9 +146,11 @@ export function Tickets() {
               {"  "}none
             </text>
           ) : (
-            <box
-              flexDirection="column"
-              flexShrink={0}
+            <scrollbox
+              ref={scroller}
+              flexShrink={1}
+              minHeight={0}
+              scrollbarOptions={{ visible: false }}
               onSizeChange={function (this: { width: number }) {
                 setPane(this.width);
               }}
@@ -193,7 +204,7 @@ export function Tickets() {
                 ))}
               </box>
             ))}
-            </box>
+            </scrollbox>
           )}
           {unknownTickets.map((u) => (
             <text key={u.key} fg={theme.dim} truncate wrapMode="none">
@@ -249,7 +260,7 @@ function EpicView({
   const selected = selectedId === block.epic.t.id;
   return (
     <box flexDirection="column" flexShrink={0} marginTop={first ? 1 : 0} marginBottom={1}>
-      <box flexDirection="row" flexShrink={0}>
+      <box id={rowId(block.epic.t.id)} flexDirection="row" flexShrink={0}>
         <text wrapMode="none" flexShrink={0}>
           {" ".repeat(Math.max(0, indent - 2))}
           <span fg={selected ? theme.accent : theme.epic}>{selected ? "› " : "  "}</span>
@@ -389,6 +400,9 @@ function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
  *  asks of a list, and the answer should not move when the selection does.
  *  (It held the kind until the kinds became headers.) Nothing else: the
  *  ticket's own page has the rest, and an agent can read all of it. */
+/** the id a ticket's row is drawn under, so the list can scroll to it */
+const rowId = (ticketId: string): string => `row-${ticketId}`;
+
 function TicketRow({
   ticket: t,
   summary: s,
@@ -431,7 +445,7 @@ function TicketRow({
   const dim = s.state === "done" || s.held.length > 0 || excluded === true;
   const fg = selected ? theme.accent : dim ? theme.dim : theme.fg;
   return (
-    <box flexDirection="row" flexShrink={0}>
+    <box id={rowId(t.id)} flexDirection="row" flexShrink={0}>
       <text fg={fg} wrapMode="none" flexShrink={0}>
         {" ".repeat(Math.max(0, indent - 2))}
         {selected ? "› " : "  "}
