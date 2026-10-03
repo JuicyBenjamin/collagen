@@ -154,11 +154,13 @@ export function groupByUnit(
       unexplained: ids.filter((id) => !claims.has(id)),
     };
   });
+  const inUnits = new Set(units.flatMap((u) => u.decisions));
   return {
     units,
     hunks,
     unmatched,
     looseForks: review.forks.filter((f) => forkHunks.get(f.id)!.size === 0),
+    outside: review.decisions.filter((d) => !inUnits.has(d.id)).map((d) => d.id),
   };
 }
 

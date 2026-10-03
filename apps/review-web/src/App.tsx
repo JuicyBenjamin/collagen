@@ -121,6 +121,14 @@ function Page(props: { data: ReviewPageData }) {
               </For>
             )}
           </Show>
+          <Show when={(props.data.grouped?.outside.length ?? 0) > 0}>
+            <li class="nav-unexplained">
+              <a href="#outside">
+                <span class="nav-what">Decisions outside the diff</span>
+                <span class="count">{props.data.grouped!.outside.length}</span>
+              </a>
+            </li>
+          </Show>
         </ol>
       </nav>
 
@@ -145,6 +153,28 @@ function Page(props: { data: ReviewPageData }) {
           {(g) => (
             <>
               <For each={g().units}>{(u) => <UnitSection unit={u} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={g().unmatched} />}</For>
+              <Show when={g().outside.length > 0}>
+                <section class="decision" id="outside">
+                  <div class="decision-head">
+                    <h2>Decisions outside the diff</h2>
+                    <p class="decision-what">Their code is in no change here — the why may be older than the branch, or points at nothing.</p>
+                  </div>
+                  <div class="decision-main" />
+                  <details class="why" open={wide()}>
+                    <summary>Why</summary>
+                    <For each={g().outside.map((id) => decisions().get(id)).filter((d): d is Decision => d !== undefined)}>
+                      {(d) => (
+                        <div class="why-decision">
+                          <DecisionWhy decision={d} />
+                          <p class="stale" title={(g().unmatched[d.id] ?? []).join(", ")}>
+                            {d.where.length === 0 ? "Points at no code." : `Points at code this diff does not change: ${d.where.join(", ")}`}
+                          </p>
+                        </div>
+                      )}
+                    </For>
+                  </details>
+                </section>
+              </Show>
               <Show when={g().looseForks.length > 0}>
                 <section class="decision">
                   <h2>Forks outside the diff</h2>
