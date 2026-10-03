@@ -7,6 +7,7 @@ import { TypesBanner } from "./components/TypesBanner";
 import { ticketId } from "./ticket";
 import { viewed } from "./viewedNow";
 import { reviewChanges, reviewData } from "./api";
+import { lasting } from "./lasting";
 import { diffNow } from "./diffNow";
 
 // The review page: a review ticket's diff read by purpose. One section per
@@ -27,8 +28,9 @@ async function load(): Promise<ReviewPageData> {
 export function App() {
   // the review's state, from a live server function held open while the
   // page is: a token that moves when its why is revised, the ticket moves,
-  // or the branch's commit in the clone changes (a reconnect re-reads it)
-  const state = createMemo(() => reviewChanges(ticketId));
+  // or the branch's commit in the clone changes — opened again whenever the
+  // connection breaks (collagen restarted), its first value catching up
+  const state = createMemo(() => lasting(() => reviewChanges(ticketId)));
   // its data, read again whenever that state moves — what is on screen
   // stays until the new data is in
   const data = createMemo(() => {
