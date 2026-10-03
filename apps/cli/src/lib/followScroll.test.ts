@@ -32,6 +32,20 @@ describe("a list following its cursor", () => {
     expect(tops).toEqual([0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 3, 2, 1, 0]);
   });
 
+  it("a row taller than the view: in at its top, then still while read — never flipping on repeated passes", () => {
+    // a 10-line message in a 5-line view, below it
+    const tall = { kind: "edge" as const, at: 8, size: 10 };
+    let top = followTop(view(0), tall);
+    expect(top).toBe(8);
+    const tops = [1, 2, 3].map(() => (top = followTop(view(top), tall)));
+    expect(tops).toEqual([8, 8, 8]);
+    // read down inside it: left where the reader put it
+    expect(followTop(view(11), tall)).toBe(11);
+    expect(followTop(view(13), tall)).toBe(13);
+    // scrolled away from it: back to its top
+    expect(followTop(view(2), tall)).toBe(8);
+  });
+
   it("pinned to the start, the end, or a row put at the top — never past either end", () => {
     expect(followTop(view(7), { kind: "start" })).toBe(0);
     expect(followTop(view(0), { kind: "end" })).toBe(15);
