@@ -29,17 +29,35 @@ export const fingerprints = (hunks: ReadonlyArray<Hunk>): ReadonlyMap<string, st
 
 export type Viewed = "viewed" | "changed" | "unread";
 
+/** A mark: the file's fingerprint when it was read, and the branch's commit
+ *  then (from a clone), to show what moved since. */
+export interface Mark {
+  readonly fp: string;
+  readonly at?: string;
+}
+type Marks = Readonly<Record<string, Mark>>;
+
 /** A file's state: marked as it is now, marked as it was before, or not. */
-export const viewedState = (marks: Readonly<Record<string, string>>, file: string, now: string | undefined): Viewed =>
-  marks[file] === undefined ? "unread" : marks[file] === now ? "viewed" : "changed";
+export const viewedState = (marks: Marks, file: string, now: string | undefined): Viewed =>
+  marks[file] === undefined ? "unread" : marks[file]!.fp === now ? "viewed" : "changed";
+
+/** Marks as stored — the first ones kept the fingerprint alone. */
+export const readMarks = (raw: unknown): Marks => {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, Mark> = {};
+  for (const [file, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string") out[file] = { fp: v };
+    else if (v && typeof v === "object" && typeof (v as Mark).fp === "string") out[file] = { fp: (v as Mark).fp, ...(typeof (v as Mark).at === "string" ? { at: (v as Mark).at } : {}) };
+  }
+  return out;
+};
 
 const key = (ticketId: string) => `collagen.viewed.${ticketId}`;
 
-const load = (ticketId: string): Record<string, string> => {
+const load = (ticketId: string): Marks => {
   try {
     const raw = localStorage.getItem(key(ticketId));
-    const parsed: unknown = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
+    return readMarks(raw ? JSON.parse(raw) : {});
   } catch {
     return {};
   }
@@ -47,13 +65,14 @@ const load = (ticketId: string): Record<string, string> => {
 
 /** The page's marks for one review: read once, written on every change. */
 export const viewedStore = (ticketId: string) => {
-  const [marks, setMarks] = createSignal<Record<string, string>>(load(ticketId));
+  const [marks, setMarks] = createSignal<Marks>(load(ticketId));
   const [now, setNow] = createSignal<ReadonlyMap<string, string>>(new Map());
   const state = (file: string): Viewed => viewedState(marks(), file, now().get(file));
-  const toggle = (file: string) => {
-    const next = { ...marks() };
+  /** marked, or marked again: as it is now, at the branch's commit now */
+  const toggle = (file: string, commit: string | undefined) => {
+    const next: Record<string, Mark> = { ...marks() };
     if (state(file) === "viewed") delete next[file];
-    else next[file] = now().get(file) ?? "";
+    else next[file] = { fp: now().get(file) ?? "", ...(commit ? { at: commit } : {}) };
     setMarks(next);
     try {
       localStorage.setItem(key(ticketId), JSON.stringify(next));
@@ -65,5 +84,7 @@ export const viewedStore = (ticketId: string) => {
     const files = [...now().keys()];
     return { viewed: files.filter((f) => state(f) === "viewed").length, files: files.length };
   };
-  return { state, toggle, count, setFiles: (hunks: ReadonlyArray<Hunk>) => setNow(fingerprints(hunks)) };
+  /** the commit a file was viewed at, when the page knew it */
+  const viewedAt = (file: string): string | undefined => marks()[file]?.at;
+  return { state, toggle, count, viewedAt, setFiles: (hunks: ReadonlyArray<Hunk>) => setNow(fingerprints(hunks)) };
 };

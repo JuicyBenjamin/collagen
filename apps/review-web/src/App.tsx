@@ -77,7 +77,7 @@ function Page(props: { data: ReviewPageData }) {
     () => props.data.grouped?.hunks ?? [],
     (all) => {
       viewed.setFiles(all);
-      diffNow.set(all, props.data.source.kind === "clone");
+      diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
     },
   );
   createEffect(
