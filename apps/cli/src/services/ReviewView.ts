@@ -140,6 +140,9 @@ export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: 
   return { lines } satisfies WholeFileResult;
 });
 
+/** Is `commit` a commit the clone at `path` has? */
+export const commitIn = (path: string, commit: string) => run("git", ["cat-file", "-e", `${commit}^{commit}`], path, 5_000).pipe(Effect.map((ok) => ok !== null));
+
 /** A commit as the page names it: a full or abbreviated hash, nothing else. */
 export const commitOk = (c: string | undefined): c is string => c !== undefined && /^[0-9a-f]{7,40}$/.test(c);
 
