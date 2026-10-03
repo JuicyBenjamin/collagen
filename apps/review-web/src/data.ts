@@ -190,3 +190,88 @@ export interface ToolState {
   readonly notices?: ReadonlyArray<string>;
   readonly error?: string;
 }
+
+/** Someone on the repository's host (GitHub): the person signed in through
+ *  their own `gh`, or a comment's author. */
+export interface HostUser {
+  readonly login: string;
+  readonly name?: string;
+  readonly avatarUrl?: string;
+}
+
+/** The pull request a review's branch is, on its host. `mine`: the person
+ *  signed in opened it — a host does not let you approve your own. */
+export interface PullRequest {
+  readonly number: number;
+  readonly url: string;
+  readonly title: string;
+  readonly state: "open" | "closed" | "merged";
+  readonly draft: boolean;
+  readonly author: string;
+  /** the commit its head is at on the host */
+  readonly head: string;
+  /** "approved", "changes requested", "review required" — the host's word, when it has one */
+  readonly decision?: string;
+  readonly mine: boolean;
+}
+
+/** A comment on one line of the pull request's diff. `side`: the new file's
+ *  line (RIGHT) or a removed line of the old one (LEFT). */
+export interface LineComment {
+  readonly id: number;
+  readonly author: HostUser;
+  readonly body: string;
+  readonly file: string;
+  readonly line: number;
+  readonly side: "LEFT" | "RIGHT";
+  readonly url: string;
+  readonly at: string;
+  /** shown before the host has answered: the reader's own, on its way */
+  readonly pending?: true;
+}
+
+/** One branch of a stack: a pull request, a review in the room, or the
+ *  trunk everything builds on. */
+export interface StackStep {
+  readonly branch: string;
+  readonly label: string;
+  readonly url?: string;
+  readonly number?: number;
+  readonly kind: "pull" | "review" | "trunk";
+}
+
+/** The stack a review's branch sits in: what it builds on, from the trunk
+ *  up, and what builds on it. */
+export interface Stack {
+  readonly below: ReadonlyArray<StackStep>;
+  readonly here: StackStep;
+  /** the chain on top of it, while there is one way up */
+  readonly above: ReadonlyArray<StackStep>;
+  /** where several branches build on the top of that chain: each of them */
+  readonly split: ReadonlyArray<StackStep>;
+}
+
+/** hostView(ticketId) — the review on its host: who is signed in, its pull
+ *  request and that request's line comments, the stack; or why there is no
+ *  host (no link, none collagen knows) — the stack the room's own reviews
+ *  make still comes with it. Each part says why it is missing. */
+export type HostView =
+  | {
+      readonly host: string;
+      readonly viewer: HostUser | null;
+      /** not signed in, or gh is not there: how to fix it */
+      readonly signIn?: string;
+      readonly pull: PullRequest | null;
+      /** why there is no pull request, in words */
+      readonly noPull?: string;
+      readonly comments: ReadonlyArray<LineComment>;
+      readonly stack: Stack | null;
+    }
+  | { readonly none: string; readonly stack: Stack | null };
+
+/** What a review sends: a comment, an approval, or a request for changes. */
+export type Verdict = "comment" | "approve" | "request-changes";
+
+/** What the host said to a write: done (the comment as it now stands), or
+ *  its refusal in words. */
+export type HostWrite = { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
