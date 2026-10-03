@@ -119,6 +119,23 @@ describe("the outbox — what went out", () => {
     expect(value).toBe("wrote message");
   });
 
+  it("an epic's row and its text name it by its title, an old record by its goal", async () => {
+    const shown = (outgoing: Outgoing) =>
+      run((o) =>
+        Effect.gen(function* () {
+          yield* o.send({ roomId: "r1", to: "the room", title: "epic", outgoing });
+          const [p] = yield* o.all;
+          return { summary: outgoingSummary(p!).subject, text: proposalText(p!) };
+        }),
+      ).then((r) => r.value);
+    const move = await shown({ kind: "epic-move", ticketIds: ["t1"], epic: "e1", goal: "Old goal", name: "New title" });
+    expect(move).toEqual({ summary: '1 into "New title"', text: 'put into the epic "New title": t1' });
+    const order = await shown({ kind: "epic-order", epicId: "e1", goal: "Old goal", name: "New title", ticketIds: ["t1"] });
+    expect(order).toEqual({ summary: 'order of "New title"', text: '"New title" read in this order: t1' });
+    // written before epics had titles in the outbox: the goal it was sent with
+    expect((await shown({ kind: "epic-order", epicId: "e1", goal: "Old goal", ticketIds: ["t1"] })).summary).toBe('order of "Old goal"');
+  });
+
   it("a message row names the peer it went to", async () => {
     const { value } = await run((o) =>
       Effect.gen(function* () {

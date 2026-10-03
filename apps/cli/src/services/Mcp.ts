@@ -1134,7 +1134,7 @@ const makeHandlers = Effect.gen(function* () {
             roomId,
             to: "the room",
             title: epic ? `${ids.length} ${excluded === true ? "excluded in" : excluded === false ? "counted again in" : "into"} "${epic.name}"` : `${ids.length} out of their epic`,
-            outgoing: { kind: "epic-move", ticketIds: [...ids], epic: epic?.id ?? null, goal: epic?.goal ?? "", ...(excluded !== undefined ? { excluded } : {}) },
+            outgoing: { kind: "epic-move", ticketIds: [...ids], epic: epic?.id ?? null, goal: epic?.goal ?? "", ...(epic ? { name: epic.name } : {}), ...(excluded !== undefined ? { excluded } : {}) },
           });
         const theEpic = () => {
           const e = input.epicId ? all.get(input.epicId) : undefined;
@@ -1180,7 +1180,7 @@ const makeHandlers = Effect.gen(function* () {
             const epic = theEpic();
             if (!epic) return noEpic;
             if (ids.length === 0) return "failed: pass the ticketIds in the order they are to be read";
-            return yield* outbox.tell({ roomId, to: "the room", title: `order of "${ticketName(epic)}"`, outgoing: { kind: "epic-order", epicId: epic.id, goal: epic.goal, ticketIds: [...ids] } });
+            return yield* outbox.tell({ roomId, to: "the room", title: `order of "${ticketName(epic)}"`, outgoing: { kind: "epic-order", epicId: epic.id, goal: epic.goal, name: ticketName(epic), ticketIds: [...ids] } });
           }
           case "close":
           case "reopen": {
