@@ -40,9 +40,9 @@ export const outgoingSummary = (p: Proposal): OutgoingSummary => {
     case "close":
       return { kind: "close", project: null, target: null, subject: p.title };
     case "epic-move":
-      return { kind: "epic", project: null, target: null, subject: o.epic ? `${o.ticketIds.length} ${o.excluded === true ? "excluded in" : o.excluded === false ? "counted again in" : "into"} "${o.goal}"` : `${o.ticketIds.length} out of its epic` };
+      return { kind: "epic", project: null, target: null, subject: o.epic ? `${o.ticketIds.length} ${o.excluded === true ? "excluded in" : o.excluded === false ? "counted again in" : "into"} "${o.name ?? o.goal}"` : `${o.ticketIds.length} out of its epic` };
     case "epic-order":
-      return { kind: "epic", project: null, target: null, subject: `order of "${o.goal}"` };
+      return { kind: "epic", project: null, target: null, subject: `order of "${o.name ?? o.goal}"` };
     case "epic-turn":
       return { kind: "epic", project: null, target: null, subject: p.title };
     case "attach":
@@ -89,10 +89,10 @@ export function proposalText(p: Proposal): string {
       return o.reason ? `closed — ${o.reason}` : "closed";
     case "epic-move":
       return o.epic
-        ? `${o.excluded === true ? "kept in the epic but out of its progress" : o.excluded === false ? "counted in the epic's progress again" : "put into the epic"} "${o.goal}": ${o.ticketIds.join(", ")}`
+        ? `${o.excluded === true ? "kept in the epic but out of its progress" : o.excluded === false ? "counted in the epic's progress again" : "put into the epic"} "${o.name ?? o.goal}": ${o.ticketIds.join(", ")}`
         : `taken out of their epic: ${o.ticketIds.join(", ")}`;
     case "epic-order":
-      return `"${o.goal}" read in this order: ${o.ticketIds.join(", ")}`;
+      return `"${o.name ?? o.goal}" read in this order: ${o.ticketIds.join(", ")}`;
     case "epic-turn":
       return `${o.closed ? "closed" : "reopened"}${o.reason ? ` — ${o.reason}` : ""}`;
     case "attach":
