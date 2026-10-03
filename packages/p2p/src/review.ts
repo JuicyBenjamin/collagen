@@ -24,6 +24,10 @@ export const ReviewDecision = Schema.Struct({
   userWhy: Schema.optional(Schema.String),
   agentWhy: Schema.optional(Schema.String),
   where: Schema.Array(Schema.String),
+  /** The skills and agent instruction files (AGENTS.md, CLAUDE.md …) that
+   *  told the agent to do it this way — so a reader sees the right ones were
+   *  used, and a skill giving the wrong direction shows beside its code. */
+  guidedBy: Schema.optional(Schema.Array(Schema.String)),
 });
 export type ReviewDecision = typeof ReviewDecision.Type;
 
@@ -132,6 +136,7 @@ export interface ReviewDelta {
     readonly agentWhy?: string;
     /** file, or file:line */
     readonly where?: ReadonlyArray<string>;
+    readonly guidedBy?: ReadonlyArray<string>;
   }>;
   readonly forks?: ReadonlyArray<{
     readonly id?: string;

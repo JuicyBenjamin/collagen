@@ -42,7 +42,7 @@ expect "a title that is a sentence: refused, 60 characters at most" "$(call $A "
 expect "someone who is not in the room: refused, naming who is" "$(call $A "$SA" ask-review "$NOPEER")" "no one here is called kristian — in the room: .*bob"
 
 echo "## the ask: alice's steering, her agent's reasons, and the fork it took"
-D1='{"title":"A logo worth a look","what":"pure frame functions for the logo","userWhy":"she said make it look cool, and was fine with a longer boot for it","agentWhy":"a frame is then testable without a terminal","where":["src/lib/logoFrame.ts:60"]}'
+D1='{"title":"A logo worth a look","what":"pure frame functions for the logo","userWhy":"she said make it look cool, and was fine with a longer boot for it","agentWhy":"a frame is then testable without a terminal","where":["src/lib/logoFrame.ts:60"],"guidedBy":["skill: frontend-design","CLAUDE.md"]}'
 D2='{"title":"A fast boot is","what":"a fast boot is still held until the sweep is seen","userWhy":"collagen first in the middle, the tagline below, then it animates to its place","where":["src/lib/opening.ts:14"]}'
 F1='{"at":"src/components/Logo/Logo.tsx:87","chose":"setInterval at 30 fps","instead":"the Timeline animator in @opentui/core","why":"no new dependency and the frame stays pure","by":"agent"}'
 ASK="{\"title\":\"The opening animation: the logo starts\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"base\":\"main\",\"focus\":\"the timing constants\",\"summary\":\"the opening animation: the logo starts centred and glides into the header\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
@@ -69,6 +69,7 @@ expect "the decision's headline" "$WHY" "A logo worth a look"
 expect "what alice asked for, in her words" "$WHY" "she said make it look cool"
 expect "what her agent reasoned" "$WHY" "testable without a terminal"
 expect "where the decision landed" "$WHY" "src/lib/logoFrame.ts:60"
+expect "what guided it: a skill and an agent file" "$WHY" "skill: frontend-design, CLAUDE.md"
 expect "the fork: the road taken, the road not taken, and why" "$WHY" "setInterval at 30 fps.*Timeline animator.*no new dependency"
 expect "…with the file:line the choice produced" "$WHY" "src/components/Logo/Logo.tsx:87"
 

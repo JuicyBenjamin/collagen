@@ -240,6 +240,15 @@ function DecisionSection(props: { section: Section; hunks: ReadonlyMap<string, H
       <div class="decision-head">
         <h2 class={{ untitled: !props.section.decision.title }}>{props.section.decision.title ?? NO_TITLE}</h2>
         <p class="decision-what">{props.section.decision.what}</p>
+        {/* what told the agent to do it this way: right beside its code, so a
+            skill that points the wrong way is seen where it did */}
+        <Show when={props.section.decision.guidedBy?.length ? props.section.decision.guidedBy : null}>
+          {(by) => (
+            <p class="guided-by">
+              Guided by <For each={by()}>{(s, i) => <>{i() > 0 ? ", " : ""}<code>{s}</code></>}</For>
+            </p>
+          )}
+        </Show>
       </div>
       <div class="decision-main">
         <For each={props.section.hunks}>{(id) => <Show when={props.hunks.get(id)}>{(h) => <Hunk hunk={h()} alsoUnder={others(id)} />}</Show>}</For>
