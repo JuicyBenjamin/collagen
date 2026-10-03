@@ -65,6 +65,10 @@ export function MessagesPage() {
         if (key.name === "down") return setReading(false), setCursor(sel >= last ? null : sel + 1), true;
         if (isEnter(key)) {
           if (current) setExpanded((e) => (e === current.id ? null : current.id));
+          // opened details hold the cursor on their message: one that arrives
+          // while they are read does not take it — following the newest
+          // resumes only by moving past the last row
+          setCursor(sel);
           setReading(false);
           return true;
         }
