@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { final, toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
 import { ticketId } from "./ticket";
+import { definitionAt, hoverAt, installTool as install, toolState as askTool } from "./api";
 
 // The language servers, asked from the page: what is this symbol (hover)
 // and where is it declared (peek). The answers come from collagen's own
@@ -37,23 +38,22 @@ export const toolNameFor = (file: string): string => {
 };
 
 export async function refreshTool(id: ToolId): Promise<void> {
-  const r = await fetch(`/review-tools/${id}`);
-  if (r.ok) keep((await r.json()) as ToolState);
+  const t = await askTool(id);
+  if (t) keep(t);
 }
 
 /** Install it — only ever on the person's click. */
 export async function installTool(id: ToolId): Promise<void> {
-  const r = await fetch(`/review-tools/${id}`, { method: "POST", headers: { "x-collagen": "install" } });
-  if (r.ok) keep((await r.json()) as ToolState);
+  const t = await install(id);
+  if (t) keep(t);
 }
 
 const key = (s: Spot) => `${s.file}:${s.line}:${s.col}`;
-const ask = <A>(what: "hover" | "definition", s: Spot, cache: Map<string, Promise<A>>): Promise<A> => {
+const ask = <A>(call: (ticketId: string, file: string, line: number, col: number) => Promise<A>, s: Spot, cache: Map<string, Promise<A>>): Promise<A> => {
   const k = key(s);
   let p = cache.get(k);
   if (!p) {
-    const q = new URLSearchParams({ file: s.file, line: String(s.line), col: String(s.col) });
-    p = fetch(`/review/${encodeURIComponent(ticketId)}/${what}?${q}`).then((r) => (r.ok ? (r.json() as Promise<A>) : r.text().then((t) => ({ error: t }) as A)));
+    p = call(ticketId, s.file, s.line, s.col).catch((e: unknown) => ({ error: String(e) }) as A);
     // only a final answer is kept: one given mid-index, or a failure, is
     // asked again next time rather than standing until a reload
     p.then((r) => !final(r as HoverResult | DefinitionResult) && cache.delete(k), () => cache.delete(k));
@@ -118,7 +118,7 @@ export function pointAt(spot: Spot | null, x: number, y: number): void {
   const timer = setTimeout(() => {
     // a slow first answer (the server starting) says so rather than nothing
     const slow = setTimeout(() => pending?.spot === spot && setPopover({ x, y, file: spot.file, state: "loading" }), 400);
-    void ask("hover", spot, hovers).then((result) => {
+    void ask(hoverAt, spot, hovers).then((result) => {
       clearTimeout(slow);
       if (pending?.spot !== spot) return;
       // nothing to say is no popover — unless the server was still reading,
@@ -149,7 +149,7 @@ export function peekAt(hunk: string, index: number, spot: Spot): void {
   if (same && now.result !== null && final(now.result)) return closePeek();
   if (same && now.result === null) return; // still asking
   setPeek({ hunk, index, spot, result: null });
-  void ask("definition", spot, definitions).then((result) => {
+  void ask(definitionAt, spot, definitions).then((result) => {
     const still = peek();
     if (still && key(still.spot) === key(spot)) setPeek({ ...still, result });
   });

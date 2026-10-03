@@ -26,8 +26,8 @@ import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes } from "./ReviewView";
-import { ReviewTypesRoutes } from "./ReviewTypes";
-import { ReviewLiveRoutes, ReviewPages } from "./ReviewLive";
+import { ReviewPages } from "./ReviewLive";
+import { ReviewServerRoutes } from "./ReviewServer";
 import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
@@ -1515,8 +1515,7 @@ export const McpLive = Layer.unwrap(
           announce,
           InboxRoutes,
           ReviewRoutes,
-          ReviewTypesRoutes,
-          ReviewLiveRoutes,
+          ReviewServerRoutes,
         ).pipe(
           Layer.provideMerge(
             McpServer.layerHttp({

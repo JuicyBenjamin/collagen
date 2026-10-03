@@ -1,16 +1,16 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
 import { focusTab } from "../lib/focusTab";
 import { settingOf } from "../lib/settings";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
 import { Rooms } from "./Rooms";
-import { commitOf, localHost, reviewTree, ticketIdOk } from "./ReviewView";
+import { commitOf, reviewTree } from "./ReviewView";
 
-// The review page, kept current and known about. Each open page holds an
-// event stream to the instance; the instance says "changed" when the
-// review's why is revised (the author's agent amends it whenever the code
+// The review page, kept current and known about. Each open page holds a
+// live server function (review-web src/api.ts, reviewChanges) on the
+// instance; its token moves when the review's why is revised (the author's agent amends it whenever the code
 // moves), when the ticket moves, or when the branch's commit in the
 // reader's clone changes — and the page reloads its data in place. The same
 // streams tell the instance which reviews have a page open, so `o` (and
@@ -82,43 +82,40 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
 /** How often the branch's commit is looked at while a page is open: a local
  *  `git rev-parse`, no network. */
 const COMMIT_EVERY = "4 seconds";
-const KEEP_ALIVE = "20 seconds";
 
-/** Something in this stream changed: emit once per change after the first
- *  value (the page already has that one). */
-const afterFirst = <A>(s: Stream.Stream<A>): Stream.Stream<void> => s.pipe(Stream.changes, Stream.drop(1), Stream.map(() => undefined));
-
-export const ReviewLiveRoutes = HttpRouter.add("GET", "/review/:ticketId/events", (request) =>
-  Effect.gen(function* () {
-    if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-    const { ticketId } = yield* HttpRouter.params;
-    if (!ticketIdOk(ticketId)) return HttpServerResponse.text("no ticket", { status: 404 });
-    const rooms = yield* Rooms;
-    const pages = yield* ReviewPages;
-    const handles = yield* SubscriptionRef.get(rooms.handles);
-    let handle: (typeof handles)[number] | undefined;
-    for (const h of handles) if ((yield* SubscriptionRef.get(h.room.tickets)).has(ticketId)) handle = h;
-    if (!handle) return HttpServerResponse.text("no ticket", { status: 404 });
-    const { room } = handle;
-    const tree = yield* reviewTree(ticketId);
-    const sources: Array<Stream.Stream<void>> = [
-      afterFirst(SubscriptionRef.changes(room.reviews).pipe(Stream.map((rs) => rs.find((r) => r.ticketId === ticketId)?.ts ?? 0))),
-      afterFirst(SubscriptionRef.changes(room.tickets).pipe(Stream.map((m) => JSON.stringify(m.get(ticketId) ?? null)))),
-      ...(typeof tree === "string" ? [] : [afterFirst(Stream.tick(COMMIT_EVERY).pipe(Stream.mapEffect(() => commitOf(tree.projectPath, tree.ref))))]),
-    ];
-    const events = Stream.mergeAll(
-      [
-        Stream.make("retry: 2000\n\n"),
-        Stream.mergeAll(sources, { concurrency: "unbounded" }).pipe(Stream.map(() => "event: changed\ndata: {}\n\n")),
-        Stream.tick(KEEP_ALIVE).pipe(Stream.map(() => ": keep-alive\n\n")),
-      ],
-      { concurrency: "unbounded" },
-    );
-    pages.opened(ticketId);
-    const body = events.pipe(
-      Stream.encodeText,
-      Stream.ensuring(Effect.sync(() => pages.closed(ticketId))),
-    );
-    return HttpServerResponse.stream(body, { contentType: "text/event-stream", headers: { "cache-control": "no-cache", connection: "keep-alive" } });
-  }),
-);
+/** The review's state as a token for an open page — the why's revision,
+ *  the ticket as it stands, the branch's commit in the reader's clone —
+ *  current first, then each time it moves. While it is read, the review
+ *  counts as having a page open (so `o` brings that tab forward). */
+export const reviewChanges = (ticketId: string): Stream.Stream<string, never, Rooms | ReviewPages | StateStore> =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const rooms = yield* Rooms;
+      const pages = yield* ReviewPages;
+      const handles = yield* SubscriptionRef.get(rooms.handles);
+      let handle: (typeof handles)[number] | undefined;
+      for (const h of handles) if ((yield* SubscriptionRef.get(h.room.tickets)).has(ticketId)) handle = h;
+      if (!handle) return Stream.empty;
+      const { room } = handle;
+      const tree = yield* reviewTree(ticketId);
+      const token = Effect.gen(function* () {
+        const why = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === ticketId)?.ts ?? 0;
+        const ticket = createHash("sha1").update(JSON.stringify((yield* SubscriptionRef.get(room.tickets)).get(ticketId) ?? null)).digest("hex");
+        const commit = typeof tree === "string" ? "" : ((yield* commitOf(tree.projectPath, tree.ref)) ?? "");
+        return `${why}|${commit}|${ticket}`;
+      });
+      // anything that might have moved it, then the token as it is now —
+      // the same token twice says nothing
+      const moved: Array<Stream.Stream<unknown>> = [
+        SubscriptionRef.changes(room.reviews),
+        SubscriptionRef.changes(room.tickets),
+        ...(typeof tree === "string" ? [] : [Stream.tick(COMMIT_EVERY)]),
+      ];
+      pages.opened(ticketId);
+      return Stream.mergeAll(moved, { concurrency: "unbounded" }).pipe(
+        Stream.mapEffect(() => token),
+        Stream.changes,
+        Stream.ensuring(Effect.sync(() => pages.closed(ticketId))),
+      );
+    }),
+  );

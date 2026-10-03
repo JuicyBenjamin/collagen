@@ -147,9 +147,15 @@ hunk (the old lines, the new lines) is tokenized as one block, so a string or co
 opens on one line colours the next, and the tokens are rendered as the page's own spans —
 nothing is ever set as HTML. About 28 KB gzipped. The cli build builds it and ships it in
 `dist/review-web`; running collagen from source serves `apps/review-web/dist`
-(`pnpm --filter @collagen/review-web build`, or `dev` to rebuild on change). The JSON it
-reads, `/review/<ticket id>/data`, is typed once in `apps/review-web/src/data.ts`, which
-the cli imports.
+(`pnpm --filter @collagen/review-web build`). The page talks to your collagen through
+Solid's server functions (`apps/review-web/src/api.ts`), not routes: each is called on the
+page like a function and runs in collagen's own process, on its own services, through a
+backend the page declares (`src/server/backend.ts`) and collagen provides when it loads the
+page's server bundle. Reads are `GET`s Solid can cache; the review's state is a `live`
+function the page holds open, so it reloads when the why, the ticket or the branch moves.
+What they answer is typed once in `apps/review-web/src/data.ts`, which the cli imports.
+Every argument is checked in collagen before it is used, calls from another origin are
+refused, and only a request naming this machine is answered.
 
 ## Saying what you think
 
