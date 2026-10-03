@@ -16,6 +16,8 @@ export interface FollowScrollHandle {
   readonly scrollTo: (top: number) => void;
   /** where the list stands: its first visible line, how many show, how many it has */
   readonly view: () => View;
+  /** where a row (by id) sits in the list and how tall it is, or null */
+  readonly rowOf: (id: string) => { readonly at: number; readonly size: number } | null;
 }
 
 type Props = Omit<ScrollBoxProps, "children" | "ref" | "onSizeChange"> & {
@@ -108,6 +110,11 @@ export const FollowScroll = forwardRef<FollowScrollHandle, Props>(function Follo
       tell();
     },
     view: () => (list.current ? viewOf(list.current) : { top: 0, height: 0, total: 0 }),
+    rowOf: (id) => {
+      const l = list.current;
+      const row = l?.content.findDescendantById(id);
+      return l && row ? { at: row.y - l.content.y, size: row.height } : null;
+    },
   }));
 
   return (
