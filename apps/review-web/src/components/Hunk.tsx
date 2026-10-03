@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import type { Decision, DiffLine, Hunk as HunkData, WholeFileResult } from "../data";
 import { diffNow } from "../diffNow";
 import { ticketId } from "../ticket";
+import { wholeFile } from "../api";
 import { hasNewSide, wholeHunk } from "../whole";
 import { highlightHunk } from "../highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
@@ -55,8 +56,7 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
     if (w === null || (w !== "loading" && "error" in w)) {
       setWhole("loading");
       try {
-        const res = await fetch(`/review/${encodeURIComponent(ticketId)}/file?file=${encodeURIComponent(props.hunk.file)}`);
-        setWhole(res.ok ? ((await res.json()) as WholeFileResult) : { error: await res.text() });
+        setWhole(await wholeFile(ticketId, props.hunk.file));
       } catch (e) {
         setWhole({ error: String(e) });
       }

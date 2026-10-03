@@ -1,12 +1,15 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { DefinitionResult } from "./data";
 
-// the page module reads its ticket from the url and listens for Esc
+// the page module reads its ticket from the url and listens for Esc; the
+// server functions it calls are compiled by the page's build, so here they
+// are stand-ins answering from a queue
 const answers: Array<DefinitionResult> = [];
-const fetch = vi.fn(async () => new Response(JSON.stringify(answers.shift() ?? { peeks: [] }), { status: 200 }));
+const definitionAt = vi.fn(async () => answers.shift() ?? { peeks: [] });
+vi.mock("./api", () => ({ definitionAt, hoverAt: vi.fn(async () => ({ none: true })), toolState: vi.fn(async () => null), installTool: vi.fn(async () => null) }));
 let intel: typeof import("./intel");
 beforeAll(async () => {
-  Object.assign(globalThis, { location: { pathname: "/review/t1" }, addEventListener: () => {}, fetch });
+  Object.assign(globalThis, { location: { pathname: "/review/t1" }, addEventListener: () => {} });
   intel = await import("./intel");
 });
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -20,14 +23,14 @@ describe("a peek that was not a final answer", () => {
     expect(intel.peek()?.result).toEqual({ indexing: true });
     intel.peekAt("h1", 0, spot); // the retry the note asks for
     await settle();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(definitionAt).toHaveBeenCalledTimes(2);
     expect(intel.peek()?.result).toEqual({ peeks: [], partial: true });
     intel.retryPeek(); // its Try again
     await settle();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(definitionAt).toHaveBeenCalledTimes(3);
     expect(intel.peek()?.result).toEqual({ peeks: [] });
     intel.peekAt("h1", 0, spot); // a final answer: the same click folds it away
     expect(intel.peek()).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(definitionAt).toHaveBeenCalledTimes(3);
   });
 });
