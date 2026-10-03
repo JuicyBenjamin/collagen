@@ -14,7 +14,7 @@ import {
   type TranscriptRequestFrame,
 } from "./schema";
 import { NotWritable, PeerNotConnected } from "./errors";
-import type { ReviewContext } from "./review";
+import type { ReviewComment, ReviewContext } from "./review";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic, type Net } from "./topic";
 import { openRoomLog, type RoomLog, type Unseen } from "./RoomLog";
@@ -90,6 +90,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const attachments = yield* SubscriptionRef.make<ReadonlyArray<Attachment>>([]);
     // The why behind review tickets, as the log has it.
     const reviews = yield* SubscriptionRef.make<ReadonlyArray<ReviewContext>>([]);
+    // Comments on reviews' code, said in the room.
+    const comments = yield* SubscriptionRef.make<ReadonlyArray<ReviewComment>>([]);
     // records a newer build wrote that this one cannot read yet (RoomLog.Unseen)
     const unseen = yield* SubscriptionRef.make<ReadonlyArray<Unseen>>([]);
     const fetchRequests = yield* Effect.acquireRelease(
@@ -138,6 +140,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(trace, view.messages.map((m) => m.msg));
       yield* SubscriptionRef.set(attachments, view.attachments);
       yield* SubscriptionRef.set(reviews, view.reviews);
+      yield* SubscriptionRef.set(comments, view.comments);
       yield* SubscriptionRef.set(unseen, view.unseen);
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (cur) => (name.ts > cur.ts ? name : cur));
@@ -429,6 +432,13 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* refresh;
     });
 
+    /** Say a comment on a review's code, on the log — once; it never changes. */
+    const comment = Effect.fn("Room.comment")(function* (c: ReviewComment) {
+      const l = yield* requireLog;
+      yield* l.append({ op: "comment", comment: c }).pipe(Effect.orDie);
+      yield* refresh;
+    });
+
     /** Hand a fetched attachment's bytes to the one who asked. */
     const sendAttachment = Effect.fn("Room.sendAttachment")(function* (peerKey: string, attachment: Omit<AttachmentFrame, "kind">) {
       if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
@@ -513,6 +523,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       transcripts: Stream.fromPubSub(transcripts),
       requestTranscripts,
       sendTranscript,
+      /** Comments on reviews' code, as the log has them. */
+      comments,
+      comment,
       /** Files attached to the room's tickets — references from the log. */
       attachments,
       attach,

@@ -201,7 +201,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
 
 /** A review ticket on this machine: the ticket, its why, and the project's
  *  clone when this machine has located it. */
-const reviewNamed = (ticketId: string) =>
+export const reviewNamed = (ticketId: string) =>
   Effect.gen(function* () {
     const rooms = yield* Rooms;
     const store = yield* StateStore;
@@ -218,7 +218,21 @@ const reviewNamed = (ticketId: string) =>
 
 /** Where a review's code is hosted: the link it names, else the clone's own
  *  remote — a review filed without a link is still on its host. */
-const hostLink = (review: ReviewContext, project: { readonly path: string } | undefined): string | undefined => review.link ?? (project ? (repoWebUrl(project.path) ?? undefined) : undefined);
+export const hostLink = (review: ReviewContext, project: { readonly path: string } | undefined): string | undefined => review.link ?? (project ? (repoWebUrl(project.path) ?? undefined) : undefined);
+
+/** The review's diff from the reader's clone, as hunks, and the branch's
+ *  commit it was read at — what a comment drafted on it is about. The clone
+ *  as it is first; fetched only when it does not have the branch yet. */
+export const reviewHunks = (found: { readonly review: ReviewContext; readonly project: { readonly path: string } | undefined }) =>
+  Effect.gen(function* () {
+    if (!found.review.branch) return { error: "this review names no branch" };
+    if (!found.project) return { error: "the review's project is not located on this machine (the projects panel) — its code cannot be read here" };
+    const base = found.review.base ?? "main";
+    let got = yield* fromClone(found.project.path, base, found.review.branch, false);
+    if (got.diff === null) got = yield* fromClone(found.project.path, base, found.review.branch, true);
+    if (got.diff === null || !("commit" in got) || !got.commit) return { error: got.why };
+    return { hunks: parseDiff(got.diff), commit: got.commit };
+  });
 
 /** A pull request as the page shows it: without the branches it joins. */
 const shown = ({ branch: _branch, base: _base, ...pull }: HostPull, viewer: string | undefined) => ({ ...pull, mine: viewer !== undefined && pull.author === viewer });
@@ -296,14 +310,6 @@ export const sendReview = Effect.fn("ReviewView.sendReview")(function* (ticketId
   return yield* to.host.review(to.link, to.pull.number, verdict, text);
 });
 
-/** A comment on one line of the pull request, at the commit the page shows. */
-export const sendLineComment = Effect.fn("ReviewView.sendLineComment")(function* (ticketId: string, at: LineSpot, body: string) {
-  const to = yield* openPull(ticketId);
-  if ("error" in to) return to satisfies HostWrite;
-  const text = body.trim();
-  if (text.length === 0) return { error: "Write the comment first." } satisfies HostWrite;
-  return yield* to.host.comment(to.link, to.pull.number, at, text);
-});
 
 /** Only this machine's own browser, by name: the server listens on loopback,
  *  and a page elsewhere that re-points a hostname at 127.0.0.1 (DNS

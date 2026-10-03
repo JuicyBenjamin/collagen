@@ -196,7 +196,7 @@ function Lines(props: {
     const which = props.threads ?? "none";
     return at && (which === "all" || (which === "new" && at.side === "RIGHT")) ? at : null;
   };
-  const talks = () => props.talk === true && hostNow.canWrite();
+  const talks = () => props.talk === true && hostNow.canComment();
   // the lines picked for a comment in this hunk, first to last, while picked here
   const picked = createMemo(() => {
     const p = hostNow.pick();

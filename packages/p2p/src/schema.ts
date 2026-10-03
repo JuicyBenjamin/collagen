@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ReviewContext } from "./review";
+import { DraftComment, ReviewComment, ReviewContext } from "./review";
 import { Ticket } from "./ticket";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
@@ -22,7 +22,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "8";
+export const PROTOCOL_VERSION = "9";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -258,6 +258,9 @@ export const LogOp = Schema.Union([
   /** The why behind a review ticket's change — its author is its only writer,
    *  so the later ts wins (an amendment carries the whole record). */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("review"), review: ReviewContext }),
+  /** A comment on a review's code — written once by its author, never
+   *  changed: the first write of an id stands. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("comment"), comment: ReviewComment }),
   /** The migration. The log is append-only, so a record written by a build
    *  that spoke another protocol version cannot be rewritten — this is how it
    *  stops being part of the room instead: the rows it left in the view are
@@ -276,7 +279,7 @@ export const LogOp = Schema.Union([
 export type LogOp = typeof LogOp.Type;
 
 /** What an `evict` may remove: room records only, never the room's meta. */
-export const EVICTABLE = /^(ticket|review|attachment|msg|member)\//;
+export const EVICTABLE = /^(ticket|review|attachment|comment|msg|member)\//;
 
 /** A member as recorded on the log. */
 export const Member = Schema.Struct({
@@ -491,5 +494,8 @@ export const LocalState = Schema.Struct({
   /** Files we attached to tickets: attachment id → our local path, so a fetch
    *  can be answered (only for ids here — nothing else ever leaves). */
   attachedFiles: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** What the person's AI drafted on reviews, waiting on their word: ticket
+   *  id → drafts. Never leaves this machine; accepted ones go on the log. */
+  drafts: Schema.optional(Schema.Record(Schema.String, Schema.Array(DraftComment))),
 });
 export type LocalState = typeof LocalState.Type;

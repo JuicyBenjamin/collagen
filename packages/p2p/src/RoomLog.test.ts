@@ -233,6 +233,21 @@ describe("RoomLog", () => {
     });
   });
 
+  it("a comment on a review's code is written once: a repeat of its id changes nothing", async () => {
+    await withLog(async (log) => {
+      const c = { id: "c1", ticketId: "t1", author: "k-bob", authorName: "bob", file: "src/a.ts", line: 3, side: "RIGHT" as const, startLine: 1, startSide: "RIGHT" as const, commit: "abc", body: "why?", drafted: true, host: { id: 7, url: "https://github.com/o/r/pull/1#discussion_r7" }, ts: 1 };
+      await Effect.runPromise(log.append({ op: "comment", comment: c }));
+      await Effect.runPromise(log.append({ op: "comment", comment: { ...c, body: "rewritten", ts: 2 } }));
+      await Effect.runPromise(log.append({ op: "comment", comment: { ...c, id: "c2", line: 9, startLine: undefined, startSide: undefined, host: undefined, drafted: undefined } }));
+      const view = await Effect.runPromise(log.read);
+      expect(view.comments.map((x) => [x.id, x.body, x.line])).toEqual([
+        ["c1", "why?", 3],
+        ["c2", "why?", 9],
+      ]);
+      expect(view.comments[0]).toEqual(c);
+    });
+  });
+
   it("a settled step is not un-settled by a later copy that says otherwise", async () => {
     await withLog(async (log) => {
       const withStep = (status: "pending" | "suspended" | "settled", updatedAt: number, result?: string) =>

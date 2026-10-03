@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, PubSub, Stream, SubscriptionRef } from "effect";
-import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext, type Unseen } from "@collagen/p2p";
+import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext, type Unseen, type ReviewComment } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
 import { Rooms, type RoomHandle } from "./Rooms";
@@ -46,6 +46,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
       const trace = yield* SubscriptionRef.make<ReadonlyArray<RoomMessage>>([]);
       const attachments = yield* SubscriptionRef.make<ReadonlyArray<Attachment>>([]);
       const reviews = yield* SubscriptionRef.make<ReadonlyArray<ReviewContext>>([]);
+      const comments = yield* SubscriptionRef.make<ReadonlyArray<ReviewComment>>([]);
       const members = yield* SubscriptionRef.make<ReadonlyArray<Member>>([]);
       const logKey = yield* SubscriptionRef.make<string | null>("log");
       const writable = yield* SubscriptionRef.make(true);
@@ -65,6 +66,8 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
         sendTranscript: () => Effect.succeed(undefined),
         attachments,
         attach: () => Effect.succeed(undefined),
+        comments,
+        comment: () => Effect.succeed(undefined),
         fetchRequests: Stream.empty,
         fetchAttachment: () => Effect.succeed(undefined),
         attachmentsIn: Stream.empty,

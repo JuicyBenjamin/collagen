@@ -270,3 +270,50 @@ export const emptyReview = (ticketId: string, author: string, authorName: string
   forks: [],
   ts: 0,
 });
+
+/** Which side of a diff a line is on — GitHub's words: the new file's line
+ *  (RIGHT), or a removed line of the old one (LEFT). */
+export const DiffSide = Schema.Literals(["LEFT", "RIGHT"]);
+export type DiffSide = typeof DiffSide.Type;
+
+/** Where a comment sits on a review's code: a file, its (last) line on a
+ *  side, where a block of lines starts, and the commit it was written at —
+ *  the code the words are about. */
+const CommentSpot = {
+  file: Schema.String,
+  line: Schema.Finite,
+  side: DiffSide,
+  startLine: Schema.optional(Schema.Finite),
+  startSide: Schema.optional(DiffSide),
+  commit: Schema.String,
+};
+
+/** A comment on lines of a review's code, said in the room — by a reader on
+ *  the review page, or drafted by their AI and accepted by them. Written once,
+ *  by its author; never changed (grow-only). `host`: the same comment where
+ *  the code is hosted (a GitHub review comment), when it went there too. */
+export const ReviewComment = Schema.Struct({
+  id: Schema.String,
+  ticketId: Schema.String,
+  author: Schema.String,
+  authorName: Schema.String,
+  ...CommentSpot,
+  body: Schema.String,
+  /** drafted by the reader's AI, then accepted by the reader (or by the AI on their word) */
+  drafted: Schema.optional(Schema.Boolean),
+  host: Schema.optional(Schema.Struct({ id: Schema.Finite, url: Schema.String })),
+  ts: Schema.Finite,
+});
+export type ReviewComment = typeof ReviewComment.Type;
+
+/** A comment the reader's AI drafted on a review, waiting on the reader: on
+ *  this machine only, never the log, until it is accepted (then it is said,
+ *  a ReviewComment) or declined (then it is gone). */
+export const DraftComment = Schema.Struct({
+  id: Schema.String,
+  ticketId: Schema.String,
+  ...CommentSpot,
+  body: Schema.String,
+  ts: Schema.Finite,
+});
+export type DraftComment = typeof DraftComment.Type;

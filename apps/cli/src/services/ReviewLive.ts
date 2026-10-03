@@ -84,7 +84,8 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
 const COMMIT_EVERY = "4 seconds";
 
 /** The review's state as a token for an open page — the why's revision,
- *  the ticket as it stands, the branch's commit in the reader's clone —
+ *  the ticket as it stands, the branch's commit in the reader's clone, the
+ *  comments drafted and said on it —
  *  current first, then each time it moves. While it is read, the review
  *  counts as having a page open (so `o` brings that tab forward). */
 export const reviewChanges = (ticketId: string): Stream.Stream<string, never, Rooms | ReviewPages | StateStore> =>
@@ -98,17 +99,24 @@ export const reviewChanges = (ticketId: string): Stream.Stream<string, never, Ro
       if (!handle) return Stream.empty;
       const { room } = handle;
       const tree = yield* reviewTree(ticketId);
+      const store = yield* StateStore;
       const token = Effect.gen(function* () {
         const why = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === ticketId)?.ts ?? 0;
         const ticket = createHash("sha1").update(JSON.stringify((yield* SubscriptionRef.get(room.tickets)).get(ticketId) ?? null)).digest("hex");
         const commit = typeof tree === "string" ? "" : ((yield* commitOf(tree.projectPath, tree.ref)) ?? "");
-        return `${why}|${commit}|${ticket}`;
+        // the comments on it: the drafts waiting here, and what the room said
+        const drafts = (yield* store.get).drafts?.[ticketId] ?? [];
+        const said = (yield* SubscriptionRef.get(room.comments)).filter((c) => c.ticketId === ticketId);
+        const talk = createHash("sha1").update(JSON.stringify([drafts.map((d) => d.id), said.map((c) => c.id)])).digest("hex");
+        return `${why}|${commit}|${ticket}|${talk}`;
       });
       // anything that might have moved it, then the token as it is now —
       // the same token twice says nothing
       const moved: Array<Stream.Stream<unknown>> = [
         SubscriptionRef.changes(room.reviews),
         SubscriptionRef.changes(room.tickets),
+        SubscriptionRef.changes(room.comments),
+        SubscriptionRef.changes(store.state),
         ...(typeof tree === "string" ? [] : [Stream.tick(COMMIT_EVERY)]),
       ];
       pages.opened(ticketId);

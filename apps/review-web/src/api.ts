@@ -1,5 +1,5 @@
 import { GET, live } from "@solidjs/web/server-functions";
-import type { DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { AcceptResult, DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -79,8 +79,9 @@ export const sendReview = async (ticketId: string, verdict: Verdict, body: strin
   return run((b) => b.review(ticketId, verdict, body));
 };
 
-/** A comment on a line of the pull request — or a block of lines, from
- *  `start` to `line` — at the commit the page shows. */
+/** A comment on a line — or a block of lines, from `start` to `line` — at
+ *  the commit the page shows: said in the room as the reader's, and on the
+ *  pull request too when there is an open one. */
 export const sendLineComment = async (
   ticketId: string,
   file: string,
@@ -92,4 +93,25 @@ export const sendLineComment = async (
 ): Promise<HostWrite> => {
   "use server";
   return run((b) => b.lineComment(ticketId, file, line, side, body, commit, start));
+};
+
+/** The comments on the review collagen holds: what the reader's AI drafted
+ *  (waiting on them, this machine's own) and what has been said in the room.
+ *  Read again as the review's state moves — a new draft moves it. */
+export const talkView = GET(async (ticketId: string): Promise<TalkView> => {
+  "use server";
+  return run((b) => b.talk(ticketId));
+});
+
+/** Accept the AI's drafts — by id, or all (null) — each said as the reader's,
+ *  in the room and on the pull request; `edits` holds words the reader changed. */
+export const acceptDrafts = async (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>>): Promise<AcceptResult> => {
+  "use server";
+  return run((b) => b.accept(ticketId, ids, edits));
+};
+
+/** Decline the AI's drafts — by id, or all (null). */
+export const declineDrafts = async (ticketId: string, ids: ReadonlyArray<string> | null): Promise<number> => {
+  "use server";
+  return run((b) => b.decline(ticketId, ids));
 };

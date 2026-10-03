@@ -6,7 +6,8 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
-import { commitOk, hostView, localHost, reviewData, sendLineComment, sendReview, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
+import { commitOk, hostView, localHost, reviewData, sendReview, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
+import { acceptDrafts, declineDrafts, sayComment, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -32,6 +33,11 @@ const bad = { error: "bad request" } as const;
 const verdictOk = (v: unknown): v is "comment" | "approve" | "request-changes" => v === "comment" || v === "approve" || v === "request-changes";
 const bodyOk = (b: unknown): b is string => typeof b === "string" && b.length <= 65_536;
 const sideOk = (s: unknown): s is "LEFT" | "RIGHT" => s === "LEFT" || s === "RIGHT";
+/** Drafts named by id — or null, all of them. */
+const idsOk = (ids: unknown): ids is ReadonlyArray<string> | null => ids === null || (Array.isArray(ids) && ids.length <= 500 && ids.every((i) => typeof i === "string" && /^[0-9a-f-]{1,64}$/.test(i)));
+/** A draft's words as the reader edited them, by its id. */
+const editsOk = (e: unknown): e is Readonly<Record<string, string>> =>
+  typeof e === "object" && e !== null && !Array.isArray(e) && Object.entries(e).length <= 500 && Object.entries(e).every(([k, v]) => /^[0-9a-f-]{1,64}$/.test(k) && bodyOk(v));
 /** Where a block of lines starts: none (one line), or a line on a side —
  *  before the last one when both are on the same side, as GitHub asks. */
 const startOk = (start: unknown, line: number, side: "LEFT" | "RIGHT"): start is { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null => {
@@ -59,8 +65,12 @@ const backend = Effect.gen(function* () {
     review: (ticketId, verdict, body) => (ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) ? on(sendReview(ticketId, verdict, body)) : Effect.succeed(bad)),
     lineComment: (ticketId, file, line, side, body, commit, start) =>
       ticketIdOk(ticketId) && treePathOk(file) && lineOk(line, 0) && sideOk(side) && bodyOk(body) && commitOk(commit) && startOk(start, line, side)
-        ? on(sendLineComment(ticketId, { file, line, side, commit, ...(start ? { start } : {}) }, body))
+        ? on(sayComment(ticketId, { file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}) }, commit, body))
         : Effect.succeed(bad),
+    talk: (ticketId) => (ticketIdOk(ticketId) ? on(talkView(ticketId)) : Effect.succeed({ drafts: [], said: [] })),
+    accept: (ticketId, ids, edits) =>
+      ticketIdOk(ticketId) && idsOk(ids) && editsOk(edits) ? on(acceptDrafts(ticketId, ids, edits)) : Effect.succeed({ said: 0, failed: [{ id: "", error: "bad request" }] }),
+    decline: (ticketId, ids) => (ticketIdOk(ticketId) && idsOk(ids) ? on(declineDrafts(ticketId, ids)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });
 
