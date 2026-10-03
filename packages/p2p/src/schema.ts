@@ -375,6 +375,8 @@ export const Outgoing = Schema.Union([
     ticketIds: Schema.Array(Schema.String),
     epic: Schema.NullOr(Schema.String),
     goal: Schema.String,
+    /** the epic's title when this was sent, the name the outbox shows it by */
+    name: Schema.optional(Schema.String),
     /** kept in the epic but out of its progress (or, false, counted again) */
     excluded: Schema.optional(Schema.Boolean),
   }),
@@ -383,6 +385,8 @@ export const Outgoing = Schema.Union([
     kind: Schema.Literal("epic-order"),
     epicId: Schema.String,
     goal: Schema.String,
+    /** the epic's title when this was sent, the name the outbox shows it by */
+    name: Schema.optional(Schema.String),
     ticketIds: Schema.Array(Schema.String),
   }),
   /** An epic closed or reopened — anyone's to do, with its reason. */
