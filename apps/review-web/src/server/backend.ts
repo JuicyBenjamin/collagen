@@ -18,7 +18,9 @@ export class ReviewBackend extends Context.Service<
     readonly changes: (ticketId: string) => Stream.Stream<string>;
     readonly hover: (ticketId: string, file: string, line: number, col: number) => Effect.Effect<HoverResult>;
     readonly definition: (ticketId: string, file: string, line: number, col: number) => Effect.Effect<DefinitionResult>;
-    readonly tool: (tool: ToolId) => Effect.Effect<ToolState | null>;
+    /** a language server's state, now and each time it changes — installing,
+     *  ready, failed, a notice it asked to show */
+    readonly tool: (tool: ToolId) => Stream.Stream<ToolState>;
     readonly install: (tool: ToolId) => Effect.Effect<ToolState | null>;
     readonly wholeFile: (ticketId: string, file: string) => Effect.Effect<WholeFileResult>;
     readonly since: (ticketId: string, file: string, from: string) => Effect.Effect<SinceResult>;
