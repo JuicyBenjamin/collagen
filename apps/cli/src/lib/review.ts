@@ -36,6 +36,7 @@ export interface DecisionInput {
   readonly userWhy?: string;
   readonly agentWhy?: string;
   readonly where?: ReadonlyArray<string>;
+  readonly guidedBy?: ReadonlyArray<string>;
 }
 export interface ForkInput {
   readonly id?: string;
@@ -181,6 +182,7 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       userWhy: d.userWhy ?? "",
       agentWhy: d.agentWhy ?? "",
       where: d.where.join(" "),
+      guidedBy: (d.guidedBy ?? []).join(", "),
     })),
     forks: forks.map((f) => ({ id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
     // a proposal's outline: what the work might be and who might do it — the

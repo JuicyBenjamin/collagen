@@ -90,6 +90,12 @@ describe("reading a review back", () => {
     expect(reviewRows(record, "Timeline").forks.map((f) => f.id)).toEqual(["f1"]);
     expect(reviewRows(record, "look cool").decisions.map((d) => d.id)).toEqual(["d1"]);
   });
+
+  it("names what guided a decision, and finds it by that name", () => {
+    const guided = { ...record, decisions: [{ ...record.decisions[0]!, guidedBy: ["skill: frontend-design", "CLAUDE.md"] }, record.decisions[1]!] };
+    expect(reviewRows(guided).decisions.map((d) => d.guidedBy)).toEqual(["skill: frontend-design, CLAUDE.md", ""]);
+    expect(reviewRows(guided, "claude.md").decisions.map((d) => d.id)).toEqual(["d1"]);
+  });
 });
 
 describe("a ticket's title", () => {

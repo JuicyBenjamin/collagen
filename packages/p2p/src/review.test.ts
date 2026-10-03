@@ -44,6 +44,13 @@ describe("a review's why, amended as the work goes on", () => {
     expect(fixed.decisions).toEqual([{ id: "d1", title: "Big exports finish", what: "rows are mapped as they are read", where: [] }]);
   });
 
+  it("a decision keeps the skills and agent files that guided it, and a correction can change them", () => {
+    const first = mergeReview(base, { decisions: [{ title: "Tokens, not hex", what: "colours from the theme", where: [], guidedBy: ["skill: frontend-design", "CLAUDE.md"] }] }, 1);
+    expect(first.decisions[0]?.guidedBy).toEqual(["skill: frontend-design", "CLAUDE.md"]);
+    const fixed = mergeReview(first, { decisions: [{ id: "d1", title: "Tokens, not hex", what: "colours from the theme", where: [] }] }, 2);
+    expect(fixed.decisions[0]?.guidedBy).toBeUndefined();
+  });
+
   it("numbering skips ids the author chose itself", () => {
     const r = mergeReview(base, { decisions: [{ id: "d7", what: "x", where: [] }, { what: "y", where: [] }] }, 1);
     expect(r.decisions.map((d) => d.id)).toEqual(["d7", "d2"]);
