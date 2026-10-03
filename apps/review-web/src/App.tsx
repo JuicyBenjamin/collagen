@@ -8,6 +8,9 @@ import { ticketId } from "./ticket";
 import { viewed } from "./viewedNow";
 import { reviewChanges, reviewData } from "./api";
 import { lasting } from "./lasting";
+import { hostNow } from "./hostNow";
+import { HostBar } from "./components/HostBar";
+import { StackRow } from "./components/StackRow";
 import { diffNow } from "./diffNow";
 
 // The review page: a review ticket's diff read by purpose. One section per
@@ -31,6 +34,8 @@ export function App() {
   // or the branch's commit in the clone changes — opened again whenever the
   // connection breaks (collagen restarted), its first value catching up
   const state = createMemo(() => lasting(() => reviewChanges(ticketId)));
+  // the review on its host (GitHub), read beside the data and never before it
+  hostNow.start(state);
   // its data, read again whenever that state moves — what is on screen
   // stays until the new data is in
   const data = createMemo(() => {
@@ -190,7 +195,7 @@ function Page(props: { data: ReviewPageData }) {
           )}
         </Show>
         <footer class="note">
-          <p>Read-only. Say what you think through your agent — it posts your review on the ticket.</p>
+          <p>A review or comment sent from here goes to the pull request on its host, in your name. Your take on the collagen ticket still goes through your agent.</p>
           <p title={props.data.source.detail}>
             {props.data.source.kind === "clone"
               ? "Diff read from your own clone."
@@ -213,6 +218,7 @@ function Header(props: { data: ReviewPageData }) {
   const beneath = () => (headline() === props.data.review.summary ? "" : props.data.review.summary.trim());
   return (
     <header>
+      <div class="header-top">
       <p class="meta">
         <Show when={props.data.review.branch}>
           {(branch) => (
@@ -233,6 +239,9 @@ function Header(props: { data: ReviewPageData }) {
           )}
         </For>
       </p>
+      <HostBar />
+      </div>
+      <StackRow />
       <h1 class="purpose">{headline()}</h1>
       <Show when={beneath()}>
         <p class="summary">{beneath()}</p>

@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { DefinitionResult, HoverResult, ReviewPageData, SinceResult, ToolId, ToolState, WholeFileResult } from "../data";
+import type { DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 // What the review page's server functions (src/api.ts) ask of the collagen
 // instance that serves them. The page declares it; the instance provides it
@@ -27,6 +27,12 @@ export class ReviewBackend extends Context.Service<
     readonly wholeFile: (ticketId: string, file: string, commit: string) => Effect.Effect<WholeFileResult>;
     /** a file's changes from `from` (where it was viewed) to `to` (the commit the page shows) */
     readonly since: (ticketId: string, file: string, from: string, to: string) => Effect.Effect<SinceResult>;
+    /** the review on its host: who is signed in, its pull request, that request's line comments, the stack */
+    readonly host: (ticketId: string) => Effect.Effect<HostView>;
+    /** a review on the pull request, in the reader's name (through their own gh) */
+    readonly review: (ticketId: string, verdict: Verdict, body: string) => Effect.Effect<HostWrite>;
+    /** a comment on one line of the pull request, at the commit the page shows */
+    readonly lineComment: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string) => Effect.Effect<HostWrite>;
   }
 >()("review-web/ReviewBackend") {}
 
