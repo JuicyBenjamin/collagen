@@ -37,6 +37,8 @@ export interface Decision {
   readonly userWhy?: string;
   readonly agentWhy?: string;
   readonly where: ReadonlyArray<string>;
+  /** the skills and agent files that told the agent to do it this way */
+  readonly guidedBy?: ReadonlyArray<string>;
 }
 
 /** A fork in the road: chosen over what, why, whose call. */
