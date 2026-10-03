@@ -32,6 +32,14 @@ const bad = { error: "bad request" } as const;
 const verdictOk = (v: unknown): v is "comment" | "approve" | "request-changes" => v === "comment" || v === "approve" || v === "request-changes";
 const bodyOk = (b: unknown): b is string => typeof b === "string" && b.length <= 65_536;
 const sideOk = (s: unknown): s is "LEFT" | "RIGHT" => s === "LEFT" || s === "RIGHT";
+/** Where a block of lines starts: none (one line), or a line on a side —
+ *  before the last one when both are on the same side, as GitHub asks. */
+const startOk = (start: unknown, line: number, side: "LEFT" | "RIGHT"): start is { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null => {
+  if (start === null) return true;
+  if (typeof start !== "object" || start === undefined) return false;
+  const s = start as { line?: unknown; side?: unknown };
+  return lineOk(s.line, 0) && sideOk(s.side) && (s.side !== side || (s.line as number) < line);
+};
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
@@ -49,8 +57,10 @@ const backend = Effect.gen(function* () {
     since: (ticketId, file, from, to) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(from) && commitOk(to) ? on(sinceViewed(ticketId, file, from, to)) : Effect.succeed(bad)),
     host: (ticketId) => (ticketIdOk(ticketId) ? on(hostView(ticketId)) : Effect.succeed({ none: "bad request", stack: null })),
     review: (ticketId, verdict, body) => (ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) ? on(sendReview(ticketId, verdict, body)) : Effect.succeed(bad)),
-    lineComment: (ticketId, file, line, side, body, commit) =>
-      ticketIdOk(ticketId) && treePathOk(file) && lineOk(line, 0) && sideOk(side) && bodyOk(body) && commitOk(commit) ? on(sendLineComment(ticketId, { file, line, side, commit }, body)) : Effect.succeed(bad),
+    lineComment: (ticketId, file, line, side, body, commit, start) =>
+      ticketIdOk(ticketId) && treePathOk(file) && lineOk(line, 0) && sideOk(side) && bodyOk(body) && commitOk(commit) && startOk(start, line, side)
+        ? on(sendLineComment(ticketId, { file, line, side, commit, ...(start ? { start } : {}) }, body))
+        : Effect.succeed(bad),
   } satisfies ReviewBackend["Service"];
 });
 
