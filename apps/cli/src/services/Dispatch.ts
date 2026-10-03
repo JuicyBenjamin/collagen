@@ -87,11 +87,12 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const kind = out.ticket?.kind ?? (yield* SubscriptionRef.get(room.tickets)).get(out.review.ticketId)?.kind ?? "review";
           // an epic is a folder: filed, or its aim revised — no readers, no takes
           if (kind === "epic") {
-            const goal = out.ticket?.goal ?? (yield* SubscriptionRef.get(room.tickets)).get(out.review.ticketId)?.goal ?? "";
+            const filed = out.ticket ?? (yield* SubscriptionRef.get(room.tickets)).get(out.review.ticketId);
+            const name = filed ? ticketName(filed) : "";
             return sent(
               out.ticket && !known
-                ? `epic filed: "${goal}" [ticket ${out.review.ticketId}]. Anyone in the room can now put tickets into it (epic, action add, with ticketIds). TELL YOUR USER ONLY THIS: "epic filed".`
-                : `epic "${goal}" [ticket ${out.review.ticketId}] updated. TELL YOUR USER ONLY THIS: "epic updated".`,
+                ? `epic filed: "${name}" [ticket ${out.review.ticketId}]. Anyone in the room can now put tickets into it (epic, action add, with ticketIds). TELL YOUR USER ONLY THIS: "epic filed".`
+                : `epic "${name}" [ticket ${out.review.ticketId}] updated. TELL YOUR USER ONLY THIS: "epic updated".`,
             );
           }
           const tool = kind === "review" ? "ask-review" : kind === "plan" ? "ask-plan" : kind === "bug" ? "report-bug" : "propose";
@@ -148,7 +149,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const all = yield* SubscriptionRef.get(room.tickets);
           const target = out.epic === null ? null : all.get(out.epic);
           if (out.epic !== null && (!target || target.kind !== "epic")) return refused(`failed: no epic ${out.epic} — check get-tickets (kind: epic)`);
-          if (target && isClosed(target, all)) return refused(`failed: "${target.goal}" is closed — reopen it first (epic, action reopen, with why), then add to it`);
+          if (target && isClosed(target, all)) return refused(`failed: "${ticketName(target)}" is closed — reopen it first (epic, action reopen, with why), then add to it`);
           const excluding = out.excluded;
           const now = yield* Clock.currentTimeMillis;
           const moved: Array<string> = [];
@@ -160,26 +161,26 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
               continue;
             }
             if (t.kind === "epic") {
-              skipped.push(`"${t.goal}" (an epic is never part of another)`);
+              skipped.push(`"${ticketName(t)}" (an epic is never part of another)`);
               continue;
             }
             if (excluding !== undefined && epicOf(t) !== out.epic) {
-              skipped.push(`"${t.goal}" (not in that epic)`);
+              skipped.push(`"${ticketName(t)}" (not in that epic)`);
               continue;
             }
             const already = excluding !== undefined ? excludedFromEpic(t) === excluding : epicOf(t) === out.epic && (t.partOf?.length ?? 0) > 0;
             if (already) {
-              skipped.push(`"${t.goal}" (already ${excluding === true ? "excluded" : excluding === false ? "counted" : out.epic ? "in it" : "in none"})`);
+              skipped.push(`"${ticketName(t)}" (already ${excluding === true ? "excluded" : excluding === false ? "counted" : out.epic ? "in it" : "in none"})`);
               continue;
             }
             // one millisecond apart, so moves made together keep their order
             const merged = yield* room.shareTicket(moveToEpic(t, out.epic, identity.pubkey, now + i, excluding === true)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
             if (!merged) return NOT_ADMITTED;
-            moved.push(`"${t.goal}"`);
+            moved.push(`"${ticketName(t)}"`);
           }
           if (moved.length === 0) return refused(`failed: nothing moved — ${skipped.join("; ")}`);
           const progress = target ? epicParts(target, yield* SubscriptionRef.get(room.tickets)) : null;
-          const what = excluding === true ? `kept in "${target!.goal}" but out of its progress` : excluding === false ? `counted in "${target!.goal}" again` : target ? `put into the epic "${target.goal}"` : "taken out of their epic";
+          const what = excluding === true ? `kept in "${ticketName(target!)}" but out of its progress` : excluding === false ? `counted in "${ticketName(target!)}" again` : target ? `put into the epic "${ticketName(target)}"` : "taken out of their epic";
           return sent(
             `${what}: ${moved.join(", ")}${skipped.length > 0 ? ` — not moved: ${skipped.join("; ")}` : ""}.${progress ? ` It now holds ${progress.parts.length} ticket(s), ${progress.done} of ${progress.counted} done.` : ""} Anyone in the room sees it at once. TELL YOUR USER ONLY THIS: "${excluding === true ? "excluded from the epic's progress" : excluding === false ? "counted in the epic again" : target ? "added to the epic" : "taken out of the epic"}".`,
           );
@@ -190,11 +191,11 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (!epic || epic.kind !== "epic") return refused(`failed: no epic ${out.epicId} — check get-tickets (kind: epic)`);
           const inIt = new Set(epicParts(epic, all).parts.map((t) => t.id));
           const strangers = out.ticketIds.filter((id) => !inIt.has(id));
-          if (strangers.length > 0) return refused(`failed: not in "${epic.goal}": ${strangers.join(", ")} — order only what is in it (add them first)`);
+          if (strangers.length > 0) return refused(`failed: not in "${ticketName(epic)}": ${strangers.join(", ")} — order only what is in it (add them first)`);
           const now = yield* Clock.currentTimeMillis;
           const merged = yield* room.shareTicket(orderEpic(epic, out.ticketIds, identity.pubkey, now)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
-          return sent(`"${epic.goal}" is now read in this order: ${out.ticketIds.map((id) => `"${all.get(id)?.goal ?? id}"`).join(", ")} — the rest after them. Ordering hides nothing and sets no after. TELL YOUR USER ONLY THIS: "epic reordered".`);
+          return sent(`"${ticketName(epic)}" is now read in this order: ${out.ticketIds.map((id) => `"${ticketName(all.get(id) ?? { goal: id })}"`).join(", ")} — the rest after them. Ordering hides nothing and sets no after. TELL YOUR USER ONLY THIS: "epic reordered".`);
         }
         case "epic-turn": {
           const all = yield* SubscriptionRef.get(room.tickets);
@@ -202,25 +203,25 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (!epic || epic.kind !== "epic") return refused(`failed: no epic ${out.epicId} — check get-tickets (kind: epic)`);
           const now = yield* Clock.currentTimeMillis;
           const turned = turnEpic(epic, out.closed, out.reason, identity.pubkey, all, now);
-          if (turned.outcome === "already") return refused(`failed: "${epic.goal}" is already ${out.closed ? "closed" : "open"}`);
+          if (turned.outcome === "already") return refused(`failed: "${ticketName(epic)}" is already ${out.closed ? "closed" : "open"}`);
           if (turned.outcome === "unresolved") {
             return refused(
-              `failed: "${epic.goal}" still holds ${turned.unresolved.length} unresolved ticket(s): ${turned.unresolved.map((t) => `"${t.goal}" [${t.id}]`).join(", ")}. An epic closes only once everything in it is done, closed, or excluded — ask your user whether to resolve them, exclude them from its progress (epic, action exclude) or move them out (action remove).`,
+              `failed: "${ticketName(epic)}" still holds ${turned.unresolved.length} unresolved ticket(s): ${turned.unresolved.map((t) => `"${ticketName(t)}" [${t.id}]`).join(", ")}. An epic closes only once everything in it is done, closed, or excluded — ask your user whether to resolve them, exclude them from its progress (epic, action exclude) or move them out (action remove).`,
             );
           }
-          if (turned.outcome === "needs-reason") return refused(`failed: reopening "${epic.goal}" needs a reason from your user — what more there is to do in it`);
-          if (turned.outcome !== "turned") return refused(`failed: "${epic.goal}" is not an epic`);
+          if (turned.outcome === "needs-reason") return refused(`failed: reopening "${ticketName(epic)}" needs a reason from your user — what more there is to do in it`);
+          if (turned.outcome !== "turned") return refused(`failed: "${ticketName(epic)}" is not an epic`);
           const merged = yield* room.shareTicket(turned.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
           const why = turned.ticket.turns?.at(-1)?.reason ?? "";
-          return sent(`${out.closed ? "closed" : "reopened"} the epic "${epic.goal}" [ticket ${epic.id}] — ${why}. ${out.closed ? "Its tickets are drawn in their projects again; anyone can reopen it, with a reason." : "It is back on the overview with its tickets."} TELL YOUR USER ONLY THIS: "epic ${out.closed ? "closed" : "reopened"}".`);
+          return sent(`${out.closed ? "closed" : "reopened"} the epic "${ticketName(epic)}" [ticket ${epic.id}] — ${why}. ${out.closed ? "Its tickets are drawn in their projects again; anyone can reopen it, with a reason." : "It is back on the overview with its tickets."} TELL YOUR USER ONLY THIS: "epic ${out.closed ? "closed" : "reopened"}".`);
         }
         case "close": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
           if (!ticket) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
           const now = yield* Clock.currentTimeMillis;
           const done = closeTicket(ticket, identity.pubkey, out.reason, now);
-          if (done.outcome === "epic") return refused(`failed: "${ticket.goal}" is an epic — it closes (and reopens) with the epic tool, by anyone, with a reason`);
+          if (done.outcome === "epic") return refused(`failed: "${ticketName(ticket)}" is an epic — it closes (and reopens) with the epic tool, by anyone, with a reason`);
           if (done.outcome === "not-yours") return refused(`failed: "${ticket.goal}" is ${nameFor(ticket.createdBy)}'s ticket to close — say what your user thinks with send-to-peer (pass ticketId)`);
           if (done.outcome === "already") return refused(`failed: "${ticket.goal}" was already closed by ${nameFor(ticket.closed!.by)}`);
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
