@@ -211,7 +211,7 @@ export const ticketIdOk = (id: string | undefined): id is string => id !== undef
  *  bundle in a release (dist/review-web, copied there by the cli build), or
  *  the web app's own dist when collagen runs from source. */
 const WEB_ROOTS = [new URL("./review-web/", import.meta.url), new URL("../../../review-web/dist/", import.meta.url)].map((u) => fileURLToPath(u));
-const webRoot = (): string | null => WEB_ROOTS.find((dir) => existsSync(join(dir, "index.html"))) ?? null;
+export const webRoot = (): string | null => WEB_ROOTS.find((dir) => existsSync(join(dir, "index.html"))) ?? null;
 
 const NOT_BUILT = `The review page is not built. From the collagen repo: pnpm --filter @collagen/review-web build (looked in ${WEB_ROOTS.join(", ")})`;
 
@@ -246,37 +246,6 @@ export const ReviewRoutes = Layer.mergeAll(
       const path = join(root, "assets", file);
       if (!existsSync(path)) return notFound("no such asset");
       return HttpServerResponse.uint8Array(readFileSync(path), { contentType: type, headers: { "cache-control": "public, max-age=31536000, immutable" } });
-    }),
-  ),
-  // one file's changes since the commit the reader viewed it at
-  HttpRouter.add("GET", "/review/:ticketId/since", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      const q = new URL(request.url, "http://localhost").searchParams;
-      const file = q.get("file") ?? undefined;
-      const from = q.get("from") ?? undefined;
-      if (!ticketIdOk(ticketId) || !treePathOk(file) || !commitOk(from)) return HttpServerResponse.text("bad request", { status: 400 });
-      return HttpServerResponse.jsonUnsafe(yield* sinceViewed(ticketId, file, from));
-    }),
-  ),
-  // one file of the branch, whole — only a path inside the tree
-  HttpRouter.add("GET", "/review/:ticketId/file", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      const file = new URL(request.url, "http://localhost").searchParams.get("file") ?? undefined;
-      if (!ticketIdOk(ticketId) || !treePathOk(file)) return HttpServerResponse.text("bad request", { status: 400 });
-      return HttpServerResponse.jsonUnsafe(yield* wholeFile(ticketId, file));
-    }),
-  ),
-  HttpRouter.add("GET", "/review/:ticketId/data", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      const data = ticketIdOk(ticketId) ? yield* reviewData(ticketId) : null;
-      if (!data) return notFound(`no review ticket ${ticketId ?? ""} in your rooms`);
-      return HttpServerResponse.jsonUnsafe(data);
     }),
   ),
 );

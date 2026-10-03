@@ -5,8 +5,8 @@
   "description": "The review page: a review ticket's diff read by intent, served by the collagen instance",
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch",
-    "build": "vite build",
+    "dev": "rm -rf dist && vite build && vite build --ssr src/server/entry.ts --outDir dist/server --emptyOutDir false && (vite build --watch & vite build --ssr src/server/entry.ts --outDir dist/server --emptyOutDir false --watch)",
+    "build": "rm -rf dist && vite build && vite build --ssr src/server/entry.ts --outDir dist/server --emptyOutDir false",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "clean": "rm -rf .turbo dist node_modules"
@@ -14,7 +14,8 @@
   "dependencies": {
     "@solidjs/web": "2.0.0-rc.13",
     "@tanstack/highlight": "1.0.0",
-    "solid-js": "2.0.0-rc.13"
+    "solid-js": "2.0.0-rc.13",
+    "effect": "4.0.0"
   },
   "devDependencies": {
     "@collagen/p2p": "workspace:*",
@@ -25,6 +26,7 @@
     "vitest": "catalog:"
   },
   "exports": {
-    "./data": "./src/data.ts"
+    "./data": "./src/data.ts",
+    "./backend": "./src/server/backend.ts"
   }
 }

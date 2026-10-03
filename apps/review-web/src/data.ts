@@ -1,6 +1,6 @@
 // The contract between the collagen instance and the review page: what
-// GET /review/<ticketId>/data answers. It lives with the page, and the cli
-// imports it (apps/cli/src/lib/reviewView, services/ReviewView), so the two
+// the page's server functions (src/api.ts) answer. It lives with the page,
+// and the cli imports it (apps/cli/src/lib/reviewView, services/ReviewView), so the two
 // sides cannot drift. Plain types, no runtime: nothing here is bundled into
 // the cli.
 
@@ -93,16 +93,16 @@ export interface ReviewPageData {
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
 }
 
-/** GET /review/<ticketId>/file?file — the whole file as the review's
+/** wholeFile(ticketId, file) — the whole file as the review's
  *  branch has it, from the reader's clone, line by line; or why not. */
 export type WholeFileResult = { readonly lines: ReadonlyArray<string> } | { readonly error: string };
 
-/** GET /review/<ticketId>/since?file&from — what changed in one file from
+/** sinceViewed(ticketId, file, from) — what changed in one file from
  *  the commit the reader viewed it at to the branch now, as hunks; or why
  *  not (the branch was rewritten and that commit is gone, say). */
 export type SinceResult = { readonly hunks: ReadonlyArray<Hunk> } | { readonly error: string };
 
-/** GET /review/<ticketId>/hover?file&line&col — what the type checker says
+/** hoverAt(ticketId, file, line, col) — what the type checker says
  *  about the symbol there: markdown (a code fence with the signature, then
  *  its doc comment), nothing, that its server is still indexing (ask
  *  again), or why it could not answer. */
@@ -129,7 +129,7 @@ export interface Peek {
   readonly more: number;
 }
 
-/** GET /review/<ticketId>/definition?file&line&col */
+/** definitionAt(ticketId, file, line, col) */
 export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek>; readonly partial?: true } | { readonly missing: true } | { readonly indexing: true } | { readonly error: string };
 
 /** An answer that may change if asked again — the server was still
@@ -157,9 +157,9 @@ const TOOL_OF_EXTENSION: Readonly<Record<string, ToolId>> = {
 export const toolOf = (file: string): ToolId | null => TOOL_OF_EXTENSION[file.split(".").pop()?.toLowerCase() ?? ""] ?? null;
 export const toolIds = (): ReadonlyArray<ToolId> => [...new Set(Object.values(TOOL_OF_EXTENSION))];
 
-/** GET/POST /review-tools/<tool> — a pinned language server the hints need:
- *  not installed yet, being installed, or ready; POST (from the page, with
- *  x-collagen: install) installs it. What the offer says comes with it: the
+/** toolState(tool) — a pinned language server the hints need: not
+ *  installed yet, being installed, or ready; installTool(tool), on the
+ *  reader's click, installs it. What the offer says comes with it: the
  *  language, the tool's name, its size, and its licence where that is not
  *  open source.
  *  `notices` are messages the server itself asked to show the person. */

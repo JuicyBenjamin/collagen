@@ -183,6 +183,9 @@ importers:
       '@tanstack/highlight':
         specifier: 1.0.0
         version: 1.0.0
+      effect:
+        specifier: 4.0.0
+        version: 4.0.0
       solid-js:
         specifier: 2.0.0-rc.13
         version: 2.0.0-rc.13

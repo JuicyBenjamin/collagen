@@ -4,12 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
 import { toolOf, type DefinitionResult, type HoverResult, type Peek, type ToolId, type ToolState } from "@collagen/review-web/data";
 import { startLsp, type LspClient } from "../lib/lsp";
 import { install, installed, packageDir, toolRoot, TOOLS, type LanguageTool } from "../lib/languageTools";
 import { configDir } from "./Identity";
-import { localHost, reviewTree, ticketIdOk } from "./ReviewView";
+import { reviewTree } from "./ReviewView";
 
 // Type hints and definition peeks on the review page, per language: each
 // file's language has its own pinned server (lib/languageTools), installed
@@ -408,56 +407,5 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
   static readonly layer = Layer.effect(this, this.make);
 }
 
-const position = (url: string) => {
-  const q = new URL(url, "http://localhost").searchParams;
-  const file = q.get("file") ?? undefined;
-  const line = Number(q.get("line"));
-  const col = Number(q.get("col"));
-  return codePathOk(file) && Number.isInteger(line) && line > 0 && Number.isInteger(col) && col >= 0 ? { file, line, col } : null;
-};
-
-/** Asked from the page itself, not from anywhere a browser can be sent: a
- *  cross-site form or fetch cannot set this header without a CORS preflight
- *  this server never answers, and a page elsewhere is not localhost. */
-const fromThePage = (headers: Record<string, string | undefined>): boolean =>
-  headers["x-collagen"] === "install" && (headers["origin"] === undefined || /^http:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(headers["origin"]));
-
-/** The tool a /review-tools/<tool> path names, if it is one. */
-const toolNamed = (name: string | undefined): ToolId | null => (name !== undefined && Object.hasOwn(TOOLS, name) ? (name as ToolId) : null);
-
-export const ReviewTypesRoutes = Layer.mergeAll(
-  HttpRouter.add("GET", "/review-tools/:tool", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const tool = toolNamed((yield* HttpRouter.params).tool);
-      if (!tool) return HttpServerResponse.text("not found", { status: 404 });
-      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).toolState(tool));
-    }),
-  ),
-  HttpRouter.add("POST", "/review-tools/:tool", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"]) || !fromThePage(request.headers)) return HttpServerResponse.text("forbidden", { status: 403 });
-      const tool = toolNamed((yield* HttpRouter.params).tool);
-      if (!tool) return HttpServerResponse.text("not found", { status: 404 });
-      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).startInstall(tool));
-    }),
-  ),
-  HttpRouter.add("GET", "/review/:ticketId/hover", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      const at = position(request.url);
-      if (!ticketIdOk(ticketId) || !at) return HttpServerResponse.text("bad request", { status: 400 });
-      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).hover(ticketId, at.file, at.line, at.col));
-    }),
-  ),
-  HttpRouter.add("GET", "/review/:ticketId/definition", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      const at = position(request.url);
-      if (!ticketIdOk(ticketId) || !at) return HttpServerResponse.text("bad request", { status: 400 });
-      return HttpServerResponse.jsonUnsafe(yield* (yield* ReviewTypes).definition(ticketId, at.file, at.line, at.col));
-    }),
-  ),
-);
+/** The tool a page names, if it is one collagen has. */
+export const toolNamed = (name: unknown): ToolId | null => (typeof name === "string" && Object.hasOwn(TOOLS, name) ? (name as ToolId) : null);
