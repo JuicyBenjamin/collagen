@@ -217,8 +217,23 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 .host-error { margin: 0; font-size: 12.5px; color: var(--warn); }
 
 /* line comments on the pull request: under their line, the reader's own on its way dimmed */
-td.n.talk { cursor: pointer; }
-td.n.talk:hover { color: var(--accent); background: var(--panel); }
+/* GitHub's +: on the line under the pointer, at the code's left edge; press
+   and drag (or shift-click another) for a block of lines, which stays marked */
+td.t { position: relative; }
+.add-comment { position: absolute; left: -11px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: var(--accent); color: var(--bg); font: 700 15px/20px -apple-system, sans-serif; text-align: center; cursor: pointer; opacity: 0; transition: opacity 80ms, transform 80ms; z-index: 1; }
+tr:hover > td.t > .add-comment, tr.picked > td.t > .add-comment:focus-visible { opacity: 1; }
+.add-comment:hover { transform: translateY(-50%) scale(1.12); }
+tr.picked td { background: color-mix(in srgb, var(--accent) 16%, transparent) !important; }
+tr.picked td.n { box-shadow: inset 2px 0 0 var(--accent); }
+.composer-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12.5px; color: var(--dim); }
+.quiet.small { font-size: 12px; padding: 2px 9px; }
+.suggestion { margin-top: 6px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.suggestion-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; font-size: 12.5px; color: var(--dim); background: var(--bg); border-bottom: 1px solid var(--line); }
+.suggestion-code { margin: 0; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow-x: auto; }
+.sg-del, .sg-add, .sg-none { padding: 0 10px; }
+.sg-del { background: var(--del-bg); }
+.sg-add { background: var(--add-bg); }
+.sg-none { color: var(--faint); font-style: italic; }
 tr.thread-row td { padding: 0; white-space: normal; background: var(--bg); }
 .thread { margin: 6px 12px 10px 56px; display: grid; gap: 8px; font: 13.5px/1.5 -apple-system, sans-serif; }
 .line-comment { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }

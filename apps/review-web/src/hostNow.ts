@@ -30,8 +30,17 @@ const ready = <T>(read: () => T, otherwise: T): T => {
 /** Which line a comment is on: a file, a side, a line number. */
 const spot = (file: string, side: "LEFT" | "RIGHT", line: number) => `${side}:${line}:${file}`;
 
-/** The line whose composer is open — one at a time on the page. */
-const [composing, setComposing] = createSignal<string | null>(null);
+/** Lines picked for a comment, in one hunk (GitHub's own rule: a comment's
+ *  lines are in one hunk of the diff), by row: where the pointer went down,
+ *  and where it is now — one line, or a block dragged or shift-clicked out.
+ *  One pick at a time on the page; its composer opens under its last row. */
+export interface Pick {
+  readonly hunk: string;
+  readonly anchor: number;
+  readonly focus: number;
+}
+const [pick, setPick] = createSignal<Pick | null>(null);
+const [dragging, setDragging] = createSignal(false);
 
 export const hostNow = {
   /** Made once by the page, read again each time `state` (the review's live token) moves. */
@@ -73,21 +82,38 @@ export const hostNow = {
     return ready(comments, []).filter((c) => spot(c.file, c.side, c.line) === at);
   },
 
-  composing: (file: string, side: "LEFT" | "RIGHT", line: number): boolean => composing() === spot(file, side, line),
-  compose: (file: string, side: "LEFT" | "RIGHT", line: number | null): void => {
-    setComposing(line === null ? null : spot(file, side, line));
+  /** The lines picked for a comment, and whether the pointer is still dragging them out. */
+  pick,
+  dragging,
+  /** The pointer went down on a line's +: a new pick there — or, with shift
+   *  held, the pick in this hunk stretched to it. Dragging goes on until the
+   *  button comes up, anywhere. */
+  startPick: (hunk: string, row: number, stretch: boolean): void => {
+    const p = pick();
+    setPick(stretch && p?.hunk === hunk ? { ...p, focus: row } : { hunk, anchor: row, focus: row });
+    setDragging(true);
+    window.addEventListener("mouseup", () => setDragging(false), { once: true });
+  },
+  /** The pointer passed over a line while dragging: the pick reaches it. */
+  dragTo: (hunk: string, row: number): void => {
+    const p = pick();
+    if (dragging() && p?.hunk === hunk && p.focus !== row) setPick({ ...p, focus: row });
+  },
+  clearPick: (): void => {
+    setPick(null);
   },
 
-  /** Post a comment on a line, at the commit the page shows. It shows at
-   *  once as the reader's, marked as on its way; the host's answer (read
-   *  again) takes its place, or a refusal takes it away. */
-  comment: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string) {
+  /** Post a comment on a line, or a block of lines from `start`, at the
+   *  commit the page shows. It shows at once as the reader's, marked as on
+   *  its way; the host's answer (read again) takes its place, or a refusal
+   *  takes it away. */
+  comment: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string, start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null) {
     const commit = diffNow.commit();
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
     const me = hostNow.host()?.viewer;
-    const mine: LineComment = { id: -Date.now(), author: me ?? { login: "you" }, body, file, line, side, url: "", at: new Date().toISOString(), pending: true };
+    const mine: LineComment = { id: -Date.now(), author: me ?? { login: "you" }, body, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), url: "", at: new Date().toISOString(), pending: true };
     setComments((l) => [...l, mine]);
-    const said = (yield sendLineComment(ticketId, file, line, side, body, commit)) as HostWrite;
+    const said = (yield sendLineComment(ticketId, file, line, side, body, commit, start)) as HostWrite;
     if ("ok" in said && view) refresh(view);
     return said;
   }),

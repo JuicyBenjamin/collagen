@@ -13,12 +13,14 @@ import { githubRepo, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, re
 /** A pull request as a host has it, with the branches it joins. */
 export type HostPull = PullRequest & { readonly branch: string; readonly base: string };
 
-/** Where on the pull request's diff a line comment goes: the file, its line
- *  on one side, at the commit the page shows. */
+/** Where on the pull request's diff a line comment goes: the file, its
+ *  (last) line on one side, where a block of lines starts, at the commit the
+ *  page shows. */
 export interface LineSpot {
   readonly file: string;
   readonly line: number;
   readonly side: "LEFT" | "RIGHT";
+  readonly start?: { readonly line: number; readonly side: "LEFT" | "RIGHT" };
   readonly commit: string;
 }
 
@@ -140,7 +142,7 @@ export const github: RepoHost = {
     Effect.gen(function* () {
       const r = githubRepo(link)!;
       // -f sends each as a plain string (never read from a file, as -F's @ would); the line is a number
-      const ran = yield* gh(["api", "-X", "POST", `repos/${r.owner}/${r.repo}/pulls/${pull}/comments`, "-f", `body=${body}`, "-f", `commit_id=${at.commit}`, "-f", `path=${at.file}`, "-F", `line=${at.line}`, "-f", `side=${at.side}`]);
+      const ran = yield* gh(["api", "-X", "POST", `repos/${r.owner}/${r.repo}/pulls/${pull}/comments`, "-f", `body=${body}`, "-f", `commit_id=${at.commit}`, "-f", `path=${at.file}`, "-F", `line=${at.line}`, "-f", `side=${at.side}`, ...(at.start ? ["-F", `start_line=${at.start.line}`, "-f", `start_side=${at.start.side}`] : [])]);
       if (ran.missing) return { error: NO_GH };
       if (!ran.ok) return { error: refusal(ran.err) };
       const comment = readComment(parse(ran.out));

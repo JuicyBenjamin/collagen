@@ -186,12 +186,17 @@ login**. collagen keeps no token; whatever `gh` is signed in as is who the page 
 - **Review**: a box like GitHub's "Review changes" — your words, and Comment, Approve or
   Request changes (`gh pr review`). GitHub asks for words with anything but an approval,
   and lets you only comment on your own pull request; the page says both before sending.
-- **Comments on a line**: click a line number in a hunk, write, and the comment goes to that
-  file, line and side, **at the commit the page shows** (`gh api …/pulls/N/comments`). It
-  shows under the line at once while it is sent, and stays with its words, with GitHub's
-  reason, if GitHub refuses it (a line outside the pull request's diff, say). Everyone's line
-  comments on the pull request sit under their lines; one GitHub no longer places on a line
-  (the code under it moved) is left out.
+- **Comments on lines**, as on GitHub: hover a line and a **+** shows at the code's edge;
+  click it to comment on that line, or press it and drag down — or shift-click another
+  line's + — for a block of lines in the same hunk, which stays marked while you write.
+  **Suggest a change** puts the picked lines in a ```` ```suggestion ```` block to edit
+  (new-side lines only, as on GitHub). The comment goes to that file and those lines **at
+  the commit the page shows** (`gh api …/pulls/N/comments`), shows at once while it is
+  sent, and stays in its box with GitHub's reason if GitHub refuses it (a line outside the
+  pull request's diff, say). Everyone's line comments on the pull request sit under their
+  (last) line; a suggested change shows as the lines it replaces and what it suggests, with
+  its code to **copy** — GitHub has no way for another app to commit one. A comment GitHub
+  no longer places on a line (the code under it moved) is left out.
 - **The stack**: when the branch is built on another branch that is itself under review — a
   pull request whose base is another's head, or a review in the room naming that base — a
   row under the branch line shows the chain from the trunk up, this one, and what builds on
