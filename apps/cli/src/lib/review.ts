@@ -59,6 +59,9 @@ export interface ReviewInput {
   /** A bug report, whole or in part, and the optional fields withdrawn. */
   readonly bug?: Partial<BugReport>;
   readonly retireBug?: ReadonlyArray<string>;
+  /** A review's units, and the ids withdrawn — how its code reads. */
+  readonly units?: ReadonlyArray<unknown>;
+  readonly retireUnits?: ReadonlyArray<string>;
 }
 
 const blank = (s: string | undefined): boolean => (s ?? "").trim().length === 0;
@@ -103,7 +106,8 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
   }
   const outlineMoves = (input.outline?.length ?? 0) > 0 || (input.retireOutline?.length ?? 0) > 0;
   const bugMoves = Object.keys(input.bug ?? {}).length > 0 || (input.retireBug?.length ?? 0) > 0;
-  if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves) {
+  const unitsMove = (input.units?.length ?? 0) > 0 || (input.retireUnits?.length ?? 0) > 0;
+  if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves && !unitsMove) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
   }
   for (const [i, d] of decisions.entries()) {
@@ -185,6 +189,8 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       guidedBy: (d.guidedBy ?? []).join(", "),
     })),
     forks: forks.map((f) => ({ id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
+    // how the change reads, as its author's agent grouped it
+    ...(r.units && r.units.length > 0 ? { units: r.units.map((u) => ({ id: u.id, title: u.title, where: u.where.join(" ") })) } : {}),
     // a proposal's outline: what the work might be and who might do it — the
     // author's suggestion, binding on nobody; a plan lifts it into real steps
     ...(outline.length > 0 ? { outline: outline.map((o) => ({ id: o.id, intent: o.intent, description: o.description, owner: o.owner ?? "" })) } : {}),

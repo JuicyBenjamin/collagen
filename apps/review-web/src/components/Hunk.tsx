@@ -1,12 +1,11 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
-import type { Decision, DiffLine, Hunk as HunkData, WholeFileResult } from "../data";
+import type { DiffLine, Hunk as HunkData, WholeFileResult } from "../data";
 import { diffNow } from "../diffNow";
 import { ticketId } from "../ticket";
 import { wholeFile } from "../api";
 import { hasNewSide, wholeHunk } from "../whole";
 import { highlightHunk } from "../highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
-import { AlsoUnder } from "./AlsoUnder";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
 import { viewed } from "../viewedNow";
@@ -29,7 +28,14 @@ function charAt(x: number, y: number): { readonly col: number; readonly node: No
  *  wherever else it shows; once it moves, this hunk shows only what changed
  *  in it since the commit it was viewed at — or, where nothing did, stays
  *  folded — and the whole change against the base is a click away. */
-export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision> }) {
+export function Hunk(props: {
+  hunk: HunkData;
+  /** a later change in the same file of the same unit: no header of its own,
+   *  the file's is the one above it */
+  continued?: boolean;
+  /** no decision covers this change — worth a question to the author */
+  unexplained?: boolean;
+}) {
   // the file whole, on the reader's word: asked once, kept while the page is
   const [whole, setWhole] = createSignal<WholeFileResult | "loading" | null>(null);
   const [open, setOpen] = createSignal(false);
@@ -86,28 +92,33 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
   const counts = () => moved(mine() ?? []);
 
   return (
-    <div class={["hunk", { viewed: state() === "viewed" }]}>
-      <div class="file">
-        <span class="head">{props.hunk.file}</span>
+    <Show when={!(props.continued && state() === "viewed")}>
+    <div class={["hunk", { viewed: state() === "viewed", continued: props.continued }]}>
+      <div class={["file", { continued: props.continued }]}>
+        <span class="head">{props.continued ? "⋯" : props.hunk.file}</span>
         <span class="file-side">
-          <AlsoUnder decisions={props.alsoUnder} />
           <Show when={mine() !== null && !open()}>
             <button type="button" class="whole-toggle" onClick={() => setFull(!full())} title="Switch between what changed since you viewed it and the whole change against the base">
               {full() ? "Since you viewed" : "Whole change"}
             </button>
           </Show>
-          <Show when={diffNow.canReadWhole() && hasNewSide(props.hunk) && state() !== "viewed"}>
+          <Show when={!props.continued && diffNow.canReadWhole() && hasNewSide(props.hunk) && state() !== "viewed"}>
             <button type="button" class="whole-toggle" onClick={() => void toggleWhole()} title="The whole file as the branch has it, this diff's added lines marked">
               {open() ? (whole() === "loading" ? "Reading…" : "Just the change") : "Whole file"}
             </button>
           </Show>
+          <Show when={!props.continued}>
           <label class={["mark-viewed", { changed: state() === "changed" }]} title="Fold this file everywhere on the page, as read; it opens again if its changes move, showing what moved">
             <input type="checkbox" checked={state() === "viewed"} onChange={() => viewed.toggle(props.hunk.file, diffNow.commit())} />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}
           </label>
+          </Show>
         </span>
       </div>
       <Show when={state() !== "viewed"}>
+        <Show when={props.unexplained}>
+          <p class="hunk-note">No decision covers this change.</p>
+        </Show>
         <Show when={failed()}>{(why) => <p class="whole-failed">Could not read the whole file: {why()}</p>}</Show>
         <Show when={sinceFailed()}>{(why) => <p class="whole-failed">Could not show what changed since you viewed it: {why()} Showing the whole change.</p>}</Show>
         <Show
@@ -133,6 +144,7 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
         </Show>
       </Show>
     </div>
+    </Show>
   );
 }
 
