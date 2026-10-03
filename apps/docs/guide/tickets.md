@@ -409,8 +409,11 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
   reopen never reopens it again. What each side had seen decides it, not whose clock was
   later.
 - **Only when asked.** Agents shape epics when their person says so (the `epic` tool), and
-  offer one in a line when a filing suggests it — a parent's epic, or several related
-  tickets filed together.
+  may offer one in a line when a filing suggests it: a filing hands the agent candidates
+  — the epic of the ticket it grows out of, four or more of your open tickets sharing one
+  lineage, or the room's open epics — and the agent asks only when the topics plainly
+  match, and says nothing otherwise. Being filed close together, or in one project, is no
+  sign of a shared topic.
 
 On the overview every ticket's row carries its kind's glyph — `✦` proposal, `≡` plan,
 `⚑` bug, `±` review, `☐` task (on `?` too) — so the headings above teach them. An open
