@@ -1,9 +1,9 @@
-import { useRef, useState } from "react";
-import { useTerminalDimensions } from "@opentui/react";
+import { useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import type { RoomMessage } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
+import { FollowScroll } from "../../../components/FollowScroll";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
@@ -15,10 +15,10 @@ type Row = { readonly kind: "msg"; readonly id: string; readonly msg: RoomMessag
 
 /** Messages tab: the room's agent-to-agent trace as its log has it — every
  *  message between members, in log order. ↑↓ scroll (follows the newest row
- *  until you scroll up), enter shows a row's full text. It is a trace, not a
+ *  until you scroll up; the list moves only at its edges), enter shows a
+ *  row's full text. It is a trace, not a
  *  queue: nothing here waits for the person, so nothing counts it. */
 export function MessagesPage() {
-  const { height } = useTerminalDimensions();
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
@@ -27,8 +27,6 @@ export function MessagesPage() {
   // null = follow the newest row until the user scrolls
   const [cursor, setCursor] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
-  // first visible row — a ref, not state: derived from the cursor each render
-  const startRef = useRef(0);
 
   const rows: ReadonlyArray<Row> = trace.map((msg): Row => ({ kind: "msg", id: msg.id, msg }));
   const last = Math.max(0, rows.length - 1);
@@ -40,14 +38,6 @@ export function MessagesPage() {
       ? "you"
       : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
 
-  // Sticky viewport: only scrolls when the cursor hits an edge, so a keypress
-  // redraws one or two rows — not the whole panel.
-  const window = Math.max(5, height - 16 - (expanded ? 5 : 0));
-  const maxStart = Math.max(0, rows.length - window);
-  let start = cursor === null ? maxStart : clamp(startRef.current, 0, maxStart);
-  if (sel < start) start = sel;
-  if (sel >= start + window) start = sel - window + 1;
-  startRef.current = start;
 
   return (
     <Focusable
@@ -76,17 +66,22 @@ export function MessagesPage() {
           {rows.length === 0 ? (
             <text fg={theme.dim}>no messages yet</text>
           ) : (
-            rows.slice(start, start + window).map((row, i) => (
-              <MessageRow
-                key={row.id}
-                msg={row.msg}
-                mine={row.msg.from === identity?.pubkey}
-                from={nameFor(row.msg.from)}
-                to={nameFor(row.msg.to)}
-                selected={focused && start + i === sel}
-                expanded={expanded === row.id}
-              />
-            ))
+            // the newest row followed until the user scrolls; then the cursor's,
+            // moved only at the edges (components/FollowScroll)
+            <FollowScroll follow={cursor === null ? "end" : current ? { id: msgRowId(current.id) } : null} flexGrow={1}>
+              {rows.map((row, i) => (
+                <MessageRow
+                  key={row.id}
+                  id={msgRowId(row.id)}
+                  msg={row.msg}
+                  mine={row.msg.from === identity?.pubkey}
+                  from={nameFor(row.msg.from)}
+                  to={nameFor(row.msg.to)}
+                  selected={focused && i === sel}
+                  expanded={expanded === row.id}
+                />
+              ))}
+            </FollowScroll>
           )}
         </>
       )}
@@ -94,7 +89,11 @@ export function MessagesPage() {
   );
 }
 
+/** The id a message's row is drawn under, so the list can keep it in view. */
+const msgRowId = (id: string): string => `msg-${id}`;
+
 function MessageRow({
+  id,
   msg,
   mine,
   from,
@@ -102,6 +101,7 @@ function MessageRow({
   selected,
   expanded,
 }: {
+  id: string;
   msg: RoomMessage;
   mine: boolean;
   from: string;
@@ -110,7 +110,7 @@ function MessageRow({
   expanded: boolean;
 }) {
   return (
-    <box flexDirection="column">
+    <box id={id} flexDirection="column" flexShrink={0}>
       <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none">
         {selected ? (expanded ? "▾ " : "› ") : "  "}
         <Arrow from={from} to={to} mine={mine} />
