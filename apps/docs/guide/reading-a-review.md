@@ -58,6 +58,12 @@ the order the author gave them:
 Last, **not explained**: every change no decision covers — a finding in itself, worth a
 question to the author — with any forks outside every decision's lines.
 
+**Viewed**, on each file's header, marks it as read, as on GitHub: the file folds to its
+header everywhere it shows on the page, and the top of the decisions list counts how many
+of the review's files you have viewed. A mark is for the file as you read it — when the
+author pushes a change to it, it opens again and says "changed since viewed". Marks stay in
+your browser, per review.
+
 The plumbing stays out of the way: no decision ids, no pointer lists (each hunk names its
 file), and where the diff came from is one line at the foot of the page.
 
