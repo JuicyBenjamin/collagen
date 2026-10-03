@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import type { RoomMessage } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
-import { FollowScroll } from "../../../components/FollowScroll";
+import { FollowScroll, type FollowScrollHandle } from "../../../components/FollowScroll";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
@@ -27,6 +27,10 @@ export function MessagesPage() {
   // null = follow the newest row until the user scrolls
   const [cursor, setCursor] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const list = useRef<FollowScrollHandle>(null);
+  // details just opened start at their header; once the reader moves through
+  // them they stay where the reader put them
+  const [reading, setReading] = useState(false);
 
   const rows: ReadonlyArray<Row> = trace.map((msg): Row => ({ kind: "msg", id: msg.id, msg }));
   const last = Math.max(0, rows.length - 1);
@@ -48,11 +52,20 @@ export function MessagesPage() {
       flexGrow={1}
       flexShrink={1}
       onKey={(key) => {
-        if (key.name === "up" && sel > 0) return setCursor(sel - 1), true;
+        // an unfolded message taller than the list is read first: ↑↓ move
+        // through its text, and on to the next message only at its ends
+        const open = current && expanded === current.id ? list.current?.rowOf(msgRowId(current.id)) : null;
+        const view = list.current?.view();
+        if (open && view && open.size > view.height) {
+          if (key.name === "down" && view.top + view.height < open.at + open.size) return setReading(true), list.current?.scrollBy(1), true;
+          if (key.name === "up" && view.top > open.at) return setReading(true), list.current?.scrollBy(-1), true;
+        }
+        if (key.name === "up" && sel > 0) return setReading(false), setCursor(sel - 1), true;
         // scrolling back to the newest row resumes following
-        if (key.name === "down") return setCursor(sel >= last ? null : sel + 1), true;
+        if (key.name === "down") return setReading(false), setCursor(sel >= last ? null : sel + 1), true;
         if (isEnter(key)) {
           if (current) setExpanded((e) => (e === current.id ? null : current.id));
+          setReading(false);
           return true;
         }
         return false;
@@ -68,7 +81,7 @@ export function MessagesPage() {
           ) : (
             // the newest row followed until the user scrolls; then the cursor's,
             // moved only at the edges (components/FollowScroll)
-            <FollowScroll follow={cursor === null ? "end" : current ? { id: msgRowId(current.id) } : null} flexGrow={1}>
+            <FollowScroll ref={list} follow={cursor === null && expanded === null ? "end" : current ? { id: msgRowId(current.id), how: expanded === current.id && !reading ? "top" : "edge" } : null} flexGrow={1}>
               {rows.map((row, i) => (
                 <MessageRow
                   key={row.id}
@@ -117,7 +130,7 @@ function MessageRow({
         <span fg={theme.dim}>
           {" "}[{msg.project}/{msg.intent}]{" "}
         </span>
-        {msg.findings}
+        {msg.findings.split("\n")[0]}
       </text>
       {expanded ? (
         <box flexDirection="column" paddingLeft={4} marginBottom={1}>
