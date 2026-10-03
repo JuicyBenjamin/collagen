@@ -31,7 +31,7 @@ describe("offering an epic for tickets filed together", () => {
   });
 
   it("a ticket grown out of one in an epic is offered that epic, not put there; parents in two epics ask which", () => {
-    const e = t("e", { kind: "epic", project: "", goal: "More languages" });
+    const e = t("e", { kind: "epic", project: "", title: "More languages", goal: "the review page reads more languages" });
     const php = moveToEpic(t("php"), "e", "me", 1);
     const plan = t("plan", { from: ["php"], structureAt: 5 * HOUR });
     expect(relatedHint(plan, room(e, php, plan), "me")).toMatch(/grows out of a ticket in the epic "More languages" \[e\].*not put there on its own/);
