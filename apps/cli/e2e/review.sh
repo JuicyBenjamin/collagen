@@ -83,12 +83,12 @@ echo "## the page opens when a reader starts on the review — once, and only if
 opened() { cat "$OUT/$1.opened" 2>/dev/null | grep -c "/review/$TICKET" ; }
 expect "bob starting on the review opened its page in his browser" "$WHY" "review page opened: http://127.0.0.1:[0-9]+/review/$TICKET"
 expect "…once: reading the why again does not hand it to him again" "$(opened bob)" "^1$"
-expect "alice's own reads of her review open nothing" "$(call $A "$SA" review-context "{\"ticketId\":\"$TICKET\"}" | grep -c 'review page')" "^0$"
+expect "alice's own reads of her review open nothing" "$(call $A "$SA" review-context "{\"ticketId\":\"$TICKET\"}" | grep -c 'review page opened')" "^0$"
 expect "the switches, listed: on unless switched off" "$(call $B "$SB" set-settings '{}')" "openReviewPage: on \(default\)"
 expect "open-review opens it when asked, whatever the switch" "$(call $B "$SB" open-review "{\"ticketId\":\"$TICKET\"}")" "review page opened"
 expect "…that is a second url handed to the browser" "$(opened bob)" "^2$"
 expect "carol's agent switches it off for her" "$(call $C "$SC" set-settings '{"openReviewPage":false}')" "openReviewPage: off"
-expect "…so her starting on the review opens nothing" "$(call $C "$SC" review-context "{\"ticketId\":\"$TICKET\"}" | grep -c 'review page')" "^0$"
+expect "…so her starting on the review opens nothing" "$(call $C "$SC" review-context "{\"ticketId\":\"$TICKET\"}" | grep -c 'review page opened')" "^0$"
 expect "…and nothing was handed to a browser" "$(opened carol)" "^0$"
 
 echo "## a plain ticket has no why to read"

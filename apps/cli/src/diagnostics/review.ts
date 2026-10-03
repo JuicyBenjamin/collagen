@@ -81,6 +81,21 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       if (about && rows.decisions.length === 0 && rows.forks.length === 0 && (rows.outline?.length ?? 0) === 0 && !rows.bug) {
         return `nothing in the why mentions "${about}" — call review-context without 'about' for all ${review.decisions.length} decision(s) and ${review.forks.length} fork(s), or ask ${review.authorName} through their person (send-to-peer, with this ticketId)${opened}`;
       }
-      return toToon(rows) + opened;
+      // what readers said on the code, line by line — the review page's comments, in the room
+      const said = (yield* SubscriptionRef.get(h.room.comments)).filter((c) => c.ticketId === ticketId && (!about || `${c.file} ${c.body}`.toLowerCase().includes(about.toLowerCase())));
+      const comments =
+        said.length > 0
+          ? {
+              comments: said.map((c) => ({
+                by: c.authorName,
+                at: `${c.file}:${c.startLine !== undefined ? `${c.startLine}-` : ""}${c.line}${c.side === "LEFT" ? " (old)" : ""}`,
+                body: c.body,
+                ...(c.host ? { onHost: c.host.url } : {}),
+              })),
+            }
+          : {};
+      // a reader's agent reviewing it: remarks on lines belong beside the code, not in the chat
+      const drafting = ticket?.kind === "review" && ticket.createdBy !== me ? "\n\nREVIEWING THIS FOR YOUR USER: each remark about particular lines goes on the review page as a draft (review-comments, action draft) — beside the code, for them to accept or decline — not in the chat." : "";
+      return toToon({ ...rows, ...comments }) + opened + drafting;
     }),
 });

@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import type { LineComment } from "../data";
+import type { DraftView, LineComment } from "../data";
 import { hostNow } from "../hostNow";
 import { bodyParts, suggestionBlock } from "../suggest";
 
@@ -70,6 +70,9 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
       <div class="line-comment-head">
         <Show when={props.comment.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(e) => (e.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
         <strong>{props.comment.author.login}</strong>
+        <Show when={props.comment.drafted}>
+          <span class="drafted-mark" title="Drafted by their AI, accepted by them">with AI</span>
+        </Show>
         <span class="line-comment-when">
           {props.comment.startLine !== undefined ? `on ${linesOf(props.comment)} · ` : ""}
           {props.comment.pending ? "sending…" : when(props.comment.at)}
@@ -89,16 +92,65 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
   );
 }
 
-/** The comments on one line of a hunk — a block of lines' comments sit under
- *  its last line, as on GitHub. */
+/** A comment the reader's AI drafted, waiting on the reader: its words (a
+ *  suggestion in them shown as one), and Accept — said as theirs, in the room
+ *  and on the pull request — Edit, or Decline. */
+function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
+  const [editing, setEditing] = createSignal(false);
+  const [body, setBody] = createSignal(props.draft.body);
+  const [busy, setBusy] = createSignal(false);
+  const replaces = () => {
+    const d = props.draft;
+    return d.side === "RIGHT" && (d.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(d.startLine ?? d.line, d.line) : null;
+  };
+  const accept = async () => {
+    setBusy(true);
+    try {
+      await hostNow.accept([props.draft.id], editing() && body().trim() !== props.draft.body ? { [props.draft.id]: body().trim() } : {});
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div class="line-comment draft" id={`draft-${props.draft.id}`}>
+      <div class="line-comment-head">
+        <span class="draft-badge">Draft from your AI</span>
+        <span class="line-comment-when">on {linesOf(props.draft)}</span>
+      </div>
+      <Show
+        when={editing()}
+        fallback={<For each={bodyParts(props.draft.body)}>{(part) => (part.kind === "text" ? <p class="line-comment-body">{part.text}</p> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
+      >
+        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
+      </Show>
+      <Show when={hostNow.refusal(props.draft.id)}>{(why) => <p class="host-error">Not posted: {why()}</p>}</Show>
+      <div class="composer-actions">
+        <button type="button" class="quiet" disabled={busy()} onClick={() => void hostNow.decline([props.draft.id])}>
+          Decline
+        </button>
+        <button type="button" class="quiet" disabled={busy()} onClick={() => setEditing(!editing())}>
+          {editing() ? "Done editing" : "Edit"}
+        </button>
+        <button type="button" class="banner-go" disabled={busy() || body().trim().length === 0} onClick={() => void accept()} title="Say it as yours: in the room, and on the pull request when there is one">
+          {busy() ? "Posting…" : "Accept"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The comments on one line of a hunk, and the drafts the reader's AI left
+ *  there — a block of lines' sit under its last line, as on GitHub. */
 export function LineThread(props: { file: string; side: "LEFT" | "RIGHT"; line: number; codeOf: CodeOf }) {
   const here = () => hostNow.commentsAt(props.file, props.side, props.line);
+  const drafted = () => hostNow.draftsAt(props.file, props.side, props.line);
   return (
-    <Show when={here().length > 0}>
+    <Show when={here().length > 0 || drafted().length > 0}>
       <tr class="thread-row">
         <td colspan={3}>
           <div class="thread">
             <For each={here()}>{(c) => <Comment comment={c} codeOf={props.codeOf} />}</For>
+            <For each={drafted()}>{(d) => <Draft draft={d} codeOf={props.codeOf} />}</For>
           </div>
         </td>
       </tr>

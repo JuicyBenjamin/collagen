@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { AcceptResult, DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 // What the review page's server functions (src/api.ts) ask of the collagen
 // instance that serves them. The page declares it; the instance provides it
@@ -41,6 +41,12 @@ export class ReviewBackend extends Context.Service<
       commit: string,
       start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
     ) => Effect.Effect<HostWrite>;
+    /** the comments on the review collagen holds: the reader's AI's drafts waiting here, and what the room has said */
+    readonly talk: (ticketId: string) => Effect.Effect<TalkView>;
+    /** accept drafts (by id, or all: null), said as the reader's — with their words where edited */
+    readonly accept: (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>>) => Effect.Effect<AcceptResult>;
+    /** decline drafts (by id, or all: null); how many went */
+    readonly decline: (ticketId: string, ids: ReadonlyArray<string> | null) => Effect.Effect<number>;
   }
 >()("review-web/ReviewBackend") {}
 

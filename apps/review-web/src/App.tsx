@@ -11,6 +11,7 @@ import { lasting } from "./lasting";
 import { hostNow } from "./hostNow";
 import { HostBar } from "./components/HostBar";
 import { StackRow } from "./components/StackRow";
+import { DraftsBar } from "./components/DraftsBar";
 import { diffNow } from "./diffNow";
 
 // The review page: a review ticket's diff read by purpose. One section per
@@ -242,6 +243,7 @@ function Header(props: { data: ReviewPageData }) {
       <HostBar />
       </div>
       <StackRow />
+      <DraftsBar />
       <h1 class="purpose">{headline()}</h1>
       <Show when={beneath()}>
         <p class="summary">{beneath()}</p>

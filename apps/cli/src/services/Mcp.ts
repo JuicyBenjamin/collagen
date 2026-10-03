@@ -26,6 +26,7 @@ import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
+import { acceptDrafts, declineDrafts, draftComments, draftsOf } from "./ReviewTalk";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { Transcripts } from "./Transcripts";
@@ -437,6 +438,31 @@ export const OpenReview = Tool.make("open-review", {
   success: Schema.String,
 });
 
+export const ReviewComments = Tool.make("review-comments", {
+  description: [
+    "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line, startLine?, side?, body}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
+    "Drafts stay on this machine. Your user reads them beside the code and accepts, edits or declines each — accepted, a comment is said in the room as theirs and, when the review has an open pull request, posted on it too (through their own gh); you call nothing else for that. Say in the chat what you found in a line or two and that the comments are drafts on the review page; do not repeat them there.",
+    "'post' (ids, or all when left out): accept drafts on your user's word ('looks good, post them') — only on their say-so. 'decline' (ids, or all): drop drafts. 'list': the drafts waiting and the comments said. Your user's verdict on the change as a whole still goes in post-review.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    action: Schema.Literals(["draft", "post", "decline", "list"]),
+    ticketId: Schema.String,
+    comments: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          file: Schema.String,
+          line: Schema.Number,
+          startLine: Schema.optional(Schema.Number),
+          side: Schema.optional(Schema.Literals(["new", "old"])),
+          body: Schema.String,
+        }),
+      ),
+    ),
+    ids: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  success: Schema.String,
+});
+
 export const SetName = Tool.make("set-name", {
   description: "Change the user's display name as peers see it. Applies live.",
   parameters: Schema.Struct({ name: Schema.String }),
@@ -516,6 +542,7 @@ export const CollagenToolkit = Toolkit.make(
   SetSteering,
   SetSettings,
   OpenReview,
+  ReviewComments,
   SetName,
   RenameRoom,
   ListRooms,
@@ -554,6 +581,7 @@ export const DevCollagenToolkit = Toolkit.make(
   SetSteering,
   SetSettings,
   OpenReview,
+  ReviewComments,
   SetName,
   RenameRoom,
   ListRooms,
@@ -575,6 +603,8 @@ const makeHandlers = Effect.gen(function* () {
     const outbox = yield* Outbox;
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
+    // what the review's comments run on (drafts here, the room's log, who is saying them)
+    const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore>();
 
     // Every tool is scoped to the room the user is looking at — resolved per
     // call, so switching rooms retargets all of them without a reconnect.
@@ -1372,6 +1402,46 @@ const makeHandlers = Effect.gen(function* () {
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review has a page (its why is in review-context)`;
         return yield* pages.show(ticketId);
       }),
+      "review-comments": Effect.fn("Mcp.reviewComments")(function* (input: {
+        action: "draft" | "post" | "decline" | "list";
+        ticketId: string;
+        comments?: ReadonlyArray<{ readonly file: string; readonly line: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly body: string }>;
+        ids?: ReadonlyArray<string>;
+      }) {
+        const { room } = yield* focusedRoom;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ticket = all.get(input.ticketId);
+        if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+        if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}: comments go on a review's code`;
+        const where = (c: { readonly file: string; readonly line: number; readonly startLine?: number; readonly side: string }) =>
+          `${c.file}:${c.startLine !== undefined ? `${c.startLine}-` : ""}${c.line}${c.side === "LEFT" ? " (old)" : ""}`;
+        if (input.action === "draft") {
+          const items = (input.comments ?? []).filter((c) => Number.isInteger(c.line) && c.line > 0 && (c.startLine === undefined || Number.isInteger(c.startLine)));
+          if (items.length === 0) return "failed: pass 'comments' — each with file, line (a whole number of the branch's code) and body";
+          const r = yield* draftComments(input.ticketId, items.map((c) => ({ file: c.file, line: c.line, ...(c.startLine !== undefined ? { startLine: c.startLine } : {}), side: c.side === "old" ? ("LEFT" as const) : ("RIGHT" as const), body: c.body })));
+          if ("error" in r) return `failed: ${r.error}`;
+          if (r.drafted.length > 0) yield* pages.started(input.ticketId);
+          const refused = r.refused.length > 0 ? `\nREFUSED (not drafted — fix and draft them again):\n${r.refused.map((x) => `- ${x.at}: ${x.why}`).join("\n")}` : "";
+          if (r.drafted.length === 0) return `failed: no comment could be placed on the diff.${refused}`;
+          return `${r.drafted.length} draft comment(s) on the review page, under the lines they are about: ${r.drafted.map((d) => `${d.id} ${where(d)}`).join(", ")}.${refused}\nTELL YOUR USER, in a line or two: what you found, and that your comments are drafts on the review page beside the code — they accept, edit or decline each there, or tell you to post them. Do not repeat the comments in the chat.`;
+        }
+        if (input.action === "post") {
+          const r = yield* acceptDrafts(input.ticketId, input.ids && input.ids.length > 0 ? input.ids : null);
+          if (r.said === 0 && r.failed.length === 0) return "nothing to post: no drafts are waiting on this review";
+          const failed = r.failed.length > 0 ? `\nNOT POSTED (still drafts):\n${r.failed.map((f) => `- ${f.id}: ${f.error}`).join("\n")}` : "";
+          return `${r.said} comment(s) said in the room as your user's${r.said > 0 ? (r.roomOnly ? ` — not on GitHub: ${r.roomOnly}` : " and posted on the pull request") : ""}.${failed}`;
+        }
+        if (input.action === "decline") {
+          const n = yield* declineDrafts(input.ticketId, input.ids && input.ids.length > 0 ? input.ids : null);
+          return n === 0 ? "nothing declined: no such drafts waiting" : `${n} draft(s) declined — said nowhere`;
+        }
+        const drafts = yield* draftsOf(input.ticketId);
+        const said = (yield* SubscriptionRef.get(room.comments)).filter((c) => c.ticketId === input.ticketId);
+        return toToon({
+          drafts: drafts.map((d) => ({ id: d.id, at: where(d), body: d.body })),
+          said: said.map((c) => ({ by: c.authorName, at: where(c), body: c.body, ...(c.host ? { onHost: c.host.url } : {}), ...(c.drafted ? { drafted: true } : {}) })),
+        });
+      }, Effect.provideContext(talkContext)),
       "set-name": ({ name }: { name: string }) =>
         Effect.gen(function* () {
           const n = name.trim();

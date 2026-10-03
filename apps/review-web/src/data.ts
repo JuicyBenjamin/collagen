@@ -220,7 +220,8 @@ export interface PullRequest {
  *  (LEFT). A block runs from `startLine` on `startSide` to `line` on `side`,
  *  and sits under its last line, as on GitHub. */
 export interface LineComment {
-  readonly id: number;
+  /** the host's id for it, or collagen's own for one said only in the room */
+  readonly id: string;
   readonly author: HostUser;
   readonly body: string;
   readonly file: string;
@@ -232,6 +233,37 @@ export interface LineComment {
   readonly at: string;
   /** shown before the host has answered: the reader's own, on its way */
   readonly pending?: true;
+  /** drafted by the reader's AI, accepted by the reader */
+  readonly drafted?: true;
+}
+
+/** A comment the reader's AI drafted, waiting on the reader: Accept puts it
+ *  in the room (and on the pull request), Decline drops it. */
+export interface DraftView {
+  readonly id: string;
+  readonly file: string;
+  readonly line: number;
+  readonly side: "LEFT" | "RIGHT";
+  readonly startLine?: number;
+  readonly startSide?: "LEFT" | "RIGHT";
+  readonly body: string;
+}
+
+/** talkView(ticketId) — the comments on the review's code that collagen
+ *  holds: what the reader's AI drafted (this machine's), and what has been
+ *  said in the room — each with the host's id when it is on the pull request
+ *  too, so the page shows it once. */
+export interface TalkView {
+  readonly drafts: ReadonlyArray<DraftView>;
+  readonly said: ReadonlyArray<LineComment & { readonly hostId?: string }>;
+}
+
+/** What accepting drafts did: how many were said, and each one that was not, with why. */
+export interface AcceptResult {
+  readonly said: number;
+  readonly failed: ReadonlyArray<{ readonly id: string; readonly error: string }>;
+  /** said in the room only — why not on the host too (no pull request, say) */
+  readonly roomOnly?: string;
 }
 
 /** One branch of a stack: a pull request, a review in the room, or the
