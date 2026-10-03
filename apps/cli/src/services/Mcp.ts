@@ -1127,11 +1127,13 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ids = input.ticketIds ?? [];
-        const move = (epic: { id: string; goal: string } | null, excluded?: boolean) =>
+        // an epic is named by its title, as the lists name it; `goal` on the
+        // record stays what it was filed as
+        const move = (epic: { id: string; goal: string; name: string } | null, excluded?: boolean) =>
           outbox.tell({
             roomId,
             to: "the room",
-            title: epic ? `${ids.length} ${excluded === true ? "excluded in" : excluded === false ? "counted again in" : "into"} "${epic.goal}"` : `${ids.length} out of their epic`,
+            title: epic ? `${ids.length} ${excluded === true ? "excluded in" : excluded === false ? "counted again in" : "into"} "${epic.name}"` : `${ids.length} out of their epic`,
             outgoing: { kind: "epic-move", ticketIds: [...ids], epic: epic?.id ?? null, goal: epic?.goal ?? "", ...(excluded !== undefined ? { excluded } : {}) },
           });
         const theEpic = () => {
@@ -1156,13 +1158,13 @@ const makeHandlers = Effect.gen(function* () {
               outgoing: { kind: "review", ticket, review: mergeReview(emptyReview(id, identity.pubkey, myName), { summary: input.summary?.trim() ?? "" }, now) },
             });
             if (ids.length === 0 || filed.startsWith("failed")) return filed;
-            return `${filed} ${yield* move({ id, goal: title })}`;
+            return `${filed} ${yield* move({ id, goal, name: title })}`;
           }
           case "add": {
             const epic = input.epicId ? all.get(input.epicId) : undefined;
             if (!epic || epic.kind !== "epic") return `failed: no epic ${input.epicId ?? "(pass epicId)"} — check get-tickets (kind: epic)`;
             if (ids.length === 0) return "failed: pass the ticketIds to put into it";
-            return yield* move({ id: epic.id, goal: epic.goal });
+            return yield* move({ id: epic.id, goal: epic.goal, name: ticketName(epic) });
           }
           case "remove":
             if (ids.length === 0) return "failed: pass the ticketIds to take out of their epic";
@@ -1172,13 +1174,13 @@ const makeHandlers = Effect.gen(function* () {
             const epic = theEpic();
             if (!epic) return noEpic;
             if (ids.length === 0) return `failed: pass the ticketIds to ${input.action} in its progress`;
-            return yield* move({ id: epic.id, goal: epic.goal }, input.action === "exclude");
+            return yield* move({ id: epic.id, goal: epic.goal, name: ticketName(epic) }, input.action === "exclude");
           }
           case "order": {
             const epic = theEpic();
             if (!epic) return noEpic;
             if (ids.length === 0) return "failed: pass the ticketIds in the order they are to be read";
-            return yield* outbox.tell({ roomId, to: "the room", title: `order of "${epic.goal}"`, outgoing: { kind: "epic-order", epicId: epic.id, goal: epic.goal, ticketIds: [...ids] } });
+            return yield* outbox.tell({ roomId, to: "the room", title: `order of "${ticketName(epic)}"`, outgoing: { kind: "epic-order", epicId: epic.id, goal: epic.goal, ticketIds: [...ids] } });
           }
           case "close":
           case "reopen": {
@@ -1187,7 +1189,7 @@ const makeHandlers = Effect.gen(function* () {
             return yield* outbox.tell({
               roomId,
               to: "the room",
-              title: `${epic.goal} · ${input.action === "close" ? "closed" : "reopened"}`,
+              title: `${ticketName(epic)} · ${input.action === "close" ? "closed" : "reopened"}`,
               outgoing: { kind: "epic-turn", epicId: epic.id, closed: input.action === "close", ...(input.reason?.trim() ? { reason: input.reason.trim() } : {}) },
             });
           }
