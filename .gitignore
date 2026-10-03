@@ -27,7 +27,9 @@ pnpm-debug.log*
 .idea/
 .vscode/*
 !.vscode/extensions.json
-.claude/
+.claude/*
+# the project's skills, shared with every agent (skills/README.md)
+!.claude/skills
 
 # packaging
 apps/cli/README.md
