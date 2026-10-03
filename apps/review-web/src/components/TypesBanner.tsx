@@ -1,6 +1,7 @@
-import { createSignal, For, onSettled, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { ToolId } from "../data";
-import { installTool, refreshTool, toolState } from "../intel";
+import { toolStates } from "../api";
+import { installTool, keepTool, toolState } from "../intel";
 
 const dismissedKey = (tool: ToolId) => `collagen.typesBanner.dismissed.${tool}`;
 const remembered = (tool: ToolId): boolean => {
@@ -22,14 +23,11 @@ export function TypesBanner(props: { tool: ToolId }) {
   // notices are acknowledged one by one: a new one after "Got it" still shows
   const [seen, setSeen] = createSignal<ReadonlySet<string>>(new Set());
   const unseen = () => (toolState(props.tool)?.notices ?? []).filter((n) => !seen().has(n));
-  onSettled(() => {
-    void refreshTool(props.tool);
-    // while an install runs, see it through; once ready, keep the server's notices current
-    const timer = setInterval(() => {
-      const s = toolState(props.tool)?.state;
-      if (s === "installing" || s === "ready") void refreshTool(props.tool);
-    }, 2000);
-    return () => clearInterval(timer);
+  // the tool's state, live from the instance while the banner is on the
+  // page: the offer, an install seen through, the server's notices
+  const live = createMemo(() => toolStates(props.tool));
+  createEffect(live, (t) => {
+    keepTool(t);
   });
   const dismiss = () => {
     setDismissed(true);

@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { final, toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
 import { ticketId } from "./ticket";
-import { definitionAt, hoverAt, installTool as install, toolState as askTool } from "./api";
+import { definitionAt, hoverAt, installTool as install } from "./api";
 
 // The language servers, asked from the page: what is this symbol (hover)
 // and where is it declared (peek). The answers come from collagen's own
@@ -18,12 +18,12 @@ export interface Spot {
   readonly col: number;
 }
 
-/** Each language's pinned server, as the instance reports it. The page asks
- *  once per language the review has, and again every second while an
- *  install runs. */
+/** Each language's pinned server, as the instance reports it — followed
+ *  live per language the review has (TypesBanner), kept here for every
+ *  hunk that asks whether its words can be asked about. */
 const [tools, setTools] = createSignal<Readonly<Partial<Record<ToolId, ToolState>>>>({});
 export const toolState = (id: ToolId): ToolState | undefined => tools()[id];
-const keep = (t: ToolState) => setTools((all) => ({ ...all, [t.tool]: t }));
+export const keepTool = (t: ToolState) => setTools((all) => ({ ...all, [t.tool]: t }));
 
 /** Can a word in this file be asked about right now? */
 export const readyFor = (file: string): boolean => {
@@ -37,15 +37,11 @@ export const toolNameFor = (file: string): string => {
   return (id && toolState(id)?.name) ?? "the language server";
 };
 
-export async function refreshTool(id: ToolId): Promise<void> {
-  const t = await askTool(id);
-  if (t) keep(t);
-}
-
-/** Install it — only ever on the person's click. */
+/** Install it — only ever on the person's click. Its progress comes back
+ *  on the tool's live state. */
 export async function installTool(id: ToolId): Promise<void> {
   const t = await install(id);
-  if (t) keep(t);
+  if (t) keepTool(t);
 }
 
 const key = (s: Spot) => `${s.file}:${s.line}:${s.col}`;
