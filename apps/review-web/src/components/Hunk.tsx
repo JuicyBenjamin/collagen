@@ -8,6 +8,8 @@ import { highlightHunk } from "../highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
+import { LineThread } from "./LineThread";
+import { hostNow } from "../hostNow";
 import { viewed } from "../viewedNow";
 import { sinceOf } from "../sinceNow";
 import { moved, placeSince } from "../since";
@@ -126,7 +128,10 @@ export function Hunk(props: {
           when={sinceMode()}
           fallback={
             <div class={["code", { whole: wholeShown() !== null }]} ref={box}>
-              <Lines hunk={wholeShown() ?? props.hunk} />
+              {/* comments on the pull request sit under their lines; a line of
+                  the diff itself takes a new one (the whole file's other lines
+                  are not in the pull request's diff) */}
+              <Lines hunk={wholeShown() ?? props.hunk} threads={wholeShown() === null ? "all" : "new"} talk={wholeShown() === null} />
             </div>
           }
         >
@@ -155,7 +160,15 @@ export function Hunk(props: {
  *  unchanged line answers to the pointer: rest on it for its type, click it
  *  to peek where it is declared (removed lines are not the branch's, not
  *  asked). */
-function Lines(props: { hunk: HunkData }) {
+function Lines(props: {
+  hunk: HunkData;
+  /** the pull request's line comments to show under their lines: all, the
+   *  new file's only (the whole file: its old numbers are not the diff's),
+   *  or none (what moved since you viewed: numbered against that commit) */
+  threads?: "all" | "new" | "none";
+  /** a click on a line's number opens a comment on it */
+  talk?: boolean;
+}) {
   const spans = createMemo(() => highlightHunk(props.hunk));
   const asks = () => readyFor(props.hunk.file);
 
@@ -174,6 +187,21 @@ function Lines(props: { hunk: HunkData }) {
   };
   const spotAt = (line: DiffLine, e: MouseEvent): Spot | null => wordUnder(line, e)?.spot ?? null;
 
+  /** Where on the pull request's diff a line is: a removed line on the old
+   *  side by its old number, any other on the new side by its new one. */
+  const sideOf = (line: DiffLine): { readonly side: "LEFT" | "RIGHT"; readonly n: number } | null =>
+    line.kind === "-" ? (line.old !== undefined ? { side: "LEFT", n: line.old } : null) : line.new !== undefined ? { side: "RIGHT", n: line.new } : null;
+  const threadOf = (line: DiffLine) => {
+    const at = sideOf(line);
+    const which = props.threads ?? "none";
+    return at && (which === "all" || (which === "new" && at.side === "RIGHT")) ? at : null;
+  };
+  const talks = () => props.talk === true && hostNow.canWrite();
+  const startComment = (line: DiffLine) => {
+    const at = sideOf(line);
+    if (at && talks()) hostNow.compose(props.hunk.file, at.side, at.n);
+  };
+
   return (
     <table>
       <tbody>
@@ -181,8 +209,12 @@ function Lines(props: { hunk: HunkData }) {
           {(line, i) => (
             <>
               <tr class={{ add: line.kind === "+", del: line.kind === "-" }} data-new={line.new}>
-                <td class="n">{line.old ?? ""}</td>
-                <td class="n">{line.new ?? ""}</td>
+                <td class={["n", { talk: talks() }]} title={talks() ? "Comment on this line" : undefined} onClick={() => startComment(line)}>
+                  {line.old ?? ""}
+                </td>
+                <td class={["n", { talk: talks() }]} title={talks() ? "Comment on this line" : undefined} onClick={() => startComment(line)}>
+                  {line.new ?? ""}
+                </td>
                 <td
                   class={["t", { asks: asks() && line.new !== undefined }]}
                   onMouseMove={(e) => {
@@ -211,6 +243,7 @@ function Lines(props: { hunk: HunkData }) {
                   <CodeLine spans={spans()[i()] ?? []} />
                 </td>
               </tr>
+              <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} />}</Show>
               <Show when={peek()?.hunk === props.hunk.id && peek()?.index === i() ? peek() : null}>
                 {(p) => (
                   <tr class="peek-row">
