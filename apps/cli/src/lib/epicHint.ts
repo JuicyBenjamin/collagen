@@ -1,4 +1,4 @@
-import { epicOf, isClosed, type Ticket } from "@collagen/p2p";
+import { epicOf, isClosed, ticketName, type Ticket } from "@collagen/p2p";
 
 /** How recent "filed together" is, for the epic offer. */
 const TOGETHER_MS = 30 * 60_000;
@@ -19,10 +19,10 @@ export function relatedHint(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me
   });
   if (parentEpics.length === 1) {
     const e = parentEpics[0]!;
-    return ` EPIC: it grows out of a ticket in the epic "${e.goal}" [${e.id}]. Ask your user in one line whether this one belongs there too (epic, action add) — it is not put there on its own.`;
+    return ` EPIC: it grows out of a ticket in the epic "${ticketName(e)}" [${e.id}]. Ask your user in one line whether this one belongs there too (epic, action add) — it is not put there on its own.`;
   }
   if (parentEpics.length > 1) {
-    return ` EPIC: it grows out of tickets in ${parentEpics.length} epics (${parentEpics.map((e) => `"${e.goal}" [${e.id}]`).join(", ")}). Ask your user in one line which, if any, this one belongs to (epic, action add).`;
+    return ` EPIC: it grows out of tickets in ${parentEpics.length} epics (${parentEpics.map((e) => `"${ticketName(e)}" [${e.id}]`).join(", ")}). Ask your user in one line which, if any, this one belongs to (epic, action add).`;
   }
   const parents = new Set(ticket.from ?? []);
   const related = [...all.values()].filter(
