@@ -208,6 +208,24 @@ writes are not reads: Solid refuses them from any page but this one, so a site y
 cannot send a review in your name; collagen finds the pull request from the ticket itself
 and never takes a number from the page.
 
+## Your AI's comments
+
+Ask your agent to review the change and it reads the code, then leaves each remark about
+particular lines as a **draft** on the page (`review-comments`), under the lines it is
+about — not as a wall of text in the chat. Drafts stay on your machine. A bar at the top
+says how many are waiting; each draft is marked **Draft from your AI**, its suggested
+changes shown as changes, with **Accept**, **Edit** and **Decline**.
+
+Accepting one says it as yours: **in the room** — a comment on the review's code that the
+author's agent reads in `review-context` — and, when the review has an open pull request,
+**on it too**, through your own `gh`, at the commit your AI read. Nothing else has to call
+GitHub: collagen wires it. **Post all** and **Decline all** take them at once, and your
+agent can do the same when you tell it to ("looks good, post them"). One GitHub refuses
+stays a draft with GitHub's reason; with no pull request the comments are said in the room
+alone, and the page and your agent say so. A comment you type on the page goes the same
+way. Comments said in the room show on the page once each, with the pull request's own;
+those your AI drafted are marked **with AI**.
+
 ## Saying what you think
 
 A review sent from the page reviews the **pull request**. Your take on the collagen ticket

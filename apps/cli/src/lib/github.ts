@@ -99,7 +99,7 @@ export const readComment = (v: unknown): LineComment | null => {
   // a block of lines names where it starts; one line names none (null)
   const startLine = int(o.start_line);
   return {
-    id,
+    id: String(id),
     author,
     body: typeof o.body === "string" ? o.body : "",
     file,

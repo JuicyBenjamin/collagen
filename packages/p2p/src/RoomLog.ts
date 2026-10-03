@@ -5,6 +5,7 @@ import Hyperbee from "hyperbee";
 import b4a from "b4a";
 import { LogAppendFailed } from "./errors";
 import { Attachment, EVICTABLE, LogOp, Member, PROTOCOL_VERSION, RoomMessage } from "./schema";
+import { ReviewComment } from "./review";
 import { ReviewContext } from "./review";
 import { Ticket, contributes, mergeTicket } from "./ticket";
 import { migrateOp, migrateRow, readTicket } from "./migrate";
@@ -18,6 +19,8 @@ export interface LogView {
   readonly messages: ReadonlyArray<{ readonly seq: number; readonly msg: RoomMessage }>;
   /** Transcripts attached to tickets — references; the files stay with their holders. */
   readonly attachments: ReadonlyArray<Attachment>;
+  /** comments on reviews' code, in the order their keys sort (ticket, then id) */
+  readonly comments: ReadonlyArray<ReviewComment>;
   /** The why behind each review ticket, one per ticket. */
   readonly reviews: ReadonlyArray<ReviewContext>;
   /** Entries written by a NEWER build than this one, kept raw and unapplied:
@@ -127,6 +130,11 @@ const claimedKey = (value: unknown): string | null => {
     const id = field(v.attachment, "id");
     return ticketId && id ? `attachment/${ticketId}/${id}` : null;
   }
+  if (v.op === "comment") {
+    const ticketId = field(v.comment, "ticketId");
+    const id = field(v.comment, "id");
+    return ticketId && id ? `comment/${ticketId}/${id}` : null;
+  }
   return null;
 };
 
@@ -186,6 +194,12 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         await view.put(MSG_KEY(count), op.msg);
         await view.put("state/msgs", count + 1);
         await view.put(`msgid/${op.msg.id}`, count);
+        break;
+      }
+      case "comment": {
+        // written once by its author: the first write of an id stands
+        const key = `comment/${op.comment.ticketId}/${op.comment.id}`;
+        if (!(await view.get(key))) await view.put(key, op.comment);
         break;
       }
       case "attachment": {
@@ -305,6 +319,7 @@ export const openRoomLog = (
       const members = (yield* rows("member", Member)).map((e) => e.value);
       const messages = (yield* rows("msg", RoomMessage)).map((e) => ({ seq: Number(e.key.slice("msg/".length)), msg: e.value }));
       const attachments = (yield* rows("attachment", Attachment)).map((e) => e.value);
+      const comments = (yield* rows("comment", ReviewComment)).map((e) => e.value);
       const reviews = (yield* rows("review", ReviewContext)).map((e) => e.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
       // entries a build behind kept raw: list them, and queue for replay the
@@ -339,7 +354,7 @@ export const openRoomLog = (
         announcedNewer = unseen.length;
         if (unseen.length > 0) yield* Effect.logWarning(`${unseen.length} record(s) in this room were written by a newer collagen than this one — kept, unseen, until this side updates`);
       }
-      return { tickets, members, messages, attachments, reviews, name: name?.value ?? null, unseen };
+      return { tickets, members, messages, attachments, comments, reviews, name: name?.value ?? null, unseen };
     });
 
     /** The migration: take the rows nobody can read off the room, for every

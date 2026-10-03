@@ -46,8 +46,8 @@ describe("what gh answers, read for the review page", () => {
     const c = (id: number, line: number | null, side = "RIGHT") => ({ id, body: "why?", path: "src/a.ts", line, side, user: { login: "bob", avatar_url: "u" }, html_url: `h${id}`, created_at: "2026-10-03T10:00:00Z" });
     const read = readComments([[c(1, 4), c(2, null)], [c(3, 9, "LEFT")]]);
     expect(read.map((x) => [x.id, x.line, x.side])).toEqual([
-      [1, 4, "RIGHT"],
-      [3, 9, "LEFT"],
+      ["1", 4, "RIGHT"],
+      ["3", 9, "LEFT"],
     ]);
     expect(readComments({ message: "Not Found" })).toEqual([]);
     // a block of lines says where it starts; one line does not
