@@ -5,6 +5,7 @@ import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot }
 import { AlsoUnder } from "./AlsoUnder";
 import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
+import { viewed } from "../viewedNow";
 
 /** The character a pointer is over, in a line drawn by CodeLine: the text
  *  under the pointer, and where its span starts (data-o). */
@@ -25,6 +26,8 @@ function charAt(x: number, y: number): { readonly col: number; readonly node: No
  *  base's, not asked). */
 export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision> }) {
   const spans = createMemo(() => highlightHunk(props.hunk));
+  // read already: the file folds to its header here and wherever else it shows
+  const state = () => viewed.state(props.hunk.file);
   const asks = () => readyFor(props.hunk.file);
 
   /** The word under the pointer on this line, as a spot in the branch, and
@@ -43,11 +46,18 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
   const spotAt = (line: DiffLine, e: MouseEvent): Spot | null => wordUnder(line, e)?.spot ?? null;
 
   return (
-    <div class="hunk">
+    <div class={["hunk", { viewed: state() === "viewed" }]}>
       <div class="file">
         <span class="head">{props.hunk.file}</span>
-        <AlsoUnder decisions={props.alsoUnder} />
+        <span class="file-side">
+          <AlsoUnder decisions={props.alsoUnder} />
+          <label class={["mark-viewed", { changed: state() === "changed" }]} title="Fold this file everywhere on the page, as read; it opens again if its changes move">
+            <input type="checkbox" checked={state() === "viewed"} onChange={() => viewed.toggle(props.hunk.file)} />
+            {state() === "changed" ? "Changed since viewed" : "Viewed"}
+          </label>
+        </span>
       </div>
+      <Show when={state() !== "viewed"}>
       <div class="code">
         <table>
           <tbody>
@@ -100,6 +110,7 @@ export function Hunk(props: { hunk: HunkData; alsoUnder: ReadonlyArray<Decision>
           </tbody>
         </table>
       </div>
+      </Show>
     </div>
   );
 }
