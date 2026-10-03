@@ -6,6 +6,7 @@ import { Popover } from "./components/Popover";
 import { TypesBanner } from "./components/TypesBanner";
 import { ticketId } from "./ticket";
 import { viewed } from "./viewedNow";
+import { diffNow } from "./diffNow";
 
 // The review page: a review ticket's diff read by intent. One section per
 // decision — its title, and the code it produced, front and centre; beside
@@ -76,6 +77,7 @@ function Page(props: { data: ReviewPageData }) {
     () => props.data.grouped?.hunks ?? [],
     (all) => {
       viewed.setFiles(all);
+      diffNow.set(all, props.data.source.kind === "clone");
     },
   );
   createEffect(

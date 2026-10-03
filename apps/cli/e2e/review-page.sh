@@ -82,6 +82,12 @@ expect "…with the doc comment above it" "$PEEK" "A hundred rows a page"
 expect "a path outside the branch is refused" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/hover?file=../../etc/passwd.ts&line=1&col=0")" "^400$"
 expect "…and so is a file the type checker does not read" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/hover?file=src/notes.txt&line=1&col=0")" "^400$"
 expect "…and a hover from another host" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$ORIGIN/review/$TICKET/hover?file=src/use.ts&line=3&col=21")" "^403$"
+WHOLE=$(curl -s "$ORIGIN/review/$TICKET/file?file=src/use.ts")
+expect "a file reads whole, as the branch has it" "$WHOLE" '^\{"lines":\[.*\]\}$'
+expect "…every line of it" "$(echo "$WHOLE" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["lines"]))')" "^[3-9]$|^[1-9][0-9]+$"
+expect "…a path outside the tree is refused" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/$TICKET/file?file=../../etc/passwd")" "^400$"
+expect "…a file the branch does not have says so" "$(curl -s "$ORIGIN/review/$TICKET/file?file=src/nope.ts")" "not in the branch"
+expect "…and from another host it is refused" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$ORIGIN/review/$TICKET/file?file=src/use.ts")" "^403$"
 expect "your clone was not touched: no worktree, nothing staged" "$(git -C "$R" worktree list | wc -l | tr -d ' ')$(git -C "$R" status --porcelain | wc -l | tr -d ' ')" "^10$"
 
 echo "## the page is kept current: the instance says when the review changes"

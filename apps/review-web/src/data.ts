@@ -88,6 +88,10 @@ export interface ReviewPageData {
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
 }
 
+/** GET /review/<ticketId>/file?file — the whole file as the review's
+ *  branch has it, from the reader's clone, line by line; or why not. */
+export type WholeFileResult = { readonly lines: ReadonlyArray<string> } | { readonly error: string };
+
 /** GET /review/<ticketId>/hover?file&line&col — what the type checker says
  *  about the symbol there: markdown (a code fence with the signature, then
  *  its doc comment), nothing, that its server is still indexing (ask
