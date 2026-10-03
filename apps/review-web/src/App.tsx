@@ -5,6 +5,7 @@ import { Hunk } from "./components/Hunk";
 import { Popover } from "./components/Popover";
 import { TypesBanner } from "./components/TypesBanner";
 import { ticketId } from "./ticket";
+import { viewed } from "./viewedNow";
 
 // The review page: a review ticket's diff read by intent. One section per
 // decision — its title, and the code it produced, front and centre; beside
@@ -70,6 +71,13 @@ function Page(props: { data: ReviewPageData }) {
     for (const s of sections()) for (const id of s.hunks) m.set(id, [...(m.get(id) ?? []), s.decision]);
     return m;
   });
+  // the files a mark can be for, as this diff has them
+  createEffect(
+    () => props.data.grouped?.hunks ?? [],
+    (all) => {
+      viewed.setFiles(all);
+    },
+  );
   createEffect(
     () => props.data.ticket.title ?? props.data.ticket.goal,
     (name) => {
@@ -81,6 +89,11 @@ function Page(props: { data: ReviewPageData }) {
     <div class="wrap">
       <nav aria-label="Decisions">
         <p class="nav-title">Decisions</p>
+        <Show when={viewed.count().files > 0}>
+          <p class={["nav-viewed", { done: viewed.count().viewed === viewed.count().files }]}>
+            {viewed.count().viewed} of {viewed.count().files} files viewed
+          </p>
+        </Show>
         <ol>
           <For each={sections()}>
             {(s) => (
