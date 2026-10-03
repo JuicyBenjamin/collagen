@@ -38,6 +38,11 @@ order the author tested and wrong for another.
    bump `PROTOCOL_VERSION`, or an older peer rewriting the record drops it.
    (A field only its author ever writes, on a record older peers never write
    back, can skip the bump — say why in the review.)
+8. **A field already on the log never becomes required.** Records written
+   before it existed are in every peer's log; a build that cannot decode a row
+   *evicts it for the whole room* (`evictStale`). Add a field as
+   `Schema.optional` in the stored schema, default it where it is read, and
+   require it only at the tool's input. Test that a record without it decodes.
 
 ## Bugs this would have caught
 
@@ -47,6 +52,9 @@ order the author tested and wrong for another.
   and `merge(A,merge(B,C))` disagreed.
 - An epic's reopen reason was chosen by wall clock while closure was causal,
   so the shown reason was not the one that decided it.
+- A review unit's `what` was added as required: the author's own build could
+  no longer read its earlier reviews and evicted them for everyone, until
+  `restoreOwn` put them back from its history.
 
 ## Checklist
 
@@ -55,3 +63,4 @@ order the author tested and wrong for another.
 - [ ] New ids come from `opId()` (or another random UUID).
 - [ ] Nothing ordered by `Date.now()` across peers; causal where it matters.
 - [ ] Schema change: migration default + `PROTOCOL_VERSION` bump, or a stated reason not to.
+- [ ] A new field on a stored record is optional there; a record without it still decodes (tested).
