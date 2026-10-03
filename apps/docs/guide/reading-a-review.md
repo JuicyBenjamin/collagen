@@ -44,7 +44,9 @@ know what the change is for before reading any of it. Then one section per **dec
 the order the author gave them:
 
 - the decision's **title** — a few words, what it is for — with what was done in a line
-  beneath it, then the **hunks at its lines** — a hunk holding a `where` line, or
+  beneath it, and "Guided by …" naming any skill or agent file (`CLAUDE.md`, `AGENTS.md`)
+  that told the agent to do it that way — so you see the right ones were used, and a skill
+  pointing the wrong way shows beside the code it produced, then the **hunks at its lines** — a hunk holding a `where` line, or
   the nearest one within a few lines (line numbers drift as code is edited), or every hunk
   of a file when the decision names a file alone. A hunk that also serves another decision
   says so above it — "also under …", a link there;
