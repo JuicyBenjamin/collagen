@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Errored, For, Loading, onSettled, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, Errored, For, Loading, Show } from "solid-js";
 import { NO_TITLE, toolOf, type Decision, type Fork as ForkData, type Hunk as HunkData, type ReviewPageData, type Section } from "./data";
 import { Fork } from "./components/Fork";
 import { Hunk } from "./components/Hunk";
@@ -6,6 +6,7 @@ import { Popover } from "./components/Popover";
 import { TypesBanner } from "./components/TypesBanner";
 import { ticketId } from "./ticket";
 import { viewed } from "./viewedNow";
+import { reviewChanges, reviewData } from "./api";
 import { diffNow } from "./diffNow";
 
 // The review page: a review ticket's diff read by intent. One section per
@@ -17,25 +18,21 @@ import { diffNow } from "./diffNow";
 // back through the person's agent (post-review).
 
 async function load(): Promise<ReviewPageData> {
-  const res = await fetch(`/review/${encodeURIComponent(ticketId)}/data`);
-  if (!res.ok) throw new Error(await res.text());
-  return (await res.json()) as ReviewPageData;
+  const data = await reviewData(ticketId);
+  if (!data) throw new Error(`no review ticket ${ticketId} in your rooms`);
+  return data;
 }
 
-// the instance says when the review changed — its why revised, the ticket
-// moved, the branch's commit in the clone — and the page reloads in place:
-// what is on screen stays until the new data is in
-const [version, setVersion] = createSignal(0);
-
 export function App() {
+  // the review's state, from a live server function held open while the
+  // page is: a token that moves when its why is revised, the ticket moves,
+  // or the branch's commit in the clone changes (a reconnect re-reads it)
+  const state = createMemo(() => reviewChanges(ticketId));
+  // its data, read again whenever that state moves — what is on screen
+  // stays until the new data is in
   const data = createMemo(() => {
-    version();
+    state();
     return load();
-  });
-  onSettled(() => {
-    const events = new EventSource(`/review/${encodeURIComponent(ticketId)}/events`);
-    events.addEventListener("changed", () => setVersion((v) => v + 1));
-    return () => events.close();
   });
   return (
     <Errored fallback={(err) => <p class="failed">{String(err())}</p>}>
