@@ -4,7 +4,7 @@ import solid from "@solidjs/vite-plugin";
 // The review page, built once into dist/ and served by the collagen instance
 // at /review/<ticketId> (apps/cli/src/services/ReviewView). Assets live under
 // /review/assets/, hashed, so the instance can cache them for good.
-export default defineConfig({
+export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
     solid({
       // "use server" functions (src/api.ts): compiled to calls on the page,
@@ -22,5 +22,9 @@ export default defineConfig({
     emptyOutDir: false,
     assetsDir: "assets",
     target: "es2022",
+    // the server bundle is one file: collagen loads it again when it is
+    // rebuilt, and a chunk importing back from entry.js would load a second
+    // copy of it — one whose backend was never provided
+    ...(isSsrBuild ? { rolldownOptions: { output: { codeSplitting: false } } } : {}),
   },
-});
+}));

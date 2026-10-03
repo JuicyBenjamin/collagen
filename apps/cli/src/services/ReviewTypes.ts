@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { toolOf, type DefinitionResult, type HoverResult, type Peek, type ToolId, type ToolState } from "@collagen/review-web/data";
 import { startLsp, type LspClient } from "../lib/lsp";
 import { install, installed, packageDir, toolRoot, TOOLS, type LanguageTool } from "../lib/languageTools";
@@ -189,6 +189,10 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const installing = new Map<ToolId, Promise<string | null>>();
     const installError = new Map<ToolId, string>();
     const notices = new Map<ToolId, Array<string>>();
+    // moves whenever any of those does — an install started, done or failed,
+    // a server's notice — so an open page follows a tool's state live
+    const moved = yield* SubscriptionRef.make(0);
+    const bump = () => Effect.runSync(SubscriptionRef.update(moved, (n) => n + 1));
     const toolState = (id: ToolId): ToolState => {
       const tool = TOOLS[id];
       const about = { tool: id, language: tool.language, name: tool.name, version: tool.version, size: tool.size, ...(tool.licence ? { licence: tool.licence } : {}) };
@@ -205,12 +209,20 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
           install(toolRoot(configDir, tool), tool).then((error) => {
             installing.delete(id);
             if (error) installError.set(id, error);
+            bump();
             return error;
           }),
         );
+        bump();
       }
       return toolState(id);
     };
+    /** A tool's state, now and each time it changes. */
+    const watchTool = (id: ToolId): Stream.Stream<ToolState> =>
+      SubscriptionRef.changes(moved).pipe(
+        Stream.map(() => toolState(id)),
+        Stream.changesWith((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+      );
 
     const stop = (key: string) => {
       const s = sessions.get(key);
@@ -263,7 +275,10 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
           if (method === "window/showMessage") {
             const text = String((params as { message?: unknown } | null)?.message ?? "").trim();
             const seen = notices.get(tool.id) ?? [];
-            if (text && !seen.includes(text)) notices.set(tool.id, [...seen, text].slice(-5));
+            if (text && !seen.includes(text)) {
+              notices.set(tool.id, [...seen, text].slice(-5));
+              bump();
+            }
           }
         },
       });
@@ -401,7 +416,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)], ...(r.partial ? { partial: true as const } : {}) } satisfies DefinitionResult;
     });
 
-    return { hover, definition, toolState: (id: ToolId) => Effect.sync(() => toolState(id)), startInstall: (id: ToolId) => Effect.sync(() => startInstall(id)) } as const;
+    return { hover, definition, watchTool, startInstall: (id: ToolId) => Effect.sync(() => startInstall(id)) } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
