@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import type { ScrollBoxRenderable } from "@opentui/core";
+import { useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { excludedFromEpic, heldBy, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
+import { FollowScroll } from "../../../../../components/FollowScroll";
 import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
@@ -46,8 +46,6 @@ export function Tickets() {
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   // the list's own width, once drawn: the columns are sized to it
   const [pane, setPane] = useState<number | undefined>(undefined);
-  // the rows scroll inside the pane: the cursor's row is kept in view
-  const scroller = useRef<ScrollBoxRenderable>(null);
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
@@ -100,32 +98,6 @@ export function Tickets() {
   const sel = clamp(cursor, 0, last);
   const current = shown[sel];
   const currentId = current?.t.id;
-  // kept in view as the cursor moves — and as the rows move under it (an
-  // epic folded or unfolded, tickets arriving or leaving above, a resize):
-  // those are seen once laid out, as the list's content or box changes size
-  const want = useRef<{ readonly id: string; readonly first: boolean } | null>(null);
-  want.current = currentId ? { id: rowId(currentId), first: sel === 0 } : null;
-  const keep = () => {
-    if (want.current && scroller.current) keepInView(scroller.current, want.current.id, want.current.first);
-  };
-  useEffect(keep, [currentId, sel]);
-  useEffect(() => {
-    const list = scroller.current;
-    if (!list) return;
-    // after the scrollbox's own handling (it re-measures its range there),
-    // never instead of it
-    const undo = [list.content, list.viewport].map((part) => {
-      const before = part.onSizeChange;
-      part.onSizeChange = function (this: typeof part) {
-        before?.call(this);
-        keep();
-      };
-      return () => {
-        part.onSizeChange = before;
-      };
-    });
-    return () => undo.forEach((f) => f());
-  });
 
   return (
     <Focusable
@@ -169,15 +141,9 @@ export function Tickets() {
               {"  "}none
             </text>
           ) : (
-            <scrollbox
-              ref={scroller}
-              flexShrink={1}
-              minHeight={0}
-              scrollbarOptions={{ visible: false }}
-              onSizeChange={function (this: { width: number }) {
-                setPane(this.width);
-              }}
-            >
+            // the rows scroll inside the pane, the cursor's row kept in view;
+            // at the first row all the way up, so what heads the list shows
+            <FollowScroll follow={currentId ? (sel === 0 ? "start" : { id: rowId(currentId) }) : null} onWidth={setPane}>
             {epics.map((e) => (
               <EpicView
                 key={e.epic.t.id}
@@ -227,7 +193,7 @@ export function Tickets() {
                 ))}
               </box>
             ))}
-            </scrollbox>
+            </FollowScroll>
           )}
           {unknownTickets.map((u) => (
             <text key={u.key} fg={theme.dim} truncate wrapMode="none">
@@ -411,6 +377,9 @@ function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
   );
 }
 
+/** The id a ticket's row is drawn under, so the list can keep it in view. */
+const rowId = (ticketId: string): string => `row-${ticketId}`;
+
 /** One ticket at a glance: whose it is, what it is about, and what has been
  *  said on it — `↻` changes were asked for, `✓` someone approved, one glyph
  *  per kind of answer however many gave it (lib/glyphs, spelled out on `?`).
@@ -423,29 +392,6 @@ function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
  *  asks of a list, and the answer should not move when the selection does.
  *  (It held the kind until the kinds became headers.) Nothing else: the
  *  ticket's own page has the rest, and an agent can read all of it. */
-/** the id a ticket's row is drawn under, so the list can scroll to it */
-const rowId = (ticketId: string): string => `row-${ticketId}`;
-
-/** Scroll the list only as far as the cursor's row needs: not at all while
- *  it is in view, and when it would leave, by exactly enough to bring it to
- *  the edge it left by — so the list moves with the cursor, one row at a
- *  time, and never jumps. At the first row, all the way up, so what heads
- *  the list shows. The row's place is measured inside the list's content,
- *  which does not move as it scrolls (OpenTUI's own scrollChildIntoView
- *  measured it on screen, against a viewport that had, and drifted). */
-const keepInView = (list: ScrollBoxRenderable, id: string, first: boolean): void => {
-  if (first) {
-    list.scrollTop = 0;
-    return;
-  }
-  const row = list.content.findDescendantById(id);
-  if (!row) return;
-  const at = row.y - list.content.y;
-  const height = list.viewport.height;
-  if (at < list.scrollTop) list.scrollTop = at;
-  else if (at + row.height > list.scrollTop + height) list.scrollTop = at + row.height - height;
-};
-
 function TicketRow({
   ticket: t,
   summary: s,

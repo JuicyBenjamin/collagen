@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { BoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { Focusable } from "../../../components/Focusable";
+import { FollowScroll, type FollowScrollHandle } from "../../../components/FollowScroll";
 import { focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
 import { wrap } from "../../../lib/wrap";
 import { transcriptLinesAtom } from "../transcripts/atoms";
+
+/** The id a turn's head row is drawn under, so the list can keep it in view. */
+const turnRowId = (turn: number): string => `turn-${turn}`;
 
 const hhmmss = (ts: string | null) => (ts ? ts.slice(11, 19) : "  ·  ·  ");
 
@@ -29,13 +32,9 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
   const linesResult = useAtomValue(transcriptLinesAtom);
   const [turnSel, setTurnSel] = useState<number | null>(null);
   const [unfolded, setUnfolded] = useState<number | null>(null);
-  // the rows box takes what the layout leaves; we read how many rows that is
-  const listRef = useRef<BoxRenderable>(null);
-  const [viewport, setViewport] = useState(8);
-  useEffect(() => {
-    const h = listRef.current?.height;
-    if (h && h > 0 && h !== viewport) setViewport(h);
-  });
+  // the rows scroll in what the layout leaves; a page is as many as show
+  const list = useRef<FollowScrollHandle>(null);
+  const page = () => Math.max(1, list.current?.view().height ?? 8);
 
   useEffect(() => {
     setFocus("transcript-lines");
@@ -60,9 +59,6 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
     const body = wrap(t.text.length > 0 ? t.text : "(nothing said in this turn)", textWidth);
     return [head, ...body.map((text) => ({ kind: "body" as const, turn, text }))];
   });
-  const maxStart = Math.max(0, rows.length - viewport);
-  const headRow = Math.max(0, rows.findIndex((r) => r.turn === tSel));
-  const start = turnSel === null ? maxStart : clamp(Math.min(headRow, maxStart), 0, maxStart);
   const jump = (toTurn: number) => setTurnSel(toTurn >= lastTurn ? null : Math.max(0, toTurn));
 
   return (
@@ -76,8 +72,8 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
         onKey={(key) => {
           if (key.name === "up" && tSel > 0) return jump(tSel - 1), true;
           if (key.name === "down" && tSel < lastTurn) return jump(tSel + 1), true;
-          if (key.name === "pageup") return jump(tSel - viewport), true;
-          if (key.name === "pagedown") return jump(tSel + viewport), true;
+          if (key.name === "pageup") return jump(tSel - page()), true;
+          if (key.name === "pagedown") return jump(tSel + page()), true;
           if (key.name === "home") return jump(0), true;
           if (key.name === "end") return jump(lastTurn), true;
           if (isEnter(key) && turns.length > 0) return setUnfolded((u) => (u === tSel ? null : tSel)), true;
@@ -90,7 +86,10 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
               <span fg={focused ? theme.accent : theme.fg}>{file}</span>
               <span fg={theme.dim}> · {turns.length} turn(s)</span>
             </text>
-            <box ref={listRef} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+            {/* the newest turn followed until you move; then the selected turn,
+                moved only at the edges — an unfolded one at the top, its text
+                read downwards (components/FollowScroll) */}
+            <FollowScroll ref={list} follow={turnSel === null ? "end" : { id: turnRowId(tSel), how: unfolded === tSel ? "top" : "edge" }} flexGrow={1}>
               {AsyncResult.isWaiting(linesResult) ? (
                 <text fg={theme.dim} flexShrink={0}>
                   {"  "}reading…
@@ -100,11 +99,11 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
                   {"  "}nothing readable in this file
                 </text>
               ) : (
-                rows.slice(start, start + viewport).map((r, i) => {
+                rows.map((r, i) => {
                   const t = turns[r.turn]!;
                   const selected = focused && r.turn === tSel;
                   return r.kind === "head" ? (
-                    <text key={`${path}:${start + i}`} truncate wrapMode="none" flexShrink={0}>
+                    <text key={`${path}:${i}`} id={turnRowId(r.turn)} truncate wrapMode="none" flexShrink={0}>
                       <span fg={selected ? theme.accent : theme.dim}>{selected ? (unfolded === r.turn ? "▾ " : "› ") : "  "}</span>
                       <span fg={theme.dim}>{hhmmss(t.ts)}  </span>
                       <span fg={whoColor(t.who)}>{t.who.padEnd(11)}</span>
@@ -113,14 +112,14 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
                       </span>
                     </text>
                   ) : (
-                    <text key={`${path}:${start + i}`} fg={theme.fg} truncate wrapMode="none" flexShrink={0}>
+                    <text key={`${path}:${i}`} fg={theme.fg} truncate wrapMode="none" flexShrink={0}>
                       {"            "}
                       {r.text}
                     </text>
                   );
                 })
               )}
-            </box>
+            </FollowScroll>
           </>
         )}
       </Focusable>
