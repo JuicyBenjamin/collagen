@@ -36,7 +36,7 @@ IP="$ROOT_OUT/tools/intelephense-$IP_VERSION"
 [ -f "$IP/node_modules/intelephense/lib/intelephense.js" ] || npm install --prefix "$IP" --no-save --no-package-lock --no-audit --no-fund --ignore-scripts --loglevel=error "intelephense@$IP_VERSION" > /dev/null 2>&1
 COLLAGEN_TYPESCRIPT="$ROOT/node_modules/typescript" COLLAGEN_INTELEPHENSE="$IP/node_modules/intelephense" start alice
 SA=$(mcp $A)
-D1='{"title":"Stream the rows","what":"stream the rows","userWhy":"she said the export times out","agentWhy":"a map keeps memory flat","where":["src/export.ts:2"]}'
+D1='{"title":"Stream the rows","what":"stream the rows","userWhy":"she said the export times out","agentWhy":"a map keeps memory flat","where":["src/export.ts:2"],"guidedBy":["CLAUDE.md"]}'
 D2='{"title":"Page by id","what":"page by id","userWhy":"pages of a hundred","where":["src/page.ts"]}'
 F1='{"at":"src/export.ts:2","chose":"map to strings","instead":"a csv library","why":"no new dependency","by":"agent"}'
 ASK="{\"title\":\"Stream the export\",\"project\":\"sandbox\",\"base\":\"main\",\"summary\":\"stream the export\",\"decisions\":[$D1,$D2],\"forks\":[$F1]}"
@@ -46,6 +46,7 @@ ORIGIN=${A%/mcp}
 echo "## the page's data: the diff from the clone, grouped by the why"
 wait_until "the review's data is served" "\"sections\"" curl -s "$ORIGIN/review/$TICKET/data"
 DATA=$(curl -s "$ORIGIN/review/$TICKET/data")
+expect "a decision carries what guided it to the page" "$DATA" '"guidedBy":\["CLAUDE.md"\]'
 SHAPE=$(python3 -c '
 import json, sys
 d = json.loads(sys.stdin.read()); g = d["grouped"]
