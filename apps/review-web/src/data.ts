@@ -51,13 +51,17 @@ export interface Fork {
   readonly by?: "user" | "agent";
 }
 
-/** A unit of the change: code that together makes one thing, each hunk of
- *  the diff in exactly one unit. Named by the author's agent, or grouped by
- *  imports where it named none. */
+/** A unit of the change: code that together achieves one thing, each hunk
+ *  of the diff in exactly one unit, titled by what it achieves. Named by the
+ *  author's agent; where it named none, a decision's code is its own unit,
+ *  titled by the decision; what no decision covers is "Not explained". */
 export interface Unit {
   readonly id: string;
+  /** what it achieves — never a file name */
   readonly title: string;
-  readonly by: "author" | "imports";
+  /** the line beneath the title */
+  readonly what: string;
+  readonly by: "author" | "decision" | "unexplained";
   /** hunk ids, a file's together, in diff order */
   readonly hunks: ReadonlyArray<string>;
   /** the decisions whose lines fall in this unit, by id, in the why's order */
