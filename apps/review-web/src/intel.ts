@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { final, toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
 import { ticketId } from "./ticket";
 import { definitionAt, hoverAt, installTool as install } from "./api";
+import { diffNow } from "./diffNow";
 
 // The language servers, asked from the page: what is this symbol (hover)
 // and where is it declared (peek). The answers come from collagen's own
@@ -45,11 +46,14 @@ export async function installTool(id: ToolId): Promise<void> {
 }
 
 const key = (s: Spot) => `${s.file}:${s.line}:${s.col}`;
-const ask = <A>(call: (ticketId: string, file: string, line: number, col: number) => Promise<A>, s: Spot, cache: Map<string, Promise<A>>): Promise<A> => {
-  const k = key(s);
+const ask = <A>(call: (ticketId: string, file: string, line: number, col: number, commit: string) => Promise<A>, s: Spot, cache: Map<string, Promise<A>>): Promise<A> => {
+  // asked of the code at the commit the page shows: a moved branch is a new key
+  const commit = diffNow.commit();
+  if (!commit) return Promise.resolve({ error: "the page does not know which commit its diff is" } as A);
+  const k = `${commit}:${key(s)}`;
   let p = cache.get(k);
   if (!p) {
-    p = call(ticketId, s.file, s.line, s.col).catch((e: unknown) => ({ error: String(e) }) as A);
+    p = call(ticketId, s.file, s.line, s.col, commit).catch((e: unknown) => ({ error: String(e) }) as A);
     // only a final answer is kept: one given mid-index, or a failure, is
     // asked again next time rather than standing until a reload
     p.then((r) => !final(r as HoverResult | DefinitionResult) && cache.delete(k), () => cache.delete(k));
