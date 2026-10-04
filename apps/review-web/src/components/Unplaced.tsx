@@ -20,7 +20,7 @@ export function Unplaced() {
           <For each={lost()}>
             {(d) => (
               <li>
-                <span class={hostNow.isDraft(d) ? "draft-badge" : "pending-badge"}>{hostNow.isDraft(d) ? "Draft from your AI" : d.posted ? "On GitHub" : "Pending"}</span>
+                <span class={hostNow.isDraft(d) ? "draft-badge" : "pending-badge"}>{hostNow.isDraft(d) ? "Draft from your AI" : d.posted ? `On ${hostNow.hostName()}` : "Pending"}</span>
                 <code>{where(d)}</code>
                 <span class="unplaced-body">{d.body}</span>
                 <Show when={!d.posted}>

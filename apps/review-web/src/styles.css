@@ -387,19 +387,19 @@ section.decision.unit { display: block; }
 body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 24px; z-index: 5; pointer-events: none; background: linear-gradient(var(--bg) 20%, color-mix(in srgb, var(--bg) 0%, transparent)); backdrop-filter: blur(3px); mask-image: linear-gradient(black 40%, transparent); -webkit-mask-image: linear-gradient(black 40%, transparent); }
 
 /* what was said on GitHub apart from the lines: reviews, the conversation */
-.gh-activity { margin-top: 28px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
-.gh-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
-.gh-head h2 { margin: 0; font-size: 15px; }
-.gh-counts { color: var(--dim); font-size: 13px; }
-.gh-checked { margin-left: auto; color: var(--faint); font-size: 12.5px; }
-.gh-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
-.gh-item { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font: 13.5px/1.5 -apple-system, sans-serif; }
-.gh-body { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.gh-suggestion { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; background: var(--add-bg); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+.host-activity { margin-top: 28px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.host-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.host-head h2 { margin: 0; font-size: 15px; }
+.host-counts { color: var(--dim); font-size: 13px; }
+.host-checked { margin-left: auto; color: var(--faint); font-size: 12.5px; }
+.host-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.host-item { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font: 13.5px/1.5 -apple-system, sans-serif; }
+.host-body { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.host-suggestion { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; background: var(--add-bg); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
 .verdict { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 0 8px; border: 1px solid currentColor; }
 .verdict.approved { color: var(--sign-add); }
 .verdict.changes-requested { color: var(--warn); }
 .verdict.commented, .verdict.dismissed { color: var(--dim); }
 /* a reply sits under the comment it answers, a step in */
 .line-comment.reply { margin-left: 24px; }
-.gh-earlier { margin-top: 10px; }
+.host-earlier { margin-top: 10px; }

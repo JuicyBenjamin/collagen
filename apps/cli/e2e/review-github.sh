@@ -96,9 +96,9 @@ N=$(calls | wc -l)
 expect "a write from another site is refused" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null,null,{\"id\":\"0123abcd\",\"pending\":[]}]" http://evil.example)" "^HTTP 403$"
 expect "…and gh was never asked" "$(calls | wc -l | tr -d ' ')" "^$(echo $N | tr -d ' ')$"
 
-echo "## a write goes out under whoever gh is signed in as now"
+echo "## a write goes out under whoever is signed in to the host now"
 N=$(calls | wc -l)
-expect "the page showed someone else: refused, saying who it is now" "$(submit "$TICKET" approve "" null '"carol"')" '"error":"gh is signed in as bob now, not carol as the page showed'
+expect "the page showed someone else: refused, saying who it is now" "$(submit "$TICKET" approve "" null '"carol"')" '"error":"GitHub has bob signed in now, not carol as the page showed'
 expect "…gh asked right then, not remembered" "$(calls | sed -n "$((N + 1)),\$p" | grep -c '"api","user"')" "^1$"
 expect "…and nothing posted" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
 
@@ -244,9 +244,10 @@ expect "…each guess with what it rests on and how sure" "$CTX" "decisions\\[1\
 expect "…the fork too" "$CTX" "a stream,paging,fewer round trips,the code,low"
 expect "the ticket is alice's to read: her review step, nobody to address it" "$(call $A "$SA" get-tickets '{}' | grep -A12 "id: $AT" | grep -cE '^ +address,')" "^0$"
 DATA=$(sfn reviewData "[\"$AT\"]")
-expect "the page has the guess and its grounds" "$DATA" '"assumed":\{"author":"alice-gh","sources":\["the pull request description","its commits"\]\}'
+expect "the page has the guess and its grounds" "$DATA" '"assumed":\{"author":"alice-gh","sources":\["the pull request description","its commits"\]'
 expect "…its branch read from the pull request" "$DATA" '"branch":"feat/stream-export","base":"main"'
 expect "…and the diff read from the clone, by unit" "$DATA" '"source":\{"kind":"clone"'
+expect "…and who wrote it, as identities no host owns: the login on the pull request, the email on its commits" "$DATA" '"identities":\["github:alice-gh","git:e2e@collagen.test"\]'
 # built here, not inside "$( )": bash 3.2 mangles \" nested there
 TOLD="{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"x\",\"what\":\"y\",\"agentWhy\":\"z\"}],\"forks\":[]}"
 expect "a told why is never added to a guessed one" "$(call $A "$SA" ask-review "$TOLD")" "built from assumptions .{1,3} amend it with assume-review"
@@ -261,12 +262,12 @@ SB=$(mcp $B); wait_for_peer $B "$SB" alice; admitted bob
 wait_until "bob's agent reads the guesses, and how to answer them if he wrote the code" "IF YOUR USER WROTE THIS CODE .alice-gh's pull request.: they can take this review over" call $B "$SB" review-context "$QAT"
 CLAIM="{\"ticketId\":\"$AT\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"},{\"id\":\"d2\",\"verdict\":\"corrected\",\"title\":\"Pages of fifty\",\"what\":\"a page holds 50 rows\",\"userWhy\":\"the phone app runs out of memory\"},{\"id\":\"f1\",\"verdict\":\"wrong\",\"userWhy\":\"paging was never considered\"}],\"decisions\":[{\"title\":\"Sessions untouched\",\"what\":\"exports keep the session they run in\",\"userWhy\":\"auth is out of scope\"}]}"
 expect "its guesser cannot answer its own guesses" "$(call $A "$SA" claim-review "$CLAIM")" "only the code's author can answer them"
-echo carol > "$GH/login"
-expect "signed in to gh as someone else, the code's author is not who is asking" "$(call $B "$SB" claim-review "$CLAIM")" "gh is signed in as carol, but this review is about alice-gh's code"
+echo carol > "$GH/login"; git -C "$R" config user.email carol@example.com
+expect "sharing no identity with the code's author, bob is refused, saying who is who" "$(call $B "$SB" claim-review "$CLAIM")" "written by alice-gh on GitHub, e2e@collagen.test in git .{1,3} and here you are carol@example.com in git, carol on GitHub"
 echo alice-gh > "$GH/login"
 CLAIMED=$(call $B "$SB" claim-review "$CLAIM")
-rm "$GH/login"
-expect "signed in as alice-gh, bob takes it over: each guess answered" "$CLAIMED" "taken over .Exports stream.*1 confirmed, 1 corrected, 1 wrong"
+rm "$GH/login"; git -C "$R" config user.email e2e@collagen.test
+expect "signed in to the host as alice-gh, bob takes it over (his git email no help): each guess answered" "$CLAIMED" "taken over .Exports stream.*1 confirmed, 1 corrected, 1 wrong"
 wait_until "alice reads it as bob's now" "takenOver: .?bob wrote the code and took this over from alice's AI's guesses" call $A "$SA" review-context "$QAT"
 CTX=$(call $A "$SA" review-context "$QAT")
 expect "…the confirmed guess" "$CTX" "d1,Stream the rows,rows go out as they are read,confirmed"
@@ -279,6 +280,16 @@ DATA=$(sfn reviewData "[\"$AT\"]")
 expect "the page has it taken over, each guess's verdict" "$DATA" '"claimed":\{"guessedBy":"[0-9a-f]+","guessedByName":"alice"'
 expect "…the correction keeps the guess" "$DATA" '"verdict":"corrected","guess":\{"what":"a page holds 100 rows","why":"memory","basis":"a constant in the code"\}'
 expect "the ticket is bob's to act on now: an address step of his" "$(call $B "$SB" get-tickets '{}' | grep -A14 "id: $AT" | grep -cE '^ +address,')" "^1$"
+
+echo "## with no host at all, git says who wrote it"
+NOHOST='{"project":"sandbox","title":"Exports, unhosted","summary":"The same change, on no host","branch":"feat/stream-export","base":"main","author":"Ann","sources":["the commits"],"decisions":[{"title":"Stream the rows","what":"rows go out as read","why":"timeouts","basis":"a commit message","confidence":"medium","where":["src/export.ts:2"]}]}'
+NH=$(call $A "$SA" assume-review "$NOHOST" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+wait_until "bob has it" "Exports, unhosted" call $B "$SB" get-tickets '{}'
+NHCLAIM="{\"ticketId\":\"$NH\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"}]}"
+git -C "$R" config user.email carol@example.com
+expect "committing as someone else, bob is refused — no host to ask" "$(call $B "$SB" claim-review "$NHCLAIM")" "written by e2e@collagen.test in git .{1,3} and here you are carol@example.com in git"
+git -C "$R" config user.email e2e@collagen.test
+expect "committing as the change's author, bob takes it over: git alone says who wrote it" "$(call $B "$SB" claim-review "$NHCLAIM")" "taken over .Exports, unhosted.*1 confirmed"
 
 echo "## a review with no pull request: comments are said in the room alone"
 BARE_ASK=$(call $A "$SA" ask-review "{\"title\":\"Stream it, unhosted\",\"project\":\"sandbox\",\"branch\":\"feat/stream-export\",\"base\":\"main\",\"summary\":\"the same change, no host\",\"decisions\":[$D1],\"forks\":[]}")
