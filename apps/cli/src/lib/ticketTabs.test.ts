@@ -18,8 +18,21 @@ describe("the ticket list's tabs", () => {
     const me = t({ id: "m", kind: "plan", from: ["p"], partOf: [{ id: "x", epic: "e", by: "alice", at: 1 }] });
     const kid = t({ id: "k", from: ["m"] });
     const all = new Map([epic, parent, me, kid].map((x) => [x.id, x]));
-    expect(relationsOf(me, all)).toEqual({ epic: { id: "e", name: "More languages" }, parent: { id: "p", name: "PHP" }, children: 1 });
-    expect(relationsOf(parent, all)).toEqual({ children: 1 });
+    expect(relationsOf(me, all, "alice")).toEqual({ epic: { id: "e", name: "More languages" }, parent: { id: "p", name: "PHP" }, children: 1 });
+    expect(relationsOf(parent, all, "alice")).toEqual({ children: 1 });
+  });
+
+  it("names, counts and opens only what the reader may see: a ticket waiting on another is its author's alone", () => {
+    const blocker = t({ id: "b", kind: "plan", title: "Blocker", createdBy: "bob" });
+    // carol's ticket waits on the blocker: nobody but carol sees it yet
+    const gatedParent = t({ id: "g", kind: "proposal", title: "Secret plan", createdBy: "carol", after: ["b"] });
+    const child = t({ id: "c", from: ["g"], createdBy: "alice" });
+    const gatedChild = t({ id: "gc", from: ["c"], createdBy: "carol", after: ["b"] });
+    const all = new Map([blocker, gatedParent, child, gatedChild].map((x) => [x.id, x]));
+    // to alice: no hidden parent, no hidden descendant counted
+    expect(relationsOf(child, all, "alice")).toEqual({ children: 0 });
+    // to carol, their author: both are there
+    expect(relationsOf(child, all, "carol")).toEqual({ parent: { id: "g", name: "Secret plan" }, children: 1 });
   });
 
   it("a closed ticket says how it ended", () => {
