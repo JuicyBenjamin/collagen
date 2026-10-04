@@ -1,4 +1,4 @@
-import type { HostUser, LineComment, PullRequest } from "@collagen/review-web/data";
+import type { HostNote, HostReview, HostUser, LineComment, PullRequest } from "@collagen/review-web/data";
 
 // What `gh` answers, read into the review page's shapes. Pure: the calls
 // are services/RepoHost's. Anything gh says that is not the shape asked for
@@ -77,16 +77,56 @@ export const readPull = (v: unknown, viewer: string | undefined): (PullRequest &
  *  merged — `gh pr list --head` lists newest first. */
 export const pickPull = <P extends { readonly state: string }>(pulls: ReadonlyArray<P>): P | null => pulls.find((p) => p.state === "open") ?? pulls[0] ?? null;
 
+/** Pages from `gh api --paginate --slurp`, flattened. */
+const pages = (v: unknown): ReadonlyArray<unknown> => (Array.isArray(v) ? v.flatMap((page) => (Array.isArray(page) ? page : [page])) : []);
+
 /** `gh api --paginate --slurp repos/…/pulls/N/comments`: pages of comments,
  *  flattened. Comments GitHub no longer places on a line (outdated, the
- *  code under them moved) are left out — they have no line to sit under. */
-export const readComments = (v: unknown): ReadonlyArray<LineComment> => {
-  const items = Array.isArray(v) ? v.flatMap((page) => (Array.isArray(page) ? page : [page])) : [];
-  return items.flatMap((c): ReadonlyArray<LineComment> => {
+ *  code under them moved) have no line to sit under — readOutdated reads those. */
+export const readComments = (v: unknown): ReadonlyArray<LineComment> =>
+  pages(v).flatMap((c): ReadonlyArray<LineComment> => {
     const comment = readComment(c);
     return comment ? [comment] : [];
   });
-};
+
+/** The line comments on code that has changed since they were written: no
+ *  line now, so a note saying where they were. */
+export const readOutdated = (v: unknown): ReadonlyArray<HostNote> =>
+  pages(v).flatMap((c): ReadonlyArray<HostNote> => {
+    const o = obj(c);
+    const author = readUser(o?.user);
+    const id = int(o?.id);
+    if (!o || !author || id === undefined || o.line !== null) return [];
+    const was = int(o.original_line);
+    return [{ id: String(id), author, body: typeof o.body === "string" ? o.body : "", at: str(o.created_at) ?? "", url: str(o.html_url) ?? "", outdated: `${str(o.path) ?? "a file"}${was !== undefined ? `, line ${was}` : ""}` }];
+  });
+
+const VERDICT: Readonly<Record<string, HostReview["verdict"]>> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", COMMENTED: "commented", DISMISSED: "dismissed" };
+
+/** `gh api --paginate --slurp repos/…/pulls/N/reviews`: each submitted review —
+ *  a pending one is its author's alone, and a comment-only review that says
+ *  nothing on the whole is just its line comments, shown under their lines. */
+export const readReviews = (v: unknown): ReadonlyArray<HostReview> =>
+  pages(v).flatMap((r): ReadonlyArray<HostReview> => {
+    const o = obj(r);
+    const author = readUser(o?.user);
+    const id = int(o?.id);
+    const verdict = VERDICT[String(o?.state)];
+    if (!o || !author || id === undefined || !verdict) return [];
+    const body = typeof o.body === "string" ? o.body.trim() : "";
+    if (verdict === "commented" && body.length === 0) return [];
+    return [{ id: String(id), author, verdict, body, at: str(o.submitted_at) ?? "", url: str(o.html_url) ?? "" }];
+  });
+
+/** `gh api --paginate --slurp repos/…/issues/N/comments`: the conversation. */
+export const readConversation = (v: unknown): ReadonlyArray<HostNote> =>
+  pages(v).flatMap((c): ReadonlyArray<HostNote> => {
+    const o = obj(c);
+    const author = readUser(o?.user);
+    const id = int(o?.id);
+    if (!o || !author || id === undefined) return [];
+    return [{ id: String(id), author, body: typeof o.body === "string" ? o.body : "", at: str(o.created_at) ?? "", url: str(o.html_url) ?? "" }];
+  });
 
 /** One line comment, as GitHub's REST API has it. */
 export const readComment = (v: unknown): LineComment | null => {
@@ -108,6 +148,7 @@ export const readComment = (v: unknown): LineComment | null => {
     ...(startLine !== undefined && startLine !== line ? { startLine, startSide: o.start_side === "LEFT" ? ("LEFT" as const) : ("RIGHT" as const) } : {}),
     url: str(o.html_url) ?? "",
     at: str(o.created_at) ?? "",
+    ...(int(o.in_reply_to_id) !== undefined ? { replyTo: String(o.in_reply_to_id) } : {}),
   };
 };
 

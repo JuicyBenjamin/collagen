@@ -66,7 +66,7 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
     return c.side === "RIGHT" && (c.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(c.startLine ?? c.line, c.line) : null;
   };
   return (
-    <div class={["line-comment", { pending: props.comment.pending }]}>
+    <div class={["line-comment", { pending: props.comment.pending, reply: props.comment.replyTo !== undefined }]}>
       <div class="line-comment-head">
         <Show when={props.comment.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(e) => (e.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
         <strong>{props.comment.author.login}</strong>

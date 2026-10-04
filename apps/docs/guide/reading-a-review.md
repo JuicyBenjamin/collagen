@@ -202,6 +202,16 @@ login**. collagen keeps no token; whatever `gh` is signed in as is who the page 
   row under the branch line shows the chain from the trunk up, this one, and what builds on
   it, each linked to its pull request or its review page.
 
+- **What was said on GitHub**: everyone's line comments sit under their lines, a reply a
+  step in under the comment it answers. Above the code, **On GitHub** lists the rest, oldest
+  first — each review with its verdict (approved, changes requested, commented) and its words
+  on the whole, the pull request's conversation, and line comments on code that has changed
+  since, with where they were — the latest three, the rest a click away. Comments said in
+  collagen (yours, your AI's once accepted, a colleague's) show with them, each once.
+- **When GitHub is asked**: never on a timer. When the page opens; when the review moves (a
+  push, a revision); after anything sent from the page; when you come back to the tab after a
+  minute or more away; and on **↻ Refresh**, beside when it was last asked.
+
 GitHub is a network and a login away: each part that cannot be read says why where it
 would be, and the diff never waits for any of it (it is read in a call of its own). The
 writes are not reads: Solid refuses them from any page but this one, so a site you visit
