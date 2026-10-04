@@ -161,7 +161,8 @@ nav .nav-unexplained .nav-what { color: var(--warn); }
 /* what opens between a hunk's lines (a peek, comments, a comment being
    written) is as wide as the code's box, not as the code: it stays in view
    while a long line is scrolled sideways (100cqw: the box's width) */
-.peek, .thread { position: sticky; left: 56px; box-sizing: border-box; width: calc(100cqw - 68px); }
+/* balanced: the same space on either side, the box's width less both */
+.peek, .thread { position: sticky; left: 12px; box-sizing: border-box; width: calc(100cqw - 24px); }
 table { border-collapse: collapse; width: 100%; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
 td { padding: 0 12px; white-space: pre; vertical-align: top; }
 td.n { color: var(--faint); text-align: right; user-select: none; width: 1%; padding: 0 8px; font-size: 12px; }
@@ -188,7 +189,7 @@ td.t.asks.on-word { cursor: pointer; }
 .hint-text.muted { color: var(--faint); }
 
 tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
-.peek { margin: 6px 12px 12px 56px; padding: 12px 16px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--panel); font-size: 13.5px; }
+.peek { margin: 10px 12px; padding: 12px 16px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--panel); font-size: 13.5px; }
 .peek-close { position: absolute; top: 8px; right: 10px; border: 0; background: none; color: var(--faint); font-size: 18px; line-height: 1; cursor: pointer; }
 .peek-close:hover { color: var(--fg); }
 .peek-one + .peek-one { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
@@ -256,7 +257,7 @@ tr.picked td.n { box-shadow: inset 2px 0 0 var(--accent); }
 .sg-add { background: var(--add-bg); }
 .sg-none { color: var(--faint); font-style: italic; }
 tr.thread-row td { padding: 0; white-space: normal; background: var(--bg); }
-.thread { margin: 6px 12px 10px 56px; display: grid; gap: 8px; font: 13.5px/1.5 -apple-system, sans-serif; }
+.thread { margin: 10px 12px; display: grid; gap: 8px; font: 13.5px/1.5 -apple-system, sans-serif; }
 .line-comment { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .line-comment.pending { opacity: 0.6; border-style: dashed; }
 .line-comment-head { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--dim); }
