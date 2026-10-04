@@ -33,10 +33,11 @@ export class ReviewBackend extends Context.Service<
     /** the review on its host: who is signed in, its pull request, that request's line comments, the stack */
     readonly host: (ticketId: string) => Effect.Effect<HostView>;
     /** finish the reader's review: its pending comments said — on the pull request as one review with
-     *  their verdict and words, and in the room; `commit`: the one the page shows */
-    readonly submit: (ticketId: string, verdict: Verdict, body: string, commit: string | null) => Effect.Effect<SubmitResult>;
+     *  their verdict and words, and in the room; `commit`: the one the page shows; `shownAs`: the
+     *  login the page shows signed in — a write under anyone else is refused */
+    readonly submit: (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null) => Effect.Effect<SubmitResult>;
     /** a single comment, said at once — on a line, or a block of lines from `start`, at the commit the page shows */
-    readonly lineComment: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart) => Effect.Effect<HostWrite>;
+    readonly lineComment: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart, shownAs: string | null) => Effect.Effect<HostWrite>;
     /** a comment into the reader's review: pending, said when they finish it */
     readonly addToReview: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart) => Effect.Effect<HostWrite>;
     /** the comments on the review collagen holds: the AI's drafts and the pending review here, and what the room has said */
@@ -47,6 +48,8 @@ export class ReviewBackend extends Context.Service<
     readonly edit: (ticketId: string, id: string, body: string) => Effect.Effect<DraftsResult>;
     /** drop drafts or pending comments (by id; or, with null, all of a kind); how many went */
     readonly drop: (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending") => Effect.Effect<number>;
+    /** a comment not said yet, confirmed where it sits at `commit` — the one the page shows now */
+    readonly repin: (ticketId: string, id: string, commit: string) => Effect.Effect<DraftsResult>;
   }
 >()("review-web/ReviewBackend") {}
 

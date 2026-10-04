@@ -40,8 +40,11 @@ export interface RepoHost {
   /** base...branch as a diff, for a reader with no clone */
   readonly compare: (link: string, base: string, branch: string) => Effect.Effect<string | null>;
   readonly links: (link: string, base: string | undefined, branch: string | undefined) => ReadonlyArray<{ readonly label: string; readonly url: string }>;
-  /** who is signed in — or how to sign in */
+  /** who is signed in — or how to sign in; remembered a while, for reading */
   readonly viewer: Effect.Effect<{ readonly user: HostUser } | { readonly signIn: string }>;
+  /** who is signed in this moment, asked again — what a write goes out
+   *  under, whatever was remembered (and what is remembered from now on) */
+  readonly viewerNow: Effect.Effect<{ readonly user: HostUser } | { readonly signIn: string }>;
   /** the pull request a review is: the one its link names, else its branch's */
   readonly pull: (link: string, branch: string | undefined) => Effect.Effect<{ readonly pull: HostPull } | { readonly none: string }>;
   /** its line comments: those on a line now, and those on code changed since */
@@ -89,6 +92,21 @@ const NO_GH = "Install the GitHub CLI (gh) and run gh auth login to act on the p
 const VIEWER_FOR_MS = 10 * 60_000;
 let viewerSeen: { readonly at: number; readonly user: HostUser } | null = null;
 
+/** Ask gh who is signed in, and remember it (a failure is not remembered —
+ *  and forgets what was). */
+type Viewer = { readonly user: HostUser } | { readonly signIn: string };
+const askViewer: Effect.Effect<Viewer> = Effect.gen(function* () {
+  const ran = yield* gh(["api", "user"], 10_000);
+  if (ran.missing) return { signIn: NO_GH };
+  const user = ran.ok ? readUser(parse(ran.out)) : null;
+  if (!user) {
+    viewerSeen = null;
+    return { signIn: `Not signed in to GitHub (${refusal(ran.err)}): run gh auth login.` };
+  }
+  viewerSeen = { at: Date.now(), user };
+  return { user };
+});
+
 /** GitHub, through the person's own `gh` login. */
 export const github: RepoHost = {
   name: "GitHub",
@@ -108,15 +126,8 @@ export const github: RepoHost = {
       ...(base && branch ? [{ label: "compare", url: `https://github.com/${r.owner}/${r.repo}/compare/${base}...${branch}` }] : []),
     ];
   },
-  viewer: Effect.gen(function* () {
-    if (viewerSeen && Date.now() - viewerSeen.at < VIEWER_FOR_MS) return { user: viewerSeen.user };
-    const ran = yield* gh(["api", "user"], 10_000);
-    if (ran.missing) return { signIn: NO_GH };
-    const user = ran.ok ? readUser(parse(ran.out)) : null;
-    if (!user) return { signIn: `Not signed in to GitHub (${refusal(ran.err)}): run gh auth login.` };
-    viewerSeen = { at: Date.now(), user };
-    return { user };
-  }),
+  viewer: Effect.suspend((): Effect.Effect<Viewer> => (viewerSeen && Date.now() - viewerSeen.at < VIEWER_FOR_MS ? Effect.succeed({ user: viewerSeen.user }) : askViewer)),
+  viewerNow: Effect.suspend(() => askViewer),
   pull: (link, branch) =>
     Effect.gen(function* () {
       const r = githubRepo(link)!;

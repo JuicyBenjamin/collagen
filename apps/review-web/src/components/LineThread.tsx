@@ -95,6 +95,22 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
 /** A comment the reader's AI drafted, waiting on the reader: its words (a
  *  suggestion in them shown as one), and Add to review — pending in their
  *  review, said when they finish it — Edit, or Decline. */
+/** A comment not said yet, written at another commit than the one the page
+ *  shows: where it sits may have moved. The reader confirms it here or
+ *  deletes it — until then, finishing the review refuses it. */
+function Moved(props: { comment: DraftView }) {
+  return (
+    <Show when={hostNow.moved(props.comment)}>
+      <p class="moved-note">
+        Written at {props.comment.commit.slice(0, 7)} — the code has moved since, so these lines may not be the ones it meant.
+        <button type="button" class="link" onClick={() => void hostNow.repin(props.comment.id)} title="It is about these lines at the commit shown now">
+          Keep it here
+        </button>
+      </p>
+    </Show>
+  );
+}
+
 function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
   const [editing, setEditing] = createSignal(false);
   const [body, setBody] = createSignal(props.draft.body);
@@ -124,6 +140,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
       >
         <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
       </Show>
+      <Moved comment={props.draft} />
       <Show when={hostNow.refusal(props.draft.id)}>{(why) => <p class="host-error">Not posted: {why()}</p>}</Show>
       <div class="composer-actions">
         <button type="button" class="quiet" disabled={busy()} onClick={() => void hostNow.decline([props.draft.id])}>
@@ -157,7 +174,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
   return (
     <div class="line-comment pending-review">
       <div class="line-comment-head">
-        <span class="pending-badge">Pending</span>
+        <span class="pending-badge">{props.comment.posted ? "On GitHub" : "Pending"}</span>
         <Show when={props.comment.drafted}>
           <span class="drafted-mark" title="Drafted by your AI, taken into your review">with AI</span>
         </Show>
@@ -169,7 +186,11 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
       >
         <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
       </Show>
+      <Show when={!props.comment.posted} fallback={<p class="moved-note">On the pull request already — finish the review again to say it in the room.</p>}>
+        <Moved comment={props.comment} />
+      </Show>
       <Show when={hostNow.refusal(props.comment.id)}>{(why) => <p class="host-error">{why()}</p>}</Show>
+      <Show when={!props.comment.posted}>
       <div class="composer-actions">
         <button type="button" class="quiet" onClick={() => void hostNow.unpend([props.comment.id])}>
           Delete
@@ -183,6 +204,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
           </button>
         </Show>
       </div>
+      </Show>
     </div>
   );
 }
