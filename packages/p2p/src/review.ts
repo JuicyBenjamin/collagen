@@ -260,6 +260,24 @@ const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
   return `${prefix}${n}`;
 };
 
+/** A guess the code's author answered keeps its answer when its id is given
+ *  again (an edit through ask-review, which knows nothing of verdicts): a
+ *  correction stays one, beside the guess it replaced; a confirmed or wrong
+ *  guess edited to say something else becomes a correction, the old words
+ *  kept as the guess. Nothing answered: the edit stands as it is. */
+const keepAnswer = <T extends { readonly verdict?: Verdict; readonly guess?: Guess; readonly basis?: string; readonly confidence?: Confidence }>(
+  old: T,
+  next: T,
+  says: (x: T) => string,
+  asGuess: (x: T) => { readonly what: string; readonly why?: string },
+): T => {
+  if (!old.verdict || next.verdict) return next;
+  const { basis: _b, confidence: _c, ...told } = next;
+  if (old.verdict === "corrected") return { ...told, verdict: "corrected", ...(old.guess ? { guess: old.guess } : {}) } as T;
+  if (says(next) === says(old)) return { ...next, verdict: old.verdict, ...(old.basis && !next.basis ? { basis: old.basis } : {}), ...(old.confidence && !next.confidence ? { confidence: old.confidence } : {}) };
+  return { ...told, verdict: "corrected", guess: { ...asGuess(old), ...(old.basis ? { basis: old.basis } : {}) } } as T;
+};
+
 /** Fold an amendment into what the log already has. Scalars are replaced when
  *  given; decisions and forks merge by id — a repeated id is a correction, a
  *  new (or missing) one appends with the next free number. The whole record
@@ -274,7 +292,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     const at = decisions.findIndex((x) => x.id === id);
     const entry: ReviewDecision = { ...d, id, where: d.where ?? [] };
     if (at === -1) decisions.push(entry);
-    else decisions[at] = entry;
+    else decisions[at] = keepAnswer(decisions[at]!, entry, (x) => `${x.title ?? ""}|${x.what}`, (x) => ({ what: x.what, ...(x.agentWhy ? { why: x.agentWhy } : {}) }));
   }
   const forks = [...base.forks];
   for (const f of delta.forks ?? []) {
@@ -282,7 +300,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     const at = forks.findIndex((x) => x.id === id);
     const entry: ReviewFork = { ...f, id };
     if (at === -1) forks.push(entry);
-    else forks[at] = entry;
+    else forks[at] = keepAnswer(forks[at]!, entry, (x) => `${x.chose}|${x.instead}`, (x) => ({ what: `${x.chose} over ${x.instead}`, why: x.why }));
   }
   // a withdrawn guess goes; its id is not given again, so it never comes back as another
   const withdrawn = new Set(delta.retireGuesses ?? []);
@@ -419,8 +437,26 @@ export type DraftComment = typeof DraftComment.Type;
 export const supersedes = (incoming: ReviewContext, current: ReviewContext): boolean => {
   const a = incoming.assumed !== undefined && incoming.claimed === undefined ? 0 : 1;
   const b = current.assumed !== undefined && current.claimed === undefined ? 0 : 1;
-  return a !== b ? a > b : incoming.ts >= current.ts;
+  if (a !== b) return a > b;
+  if (incoming.ts !== current.ts) return incoming.ts > current.ts;
+  // the same moment from two writers (the author and a co-author, two
+  // sessions): one order over the whole record, never "whichever came last"
+  return canonical(incoming) >= canonical(current);
 };
+
+/** Whether `incoming` replaces `current` and is not the same record. */
+export const strictlySupersedes = (incoming: ReviewContext, current: ReviewContext): boolean => supersedes(incoming, current) && !supersedes(current, incoming);
+
+/** A value as JSON with its keys in order — the same text for the same record on every peer. */
+const canonical = (v: unknown): string =>
+  Array.isArray(v)
+    ? `[${v.map(canonical).join(",")}]`
+    : v !== null && typeof v === "object"
+      ? `{${Object.keys(v as object)
+          .sort()
+          .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+          .join(",")}}`
+      : JSON.stringify(v);
 
 /** An answer the code's author gives one guess, by its id (d1, f2 …):
  *  right; wrong, with the real one in its place; or wrong, with why. */
