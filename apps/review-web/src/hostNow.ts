@@ -1,4 +1,4 @@
-import { action, createMemo, createOptimistic, createSignal, NotReadyError, refresh, type Accessor, type SourceAccessor } from "solid-js";
+import { action, createMemo, createOptimistic, createSignal, isPending, NotReadyError, refresh, type Accessor, type SourceAccessor } from "solid-js";
 import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, sendLineComment, submitReview, talkView } from "./api";
 import type { DraftsResult, DraftView, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
 import { diffNow } from "./diffNow";
@@ -48,6 +48,24 @@ export interface Pick {
   readonly focus: number;
 }
 const [pick, setPick] = createSignal<Pick | null>(null);
+
+// When GitHub is asked again — never on a timer: when the page opens, when
+// the review's state moves (a push, a revision), after anything sent from
+// here, on the reader's Refresh, and when they come back to the tab after a
+// while away. `asked` moves to ask again.
+const [asked, setAsked] = createSignal(0);
+const STALE_AFTER_MS = 60_000;
+/** The page's clock for "checked 2 min ago", moved twice a minute. */
+const [now, setNow] = createSignal(Date.now());
+if (typeof window !== "undefined") {
+  setInterval(() => setNow(Date.now()), 30_000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    setNow(Date.now());
+    const at = hostNow.checkedAt();
+    if (at !== null && Date.now() - at > STALE_AFTER_MS) setAsked((n) => n + 1);
+  });
+}
 /** Why a draft could not be said, by its id — kept apart from the draft, so
  *  it survives the draft coming back when the optimistic accept is undone. */
 const [refusals, setRefusals] = createSignal<Readonly<Record<string, string>>>({});
@@ -58,6 +76,7 @@ export const hostNow = {
   start(state: Accessor<unknown>): void {
     const v = createMemo(() => {
       state();
+      asked();
       return hostView(ticketId);
     });
     view = v;
@@ -94,6 +113,25 @@ export const hostNow = {
     const v = hostNow.view();
     return v && "host" in v ? v : null;
   },
+
+  /** Ask GitHub again now — the reader's Refresh. */
+  refresh: (): void => {
+    setAsked((n) => n + 1);
+  },
+  /** When GitHub was last asked (ms), or null before it has been. */
+  checkedAt: (): number | null => {
+    const h = hostNow.host();
+    return h ? Date.parse(h.checkedAt) : null;
+  },
+  /** Is it being asked right now (a refresh on its way). */
+  checking: (): boolean => {
+    try {
+      return view ? isPending(() => view!()) : false;
+    } catch {
+      return true;
+    }
+  },
+  now,
 
   /** The stack the branch sits in, host or not (the room's reviews make one too). */
   stack: () => hostNow.view()?.stack ?? null,

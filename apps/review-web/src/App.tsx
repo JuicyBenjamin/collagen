@@ -12,6 +12,7 @@ import { hostNow } from "./hostNow";
 import { HostBar } from "./components/HostBar";
 import { StackRow } from "./components/StackRow";
 import { DraftsBar } from "./components/DraftsBar";
+import { GitHubActivity } from "./components/GitHubActivity";
 import { diffNow } from "./diffNow";
 import { placeWhy, whyOpening } from "./whyPanel";
 
@@ -155,6 +156,7 @@ function Page(props: { data: ReviewPageData }) {
 
       <main>
         <Header data={props.data} />
+        <GitHubActivity />
         {/* one offer per language the review's code is in */}
         <For each={[...new Set((props.data.grouped?.hunks ?? []).map((h) => toolOf(h.file)).filter((t) => t !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
         <Show

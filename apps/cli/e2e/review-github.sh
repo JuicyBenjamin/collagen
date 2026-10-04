@@ -69,6 +69,10 @@ expect "signed in as the gh login, with a name and an avatar" "$VIEW" '"viewer":
 expect "the pull request the review's link names, its state and decision" "$SHAPE" "^pull 7 open review required theirs$"
 expect "its line comments, on the line and side they sit on" "$SHAPE" "^comment bob src/export.ts RIGHT 2 Why map to strings here\?$"
 expect "the stack: the trunk, the pull request it builds on, this one, then what builds on it — a review with no pull request yet among them" "$SHAPE" "^stack trunk:main < pull:6 < \[pull:7\] < pull:8 < review:feat/docs$"
+expect "a reply sits on its line, knowing what it answers" "$VIEW" '"body":"Agreed — rows, please.","file":"src/export.ts","line":2,"side":"RIGHT","url":"[^"]*","at":"[^"]*","replyTo":"900"'
+expect "the reviews on it, with their verdicts and words" "$VIEW" '"reviews":\[\{"id":"98","author":\{"login":"carol","avatarUrl":"http://127.0.0.1:9/carol.png"\},"verdict":"approved","body":"Good to go."'
+expect "its conversation, and a line comment on code changed since, oldest first" "$VIEW" '"conversation":\[\{"id":"77","author":\{"login":"carol"\},"body":"Can this ship Friday\?".*\{"id":"901",.*"body":"old note".*"outdated":"src/export.ts, line 1"\}\]'
+expect "…and when GitHub was asked" "$VIEW" '"checkedAt":"20[0-9]{2}-'
 expect "gh was asked for the pull request by the number in the link" "$(calls)" '\["pr","view","7","--repo","acme/sandbox","--json"'
 
 echo "## a review in the reader's name, finished at once"
@@ -129,6 +133,7 @@ expect "the agent puts the rest in the review on its person's word" "$AGENTACC" 
 FINISHED=$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$TICKET\",\"body\":\"Close — two questions.\"}")
 expect "…and finishes it: every pending comment said, the review on the pull request" "$FINISHED" "^review finished: 3 comment\(s\) said in the room as your user's, and the review is on the pull request: https://github.com/acme/sandbox/pull/7#pullrequestreview-50[0-9]"
 REVIEW=$(reviewed)
+expect "a finished review is read back among the reviews, its verdict and words" "$(sfn hostView "[\"$TICKET\"]")" '"verdict":"commented","body":"Close — two questions."' 
 expect "…one review on GitHub: its words, a comment, every comment in it" "$REVIEW" '"event":"COMMENT","body":"Close — two questions.","comments":\[\{"path":"src/export.ts","line":2,"side":"RIGHT","body":"Strings lose the row shape: keep the objects."\},\{"path":"src/page.ts","line":3,"side":"RIGHT","body":"Name the size:.*","start_line":2,"start_side":"RIGHT"\},\{"path":"src/use.ts","line":3,"side":"RIGHT","body":"Does first need to be exported\?"\}\]'
 TALK=$(talk "$TICKET")
 expect "…said in the room, each with where it is on GitHub, the AI's marked" "$TALK" '"said":\[.*\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"Strings lose the row shape: keep the objects.","file":"src/export.ts","line":2,"side":"RIGHT","url":"[^"]+","at":"[^"]+","drafted":true,"hostId":"[0-9]+"\}'

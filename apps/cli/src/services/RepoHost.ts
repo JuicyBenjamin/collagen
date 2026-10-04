@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { Effect } from "effect";
-import type { HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
-import { githubRepo, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, readComments, readPull, readUser, refusal } from "../lib/github";
+import type { HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
+import { githubRepo, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, readComments, readConversation, readOutdated, readPull, readReviews, readUser, refusal } from "../lib/github";
 
 // Where a project's code is hosted, as something collagen can act on: read
 // a compare diff when there is no clone, link back to it, and — for the
@@ -44,7 +44,12 @@ export interface RepoHost {
   readonly viewer: Effect.Effect<{ readonly user: HostUser } | { readonly signIn: string }>;
   /** the pull request a review is: the one its link names, else its branch's */
   readonly pull: (link: string, branch: string | undefined) => Effect.Effect<{ readonly pull: HostPull } | { readonly none: string }>;
-  readonly comments: (link: string, pull: number) => Effect.Effect<ReadonlyArray<LineComment>>;
+  /** its line comments: those on a line now, and those on code changed since */
+  readonly comments: (link: string, pull: number) => Effect.Effect<{ readonly inline: ReadonlyArray<LineComment>; readonly outdated: ReadonlyArray<HostNote> }>;
+  /** the reviews submitted on it */
+  readonly reviews: (link: string, pull: number) => Effect.Effect<ReadonlyArray<HostReview>>;
+  /** its conversation: comments on the whole, not a line */
+  readonly conversation: (link: string, pull: number) => Effect.Effect<ReadonlyArray<HostNote>>;
   /** the repository's open pull requests, for the stack a branch sits in */
   readonly openPulls: (link: string) => Effect.Effect<ReadonlyArray<HostPull>>;
   /** a whole review, at once: its verdict, its words, and every comment
@@ -136,7 +141,20 @@ export const github: RepoHost = {
     Effect.gen(function* () {
       const r = githubRepo(link)!;
       const ran = yield* gh(["api", "--paginate", "--slurp", `repos/${r.owner}/${r.repo}/pulls/${pull}/comments`]);
-      return ran.ok ? readComments(parse(ran.out)) : [];
+      const got = ran.ok ? parse(ran.out) : null;
+      return { inline: readComments(got), outdated: readOutdated(got) };
+    }),
+  reviews: (link, pull) =>
+    Effect.gen(function* () {
+      const r = githubRepo(link)!;
+      const ran = yield* gh(["api", "--paginate", "--slurp", `repos/${r.owner}/${r.repo}/pulls/${pull}/reviews`]);
+      return ran.ok ? readReviews(parse(ran.out)) : [];
+    }),
+  conversation: (link, pull) =>
+    Effect.gen(function* () {
+      const r = githubRepo(link)!;
+      const ran = yield* gh(["api", "--paginate", "--slurp", `repos/${r.owner}/${r.repo}/issues/${pull}/comments`]);
+      return ran.ok ? readConversation(parse(ran.out)) : [];
     }),
   openPulls: (link) =>
     Effect.gen(function* () {
