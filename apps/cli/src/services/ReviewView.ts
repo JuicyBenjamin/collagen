@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +5,7 @@ import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { gitDir, repoWebUrl } from "../lib/gitInfo";
+import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, SinceResult, Verdict, WholeFileResult } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
 import { importsAmong } from "../lib/imports";
@@ -20,29 +20,6 @@ import { StateStore } from "./StateStore";
 // the reviewer's own clone, laid out under the why (lib/reviewView). Served
 // by the running instance beside /mcp, on loopback, read-only — a take still
 // goes back through the person's agent (post-review), one path into the log.
-
-/** Run a command, its stdout or null — never a failure: no git, no clone, no
- *  network all degrade the page, they do not break it. */
-export const run = (cmd: string, args: ReadonlyArray<string>, cwd: string | undefined, timeoutMs: number): Effect.Effect<string | null> =>
-  Effect.callback<string | null>((resume) => {
-    const child = execFile(cmd, [...args], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "utf8" }, (err, stdout) =>
-      resume(Effect.succeed(err ? null : stdout)),
-    );
-    return Effect.sync(() => child.kill());
-  });
-
-
-
-
-/** The first of `refs` the repo knows as a commit. */
-export const firstRef = (cwd: string, refs: ReadonlyArray<string>) =>
-  Effect.gen(function* () {
-    for (const ref of refs) {
-      const ok = yield* run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], cwd, 5_000);
-      if (ok !== null && ok.trim().length > 0) return ref;
-    }
-    return null;
-  });
 
 /** The diff of base...branch from the clone at `path`: fetch first (the
  *  reviewer may not have the branch yet), then the refs as they are, local

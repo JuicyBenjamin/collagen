@@ -502,5 +502,8 @@ export const LocalState = Schema.Struct({
   /** The reader's reviews finished from the page: ticket id → the ids of
    *  its latest finishes, so the same finish sent again is not said twice. */
   finished: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
+  /** Assumed reviews of this person's own code their agent has been told of
+   *  — once each, whenever it arrived. */
+  toldGuessed: Schema.optional(Schema.Array(Schema.String)),
 });
 export type LocalState = typeof LocalState.Type;
