@@ -220,7 +220,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
           if (!ticket) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
           const now = yield* Clock.currentTimeMillis;
-          const done = closeTicket(ticket, identity.pubkey, out.reason, now);
+          const done = closeTicket(ticket, identity.pubkey, out.reason, now, out.outcome);
           if (done.outcome === "epic") return refused(`failed: "${ticketName(ticket)}" is an epic — it closes (and reopens) with the epic tool, by anyone, with a reason`);
           if (done.outcome === "not-yours") return refused(`failed: "${ticket.goal}" is ${nameFor(ticket.createdBy)}'s ticket to close — say what your user thinks with send-to-peer (pass ticketId)`);
           if (done.outcome === "already") return refused(`failed: "${ticket.goal}" was already closed by ${nameFor(ticket.closed!.by)}`);
@@ -230,7 +230,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // the author's own instruction for this moment, written when the
           // ticket was filed — handed over now, and not a settle earlier. One
           // instruction to the agent, not two: what to report, then what to do
-          const fact = `closed "${merged.goal}" [ticket ${merged.id}]${out.reason ? ` — ${out.reason.replace(/\.$/, "")}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it.`;
+          const fact = `closed "${merged.goal}" [ticket ${merged.id}] as ${out.outcome === "dropped" ? "dropped (out of its epic's progress)" : "done"}${out.reason ? ` — ${out.reason.replace(/\.$/, "")}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it.`;
           const then = merged.whenClosed
             ? `TELL YOUR USER that the ticket is closed, THEN carry out what it says to do when closed — "${merged.whenClosed}" — which they authorised when they filed it, and tell them what came of that.`
             : `TELL YOUR USER ONLY THIS: "ticket closed".`;

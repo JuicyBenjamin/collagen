@@ -120,8 +120,16 @@ export const Closed = Schema.Struct({
   ts: Schema.Finite,
   /** Why, when a close needs explaining (abandoned, superseded, done differently). */
   reason: Schema.optional(Schema.String),
+  /** How it ended: its work done, or dropped. Absent on closes from before
+   *  it was asked — read as done (closedAs). */
+  outcome: Schema.optional(Schema.Literals(["done", "dropped"])),
 });
 export type Closed = typeof Closed.Type;
+
+/** How a closed ticket ended, or null while it is open. A close that did
+ *  not say was made when dropped work was to be taken out of its epic or
+ *  excluded, so one still counted there was done. */
+export const closedAs = (ticket: Ticket): "done" | "dropped" | null => (ticket.closed ? (ticket.closed.outcome ?? "done") : null);
 
 export const Ticket = Schema.Struct({
   id: Schema.String,
@@ -278,14 +286,20 @@ export function moveToEpic(ticket: Ticket, epic: string | null, by: string, now:
   return { ...ticket, partOf: [...(ticket.partOf ?? []), move], updatedAt: now };
 }
 
+/** Done, as its epic counts it: every step answered, or closed as done. */
+export const doneInEpic = (t: Ticket): boolean => finished(t) || closedAs(t) === "done";
+
+/** Out of its epic's progress: excluded, or closed as dropped (4 of 5 becomes 4 of 4). */
+export const outOfProgress = (t: Ticket): boolean => excludedFromEpic(t) || closedAs(t) === "dropped";
+
 /** Is a ticket in an epic resolved — so the epic may close? Done (every step
  *  answered), closed, or excluded from progress. */
 const resolved = (t: Ticket): boolean => finished(t) || (t.kind !== "epic" && t.closed !== undefined) || excludedFromEpic(t);
 
 /** The tickets in an epic now, in its reading order (the latest one set,
- *  then the rest), and its progress: the ones done — every step answered —
- *  against all but the excluded. Closing a ticket does not make it done:
- *  dropped work is taken out or excluded, so 4 of 5 becomes 4 of 4. */
+ *  then the rest), and its progress: the ones done — every step answered,
+ *  or closed as done — against all but the excluded and those closed as
+ *  dropped, so 4 of 5 becomes 4 of 4. */
 export function epicParts(epic: Ticket, all: ReadonlyMap<string, Ticket>): {
   readonly parts: ReadonlyArray<Ticket>;
   readonly counted: number;
@@ -299,8 +313,8 @@ export function epicParts(epic: Ticket, all: ReadonlyMap<string, Ticket>): {
     return i === -1 ? order.length : i;
   };
   const parts = [...inside].sort((a, b) => rank(a) - rank(b));
-  const counted = parts.filter((t) => !excludedFromEpic(t));
-  return { parts, counted: counted.length, done: counted.filter(finished).length, unresolved: parts.filter((t) => !resolved(t)) };
+  const counted = parts.filter((t) => !outOfProgress(t));
+  return { parts, counted: counted.length, done: counted.filter(doneInEpic).length, unresolved: parts.filter((t) => !resolved(t)) };
 }
 
 /** The turns no other turn has seen: what the room's latest word on the
@@ -469,12 +483,12 @@ export type CloseOutcome =
 
 /** Close a ticket, as one rule for every caller: the author's decision, the
  *  steps untouched. Returns the closed ticket, or why not. */
-export function closeTicket(ticket: Ticket, by: string, reason: string | undefined, now: number): { readonly ticket: Ticket; readonly outcome: CloseOutcome } {
+export function closeTicket(ticket: Ticket, by: string, reason: string | undefined, now: number, ended?: "done" | "dropped"): { readonly ticket: Ticket; readonly outcome: CloseOutcome } {
   if (ticket.kind === "epic") return { ticket, outcome: "epic" };
   if (ticket.createdBy !== by) return { ticket, outcome: "not-yours" };
   if (ticket.closed) return { ticket, outcome: "already" };
   return {
-    ticket: { ...ticket, closed: { by, ts: now, ...(reason ? { reason } : {}) }, updatedAt: now },
+    ticket: { ...ticket, closed: { by, ts: now, ...(reason ? { reason } : {}), ...(ended ? { outcome: ended } : {}) }, updatedAt: now },
     outcome: "closed",
   };
 }

@@ -86,7 +86,7 @@ export function proposalText(p: Proposal): string {
     case "transcript":
       return `your ${o.ai} conversation ${o.sessionId.slice(0, 8)}… on thread ${o.threadId}, from ${new Date(o.since).toISOString()} on — every line of it, as the session file has it. It goes to the requester only.`;
     case "close":
-      return o.reason ? `closed — ${o.reason}` : "closed";
+      return `closed${o.outcome === "dropped" ? " as dropped" : o.outcome === "done" ? " as done" : ""}${o.reason ? ` — ${o.reason}` : ""}`;
     case "epic-move":
       return o.epic
         ? `${o.excluded === true ? "kept in the epic but out of its progress" : o.excluded === false ? "counted in the epic's progress again" : "put into the epic"} "${o.name ?? o.goal}": ${o.ticketIds.join(", ")}`
