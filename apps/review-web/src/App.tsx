@@ -363,6 +363,13 @@ function UnitSection(props: {
 }) {
   const shaped = () => props.unit.decisions.map((id) => props.decisions.get(id)).filter((d): d is Decision => d !== undefined);
   const files = () => new Set(props.unit.hunks.map((id) => props.hunks.get(id)?.file)).size;
+  /** What the diff skips between one change of a file and the next in this
+   *  unit: how many lines, and how many changes among them sit in another unit. */
+  const skippedBefore = (above: HunkData, h: HunkData) => {
+    const from = above.newStart + above.newLines;
+    const elsewhere = [...props.hunks.values()].filter((o) => o.file === h.file && o.newStart >= from && o.newStart < h.newStart).length;
+    return { lines: h.newStart - from, elsewhere };
+  };
   // the unit's changes in runs of one file each, in order
   const runs = createMemo(() => {
     const out: Array<Array<HunkData>> = [];
@@ -424,7 +431,7 @@ function UnitSection(props: {
           {(run) => (
             <div class="hunk-group">
               <For each={run}>
-                {(h, j) => <Hunk hunk={h} continued={j() > 0} unexplained={unexplained().has(h.id)} />}
+                {(h, j) => <Hunk hunk={h} continued={j() > 0} skipped={j() > 0 ? skippedBefore(run[j() - 1]!, h) : undefined} unexplained={unexplained().has(h.id)} />}
               </For>
             </div>
           )}
