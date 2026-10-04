@@ -403,10 +403,10 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
   proposal in an epic is not in it until someone adds it, and moving the proposal leaves
   the plan where it is. Filing a ticket that grows out of one in an epic *suggests* that
   epic (or asks which, when its parents sit in different ones); the choice is stored.
-- **Progress is a count**: the tickets done — every step answered — against everything
-  counted. Closing a ticket does not make it done. Work that is dropped or will not be
-  done there is taken out, or kept in and **excluded** from progress: 4 of 5 becomes 4 of
-  4 when the fifth is dropped, not 5 of 5.
+- **Progress is a count**: the tickets done — every step answered, or **closed as done**
+  — against everything counted. A ticket **closed as dropped** leaves the count, as does
+  one taken out or kept in and **excluded**: 4 of 5 becomes 4 of 4 when the fifth is
+  dropped, not 5 of 5. A ticket closed before closes said how they ended counts as done.
 - **Order is for reading.** Anyone may order an epic's tickets — PHP before Rust — and
   that hides nothing: both stay visible and open for discussion. `after` stays the gate,
   for when a later ticket really must wait unseen until the one before is answered.
@@ -478,7 +478,8 @@ rest: the kinds, every mark and the states.
 answered — a reader's ↻ on a review counts as an answer — and that is a signal, not an
 end: it makes the ticket its author's to act on, and the settle that finished it tells
 their agent "when your user says they are done with it, `close-ticket`". *Closing* is the
-author's decision, recorded on the log with an optional reason: the ticket leaves the
+author's decision, recorded on the log with how it ended — **done** or **dropped**, which
+its epic counts — and an optional reason: the ticket leaves the
 list and stays, steps exactly as they were, where `get-tickets` still shows it
 (`closed: true`) and later tickets refer back to it. The author can close a ticket whose
 reviewer never answered or whose work was abandoned — like merging a pull request without

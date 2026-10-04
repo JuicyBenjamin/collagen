@@ -1,6 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { epicBecause, epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
+import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
 
@@ -47,7 +47,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
               kind: t.kind,
               project: t.project,
               goal: t.goal,
-              state: excludedFromEpic(t) ? "excluded" : finished(t) ? "done" : isClosed(t) ? "closed unfinished" : "open",
+              state: excludedFromEpic(t) ? "excluded" : closedAs(t) === "dropped" ? "dropped" : closedAs(t) === "done" ? "closed as done" : finished(t) ? "done" : isClosed(t) ? "closed" : "open",
             })),
         });
       }

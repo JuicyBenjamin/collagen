@@ -69,7 +69,7 @@ wait_until "alice's address step is hers now" "ticket .{1,10} step address actio
 SETTLED=$(call $A "$SA" settle-step "{\"ticketId\":\"$PID\",\"stepId\":\"address\",\"result\":\"cursor paging it is\"}")
 expect "the settle offers the close and nothing else" "$SETTLED" "When your user says they are done with it .{1,6} and only then .{1,6} call close-ticket"
 expect "…the when-closed line is NOT handed over on a settle" "$(echo "$SETTLED" | grep -c 'WHEN CLOSED')" "^0$"
-CLOSED=$(call $A "$SA" close-ticket "{\"ticketId\":\"$PID\",\"reason\":\"agreed: stream rows paged by cursor\"}")
+CLOSED=$(call $A "$SA" close-ticket "{\"ticketId\":\"$PID\",\"outcome\":\"done\",\"reason\":\"agreed: stream rows paged by cursor\"}")
 expect "alice closes with the conclusion as the reason" "$CLOSED" "closed .{1,3}stream the export, paged by cursor.{1,60} .{1,3} agreed: stream rows paged by cursor"
 expect "…and only now is her instruction handed back to her agent — one instruction: report the close, then act" "$CLOSED" "TELL YOUR USER that the ticket is closed, THEN carry out what it says to do when closed .{1,6} .{1,3}open a Jira ticket for the export work"
 expect "…not two: no bare 'ticket closed' line beside it" "$(echo "$CLOSED" | grep -c 'ONLY THIS')" "^0$"
