@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import type { DiffLine, Hunk as HunkData, WholeFileResult } from "../data";
 import { diffNow } from "../diffNow";
 import { ticketId } from "../ticket";
@@ -30,6 +30,40 @@ const skippedText = (skip: { readonly lines: number; readonly elsewhere: number 
   if (!skip || skip.lines <= 0) return "⋯";
   const lines = `${skip.lines} ${skip.lines === 1 ? "line" : "lines"}`;
   return skip.elsewhere === 0 ? `⋯ ${lines} unchanged` : `⋯ ${lines} — ${skip.elsewhere === 1 ? "a change" : `${skip.elsewhere} changes`} among them under another unit`;
+};
+
+/** How far below the window's top a file's header sticks — the why's rail
+ *  sticks there too, so the two travel together (styles.css says the same). */
+const STUCK_AT = 24;
+
+/** A file's header is stuck while it sits where it sticks with its card
+ *  running above it: the band above it is covered then, so code scrolling
+ *  past does not show through. Checked on every frame the page scrolls in,
+ *  for every header on it — a jump lands on the right answer too. */
+const headers = new Set<HTMLElement>();
+let pending = false;
+const markStuck = () => {
+  pending = false;
+  for (const el of headers) {
+    const top = el.getBoundingClientRect().top;
+    const card = el.closest(".hunk-group")?.getBoundingClientRect();
+    el.classList.toggle("stuck", card !== undefined && card.top < top - 0.5 && top <= STUCK_AT + 0.5 && card.bottom > 0);
+  }
+};
+if (typeof window !== "undefined") {
+  const soon = () => {
+    if (!pending) {
+      pending = true;
+      requestAnimationFrame(markStuck);
+    }
+  };
+  window.addEventListener("scroll", soon, { passive: true });
+  window.addEventListener("resize", soon, { passive: true });
+}
+const watchStuck = (el: HTMLElement) => {
+  headers.add(el);
+  requestAnimationFrame(markStuck);
+  onCleanup(() => headers.delete(el));
 };
 
 /** The file as the page's commit has it, line by line — read once per file
@@ -157,7 +191,7 @@ export function Hunk(props: {
   return (
     <Show when={!(props.continued && folded())}>
     <div class={["hunk", { viewed: folded(), reread: state() === "viewed" && !folded(), continued: props.continued }]}>
-      <div class={["file", { continued: props.continued }]}>
+      <div class={["file", { continued: props.continued }]} ref={(el) => !props.continued && watchStuck(el)}>
         {/* a later change in the file: a band saying how much unchanged code
             lies between it and the one above — the file's header stays above */}
         <Show
