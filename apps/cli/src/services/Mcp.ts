@@ -226,6 +226,7 @@ export const AssumeReview = Tool.make("assume-review", {
     "WHAT AN ASSUMPTION IS: a guess at what the change cannot tell the reader — WHY it was made (the problem the author ran into: a bug, an incident, a review that caught something, a constraint) and WHY THIS WAY (the road they did not take, and what ruled it out). Never a restatement: if the description, a commit message or the code already says it, it is not an assumption — the reader can read it there. \"The skill grows over time\" when the skill says so is noise; \"they wrote it after a leak slipped through review\" is a guess worth checking. Look for the trigger in what surrounds the change: what was fixed or reviewed just before, the issues it links, the code it touches and who last changed it.",
     "YOUR JOB: infer the underlying problem, and why the chosen solution is the one they chose. Not what a function is named or what it is for — why the author wrote it to solve their problem, and what that problem was. One line of code may have six reasons behind it, and then it has six assumptions; a given has none. The count follows the reasons, so it follows the change. No forks unless you can see the other road.",
     "Each decision: 'title' (a few words: the reason or the choice, not the file's own words), 'what' (one line: what you think happened or was chosen), 'why' (your guess at the reason), 'basis' (the evidence for the REASON — the timing, a linked issue, the fix before it — never the line that says what the change is), 'confidence' in the reason (high: someone said why; medium: the evidence points there; low: a hunch from the code), 'where'. 'forks': 'at', 'chose', 'instead', 'why', 'basis', 'confidence'. 'title' and 'summary' of the review: what the change is for. 'units': as for ask-review. Never invent: a guess you cannot ground is not one to file.",
+    "'retire' withdraws guesses by id when amending (ticketId): one that only restated the change, or that you now think is wrong — the review stays the same review.",
     "'link' is the pull request: who wrote it ('author'), its 'branch' and 'base' are read from it when you omit them. 'peers' names others in the room to read it too — only who your user named.",
     "It files a review ticket that is your user's to read: a review step of theirs, and the review page shows every assumption marked as a guess, with what it rests on, for them to confirm or put to the author as a question. Amend it with 'ticketId' as you learn more.",
     "WHAT TO TELL YOUR USER: that the review is on the review page, built from your assumptions for them to check — and nothing more; open-review opens it.",
@@ -278,6 +279,7 @@ export const AssumeReview = Tool.make("assume-review", {
       ),
     ),
     retireUnits: Schema.optional(Schema.Array(Schema.String)),
+    retire: Schema.optional(Schema.Array(Schema.String)),
   }),
   success: Schema.String,
 });
@@ -841,6 +843,8 @@ const makeHandlers = Effect.gen(function* () {
         retire?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
         retireUnits?: ReadonlyArray<string>;
+        /** guesses withdrawn by id (assume-review, amending) */
+        retireGuesses?: ReadonlyArray<string>;
         /** the why is the filer's AI's assumptions about someone else's change (assume-review) */
         assumed?: { readonly author: string; readonly sources: ReadonlyArray<string>; readonly identities?: ReadonlyArray<string> };
       }) {
@@ -887,6 +891,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(retireBug ? { retireBug } : {}),
           ...(units ? { units } : {}),
           ...(retireUnits ? { retireUnits } : {}),
+          ...(input.retireGuesses && input.retireGuesses.length > 0 ? { retireGuesses: input.retireGuesses } : {}),
           ...(input.assumed
             ? {
                 assumed: {
@@ -920,7 +925,7 @@ const makeHandlers = Effect.gen(function* () {
           }
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
-            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves || unitsMove;
+            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves || unitsMove || (input.retireGuesses?.length ?? 0) > 0;
           if (input.title !== undefined) {
             const gap = ticketTitleGap(input.title);
             if (gap) return gap;
@@ -1408,6 +1413,7 @@ const makeHandlers = Effect.gen(function* () {
         forks?: ReadonlyArray<{ readonly id?: string; readonly at: string; readonly chose: string; readonly instead: string; readonly why: string; readonly basis: string; readonly confidence: Confidence }>;
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
         retireUnits?: ReadonlyArray<string>;
+        retire?: ReadonlyArray<string>;
       }) {
         // the pull request, read from its host: who wrote it and where its
         // code is — a fork's branch is on the fork, so its head is read as pr/<n>
@@ -1440,6 +1446,16 @@ const makeHandlers = Effect.gen(function* () {
         const forks: ReadonlyArray<ForkInput> = (input.forks ?? []).map((f) => ({ ...(f.id ? { id: f.id } : {}), at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis, confidence: f.confidence }));
         const gap = assumedGaps({ decisions, forks, assumed }, input.ticketId !== undefined);
         if (gap) return gap;
+        // withdrawing guesses: on a review of yours, guesses still unanswered
+        const retire = [...new Set(input.retire ?? [])];
+        if (retire.length > 0) {
+          if (!existing) return "failed: 'retire' withdraws guesses from a review you filed — pass its ticketId";
+          for (const id of retire) {
+            const guess = existing.decisions.find((d) => d.id === id) ?? existing.forks.find((f) => f.id === id);
+            if (!guess) return `failed: no guess "${id}" on this review — see review-context for their ids`;
+            if (guess.verdict) return `failed: "${id}" was answered by the code's author — it is theirs now`;
+          }
+        }
         const filed = yield* fileJudged("review", {
           ...(input.project ? { project: input.project } : {}),
           ...(input.ticketId ? { ticketId: input.ticketId } : {}),
@@ -1451,6 +1467,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(input.peers ? { peers: input.peers } : {}),
           ...(input.units ? { units: input.units } : {}),
           ...(input.retireUnits ? { retireUnits: input.retireUnits } : {}),
+          ...(retire.length > 0 ? { retireGuesses: retire } : {}),
           decisions,
           forks,
           assumed,
