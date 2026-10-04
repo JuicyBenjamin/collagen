@@ -98,10 +98,13 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 /* the code */
 /* not clipped, so the also-under list can open over what follows; the
    rounding is the header's and the code's own instead */
-/* the card clips to its own rounded edge (out to its border, where the header
-   overlaps it): so the header pushed to the card's bottom as it scrolls away
-   rounds with it — while stuck mid-card it is out of reach of the clip */
-.hunk { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: clip; overflow-clip-margin: 1px; }
+/* a file's card: its changes in the unit, together. It clips to its own
+   rounded edge (out to its border, where the header overlaps it): so the
+   header pushed to the card's bottom as it scrolls away rounds with it —
+   while stuck mid-card it is out of reach of the clip. Each change is no box
+   of its own (display: contents), so the header's sticking spans them all. */
+.hunk-group { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: clip; overflow-clip-margin: 1px; }
+.hunk { display: contents; }
 /* the file's header — its name, Whole file, Viewed — stays at the top of the
    window while its hunk is read, as the why beside it does, and keeps its
    rounded top there. It is a square of the page's own colour laid over the
@@ -123,13 +126,10 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 /* a file's later changes in a unit: joined to the one above, no header of their own */
 /* a file's later change in the same unit: one card with the change above it,
    the two parted by a band naming where it jumps to, as GitHub's hunk line */
-.hunk:has(+ .hunk.continued) { margin-bottom: 0; border-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
-.hunk.continued { margin-top: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
-.hunk .file.continued { margin: 0; padding: 3px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 45%, var(--panel)); color: var(--faint); font-size: 12px; }
+.hunk .file.continued { position: static; margin: 0; padding: 3px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 45%, var(--panel)); color: var(--faint); font-size: 12px; }
 .hunk .file.continued::before { content: none; }
 .hunk .file.continued .head { color: var(--faint); }
-.cont-file { color: var(--dim); }
-.cont-at { margin-left: 8px; }
+
 .hunk-note { margin: 0; padding: 4px 12px; font-size: 12px; color: var(--warn); border-bottom: 1px solid var(--line); }
 /* the why beside a unit: one block per decision that shaped it */
 .why-decision { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed var(--line); }
@@ -152,13 +152,12 @@ nav .nav-unexplained .nav-what { color: var(--warn); }
 .mark-viewed { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
 .mark-viewed input { margin: 0; accent-color: var(--accent); cursor: pointer; }
 .mark-viewed.changed { color: var(--warn); }
-.hunk.viewed { opacity: 0.6; }
+.hunk.viewed > * { opacity: 0.6; }
 .hunk.viewed .file::before { inset: 0; border-radius: 10px; }
 .hunk.viewed .file { margin-bottom: -1px; }
 .nav-viewed { font-size: 12.5px; color: var(--dim); margin: -4px 0 10px; }
 .nav-viewed.done { color: var(--sign-add); }
-.code { overflow-x: auto; container-type: inline-size; border-radius: 0 0 10px 10px; }
-.hunk:has(+ .hunk.continued) .code { border-radius: 0; }
+.code { overflow-x: auto; container-type: inline-size; }
 /* what opens between a hunk's lines (a peek, comments, a comment being
    written) is as wide as the code's box, not as the code: it stays in view
    while a long line is scrolled sideways (100cqw: the box's width) */
