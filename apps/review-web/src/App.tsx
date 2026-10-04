@@ -13,6 +13,7 @@ import { HostBar } from "./components/HostBar";
 import { StackRow } from "./components/StackRow";
 import { DraftsBar } from "./components/DraftsBar";
 import { diffNow } from "./diffNow";
+import { placeWhy, whyOpening } from "./whyPanel";
 
 // The review page: a review ticket's diff read by purpose. One section per
 // unit — what it achieves, a line on what it does, the decisions that shaped
@@ -307,15 +308,9 @@ function Why(props: {
   decisions: ReadonlyArray<Decision>;
   unitsOf: ReadonlyMap<string, ReadonlyArray<Unit>>;
   unmatched: Readonly<Record<string, ReadonlyArray<string>>>;
-  open: boolean;
-  onToggle: (open: boolean) => void;
 }) {
-  // what no decision covers is said by the unit itself when that is all it is
-  const has = () => props.decisions.length > 0 || props.unit.forks.length > 0 || (props.unit.unexplained.length > 0 && props.unit.by !== "unexplained");
   return (
-    <Show when={has()}>
-      <details class="why" open={props.open} onToggle={(e) => props.onToggle(e.currentTarget.open)}>
-        <summary>Why in full</summary>
+    <>
         <For each={props.decisions}>
           {(d) => (
             <div class="why-decision" id={whyId(props.unit, d)}>
@@ -353,10 +348,14 @@ function Why(props: {
             {changes(props.unit.unexplained.length)} here no decision covers — worth a question to the author.
           </p>
         </Show>
-      </details>
-    </Show>
+    </>
   );
 }
+
+/** Is there a why to show beside a unit: decisions, forks, or — when that is
+ *  not all the unit is — changes no decision covers. */
+const hasWhy = (unit: Unit, decisions: ReadonlyArray<Decision>) =>
+  decisions.length > 0 || unit.forks.length > 0 || (unit.unexplained.length > 0 && unit.by !== "unexplained");
 
 /** Where a decision's full why sits beside a unit — a chip in the unit's
  *  header leads there. */
@@ -416,54 +415,87 @@ function UnitSection(props: {
     },
   );
   const show = (d: Decision) => {
-    // folded under the title on a narrow screen: open it first, then go there
+    // folded: open it first, then go there once it has opened
+    const wait = open() ? 0 : whyOpening();
     setOpen(true);
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       const at = document.getElementById(whyId(props.unit, d));
       if (!at) return;
       at.scrollIntoView({ block: "nearest", behavior: "smooth" });
       at.classList.remove("flash");
       void at.offsetWidth;
       at.classList.add("flash");
-    });
+    }, wait);
   };
+  // the why's panel, placed as it is at first and moved on every change after
+  let panel: HTMLElement | undefined;
+  let inner: HTMLElement | undefined;
+  let placed = false;
+  createEffect(
+    () => [open(), wide()] as const,
+    ([o, w]) => {
+      if (!panel || !inner) return;
+      void placeWhy(panel, inner, o, w, !placed);
+      placed = true;
+    },
+  );
   return (
     <section class={["decision", "unit", { unexplained: props.unit.by === "unexplained" }]} id={props.unit.id}>
-      <div class="decision-head">
-        <h2>{props.unit.title}</h2>
-        <Show when={props.unit.what}>
-          <p class="decision-what">{props.unit.what}</p>
-        </Show>
-        <Show when={chips().length > 0}>
-          <p class="unit-why">
-            <span class="who">Why</span>
-            <For each={chips()}>
-              {(d) => (
-                <button type="button" class={["chip", { untitled: !d.title }]} onClick={() => show(d)}>
-                  {d.title ?? NO_TITLE}
-                </button>
-              )}
-            </For>
-          </p>
-        </Show>
-        <p class="unit-size">
-          {changes(props.unit.hunks.length)} in {files() === 1 ? "1 file" : `${files()} files`}
-        </p>
-      </div>
-      <div class="decision-main">
-        {/* one card per file: its changes in this unit together, so its header
-            stays at the top of the window through all of them */}
-        <For each={runs()}>
-          {(run) => (
-            <div class="hunk-group">
-              <For each={run}>
-                {(h, j) => <Hunk hunk={h} continued={j() > 0} skipped={j() > 0 ? skippedBefore(run[j() - 1]!, h) : undefined} unexplained={unexplained().has(h.id)} />}
+      <div class="unit-head">
+        <div class="decision-head">
+          <h2>{props.unit.title}</h2>
+          <Show when={props.unit.what}>
+            <p class="decision-what">{props.unit.what}</p>
+          </Show>
+          <Show when={chips().length > 0}>
+            <p class="unit-why">
+              <span class="who">Why</span>
+              <For each={chips()}>
+                {(d) => (
+                  <button type="button" class={["chip", { untitled: !d.title }]} onClick={() => show(d)}>
+                    {d.title ?? NO_TITLE}
+                  </button>
+                )}
               </For>
-            </div>
-          )}
-        </For>
+            </p>
+          </Show>
+          <p class="unit-size">
+            {changes(props.unit.hunks.length)} in {files() === 1 ? "1 file" : `${files()} files`}
+          </p>
+        </div>
+        {/* one place to open and fold the why, whichever way the window lays it out */}
+        <Show when={hasWhy(props.unit, shaped())}>
+          <button type="button" class={["why-toggle", { on: open() }]} aria-expanded={open() ? "true" : "false"} aria-controls={`why-${props.unit.id}`} onClick={() => setOpen(!open())}>
+            <svg width="15" height="12" viewBox="0 0 15 12" aria-hidden="true">
+              <rect x="0.75" y="0.75" width="13.5" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+              <rect x="9" y="1.5" width="4.5" height="9" fill="currentColor" opacity={open() ? "0.9" : "0.25"} />
+            </svg>
+            {open() ? "Hide why" : "Show why"}
+          </button>
+        </Show>
       </div>
-      <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} open={open()} onToggle={setOpen} />
+      <div class="unit-body">
+        <div class="decision-main">
+          {/* one card per file: its changes in this unit together, so its header
+              stays at the top of the window through all of them */}
+          <For each={runs()}>
+            {(run) => (
+              <div class="hunk-group">
+                <For each={run}>
+                  {(h, j) => <Hunk hunk={h} continued={j() > 0} skipped={j() > 0 ? skippedBefore(run[j() - 1]!, h) : undefined} unexplained={unexplained().has(h.id)} />}
+                </For>
+              </div>
+            )}
+          </For>
+        </div>
+        <Show when={hasWhy(props.unit, shaped())}>
+          <aside class="why-panel" id={`why-${props.unit.id}`} ref={(el) => (panel = el)} aria-label="Why">
+            <div class="why" ref={(el) => (inner = el)}>
+              <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} />
+            </div>
+          </aside>
+        </Show>
+      </div>
     </section>
   );
 }
