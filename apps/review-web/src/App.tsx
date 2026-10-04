@@ -260,19 +260,8 @@ function Header(props: { data: ReviewPageData }) {
         </Show>
         <Show when={props.data.review.assumed} fallback={<>by {props.data.review.authorName}</>}>
           {(a) => (
-            <Show
-              when={props.data.review.claimed}
-              fallback={
-                <>
-                  by {a().author} · <span class="assumed-by">assumptions by {props.data.review.authorName}'s AI</span>
-                </>
-              }
-            >
-              {(c) => (
-                <>
-                  by {props.data.review.authorName} · <span class="assumed-by">answering {c().guessedByName}'s AI's guesses</span>
-                </>
-              )}
+            <Show when={props.data.review.claimed} fallback={<>by {a().author}</>}>
+              <>by {props.data.review.authorName}</>
             </Show>
           )}
         </Show>
@@ -306,10 +295,7 @@ function Header(props: { data: ReviewPageData }) {
               when={props.data.review.claimed}
               fallback={
                 <div class="assumed-banner" role="note">
-                  <p>
-                    <strong>Built from assumptions.</strong> {a().author} does not use collagen, so nobody told it why. {props.data.review.authorName}'s AI inferred every decision and fork below from{" "}
-                    {a().sources.join(", ")} — each says what it rests on. Check each: it holds, or ask {a().author}.
-                  </p>
+                  <p>Assumption-based review by {props.data.review.authorName}</p>
                   <p class="assumed-count">
                     {assumedNow.checks.checked(ids())} of {ids().length} checked
                   </p>
@@ -319,8 +305,10 @@ function Header(props: { data: ReviewPageData }) {
               {(c) => (
                 <div class="assumed-banner claimed" role="note">
                   <p>
-                    <strong>Answered by its author.</strong> {c().guessedByName}'s AI built this review from guesses; {props.data.review.authorName}, who wrote the code, took it over: {said("confirmed")} confirmed,{" "}
-                    {said("corrected")} corrected, {said("wrong")} wrong{ids().length > 0 ? `, ${ids().length} still a guess` : ""}. What they added is their own.
+                    Assumption-based review by {c().guessedByName}, answered by {props.data.review.authorName}
+                  </p>
+                  <p class="assumed-count">
+                    {said("confirmed")} confirmed · {said("corrected")} corrected · {said("wrong")} wrong{ids().length > 0 ? ` · ${ids().length} open` : ""}
                   </p>
                 </div>
               )}

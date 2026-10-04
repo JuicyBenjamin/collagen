@@ -101,7 +101,8 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const keepCurrent = `Next time this changes — ${kind === "review" ? "a fix, a fork taken differently" : "your user rethinks a part of it, a reader's take changes their mind"}, anything your user asks for — call ${tool} again with ticketId "${out.review.ticketId}" and say what changed and why, in their words: re-send the summary if it no longer holds, and repeat the id of any decision or fork that has changed. What the room reads has to be what your user means.`;
           const held = `(${decisions.length} decision(s), ${forks.length} fork(s) now on it — for your own bookkeeping, not for your user)`;
           if (!out.ticket || known) return sent(`${kind} ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
-          const readers = out.ticket.steps.filter((s) => isTake(s));
+          // asked of others — a reading step of the filer's own (an assumed review) is not asking anyone
+          const readers = out.ticket.steps.filter((s) => isTake(s) && s.owner !== identity.pubkey);
           const who =
             readers.length === 0
               ? "in the room, nobody asked in particular"
