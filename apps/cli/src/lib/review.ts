@@ -194,8 +194,8 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       ...(r.link ? { link: r.link } : {}),
       summary: r.summary,
       // nobody told this why: it was inferred, and from what
-      ...(r.assumed && !r.claimed ? { assumed: `${r.assumed.author} does not use collagen: every decision and fork here is ${r.authorName}'s AI's guess at their why, inferred from ${r.assumed.sources.join(", ")} — each says what it rests on and how sure it is` } : {}),
-      ...(r.claimed ? { takenOver: `${r.authorName} wrote the code and took this over from ${r.claimed.guessedByName}'s AI's guesses: each guess says what they made of it (confirmed, corrected — with what was guessed — or wrong); one with no verdict is still a guess` } : {}),
+      ...(r.assumed && !r.claimed ? { assumed: `${r.authorName}'s AI guessed every decision and fork here about ${r.assumed.author}'s code, from ${r.assumed.sources.join(", ")} — each with what it rests on and how sure it is` } : {}),
+      ...(r.claimed ? { takenOver: `${r.claimed.guessedByName}'s AI guessed this; ${r.authorName}, who wrote the code, answered each guess (confirmed, corrected — with what was guessed — or wrong); one with no verdict is still a guess` } : {}),
       // reviews outlive the first read: this is the why as it stands NOW
       updated: new Date(r.ts).toISOString(),
       ...(q.length > 0
