@@ -282,23 +282,35 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     logComments(found, ds.map((d) => ({ id: d.id, spot: spotOf(d), commit: d.commit, body: d.body, drafted: d.drafted === true, ...(d.host ? { host: d.host } : {}) })));
   const done = (ids: ReadonlyArray<string>, finished: string | null = null) => setDrafts(ticketId, (ds) => ds.filter((d) => !ids.includes(d.id)), finished);
 
-  // a finish that stopped after the host had it: tell the room, nothing more
+  // an earlier finish that stopped after the host had it: the room is told
+  // first — its review, words and verdict are on the host already, never
+  // sent again — and whatever this finish brings is a review of its own
   const halfSaid = mine.filter(isPosted);
   if (halfSaid.length > 0) {
     const r = yield* sayAll(halfSaid);
-    if ("error" in r) return { error: r.error } satisfies SubmitResult;
+    if ("error" in r) return { error: r.error, onHost: true as const } satisfies SubmitResult;
     yield* done(halfSaid.map((d) => d.id));
-    return { ok: true as const, said: halfSaid.length } satisfies SubmitResult;
   }
+  const recovered = halfSaid.length;
+  const recoveredIds = new Set(halfSaid.map((d) => d.id));
 
   const pending = mine.filter(isPending);
-  if (seen !== null) {
-    if ((yield* finishedOf(ticketId)).includes(seen.id)) return { ok: true as const, said: 0, already: true as const } satisfies SubmitResult;
-    const now = new Set(pending.map((d) => d.id));
-    if (seen.pending.length !== now.size || seen.pending.some((id) => !now.has(id)))
-      return { error: "Your review changed since the page last read it — finished elsewhere, or comments added or deleted. Look again, then finish it." } satisfies SubmitResult;
-  }
   const text = body.trim();
+  if (seen !== null) {
+    // this very finish again (a retry): done already, nothing said twice
+    if ((yield* finishedOf(ticketId)).includes(seen.id)) return { ok: true as const, said: recovered, ...(recovered === 0 ? { already: true as const } : {}) } satisfies SubmitResult;
+    const now = new Set(pending.map((d) => d.id));
+    const saw = seen.pending.filter((id) => !recoveredIds.has(id));
+    if (saw.length !== now.size || saw.some((id) => !now.has(id)))
+      return { error: `${recovered > 0 ? `Your earlier review is in the room now (${recovered} comment(s), on the pull request already). ` : ""}Your review changed since the page last read it — finished elsewhere, or comments added or deleted. Look again, then finish it.` } satisfies SubmitResult;
+  } else if (recovered > 0 && (pending.length > 0 || text.length > 0 || verdict !== "comment")) {
+    // from the agent, words or a verdict here may be the earlier review's sent again: asked, never assumed
+    return {
+      error: `Your earlier review is in the room now: ${recovered} comment(s), on the pull request already with its words and verdict. Nothing else was sent — if these words, this verdict or the comments pending are a new review, finish it again.`,
+    } satisfies SubmitResult;
+  }
+  // only the room was left to tell
+  if (recovered > 0 && pending.length === 0 && text.length === 0 && verdict === "comment") return { ok: true as const, said: recovered } satisfies SubmitResult;
   const to = yield* hostFor(found, shownAs);
   if ("refused" in to) return { error: to.refused } satisfies SubmitResult;
   if ("roomOnly" in to) {
@@ -309,7 +321,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     const r = yield* sayAll(pending);
     if ("error" in r) return { error: r.error } satisfies SubmitResult;
     yield* done(pending.map((d) => d.id), seen?.id ?? null);
-    return { ok: true as const, said: pending.length, roomOnly: to.roomOnly } satisfies SubmitResult;
+    return { ok: true as const, said: recovered + pending.length, roomOnly: to.roomOnly } satisfies SubmitResult;
   }
 
   if (verdict === "request-changes" && text.length === 0) return { error: "Say what should change — GitHub asks for it." } satisfies SubmitResult;
@@ -345,9 +357,9 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   // finish recorded as done in the same write
   yield* setDrafts(ticketId, (ds) => ds.map((d) => posted.find((p) => p.id === d.id) ?? d), seen?.id ?? null);
   const r = yield* sayAll(posted);
-  if ("error" in r) return { error: `${r.error} — the review is on the pull request; finishing again tells the room without posting it twice` } satisfies SubmitResult;
+  if ("error" in r) return { error: `${r.error} — the review is on the pull request with its words and verdict; finishing again with none tells the room without posting it twice`, onHost: true as const } satisfies SubmitResult;
   yield* done(posted.map((d) => d.id));
-  return { ok: true as const, said: pending.length, ...(sent.url ? { url: sent.url } : {}) } satisfies SubmitResult;
+  return { ok: true as const, said: recovered + pending.length, ...(sent.url ? { url: sent.url } : {}) } satisfies SubmitResult;
 });
 
 /** Confirm where a comment not said yet sits, at the commit the page shows

@@ -31,7 +31,14 @@ export function ReviewComposer(props: { onDone: () => void }) {
     try {
       // in the room alone there is nowhere for words on the whole, or a verdict
       const r = await hostNow.submit(onHost() ? verdict() : "comment", onHost() ? body() : "");
-      if ("error" in r) return setSaid(r.error);
+      if ("error" in r) {
+        // its words and verdict reached the pull request: only the room is left to tell
+        if (r.onHost) {
+          setBody("");
+          setVerdict("comment");
+        }
+        return setSaid(r.error);
+      }
       setBody("");
       props.onDone();
     } catch (e) {
