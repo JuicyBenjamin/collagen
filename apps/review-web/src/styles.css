@@ -98,14 +98,15 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 /* the code */
 /* not clipped, so the also-under list can open over what follows; the
    rounding is the header's and the code's own instead */
-.hunk { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: clip; }
+.hunk { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 /* the file's header — its name, Whole file, Viewed — stays at the top of the
-   window while its hunk is read, as the why beside it does. Square and solid:
-   the card's own clip rounds it at the card's top, so nothing scrolling under
-   it shows through its corners once it is stuck (overflow: clip, not hidden —
-   no scroll box of its own, so sticky still goes by the window) */
-.hunk .file { position: sticky; top: 0; z-index: 3; background: var(--panel); }
-.hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+   window while its hunk is read, as the why beside it does, and keeps its
+   rounded top there. It is a square of the page's own colour laid over the
+   card's top edge, the rounded panel drawn inside it: at rest its corners
+   are the page around the card, stuck they hide what scrolls beneath. */
+.hunk .file { position: sticky; top: 0; z-index: 3; margin: -1px -1px 0; background: var(--bg); }
+.hunk .file::before { content: ""; position: absolute; inset: 0 0 -1px; z-index: -1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+.hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 9px 13px 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .hunk .file .head { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whole-toggle { font: 12px -apple-system, sans-serif; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
 .whole-toggle:hover { color: var(--accent); border-color: var(--accent); }
@@ -121,7 +122,8 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
    the two parted by a band naming where it jumps to, as GitHub's hunk line */
 .hunk:has(+ .hunk.continued) { margin-bottom: 0; border-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .hunk.continued { margin-top: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
-.hunk .file.continued { padding: 3px 12px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 45%, var(--panel)); color: var(--faint); font-size: 12px; }
+.hunk .file.continued { margin: 0; padding: 3px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 45%, var(--panel)); color: var(--faint); font-size: 12px; }
+.hunk .file.continued::before { content: none; }
 .hunk .file.continued .head { color: var(--faint); }
 .cont-file { color: var(--dim); }
 .cont-at { margin-left: 8px; }
@@ -148,10 +150,12 @@ nav .nav-unexplained .nav-what { color: var(--warn); }
 .mark-viewed input { margin: 0; accent-color: var(--accent); cursor: pointer; }
 .mark-viewed.changed { color: var(--warn); }
 .hunk.viewed { opacity: 0.6; }
-.hunk.viewed .file { border-bottom: 0; }
+.hunk.viewed .file::before { inset: 0; border-radius: 10px; }
+.hunk.viewed .file { margin-bottom: -1px; }
 .nav-viewed { font-size: 12.5px; color: var(--dim); margin: -4px 0 10px; }
 .nav-viewed.done { color: var(--sign-add); }
-.code { overflow-x: auto; container-type: inline-size; }
+.code { overflow-x: auto; container-type: inline-size; border-radius: 0 0 10px 10px; }
+.hunk:has(+ .hunk.continued) .code { border-radius: 0; }
 /* what opens between a hunk's lines (a peek, comments, a comment being
    written) is as wide as the code's box, not as the code: it stays in view
    while a long line is scrolled sideways (100cqw: the box's width) */
