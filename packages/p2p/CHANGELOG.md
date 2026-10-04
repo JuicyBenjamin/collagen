@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.20.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.19.0-alpha...p2p-v0.20.0-alpha) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** protocol 9 — the room's log gains comment records. A peer on protocol 8 keeps entries written by 9 aside until it updates.
+
+### Features
+
+* **cli:** a review is written, then finished, as on GitHub ([9103225](https://github.com/JuicyBenjamin/collagen/commit/91032254173075bc29e48143d036243ab08968b0))
+* **cli:** your AI drafts review comments beside the code, you accept them ([1121aa2](https://github.com/JuicyBenjamin/collagen/commit/1121aa20f4112339e00e3ec1cc5938a87bcb299d))
+
+
+### Bug Fixes
+
+* **cli:** a finish is said once, holds the review while it goes, and nothing gets stuck ([54d17af](https://github.com/JuicyBenjamin/collagen/commit/54d17afca8becd78bb6e2f0b40a2a9b9afc5c6c1))
+* **cli:** a finished review is said once, under who is signed in now, at one commit ([804ba2b](https://github.com/JuicyBenjamin/collagen/commit/804ba2baa2c7abff1935a27644144919493fa56b))
+
 ## [0.19.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.18.0-alpha...p2p-v0.19.0-alpha) (2026-10-03)
 
 
