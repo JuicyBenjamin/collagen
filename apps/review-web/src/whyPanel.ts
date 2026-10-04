@@ -7,9 +7,8 @@ import { animate } from "motion";
 // down under the unit's head. Animated with Motion — none at all when the reader
 // asks their system for less motion.
 
-/** How wide the why's column is open, and the gap before it. */
+/** How wide the why's column is open. */
 export const WHY_WIDTH = 280;
-const WHY_GAP = 28;
 /** The space under it on a narrow window. */
 const WHY_BELOW = 14;
 
@@ -26,11 +25,10 @@ export async function placeWhy(panel: HTMLElement, inner: HTMLElement, open: boo
     panel.style.marginBottom = "";
   } else {
     panel.style.width = "";
-    panel.style.marginLeft = "";
   }
   const reasons = animate(inner, { opacity: open ? 1 : 0, x: open || !wide ? 0 : 16, y: open || wide ? 0 : -6 }, { duration: open ? duration : duration * 0.6, ease: EASE, delay: open ? duration * 0.25 : 0 });
   const box = wide
-    ? animate(panel, { width: open ? WHY_WIDTH : 0, marginLeft: open ? WHY_GAP : 0, height: open ? inner.offsetHeight : 0 }, { duration, ease: EASE })
+    ? animate(panel, { width: open ? WHY_WIDTH : 0, height: open ? inner.offsetHeight : 0 }, { duration, ease: EASE })
     : animate(panel, { height: open ? inner.offsetHeight : 0, marginBottom: open ? WHY_BELOW : 0 }, { duration, ease: EASE });
   await Promise.all([box, reasons]);
   // open, it follows its content's height from here on

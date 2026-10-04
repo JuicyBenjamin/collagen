@@ -328,15 +328,21 @@ nav .nav-done .nav-what { color: var(--dim); }
 section.decision.unit { display: block; }
 .unit-head { display: flex; align-items: flex-start; gap: 20px; }
 .unit-head > .decision-head { flex: 1; min-width: 0; }
-.why-toggle { flex: none; display: inline-flex; align-items: center; gap: 7px; margin-top: 3px; font: 12.5px -apple-system, sans-serif; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+.why-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 12.5px -apple-system, sans-serif; color: var(--dim); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
 .why-toggle:hover, .why-toggle:focus-visible { color: var(--accent); border-color: var(--accent); }
 .why-toggle.on { color: var(--fg); }
 .unit-body { display: flex; align-items: flex-start; }
 .unit-body > .decision-main { flex: 1; min-width: 0; }
-.why-panel { flex: none; overflow: hidden; position: sticky; top: 24px; width: 0; height: 0; }
+/* the rail beside the code: the toggle, then the why — sticking together */
+.why-rail { flex: none; position: sticky; top: 24px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; margin-left: 16px; }
+.why-panel { overflow: hidden; width: 0; height: 0; }
 .why-panel > .why { position: static; width: 280px; box-sizing: border-box; }
+.head-toggle { display: none; margin-top: 3px; padding: 4px 10px; }
 @media (max-width: 1320px) {
   .unit-body { flex-direction: column; align-items: stretch; }
-  .why-panel { order: -1; position: static; width: auto; height: 0; }
+  .why-rail { order: -1; position: static; margin-left: 0; align-items: stretch; }
+  .rail-toggle { display: none; }
+  .head-toggle { display: inline-flex; }
+  .why-panel { width: auto; height: 0; }
   .why-panel > .why { width: auto; }
 }

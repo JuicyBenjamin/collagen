@@ -352,6 +352,27 @@ function Why(props: {
   );
 }
 
+/** Opens and folds a unit's why: a sidebar icon, and on the head's toggle a word for it too. */
+function WhyToggle(props: { open: boolean; onToggle: () => void; controls: string; class: string; label?: boolean }) {
+  return (
+    <button
+      type="button"
+      class={["why-toggle", props.class, { on: props.open }]}
+      aria-expanded={props.open ? "true" : "false"}
+      aria-controls={props.controls}
+      aria-label={props.open ? "Hide why" : "Show why"}
+      title={props.open ? "Hide why" : "Show why"}
+      onClick={() => props.onToggle()}
+    >
+      <svg width="15" height="12" viewBox="0 0 15 12" aria-hidden="true">
+        <rect x="0.75" y="0.75" width="13.5" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
+        <rect x="9" y="1.5" width="4.5" height="9" fill="currentColor" opacity={props.open ? "0.9" : "0.25"} />
+      </svg>
+      <Show when={props.label}>{props.open ? "Hide why" : "Show why"}</Show>
+    </button>
+  );
+}
+
 /** Is there a why to show beside a unit: decisions, forks, or — when that is
  *  not all the unit is — changes no decision covers. */
 const hasWhy = (unit: Unit, decisions: ReadonlyArray<Decision>) =>
@@ -463,15 +484,9 @@ function UnitSection(props: {
             {changes(props.unit.hunks.length)} in {files() === 1 ? "1 file" : `${files()} files`}
           </p>
         </div>
-        {/* one place to open and fold the why, whichever way the window lays it out */}
+        {/* a narrow window unfolds the why under the head: its toggle is here */}
         <Show when={hasWhy(props.unit, shaped())}>
-          <button type="button" class={["why-toggle", { on: open() }]} aria-expanded={open() ? "true" : "false"} aria-controls={`why-${props.unit.id}`} onClick={() => setOpen(!open())}>
-            <svg width="15" height="12" viewBox="0 0 15 12" aria-hidden="true">
-              <rect x="0.75" y="0.75" width="13.5" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5" />
-              <rect x="9" y="1.5" width="4.5" height="9" fill="currentColor" opacity={open() ? "0.9" : "0.25"} />
-            </svg>
-            {open() ? "Hide why" : "Show why"}
-          </button>
+          <WhyToggle open={open()} onToggle={() => setOpen(!open())} controls={`why-${props.unit.id}`} class="head-toggle" label />
         </Show>
       </div>
       <div class="unit-body">
@@ -488,12 +503,18 @@ function UnitSection(props: {
             )}
           </For>
         </div>
+        {/* a wide window keeps the why in a rail beside the code: its toggle
+            on top, sticking with it down the unit, so it can be folded or
+            opened from anywhere in a long one */}
         <Show when={hasWhy(props.unit, shaped())}>
-          <aside class="why-panel" id={`why-${props.unit.id}`} ref={(el) => (panel = el)} aria-label="Why">
-            <div class="why" ref={(el) => (inner = el)}>
-              <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} />
-            </div>
-          </aside>
+          <div class="why-rail">
+            <WhyToggle open={open()} onToggle={() => setOpen(!open())} controls={`why-${props.unit.id}`} class="rail-toggle" />
+            <aside class="why-panel" id={`why-${props.unit.id}`} ref={(el) => (panel = el)} aria-label="Why">
+              <div class="why" ref={(el) => (inner = el)}>
+                <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} />
+              </div>
+            </aside>
+          </div>
         </Show>
       </div>
     </section>
