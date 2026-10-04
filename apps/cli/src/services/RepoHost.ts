@@ -11,7 +11,7 @@ import { githubRepo, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, re
 // the person's own `gh` login, so collagen keeps no token of its own.
 
 /** A pull request as a host has it, with the branches it joins. */
-export type HostPull = PullRequest & { readonly branch: string; readonly base: string };
+export type HostPull = PullRequest & { readonly branch: string; readonly base: string; readonly fork?: true };
 
 /** Where on the pull request's diff a line comment goes: the file, its
  *  (last) line on one side, where a block of lines starts, at the commit the
