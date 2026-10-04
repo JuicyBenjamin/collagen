@@ -1,4 +1,4 @@
-import { IMPORTANCE, type BugReport, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork } from "@collagen/p2p";
+import { IMPORTANCE, type Assumed, type BugReport, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork } from "@collagen/p2p";
 
 /** A review's why, as the agent hands it over and as a reader gets it back.
  *  The point of the whole thing: a diff shows the what, and the reviewer has
@@ -53,6 +53,9 @@ export interface DecisionInput {
   readonly agentWhy?: string;
   readonly where?: ReadonlyArray<string>;
   readonly guidedBy?: ReadonlyArray<string>;
+  /** an assumption's evidence, and how sure of it the AI is */
+  readonly basis?: string;
+  readonly confidence?: Confidence;
 }
 export interface ForkInput {
   readonly id?: string;
@@ -61,6 +64,8 @@ export interface ForkInput {
   readonly instead: string;
   readonly why: string;
   readonly by?: "user" | "agent";
+  readonly basis?: string;
+  readonly confidence?: Confidence;
 }
 export interface ReviewInput {
   readonly summary?: string;
@@ -78,6 +83,8 @@ export interface ReviewInput {
   /** A review's units, and the ids withdrawn — how its code reads. */
   readonly units?: ReadonlyArray<unknown>;
   readonly retireUnits?: ReadonlyArray<string>;
+  /** the why is inferred, not told (see p2p Assumed) */
+  readonly assumed?: Assumed;
 }
 
 const blank = (s: string | undefined): boolean => (s ?? "").trim().length === 0;
@@ -186,6 +193,8 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       ...(r.branch ? { branch: r.base ? `${r.branch} → ${r.base}` : r.branch } : {}),
       ...(r.link ? { link: r.link } : {}),
       summary: r.summary,
+      // nobody told this why: it was inferred, and from what
+      ...(r.assumed ? { assumed: `${r.assumed.author} does not use collagen: every decision and fork here is ${r.authorName}'s AI's guess at their why, inferred from ${r.assumed.sources.join(", ")} — each says what it rests on and how sure it is` } : {}),
       // reviews outlive the first read: this is the why as it stands NOW
       updated: new Date(r.ts).toISOString(),
       ...(q.length > 0
@@ -195,16 +204,20 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
           }
         : {}),
     },
-    decisions: decisions.map((d) => ({
-      id: d.id,
-      title: d.title ?? NO_TITLE,
-      what: d.what,
-      userWhy: d.userWhy ?? "",
-      agentWhy: d.agentWhy ?? "",
-      where: d.where.join(" "),
-      guidedBy: (d.guidedBy ?? []).join(", "),
-    })),
-    forks: forks.map((f) => ({ id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
+    decisions: decisions.map((d) =>
+      r.assumed
+        ? { id: d.id, title: d.title ?? NO_TITLE, what: d.what, assumedWhy: d.agentWhy ?? "", basis: d.basis ?? "", confidence: d.confidence ?? "", where: d.where.join(" ") }
+        : {
+            id: d.id,
+            title: d.title ?? NO_TITLE,
+            what: d.what,
+            userWhy: d.userWhy ?? "",
+            agentWhy: d.agentWhy ?? "",
+            where: d.where.join(" "),
+            guidedBy: (d.guidedBy ?? []).join(", "),
+          },
+    ),
+    forks: forks.map((f) => (r.assumed ? { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis ?? "", confidence: f.confidence ?? "" } : { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
     // how the change reads, as its author's agent grouped it
     ...(r.units && r.units.length > 0 ? { units: r.units.map((u) => ({ id: u.id, title: u.title, ...(u.what ? { what: u.what } : {}), where: u.where.join(" ") })) } : {}),
     // a proposal's outline: what the work might be and who might do it — the
@@ -238,3 +251,25 @@ export const REMEDY_WORDS = {
   new: "the system that should handle this does not exist",
 } as const;
 
+/** What an assumed review is missing: the why it carries is a guess, so a
+ *  reader must be able to weigh each one — what it was inferred from and how
+ *  sure the AI is — and nothing in it may pass for the author's own words. */
+export const assumedGaps = (input: ReviewInput, amending: boolean): string | null => {
+  const a = input.assumed;
+  if (!amending && (!a || blank(a.author))) return "failed: pass 'author' — who wrote the code (their login on the host, or their name); with a pull request link it is read from the host";
+  if (!amending && (a?.sources ?? []).filter((x) => !blank(x)).length === 0) {
+    return "failed: pass 'sources' — what you read to infer the why: the pull request's description, its commits, a linked ticket (\"JIRA-123\"), the code itself. A reader weighs a guess by what it rests on.";
+  }
+  for (const [i, d] of (input.decisions ?? []).entries()) {
+    const at = d.id ?? `assumption ${i + 1}`;
+    if (!blank(d.userWhy)) return `failed: ${at} has a 'userWhy' — nobody told you why: the author is not in a chat with you. Put your reading of the reason in 'why', and what it rests on in 'basis'.`;
+    if (blank(d.basis)) return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'basis' — what you inferred it from: a line of the pull request's description, a commit message, a ticket, the shape of the code. A guess with nothing under it cannot be checked.`;
+    if (!d.confidence) return `failed: ${at} has no 'confidence' — high (the author said as much), medium (the code makes it likely), or low (a reading of the code, nothing more)`;
+  }
+  for (const [i, f] of (input.forks ?? []).entries()) {
+    const at = f.id ?? `fork ${i + 1}`;
+    if (blank(f.basis)) return `failed: ${at} has no 'basis' — what tells you the other road was considered, or why this one was taken`;
+    if (!f.confidence) return `failed: ${at} has no 'confidence' — high, medium or low`;
+  }
+  return null;
+};

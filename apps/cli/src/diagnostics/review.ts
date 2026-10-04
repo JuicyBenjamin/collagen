@@ -75,7 +75,10 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       }
       // a reader starting on a review gets its page, the diff read by intent,
       // in their browser (their openReviewPage setting; once a run)
-      const page = ticket?.kind === "review" && ticket.createdBy !== me && reviewStarted ? yield* reviewStarted(ticketId) : null;
+      // its reader: anyone but its author — or, on a review built from
+      // assumptions, the one whose AI built it: they are its reader
+      const reading = ticket?.kind === "review" && (ticket.createdBy !== me || review.assumed !== undefined);
+      const page = reading && reviewStarted ? yield* reviewStarted(ticketId) : null;
       const opened = page === null ? "" : `\n\n${page} — the diff read by intent, in your user's browser. Tell them it is there. (Their openReviewPage setting; if they find it in the way, set-settings turns it off.)`;
       const rows = reviewRows(review, about);
       if (about && rows.decisions.length === 0 && rows.forks.length === 0 && (rows.outline?.length ?? 0) === 0 && !rows.bug) {
@@ -95,7 +98,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
             }
           : {};
       // a reader's agent reviewing it: remarks on lines belong beside the code, not in the chat
-      const drafting = ticket?.kind === "review" && ticket.createdBy !== me ? "\n\nREVIEWING THIS FOR YOUR USER: each remark about particular lines goes on the review page as a draft (review-comments, action draft) — beside the code, for them to accept or decline — not in the chat." : "";
+      const drafting = reading ? "\n\nREVIEWING THIS FOR YOUR USER: each remark about particular lines goes on the review page as a draft (review-comments, action draft) — beside the code, for them to accept or decline — not in the chat." : "";
       return toToon({ ...rows, ...comments }) + opened + drafting;
     }),
 });

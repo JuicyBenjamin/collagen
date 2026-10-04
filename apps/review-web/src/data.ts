@@ -39,6 +39,19 @@ export interface Decision {
   readonly where: ReadonlyArray<string>;
   /** the skills and agent files that told the agent to do it this way */
   readonly guidedBy?: ReadonlyArray<string>;
+  /** on a review built from assumptions: what the guess rests on, and how sure the AI is */
+  readonly basis?: string;
+  readonly confidence?: Confidence;
+}
+
+/** How sure an AI is of something it inferred rather than was told. */
+export type Confidence = "high" | "medium" | "low";
+
+/** A review built from assumptions: who wrote the code (not on collagen),
+ *  and what the reader's AI read to infer the why. */
+export interface Assumed {
+  readonly author: string;
+  readonly sources: ReadonlyArray<string>;
 }
 
 /** A fork in the road: chosen over what, why, whose call. */
@@ -49,6 +62,8 @@ export interface Fork {
   readonly instead: string;
   readonly why: string;
   readonly by?: "user" | "agent";
+  readonly basis?: string;
+  readonly confidence?: Confidence;
 }
 
 /** A unit of the change: code that together achieves one thing, each hunk
@@ -97,6 +112,8 @@ export interface ReviewPageData {
     readonly authorName: string;
     readonly decisions: ReadonlyArray<Decision>;
     readonly forks: ReadonlyArray<Fork>;
+    /** present when the why was inferred, not told */
+    readonly assumed?: Assumed;
     readonly ts: number;
   };
   /** where the diff came from, in words for the page */

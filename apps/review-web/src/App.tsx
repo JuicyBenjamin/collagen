@@ -16,6 +16,8 @@ import { Unplaced } from "./components/Unplaced";
 import { GitHubActivity } from "./components/GitHubActivity";
 import { diffNow } from "./diffNow";
 import { placeWhy, whyOpening } from "./whyPanel";
+import { assumedNow } from "./assumedNow";
+import { AssumedMark, AssumedWhy } from "./components/Assumption";
 
 // The review page: a review ticket's diff read by purpose. One section per
 // unit — what it achieves, a line on what it does, the decisions that shaped
@@ -90,6 +92,13 @@ function Page(props: { data: ReviewPageData }) {
     (all) => {
       viewed.setFiles(all);
       diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
+    },
+  );
+  // a why guessed, not told: every decision and fork drawn knows it
+  createEffect(
+    () => props.data.review.assumed,
+    (a) => {
+      assumedNow.setAssumed(a);
     },
   );
   createEffect(
@@ -243,7 +252,13 @@ function Header(props: { data: ReviewPageData }) {
             </>
           )}
         </Show>
-        by {props.data.review.authorName}
+        <Show when={props.data.review.assumed} fallback={<>by {props.data.review.authorName}</>}>
+          {(a) => (
+            <>
+              by {a().author} · <span class="assumed-by">assumptions by {props.data.review.authorName}'s AI</span>
+            </>
+          )}
+        </Show>
         <For each={props.data.links}>
           {(l) => (
             <>
@@ -264,6 +279,22 @@ function Header(props: { data: ReviewPageData }) {
       <Show when={beneath()}>
         <p class="summary">{beneath()}</p>
       </Show>
+      <Show when={props.data.review.assumed}>
+        {(a) => {
+          const ids = () => props.data.review.decisions.map((d) => d.id);
+          return (
+            <div class="assumed-banner" role="note">
+              <p>
+                <strong>Built from assumptions.</strong> {a().author} does not use collagen, so nobody told it why. {props.data.review.authorName}'s AI inferred every decision and fork below from{" "}
+                {a().sources.join(", ")} — each says what it rests on. Check each: it holds, or ask {a().author}.
+              </p>
+              <p class="assumed-count">
+                {assumedNow.checks.checked(ids())} of {ids().length} checked
+              </p>
+            </div>
+          );
+        }}
+      </Show>
     </header>
   );
 }
@@ -273,8 +304,22 @@ function Header(props: { data: ReviewPageData }) {
 function DecisionWhy(props: { decision: Decision }) {
   return (
     <>
+      <Show when={assumedNow.assumed()}>
+        <AssumedMark {...(props.decision.confidence ? { confidence: props.decision.confidence } : {})} />
+      </Show>
       <p class={["why-title", { untitled: !props.decision.title }]}>{props.decision.title ?? NO_TITLE}</p>
       <p class="why-what">{props.decision.what}</p>
+      <Show when={assumedNow.assumed()} fallback={<ToldWhy decision={props.decision} />}>
+        <AssumedWhy decision={props.decision} />
+      </Show>
+    </>
+  );
+}
+
+/** A told decision's why: what guided the agent, the person's words and the agent's reasons. */
+function ToldWhy(props: { decision: Decision }) {
+  return (
+    <>
       {/* what told the agent to do it this way: right beside its code, so a
           skill that points the wrong way is seen where it did */}
       <Show when={props.decision.guidedBy?.length ? props.decision.guidedBy : null}>
@@ -477,7 +522,7 @@ function UnitSection(props: {
               <span class="who">Why</span>
               <For each={chips()}>
                 {(d) => (
-                  <button type="button" class={["chip", { untitled: !d.title }]} onClick={() => show(d)}>
+                  <button type="button" class={["chip", { untitled: !d.title, assumed: assumedNow.assumed() !== undefined, checked: assumedNow.checks.check(d.id) !== undefined }]} onClick={() => show(d)} title={assumedNow.assumed() ? "an assumption — inferred, not told" : undefined}>
                     {d.title ?? NO_TITLE}
                   </button>
                 )}

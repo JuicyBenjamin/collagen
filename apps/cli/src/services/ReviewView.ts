@@ -52,6 +52,10 @@ const fromClone = (path: string, base: string, branch: string, fetch = true) =>
     if (!gitDir(path)) return { diff: null, why: `${path} is not a git repository` };
     // best effort: offline, or a remote that needs a password, still has whatever is local
     if (fetch) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin"], path, 20_000);
+    // a pull request from a fork has its head on the fork: the host keeps it
+    // on this repository as refs/pull/<n>/head, read here as origin/pr/<n>
+    const pr = /^pr\/(\d+)$/.exec(branch);
+    if (fetch && pr) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin", `+refs/pull/${pr[1]}/head:refs/remotes/origin/pr/${pr[1]}`], path, 20_000);
     const b = yield* firstRef(path, [branch, `origin/${branch}`]);
     const a = yield* firstRef(path, [base, `origin/${base}`]);
     if (!b) return { diff: null, why: `the branch ${branch} is not in your clone at ${path}, nor on its origin` };
@@ -189,7 +193,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     }
     return {
       ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
-      review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ts: review.ts },
+      review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ts: review.ts },
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
       grouped: diff === null ? null : groupByUnit(review, hunks, imports),
