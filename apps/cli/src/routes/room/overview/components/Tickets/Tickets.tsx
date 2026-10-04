@@ -14,7 +14,7 @@ import { epicProgress, marksLabel, progressShort, rowTitle, summarize, type Tick
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
-import { closedLine, kindGlyph, nextTab, relationsOf, tabLabel, TICKET_TABS, type TicketTab } from "../../../../../lib/ticketTabs";
+import { closedLine, kindGlyph, relationsOf, tabLabel, TICKET_TABS, type TicketTab } from "../../../../../lib/ticketTabs";
 import { openReviewPageAtom } from "../../../review/atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
@@ -122,11 +122,12 @@ export function Tickets() {
   const currentId = current?.t.id;
 
   return (
+    <box flexDirection="column" marginTop={1} flexShrink={1} minHeight={0}>
+    <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} onTab={(t) => (setTab(t), setCursor(0))} />
     <Focusable
       id="tickets"
       hint={`↑↓ select · enter open${current?.t.kind === "epic" ? ` · space ${unfolded.has(current.t.id) ? "fold" : "unfold"}` : ""}${current?.t.kind === "review" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
       flexDirection="column"
-      marginTop={1}
       flexShrink={1}
       minHeight={0}
       onKey={(key) => {
@@ -149,10 +150,7 @@ export function Tickets() {
         }
         // straight from the list to the diff read by intent, in the browser
         if (key.name === "o" && current?.t.kind === "review") return openReviewPage({ ticketId: current.t.id }), true;
-        // the tabs, from the list itself; and the closed ones, shown or not
-        // shift-tab arrives as its escape sequence
-        const back = key.sequence === "[" || key.sequence === "\x1b[Z";
-        if (key.name === "tab" || back || key.sequence === "]") return setTab(nextTab(tab, back ? -1 : 1)), setCursor(0), true;
+        // the closed ones, shown or not
         if (key.name === "h") return setShowClosed(!showClosed), true;
         // one key to what a ticket hangs from
         if (current && (key.name === "e" || key.name === "p")) {
@@ -166,22 +164,6 @@ export function Tickets() {
     >
       {(focused) => (
         <>
-          {/* the header is the tabs: every ticket, then one per kind with its
-              glyph — the glyphs on the rows learned here — and how many are open */}
-          <text truncate wrapMode="none" flexShrink={0}>
-            {TICKET_TABS.flatMap((t, i) => {
-              const n = (counts.get(t) ?? 0) + (t === "all" ? unknownTickets.length : 0);
-              const on = t === tab;
-              return [
-                ...(i > 0 ? [<span key={`${t}-gap`}>{"   "}</span>] : []),
-                // a kind with nothing open shows its glyph alone, so the row fits
-                <span key={t} fg={on ? (focused ? theme.accent : theme.fg) : theme.dim}>
-                  {on || n > 0 || t === "all" ? tabLabel(t) : kindGlyph(t)}
-                </span>,
-                <span key={`${t}-n`} fg={on && needsYou > 0 ? theme.warn : theme.dim}>{` ${n}`}</span>,
-              ];
-            })}
-          </text>
           {shown.length === 0 && !showClosed && (unknownTickets.length === 0 || tab !== "all") ? (
             <text fg={theme.dim} truncate wrapMode="none">
               {"  "}none
@@ -292,6 +274,46 @@ export function Tickets() {
             </text>
           ) : null}
         </>
+      )}
+    </Focusable>
+    </box>
+  );
+}
+
+/** The list's tabs: every ticket, then one per kind — each with its glyph,
+ *  so the glyphs on the rows are learned here, and how many are open. A
+ *  section like the room's tab bar: hover it, ←→ switch, ↓ into the list,
+ *  which shows only that tab's tickets. */
+function KindTabs({ tab, counts, extra, needsYou, onTab }: { tab: TicketTab; counts: ReadonlyMap<TicketTab, number>; extra: number; needsYou: boolean; onTab: (tab: TicketTab) => void }) {
+  return (
+    <Focusable
+      id="ticket-tabs"
+      flexShrink={0}
+      hint="←→ switch tab · ↓ into its tickets"
+      onKey={(key) => {
+        const i = TICKET_TABS.indexOf(tab);
+        if (key.name === "left" && i > 0) return onTab(TICKET_TABS[i - 1]!), true;
+        if (key.name === "right" && i < TICKET_TABS.length - 1) return onTab(TICKET_TABS[i + 1]!), true;
+        // ← past the first and → past the last are not ours: the rail, the projects
+        return false;
+      }}
+    >
+      {(focused) => (
+        <text truncate wrapMode="none">
+          <span fg={focused ? theme.accent : theme.dim}>{focused ? "› " : "  "}</span>
+          {TICKET_TABS.flatMap((t, i) => {
+            const n = (counts.get(t) ?? 0) + (t === "all" ? extra : 0);
+            const on = t === tab;
+            return [
+              ...(i > 0 ? [<span key={`${t}-gap`}>{"   "}</span>] : []),
+              // a kind with nothing open shows its glyph alone, so the row fits
+              <span key={t} fg={on ? (focused ? theme.accent : theme.fg) : theme.dim}>
+                {on || n > 0 || t === "all" ? tabLabel(t) : kindGlyph(t)}
+              </span>,
+              <span key={`${t}-n`} fg={on && needsYou ? theme.warn : theme.dim}>{` ${n}`}</span>,
+            ];
+          })}
+        </text>
       )}
     </Focusable>
   );

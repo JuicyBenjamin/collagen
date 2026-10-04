@@ -49,7 +49,7 @@ await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/nu
 await_mark M5_back_to_ticket; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
-expect "↓↓↓ from the tab bar reached the tickets list" "$KEYS" "tickets"
+expect "↓↓↓ from the tab bar reached the tickets list, past its tabs" "$KEYS" "tickets"
 expect "enter opened the ticket: the cursor landed on its steps" "$KEYS" "ticket-steps"
 expect "↑ from the steps reached the why section" "$KEYS" "ticket-review"
 expect "the ticket page says where the code is and how much why came with it" "$(echo "$TEXT" | grep -cE 'feat/opening-animation .{1,6} main')" "^[1-9]"
