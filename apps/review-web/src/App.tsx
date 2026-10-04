@@ -363,6 +363,18 @@ function UnitSection(props: {
 }) {
   const shaped = () => props.unit.decisions.map((id) => props.decisions.get(id)).filter((d): d is Decision => d !== undefined);
   const files = () => new Set(props.unit.hunks.map((id) => props.hunks.get(id)?.file)).size;
+  // the unit's changes in runs of one file each, in order
+  const runs = createMemo(() => {
+    const out: Array<Array<HunkData>> = [];
+    for (const id of props.unit.hunks) {
+      const h = props.hunks.get(id);
+      if (!h) continue;
+      const last = out[out.length - 1];
+      if (last && last[0]!.file === h.file) last.push(h);
+      else out.push([h]);
+    }
+    return out;
+  });
   const unexplained = () => new Set(props.unit.unexplained);
   // a unit that is a decision names it in its title already: its chips are the others
   const chips = () => shaped().filter((d) => props.unit.id !== `d-${d.id}`);
@@ -406,11 +418,15 @@ function UnitSection(props: {
         </p>
       </div>
       <div class="decision-main">
-        <For each={props.unit.hunks}>
-          {(id, i) => (
-            <Show when={props.hunks.get(id)}>
-              {(h) => <Hunk hunk={h()} continued={i() > 0 && props.hunks.get(props.unit.hunks[i() - 1]!)?.file === h().file} unexplained={unexplained().has(id)} />}
-            </Show>
+        {/* one card per file: its changes in this unit together, so its header
+            stays at the top of the window through all of them */}
+        <For each={runs()}>
+          {(run) => (
+            <div class="hunk-group">
+              <For each={run}>
+                {(h, j) => <Hunk hunk={h} continued={j() > 0} unexplained={unexplained().has(h.id)} />}
+              </For>
+            </div>
           )}
         </For>
       </div>
