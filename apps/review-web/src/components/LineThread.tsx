@@ -80,7 +80,7 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
         <Show when={props.comment.url}>
           {(url) => (
             <a class="line-comment-link" href={url()} target="_blank" rel="noreferrer">
-              on GitHub
+              on {hostNow.hostName()}
             </a>
           )}
         </Show>
@@ -174,7 +174,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
   return (
     <div class="line-comment pending-review">
       <div class="line-comment-head">
-        <span class="pending-badge">{props.comment.posted ? "On GitHub" : "Pending"}</span>
+        <span class="pending-badge">{props.comment.posted ? `On ${hostNow.hostName()}` : "Pending"}</span>
         <Show when={props.comment.drafted}>
           <span class="drafted-mark" title="Drafted by your AI, taken into your review">with AI</span>
         </Show>

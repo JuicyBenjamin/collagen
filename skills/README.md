@@ -24,6 +24,7 @@ skill into an agent's folder — edit it here.
 | [offline-and-delivery](offline-and-delivery/SKILL.md) | sending, receiving or waking anyone: outbox, transcripts, steps, readiness |
 | [who-sees-what](who-sees-what/SKILL.md) | showing or explaining tickets to a person or an agent; filtering anything out |
 | [tui-layout](tui-layout/SKILL.md) | laying out, sizing or scrolling anything in the OpenTUI app |
+| [repo-hosts](repo-hosts/SKILL.md) | anything touching where code is hosted: pull requests, sign-in, links, refs, who wrote it |
 
 When a review finds something none of these cover, and it could come back,
 add it to the skill it belongs to (or a new one) in the same change.

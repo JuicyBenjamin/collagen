@@ -26,6 +26,10 @@ export type Confidence = typeof Confidence.Type;
 export const Assumed = Schema.Struct({
   author: Schema.String,
   sources: Schema.Array(Schema.String),
+  /** who wrote the code, as identities no host owns: "<host id>:<login>"
+   *  from the pull request, "git:<email>" from its commits — whoever shares
+   *  one may take the review over */
+  identities: Schema.optional(Schema.Array(Schema.String)),
 });
 export type Assumed = typeof Assumed.Type;
 
