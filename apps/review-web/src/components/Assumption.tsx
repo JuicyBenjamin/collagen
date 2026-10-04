@@ -1,11 +1,8 @@
 import { Show } from "solid-js";
 import type { Decision } from "../data";
 import { assumedNow } from "../assumedNow";
-import { questionFor, spotFor } from "../assumed";
-import { diffNow } from "../diffNow";
-import { hostNow } from "../hostNow";
 
-const SURE = { high: "the author said as much", medium: "the code makes it likely", low: "a reading of the code" } as const;
+const SURE = { high: "someone said why", medium: "the evidence points there", low: "a hunch from the code" } as const;
 
 /** What a guess rests on and how sure the AI is — in place of the person's
  *  words and the agent's reasons a told decision has. */
@@ -28,7 +25,6 @@ export function AssumedWhy(props: { decision: Decision }) {
           </div>
         )}
       </Show>
-      <Check decision={props.decision} />
     </>
   );
 }
@@ -53,51 +49,5 @@ export function VerdictMark(props: { verdict?: "confirmed" | "corrected" | "wron
         </p>
       )}
     </Show>
-  );
-}
-
-/** The reader's verdict on one guess: it holds — or it goes to the author as
- *  a question, pending in the reader's review, on the line it is about. */
-function Check(props: { decision: Decision }) {
-  const author = () => assumedNow.assumed()?.author ?? "the author";
-  const state = () => assumedNow.checks.check(props.decision.id);
-  const spot = () => spotFor(props.decision.where, diffNow.hunksOf);
-  const ask = async () => {
-    const at = spot();
-    if (!at) return;
-    const r = await hostNow.addToReview(at.file, "RIGHT", at.line, questionFor(props.decision), null);
-    if ("ok" in r) assumedNow.checks.set(props.decision.id, "asked");
-  };
-  return (
-    <div class="assumed-check">
-      <Show
-        when={state()}
-        fallback={
-          <>
-            <button type="button" class="quiet small" onClick={() => assumedNow.checks.set(props.decision.id, "holds")} title="You read the code and the guess is right">
-              Holds
-            </button>
-            <button
-              type="button"
-              class="quiet small"
-              disabled={spot() === null}
-              onClick={() => void ask()}
-              title={spot() ? `A question to ${author()} on ${spot()!.file}:${spot()!.line}, pending in your review — edit it there` : "Its code is not in this diff: ask in the review's words instead"}
-            >
-              Ask {author()}
-            </button>
-          </>
-        }
-      >
-        {(s) => (
-          <p class="assumed-done">
-            {s() === "holds" ? "✓ You checked it: it holds." : `Asked ${author()} — the question is pending in your review, under its line.`}
-            <button type="button" class="link" onClick={() => assumedNow.checks.set(props.decision.id, null)}>
-              Undo
-            </button>
-          </p>
-        )}
-      </Show>
-    </div>
   );
 }
