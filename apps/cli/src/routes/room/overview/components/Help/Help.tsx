@@ -97,8 +97,29 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
       ),
     });
   }
+  gap("g-list");
+  head("h-list", "the list");
+  for (const [key, what] of LIST_KEYS)
+    out.push({
+      key: `list-${key}`,
+      node: (
+        <>
+          {"  "}
+          <span fg={theme.fg}>{key.padEnd(COL)}</span>
+          <span fg={theme.dim}>{what}</span>
+        </>
+      ),
+    });
   return out;
 }
+
+/** The list's own keys, beyond moving and opening. */
+const LIST_KEYS: ReadonlyArray<readonly [string, string]> = [
+  ["tab", "the next tab: every ticket, then one kind at a time, by project (shift-tab, [ and ] too)"],
+  ["h", "the closed tickets too, below the open ones, each saying how it ended"],
+  ["e", "open the epic the ticket is in"],
+  ["p", "open the ticket it grew out of"],
+];
 
 /** What the overview's words and glyphs mean, on demand (`?`): the kinds of
  *  ticket — what each is, what it asks of a reader, who closes it — then the
