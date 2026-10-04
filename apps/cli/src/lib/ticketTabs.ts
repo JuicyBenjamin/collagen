@@ -15,12 +15,6 @@ export const kindGlyph = (kind: TicketKind): string => (kind === "epic" ? EPIC_M
 /** "all tickets", or "✦ proposals" — a kind's glyph and its plural. */
 export const tabLabel = (tab: TicketTab): string => (tab === "all" ? "all tickets" : `${kindGlyph(tab)} ${tab}s`);
 
-/** The tab one step along, wrapping at the ends. */
-export const nextTab = (tab: TicketTab, by: 1 | -1): TicketTab => {
-  const i = TICKET_TABS.indexOf(tab);
-  return TICKET_TABS[(i + by + TICKET_TABS.length) % TICKET_TABS.length]!;
-};
-
 /** What a ticket hangs from, for a row to say quietly: the epic it is in,
  *  the ticket it grew out of, and how many grew out of it. */
 export interface Relations {

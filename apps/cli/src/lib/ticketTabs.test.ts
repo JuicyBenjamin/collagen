@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Ticket } from "@collagen/p2p";
-import { closedLine, nextTab, relationsOf, tabLabel, TICKET_TABS } from "./ticketTabs";
+import { closedLine, relationsOf, tabLabel, TICKET_TABS } from "./ticketTabs";
 
 const t = (over: Partial<Ticket>): Ticket => ({ id: "t", project: "collagen", goal: "g", createdBy: "alice", kind: "task", steps: [], structureAt: 1, updatedAt: 1, ...over });
 
 describe("the ticket list's tabs", () => {
-  it("all tickets, then a tab per kind with its glyph, wrapping at the ends", () => {
+  it("all tickets, then a tab per kind with its glyph", () => {
     expect(TICKET_TABS[0]).toBe("all");
     expect(tabLabel("all")).toBe("all tickets");
     expect(tabLabel("bug")).toBe("⚑ bugs");
     expect(tabLabel("epic")).toBe("♛ epics");
-    expect(nextTab("all", -1)).toBe("task");
-    expect(nextTab("task", 1)).toBe("all");
   });
 
   it("a row's relations: its epic, what it grew out of, and how many grew out of it", () => {

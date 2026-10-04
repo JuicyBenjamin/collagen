@@ -115,7 +115,7 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
 
 /** The list's own keys, beyond moving and opening. */
 const LIST_KEYS: ReadonlyArray<readonly [string, string]> = [
-  ["tab", "the next tab: every ticket, then one kind at a time, by project (shift-tab, [ and ] too)"],
+  ["←→", "on the tabs above the list: every ticket, or one kind at a time, by project"],
   ["h", "the closed tickets too, below the open ones, each saying how it ended"],
   ["e", "open the epic the ticket is in"],
   ["p", "open the ticket it grew out of"],
