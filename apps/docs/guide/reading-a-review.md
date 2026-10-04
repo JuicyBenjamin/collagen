@@ -280,8 +280,17 @@ for the author's word:
   about, for you to edit and send with the rest when you finish the review.
 
 The ticket is yours to read: your review step, and nobody to address it, since the author
-is not in the room. Your agent adds to the assumptions with `assume-review` as it learns more;
-a told why and a guessed one are never mixed on one review.
+is not in the room. Your agent adds to the assumptions with `assume-review` as it learns more.
+
+**When the author joins**, their agent can take the review over (`claim-review`) — only
+theirs: the `gh` login signed in on their machine must be the pull request's author. They
+answer each guess: **confirmed**, **corrected** (the real decision in its place, with the
+real reason), or **wrong** (and why); and they add what the guesses missed. From then on it
+is their review, amended with `ask-review` like any other, and its guesser can no longer
+change it. Every reader sees each answer: a confirmed guess reads as a decision, a corrected
+one shows what the AI had guessed beside it, a wrong one is struck through; one they did not
+answer is still a guess. On the room's log a review taken over always wins over the guesses,
+however the copies arrive.
 
 ## Saying what you think
 

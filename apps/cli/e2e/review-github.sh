@@ -255,6 +255,31 @@ ADDED=$(call $A "$SA" assume-review "$MORE")
 expect "…and assume-review adds to it" "$ADDED" "review ticket updated .*2 decision\\(s\\)"
 expect "…marked as built from assumptions" "$ADDED" "BUILT FROM ASSUMPTIONS"
 
+echo "## the code's author joins and takes the guesses over"
+COLLAGEN_GH="$E2E/fake-gh.mjs" FAKE_GH_DIR="$GH" start bob
+SB=$(mcp $B); wait_for_peer $B "$SB" alice; admitted bob
+wait_until "bob's agent reads the guesses, and how to answer them if he wrote the code" "IF YOUR USER WROTE THIS CODE .alice-gh's pull request.: they can take this review over" call $B "$SB" review-context "$QAT"
+CLAIM="{\"ticketId\":\"$AT\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"},{\"id\":\"d2\",\"verdict\":\"corrected\",\"title\":\"Pages of fifty\",\"what\":\"a page holds 50 rows\",\"userWhy\":\"the phone app runs out of memory\"},{\"id\":\"f1\",\"verdict\":\"wrong\",\"userWhy\":\"paging was never considered\"}],\"decisions\":[{\"title\":\"Sessions untouched\",\"what\":\"exports keep the session they run in\",\"userWhy\":\"auth is out of scope\"}]}"
+expect "its guesser cannot answer its own guesses" "$(call $A "$SA" claim-review "$CLAIM")" "only the code's author can answer them"
+echo carol > "$GH/login"
+expect "signed in to gh as someone else, the code's author is not who is asking" "$(call $B "$SB" claim-review "$CLAIM")" "gh is signed in as carol, but this review is about alice-gh's code"
+echo alice-gh > "$GH/login"
+CLAIMED=$(call $B "$SB" claim-review "$CLAIM")
+rm "$GH/login"
+expect "signed in as alice-gh, bob takes it over: each guess answered" "$CLAIMED" "taken over .Exports stream.*1 confirmed, 1 corrected, 1 wrong"
+wait_until "alice reads it as bob's now" "takenOver: .?bob wrote the code and took this over from alice's AI's guesses" call $A "$SA" review-context "$QAT"
+CTX=$(call $A "$SA" review-context "$QAT")
+expect "…the confirmed guess" "$CTX" "d1,Stream the rows,rows go out as they are read,confirmed"
+expect "…the corrected one, beside what was guessed" "$CTX" "d2,Pages of fifty,a page holds 50 rows,corrected,the phone app runs out of memory,..,a page holds 100 rows .{1,5}memory"
+expect "…and bob's own decision, told" "$CTX" "Sessions untouched,exports keep the session they run in,told,auth is out of scope"
+expect "…the fork marked wrong, with why" "$CTX" "a stream,paging,paging was never considered,wrong"
+expect "its guesser cannot guess on it any more: it is bob's" "$(call $A "$SA" assume-review "$MORE")" "that review's why is bob's to write"
+expect "bob adds to it as to any review of his" "$(call $B "$SB" ask-review "{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"CSV next\",\"what\":\"a CSV export follows\",\"userWhy\":\"finance asked\"}],\"forks\":[]}")" "review ticket updated"
+DATA=$(sfn reviewData "[\"$AT\"]")
+expect "the page has it taken over, each guess's verdict" "$DATA" '"claimed":\{"guessedBy":"[0-9a-f]+","guessedByName":"alice"'
+expect "…the correction keeps the guess" "$DATA" '"verdict":"corrected","guess":\{"what":"a page holds 100 rows","why":"memory","basis":"a constant in the code"\}'
+expect "the ticket is bob's to act on now: an address step of his" "$(call $B "$SB" get-tickets '{}' | grep -A14 "id: $AT" | grep -cE '^ +address,')" "^1$"
+
 echo "## a review with no pull request: comments are said in the room alone"
 BARE_ASK=$(call $A "$SA" ask-review "{\"title\":\"Stream it, unhosted\",\"project\":\"sandbox\",\"branch\":\"feat/stream-export\",\"base\":\"main\",\"summary\":\"the same change, no host\",\"decisions\":[$D1],\"forks\":[]}")
 BARE=$(echo "$BARE_ASK" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)

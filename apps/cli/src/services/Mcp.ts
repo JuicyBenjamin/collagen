@@ -9,7 +9,7 @@ import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { hostOf } from "./RepoHost";
-import { afterProblem, AI_OPTIONS, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { afterProblem, AI_OPTIONS, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
@@ -275,6 +275,70 @@ export const AssumeReview = Tool.make("assume-review", {
       ),
     ),
     retireUnits: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  success: Schema.String,
+});
+
+export const ClaimReview = Tool.make("claim-review", {
+  description: [
+    "Take over a review built from ASSUMPTIONS about your user's own code: someone's AI guessed the decisions and forks behind their pull request (assume-review) before your user was in collagen. Only when your user says it is their code and wants to answer it.",
+    "Read the guesses first (review-context), then ask your user about each and pass their answers by id ('d1', 'f1' …): 'confirmed' — the guess is right; 'corrected' — it is not, and here is the real one ('title' and 'what' for a decision, 'chose' and 'instead' for a fork) with the real reason ('userWhy' in their words, 'agentWhy' yours); 'wrong' — it is just wrong ('userWhy': why, in their words). Never answer for them: an answer is theirs.",
+    "Add what the guesses missed as you would on ask-review: 'decisions', 'forks', 'units'. Guesses left unanswered stay marked as guesses.",
+    "It becomes your user's review — every reader sees each guess answered, the corrected ones beside what was guessed — and theirs to amend from then on with ask-review. Only the code's author can take it over: the gh login signed in here must be the pull request's author.",
+    "WHAT TO TELL YOUR USER: that the review is theirs now, with their answers on it — nothing more.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    ticketId: Schema.String,
+    answers: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.String,
+          verdict: Schema.Literals(["confirmed", "corrected", "wrong"]),
+          title: Schema.optional(Schema.String),
+          what: Schema.optional(Schema.String),
+          chose: Schema.optional(Schema.String),
+          instead: Schema.optional(Schema.String),
+          userWhy: Schema.optional(Schema.String),
+          agentWhy: Schema.optional(Schema.String),
+        }),
+      ),
+    ),
+    summary: Schema.optional(Schema.String),
+    decisions: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          title: Schema.String,
+          what: Schema.String,
+          userWhy: Schema.optional(Schema.String),
+          agentWhy: Schema.optional(Schema.String),
+          where: Schema.optional(Schema.Array(Schema.String)),
+          guidedBy: Schema.optional(Schema.Array(Schema.String)),
+        }),
+      ),
+    ),
+    forks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          at: Schema.String,
+          chose: Schema.String,
+          instead: Schema.String,
+          why: Schema.String,
+          by: Schema.optional(Schema.Literals(["user", "agent"])),
+        }),
+      ),
+    ),
+    units: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          title: Schema.String,
+          what: Schema.String,
+          where: Schema.Array(Schema.String),
+        }),
+      ),
+    ),
   }),
   success: Schema.String,
 });
@@ -594,6 +658,7 @@ export const CollagenToolkit = Toolkit.make(
   CreateTicket,
   AskReview,
   AssumeReview,
+  ClaimReview,
   AskPlan,
   Propose,
   ReportBug,
@@ -634,6 +699,7 @@ export const DevCollagenToolkit = Toolkit.make(
   CreateTicket,
   AskReview,
   AssumeReview,
+  ClaimReview,
   AskPlan,
   Propose,
   ReportBug,
@@ -835,8 +901,9 @@ const makeHandlers = Effect.gen(function* () {
             return `failed: that review's why is ${existing.authorName}'s to write — your user's own reading of the code goes to them with send-to-peer (pass ticketId so it lands on the ticket)`;
           }
           // a why told and a why guessed are never mixed on one review
-          if (existing && (existing.assumed !== undefined) !== (input.assumed !== undefined)) {
-            return existing.assumed
+          const guessed = existing?.assumed !== undefined && existing.claimed === undefined;
+          if (existing && guessed !== (input.assumed !== undefined)) {
+            return guessed
               ? `failed: that review is built from assumptions — amend it with assume-review, so what you add is marked as a guess too`
               : `failed: that review's why was told, not guessed — amend it with ask-review`;
           }
@@ -1249,6 +1316,67 @@ const makeHandlers = Effect.gen(function* () {
         return yield* outbox.tell({ roomId, to, title: `${project} · ${input.title.trim()}`, outgoing: { kind: "ticket", ticket } });
       }),
       "ask-review": (input: Parameters<typeof fileJudged>[1]) => fileJudged("review", input),
+      "claim-review": Effect.fn("Mcp.claimReview")(function* (input: {
+        ticketId: string;
+        answers?: ReadonlyArray<{ readonly id: string; readonly verdict: "confirmed" | "corrected" | "wrong"; readonly title?: string; readonly what?: string; readonly chose?: string; readonly instead?: string; readonly userWhy?: string; readonly agentWhy?: string }>;
+        summary?: string;
+        decisions?: ReadonlyArray<DecisionInput>;
+        forks?: ReadonlyArray<ForkInput>;
+        units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
+      }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
+        if (!ticket) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+        const review = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId);
+        if (!review?.assumed) return `failed: "${ticketName(ticket)}" was not built from assumptions — there is nothing to take over; your user's own review goes through ask-review`;
+        if (review.claimed && review.author !== identity.pubkey) return `failed: ${review.authorName} took this review over already — it is theirs`;
+        if (!review.claimed && review.author === identity.pubkey) return "failed: your user's AI made these guesses — only the code's author can answer them; add to them with assume-review";
+        // only the code's author: the one signed in to the host here wrote the pull request
+        const host = review.link ? hostOf(review.link) : undefined;
+        if (host) {
+          const viewer = yield* host.viewerNow;
+          if (!("user" in viewer)) return `failed: ${viewer.signIn} — the review is about ${review.assumed.author}'s code, and only they can take it over`;
+          if (viewer.user.login !== review.assumed.author) return `failed: gh is signed in as ${viewer.user.login}, but this review is about ${review.assumed.author}'s code — only they can take it over`;
+        }
+        const answers = input.answers ?? [];
+        for (const a of answers) {
+          const d = review.decisions.find((x) => x.id === a.id);
+          const f = review.forks.find((x) => x.id === a.id);
+          if (!d && !f) return `failed: no guess "${a.id}" on this review — see review-context for their ids`;
+          if (a.verdict === "corrected") {
+            if (d && !a.what?.trim() && !a.title?.trim()) return `failed: correcting ${a.id} needs the real decision — 'title' and 'what'`;
+            if (f && (!a.chose?.trim() || !a.instead?.trim())) return `failed: correcting ${a.id} needs the real turn — 'chose' and 'instead'`;
+            if (!a.userWhy?.trim() && !a.agentWhy?.trim()) return `failed: correcting ${a.id} needs the real reason — 'userWhy' in your user's words, or 'agentWhy'`;
+          }
+        }
+        const delta = {
+          ...(input.summary ? { summary: input.summary } : {}),
+          decisions: input.decisions ?? [],
+          forks: input.forks ?? [],
+          ...(input.units ? { units: input.units.map((u) => ({ ...(u.id ? { id: u.id } : {}), title: u.title.trim(), what: u.what.trim(), where: u.where })) } : {}),
+        };
+        if (answers.length === 0 && delta.decisions.length === 0 && delta.forks.length === 0 && !input.summary && !input.units) return "failed: nothing to take over with — pass your user's answers to the guesses, or their own decisions";
+        const gap = reviewGaps(delta, true, "review");
+        if (gap && (delta.decisions.length > 0 || delta.forks.length > 0)) return gap;
+        const now = yield* Clock.currentTimeMillis;
+        const myName = yield* SubscriptionRef.get(nameRef);
+        const told = claimReview(review, { key: identity.pubkey, name: myName }, answers, delta, now);
+        // theirs to act on now: the reviews of their change
+        const takes = ticket.steps.filter((s) => isTake(s)).map((s) => s.id);
+        const revised: Ticket = ticket.steps.some((s) => s.id === "address")
+          ? ticket
+          : { ...ticket, updatedAt: now, steps: [...ticket.steps, { id: "address", owner: identity.pubkey, intent: "address", description: `act on the reviews of your change, ${ticket.goal}`, needs: takes, status: "pending" as const, updatedAt: now }] };
+        const sent = yield* outbox.tell({
+          roomId,
+          to: "the room",
+          title: `${ticket.goal} · taken over`,
+          outgoing: { kind: "review", ...(revised !== ticket ? { ticket: revised } : {}), review: told },
+        });
+        if (sent.startsWith("failed")) return sent;
+        const count = (v: string) => told.decisions.filter((d) => d.verdict === v).length + told.forks.filter((f) => f.verdict === v).length;
+        const open = told.decisions.filter((d) => d.basis !== undefined && d.verdict === undefined).length + told.forks.filter((f) => f.basis !== undefined && f.verdict === undefined).length;
+        return `taken over "${ticketName(ticket)}" [ticket ${ticket.id}] from ${review.authorName}'s AI's guesses: ${count("confirmed")} confirmed, ${count("corrected")} corrected, ${count("wrong")} wrong${open > 0 ? `, ${open} still a guess — answer them with claim-review again` : ""}. It is your user's review now: amend it with ask-review. TELL YOUR USER ONLY THIS: "the review is yours now, with your answers on it".`;
+      }),
       "assume-review": Effect.fn("Mcp.assumeReview")(function* (input: {
         project?: string;
         ticketId?: string;
