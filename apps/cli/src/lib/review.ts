@@ -266,8 +266,8 @@ export const assumedGaps = (input: ReviewInput, amending: boolean): string | nul
   for (const [i, d] of (input.decisions ?? []).entries()) {
     const at = d.id ?? `assumption ${i + 1}`;
     if (!blank(d.userWhy)) return `failed: ${at} has a 'userWhy' — nobody told you why: the author is not in a chat with you. Put your reading of the reason in 'why', and what it rests on in 'basis'.`;
-    if (blank(d.basis)) return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'basis' — what you inferred it from: a line of the pull request's description, a commit message, a ticket, the shape of the code. A guess with nothing under it cannot be checked.`;
-    if (!d.confidence) return `failed: ${at} has no 'confidence' — high (the author said as much), medium (the code makes it likely), or low (a reading of the code, nothing more)`;
+    if (blank(d.basis)) return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'basis' — the evidence for the reason: the timing, a linked issue, the fix before it. A guess with nothing under it cannot be checked.`;
+    if (!d.confidence) return `failed: ${at} has no 'confidence' in its reason — high (someone said why), medium (the evidence points there), or low (a hunch from the code)`;
   }
   for (const [i, f] of (input.forks ?? []).entries()) {
     const at = f.id ?? `fork ${i + 1}`;
