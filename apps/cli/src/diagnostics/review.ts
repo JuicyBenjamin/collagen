@@ -98,7 +98,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
             }
           : {};
       // a reader's agent reviewing it: remarks on lines belong beside the code, not in the chat
-      const drafting = reading ? "\n\nREVIEWING THIS FOR YOUR USER: each remark about particular lines goes on the review page as a draft (review-comments, action draft) — beside the code, for them to accept or decline — not in the chat." : "";
+      const drafting = reading ? "\n\nREVIEWING THIS FOR YOUR USER: each remark about particular lines goes on the review page as a draft (review-comments, action draft) — beside the code, for them to accept or decline — not in the chat. Judge the change — its reasons, and whether the code serves them; running the tests is CI's and the author's, not yours." : "";
       // guesses about someone's code: if that someone is reading, they can answer them
       const answer =
         review.assumed && !review.claimed && review.author !== me
