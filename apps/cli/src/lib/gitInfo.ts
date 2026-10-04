@@ -62,10 +62,4 @@ export const repoWebUrl = (root: string): string | null => {
   return null;
 };
 
-/** A link the reviewer can open for this branch — the branch's tree on the
- *  forge. A pull request is better, so this is only the fallback for when the
- *  agent has no link to give. */
-export const branchLink = (root: string, branch: string): string | null => {
-  const web = repoWebUrl(root);
-  return web ? `${web}/tree/${branch.split("/").map(encodeURIComponent).join("/")}` : null;
-};
+
