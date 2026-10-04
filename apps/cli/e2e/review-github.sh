@@ -287,6 +287,16 @@ echo "## with no host at all, git says who wrote it"
 NOHOST='{"project":"sandbox","title":"Exports, unhosted","summary":"The same change, on no host","branch":"feat/stream-export","base":"main","author":"Ann","sources":["the commits"],"decisions":[{"title":"Stream the rows","what":"rows go out as read","why":"timeouts","basis":"a commit message","confidence":"medium","where":["src/export.ts:2"]}]}'
 NH=$(call $A "$SA" assume-review "$NOHOST" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "bob has it" "Exports, unhosted" call $B "$SB" get-tickets '{}'
+QNH="{\"ticketId\":\"$NH\"}"
+ADDNH="{\"ticketId\":\"$NH\",\"decisions\":[{\"title\":\"Rows as strings\",\"what\":\"rows map to strings\",\"why\":\"it says so\",\"basis\":\"the code\",\"confidence\":\"low\"}]}"
+call $A "$SA" assume-review "$ADDNH" > /dev/null
+RETIRE="{\"ticketId\":\"$NH\",\"retire\":[\"d2\"]}"
+NOSUCH="{\"ticketId\":\"$NH\",\"retire\":[\"d9\"]}"
+expect "a guess that only restates the change is withdrawn — the same review" "$(call $A "$SA" assume-review "$RETIRE")" "review ticket updated .*1 decision\\(s\\)"
+expect "…gone from it" "$(call $A "$SA" review-context "$QNH" | grep -c 'Rows as strings')" "^0$"
+expect "…and its id never given to another" "$(call $A "$SA" assume-review "$ADDNH")" "review ticket updated .*2 decision\\(s\\)"
+expect "…which is d3" "$(call $A "$SA" review-context "$QNH")" "d3,Rows as strings"
+expect "a guess that is not there cannot be withdrawn" "$(call $A "$SA" assume-review "$NOSUCH")" "no guess .d9. on this review"
 NHCLAIM="{\"ticketId\":\"$NH\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"}]}"
 git -C "$R" config user.email carol@example.com
 expect "committing as someone else, bob is refused — no host to ask" "$(call $B "$SB" claim-review "$NHCLAIM")" "written by e2e@collagen.test in git .{1,3} and here you are carol@example.com in git"

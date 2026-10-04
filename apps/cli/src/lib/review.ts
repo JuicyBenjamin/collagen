@@ -85,6 +85,8 @@ export interface ReviewInput {
   readonly retireUnits?: ReadonlyArray<string>;
   /** the why is inferred, not told (see p2p Assumed) */
   readonly assumed?: Assumed;
+  /** guesses withdrawn, by id */
+  readonly retireGuesses?: ReadonlyArray<string>;
 }
 
 const blank = (s: string | undefined): boolean => (s ?? "").trim().length === 0;
@@ -130,7 +132,7 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
   const outlineMoves = (input.outline?.length ?? 0) > 0 || (input.retireOutline?.length ?? 0) > 0;
   const bugMoves = Object.keys(input.bug ?? {}).length > 0 || (input.retireBug?.length ?? 0) > 0;
   const unitsMove = (input.units?.length ?? 0) > 0 || (input.retireUnits?.length ?? 0) > 0;
-  if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves && !unitsMove) {
+  if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves && !unitsMove && (input.retireGuesses?.length ?? 0) === 0) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
   }
   for (const [i, d] of decisions.entries()) {

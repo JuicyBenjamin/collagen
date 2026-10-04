@@ -280,7 +280,8 @@ for the author's word:
   about, for you to edit and send with the rest when you finish the review.
 
 The ticket is yours to read: your review step, and nobody to address it, since its author
-did not file it. Your agent adds to the assumptions with `assume-review` as it learns more.
+did not file it. Your agent adds to the assumptions with `assume-review` as it learns more — corrects one,
+or withdraws one that turned out wrong; it stays the same review.
 
 **When the author joins**, their agent can take the review over (`claim-review`) — only
 theirs: they must share an identity with whoever wrote the code — signed in to the code's
