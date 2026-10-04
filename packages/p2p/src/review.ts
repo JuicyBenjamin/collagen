@@ -14,6 +14,21 @@ import { Schema } from "effect";
  *  prefaced or ruled out, in their words where possible. `agentWhy` is the
  *  agent's own reason for the shape it took. `where` points at the code it
  *  produced (file, or file:line). */
+/** How sure an AI is of something it inferred rather than was told. */
+export const Confidence = Schema.Literals(["high", "medium", "low"]);
+export type Confidence = typeof Confidence.Type;
+
+/** A review built from assumptions: its author does not use collagen, so no
+ *  chat holds the why, and the reader's AI inferred it — the decisions and
+ *  forks are its guesses, each with what it was inferred from. `author`: who
+ *  wrote the code (their login on the host, or their name); `sources`: what
+ *  the AI read to infer it. */
+export const Assumed = Schema.Struct({
+  author: Schema.String,
+  sources: Schema.Array(Schema.String),
+});
+export type Assumed = typeof Assumed.Type;
+
 export const ReviewDecision = Schema.Struct({
   /** Stable within the review ("d1", "d2" …) so a question can name it. */
   id: Schema.String,
@@ -28,6 +43,12 @@ export const ReviewDecision = Schema.Struct({
    *  told the agent to do it this way — so a reader sees the right ones were
    *  used, and a skill giving the wrong direction shows beside its code. */
   guidedBy: Schema.optional(Schema.Array(Schema.String)),
+  /** On an assumed review (ReviewContext.assumed): what it was inferred
+   *  from — the pull request's words, a linked ticket, a commit message, the
+   *  shape of the code — so a reader can weigh the guess. */
+  basis: Schema.optional(Schema.String),
+  /** How sure the AI that inferred it is. */
+  confidence: Schema.optional(Confidence),
 });
 export type ReviewDecision = typeof ReviewDecision.Type;
 
@@ -44,6 +65,9 @@ export const ReviewFork = Schema.Struct({
   why: Schema.String,
   /** Who settled it — the person, or the agent on its own. */
   by: Schema.optional(Schema.Literals(["user", "agent"])),
+  /** On an assumed review: what the turn was inferred from. */
+  basis: Schema.optional(Schema.String),
+  confidence: Schema.optional(Confidence),
 });
 export type ReviewFork = typeof ReviewFork.Type;
 
@@ -137,6 +161,8 @@ export const ReviewContext = Schema.Struct({
   outline: Schema.optional(Schema.Array(OutlineItem)),
   /** A bug ticket's report (see BugReport). */
   bug: Schema.optional(BugReport),
+  /** Present when the why was inferred, not told (see Assumed). */
+  assumed: Schema.optional(Assumed),
   ts: Schema.Finite,
 });
 export type ReviewContext = typeof ReviewContext.Type;
@@ -157,6 +183,8 @@ export interface ReviewDelta {
     /** file, or file:line */
     readonly where?: ReadonlyArray<string>;
     readonly guidedBy?: ReadonlyArray<string>;
+    readonly basis?: string;
+    readonly confidence?: Confidence;
   }>;
   readonly forks?: ReadonlyArray<{
     readonly id?: string;
@@ -165,6 +193,8 @@ export interface ReviewDelta {
     readonly instead: string;
     readonly why: string;
     readonly by?: "user" | "agent";
+    readonly basis?: string;
+    readonly confidence?: Confidence;
   }>;
   /** Units, merged by id like decisions: a repeated id corrects one. */
   readonly units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
@@ -178,6 +208,8 @@ export interface ReviewDelta {
   readonly bug?: Partial<BugReport>;
   /** Optional report fields withdrawn — a disproven cause, a score that no longer holds. */
   readonly retireBug?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
+  /** The why is inferred: who wrote the code, and what was read (see Assumed). */
+  readonly assumed?: Assumed;
 }
 
 const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
@@ -256,6 +288,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     ...(units !== undefined ? { units } : {}),
     ...(outline !== undefined ? { outline } : {}),
     ...(bug !== undefined ? { bug } : {}),
+    ...(delta.assumed ?? base.assumed ? { assumed: delta.assumed ?? base.assumed! } : {}),
     ts,
   };
 };
