@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
-import { epicBecause, epicParts, epicStatus, excludedFromEpic, KINDS, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, KINDS, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
 import { focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
@@ -122,7 +122,7 @@ export function EpicPage({
                   <span fg={theme.dim}>{t.project} · </span>
                   {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
                   <span fg={st.state === "needs-you" ? theme.warn : theme.dim}> · {STATE_LABEL[st.state]}</span>
-                  {excluded ? <span fg={theme.dim}> · excluded from progress</span> : null}
+                  {excluded ? <span fg={theme.dim}> · excluded from progress</span> : closedAs(t) === "dropped" ? <span fg={theme.dim}> · dropped</span> : null}
                 </text>
               );
             })}

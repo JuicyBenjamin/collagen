@@ -22,7 +22,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "9";
+export const PROTOCOL_VERSION = "10";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -370,6 +370,8 @@ export const Outgoing = Schema.Union([
     kind: Schema.Literal("close"),
     ticketId: Schema.String,
     reason: Schema.optional(Schema.String),
+    /** how it ended — counted done in its epic, or out of its progress */
+    outcome: Schema.optional(Schema.Literals(["done", "dropped"])),
   }),
   /** Tickets put into an epic, moved to another, or taken out (`epic`
    *  null) — anyone's to do; `goal` is the epic's, for the record. */
