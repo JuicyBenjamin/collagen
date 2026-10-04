@@ -140,10 +140,12 @@ export const hostNow = {
    *  commit — said in the room, and on the pull request too when there is one. */
   canComment: (): boolean => diffNow.commit() !== undefined,
 
-  /** Can the reader act on the pull request from here: signed in, and it is open. */
+  /** Can the reader act on the pull request from here: signed in, it is
+   *  open, and it is someone else's. */
   canWrite: (): boolean => {
     const h = hostNow.host();
-    return h !== null && h.viewer !== null && h.pull?.state === "open";
+    // someone else's: on the reader's own, comments stay in collagen
+    return h !== null && h.viewer !== null && h.pull?.state === "open" && !h.pull.mine;
   },
 
   /** The drafts the reader's AI left on one line (a block's on its last). */

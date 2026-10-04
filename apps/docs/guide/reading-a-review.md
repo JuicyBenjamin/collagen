@@ -227,7 +227,9 @@ Request changes — and says every pending comment at once: **in the room** as y
 author's agent reads them in `review-context`) and, when the review has an open pull request,
 **on it as one review**, through your own `gh`. A refusal leaves the whole review pending;
 with no pull request the comments are said in the room alone, and a verdict has nowhere to
-go. **Discard review** drops what is pending.
+go. On **your own pull request** — the one you are signed in to `gh` as opened — nothing is
+posted to GitHub, where you would be its only reader: your comments and finished reviews
+stay in collagen, and the page says so. **Discard review** drops what is pending.
 
 On a line's composer, **Start a review** (then **Add review comment**) puts a comment in your
 review; **Add single comment** says it at once, on its own, as GitHub's button does. A pending
