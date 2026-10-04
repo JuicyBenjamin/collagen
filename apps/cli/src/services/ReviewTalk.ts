@@ -125,8 +125,11 @@ export const dropDrafts = Effect.fn("ReviewTalk.drop")(function* (ticketId: stri
  *  or nowhere — and why. */
 type Target = { readonly roomOnly: string } | { readonly host: RepoHost; readonly link: string; readonly number: number; readonly author: string };
 
-/** The open pull request comments also go to, if the review has one and
- *  its host takes comments — or why they are said in the room only. */
+/** The open pull request comments also go to, if the review has one, its
+ *  host takes comments, and it is someone else's — or why they are said in
+ *  the room only. On the reader's own pull request (the one signed in to
+ *  the host opened it) nothing goes to the host: there they would be the
+ *  only one to read it, and collagen holds it already. */
 const hostFor = (found: Found): Effect.Effect<Target> =>
   Effect.gen(function* () {
     const link = hostLink(found.review, found.project);
@@ -135,6 +138,8 @@ const hostFor = (found: Found): Effect.Effect<Target> =>
     const named = yield* host.pull(link, found.review.branch);
     if ("none" in named) return { roomOnly: named.none };
     if (named.pull.state !== "open") return { roomOnly: `pull request #${named.pull.number} is ${named.pull.state}` };
+    const viewer = yield* host.viewer;
+    if ("user" in viewer && viewer.user.login === named.pull.author) return { roomOnly: "it is your own pull request, where you would be its only reader" };
     return { host, link, number: named.pull.number, author: named.pull.author };
   });
 

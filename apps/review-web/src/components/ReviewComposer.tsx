@@ -11,8 +11,8 @@ const VERDICTS: ReadonlyArray<{ readonly value: Verdict; readonly label: string;
 /** Finishing the reader's review, as GitHub's "Finish your review" has it:
  *  their words on the whole, a verdict, and every comment pending in the
  *  review, said at once — in the room, and on the pull request as one review
- *  through their own gh. Their own pull request takes comments only; with no
- *  pull request the pending comments are said in the room alone. Their take
+ *  through their own gh. On their own pull request — or with none — the
+ *  pending comments are said in the room alone, with no verdict. Their take
  *  on the collagen ticket itself still goes through their agent. */
 export function ReviewComposer(props: { onDone: () => void }) {
   const [body, setBody] = createSignal("");
@@ -24,7 +24,7 @@ export function ReviewComposer(props: { onDone: () => void }) {
   const onHost = () => hostNow.canWrite();
   /** why a verdict cannot be picked, or null */
   const barred = (v: Verdict): string | null =>
-    v === "comment" ? null : !onHost() ? "No open pull request to give a verdict on — your comments are said in the room" : pull()?.mine ? "You opened this pull request: GitHub only lets you comment on your own" : null;
+    v === "comment" ? null : pull()?.mine ? "Your own pull request: your review stays in collagen" : !onHost() ? "No open pull request to give a verdict on — your comments are said in the room" : null;
   const ready = () => !sending() && (verdict() === "approve" || (verdict() === "request-changes" ? body().trim().length > 0 : body().trim().length > 0 || count() > 0));
   const send = async () => {
     if (!ready()) return;
@@ -71,7 +71,9 @@ export function ReviewComposer(props: { onDone: () => void }) {
         ))}
       </fieldset>
       <Show when={!onHost() && count() > 0}>
-        <p class="host-note left">Your comments are said in the room — there is no open pull request to put them on.</p>
+        <p class="host-note left">
+          {pull()?.mine ? "Your own pull request: your comments stay in collagen — on GitHub you would be their only reader." : "Your comments are said in the room — there is no open pull request to put them on."}
+        </p>
       </Show>
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">
