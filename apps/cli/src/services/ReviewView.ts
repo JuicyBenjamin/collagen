@@ -269,14 +269,21 @@ export const hostView = Effect.fn("ReviewView.host")(function* (ticketId: string
   const [viewer, named, open] = yield* Effect.all([host.viewer, host.pull(link, branch), host.openPulls(link)], { concurrency: "unbounded" });
   const login = "user" in viewer ? viewer.user.login : undefined;
   const pull = "pull" in named ? named.pull : null;
-  const comments = pull ? yield* host.comments(link, pull.number) : [];
+  // what was said on it: line comments, reviews, the conversation — at once
+  const [comments, reviews, conversation] = pull
+    ? yield* Effect.all([host.comments(link, pull.number), host.reviews(link, pull.number), host.conversation(link, pull.number)], { concurrency: "unbounded" })
+    : [{ inline: [], outdated: [] }, [], []];
+  const byTime = <T extends { readonly at: string }>(xs: ReadonlyArray<T>) => [...xs].sort((a, b) => a.at.localeCompare(b.at));
   return {
     host: host.name,
     viewer: "user" in viewer ? viewer.user : null,
     ...("signIn" in viewer ? { signIn: viewer.signIn } : {}),
     pull: pull ? shown(pull, login) : null,
     ...("none" in named ? { noPull: named.none } : {}),
-    comments,
+    comments: comments.inline,
+    reviews: byTime(reviews),
+    conversation: byTime([...conversation, ...comments.outdated]),
+    checkedAt: new Date().toISOString(),
     stack: stack(open),
   } satisfies HostView;
 });

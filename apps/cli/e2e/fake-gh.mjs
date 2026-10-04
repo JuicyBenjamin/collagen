@@ -54,13 +54,22 @@ if (a === "api" && args.includes("POST") && args.some((x) => /pulls\/7\/reviews$
   const id = 500 + Object.keys(reviews()).length;
   const made = review.comments.map((c, i) => ({ id: 2000 + id * 10 + i, body: c.body, path: c.path, line: c.line, side: c.side, start_line: c.start_line ?? null, start_side: c.start_side ?? null, commit_id: review.commit_id }));
   writeFileSync(commentsFile, JSON.stringify([...comments(), ...made]));
-  writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [id]: made.map((c) => c.id) }));
+  writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [id]: { comments: made.map((c) => c.id), event: review.event, body: review.body ?? "" } }));
   out({ id, state: review.event === "APPROVE" ? "APPROVED" : review.event === "REQUEST_CHANGES" ? "CHANGES_REQUESTED" : "COMMENTED", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` });
 }
 const ofReview = args.map((x) => x.match(/pulls\/7\/reviews\/(\d+)\/comments$/)).find(Boolean);
 if (a === "api" && ofReview) {
-  const ids = reviews()[ofReview[1]] ?? [];
+  const ids = reviews()[ofReview[1]]?.comments ?? [];
   out([comments().filter((c) => ids.includes(c.id)).map(commentJson)]);
+}
+const STATE = { APPROVE: "APPROVED", REQUEST_CHANGES: "CHANGES_REQUESTED", COMMENT: "COMMENTED" };
+if (a === "api" && args.some((x) => /pulls\/7\/reviews$/.test(x))) {
+  const seeded = { id: 98, state: "APPROVED", body: "Good to go.", user: { login: "carol", avatar_url: "http://127.0.0.1:9/carol.png" }, submitted_at: "2026-10-03T09:00:00Z", html_url: "https://github.com/acme/sandbox/pull/7#pullrequestreview-98" };
+  const sent = Object.entries(reviews()).map(([id, r]) => ({ id: Number(id), state: STATE[r.event], body: r.body, user: { login: "bob" }, submitted_at: "2026-10-03T11:00:00Z", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` }));
+  out([[seeded, ...sent]]);
+}
+if (a === "api" && args.some((x) => /issues\/7\/comments$/.test(x))) {
+  out([[{ id: 77, body: "Can this ship Friday?", user: { login: "carol" }, created_at: "2026-10-03T09:30:00Z", html_url: "https://github.com/acme/sandbox/pull/7#issuecomment-77" }]]);
 }
 if (a === "api" && args.includes("POST")) {
   const f = { ...fields("-f"), ...fields("-F") };
@@ -71,6 +80,8 @@ if (a === "api" && args.includes("POST")) {
 }
 if (a === "api" && args.some((x) => /pulls\/7\/comments$/.test(x))) {
   const seeded = { id: 900, body: "Why map to strings here?", path: "src/export.ts", line: 2, side: "RIGHT" };
-  out([[commentJson(seeded), ...comments().map(commentJson)]]);
+  const reply = { ...commentJson({ id: 902, body: "Agreed — rows, please.", path: "src/export.ts", line: 2, side: "RIGHT" }), user: { login: "carol" }, in_reply_to_id: 900 };
+  const outdated = { ...commentJson({ id: 901, body: "old note", path: "src/export.ts", line: null, side: "RIGHT" }), original_line: 1 };
+  out([[commentJson(seeded), reply, outdated, ...comments().map(commentJson)]]);
 }
 fail(`fake gh: no answer for ${args.join(" ")}`);

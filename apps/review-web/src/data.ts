@@ -235,6 +235,31 @@ export interface LineComment {
   readonly pending?: true;
   /** drafted by the reader's AI, accepted by the reader */
   readonly drafted?: true;
+  /** a reply: the id of the comment it answers, in the same thread */
+  readonly replyTo?: string;
+}
+
+/** A review on the pull request as its host has it: who, their verdict, and
+ *  what they wrote on the whole (their line comments are LineComments). */
+export interface HostReview {
+  readonly id: string;
+  readonly author: HostUser;
+  readonly verdict: "approved" | "changes requested" | "commented" | "dismissed";
+  readonly body: string;
+  readonly at: string;
+  readonly url: string;
+}
+
+/** A comment in the pull request's conversation — on the whole, not a line —
+ *  or a line comment GitHub no longer places on a line (`outdated`: where it
+ *  was, as words). */
+export interface HostNote {
+  readonly id: string;
+  readonly author: HostUser;
+  readonly body: string;
+  readonly at: string;
+  readonly url: string;
+  readonly outdated?: string;
 }
 
 /** A comment not said yet: drafted by the reader's AI and waiting on them,
@@ -317,6 +342,12 @@ export type HostView =
       /** why there is no pull request, in words */
       readonly noPull?: string;
       readonly comments: ReadonlyArray<LineComment>;
+      /** the reviews on the pull request, its conversation, and line comments
+       *  on code that has changed since — oldest first */
+      readonly reviews: ReadonlyArray<HostReview>;
+      readonly conversation: ReadonlyArray<HostNote>;
+      /** when the host was asked, ISO */
+      readonly checkedAt: string;
       readonly stack: Stack | null;
     }
   | { readonly none: string; readonly stack: Stack | null };
