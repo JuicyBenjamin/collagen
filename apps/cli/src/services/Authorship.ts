@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { hostById, type RepoHost } from "./RepoHost";
-import { firstRef, run } from "./ReviewView";
+import { firstRef, run } from "../lib/gitRun";
 
 // Who wrote some code, said in a way no host owns. An identity is
 // "<kind>:<value>": a login on a host ("github:octocat" — the host's id, so
