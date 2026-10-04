@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { branchLink, branchOf, repoWebUrl } from "./gitInfo";
+import { branchOf, repoWebUrl } from "./gitInfo";
+import { branchLink } from "../services/RepoHost";
 
 const CONFIG = (url: string) => `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${url}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`;
 

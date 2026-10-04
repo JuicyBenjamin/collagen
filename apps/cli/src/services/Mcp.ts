@@ -8,11 +8,12 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
-import { hostOf } from "./RepoHost";
+import { branchLink, hostOf } from "./RepoHost";
+import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
 import { afterProblem, AI_OPTIONS, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
-import { branchLink, branchOf } from "../lib/gitInfo";
+import { branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketView } from "../lib/ticketView";
@@ -221,7 +222,7 @@ const duplicateWorkId = (work: ReadonlyArray<{ readonly id?: string; readonly in
 export const AssumeReview = Tool.make("assume-review", {
   description: [
     "Build a review of SOMEONE ELSE'S change — a pull request whose author does not use collagen — from ASSUMPTIONS: no chat holds their why, so you infer the decisions and forks they made. Only when your user asks you to review such a change (\"review PR 42\", \"go through octocat's pull request\"). For your user's own change, ask-review.",
-    "FIRST read everything you can reach, and keep a list of it for 'sources': the pull request (gh pr view <n> --json title,body,commits,files,comments), the issues and tickets it links (a Jira or Linear ticket, through whatever tools you have), its commit messages, and the code — the diff and the code around it.",
+    "FIRST read everything you can reach, and keep a list of it for 'sources': the pull request — its description, commits, files and comments, through its host's own tool (gh pr view <n> for GitHub) — the issues and tickets it links (a Jira or Linear ticket, through whatever tools you have), its commit messages, and the code — the diff and the code around it.",
     "THEN build it as ask-review would have it from a chat, with every why a guess you can show the grounds for. 'title' and 'summary': what the change is for, as you read it. 'decisions': each a choice you think the author made — 'title' (a few words, what it achieves), 'what' (one line), 'why' (your reading of their reason), 'basis' (what it rests on: quote the pull request or the ticket when it says so; else name the commit, or the code that makes you think it), 'confidence' (high: the author said as much; medium: the code makes it likely; low: a reading of the code, nothing more), and 'where' (file, or file:line). 'forks': only the roads you have some evidence they weighed — 'at', 'chose', 'instead', 'why', 'basis', 'confidence'. 'units': as for ask-review — the change grouped into code that achieves one thing each. Never invent: a guess you cannot ground is not one to file.",
     "'link' is the pull request: who wrote it ('author'), its 'branch' and 'base' are read from it when you omit them. 'peers' names others in the room to read it too — only who your user named.",
     "It files a review ticket that is your user's to read: a review step of theirs, and the review page shows every assumption marked as a guess, with what it rests on, for them to confirm or put to the author as a question. Amend it with 'ticketId' as you learn more.",
@@ -284,7 +285,7 @@ export const ClaimReview = Tool.make("claim-review", {
     "Take over a review built from ASSUMPTIONS about your user's own code: someone's AI guessed the decisions and forks behind their pull request (assume-review) before your user was in collagen. Only when your user says it is their code and wants to answer it.",
     "Read the guesses first (review-context), then ask your user about each and pass their answers by id ('d1', 'f1' …): 'confirmed' — the guess is right; 'corrected' — it is not, and here is the real one ('title' and 'what' for a decision, 'chose' and 'instead' for a fork) with the real reason ('userWhy' in their words, 'agentWhy' yours); 'wrong' — it is just wrong ('userWhy': why, in their words). Never answer for them: an answer is theirs.",
     "Add what the guesses missed as you would on ask-review: 'decisions', 'forks', 'units'. Guesses left unanswered stay marked as guesses.",
-    "It becomes your user's review — every reader sees each guess answered, the corrected ones beside what was guessed — and theirs to amend from then on with ask-review. Only the code's author can take it over: the gh login signed in here must be the pull request's author.",
+    "It becomes your user's review — every reader sees each guess answered, the corrected ones beside what was guessed — and theirs to amend from then on with ask-review. Only the code's author can take it over: your user must share an identity with them — signed in to the code's host as its author, or committing in this clone as one of the emails on its commits.",
     "WHAT TO TELL YOUR USER: that the review is theirs now, with their answers on it — nothing more.",
   ].join("\n"),
   parameters: Schema.Struct({
@@ -839,7 +840,7 @@ const makeHandlers = Effect.gen(function* () {
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
         retireUnits?: ReadonlyArray<string>;
         /** the why is the filer's AI's assumptions about someone else's change (assume-review) */
-        assumed?: { readonly author: string; readonly sources: ReadonlyArray<string> };
+        assumed?: { readonly author: string; readonly sources: ReadonlyArray<string>; readonly identities?: ReadonlyArray<string> };
       }) {
         const { id: roomId, room } = yield* focusedRoom;
         const myName = yield* SubscriptionRef.get(nameRef);
@@ -884,7 +885,15 @@ const makeHandlers = Effect.gen(function* () {
           ...(retireBug ? { retireBug } : {}),
           ...(units ? { units } : {}),
           ...(retireUnits ? { retireUnits } : {}),
-          ...(input.assumed ? { assumed: { author: input.assumed.author.trim(), sources: input.assumed.sources.map((x) => x.trim()).filter((x) => x.length > 0) } } : {}),
+          ...(input.assumed
+            ? {
+                assumed: {
+                  author: input.assumed.author.trim(),
+                  sources: input.assumed.sources.map((x) => x.trim()).filter((x) => x.length > 0),
+                  ...(input.assumed.identities && input.assumed.identities.length > 0 ? { identities: input.assumed.identities } : {}),
+                },
+              }
+            : {}),
         };
 
         // amending a review already on a ticket: only its author writes it
@@ -1331,12 +1340,16 @@ const makeHandlers = Effect.gen(function* () {
         if (!review?.assumed) return `failed: "${ticketName(ticket)}" was not built from assumptions — there is nothing to take over; your user's own review goes through ask-review`;
         if (review.claimed && review.author !== identity.pubkey) return `failed: ${review.authorName} took this review over already — it is theirs`;
         if (!review.claimed && review.author === identity.pubkey) return "failed: your user's AI made these guesses — only the code's author can answer them; add to them with assume-review";
-        // only the code's author: the one signed in to the host here wrote the pull request
+        // only the code's author: someone here shares an identity with them —
+        // a login on the code's host, or the email git has on its commits
         const host = review.link ? hostOf(review.link) : undefined;
-        if (host) {
-          const viewer = yield* host.viewerNow;
-          if (!("user" in viewer)) return `failed: ${viewer.signIn} — the review is about ${review.assumed.author}'s code, and only they can take it over`;
-          if (viewer.user.login !== review.assumed.author) return `failed: gh is signed in as ${viewer.user.login}, but this review is about ${review.assumed.author}'s code — only they can take it over`;
+        const theirs = review.assumed.identities ?? (host && review.assumed.author ? [identityOf(host.id, review.assumed.author)] : []);
+        if (theirs.length > 0) {
+          const clone = roomProjects(yield* store.get, roomId).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+          const mine = yield* ownIdentities(clone?.path, host);
+          if (!mine.some((m) => theirs.includes(m))) {
+            return `failed: this review is about ${review.assumed.author}'s code — written by ${theirs.map(describeIdentity).join(", ")} — and here you are ${mine.length > 0 ? mine.map(describeIdentity).join(", ") : `nobody yet: sign in to ${host?.name ?? "the code's host"}, or set git's user.email in your clone`}. Only its author can take it over.`;
+          }
         }
         const answers = input.answers ?? [];
         for (const a of answers) {
@@ -1407,8 +1420,19 @@ const makeHandlers = Effect.gen(function* () {
             base ??= got.pull.base;
           }
         }
-        const existing = input.ticketId ? (yield* SubscriptionRef.get((yield* focusedRoom).room.reviews)).find((r) => r.ticketId === input.ticketId) : undefined;
-        const assumed = { author: author ?? existing?.assumed?.author ?? "", sources: [...(existing?.assumed?.sources ?? []), ...(input.sources ?? []).filter((x) => !(existing?.assumed?.sources ?? []).includes(x))] };
+        const { id: roomId, room } = yield* focusedRoom;
+        const existing = input.ticketId ? (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId) : undefined;
+        // who wrote it, as identities no host owns: their login on the host,
+        // and the emails git has on the change's commits in this clone
+        const projectName = input.project ?? (input.ticketId ? (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId)?.project : undefined);
+        const clone = projectName ? roomProjects(yield* store.get, roomId).find((p) => p.name.trim().toLowerCase() === projectName.trim().toLowerCase()) : undefined;
+        const fromGit = clone && branch ? yield* gitAuthors(clone.path, base ?? existing?.base ?? "main", branch) : [];
+        const identities = [...new Set([...(existing?.assumed?.identities ?? []), ...(host && author ? [identityOf(host.id, author)] : []), ...fromGit])];
+        const assumed = {
+          author: author ?? existing?.assumed?.author ?? "",
+          sources: [...(existing?.assumed?.sources ?? []), ...(input.sources ?? []).filter((x) => !(existing?.assumed?.sources ?? []).includes(x))],
+          ...(identities.length > 0 ? { identities } : {}),
+        };
         const decisions: ReadonlyArray<DecisionInput> = (input.decisions ?? []).map((d) => ({ ...(d.id ? { id: d.id } : {}), title: d.title, what: d.what, agentWhy: d.why, basis: d.basis, confidence: d.confidence, ...(d.where ? { where: d.where } : {}) }));
         const forks: ReadonlyArray<ForkInput> = (input.forks ?? []).map((f) => ({ ...(f.id ? { id: f.id } : {}), at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis, confidence: f.confidence }));
         const gap = assumedGaps({ decisions, forks, assumed }, input.ticketId !== undefined);
@@ -1713,7 +1737,7 @@ const makeHandlers = Effect.gen(function* () {
         if (input.action === "submit") {
           const r = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null);
           if ("error" in r) return `failed: ${r.error} — the review stays pending`;
-          return `review finished: ${r.said} comment(s) said in the room as your user's${r.roomOnly ? ` — not on GitHub: ${r.roomOnly}` : `, and the review is on the pull request${"url" in r && r.url ? `: ${r.url}` : ""}`}.`;
+          return `review finished: ${r.said} comment(s) said in the room as your user's${r.roomOnly ? ` — not on the pull request: ${r.roomOnly}` : `, and the review is on the pull request${"url" in r && r.url ? `: ${r.url}` : ""}`}.`;
         }
         if (input.action === "decline") {
           const n = yield* dropDrafts(input.ticketId, ids, "ai");
