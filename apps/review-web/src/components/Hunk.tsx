@@ -32,6 +32,21 @@ const skippedText = (skip: { readonly lines: number; readonly elsewhere: number 
   return skip.elsewhere === 0 ? `⋯ ${lines} unchanged` : `⋯ ${lines} — ${skip.elsewhere === 1 ? "a change" : `${skip.elsewhere} changes`} among them under another unit`;
 };
 
+/** The file as the page's commit has it, line by line — read once per file
+ *  and commit, for every band that opens on it. */
+const fileAt = new Map<string, Promise<WholeFileResult>>();
+const readFile = (file: string, commit: string): Promise<WholeFileResult> => {
+  const key = `${commit}:${file}`;
+  let got = fileAt.get(key);
+  if (!got) {
+    got = wholeFile(ticketId, file, commit).catch((e): WholeFileResult => ({ error: String(e) }));
+    fileAt.set(key, got);
+    // a failure is not kept: the next click asks again
+    void got.then((r) => "error" in r && fileAt.delete(key));
+  }
+  return got;
+};
+
 /** One hunk: file and header, then its code (Lines). Its header offers the
  *  file whole, and a mark as viewed. A file marked as viewed folds here and
  *  wherever else it shows; once it moves, this hunk shows only what changed
@@ -50,6 +65,39 @@ export function Hunk(props: {
 }) {
   // the file whole, on the reader's word: asked once, kept while the page is
   const [whole, setWhole] = createSignal<WholeFileResult | "loading" | null>(null);
+  // the lines the band above this change hides, shown on the reader's click:
+  // unchanged lines of the file, numbered on both sides
+  const [gap, setGap] = createSignal<HunkData | "loading" | { readonly error: string } | null>(null);
+  const expandable = () => props.continued === true && (props.skipped?.lines ?? 0) > 0 && props.skipped?.elsewhere === 0 && diffNow.canReadWhole();
+  const toggleGap = async () => {
+    if (gap() !== null && gap() !== "loading") return setGap(null);
+    const at = diffNow.commit();
+    const n = props.skipped?.lines ?? 0;
+    if (!at || n <= 0) return;
+    setGap("loading");
+    const r = await readFile(props.hunk.file, at);
+    if ("error" in r) return setGap({ error: r.error });
+    const from = props.hunk.newStart - n;
+    // old and new numbers stay this far apart between the two changes
+    const pair = props.hunk.lines.find((l) => l.old !== undefined && l.new !== undefined);
+    const shift = pair ? pair.old! - pair.new! : 0;
+    setGap({
+      id: `${props.hunk.id}~gap`,
+      file: props.hunk.file,
+      header: "",
+      newStart: from,
+      newLines: n,
+      lines: r.lines.slice(from - 1, from - 1 + n).map((text, i) => ({ kind: " " as const, text, old: from + i + shift, new: from + i })),
+    });
+  };
+  const gapFailed = () => {
+    const g = gap();
+    return g !== null && g !== "loading" && "error" in g ? g.error : null;
+  };
+  const gapShown = () => {
+    const g = gap();
+    return g !== null && g !== "loading" && "lines" in g ? g : null;
+  };
   const [open, setOpen] = createSignal(false);
   let box: HTMLDivElement | undefined;
   const wholeShown = createMemo((): HunkData | null => {
@@ -110,7 +158,13 @@ export function Hunk(props: {
       <div class={["file", { continued: props.continued }]}>
         {/* a later change in the file: a band saying how much unchanged code
             lies between it and the one above — the file's header stays above */}
-        <span class="head">{props.continued ? skippedText(props.skipped) : props.hunk.file}</span>
+        <Show when={props.continued} fallback={<span class="head">{props.hunk.file}</span>}>
+          <Show when={expandable()} fallback={<span class="head">{skippedText(props.skipped)}</span>}>
+            <button type="button" class="head band-toggle" onClick={() => void toggleGap()} aria-expanded={gapShown() ? "true" : "false"} title={gapShown() ? "Hide these lines again" : "Show the lines between these two changes"}>
+              {gap() === "loading" ? "Reading…" : gapShown() ? `⌃ hide ${props.skipped!.lines === 1 ? "this line" : `these ${props.skipped!.lines} lines`}` : `${skippedText(props.skipped)} — show`}
+            </button>
+          </Show>
+        </Show>
         <span class="file-side">
           <Show when={mine() !== null && !open()}>
             <button type="button" class="whole-toggle" onClick={() => setFull(!full())} title="Switch between what changed since you viewed it and the whole change against the base">
@@ -131,6 +185,14 @@ export function Hunk(props: {
         </span>
       </div>
       <Show when={state() !== "viewed"}>
+        <Show when={gapFailed()}>{(why) => <p class="whole-failed">Could not read the lines between: {why()}</p>}</Show>
+        <Show when={gapShown()}>
+          {(g) => (
+            <div class="code gap">
+              <Lines hunk={g()} threads="new" />
+            </div>
+          )}
+        </Show>
         <Show when={props.unexplained}>
           <p class="hunk-note">No decision covers this change.</p>
         </Show>
