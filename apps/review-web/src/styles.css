@@ -74,6 +74,12 @@ section.decision > h2, section.decision > .decision-head { grid-area: title; }
 section.decision > .decision-main { grid-area: main; min-width: 0; }
 section.decision > .why { grid-area: why; }
 /* narrow: the code keeps the width; the why folds under the title */
+/* the why folded (a unit read, or folded by hand): no column kept for it —
+   the code takes the width, as everything above it does, and the folded why
+   is a line under the title */
+section.decision:has(> details.why:not([open])) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "why" "main"; }
+section.decision > details.why:not([open]) { position: static; margin-bottom: 14px; }
+section.decision > details.why:not([open]) summary { margin-bottom: 0; }
 @media (max-width: 1320px) {
   section.decision { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "why" "main"; }
   section.decision > .why { margin-bottom: 14px; }
