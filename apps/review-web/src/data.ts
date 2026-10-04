@@ -266,6 +266,8 @@ export interface HostNote {
  *  or pending in their review — said with the rest when they finish it. */
 export interface DraftView {
   readonly id: string;
+  /** the commit it was written at — its lines are that commit's */
+  readonly commit: string;
   readonly file: string;
   readonly line: number;
   readonly side: "LEFT" | "RIGHT";
@@ -274,6 +276,9 @@ export interface DraftView {
   readonly body: string;
   /** pending: accepted from the reader's AI */
   readonly drafted?: true;
+  /** pending: on the pull request already — a finish that stopped before the
+   *  room had it; finishing again tells the room */
+  readonly posted?: true;
 }
 
 /** talkView(ticketId) — the comments on the review's code that collagen

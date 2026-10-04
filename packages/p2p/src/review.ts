@@ -316,9 +316,13 @@ export const DraftComment = Schema.Struct({
   ticketId: Schema.String,
   ...CommentSpot,
   body: Schema.String,
-  status: Schema.optional(Schema.Literals(["ai", "pending"])),
+  status: Schema.optional(Schema.Literals(["ai", "pending", "posted"])),
   /** in the review because the reader accepted it from their AI */
   drafted: Schema.optional(Schema.Boolean),
+  /** "posted": the review went to the host and this is its copy there, the
+   *  room still to be told — a finish that stopped half way resumes from here
+   *  without writing to the host again */
+  host: Schema.optional(Schema.Struct({ id: Schema.Finite, url: Schema.String })),
   ts: Schema.Finite,
 });
 export type DraftComment = typeof DraftComment.Type;
