@@ -474,6 +474,14 @@ comes before one that does not. The key line under the list spells out the verdi
 `✓` no changes, `↻` changes asked, `✕` failed — whole, at 120 columns; `?` spells out the
 rest: the kinds, every mark and the states.
 
+The list's header is its **tabs**: `all tickets`, then one per kind with its glyph and how
+many are open (`✦ proposals 4`; a kind with none shows its glyph alone). `tab` (shift-`tab`,
+`[` and `]` too) switches while the cursor is in the list. A kind's tab lists only that
+kind, grouped by project, and each row says quietly what it hangs from: `♛` its epic, `from
+"…"` the ticket it grew out of, and how many grew out of it — `e` opens the epic, `p` the
+parent. `h` lists the **closed** tickets too, set apart below the open ones, each saying how
+it ended (`closed as done`, or `dropped` and why).
+
 **Completion and closure are two facts.** A ticket is *finished* when every step is
 answered — a reader's ↻ on a review counts as an answer — and that is a signal, not an
 end: it makes the ticket its author's to act on, and the settle that finished it tells
