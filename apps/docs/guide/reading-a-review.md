@@ -242,7 +242,8 @@ confirms it where it shows now, or delete it — until then, finishing refuses i
 whose line the diff no longer shows at all — its file gone or renamed — is listed at the top
 of the page, to delete or decline there. Should a
 finish stop after GitHub has the review but before the room does, its comments stay marked
-**On GitHub**; finishing again tells the room without posting them twice.
+**On GitHub**; the next finish tells the room first, without posting them twice — and
+anything new it brings (words, a verdict, comments) goes out as a review of its own.
 
 On a line's composer, **Start a review** (then **Add review comment**) puts a comment in your
 review; **Add single comment** says it at once, on its own, as GitHub's button does. A pending
