@@ -14,6 +14,10 @@ rm -f "$PTY" "$MARKS" "$OUT/ticket-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/ticket-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M0_tickets
+  printf '\t'; sleep 1; mark M0a_epics
+  for i in 1 2 3 4 5; do printf '\t'; sleep 0.4; done; sleep 1; mark M0b_tasks
+  printf 'h'; sleep 1; mark M0c_closed; printf 'h'; sleep 0.5
+  printf ']'; sleep 1; mark M0d_all
   printf '\r'; sleep 2; mark M1_opened
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M1a_attachments   # two steps now: s1, s2, then out
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M2_diagnostics
@@ -54,12 +58,32 @@ PY
 ATTACH="{\"ticketId\":\"$TICKET\",\"files\":[\"$TDIR/bob-deadbeefdeadbeef.codex.jsonl\"]}"  # built here: bash 3.2 mangles \" nested in "$( )"
 ATTACHED=$(call $A "$SA" attach-files "$ATTACH")
 expect "alice attached the collected transcript to the ticket (a reference on the log)" "$ATTACHED" "attached 1 file"
+# a ticket of alice's, closed as dropped: listed only when the closed ones are asked for
+GONE=$(call $A "$SA" create-ticket '{"title":"a spike nobody needs","project":"sandbox","goal":"a spike nobody needs","steps":[{"id":"s1","owner":"alice","intent":"spike","description":"try it"}]}' | grep -oE '[0-9a-f-]{36}' | head -1)
+GONE_OUT=$(call $A "$SA" close-ticket "{\"ticketId\":\"$GONE\",\"outcome\":\"dropped\",\"reason\":\"not needed\"}")
+expect "alice closes her spike as dropped" "$GONE_OUT" "as dropped"
 sleep 1
 touch "$OUT/ticket-tui.go"
 await_mark() { local i; for i in $(seq 1 60); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
 await_mark M8_help_closed; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 expect "↓↓↓ from the tab bar reached the tickets list" "$KEYS" "tickets"
+HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
+[ -n "${PYTE_PATH:-}" ] && HAVE_PYTE=yes
+if [ "$HAVE_PYTE" = yes ]; then
+  screen() { python3 "$E2E/render.py" "$PTY" "$MARKS" "${ROWS:-45}" 120 "$1"; }
+  expect "the list's header is its tabs: every ticket, then a kind each with its glyph" "$(screen M0_tickets)" "all tickets 1 +♛ 0 +✦ 0 +≡ 0 +⚑ 0 +± 0 +☐ tasks 1"
+  expect "tab: the epics tab, named while open, empty" "$(screen M0a_epics)" "♛ epics 0"
+  expect "…and says so" "$(screen M0a_epics)" "│ +none +│"
+  SHOT=$(screen M0b_tasks)
+  expect "five more: the tasks tab, the ticket on it" "$SHOT" "☐ bob "
+  expect "…with no kind heading: the tab says the kind" "$(echo "$SHOT" | grep -cE '^ +tasks$')" "^0$"
+  expect "h lists the closed ones too, below, each saying how it ended" "$(screen M0c_closed)" "a spike nobody needs +dropped: not needed"
+  expect "…and not before h" "$(screen M0b_tasks | grep -c 'a spike nobody needs')" "^0$"
+  expect "] wraps round to every ticket" "$(screen M0d_all)" "all tickets 1"
+else
+  echo "  skip the tab screens (no pyte)"
+fi
 expect "enter opened the ticket: the cursor landed on its steps" "$KEYS" "ticket-steps"
 expect "↓ past the last step landed on the attachments" "$KEYS" "ticket-attachments"
 expect "the attachments section shows the file as here (we hold it), readable" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'here.{0,12}enter reads it')" "^[1-9]"
