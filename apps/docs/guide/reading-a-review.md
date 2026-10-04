@@ -266,18 +266,15 @@ For a change its author did not file in collagen — a colleague's pull request,
 your agent to review it and it builds the review from **assumptions** (`assume-review`): it reads what it
 can reach — the pull request's description and commits, the tickets it links (a Jira or
 Linear ticket, through whatever tools it has), the code — and infers what the change cannot
-say: the problem behind it, and why the author solved it this way. The page reads as any review does, units and all, but nothing on it passes
-for the author's word:
+say: the problem behind it, and why the author solved it this way. From there it is a review
+like any other — you judge the code, comment on its lines, have your agent draft comments,
+and finish it — with the guesses standing where the author's decisions would:
 
-- a banner says it is an assumption-based review, and whose, with how many guesses you
-  have checked;
-- every assumption carries its mark and **how sure** the AI is (high: the author said as
-  much; medium: the code makes it likely; low: a reading of the code), what it **rests on**,
-  and the AI's reading of the reason — in place of the person's words a told decision has;
-  its chip beside the code is dashed until you check it;
-- **Holds** marks a guess you have checked against the code (yours, on this browser);
-  **Ask** puts it to the author as a question, pending in your review on the line it is
-  about, for you to edit and send with the rest when you finish the review.
+- a banner says it is an assumption-based review, and whose;
+- every guess carries its mark and **how sure** the AI is of the reason (high: someone said
+  why; medium: the evidence points there; low: a hunch from the code), what it **rests on**,
+  and the AI's reading — in place of the person's words a told decision has; its chip beside
+  the code is dashed.
 
 The ticket is yours to read: your review step, and nobody to address it, since its author
 did not file it. Your agent adds to the assumptions with `assume-review` as it learns more — corrects one,
