@@ -102,7 +102,8 @@ export function EpicPage({
         onKey={(key) => {
           if (key.name === "up" && s > 0) return setSel(s - 1), true;
           if (key.name === "down" && s < inside.length - 1) return setSel(s + 1), true;
-          if (isEnter(key) && inside[s]) return navigate(to.ticket(inside[s]!.id)), true;
+          // a ticket opened from here comes back here
+          if (isEnter(key) && inside[s]) return navigate(to.ticket(inside[s]!.id, { name: "room/ticket", ticketId: epic.id })), true;
           return false;
         }}
       >

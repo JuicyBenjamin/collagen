@@ -47,6 +47,9 @@ const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
  *    body    — steps; attachments (files on the ticket, if any); conversation
  *    foot    — diagnostics, one row, tucked away
  *  The overview is the list; this is the show. `esc` goes back. */
+/** The sections of a ticket's page: where the cursor may already be when it opens. */
+const PAGE_SECTIONS: ReadonlyArray<string> = ["ticket-review", "ticket-steps", "ticket-attachments", "ticket-conversation", "ticket-diagnostics"];
+
 export function TicketPage({ ticketId }: { ticketId: string }) {
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
@@ -79,12 +82,17 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   const [diagSel, setDiagSel] = useState(0);
   const [attSel, setAttSel] = useState(0);
 
-  // the cursor lands on the steps when the page opens — unless we came back
-  // from a page of ours (transcripts), which put it where it left from
+  // the cursor lands on the steps when a ticket opens — unless we came back
+  // from a page of ours (transcripts), which put it on one of these. Each
+  // ticket, not each mount: from an epic's page to a ticket in it is the same
+  // page with another ticket, and the cursor must not stay on the epic's list
+  // — no section would hold it, and ← (back) would do nothing
+  // (an epic's page places its own cursor, on its list)
+  const isEpic = tickets.find((t) => t.id === ticketId)?.kind === "epic";
   useEffect(() => {
-    if (!focus.startsWith("ticket-")) setFocus("ticket-steps");
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- on mount only
-  }, [setFocus]);
+    if (!isEpic && !PAGE_SECTIONS.includes(focus)) setFocus("ticket-steps");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- on each ticket opened
+  }, [setFocus, ticketId, isEpic]);
 
   const ticket = tickets.find((t) => t.id === ticketId);
   if (!ticket) {
