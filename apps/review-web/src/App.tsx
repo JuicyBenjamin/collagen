@@ -389,6 +389,21 @@ function UnitSection(props: {
   createEffect(wide, (w) => {
     setOpen(w);
   });
+  // every file here marked viewed: the reader is done with this unit, so its
+  // why folds with its code — no column of reasons holding the section open.
+  // Unmarking one opens it again; either can still be opened by hand.
+  let wasDone = false;
+  createEffect(
+    () => {
+      const files = [...new Set(props.unit.hunks.flatMap((id) => props.hunks.get(id)?.file ?? []))];
+      return files.length > 0 && files.every((f) => viewed.state(f) === "viewed");
+    },
+    (done) => {
+      if (done) setOpen(false);
+      else if (wasDone) setOpen(wide());
+      wasDone = done;
+    },
+  );
   const show = (d: Decision) => {
     // folded under the title on a narrow screen: open it first, then go there
     setOpen(true);
