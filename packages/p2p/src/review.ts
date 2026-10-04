@@ -18,8 +18,8 @@ import { Schema } from "effect";
 export const Confidence = Schema.Literals(["high", "medium", "low"]);
 export type Confidence = typeof Confidence.Type;
 
-/** A review built from assumptions: its author does not use collagen, so no
- *  chat holds the why, and the reader's AI inferred it — the decisions and
+/** A review built from assumptions: its author did not file it in collagen,
+ *  so no chat of theirs holds the why, and the reader's AI inferred it — the decisions and
  *  forks are its guesses, each with what it was inferred from. `author`: who
  *  wrote the code (their login on the host, or their name); `sources`: what
  *  the AI read to infer it. */

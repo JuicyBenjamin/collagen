@@ -221,7 +221,7 @@ const duplicateWorkId = (work: ReadonlyArray<{ readonly id?: string; readonly in
 
 export const AssumeReview = Tool.make("assume-review", {
   description: [
-    "Build a review of SOMEONE ELSE'S change — a pull request whose author does not use collagen — from ASSUMPTIONS: no chat holds their why, so you infer the decisions and forks they made. Only when your user asks you to review such a change (\"review PR 42\", \"go through octocat's pull request\"). For your user's own change, ask-review.",
+    "Build a review of a change from ASSUMPTIONS, when its author did not file one in collagen (a colleague's pull request, say — whether or not they use collagen): no chat of theirs holds the why, so you infer the decisions and forks they made. Only when your user asks you to review such a change (\"review PR 42\", \"go through octocat's pull request\"). For your user's own change, ask-review.",
     "FIRST read everything you can reach, and keep a list of it for 'sources': the pull request — its description, commits, files and comments, through its host's own tool (gh pr view <n> for GitHub) — the issues and tickets it links (a Jira or Linear ticket, through whatever tools you have), its commit messages, and the code — the diff and the code around it.",
     "THEN build it as ask-review would have it from a chat, with every why a guess you can show the grounds for. 'title' and 'summary': what the change is for, as you read it. 'decisions': each a choice you think the author made — 'title' (a few words, what it achieves), 'what' (one line), 'why' (your reading of their reason), 'basis' (what it rests on: quote the pull request or the ticket when it says so; else name the commit, or the code that makes you think it), 'confidence' (high: the author said as much; medium: the code makes it likely; low: a reading of the code, nothing more), and 'where' (file, or file:line). 'forks': only the roads you have some evidence they weighed — 'at', 'chose', 'instead', 'why', 'basis', 'confidence'. 'units': as for ask-review — the change grouped into code that achieves one thing each. Never invent: a guess you cannot ground is not one to file.",
     "'link' is the pull request: who wrote it ('author'), its 'branch' and 'base' are read from it when you omit them. 'peers' names others in the room to read it too — only who your user named.",
@@ -1056,7 +1056,7 @@ const makeHandlers = Effect.gen(function* () {
             where,
             input.focus ? `what your user wants looked at: ${input.focus}` : "",
             kind === "review" && input.assumed
-              ? `${input.assumed.author}'s change, who does not use collagen: the why on this ticket is ${myName}'s AI's ASSUMPTIONS — ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s) inferred from ${input.assumed.sources.join(", ")}, each with what it rests on. Read it with review-context {ticketId} when your person asks — and review nothing on your own.`
+              ? `${input.assumed.author}'s change, not filed by them: the why on this ticket is ${myName}'s AI's ASSUMPTIONS — ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s) inferred from ${input.assumed.sources.join(", ")}, each with what it rests on. Read it with review-context {ticketId} when your person asks — and review nothing on your own.`
               : kind === "review"
               ? `the why behind it is on this ticket: ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s), with what steered each one. Read it with review-context {ticketId} when your person asks why something is the way it is — and review nothing on your own.`
               : kind === "bug"
@@ -1339,11 +1339,12 @@ const makeHandlers = Effect.gen(function* () {
         const review = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId);
         if (!review?.assumed) return `failed: "${ticketName(ticket)}" was not built from assumptions — there is nothing to take over; your user's own review goes through ask-review`;
         if (review.claimed && review.author !== identity.pubkey) return `failed: ${review.authorName} took this review over already — it is theirs`;
-        if (!review.claimed && review.author === identity.pubkey) return "failed: your user's AI made these guesses — only the code's author can answer them; add to them with assume-review";
         // only the code's author: someone here shares an identity with them —
         // a login on the code's host, or the email git has on its commits
         const host = review.link ? hostOf(review.link) : undefined;
         const theirs = review.assumed.identities ?? (host && review.assumed.author ? [identityOf(host.id, review.assumed.author)] : []);
+        // its guesser may answer too — only when they wrote the code themselves
+        if (!review.claimed && review.author === identity.pubkey && theirs.length === 0) return "failed: your user's AI made these guesses — only the code's author can answer them; add to them with assume-review";
         if (theirs.length > 0) {
           const clone = roomProjects(yield* store.get, roomId).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
           const mine = yield* ownIdentities(clone?.path, host);
