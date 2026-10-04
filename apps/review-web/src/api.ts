@@ -1,5 +1,5 @@
 import { GET, live } from "@solidjs/web/server-functions";
-import type { DefinitionResult, DraftsResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -76,9 +76,9 @@ export const hostView = GET(async (ticketId: string): Promise<HostView> => {
  *  comments said, on the pull request as one review with their verdict and
  *  words, and in the room. Not a read: Solid refuses it from any page but
  *  this one. */
-export const submitReview = async (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null): Promise<SubmitResult> => {
+export const submitReview = async (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish): Promise<SubmitResult> => {
   "use server";
-  return run((b) => b.submit(ticketId, verdict, body, commit, shownAs));
+  return run((b) => b.submit(ticketId, verdict, body, commit, shownAs, seen));
 };
 
 /** A single comment on a line — or a block of lines, from `start` to `line`

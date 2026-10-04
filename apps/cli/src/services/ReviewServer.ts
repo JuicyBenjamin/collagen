@@ -54,6 +54,13 @@ const startOk = (start: unknown, line: number, side: "LEFT" | "RIGHT"): start is
 /** The login the page shows signed in: none, or a GitHub login. */
 const shownOk = (s: unknown): s is string | null => s === null || (typeof s === "string" && /^[A-Za-z0-9-]{1,39}$/.test(s));
 
+/** A finish from the page: its id, and the pending comments it saw. */
+const finishOk = (f: unknown): f is { readonly id: string; readonly pending: ReadonlyArray<string> } => {
+  if (typeof f !== "object" || f === null) return false;
+  const { id, pending } = f as { id?: unknown; pending?: unknown };
+  return typeof id === "string" && /^[0-9a-f-]{8,64}$/.test(id) && Array.isArray(pending) && idsOk(pending);
+};
+
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
   const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>();
@@ -69,8 +76,10 @@ const backend = Effect.gen(function* () {
     wholeFile: (ticketId, file, commit) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(commit) ? on(wholeFile(ticketId, file, commit)) : Effect.succeed(bad)),
     since: (ticketId, file, from, to) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(from) && commitOk(to) ? on(sinceViewed(ticketId, file, from, to)) : Effect.succeed(bad)),
     host: (ticketId) => (ticketIdOk(ticketId) ? on(hostView(ticketId)) : Effect.succeed({ none: "bad request", stack: null })),
-    submit: (ticketId, verdict, body, commit, shownAs) =>
-      ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) && (commit === null || commitOk(commit)) && shownOk(shownAs) ? on(submitReview(ticketId, verdict, body, commit, shownAs)) : Effect.succeed(bad),
+    submit: (ticketId, verdict, body, commit, shownAs, seen) =>
+      ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) && (commit === null || commitOk(commit)) && shownOk(shownAs) && finishOk(seen)
+        ? on(submitReview(ticketId, verdict, body, commit, shownAs, { id: seen.id, pending: seen.pending }))
+        : Effect.succeed(bad),
     lineComment: (ticketId, file, line, side, body, commit, start, shownAs) =>
       spotOk(ticketId, file, line, side, body, commit, start) && shownOk(shownAs) ? on(sayComment(ticketId, spot(file, line, side, start), commit, body, shownAs)) : Effect.succeed(bad),
     addToReview: (ticketId, file, line, side, body, commit, start) =>

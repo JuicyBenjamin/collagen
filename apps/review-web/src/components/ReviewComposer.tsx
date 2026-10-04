@@ -76,6 +76,9 @@ export function ReviewComposer(props: { onDone: () => void }) {
           {pull()?.mine ? "Your own pull request: your comments stay in collagen — on GitHub you would be their only reader." : "Your comments are said in the room — there is no open pull request to put them on."} A word on the whole, or a verdict, goes through your agent.
         </p>
       </Show>
+      <Show when={hostNow.unplaced().filter((d) => !hostNow.isDraft(d)).length}>
+        {(n) => <p class="host-note left">{n() === 1 ? "1 pending comment sits" : `${n()} pending comments sit`} on lines this diff no longer shows — listed at the top of the page, to delete.</p>}
+      </Show>
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">
         <Show when={count() > 0}>

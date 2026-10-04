@@ -105,6 +105,10 @@ export const salvageState = (text: string): Salvaged => {
     : undefined;
   draftDrops.done();
 
+  const finishDrops = count("finished review record");
+  const finished = salvageRecord(src.finished, Schema.Array(Schema.String), finishDrops.hit);
+  finishDrops.done();
+
   const proposalDrops = count("sent record");
   const sent = Array.isArray(src.sent)
     ? src.sent.flatMap((p) => {
@@ -154,6 +158,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(sent ? { sent } : {}),
       ...(transcriptAsks ? { transcriptAsks } : {}),
       ...(drafts && Object.keys(drafts).length > 0 ? { drafts } : {}),
+      ...(finished ? { finished } : {}),
     },
     dropped: dropped.length > 0 ? dropped : ["parts of the state file no longer readable"],
   };

@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { DefinitionResult, DraftsResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -34,8 +34,9 @@ export class ReviewBackend extends Context.Service<
     readonly host: (ticketId: string) => Effect.Effect<HostView>;
     /** finish the reader's review: its pending comments said — on the pull request as one review with
      *  their verdict and words, and in the room; `commit`: the one the page shows; `shownAs`: the
-     *  login the page shows signed in — a write under anyone else is refused */
-    readonly submit: (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null) => Effect.Effect<SubmitResult>;
+     *  login the page shows signed in — a write under anyone else is refused; `seen`: this finish's
+     *  own id and the pending comments the page showed — done once, and refused if the review changed */
+    readonly submit: (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish) => Effect.Effect<SubmitResult>;
     /** a single comment, said at once — on a line, or a block of lines from `start`, at the commit the page shows */
     readonly lineComment: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart, shownAs: string | null) => Effect.Effect<HostWrite>;
     /** a comment into the reader's review: pending, said when they finish it */

@@ -293,6 +293,12 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .drafted-mark { font-size: 11px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
 .drafts-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; padding: 9px 14px; border: 1px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); font-size: 13.5px; color: var(--fg); }
 .drafts-bar > span { flex: 1; min-width: 240px; }
+.unplaced { margin-top: 14px; padding: 9px 14px; border: 1px solid var(--warn); border-radius: 8px; background: color-mix(in srgb, var(--warn) 6%, var(--panel)); font-size: 13.5px; }
+.unplaced-head { margin: 0 0 6px; }
+.unplaced ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.unplaced li { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.unplaced code { font-size: 12.5px; color: var(--faint); flex: none; }
+.unplaced-body { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* a comment pending in the reader's review: theirs, not said yet */
 .line-comment.pending-review { border-left: 3px solid var(--warn); }

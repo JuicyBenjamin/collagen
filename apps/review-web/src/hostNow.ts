@@ -70,6 +70,9 @@ if (typeof window !== "undefined") {
  *  it survives the draft coming back when the optimistic accept is undone. */
 const [refusals, setRefusals] = createSignal<Readonly<Record<string, string>>>({});
 const [dragging, setDragging] = createSignal(false);
+/** The finish the reader is about to make, named: the same when sent again
+ *  after a refusal, a new one once a finish is done. */
+let finishId = crypto.randomUUID();
 
 export const hostNow = {
   /** Made once by the page, read again each time `state` (the review's live token) moves. */
@@ -206,6 +209,10 @@ export const hostNow = {
     yield dropDrafts(ticketId, ids, "pending");
     if (talk) refresh(talk);
   }),
+  /** The drafts and pending comments on no line the diff shows. */
+  unplaced: (): ReadonlyArray<DraftView> => (diffNow.commit() ? [...ready(pending, []), ...ready(drafts, [])].filter((d) => !shown(d)) : []),
+  /** Whether it is one of the AI's drafts, not in the review yet. */
+  isDraft: (d: DraftView): boolean => ready(drafts, []).some((x) => x.id === d.id),
   /** Whether a comment not said yet was written at another commit than the
    *  one the page shows — its lines may have moved since. */
   moved: (d: DraftView): boolean => {
@@ -230,7 +237,11 @@ export const hostNow = {
     const going = ready(pending, []);
     setPending(() => []);
     setComments((l) => [...l, ...going.map((d): LineComment => ({ id: `sending-${d.id}`, author: me ?? { login: "you" }, body: d.body, file: d.file, line: d.line, side: d.side, ...(d.startLine !== undefined ? { startLine: d.startLine, startSide: d.startSide ?? d.side } : {}), url: "", at: new Date().toISOString(), pending: true, ...(d.drafted ? { drafted: true as const } : {}) }))]);
-    const r = (yield submitReview(ticketId, verdict, body, diffNow.commit() ?? null, me?.login ?? null)) as SubmitResult;
+    // this finish, named — sent again it is not said twice — with the
+    // review as the page showed it (a comment still on its way has no id yet)
+    const seen = { id: finishId, pending: going.map((d) => d.id).filter((id) => !id.startsWith("new-")) };
+    const r = (yield submitReview(ticketId, verdict, body, diffNow.commit() ?? null, me?.login ?? null, seen)) as SubmitResult;
+    if ("ok" in r) finishId = crypto.randomUUID();
     if (talk) refresh(talk);
     if ("ok" in r && view) refresh(view);
     return r;
@@ -287,4 +298,10 @@ export const hostNow = {
 /** Keep why each of `ids` could not be taken, and forget it for the rest. */
 function note(ids: ReadonlyArray<string>, failed: ReadonlyArray<{ readonly id: string; readonly error: string }>): void {
   setRefusals((r) => ({ ...Object.fromEntries(Object.entries(r).filter(([id]) => !ids.includes(id))), ...Object.fromEntries(failed.map((f) => [f.id, f.error])) }));
+}
+
+/** Whether the diff shows a comment's line, where its thread sits: a removed
+ *  line on the old side, any other on the new. */
+function shown(d: DraftView): boolean {
+  return diffNow.hunksOf(d.file).some((h) => h.lines.some((l) => (d.side === "LEFT" ? l.kind === "-" && l.old === d.line : l.kind !== "-" && l.new === d.line)));
 }

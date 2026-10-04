@@ -55,6 +55,14 @@ describe("reading the user's state file", () => {
     expect(got.dropped.join(", ")).toMatch(/1 unsaid review comment/);
   });
 
+  it("a half-done finish keeps its GitHub copy, and finished reviews are remembered, through a salvage", () => {
+    const posted = { id: "d1", ticketId: "t1", file: "src/a.ts", line: 3, side: "RIGHT", commit: "abc", body: "why?", status: "posted", host: { id: 7, url: "https://x/7" }, ts: 1 };
+    const got = salvageState(JSON.stringify({ preferredAi: null, rooms: {}, sent: [{ broken: true }], drafts: { t1: [posted] }, finished: { t1: ["f1"], t2: [3] } }));
+    expect(got.state.drafts).toEqual({ t1: [posted] });
+    expect(got.state.finished).toEqual({ t1: ["f1"] });
+    expect(got.dropped.join(", ")).toMatch(/1 finished review record/);
+  });
+
   it("junk is junk: a fresh state, and it says so", () => {
     expect(salvageState("not json").dropped[0]).toMatch(/not readable JSON/);
     expect(salvageState("[]").dropped[0]).toMatch(/not a state file/);
