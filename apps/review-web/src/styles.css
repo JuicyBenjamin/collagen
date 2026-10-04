@@ -333,7 +333,7 @@ section.decision.unit { display: block; }
 .why-toggle.on { color: var(--fg); }
 .unit-body { display: flex; align-items: flex-start; }
 .unit-body > .decision-main { flex: 1; min-width: 0; }
-.why-panel { flex: none; overflow: hidden; position: sticky; top: 24px; width: 0; }
+.why-panel { flex: none; overflow: hidden; position: sticky; top: 24px; width: 0; height: 0; }
 .why-panel > .why { position: static; width: 280px; box-sizing: border-box; }
 @media (max-width: 1320px) {
   .unit-body { flex-direction: column; align-items: stretch; }
