@@ -29,6 +29,28 @@ export const Assumed = Schema.Struct({
 });
 export type Assumed = typeof Assumed.Type;
 
+/** What the code's author made of a guess, once they took the review over:
+ *  it was right, it was not and here is the real one, or it was just wrong. */
+export const Verdict = Schema.Literals(["confirmed", "corrected", "wrong"]);
+export type Verdict = typeof Verdict.Type;
+
+/** A guess as the AI made it, kept beside the decision its author put in its place. */
+export const Guess = Schema.Struct({
+  what: Schema.String,
+  why: Schema.optional(Schema.String),
+  basis: Schema.optional(Schema.String),
+});
+export type Guess = typeof Guess.Type;
+
+/** A review built from assumptions that the code's author took over: whose
+ *  AI guessed it, and when it became theirs. */
+export const Claimed = Schema.Struct({
+  guessedBy: Schema.String,
+  guessedByName: Schema.String,
+  at: Schema.Finite,
+});
+export type Claimed = typeof Claimed.Type;
+
 export const ReviewDecision = Schema.Struct({
   /** Stable within the review ("d1", "d2" …) so a question can name it. */
   id: Schema.String,
@@ -49,6 +71,11 @@ export const ReviewDecision = Schema.Struct({
   basis: Schema.optional(Schema.String),
   /** How sure the AI that inferred it is. */
   confidence: Schema.optional(Confidence),
+  /** On a review its code's author took over: what they made of the guess
+   *  (absent: not answered yet, still a guess). */
+  verdict: Schema.optional(Verdict),
+  /** The guess a correction replaced. */
+  guess: Schema.optional(Guess),
 });
 export type ReviewDecision = typeof ReviewDecision.Type;
 
@@ -68,6 +95,9 @@ export const ReviewFork = Schema.Struct({
   /** On an assumed review: what the turn was inferred from. */
   basis: Schema.optional(Schema.String),
   confidence: Schema.optional(Confidence),
+  verdict: Schema.optional(Verdict),
+  /** The guessed turn a correction replaced, in one line. */
+  guess: Schema.optional(Guess),
 });
 export type ReviewFork = typeof ReviewFork.Type;
 
@@ -163,6 +193,8 @@ export const ReviewContext = Schema.Struct({
   bug: Schema.optional(BugReport),
   /** Present when the why was inferred, not told (see Assumed). */
   assumed: Schema.optional(Assumed),
+  /** Present once the code's author took an assumed review over (see Claimed). */
+  claimed: Schema.optional(Claimed),
   ts: Schema.Finite,
 });
 export type ReviewContext = typeof ReviewContext.Type;
@@ -359,3 +391,80 @@ export const DraftComment = Schema.Struct({
   ts: Schema.Finite,
 });
 export type DraftComment = typeof DraftComment.Type;
+
+/** Whether `incoming` replaces `current` on the log. A review is whole and
+ *  written by one author, so the later wins — except that one its code's
+ *  author took over always beats one still guessed: its guesser amending at
+ *  the same moment, on a fast clock, must not undo the takeover. An order
+ *  over (taken over, ts), so every peer keeps the same one in any order. */
+export const supersedes = (incoming: ReviewContext, current: ReviewContext): boolean => {
+  const a = incoming.assumed !== undefined && incoming.claimed === undefined ? 0 : 1;
+  const b = current.assumed !== undefined && current.claimed === undefined ? 0 : 1;
+  return a !== b ? a > b : incoming.ts >= current.ts;
+};
+
+/** An answer the code's author gives one guess, by its id (d1, f2 …):
+ *  right; wrong, with the real one in its place; or wrong, with why. */
+export interface Answer {
+  readonly id: string;
+  readonly verdict: Verdict;
+  /** a correction: the real decision (title, what) or the real turn (chose, instead) */
+  readonly title?: string;
+  readonly what?: string;
+  readonly chose?: string;
+  readonly instead?: string;
+  /** their why — for a correction, the real reason; for a wrong guess, why it is wrong */
+  readonly userWhy?: string;
+  readonly agentWhy?: string;
+}
+
+/** The code's author takes an assumed review over: it becomes theirs, each
+ *  guess answered as they say — kept, replaced with the guess beside it, or
+ *  marked wrong — and what they add (decisions, forks, units) is told, not
+ *  guessed. Guesses they leave unanswered stay guesses. */
+export const claimReview = (review: ReviewContext, by: { readonly key: string; readonly name: string }, answers: ReadonlyArray<Answer>, delta: ReviewDelta, now: number): ReviewContext => {
+  const answer = (id: string) => answers.find((a) => a.id === id);
+  const decisions = review.decisions.map((d): ReviewDecision => {
+    const a = answer(d.id);
+    if (!a) return d;
+    if (a.verdict === "confirmed") return { ...d, verdict: "confirmed", ...(a.userWhy ? { userWhy: a.userWhy } : {}) };
+    if (a.verdict === "wrong") return { ...d, verdict: "wrong", ...(a.userWhy ? { userWhy: a.userWhy } : {}) };
+    const { basis: _b, confidence: _c, agentWhy: _w, ...rest } = d;
+    return {
+      ...rest,
+      ...(a.title ? { title: a.title } : {}),
+      what: a.what ?? d.what,
+      ...(a.userWhy ? { userWhy: a.userWhy } : {}),
+      ...(a.agentWhy ? { agentWhy: a.agentWhy } : {}),
+      verdict: "corrected",
+      guess: { what: d.what, ...(d.agentWhy ? { why: d.agentWhy } : {}), ...(d.basis ? { basis: d.basis } : {}) },
+    };
+  });
+  const forks = review.forks.map((f): ReviewFork => {
+    const a = answer(f.id);
+    if (!a) return f;
+    if (a.verdict !== "corrected") return { ...f, verdict: a.verdict, ...(a.userWhy ? { why: a.userWhy } : {}) };
+    const { basis: _b, confidence: _c, ...rest } = f;
+    return {
+      ...rest,
+      chose: a.chose ?? f.chose,
+      instead: a.instead ?? f.instead,
+      why: a.userWhy ?? a.agentWhy ?? f.why,
+      by: "user",
+      verdict: "corrected",
+      guess: { what: `${f.chose} over ${f.instead}`, why: f.why, ...(f.basis ? { basis: f.basis } : {}) },
+    };
+  });
+  return mergeReview(
+    {
+      ...review,
+      author: by.key,
+      authorName: by.name,
+      decisions,
+      forks,
+      claimed: review.claimed ?? { guessedBy: review.author, guessedByName: review.authorName, at: now },
+    },
+    delta,
+    now,
+  );
+};

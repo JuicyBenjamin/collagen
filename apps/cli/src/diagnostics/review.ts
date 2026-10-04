@@ -99,6 +99,11 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
           : {};
       // a reader's agent reviewing it: remarks on lines belong beside the code, not in the chat
       const drafting = reading ? "\n\nREVIEWING THIS FOR YOUR USER: each remark about particular lines goes on the review page as a draft (review-comments, action draft) — beside the code, for them to accept or decline — not in the chat." : "";
-      return toToon({ ...rows, ...comments }) + opened + drafting;
+      // guesses about someone's code: if that someone is reading, they can answer them
+      const answer =
+        review.assumed && !review.claimed && review.author !== me
+          ? `\n\nIF YOUR USER WROTE THIS CODE (${review.assumed.author}'s pull request): they can take this review over — claim-review, with their answer to each guess (confirmed, corrected, wrong) and their own decisions. Ask them first.`
+          : "";
+      return toToon({ ...rows, ...comments }) + opened + drafting + answer;
     }),
 });

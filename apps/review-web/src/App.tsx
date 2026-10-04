@@ -17,7 +17,7 @@ import { GitHubActivity } from "./components/GitHubActivity";
 import { diffNow } from "./diffNow";
 import { placeWhy, whyOpening } from "./whyPanel";
 import { assumedNow } from "./assumedNow";
-import { AssumedMark, AssumedWhy } from "./components/Assumption";
+import { AssumedMark, AssumedWhy, VerdictMark } from "./components/Assumption";
 
 // The review page: a review ticket's diff read by purpose. One section per
 // unit — what it achieves, a line on what it does, the decisions that shaped
@@ -99,6 +99,12 @@ function Page(props: { data: ReviewPageData }) {
     () => props.data.review.assumed,
     (a) => {
       assumedNow.setAssumed(a);
+    },
+  );
+  createEffect(
+    () => (props.data.review.claimed ? props.data.review.authorName : undefined),
+    (by) => {
+      assumedNow.setClaimedBy(by);
     },
   );
   createEffect(
@@ -254,9 +260,20 @@ function Header(props: { data: ReviewPageData }) {
         </Show>
         <Show when={props.data.review.assumed} fallback={<>by {props.data.review.authorName}</>}>
           {(a) => (
-            <>
-              by {a().author} · <span class="assumed-by">assumptions by {props.data.review.authorName}'s AI</span>
-            </>
+            <Show
+              when={props.data.review.claimed}
+              fallback={
+                <>
+                  by {a().author} · <span class="assumed-by">assumptions by {props.data.review.authorName}'s AI</span>
+                </>
+              }
+            >
+              {(c) => (
+                <>
+                  by {props.data.review.authorName} · <span class="assumed-by">answering {c().guessedByName}'s AI's guesses</span>
+                </>
+              )}
+            </Show>
           )}
         </Show>
         <For each={props.data.links}>
@@ -281,17 +298,33 @@ function Header(props: { data: ReviewPageData }) {
       </Show>
       <Show when={props.data.review.assumed}>
         {(a) => {
-          const ids = () => props.data.review.decisions.map((d) => d.id);
+          // the guesses not answered yet — all of them, until the code's author took it over
+          const ids = () => props.data.review.decisions.filter((d) => assumedNow.isGuess(d)).map((d) => d.id);
+          const said = (v: string) => props.data.review.decisions.filter((d) => d.verdict === v).length + props.data.review.forks.filter((f) => f.verdict === v).length;
           return (
-            <div class="assumed-banner" role="note">
-              <p>
-                <strong>Built from assumptions.</strong> {a().author} does not use collagen, so nobody told it why. {props.data.review.authorName}'s AI inferred every decision and fork below from{" "}
-                {a().sources.join(", ")} — each says what it rests on. Check each: it holds, or ask {a().author}.
-              </p>
-              <p class="assumed-count">
-                {assumedNow.checks.checked(ids())} of {ids().length} checked
-              </p>
-            </div>
+            <Show
+              when={props.data.review.claimed}
+              fallback={
+                <div class="assumed-banner" role="note">
+                  <p>
+                    <strong>Built from assumptions.</strong> {a().author} does not use collagen, so nobody told it why. {props.data.review.authorName}'s AI inferred every decision and fork below from{" "}
+                    {a().sources.join(", ")} — each says what it rests on. Check each: it holds, or ask {a().author}.
+                  </p>
+                  <p class="assumed-count">
+                    {assumedNow.checks.checked(ids())} of {ids().length} checked
+                  </p>
+                </div>
+              }
+            >
+              {(c) => (
+                <div class="assumed-banner claimed" role="note">
+                  <p>
+                    <strong>Answered by its author.</strong> {c().guessedByName}'s AI built this review from guesses; {props.data.review.authorName}, who wrote the code, took it over: {said("confirmed")} confirmed,{" "}
+                    {said("corrected")} corrected, {said("wrong")} wrong{ids().length > 0 ? `, ${ids().length} still a guess` : ""}. What they added is their own.
+                  </p>
+                </div>
+              )}
+            </Show>
           );
         }}
       </Show>
@@ -304,13 +337,24 @@ function Header(props: { data: ReviewPageData }) {
 function DecisionWhy(props: { decision: Decision }) {
   return (
     <>
-      <Show when={assumedNow.assumed()}>
+      <Show when={assumedNow.isGuess(props.decision)} fallback={<VerdictMark verdict={props.decision.verdict} />}>
         <AssumedMark {...(props.decision.confidence ? { confidence: props.decision.confidence } : {})} />
       </Show>
-      <p class={["why-title", { untitled: !props.decision.title }]}>{props.decision.title ?? NO_TITLE}</p>
-      <p class="why-what">{props.decision.what}</p>
-      <Show when={assumedNow.assumed()} fallback={<ToldWhy decision={props.decision} />}>
+      <p class={["why-title", { untitled: !props.decision.title, wrong: props.decision.verdict === "wrong" }]}>{props.decision.title ?? NO_TITLE}</p>
+      <p class={["why-what", { wrong: props.decision.verdict === "wrong" }]}>{props.decision.what}</p>
+      <Show when={assumedNow.isGuess(props.decision)} fallback={<ToldWhy decision={props.decision} />}>
         <AssumedWhy decision={props.decision} />
+      </Show>
+      <Show when={props.decision.guess}>
+        {(g) => (
+          <div class="why-part guessed">
+            <p class="who">The AI had guessed</p>
+            <p>
+              {g().what}
+              {g().why ? ` — ${g().why}` : ""}
+            </p>
+          </div>
+        )}
       </Show>
     </>
   );
@@ -522,7 +566,7 @@ function UnitSection(props: {
               <span class="who">Why</span>
               <For each={chips()}>
                 {(d) => (
-                  <button type="button" class={["chip", { untitled: !d.title, assumed: assumedNow.assumed() !== undefined, checked: assumedNow.checks.check(d.id) !== undefined }]} onClick={() => show(d)} title={assumedNow.assumed() ? "an assumption — inferred, not told" : undefined}>
+                  <button type="button" class={["chip", { untitled: !d.title, assumed: assumedNow.isGuess(d), checked: assumedNow.isGuess(d) && assumedNow.checks.check(d.id) !== undefined, wrong: d.verdict === "wrong" }]} onClick={() => show(d)} title={assumedNow.isGuess(d) ? "an assumption — inferred, not told" : d.verdict === "wrong" ? "a wrong guess, its author says" : undefined}>
                     {d.title ?? NO_TITLE}
                   </button>
                 )}

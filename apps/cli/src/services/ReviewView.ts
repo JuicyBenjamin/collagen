@@ -193,7 +193,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     }
     return {
       ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
-      review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ts: review.ts },
+      review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ts: review.ts },
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
       grouped: diff === null ? null : groupByUnit(review, hunks, imports),

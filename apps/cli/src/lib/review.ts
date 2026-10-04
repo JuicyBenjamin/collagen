@@ -194,7 +194,8 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
       ...(r.link ? { link: r.link } : {}),
       summary: r.summary,
       // nobody told this why: it was inferred, and from what
-      ...(r.assumed ? { assumed: `${r.assumed.author} does not use collagen: every decision and fork here is ${r.authorName}'s AI's guess at their why, inferred from ${r.assumed.sources.join(", ")} — each says what it rests on and how sure it is` } : {}),
+      ...(r.assumed && !r.claimed ? { assumed: `${r.assumed.author} does not use collagen: every decision and fork here is ${r.authorName}'s AI's guess at their why, inferred from ${r.assumed.sources.join(", ")} — each says what it rests on and how sure it is` } : {}),
+      ...(r.claimed ? { takenOver: `${r.authorName} wrote the code and took this over from ${r.claimed.guessedByName}'s AI's guesses: each guess says what they made of it (confirmed, corrected — with what was guessed — or wrong); one with no verdict is still a guess` } : {}),
       // reviews outlive the first read: this is the why as it stands NOW
       updated: new Date(r.ts).toISOString(),
       ...(q.length > 0
@@ -205,7 +206,9 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
         : {}),
     },
     decisions: decisions.map((d) =>
-      r.assumed
+      r.claimed
+        ? { id: d.id, title: d.title ?? NO_TITLE, what: d.what, verdict: d.verdict ?? (d.basis !== undefined ? "still a guess" : "told"), userWhy: d.userWhy ?? "", agentWhy: d.agentWhy ?? "", guessed: d.guess ? `${d.guess.what}${d.guess.why ? ` — ${d.guess.why}` : ""}` : "", where: d.where.join(" ") }
+        : r.assumed
         ? { id: d.id, title: d.title ?? NO_TITLE, what: d.what, assumedWhy: d.agentWhy ?? "", basis: d.basis ?? "", confidence: d.confidence ?? "", where: d.where.join(" ") }
         : {
             id: d.id,
@@ -217,7 +220,7 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
             guidedBy: (d.guidedBy ?? []).join(", "),
           },
     ),
-    forks: forks.map((f) => (r.assumed ? { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis ?? "", confidence: f.confidence ?? "" } : { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
+    forks: forks.map((f) => (r.claimed ? { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, verdict: f.verdict ?? (f.basis !== undefined ? "still a guess" : "told"), guessed: f.guess ? f.guess.what : "" } : r.assumed ? { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis ?? "", confidence: f.confidence ?? "" } : { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
     // how the change reads, as its author's agent grouped it
     ...(r.units && r.units.length > 0 ? { units: r.units.map((u) => ({ id: u.id, title: u.title, ...(u.what ? { what: u.what } : {}), where: u.where.join(" ") })) } : {}),
     // a proposal's outline: what the work might be and who might do it — the

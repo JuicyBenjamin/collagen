@@ -31,7 +31,9 @@ const comments = () => (existsSync(commentsFile) ? JSON.parse(readFileSync(comme
 const commentJson = (c) => ({ ...c, user: { login: "bob", avatar_url: "http://127.0.0.1:9/bob.png" }, html_url: `https://github.com/acme/sandbox/pull/7#discussion_r${c.id}`, created_at: "2026-10-03T10:00:00Z" });
 
 const [a, b] = args;
-if (a === "api" && b === "user") out({ login: "bob", name: "Bob Reviewer", avatar_url: "http://127.0.0.1:9/bob.png" });
+// who is signed in: bob, unless a test writes another login to $FAKE_GH_DIR/login
+const login = existsSync(join(dir, "login")) ? readFileSync(join(dir, "login"), "utf8").trim() : "bob";
+if (a === "api" && b === "user") out({ login, name: login === "bob" ? "Bob Reviewer" : login, avatar_url: `http://127.0.0.1:9/${login}.png` });
 if (a === "pr" && b === "view") {
   const p = PULLS.find((x) => String(x.number) === args[2]);
   p ? out(p) : fail("GraphQL: Could not resolve to a PullRequest with the number of " + args[2]);

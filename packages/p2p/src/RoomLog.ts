@@ -5,7 +5,7 @@ import Hyperbee from "hyperbee";
 import b4a from "b4a";
 import { LogAppendFailed } from "./errors";
 import { Attachment, EVICTABLE, LogOp, Member, PROTOCOL_VERSION, RoomMessage } from "./schema";
-import { ReviewComment } from "./review";
+import { ReviewComment, supersedes } from "./review";
 import { ReviewContext } from "./review";
 import { Ticket, contributes, mergeTicket } from "./ticket";
 import { migrateOp, migrateRow, readTicket } from "./migrate";
@@ -211,7 +211,7 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
       case "review": {
         // one review per ticket, written by its author alone: later ts wins
         const cur = await view.get(`review/${op.review.ticketId}`);
-        if (!cur || op.review.ts >= (cur.value as ReviewContext).ts) await view.put(`review/${op.review.ticketId}`, op.review);
+        if (!cur || supersedes(op.review, cur.value as ReviewContext)) await view.put(`review/${op.review.ticketId}`, op.review);
         break;
       }
       case "evict":
@@ -423,7 +423,7 @@ export const openRoomLog = (
           const op = migrateOp(raw) ?? Option.getOrUndefined(decodeOp(raw));
           if (op?.op === "review") {
             const had = whys.get(op.review.ticketId);
-            if (!had || op.review.ts >= had.ts) whys.set(op.review.ticketId, op.review);
+            if (!had || supersedes(op.review, had)) whys.set(op.review.ticketId, op.review);
           }
           if (!op || op.op !== "ticket") continue;
           const have = out.get(op.ticket.id);
@@ -444,7 +444,7 @@ export const openRoomLog = (
         const lostWhys: ReviewContext[] = [];
         for (const [id, r] of whys) {
           const row = await base.view.get(`review/${id}`);
-          if (!row || (row.value as ReviewContext).ts < r.ts) lostWhys.push(r);
+          if (!row || (supersedes(r, row.value as ReviewContext) && (row.value as ReviewContext).ts !== r.ts)) lostWhys.push(r);
         }
         return { missing, lostWhys };
       });
