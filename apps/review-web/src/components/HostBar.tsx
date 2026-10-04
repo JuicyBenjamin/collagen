@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import { hostNow } from "../hostNow";
 import { viewed } from "../viewedNow";
 import { ReviewComposer } from "./ReviewComposer";
@@ -9,6 +9,16 @@ import { ReviewComposer } from "./ReviewComposer";
  *  is seen before anything is sent. Each missing part says why, quietly. */
 export function HostBar() {
   const [open, setOpen] = createSignal(false);
+  // the progress up here scrolled out of sight: it floats in the corner
+  // instead, so how far through the reader is stays in view as they read
+  const [away, setAway] = createSignal(false);
+  let seen: IntersectionObserver | undefined;
+  const watch = (el: HTMLElement) => {
+    seen?.disconnect();
+    seen = new IntersectionObserver(([e]) => setAway(!e!.isIntersecting));
+    seen.observe(el);
+  };
+  onCleanup(() => seen?.disconnect());
   const host = hostNow.host;
   const pending = () => hostNow.pending().length;
   // the review can be finished where it can go somewhere: an open pull
@@ -19,11 +29,8 @@ export function HostBar() {
       <div class="host-row">
         {/* how far through the files the reader is, as GitHub's toolbar has it */}
         <Show when={viewed.count().files > 0}>
-          <span class={["viewed-progress", { done: viewed.count().viewed === viewed.count().files }]} title="Files you have marked as viewed">
-            <span class="bar" aria-hidden="true">
-              <span style={{ width: `${(100 * viewed.count().viewed) / viewed.count().files}%` }} />
-            </span>
-            {viewed.count().viewed} / {viewed.count().files} files viewed
+          <span ref={watch}>
+            <Progress />
           </span>
         </Show>
         <Show when={host()}>
@@ -56,9 +63,27 @@ export function HostBar() {
           )}
         </Show>
       </div>
+      <Show when={away() && viewed.count().files > 0}>
+        <div class="progress-float" role="status">
+          <Progress />
+        </div>
+      </Show>
       <Show when={open() && canReview()}>
         <ReviewComposer onDone={() => setOpen(false)} />
       </Show>
     </div>
+  );
+}
+
+/** How many of the review's files are marked viewed: a count and a bar. */
+function Progress() {
+  const c = () => viewed.count();
+  return (
+    <span class={["viewed-progress", { done: c().viewed === c().files }]} title="Files you have marked as viewed">
+      <span class="bar" aria-hidden="true">
+        <span style={{ width: `${(100 * c().viewed) / c().files}%` }} />
+      </span>
+      {c().viewed} / {c().files} files viewed
+    </span>
   );
 }
