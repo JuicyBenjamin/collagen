@@ -1,4 +1,5 @@
 import { closedAs, epicOf, KIND_ORDER, ticketName, visibleTo, type Ticket, type TicketKind } from "@collagen/p2p";
+import { cells } from "./columns";
 import { EPIC_MARK, KIND_GLYPH } from "./glyphs";
 
 // The ticket list's tabs: every ticket, or one kind at a time — each kind's
@@ -44,3 +45,34 @@ export const closedLine = (t: Ticket): string | null => {
   if (as === null) return null;
   return `${as === "dropped" ? "dropped" : "closed as done"}${t.closed?.reason ? `: ${t.closed.reason}` : ""}`;
 };
+
+/** One tab as drawn: its words, and whether it is the open one. */
+export interface DrawnTab {
+  readonly tab: TicketTab;
+  readonly text: string;
+  readonly open: boolean;
+}
+
+/** The tabs as a row of `width` columns, the open one always whole with its
+ *  count: every tab named when they fit (a kind with nothing open by its
+ *  glyph alone); else the others by glyph and count; else a window of them
+ *  around the open one, a ‹ or › where some are cut off. */
+export function fitTabs(tab: TicketTab, counts: ReadonlyMap<TicketTab, number>, width: number | undefined): { readonly tabs: ReadonlyArray<DrawnTab>; readonly gap: number; readonly before: boolean; readonly after: boolean } {
+  const n = (t: TicketTab) => counts.get(t) ?? 0;
+  const full = TICKET_TABS.map((t): DrawnTab => ({ tab: t, open: t === tab, text: `${t === tab || n(t) > 0 || t === "all" ? tabLabel(t) : kindGlyph(t)} ${n(t)}` }));
+  const short = TICKET_TABS.map((t): DrawnTab => ({ tab: t, open: t === tab, text: t === tab ? `${tabLabel(t)} ${n(t)}` : `${t === "all" ? "all" : kindGlyph(t)} ${n(t)}` }));
+  const span = (row: ReadonlyArray<DrawnTab>, gap: number) => row.reduce((w, d, i) => w + cells(d.text) + (i > 0 ? gap : 0), 0);
+  if (width === undefined || span(full, 3) <= width) return { tabs: full, gap: 3, before: false, after: false };
+  if (span(short, 2) <= width) return { tabs: short, gap: 2, before: false, after: false };
+  // a window around the open tab, grown a neighbour at a time while it fits beside its marks
+  const at = TICKET_TABS.indexOf(tab);
+  let from = at;
+  let to = at;
+  const fits = (a: number, b: number) => span(short.slice(a, b + 1), 2) + (a > 0 ? 2 : 0) + (b < short.length - 1 ? 2 : 0) <= width;
+  for (let grew = true; grew; ) {
+    grew = false;
+    if (to < short.length - 1 && fits(from, to + 1)) (to++, (grew = true));
+    if (from > 0 && fits(from - 1, to)) (from--, (grew = true));
+  }
+  return { tabs: short.slice(from, to + 1), gap: 2, before: from > 0, after: to < short.length - 1 };
+}

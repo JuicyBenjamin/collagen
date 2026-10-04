@@ -14,7 +14,7 @@ import { epicProgress, marksLabel, progressShort, rowTitle, summarize, type Tick
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
-import { closedLine, kindGlyph, relationsOf, tabLabel, TICKET_TABS, type TicketTab } from "../../../../../lib/ticketTabs";
+import { closedLine, fitTabs, relationsOf, TICKET_TABS, type TicketTab } from "../../../../../lib/ticketTabs";
 import { openReviewPageAtom } from "../../../review/atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
@@ -123,7 +123,7 @@ export function Tickets() {
 
   return (
     <box flexDirection="column" marginTop={1} flexShrink={1} minHeight={0}>
-    <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} onTab={(t) => (setTab(t), setCursor(0))} />
+    <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(t) => (setTab(t), setCursor(0))} />
     <Focusable
       id="tickets"
       hint={`↑↓ select · enter open${current?.t.kind === "epic" ? ` · space ${unfolded.has(current.t.id) ? "fold" : "unfold"}` : ""}${current?.t.kind === "review" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
@@ -284,7 +284,9 @@ export function Tickets() {
  *  so the glyphs on the rows are learned here, and how many are open. A
  *  section like the room's tab bar: hover it, ←→ switch, ↓ into the list,
  *  which shows only that tab's tickets. */
-function KindTabs({ tab, counts, extra, needsYou, onTab }: { tab: TicketTab; counts: ReadonlyMap<TicketTab, number>; extra: number; needsYou: boolean; onTab: (tab: TicketTab) => void }) {
+function KindTabs({ tab, counts, extra, needsYou, width, onTab }: { tab: TicketTab; counts: ReadonlyMap<TicketTab, number>; extra: number; needsYou: boolean; width: number | undefined; onTab: (tab: TicketTab) => void }) {
+  // the row fits the pane, the open tab always whole (lib/ticketTabs)
+  const shown = fitTabs(tab, new Map([...counts].map(([t, n]) => [t, n + (t === "all" ? extra : 0)])), width === undefined ? undefined : width - 2);
   return (
     <Focusable
       id="ticket-tabs"
@@ -299,20 +301,20 @@ function KindTabs({ tab, counts, extra, needsYou, onTab }: { tab: TicketTab; cou
       }}
     >
       {(focused) => (
-        <text truncate wrapMode="none">
+        <text wrapMode="none">
           <span fg={focused ? theme.accent : theme.dim}>{focused ? "› " : "  "}</span>
-          {TICKET_TABS.flatMap((t, i) => {
-            const n = (counts.get(t) ?? 0) + (t === "all" ? extra : 0);
-            const on = t === tab;
+          {shown.before ? <span fg={theme.dim}>{"‹ "}</span> : null}
+          {shown.tabs.flatMap((d, i) => {
+            const n = counts.get(d.tab) ?? 0;
             return [
-              ...(i > 0 ? [<span key={`${t}-gap`}>{"   "}</span>] : []),
-              // a kind with nothing open shows its glyph alone, so the row fits
-              <span key={t} fg={on ? (focused ? theme.accent : theme.fg) : theme.dim}>
-                {on || n > 0 || t === "all" ? tabLabel(t) : kindGlyph(t)}
+              ...(i > 0 ? [<span key={`${d.tab}-gap`}>{" ".repeat(shown.gap)}</span>] : []),
+              <span key={d.tab} fg={d.open ? (focused ? theme.accent : theme.fg) : n === 0 && d.tab !== "all" ? theme.dim : theme.fg}>
+                {d.text.slice(0, d.text.lastIndexOf(" "))}
               </span>,
-              <span key={`${t}-n`} fg={on && needsYou ? theme.warn : theme.dim}>{` ${n}`}</span>,
+              <span key={`${d.tab}-n`} fg={d.open && needsYou ? theme.warn : theme.dim}>{d.text.slice(d.text.lastIndexOf(" "))}</span>,
             ];
           })}
+          {shown.after ? <span fg={theme.dim}>{" ›"}</span> : null}
         </text>
       )}
     </Focusable>
