@@ -259,6 +259,8 @@ expect "…marked as built from assumptions" "$ADDED" "BUILT FROM ASSUMPTIONS"
 echo "## the code's author joins and takes the guesses over"
 COLLAGEN_GH="$E2E/fake-gh.mjs" FAKE_GH_DIR="$GH" start bob
 SB=$(mcp $B); wait_for_peer $B "$SB" alice; admitted bob
+wait_until "bob's collagen sees the code is his, and tells his agent once — it arrived before he joined" "alice guessed why your user wrote their code" cat "$OUT/bob.log"
+expect "…once" "$(grep -c "${AT:0:8}: alice guessed why your user wrote their code" "$OUT/bob.log")" "^1$"
 wait_until "bob's agent reads the guesses, and how to answer them if he wrote the code" "IF YOUR USER WROTE THIS CODE .alice-gh's pull request.: they can take this review over" call $B "$SB" review-context "$QAT"
 CLAIM="{\"ticketId\":\"$AT\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"},{\"id\":\"d2\",\"verdict\":\"corrected\",\"title\":\"Pages of fifty\",\"what\":\"a page holds 50 rows\",\"userWhy\":\"the phone app runs out of memory\"},{\"id\":\"f1\",\"verdict\":\"wrong\",\"userWhy\":\"paging was never considered\"}],\"decisions\":[{\"title\":\"Sessions untouched\",\"what\":\"exports keep the session they run in\",\"userWhy\":\"auth is out of scope\"}]}"
 git -C "$R" config user.email someone@example.com

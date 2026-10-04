@@ -277,11 +277,13 @@ and finish it — with the guesses standing where the author's decisions would:
   the code is dashed.
 
 The ticket is yours to read: your review step, and nobody to address it, since its author
-did not file it. Your agent adds to the assumptions with `assume-review` as it learns more — corrects one,
-or withdraws one that turned out wrong; it stays the same review.
+did not file it. Tell your agent it is off and it edits the guesses in place with `assume-review` — or
+withdraws one that should not be there; it stays the same review.
 
-**When the author joins**, their agent can take the review over (`claim-review`) — only
-theirs: they must share an identity with whoever wrote the code — signed in to the code's
+**When the author joins**, their collagen sees the code is theirs and tells their agent, once.
+The agent takes the review over (`claim-review`), answering each guess from what it already
+knows of why they wrote it — their conversations, commits, tickets — and asks them only what
+that does not settle. Only theirs: they must share an identity with whoever wrote the code — signed in to the code's
 host as the pull request's author, or committing in their clone as one of the emails on its
 commits. Git alone is enough, so it works for code on no host at all. They
 answer each guess: **confirmed**, **corrected** (the real decision in its place, with the

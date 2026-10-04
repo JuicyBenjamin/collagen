@@ -105,6 +105,9 @@ export const salvageState = (text: string): Salvaged => {
     : undefined;
   draftDrops.done();
 
+  // which assumed reviews of their code the agent was told of: plain ids, the bad ones dropped
+  const toldGuessed = Array.isArray(src.toldGuessed) ? src.toldGuessed.filter((x): x is string => typeof x === "string") : undefined;
+
   const finishDrops = count("finished review record");
   const finished = salvageRecord(src.finished, Schema.Array(Schema.String), finishDrops.hit);
   finishDrops.done();
@@ -159,6 +162,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(transcriptAsks ? { transcriptAsks } : {}),
       ...(drafts && Object.keys(drafts).length > 0 ? { drafts } : {}),
       ...(finished ? { finished } : {}),
+      ...(toldGuessed && toldGuessed.length > 0 ? { toldGuessed } : {}),
     },
     dropped: dropped.length > 0 ? dropped : ["parts of the state file no longer readable"],
   };
