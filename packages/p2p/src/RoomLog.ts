@@ -5,7 +5,7 @@ import Hyperbee from "hyperbee";
 import b4a from "b4a";
 import { LogAppendFailed } from "./errors";
 import { Attachment, EVICTABLE, LogOp, Member, PROTOCOL_VERSION, RoomMessage } from "./schema";
-import { ReviewComment, supersedes } from "./review";
+import { ReviewComment, strictlySupersedes, supersedes } from "./review";
 import { ReviewContext } from "./review";
 import { Ticket, contributes, mergeTicket } from "./ticket";
 import { migrateOp, migrateRow, readTicket } from "./migrate";
@@ -444,7 +444,7 @@ export const openRoomLog = (
         const lostWhys: ReviewContext[] = [];
         for (const [id, r] of whys) {
           const row = await base.view.get(`review/${id}`);
-          if (!row || (supersedes(r, row.value as ReviewContext) && (row.value as ReviewContext).ts !== r.ts)) lostWhys.push(r);
+          if (!row || strictlySupersedes(r, row.value as ReviewContext)) lostWhys.push(r);
         }
         return { missing, lostWhys };
       });
