@@ -154,3 +154,16 @@ describe("the code's author takes an assumed review over", () => {
     expect(supersedes(plain, lateGuess)).toBe(true);
   });
 });
+
+describe("a guess withdrawn", () => {
+  it("goes, and its id is never given to another", () => {
+    const guess = (title: string) => ({ title, what: title, agentWhy: "w", basis: "b", confidence: "low" as const });
+    const filed = mergeReview(emptyReview("t", "me", "alice"), { summary: "s", assumed: { author: "octo", sources: ["x"] }, decisions: [guess("one"), guess("two"), guess("three")] }, 1);
+    const trimmed = mergeReview(filed, { retireGuesses: ["d3", "d2"] }, 2);
+    expect(trimmed.decisions.map((d) => d.id)).toEqual(["d1"]);
+    expect(trimmed.retired).toEqual(["d3", "d2"]);
+    const more = mergeReview(trimmed, { decisions: [guess("four")] }, 3);
+    expect(more.decisions.map((d) => d.id)).toEqual(["d1", "d4"]);
+    expect(Schema.decodeUnknownSync(ReviewContext)(JSON.parse(JSON.stringify(more)))).toEqual(more);
+  });
+});

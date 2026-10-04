@@ -199,6 +199,9 @@ export const ReviewContext = Schema.Struct({
   assumed: Schema.optional(Assumed),
   /** Present once the code's author took an assumed review over (see Claimed). */
   claimed: Schema.optional(Claimed),
+  /** Ids of guesses withdrawn — never given again, so a reader's check or an
+   *  author's answer on one cannot land on another. */
+  retired: Schema.optional(Schema.Array(Schema.String)),
   ts: Schema.Finite,
 });
 export type ReviewContext = typeof ReviewContext.Type;
@@ -246,10 +249,13 @@ export interface ReviewDelta {
   readonly retireBug?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
   /** The why is inferred: who wrote the code, and what was read (see Assumed). */
   readonly assumed?: Assumed;
+  /** Guesses withdrawn by id (d1, f2 …) — only ever an assumed review's: a
+   *  told decision is history, a guess that was wrong is not. */
+  readonly retireGuesses?: ReadonlyArray<string>;
 }
 
 const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
-  let n = taken.length + 1;
+  let n = taken.filter((t) => t.startsWith(prefix)).length + 1;
   while (taken.includes(`${prefix}${n}`)) n++;
   return `${prefix}${n}`;
 };
@@ -261,8 +267,10 @@ const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
  *  writer of their own review, so there is nothing to reconcile. */
 export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number): ReviewContext => {
   const decisions = [...base.decisions];
+  // ids once given, withdrawn or not: a new one never repeats them
+  const retired = [...(base.retired ?? []), ...(delta.retireGuesses ?? []).filter((id) => !(base.retired ?? []).includes(id))];
   for (const d of delta.decisions ?? []) {
-    const id = d.id ?? nextId("d", decisions.map((x) => x.id));
+    const id = d.id ?? nextId("d", [...decisions.map((x) => x.id), ...retired]);
     const at = decisions.findIndex((x) => x.id === id);
     const entry: ReviewDecision = { ...d, id, where: d.where ?? [] };
     if (at === -1) decisions.push(entry);
@@ -270,11 +278,17 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
   }
   const forks = [...base.forks];
   for (const f of delta.forks ?? []) {
-    const id = f.id ?? nextId("f", forks.map((x) => x.id));
+    const id = f.id ?? nextId("f", [...forks.map((x) => x.id), ...retired]);
     const at = forks.findIndex((x) => x.id === id);
     const entry: ReviewFork = { ...f, id };
     if (at === -1) forks.push(entry);
     else forks[at] = entry;
+  }
+  // a withdrawn guess goes; its id is not given again, so it never comes back as another
+  const withdrawn = new Set(delta.retireGuesses ?? []);
+  if (withdrawn.size > 0) {
+    decisions.splice(0, decisions.length, ...decisions.filter((d) => !withdrawn.has(d.id)));
+    forks.splice(0, forks.length, ...forks.filter((f) => !withdrawn.has(f.id)));
   }
   let units = base.units === undefined && delta.units === undefined ? undefined : [...(base.units ?? [])];
   if (units !== undefined) {
@@ -325,6 +339,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     ...(outline !== undefined ? { outline } : {}),
     ...(bug !== undefined ? { bug } : {}),
     ...(delta.assumed ?? base.assumed ? { assumed: delta.assumed ?? base.assumed! } : {}),
+    ...(retired.length > 0 ? { retired } : {}),
     ts,
   };
 };
