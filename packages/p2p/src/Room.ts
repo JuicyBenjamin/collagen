@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Clock, Context, Effect, Exit, Layer, PubSub, Schedule, Scope, Stream, SubscriptionRef } from "effect";
+import { Clock, Context, Effect, Exit, Layer, PubSub, Schedule, Scope, Semaphore, Stream, SubscriptionRef } from "effect";
 import {
   PROTOCOL_VERSION,
   type DriveAction,
@@ -129,7 +129,12 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     );
 
     /** Re-read the view into the refs; publish messages for us not seen yet. */
-    const refresh = Effect.gen(function* () {
+    // one refresh at a time: each reads the whole view, then sets every ref
+    // from it. Two at once (an agent's write and the delivery of a step, say)
+    // could finish out of order, and the older read would land last — a
+    // ticket closed a moment ago shown open until the next write
+    const refreshing = Semaphore.makeUnsafe(1);
+    const refresh = refreshing.withPermit(Effect.gen(function* () {
       if (!log) return;
       const view = yield* log.read;
       yield* Effect.logDebug(
@@ -158,7 +163,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (ran !== null) restoredOwn = true; // once — but only once it could actually run
       }
       yield* log.evictStale;
-    });
+    }));
 
     /** Admit everyone who asked while we couldn't. */
     const admitPending = Effect.gen(function* () {
