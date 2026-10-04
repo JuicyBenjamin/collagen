@@ -42,6 +42,20 @@ export function AssumedMark(props: { confidence?: "high" | "medium" | "low" }) {
   );
 }
 
+/** What the code's author made of a guess, once they took the review over. */
+export function VerdictMark(props: { verdict?: "confirmed" | "corrected" | "wrong" }) {
+  const by = () => assumedNow.claimedBy() ?? "its author";
+  return (
+    <Show when={props.verdict}>
+      {(v) => (
+        <p class={["verdict-mark", v()]}>
+          {v() === "confirmed" ? `Guessed, confirmed by ${by()}` : v() === "corrected" ? `Guessed wrong, corrected by ${by()}` : `Guessed wrong, says ${by()}`}
+        </p>
+      )}
+    </Show>
+  );
+}
+
 /** The reader's verdict on one guess: it holds — or it goes to the author as
  *  a question, pending in the reader's review, on the line it is about. */
 function Check(props: { decision: Decision }) {
