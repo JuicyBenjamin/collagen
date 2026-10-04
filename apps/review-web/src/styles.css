@@ -349,3 +349,8 @@ section.decision.unit { display: block; }
   .why-panel { width: auto; height: 0; }
   .why-panel > .why { width: auto; }
 }
+
+/* the window's top edge: what scrolls up past it fades and softens into the
+   page instead of being cut off — a strip as tall as the gap the stuck
+   headers and the why leave above them, so it never covers them */
+body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 24px; z-index: 5; pointer-events: none; background: linear-gradient(var(--bg) 20%, color-mix(in srgb, var(--bg) 0%, transparent)); backdrop-filter: blur(3px); mask-image: linear-gradient(black 40%, transparent); -webkit-mask-image: linear-gradient(black 40%, transparent); }
