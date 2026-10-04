@@ -304,6 +304,15 @@ git -C "$R" config user.email carol@example.com
 expect "committing as someone else, bob is refused — no host to ask" "$(call $B "$SB" claim-review "$NHCLAIM")" "written by e2e@collagen.test in git .{1,3} and here you are carol@example.com in git"
 git -C "$R" config user.email e2e@collagen.test
 expect "committing as the change's author, bob takes it over: git alone says who wrote it" "$(call $B "$SB" claim-review "$NHCLAIM")" "taken over .Exports, unhosted.*1 confirmed"
+NHMORE="{\"ticketId\":\"$NH\",\"answers\":[{\"id\":\"d3\",\"verdict\":\"wrong\",\"userWhy\":\"objects\"}]}"
+git -C "$R" config user.email carol@example.com
+expect "once his, bob answers the rest — authorship was proven when he took it over" "$(call $B "$SB" claim-review "$NHMORE")" "taken over .Exports, unhosted.*1 wrong"
+git -C "$R" config user.email e2e@collagen.test
+UNKNOWN='{"project":"sandbox","title":"Exports, unknown","summary":"Nobody can tell whose","branch":"feat/not-here","base":"main","author":"someone","sources":["a rumour"],"decisions":[{"title":"Guess","what":"a guess","why":"why not","basis":"nothing much","confidence":"low"}]}'
+UK=$(call $A "$SA" assume-review "$UNKNOWN" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+wait_until "bob has it" "Exports, unknown" call $B "$SB" get-tickets '{}'
+UKCLAIM="{\"ticketId\":\"$UK\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"}]}"
+expect "with no host and the branch nowhere, nobody can tell who wrote it — so nobody takes it over" "$(call $B "$SB" claim-review "$UKCLAIM")" "nobody can tell who wrote this code .{1,3} the branch feat/not-here is not in your clone yet"
 
 echo "## a review with no pull request: comments are said in the room alone"
 BARE_ASK=$(call $A "$SA" ask-review "{\"title\":\"Stream it, unhosted\",\"project\":\"sandbox\",\"branch\":\"feat/stream-export\",\"base\":\"main\",\"summary\":\"the same change, no host\",\"decisions\":[$D1],\"forks\":[]}")
