@@ -230,6 +230,31 @@ expect "…the room has it" "$(talk "$TICKET")" '"body":"the agent.s, half said"
 
 expect "a draft on a ticket that is not one is refused" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"nope\"}")" "^failed: no ticket nope"
 
+echo "## a review built from assumptions: someone else's pull request"
+ASSUME='{"project":"sandbox","title":"Exports stream","summary":"Big exports finish instead of timing out","link":"https://github.com/acme/sandbox/pull/7","base":"main","sources":["the pull request description","its commits"],"decisions":[{"title":"Stream the rows","what":"rows go out as they are read","why":"the exports time out","basis":"the description says exports time out","confidence":"high","where":["src/export.ts:2"]}],"forks":[{"at":"src/export.ts:2","chose":"a stream","instead":"paging","why":"fewer round trips","basis":"the code","confidence":"low"}],"units":[{"title":"Rows stream out","what":"the export streams its rows","where":["src/export.ts"]}]}'
+NOBASIS=$(echo "$ASSUME" | sed 's/"basis":"the description says exports time out"/"basis":" "/')
+expect "a guess with nothing under it is refused" "$(call $A "$SA" assume-review "$NOBASIS")" "has no 'basis'"
+ASSUMED=$(call $A "$SA" assume-review "$ASSUME")
+expect "filed: who wrote it read from the pull request" "$ASSUMED" "BUILT FROM ASSUMPTIONS about alice-gh's change"
+AT=$(echo "$ASSUMED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
+QAT="{\"ticketId\":\"$AT\"}"
+CTX=$(call $A "$SA" review-context "$QAT")
+expect "review-context says the why is guessed, and from what" "$CTX" "assumed: .?alice-gh does not use collagen: every decision and fork here is alice.s AI.s guess"
+expect "…each guess with what it rests on and how sure" "$CTX" "decisions\\[1\\]\\{id,title,what,assumedWhy,basis,confidence,where\\}:"
+expect "…the fork too" "$CTX" "a stream,paging,fewer round trips,the code,low"
+expect "the ticket is alice's to read: her review step, nobody to address it" "$(call $A "$SA" get-tickets '{}' | grep -A12 "id: $AT" | grep -cE '^ +address,')" "^0$"
+DATA=$(sfn reviewData "[\"$AT\"]")
+expect "the page has the guess and its grounds" "$DATA" '"assumed":\{"author":"alice-gh","sources":\["the pull request description","its commits"\]\}'
+expect "…its branch read from the pull request" "$DATA" '"branch":"feat/stream-export","base":"main"'
+expect "…and the diff read from the clone, by unit" "$DATA" '"source":\{"kind":"clone"'
+# built here, not inside "$( )": bash 3.2 mangles \" nested there
+TOLD="{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"x\",\"what\":\"y\",\"agentWhy\":\"z\"}],\"forks\":[]}"
+expect "a told why is never added to a guessed one" "$(call $A "$SA" ask-review "$TOLD")" "built from assumptions .{1,3} amend it with assume-review"
+MORE="{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"Pages of a hundred\",\"what\":\"a page holds 100 rows\",\"why\":\"memory\",\"basis\":\"a constant in the code\",\"confidence\":\"medium\",\"where\":[\"src/page.ts:2\"]}]}"
+ADDED=$(call $A "$SA" assume-review "$MORE")
+expect "…and assume-review adds to it" "$ADDED" "review ticket updated .*2 decision\\(s\\)"
+expect "…marked as built from assumptions" "$ADDED" "BUILT FROM ASSUMPTIONS"
+
 echo "## a review with no pull request: comments are said in the room alone"
 BARE_ASK=$(call $A "$SA" ask-review "{\"title\":\"Stream it, unhosted\",\"project\":\"sandbox\",\"branch\":\"feat/stream-export\",\"base\":\"main\",\"summary\":\"the same change, no host\",\"decisions\":[$D1],\"forks\":[]}")
 BARE=$(echo "$BARE_ASK" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)

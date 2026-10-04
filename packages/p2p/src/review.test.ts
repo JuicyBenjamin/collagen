@@ -71,3 +71,30 @@ describe("a review's why, amended as the work goes on", () => {
     expect(more.decisions.map((d) => d.id)).toEqual(["d7", "d2", "d3"]);
   });
 });
+
+describe("a review built from assumptions", () => {
+  it("keeps who wrote the code and what was read, and each guess's basis, through amendments", () => {
+    const filed = mergeReview(emptyReview("t", "me", "alice"), {
+      summary: "Big exports finish",
+      assumed: { author: "octocat", sources: ["PR #7 description", "JIRA-12"] },
+      decisions: [{ title: "Stream the rows", what: "rows go out as they are read", agentWhy: "probably the timeouts in JIRA-12", basis: "PR description: 'exports time out'", confidence: "high", where: ["src/export.ts:2"] }],
+      forks: [{ at: "src/export.ts:2", chose: "a stream", instead: "paging", why: "fewer round trips", basis: "the code", confidence: "low" }],
+    }, 1);
+    const amended = mergeReview(filed, { decisions: [{ id: "d2", title: "Pages of 100", what: "a page holds 100 rows", basis: "a constant", confidence: "medium" }] }, 2);
+    expect(amended.assumed).toEqual({ author: "octocat", sources: ["PR #7 description", "JIRA-12"] });
+    expect(amended.decisions.map((d) => [d.id, d.basis, d.confidence])).toEqual([
+      ["d1", "PR description: 'exports time out'", "high"],
+      ["d2", "a constant", "medium"],
+    ]);
+    expect(amended.forks[0]).toMatchObject({ basis: "the code", confidence: "low" });
+    // and it goes over the wire as it is
+    expect(Schema.decodeUnknownSync(ReviewContext)(JSON.parse(JSON.stringify(amended)))).toEqual(amended);
+  });
+
+  it("a review from before assumptions still decodes, with none", () => {
+    const old = { ticketId: "t", author: "me", authorName: "alice", summary: "s", decisions: [{ id: "d1", what: "w", where: [] }], forks: [], ts: 1 };
+    const got = Schema.decodeUnknownSync(ReviewContext)(old);
+    expect(got.assumed).toBeUndefined();
+    expect(got.decisions[0]!.basis).toBeUndefined();
+  });
+});
