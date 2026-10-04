@@ -98,8 +98,13 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 /* the code */
 /* not clipped, so the also-under list can open over what follows; the
    rounding is the header's and the code's own instead */
-.hunk { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
-.hunk .file { border-radius: 10px 10px 0 0; }
+.hunk { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: clip; }
+/* the file's header — its name, Whole file, Viewed — stays at the top of the
+   window while its hunk is read, as the why beside it does. Square and solid:
+   the card's own clip rounds it at the card's top, so nothing scrolling under
+   it shows through its corners once it is stuck (overflow: clip, not hidden —
+   no scroll box of its own, so sticky still goes by the window) */
+.hunk .file { position: sticky; top: 0; z-index: 3; background: var(--panel); }
 .hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .hunk .file .head { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whole-toggle { font: 12px -apple-system, sans-serif; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
@@ -112,8 +117,14 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .since-none { margin: 0; padding: 8px 12px; font-size: 12.5px; color: var(--dim); font-style: italic; }
 .code.since + .code.since { border-top: 1px dashed var(--line); }
 /* a file's later changes in a unit: joined to the one above, no header of their own */
-.hunk.continued { margin-top: -10px; border-top-style: dashed; border-top-left-radius: 0; border-top-right-radius: 0; }
-.hunk .file.continued { padding: 2px 12px; min-height: 0; border-radius: 0; color: var(--faint); }
+/* a file's later change in the same unit: one card with the change above it,
+   the two parted by a band naming where it jumps to, as GitHub's hunk line */
+.hunk:has(+ .hunk.continued) { margin-bottom: 0; border-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.hunk.continued { margin-top: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+.hunk .file.continued { padding: 3px 12px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 45%, var(--panel)); color: var(--faint); font-size: 12px; }
+.hunk .file.continued .head { color: var(--faint); }
+.cont-file { color: var(--dim); }
+.cont-at { margin-left: 8px; }
 .hunk-note { margin: 0; padding: 4px 12px; font-size: 12px; color: var(--warn); border-bottom: 1px solid var(--line); }
 /* the why beside a unit: one block per decision that shaped it */
 .why-decision { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed var(--line); }
@@ -137,10 +148,10 @@ nav .nav-unexplained .nav-what { color: var(--warn); }
 .mark-viewed input { margin: 0; accent-color: var(--accent); cursor: pointer; }
 .mark-viewed.changed { color: var(--warn); }
 .hunk.viewed { opacity: 0.6; }
-.hunk.viewed .file { border-bottom: 0; border-radius: 10px; }
+.hunk.viewed .file { border-bottom: 0; }
 .nav-viewed { font-size: 12.5px; color: var(--dim); margin: -4px 0 10px; }
 .nav-viewed.done { color: var(--sign-add); }
-.code { overflow-x: auto; border-radius: 0 0 10px 10px; container-type: inline-size; }
+.code { overflow-x: auto; container-type: inline-size; }
 /* what opens between a hunk's lines (a peek, comments, a comment being
    written) is as wide as the code's box, not as the code: it stays in view
    while a long line is scrolled sideways (100cqw: the box's width) */
@@ -266,3 +277,10 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .drafted-mark { font-size: 11px; color: var(--faint); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
 .drafts-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; padding: 9px 14px; border: 1px solid var(--accent); border-radius: 8px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); font-size: 13.5px; color: var(--fg); }
 .drafts-bar > span { flex: 1; min-width: 240px; }
+
+/* a comment pending in the reader's review: theirs, not said yet */
+.line-comment.pending-review { border-left: 3px solid var(--warn); }
+.pending-badge { font-size: 11px; font-weight: 600; color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 0 7px; }
+.review-composer .composer-head { font-size: 13px; }
+.host-note.left { text-align: left; max-width: none; margin: 0; }
+.quiet.discard { margin-right: auto; color: var(--warn); }

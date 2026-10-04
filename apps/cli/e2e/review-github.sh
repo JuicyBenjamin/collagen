@@ -42,6 +42,7 @@ sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" 
 sfn() { node "$E2E/sfn.mjs" "$ORIGIN/review/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 post() { node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
 calls() { cat "$GH/calls.log" 2>/dev/null; }
+reviewed() { tail -1 "$GH/reviews.log" 2>/dev/null; }
 wait_until "the review's data is served" '"commit"' sfn reviewData "[\"$TICKET\"]"
 SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
 
@@ -49,7 +50,7 @@ echo "## not signed in: the page says how to sign in, and offers nothing to send
 touch "$GH/signed-out"
 OUTSIDE=$(sfn hostView "[\"$TICKET\"]")
 expect "who is signed in: nobody, and how to fix it" "$OUTSIDE" '"viewer":null,"signIn":"Not signed in to GitHub \(.*gh auth login'
-expect "…and a review sent anyway is refused in words" "$(post sendReview "[\"$TICKET\",\"approve\",\"\"]")" '"error":"Could not read pull request #7'
+expect "…and a review sent anyway is refused in words" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null]")" '"error":"Cannot approve here — Could not read pull request #7: .*gh auth login'
 rm "$GH/signed-out"
 
 echo "## the review on GitHub: who is signed in, its pull request, its comments, its stack"
@@ -70,20 +71,23 @@ expect "its line comments, on the line and side they sit on" "$SHAPE" "^comment 
 expect "the stack: the trunk, the pull request it builds on, this one, then what builds on it — a review with no pull request yet among them" "$SHAPE" "^stack trunk:main < pull:6 < \[pull:7\] < pull:8 < review:feat/docs$"
 expect "gh was asked for the pull request by the number in the link" "$(calls)" '\["pr","view","7","--repo","acme/sandbox","--json"'
 
-echo "## a review in the reader's name"
-expect "approving" "$(post sendReview "[\"$TICKET\",\"approve\",\"\"]")" '^\{"ok":true\}$'
-expect "…goes to gh pr review, on the pull request found from the ticket" "$(calls)" '\["pr","review","7","--repo","acme/sandbox","--approve"\]'
-expect "a comment, with its words" "$(post sendReview "[\"$TICKET\",\"comment\",\"Looks right to me\"]")" '^\{"ok":true\}$'
-expect "…sent as they were written" "$(calls)" '\["pr","review","7","--repo","acme/sandbox","--comment","--body","Looks right to me"\]'
-expect "requesting changes without saying which is refused before GitHub is asked" "$(post sendReview "[\"$TICKET\",\"request-changes\",\"  \"]")" '"error":"Say what should change'
-expect "a verdict that is not one is a bad request" "$(post sendReview "[\"$TICKET\",\"merge\",\"\"]")" '"error":"bad request"'
+echo "## a review in the reader's name, finished at once"
+submit() { post submitReview "[\"$1\",\"$2\",\"$3\",${4:-null}]"; }
+expect "approving, with nothing pending" "$(submit "$TICKET" approve "")" '^\{"ok":true,"said":0,"url":"https://github.com/acme/sandbox/pull/7#pullrequestreview-500"\}$'
+expect "…goes to GitHub as one review, on the pull request found from the ticket" "$(calls | grep -c '"api","-X","POST","repos/acme/sandbox/pulls/7/reviews","--input","-"')" "^1$"
+expect "…an approval, at the commit the page shows" "$(reviewed)" "^\{\"commit_id\":\"$SHOWN\",\"event\":\"APPROVE\",\"comments\":\[\]\}$"
+expect "a comment on the whole, with its words" "$(submit "$TICKET" comment "Looks right to me" "\"$SHOWN\"")" '"ok":true,"said":0'
+expect "…sent as they were written" "$(reviewed)" '"event":"COMMENT","body":"Looks right to me"'
+expect "requesting changes without saying which is refused before GitHub is asked" "$(submit "$TICKET" request-changes "  ")" '"error":"Say what should change'
+expect "a comment saying nothing, with nothing pending, is refused" "$(submit "$TICKET" comment "")" '"error":"Write something, or add comments to your review first."'
+expect "a verdict that is not one is a bad request" "$(submit "$TICKET" merge "")" '"error":"bad request"'
 expect "your own pull request is yours to comment on, not to approve" "$(sfn hostView "[\"$OWN\"]")" '"pull":\{"number":6,.*"mine":true'
-expect "…approving it is refused in words, before GitHub is asked" "$(post sendReview "[\"$OWN\",\"approve\",\"\"]")" '"error":"You opened this pull request'
+expect "…approving it is refused in words, before GitHub is asked" "$(submit "$OWN" approve "")" '"error":"You opened this pull request'
 N=$(calls | wc -l)
-expect "a write from another site is refused" "$(post sendReview "[\"$TICKET\",\"approve\",\"\"]" http://evil.example)" "^HTTP 403$"
+expect "a write from another site is refused" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null]" http://evil.example)" "^HTTP 403$"
 expect "…and gh was never asked" "$(calls | wc -l | tr -d ' ')" "^$(echo $N | tr -d ' ')$"
 
-echo "## a comment on a line, at the commit the page shows"
+echo "## a single comment on a line, said at once, at the commit the page shows"
 LINE=$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"Strings, or rows?\",\"$SHOWN\",null]")
 expect "posted, and the comment comes back as GitHub has it" "$LINE" '"ok":true,"comment":\{"id":"1000","author":\{"login":"bob".*"body":"Strings, or rows\?","file":"src/export.ts","line":2,"side":"RIGHT"'
 expect "…on that file, line and side, at the commit the page shows" "$(calls | tail -1)" "\"-f\",\"body=Strings, or rows\\?\",\"-f\",\"commit_id=$SHOWN\",\"-f\",\"path=src/export.ts\",\"-F\",\"line=2\",\"-f\",\"side=RIGHT\""
@@ -102,37 +106,51 @@ expect "a commit that is not one is a bad request" "$(post sendLineComment "[\"$
 
 echo "## the reader's AI drafts its comments; they wait on the page, beside the code"
 talk() { sfn talkView "[\"$1\"]"; }
+count() { python3 -c 'import json,sys; v=json.load(sys.stdin); print(len(v[sys.argv[1]]))' "$1"; }
 DRAFTS='[{"file":"src/export.ts","line":2,"body":"Strings lose the row shape — keep objects?"},{"file":"src/page.ts","startLine":2,"line":3,"body":"Name the size:\n```suggestion\n  return n * PAGE;\n}\n```"},{"file":"src/export.ts","line":40,"body":"far away"}]'
 DRAFTED=$(call $A "$SA" review-comments "{\"action\":\"draft\",\"ticketId\":\"$TICKET\",\"comments\":$DRAFTS}")
 expect "two drafted, under the lines they are about" "$DRAFTED" "^2 draft comment\(s\) on the review page"
 expect "…one the diff cannot place refused, saying what it shows" "$DRAFTED" "#3 \(src/export.ts:40\): src/export.ts line \+40 is not in the diff — it shows \+1–2"
 expect "…and the agent told to leave them out of the chat" "$DRAFTED" "Do not repeat the comments in the chat"
-expect "nothing reached GitHub for a draft" "$(calls | grep -c 'Strings lose')" "^0$"
 TALK=$(talk "$TICKET")
-expect "the page reads them: one on a line, one on a block of lines" "$TALK" '"drafts":\[\{"id":"[0-9a-f-]+","file":"src/export.ts","line":2,"side":"RIGHT","body":"Strings lose.*\{"id":"[0-9a-f-]+","file":"src/page.ts","line":3,"side":"RIGHT","startLine":2,"startSide":"RIGHT"'
+expect "the page reads them: one on a line, one on a block of lines — nothing pending yet" "$TALK" '"drafts":\[\{"id":"[0-9a-f-]+","file":"src/export.ts","line":2,"side":"RIGHT","body":"Strings lose.*\{"id":"[0-9a-f-]+","file":"src/page.ts","line":3,"side":"RIGHT","startLine":2,"startSide":"RIGHT".*\],"pending":\[\]'
 DID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["drafts"][0]["id"])' <<< "$TALK")
-ACCEPTED=$(post acceptDrafts "[\"$TICKET\",[\"$DID\"],{\"$DID\":\"Strings lose the row shape: keep the objects.\"}]")
-expect "accepting one on the page, as the reader edited it" "$ACCEPTED" '^\{"said":1,"failed":\[\]\}$'
-expect "…posts it on the pull request, in their words, at the commit the AI read" "$(calls | tail -1)" "\"-f\",\"body=Strings lose the row shape: keep the objects.\",\"-f\",\"commit_id=$SHOWN\""
+N=$(calls | wc -l)
+expect "accepting one on the page, as the reader edited it, puts it in their review" "$(post acceptDrafts "[\"$TICKET\",[\"$DID\"],{\"$DID\":\"Strings lose the row shape: keep the objects.\"}]")" '^\{"done":1,"failed":\[\]\}$'
 TALK=$(talk "$TICKET")
-expect "…and says it in the room, marked as drafted with the AI, with where it is on GitHub" "$TALK" '"said":\[.*\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"Strings lose the row shape: keep the objects.","file":"src/export.ts","line":2,"side":"RIGHT","url":"[^"]+","at":"[^"]+","drafted":true,"hostId":"10[0-9]+"\}'
-expect "…one draft left" "$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)["drafts"]))' <<< "$TALK")" "^1$"
-POSTED=$(call $A "$SA" review-comments "{\"action\":\"post\",\"ticketId\":\"$TICKET\"}"); expect "the agent posts the rest on its person's word" "$POSTED" "^1 comment\(s\) said in the room as your user's and posted on the pull request"
-expect "…the block, from its first line" "$(calls | tail -1)" '"-F","start_line=2","-f","start_side=RIGHT"\]'
+expect "…pending there, in their words, marked as the AI's" "$TALK" '"pending":\[\{"id":"[0-9a-f-]+","file":"src/export.ts","line":2,"side":"RIGHT","body":"Strings lose the row shape: keep the objects.","drafted":true\}\]'
+expect "…one draft left" "$(count drafts <<< "$TALK")" "^1$"
+expect "a comment the reader writes goes into the review too" "$(post addToReview "[\"$TICKET\",\"src/use.ts\",3,\"RIGHT\",\"Does first need exporting?\",\"$SHOWN\",null]")" '^\{"ok":true\}$'
+PID=$(python3 -c 'import json,sys; v=json.load(sys.stdin); print([p["id"] for p in v["pending"] if p["file"] == "src/use.ts"][0])' <<< "$(talk "$TICKET")")
+expect "…and can be reworded while it is pending" "$(post editDraft "[\"$TICKET\",\"$PID\",\"Does first need to be exported?\"]")" '^\{"done":1,"failed":\[\]\}$'
+expect "nothing pending has reached GitHub" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
+AGENTACC=$(call $A "$SA" review-comments "{\"action\":\"accept\",\"ticketId\":\"$TICKET\"}")
+expect "the agent puts the rest in the review on its person's word" "$AGENTACC" "^1 draft\(s\) put into your user's review — 3 comment\(s\) pending in it"
+FINISHED=$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$TICKET\",\"body\":\"Close — two questions.\"}")
+expect "…and finishes it: every pending comment said, the review on the pull request" "$FINISHED" "^review finished: 3 comment\(s\) said in the room as your user's, and the review is on the pull request: https://github.com/acme/sandbox/pull/7#pullrequestreview-50[0-9]"
+REVIEW=$(reviewed)
+expect "…one review on GitHub: its words, a comment, every comment in it" "$REVIEW" '"event":"COMMENT","body":"Close — two questions.","comments":\[\{"path":"src/export.ts","line":2,"side":"RIGHT","body":"Strings lose the row shape: keep the objects."\},\{"path":"src/page.ts","line":3,"side":"RIGHT","body":"Name the size:.*","start_line":2,"start_side":"RIGHT"\},\{"path":"src/use.ts","line":3,"side":"RIGHT","body":"Does first need to be exported\?"\}\]'
+TALK=$(talk "$TICKET")
+expect "…said in the room, each with where it is on GitHub, the AI's marked" "$TALK" '"said":\[.*\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"Strings lose the row shape: keep the objects.","file":"src/export.ts","line":2,"side":"RIGHT","url":"[^"]+","at":"[^"]+","drafted":true,"hostId":"[0-9]+"\}'
+expect "…nothing pending any more" "$(count pending <<< "$TALK")" "^0$"
 CONTEXT=$(call $A "$SA" review-context "{\"ticketId\":\"$TICKET\"}")
-expect "the author's agent reads them in review-context" "$CONTEXT" '^comments\[4\]\{by,at,body,onHost\}:$'
-expect "…each with where it is on GitHub" "$CONTEXT" 'alice,"src/export.ts:2","Strings lose the row shape: keep the objects.","https://github.com/acme/sandbox/pull/7#discussion_r10[0-9]+"$'
+expect "the author's agent reads them in review-context" "$CONTEXT" '^comments\[5\]\{by,at,body,onHost\}:$'
+expect "…each with where it is on GitHub" "$CONTEXT" 'alice,"src/use.ts:3",Does first need to be exported\?,"https://github.com/acme/sandbox/pull/7#discussion_r[0-9]+"$'
 call $A "$SA" review-comments "{\"action\":\"draft\",\"ticketId\":\"$TICKET\",\"comments\":[{\"file\":\"src/page.ts\",\"line\":1,\"body\":\"nit\"}]}" > /dev/null
-expect "declining on the page drops it, said nowhere" "$(post declineDrafts "[\"$TICKET\",null]")" "^1$"
-expect "…no drafts left" "$(talk "$TICKET")" '^\{"drafts":\[\]'
-expect "a draft on a ticket that is not a review is refused" "$(call $A "$SA" review-comments "{\"action\":\"post\",\"ticketId\":\"nope\"}")" "^failed: no ticket nope"
+expect "declining on the page drops a draft, said nowhere" "$(post dropDrafts "[\"$TICKET\",null,\"ai\"]")" "^1$"
+post addToReview "[\"$TICKET\",\"src/page.ts\",1,\"RIGHT\",\"second thoughts\",\"$SHOWN\",null]" > /dev/null
+expect "discarding the review drops what is pending in it" "$(post dropDrafts "[\"$TICKET\",null,\"pending\"]")" "^1$"
+expect "…nothing left" "$(talk "$TICKET")" '^\{"drafts":\[\],"pending":\[\]'
+expect "a draft on a ticket that is not one is refused" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"nope\"}")" "^failed: no ticket nope"
 
 echo "## a review with no pull request: comments are said in the room alone"
 BARE_ASK=$(call $A "$SA" ask-review "{\"title\":\"Stream it, unhosted\",\"project\":\"sandbox\",\"branch\":\"feat/stream-export\",\"base\":\"main\",\"summary\":\"the same change, no host\",\"decisions\":[$D1],\"forks\":[]}")
 BARE=$(echo "$BARE_ASK" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 call $A "$SA" review-comments "{\"action\":\"draft\",\"ticketId\":\"$BARE\",\"comments\":[{\"file\":\"src/export.ts\",\"line\":2,\"body\":\"room only\"}]}" > /dev/null
+call $A "$SA" review-comments "{\"action\":\"accept\",\"ticketId\":\"$BARE\"}" > /dev/null
 N=$(calls | wc -l)
-expect "posted, in the room only, and why" "$(call $A "$SA" review-comments "{\"action\":\"post\",\"ticketId\":\"$BARE\"}")" "^1 comment\(s\) said in the room as your user's — not on GitHub: the review names no pull request"
+expect "a verdict has nowhere to go" "$(post submitReview "[\"$BARE\",\"approve\",\"\",null]")" '"error":"Cannot approve here — the review names no pull request'
+expect "finished, the review is said in the room only, and why" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$BARE\"}")" "^review finished: 1 comment\(s\) said in the room as your user's — not on GitHub: the review names no pull request"
 expect "…GitHub never asked to post" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
 expect "a comment typed on its page is said in the room too" "$(post sendLineComment "[\"$BARE\",\"src/export.ts\",1,\"RIGHT\",\"typed here\",\"$SHOWN\",null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"typed here"'
 expect "…and read back on the page" "$(talk "$BARE")" '"body":"room only".*"body":"typed here"'

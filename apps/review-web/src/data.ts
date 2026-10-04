@@ -237,8 +237,8 @@ export interface LineComment {
   readonly drafted?: true;
 }
 
-/** A comment the reader's AI drafted, waiting on the reader: Accept puts it
- *  in the room (and on the pull request), Decline drops it. */
+/** A comment not said yet: drafted by the reader's AI and waiting on them,
+ *  or pending in their review — said with the rest when they finish it. */
 export interface DraftView {
   readonly id: string;
   readonly file: string;
@@ -247,24 +247,40 @@ export interface DraftView {
   readonly startLine?: number;
   readonly startSide?: "LEFT" | "RIGHT";
   readonly body: string;
+  /** pending: accepted from the reader's AI */
+  readonly drafted?: true;
 }
 
 /** talkView(ticketId) — the comments on the review's code that collagen
- *  holds: what the reader's AI drafted (this machine's), and what has been
- *  said in the room — each with the host's id when it is on the pull request
- *  too, so the page shows it once. */
+ *  holds: what the reader's AI drafted and what is pending in the reader's
+ *  review (both this machine's only), and what has been said in the room —
+ *  each with the host's id when it is on the pull request too, so the page
+ *  shows it once. */
 export interface TalkView {
   readonly drafts: ReadonlyArray<DraftView>;
+  readonly pending: ReadonlyArray<DraftView>;
   readonly said: ReadonlyArray<LineComment & { readonly hostId?: string }>;
 }
 
-/** What accepting drafts did: how many were said, and each one that was not, with why. */
-export interface AcceptResult {
-  readonly said: number;
+/** What changing drafts or pending comments did: how many, and each one that could not be, with why. */
+export interface DraftsResult {
+  readonly done: number;
   readonly failed: ReadonlyArray<{ readonly id: string; readonly error: string }>;
-  /** said in the room only — why not on the host too (no pull request, say) */
-  readonly roomOnly?: string;
 }
+
+/** A review finished: its pending comments said — in the room, and with the
+ *  verdict on the pull request when there is one — or why not (all of it
+ *  stays pending then). */
+export type SubmitResult =
+  | {
+      readonly ok: true;
+      readonly said: number;
+      /** the review on the host */
+      readonly url?: string;
+      /** said in the room only — why not on the host too (no pull request, say) */
+      readonly roomOnly?: string;
+    }
+  | { readonly error: string };
 
 /** One branch of a stack: a pull request, a review in the room, or the
  *  trunk everything builds on. */
