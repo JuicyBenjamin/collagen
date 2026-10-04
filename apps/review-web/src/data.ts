@@ -319,7 +319,12 @@ export type SubmitResult =
       /** this finish was done already: nothing said again */
       readonly already?: true;
     }
-  | { readonly error: string };
+  | {
+      readonly error: string;
+      /** the review reached the host, its words and verdict with it — only the
+       *  room is still to be told: a new finish is a new review */
+      readonly onHost?: true;
+    };
 
 /** One branch of a stack: a pull request, a review in the room, or the
  *  trunk everything builds on. */

@@ -199,6 +199,35 @@ expect "the finish says it" "$(cat "$OUT/finish3")" '"ok":true,"said":1'
 expect "…the delete, waiting its turn, finds nothing left to delete" "$DROPPED" "^0$"
 expect "…in the room as on GitHub" "$(talk "$TICKET")" '"body":"on its way"'
 
+echo "## a finish that stopped after GitHub had it is completed; a new finish is a review of its own"
+# collagen stopped between the two: on GitHub, not yet in the room
+half() {
+  stop alice
+  python3 - "$CFG/state-alice-$SCN.json" "$TICKET" "$SHOWN" "$1" "$2" <<'PY'
+import json, sys, time
+path, ticket, commit, cid, body = sys.argv[1:]
+s = json.load(open(path))
+s.setdefault("drafts", {}).setdefault(ticket, []).append({"id": cid, "ticketId": ticket, "file": "src/export.ts", "line": 2, "side": "RIGHT", "commit": commit, "body": body, "status": "posted", "host": {"id": 1999, "url": "https://github.com/acme/sandbox/pull/7#discussion_r1999"}, "ts": int(time.time() * 1000)})
+json.dump(s, open(path, "w"))
+PY
+  COLLAGEN_GH="$E2E/fake-gh.mjs" FAKE_GH_DIR="$GH" start alice
+  SA=$(mcp $A)
+  wait_until "collagen is back" '"pending":\[\{' talk "$TICKET"
+}
+half 4a1f0000-0000-4000-8000-000000000001 "said on GitHub, not yet here"
+expect "the page shows it on GitHub, still to be said here" "$(talk "$TICKET")" '"pending":\[\{"id":"4a1f0000-[0-9a-f-]+","commit":"[0-9a-f]+","posted":true'
+post addToReview "[\"$TICKET\",\"src/page.ts\",3,\"RIGHT\",\"a new thought\",\"$SHOWN\",null]" > /dev/null
+N=$(REVIEWS)
+expect "a new finish, its own words and verdict: both said" "$(submit "$TICKET" request-changes "A new blocker." "\"$SHOWN\"" '"bob"')" '^\{"ok":true,"said":2,"url"'
+expect "…the earlier one in the room, never sent to GitHub again" "$(talk "$TICKET")" '"body":"said on GitHub, not yet here".*"hostId":"1999"'
+expect "…the new one on GitHub as a review of its own, with only its own comment" "$(reviewed)" '"event":"REQUEST_CHANGES","body":"A new blocker.","comments":\[\{"path":"src/page.ts","line":3,"side":"RIGHT","body":"a new thought"\}\]\}$'
+expect "…one review on GitHub" "$(REVIEWS)" "^$((N + 1))$"
+half 4a1f0000-0000-4000-8000-000000000002 "the agent's, half said"
+N=$(REVIEWS)
+expect "from the agent, words with an earlier review half said: the room told, nothing else sent, and asked" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$TICKET\",\"body\":\"Close — two questions.\"}")" "^failed: Your earlier review is in the room now: 1 comment\(s\), on the pull request already with its words and verdict. Nothing else was sent"
+expect "…GitHub not asked again" "$(REVIEWS)" "^$N$"
+expect "…the room has it" "$(talk "$TICKET")" '"body":"the agent.s, half said"'
+
 expect "a draft on a ticket that is not one is refused" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"nope\"}")" "^failed: no ticket nope"
 
 echo "## a review with no pull request: comments are said in the room alone"

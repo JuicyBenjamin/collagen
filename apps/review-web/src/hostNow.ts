@@ -241,7 +241,8 @@ export const hostNow = {
     // review as the page showed it (a comment still on its way has no id yet)
     const seen = { id: finishId, pending: going.map((d) => d.id).filter((id) => !id.startsWith("new-")) };
     const r = (yield submitReview(ticketId, verdict, body, diffNow.commit() ?? null, me?.login ?? null, seen)) as SubmitResult;
-    if ("ok" in r) finishId = crypto.randomUUID();
+    // done — or on the host already, its words with it: what comes next is a new finish
+    if ("ok" in r || r.onHost) finishId = crypto.randomUUID();
     if (talk) refresh(talk);
     if ("ok" in r && view) refresh(view);
     return r;
