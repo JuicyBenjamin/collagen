@@ -3,7 +3,7 @@ import type { BoxRenderable } from "@opentui/core";
 import { useTerminalDimensions } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { heldBy, KINDS, ticketName, type Ticket } from "@collagen/p2p";
+import { heldBy, KINDS, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { diagnostics } from "../../../diagnostics";
 import { aboutTicket, age, marksLabel, rowTitle, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
 import { Focusable } from "../../../components/Focusable";
@@ -95,10 +95,12 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
   }, [setFocus, ticketId, isEpic]);
 
   const ticket = tickets.find((t) => t.id === ticketId);
-  if (!ticket) {
+  // a ticket still waiting on another is its author's alone — not opened by anyone else, however they got here
+  const gated = ticket !== undefined && !visibleTo(ticket, new Map(tickets.map((t) => [t.id, t])), identity?.pubkey ?? "");
+  if (!ticket || gated) {
     return (
       <text fg={theme.dim} marginTop={1}>
-        ticket {ticketId.slice(0, 8)} is not in this room — esc goes back
+        ticket {ticketId.slice(0, 8)} is {gated ? "not shown to you yet" : "not in this room"} — esc goes back
       </text>
     );
   }
