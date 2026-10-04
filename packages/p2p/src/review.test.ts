@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
-import { claimReview, emptyReview, mergeReview, ReviewContext, supersedes } from "./review";
+import { claimReview, emptyReview, mergeReview, ReviewContext, strictlySupersedes, supersedes } from "./review";
 
 const base = emptyReview("t1", "k-alice", "alice");
 
@@ -165,5 +165,62 @@ describe("a guess withdrawn", () => {
     const more = mergeReview(trimmed, { decisions: [guess("four")] }, 3);
     expect(more.decisions.map((d) => d.id)).toEqual(["d1", "d4"]);
     expect(Schema.decodeUnknownSync(ReviewContext)(JSON.parse(JSON.stringify(more)))).toEqual(more);
+  });
+});
+
+describe("reviews of one moment, from different writers", () => {
+  const base = mergeReview(emptyReview("t", "a", "alice"), { summary: "s", assumed: { author: "octo", sources: ["x"] }, decisions: [{ title: "g", what: "g", agentWhy: "w", basis: "b", confidence: "low" }] }, 5);
+  const takenBy = (key: string, name: string) => ({ ...claimReview(base, { key, name }, [{ id: "d1", verdict: "confirmed" }], {}, 7), ts: 9 });
+  const versions = [{ ...base, ts: 9 }, takenBy("b", "bob"), takenBy("c", "carol")];
+  const apply = (order: ReadonlyArray<ReviewContext>) => order.reduce((kept, r) => (supersedes(r, kept) ? r : kept));
+  const orders = (xs: ReadonlyArray<ReviewContext>): Array<Array<ReviewContext>> =>
+    xs.length <= 1 ? [[...xs]] : xs.flatMap((x, i) => orders([...xs.slice(0, i), ...xs.slice(i + 1)]).map((rest) => [x, ...rest]));
+
+  it("every peer keeps the same one, in any order", () => {
+    const kept = new Set(orders(versions).map((o) => apply(o).author));
+    expect(kept.size).toBe(1);
+    // and it is a taken-over one, never the guess
+    expect([...kept][0]).not.toBe("a");
+  });
+
+  it("one replaces the other, never both ways — and a record is not lost to itself", () => {
+    const [, b, c] = versions;
+    expect(supersedes(b!, c!) !== supersedes(c!, b!)).toBe(true);
+    expect(strictlySupersedes(b!, b!)).toBe(false);
+    expect(strictlySupersedes(b!, versions[0]!)).toBe(true);
+  });
+});
+
+describe("an answered guess, edited by its author", () => {
+  const guessed = mergeReview(emptyReview("t", "a", "alice"), {
+    summary: "s",
+    assumed: { author: "octo", sources: ["x"] },
+    decisions: [
+      { title: "Stream", what: "rows stream", agentWhy: "timeouts", basis: "PR", confidence: "high" },
+      { title: "Pages", what: "100 a page", agentWhy: "memory", basis: "a constant", confidence: "low" },
+      { title: "Strings", what: "rows as strings", agentWhy: "simple", basis: "the map", confidence: "medium" },
+    ],
+  }, 1);
+  const told = claimReview(guessed, { key: "o", name: "octo" }, [
+    { id: "d1", verdict: "confirmed" },
+    { id: "d2", verdict: "corrected", title: "Fifty", what: "50 a page", userWhy: "the phone" },
+    { id: "d3", verdict: "wrong", userWhy: "objects next" },
+  ], {}, 2);
+
+  it("keeps its answer, and the guess a correction replaced", () => {
+    const edited = mergeReview(told, { decisions: [{ id: "d2", title: "Fifty", what: "50 a page, on phones", userWhy: "the phone's memory" }] }, 3);
+    expect(edited.decisions[1]).toMatchObject({ verdict: "corrected", what: "50 a page, on phones", guess: { what: "100 a page", why: "memory", basis: "a constant" } });
+  });
+
+  it("a confirmed or wrong guess edited to say something else becomes a correction, the old words kept", () => {
+    const edited = mergeReview(told, { decisions: [{ id: "d1", title: "Stream", what: "rows stream, in batches", userWhy: "timeouts and memory" }, { id: "d3", title: "Objects", what: "rows as objects", userWhy: "next release" }] }, 3);
+    expect(edited.decisions[0]).toMatchObject({ verdict: "corrected", guess: { what: "rows stream", why: "timeouts", basis: "PR" } });
+    expect(edited.decisions[0]!.basis).toBeUndefined();
+    expect(edited.decisions[2]).toMatchObject({ verdict: "corrected", guess: { what: "rows as strings" } });
+  });
+
+  it("…and one given again as it was keeps its verdict", () => {
+    const again = mergeReview(told, { decisions: [{ id: "d1", title: "Stream", what: "rows stream", userWhy: "yes, timeouts" }] }, 3);
+    expect(again.decisions[0]).toMatchObject({ verdict: "confirmed", basis: "PR", userWhy: "yes, timeouts" });
   });
 });
