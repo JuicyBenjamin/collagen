@@ -296,9 +296,6 @@ function Header(props: { data: ReviewPageData }) {
               fallback={
                 <div class="assumed-banner" role="note">
                   <p>Assumption-based review by {props.data.review.authorName}</p>
-                  <p class="assumed-count">
-                    {assumedNow.checks.checked(ids())} of {ids().length} checked
-                  </p>
                 </div>
               }
             >
@@ -554,7 +551,7 @@ function UnitSection(props: {
               <span class="who">Why</span>
               <For each={chips()}>
                 {(d) => (
-                  <button type="button" class={["chip", { untitled: !d.title, assumed: assumedNow.isGuess(d), checked: assumedNow.isGuess(d) && assumedNow.checks.check(d.id) !== undefined, wrong: d.verdict === "wrong" }]} onClick={() => show(d)} title={assumedNow.isGuess(d) ? "an assumption — inferred, not told" : d.verdict === "wrong" ? "a wrong guess, its author says" : undefined}>
+                  <button type="button" class={["chip", { untitled: !d.title, assumed: assumedNow.isGuess(d), wrong: d.verdict === "wrong" }]} onClick={() => show(d)} title={assumedNow.isGuess(d) ? "an assumption — inferred, not told" : d.verdict === "wrong" ? "a wrong guess, its author says" : undefined}>
                     {d.title ?? NO_TITLE}
                   </button>
                 )}
