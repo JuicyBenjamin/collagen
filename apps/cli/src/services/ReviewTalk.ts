@@ -288,7 +288,14 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   const halfSaid = mine.filter(isPosted);
   if (halfSaid.length > 0) {
     const r = yield* sayAll(halfSaid);
-    if ("error" in r) return { error: r.error, onHost: true as const } satisfies SubmitResult;
+    if ("error" in r) {
+      // onHost speaks of this finish only: true when it is the earlier one
+      // sent again, never for a new one, whose words and verdict are kept
+      const again = seen !== null && (yield* finishedOf(ticketId)).includes(seen.id);
+      return again
+        ? ({ error: `${r.error} — your review is on the pull request already; finishing again with no words or verdict tells the room`, onHost: true as const } satisfies SubmitResult)
+        : ({ error: `Your earlier review is on the pull request, but the room has not taken it yet (${r.error}). Nothing of this finish was sent — try again once the room takes it.` } satisfies SubmitResult);
+    }
     yield* done(halfSaid.map((d) => d.id));
   }
   const recovered = halfSaid.length;
