@@ -25,6 +25,13 @@ function charAt(x: number, y: number): { readonly col: number; readonly node: No
   return { col: Number(span.getAttribute("data-o")) + offset, node, offset };
 }
 
+/** The band between two changes in one file, in words: what is skipped. */
+const skippedText = (skip: { readonly lines: number; readonly elsewhere: number } | undefined): string => {
+  if (!skip || skip.lines <= 0) return "⋯";
+  const lines = `${skip.lines} ${skip.lines === 1 ? "line" : "lines"}`;
+  return skip.elsewhere === 0 ? `⋯ ${lines} unchanged` : `⋯ ${lines} — ${skip.elsewhere === 1 ? "a change" : `${skip.elsewhere} changes`} among them under another unit`;
+};
+
 /** One hunk: file and header, then its code (Lines). Its header offers the
  *  file whole, and a mark as viewed. A file marked as viewed folds here and
  *  wherever else it shows; once it moves, this hunk shows only what changed
@@ -35,6 +42,9 @@ export function Hunk(props: {
   /** a later change in the same file of the same unit: no header of its own,
    *  the file's is the one above it */
   continued?: boolean;
+  /** what the diff skips between the change above and this one: lines, and
+   *  changes among them shown under another unit */
+  skipped?: { readonly lines: number; readonly elsewhere: number };
   /** no decision covers this change — worth a question to the author */
   unexplained?: boolean;
 }) {
@@ -98,9 +108,9 @@ export function Hunk(props: {
     <Show when={!(props.continued && state() === "viewed")}>
     <div class={["hunk", { viewed: state() === "viewed", continued: props.continued }]}>
       <div class={["file", { continued: props.continued }]}>
-        {/* a later change in the file: a band naming where it jumps to — the
-            file's own header stays stuck above it */}
-        <span class="head">{props.continued ? `⋯ ${props.hunk.header}` : props.hunk.file}</span>
+        {/* a later change in the file: a band saying how much unchanged code
+            lies between it and the one above — the file's header stays above */}
+        <span class="head">{props.continued ? skippedText(props.skipped) : props.hunk.file}</span>
         <span class="file-side">
           <Show when={mine() !== null && !open()}>
             <button type="button" class="whole-toggle" onClick={() => setFull(!full())} title="Switch between what changed since you viewed it and the whole change against the base">
