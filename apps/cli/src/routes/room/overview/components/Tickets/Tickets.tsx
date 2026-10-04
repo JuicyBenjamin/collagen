@@ -81,7 +81,7 @@ export function Tickets() {
   // what a row hangs from, quietly after the rest of its info: its epic
   // (unless drawn inside it), what it grew out of, what grew out of it
   const related = (t: Ticket, insideEpic: boolean): ReadonlyArray<Part> => {
-    const r = relationsOf(t, byId);
+    const r = relationsOf(t, byId, me);
     return [
       ...(r.epic && !insideEpic ? [{ text: `${EPIC_MARK} ${clip(r.epic.name, RELATION_MAX)}` }] : []),
       ...(r.parent ? [{ text: `from "${clip(r.parent.name, RELATION_MAX)}"` }] : []),
@@ -154,7 +154,7 @@ export function Tickets() {
         if (key.name === "h") return setShowClosed(!showClosed), true;
         // one key to what a ticket hangs from
         if (current && (key.name === "e" || key.name === "p")) {
-          const r = relationsOf(current.t, byId);
+          const r = relationsOf(current.t, byId, me);
           const target = key.name === "e" ? r.epic : r.parent;
           if (target) navigate(to.ticket(target.id));
           return true;
