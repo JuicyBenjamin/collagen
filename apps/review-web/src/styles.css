@@ -291,3 +291,9 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .review-composer .composer-head { font-size: 13px; }
 .host-note.left { text-align: left; max-width: none; margin: 0; }
 .quiet.discard { margin-right: auto; color: var(--warn); }
+
+/* the band between two changes: a button when it can show what it hides */
+.band-toggle { all: unset; cursor: pointer; color: var(--faint); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.band-toggle:hover, .band-toggle:focus-visible { color: var(--accent); text-decoration: underline; }
+.code.gap { border-bottom: 1px dashed var(--line); }
+.code.gap td.t { color: var(--dim); }
