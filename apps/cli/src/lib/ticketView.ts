@@ -1,4 +1,4 @@
-import { epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { reviewHeadline } from "./review";
 import { rowTitle } from "./ticketSummary";
 
@@ -29,6 +29,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   answered: ticket.kind === "epic" ? false : finished(ticket),
   /** recorded: off the lists, still here to refer back to (an epic can be reopened) */
   closed: isClosed(ticket, all),
+  /** how its author closed it: done, or dropped (one closed before this was asked reads as done) */
+  ...(ticket.kind !== "epic" && closedAs(ticket) ? { closedAs: closedAs(ticket)! } : {}),
   ...(ticket.kind === "epic" ? becauseLine(ticket, all, me) : ticket.closed?.reason ? { closedBecause: ticket.closed.reason } : {}),
   ...(review
     ? { review: `${reviewHeadline(review)} — call review-context {ticketId} when your user asks why something is the way it is` }

@@ -356,9 +356,10 @@ export const SettleStep = Tool.make("settle-step", {
 
 export const CloseTicket = Tool.make("close-ticket", {
   description:
-    "Close a ticket your user created — only when they say they are done with it, never because you decided it is over. Closing is the author's decision, separate from completion: a ticket whose every step is answered is READY to close (settle-step tells you so), but the person closes it; and they may close one whose reviewer never answered or whose work was abandoned. The ticket leaves the overview and stays on the room's log with its steps exactly as they were, so later tickets can still refer to it; get-tickets keeps showing it with closed: true. Pass 'reason' when the close needs explaining (abandoned, superseded, done differently) — it goes on the record. Somebody else's ticket is refused: say what your user thinks with send-to-peer instead.",
+    "Close a ticket your user created — only when they say they are done with it, never because you decided it is over. Closing is the author's decision, separate from completion: a ticket whose every step is answered is READY to close (settle-step tells you so), but the person closes it; and they may close one whose reviewer never answered or whose work was abandoned. The ticket leaves the overview and stays on the room's log with its steps exactly as they were, so later tickets can still refer to it; get-tickets keeps showing it with closed: true. Pass 'outcome': 'done' when its work was done (it counts toward its epic's progress, whether or not every step was answered), 'dropped' when it was abandoned, superseded or will not be done (it leaves its epic's progress, as excluded work does) — ask your user when it is not clear which. Pass 'reason' when the close needs explaining (abandoned, superseded, done differently) — it goes on the record. Somebody else's ticket is refused: say what your user thinks with send-to-peer instead.",
   parameters: Schema.Struct({
     ticketId: Schema.String,
+    outcome: Schema.Literals(["done", "dropped"]),
     reason: Schema.optional(Schema.String),
   }),
   success: Schema.String,
@@ -1274,7 +1275,7 @@ const makeHandlers = Effect.gen(function* () {
           }
         }
       }),
-      "close-ticket": Effect.fn("Mcp.closeTicket")(function* (input: { ticketId: string; reason?: string }) {
+      "close-ticket": Effect.fn("Mcp.closeTicket")(function* (input: { ticketId: string; outcome: "done" | "dropped"; reason?: string }) {
         const { id: roomId, room } = yield* focusedRoom;
         const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
         if (!ticket) return yield* Effect.die(`no ticket ${input.ticketId} — check get-tickets`);
@@ -1282,7 +1283,7 @@ const makeHandlers = Effect.gen(function* () {
           roomId,
           to: "the room",
           title: `${ticket.goal} · closed`,
-          outgoing: { kind: "close", ticketId: input.ticketId, ...(input.reason ? { reason: input.reason } : {}) },
+          outgoing: { kind: "close", ticketId: input.ticketId, outcome: input.outcome, ...(input.reason ? { reason: input.reason } : {}) },
         });
       }),
       "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {

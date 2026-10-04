@@ -1,5 +1,6 @@
+import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { closeTicket, ticketName, epicBecause, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
+import { Ticket as TicketSchema, closeTicket, ticketName, epicBecause, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
 
 const ticket = (over: Partial<Ticket>): Ticket => ({
   id: "t",
@@ -55,12 +56,20 @@ describe("membership is explicit", () => {
 });
 
 describe("progress is a ticket count", () => {
-  it("done against all; closing does not make a ticket done; dropped work is excluded, 4 of 5 → 4 of 4", () => {
+  it("done against all; a close says how it ended; excluded or dropped work leaves the count, 4 of 5 → 4 of 4", () => {
     const four = ["a", "b", "c", "d"].map((id, i) => into(done(id), i));
     const fifth = into(open("e"), 9);
     expect(epicParts(epic, room(epic, ...four, fifth))).toMatchObject({ counted: 5, done: 4 });
-    const closedUnfinished = { ...fifth, closed: { by: "alice", ts: 10 } };
-    expect(epicParts(epic, room(epic, ...four, closedUnfinished))).toMatchObject({ counted: 5, done: 4 });
+    // closed as done with its own step never settled: done
+    const closedDone = closeTicket(fifth, "alice", "merged", 10, "done").ticket;
+    expect(finished(closedDone)).toBe(false);
+    expect(epicParts(epic, room(epic, ...four, closedDone))).toMatchObject({ counted: 5, done: 5 });
+    // closed as dropped: out of the count, as excluded work is
+    const dropped = closeTicket(fifth, "alice", "superseded", 10, "dropped").ticket;
+    expect(epicParts(epic, room(epic, ...four, dropped))).toMatchObject({ counted: 4, done: 4 });
+    // a close from before the outcome was asked: done, since dropped work was taken out or excluded then
+    const legacy = { ...fifth, closed: { by: "alice", ts: 10 } };
+    expect(epicParts(epic, room(epic, ...four, legacy))).toMatchObject({ counted: 5, done: 5 });
     const excluded = moveToEpic(fifth, "e1", "bob", 11, true);
     expect(excludedFromEpic(excluded)).toBe(true);
     expect(epicParts(epic, room(epic, ...four, excluded))).toMatchObject({ counted: 4, done: 4 });
@@ -219,5 +228,14 @@ describe("a ticket's title", () => {
     }
     // a titled revision is never lost to an untitled one of the same clock
     expect(mergeTicket(b, a).title).toBe("A");
+  });
+});
+
+describe("a close's outcome on the log", () => {
+  it("a ticket closed before outcomes were asked still decodes, and one with an outcome keeps it", () => {
+    const decode = Schema.decodeUnknownSync(TicketSchema);
+    const base = { id: "t", project: "collagen", goal: "g", createdBy: "alice", kind: "task", steps: [], structureAt: 1, updatedAt: 1 };
+    expect(decode({ ...base, closed: { by: "alice", ts: 2 } }).closed).toEqual({ by: "alice", ts: 2 });
+    expect(decode({ ...base, closed: { by: "alice", ts: 2, outcome: "dropped" } }).closed?.outcome).toBe("dropped");
   });
 });

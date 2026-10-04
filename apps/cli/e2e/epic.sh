@@ -91,8 +91,22 @@ CTX=$(call $A "$SA" review-context "$Q4")
 expect "review-context on the epic: its aim" "$CTX" "aim: Review PHP and Rust like TypeScript"
 expect "…its count, and what keeps it open" "$CTX" "progress: 1 of 2 done"
 expect "…each ticket's state, the excluded ones said" "$CTX" "Rust on the review page,excluded"
-Q5="{\"ticketId\":\"$E1\"}"
+Q5="{\"ticketId\":\"$E1\",\"outcome\":\"done\"}"
 expect "close-ticket on an epic points at the epic tool" "$(call $A "$SA" close-ticket "$Q5")" "is an epic .{1,3} it closes \\(and reopens\\) with the epic tool"
+
+echo "## a close says how it ended, and the epic counts it"
+CLP="{\"ticketId\":\"$PLAN\",\"outcome\":\"done\",\"reason\":\"merged\"}"
+expect "alice closes the plan as done, its step never settled" "$(call $A "$SA" close-ticket "$CLP")" "how Rust gets its server.{1,3} .ticket [0-9a-f-]{36}. as done .{1,3} merged"
+wait_until "the epic counts it done: 2 of 2" "parts: .?2 of 2 done" call $A "$SA" get-tickets '{}'
+TASK2='{"title":"a Kotlin grammar spike","project":"sandbox","goal":"a Kotlin grammar spike","steps":[{"id":"s1","owner":"alice","intent":"spike","description":"try it"}]}'
+TID2=$(call $A "$SA" create-ticket "$TASK2" | uuid)
+ADDOUT=$(call $A "$SA" epic "{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$TID2\"]}")
+expect "another goes in" "$ADDOUT" "2 of 3 done"
+CLOUT=$(call $A "$SA" close-ticket "{\"ticketId\":\"$TID2\",\"outcome\":\"dropped\",\"reason\":\"not now\"}")
+expect "closing it as dropped" "$CLOUT" "as dropped \\(out of its epic's progress\\)"
+wait_until "…takes it out of the count: 2 of 2" "parts: .?2 of 2 done" call $A "$SA" get-tickets '{}'
+expect "review-context says how each ended" "$(call $A "$SA" review-context "$Q4")" "a Kotlin grammar spike,dropped"
+expect "…a close without an outcome is refused at the tool" "$(call $A "$SA" close-ticket "{\"ticketId\":\"$TID2\"}")" "outcome"
 
 echo "## renaming: its author's, as a ticket's title is"
 RN="{\"action\":\"rename\",\"epicId\":\"$E1\",\"title\":\"Support more review languages\",\"goal\":\"the review page reads code beyond TypeScript\"}"
