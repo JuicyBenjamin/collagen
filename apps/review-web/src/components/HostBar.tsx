@@ -1,5 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import { hostNow } from "../hostNow";
+import { viewed } from "../viewedNow";
 import { ReviewComposer } from "./ReviewComposer";
 
 /** Top right of the page: the review's pull request (its number, state and
@@ -16,6 +17,15 @@ export function HostBar() {
   return (
     <div class="host-bar">
       <div class="host-row">
+        {/* how far through the files the reader is, as GitHub's toolbar has it */}
+        <Show when={viewed.count().files > 0}>
+          <span class={["viewed-progress", { done: viewed.count().viewed === viewed.count().files }]} title="Files you have marked as viewed">
+            <span class="bar" aria-hidden="true">
+              <span style={{ width: `${(100 * viewed.count().viewed) / viewed.count().files}%` }} />
+            </span>
+            {viewed.count().viewed} / {viewed.count().files} files viewed
+          </span>
+        </Show>
         <Show when={host()}>
           {(h) => (
             <Show when={h().pull} fallback={<span class="host-note">{h().noPull ?? ""}</span>}>
