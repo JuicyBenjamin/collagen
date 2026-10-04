@@ -10,7 +10,7 @@ import { CodeLine } from "./Code";
 import { Peek } from "./Peek";
 import { LineComposer, LineThread } from "./LineThread";
 import { hostNow } from "../hostNow";
-import { viewed } from "../viewedNow";
+import { reading, viewed } from "../viewedNow";
 import { sinceOf } from "../sinceNow";
 import { moved, placeSince } from "../since";
 
@@ -132,6 +132,8 @@ export function Hunk(props: {
   };
   // read already: the file folds to its header here and wherever else it shows
   const state = () => viewed.state(props.hunk.file);
+  // folded: viewed and not opened again to read
+  const folded = () => reading.folded(props.hunk.file);
 
   // moved since it was viewed: what changed from the commit it was viewed at
   // to the branch now, the part of it that falls in this hunk
@@ -153,12 +155,22 @@ export function Hunk(props: {
   const counts = () => moved(mine() ?? []);
 
   return (
-    <Show when={!(props.continued && state() === "viewed")}>
-    <div class={["hunk", { viewed: state() === "viewed", continued: props.continued }]}>
+    <Show when={!(props.continued && folded())}>
+    <div class={["hunk", { viewed: folded(), reread: state() === "viewed" && !folded(), continued: props.continued }]}>
       <div class={["file", { continued: props.continued }]}>
         {/* a later change in the file: a band saying how much unchanged code
             lies between it and the one above — the file's header stays above */}
-        <Show when={props.continued} fallback={<span class="head">{props.hunk.file}</span>}>
+        <Show
+          when={props.continued}
+          fallback={
+            <Show when={state() === "viewed"} fallback={<span class="head">{props.hunk.file}</span>}>
+              {/* viewed: the chevron opens it again to read, the mark stays */}
+              <button type="button" class="head reread-toggle" onClick={() => reading.toggle(props.hunk.file)} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
+                <span class="chevron">{folded() ? "▸" : "▾"}</span> {props.hunk.file}
+              </button>
+            </Show>
+          }
+        >
           <Show when={expandable()} fallback={<span class="head">{skippedText(props.skipped)}</span>}>
             <button type="button" class="head band-toggle" onClick={() => void toggleGap()} aria-expanded={gapShown() ? "true" : "false"} title={gapShown() ? "Hide these lines again" : "Show the lines between these two changes"}>
               {gap() === "loading" ? "Reading…" : gapShown() ? `⌃ hide ${props.skipped!.lines === 1 ? "this line" : `these ${props.skipped!.lines} lines`}` : `${skippedText(props.skipped)} — show`}
@@ -171,20 +183,27 @@ export function Hunk(props: {
               {full() ? "Since you viewed" : "Whole change"}
             </button>
           </Show>
-          <Show when={!props.continued && diffNow.canReadWhole() && hasNewSide(props.hunk) && state() !== "viewed"}>
+          <Show when={!props.continued && diffNow.canReadWhole() && hasNewSide(props.hunk) && !folded()}>
             <button type="button" class="whole-toggle" onClick={() => void toggleWhole()} title="The whole file as the branch has it, this diff's added lines marked">
               {open() ? (whole() === "loading" ? "Reading…" : "Just the change") : "Whole file"}
             </button>
           </Show>
           <Show when={!props.continued}>
           <label class={["mark-viewed", { changed: state() === "changed" }]} title="Fold this file everywhere on the page, as read; it opens again if its changes move, showing what moved">
-            <input type="checkbox" checked={state() === "viewed"} onChange={() => viewed.toggle(props.hunk.file, diffNow.commit())} />
+            <input
+              type="checkbox"
+              checked={state() === "viewed"}
+              onChange={() => {
+                viewed.toggle(props.hunk.file, diffNow.commit());
+                reading.marked(props.hunk.file);
+              }}
+            />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}
           </label>
           </Show>
         </span>
       </div>
-      <Show when={state() !== "viewed"}>
+      <Show when={!folded()}>
         <Show when={gapFailed()}>{(why) => <p class="whole-failed">Could not read the lines between: {why()}</p>}</Show>
         <Show when={gapShown()}>
           {(g) => (

@@ -5,7 +5,7 @@ import { Hunk } from "./components/Hunk";
 import { Popover } from "./components/Popover";
 import { TypesBanner } from "./components/TypesBanner";
 import { ticketId } from "./ticket";
-import { viewed } from "./viewedNow";
+import { reading, viewed } from "./viewedNow";
 import { reviewChanges, reviewData } from "./api";
 import { lasting } from "./lasting";
 import { hostNow } from "./hostNow";
@@ -63,6 +63,12 @@ const narrow = matchMedia(NARROW);
 const [wide, setWide] = createSignal(!narrow.matches);
 narrow.addEventListener("change", (e) => setWide(!e.matches));
 
+/** Every file of a unit marked viewed — the outline ticks it off. */
+const unitViewed = (u: Unit): boolean => {
+  const files = new Set(u.hunks.map((id) => id.slice(0, id.lastIndexOf("#"))));
+  return files.size > 0 && [...files].every((f) => viewed.state(f) === "viewed");
+};
+
 /** "2 changes" — a count in words, for the outline. */
 const changes = (n: number) => (n === 1 ? "1 change" : `${n} changes`);
 
@@ -117,9 +123,14 @@ function Page(props: { data: ReviewPageData }) {
             {(g) => (
               <For each={g().units}>
                 {(u) => (
-                  <li class={{ "nav-unexplained": u.by === "unexplained" }}>
-                    <a href={`#${u.id}`}>
-                      <span class="nav-what">{u.title}</span>
+                  <li class={{ "nav-unexplained": u.by === "unexplained", "nav-done": unitViewed(u) }}>
+                    <a href={`#${u.id}`} title={unitViewed(u) ? "Every file here is viewed" : undefined}>
+                      <span class="nav-what">
+                        <Show when={unitViewed(u)}>
+                          <span class="nav-check">✓ </span>
+                        </Show>
+                        {u.title}
+                      </span>
                       <span class="count">
                         {changes(u.hunks.length)}
                         {u.unexplained.length > 0 ? ` · ${u.unexplained.length} not explained` : ""}
@@ -389,14 +400,14 @@ function UnitSection(props: {
   createEffect(wide, (w) => {
     setOpen(w);
   });
-  // every file here marked viewed: the reader is done with this unit, so its
-  // why folds with its code — no column of reasons holding the section open.
+  // every file here marked viewed (and not opened again to read): the reader
+  // is done with this unit, so its why folds with its code — no column of reasons holding the section open.
   // Unmarking one opens it again; either can still be opened by hand.
   let wasDone = false;
   createEffect(
     () => {
       const files = [...new Set(props.unit.hunks.flatMap((id) => props.hunks.get(id)?.file ?? []))];
-      return files.length > 0 && files.every((f) => viewed.state(f) === "viewed");
+      return files.length > 0 && files.every((f) => reading.folded(f));
     },
     (done) => {
       if (done) setOpen(false);
