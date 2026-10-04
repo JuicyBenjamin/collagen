@@ -30,7 +30,10 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\033[D'; sleep 2; mark M4d_back_to_list
   printf '\033[D'; sleep 2; mark M5_back_to_ticket
   printf '\033'; sleep 2; printf '\033[B'; sleep 1; mark M6_back
-  printf '?'; sleep 2; mark M7_help; for i in $(seq 1 20); do printf '\033[B'; sleep 0.2; done; sleep 1; mark M7b_scrolled; printf '?'; sleep 2; printf '\033[B'; sleep 1; mark M8_help_closed; sleep 1; printf 'q' ) | \
+  printf '?'; sleep 2; mark M7_help; for i in $(seq 1 20); do printf '\033[B'; sleep 0.2; done; sleep 1; mark M7b_scrolled; printf '?'; sleep 2; printf '\033[B'; sleep 1; mark M8_help_closed
+  printf '\r'; sleep 2; mark M9_reopened; printf '\033[D'; sleep 2; mark M9b_left; printf '\033[B'; sleep 1; mark M9c_down
+  while [ ! -f "$OUT/epic.ready" ]; do sleep 1; done; sleep 2
+  printf '\r'; sleep 2; mark M10_epic; printf '\r'; sleep 2; mark M10b_part; printf '\033[D'; sleep 2; mark M10c_left; printf '\033[B'; sleep 1; mark M10d_down; sleep 1; printf 'q' ) | \
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-45} cols 120; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
@@ -66,7 +69,11 @@ expect "alice closes her spike as dropped" "$GONE_OUT" "as dropped"
 sleep 1
 touch "$OUT/ticket-tui.go"
 await_mark() { local i; for i in $(seq 1 60); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
-await_mark M8_help_closed; sleep 1
+await_mark M9c_down; sleep 1
+# an epic holding bob's ticket: the list opens it first, its page lists the ticket
+EPICJ="{\"action\":\"create\",\"title\":\"Averages\",\"goal\":\"averages that hold\",\"summary\":\"no NaN\",\"ticketIds\":[\"$TICKET\"]}"
+call $A "$SA" epic "$EPICJ" > /dev/null; touch "$OUT/epic.ready"
+await_mark M10d_down; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 expect "↓ from the tab bar reached the list's tabs" "$KEYS" "ticket-tabs"
 expect "…and ↓ again its tickets" "$KEYS" "ticket-tabs room tickets|ticket-tabs tickets"
@@ -120,4 +127,8 @@ expect "…and, scrolled with ↓, the states" "$HELP" "every step answered; its
 expect "the help held the keyboard: the ↓ under it reached no section" "$(grep -c 'room name="down" .*captured' "$LOG.keys")" "^[1-9]"
 AFTER_HELP=$(sed -n '/seq="?" captured/,$p' "$LOG.keys" | sed 1d | cut -d' ' -f2 | tr '\n' ' ')
 expect "…and ? gave the lists back: the next ↓ moved in the tickets section again" "$AFTER_HELP" "tickets"
+ALL_KEYS=$(grep -v ' room ' "$LOG.keys" | cut -d' ' -f2,3 | tr '\n' ' ')
+expect "← on a ticket's page goes back to the list, as everywhere: the next ↓ moves in it" "$ALL_KEYS" "tickets name=.return. ticket-steps name=.left. tickets name=.down."
+expect "from an epic's page into a ticket in it: the cursor on the ticket's steps, and ← goes back to the epic" "$ALL_KEYS" "ticket-parts name=\"return\" ticket-steps name=\"left\" ticket-parts name=\"down\""
+
 kill_all; summary
