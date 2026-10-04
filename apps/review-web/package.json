@@ -14,8 +14,9 @@
   "dependencies": {
     "@solidjs/web": "2.0.0-rc.13",
     "@tanstack/highlight": "1.0.0",
-    "solid-js": "2.0.0-rc.13",
-    "effect": "4.0.0"
+    "effect": "4.0.0",
+    "motion": "14.0.0",
+    "solid-js": "2.0.0-rc.13"
   },
   "devDependencies": {
     "@collagen/p2p": "workspace:*",
