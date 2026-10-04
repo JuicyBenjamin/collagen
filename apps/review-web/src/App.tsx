@@ -12,6 +12,7 @@ import { hostNow } from "./hostNow";
 import { HostBar } from "./components/HostBar";
 import { StackRow } from "./components/StackRow";
 import { DraftsBar } from "./components/DraftsBar";
+import { Unplaced } from "./components/Unplaced";
 import { GitHubActivity } from "./components/GitHubActivity";
 import { diffNow } from "./diffNow";
 import { placeWhy, whyOpening } from "./whyPanel";
@@ -258,6 +259,7 @@ function Header(props: { data: ReviewPageData }) {
       </div>
       <StackRow />
       <DraftsBar />
+      <Unplaced />
       <h1 class="purpose">{headline()}</h1>
       <Show when={beneath()}>
         <p class="summary">{beneath()}</p>

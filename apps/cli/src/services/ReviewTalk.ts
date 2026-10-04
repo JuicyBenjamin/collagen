@@ -48,19 +48,45 @@ const isPosted = (d: DraftComment) => d.status === "posted";
 /** What is not said yet on a review, on this machine: the AI's drafts and the reader's pending comments. */
 export const draftsOf = (ticketId: string) => StateStore.use((s) => s.get).pipe(Effect.map((state): ReadonlyArray<DraftComment> => state.drafts?.[ticketId] ?? []));
 
-const setDrafts = (ticketId: string, f: (ds: ReadonlyArray<DraftComment>) => ReadonlyArray<DraftComment>) =>
+/** The ids of the reader's latest finishes of a review from the page. */
+const finishedOf = (ticketId: string) => StateStore.use((s) => s.get).pipe(Effect.map((state): ReadonlyArray<string> => state.finished?.[ticketId] ?? []));
+
+/** Change a review's drafts — and, with `finished`, record that finish as
+ *  done in the same write, so it is never half recorded. */
+const setDrafts = (ticketId: string, f: (ds: ReadonlyArray<DraftComment>) => ReadonlyArray<DraftComment>, finished: string | null = null) =>
   StateStore.use((s) =>
     s.update((state) => {
       const next = f(state.drafts?.[ticketId] ?? []);
       const { [ticketId]: _gone, ...rest } = state.drafts ?? {};
-      return { ...state, drafts: next.length > 0 ? { ...rest, [ticketId]: [...next] } : rest };
+      const before = state.finished?.[ticketId] ?? [];
+      return {
+        ...state,
+        drafts: next.length > 0 ? { ...rest, [ticketId]: [...next] } : rest,
+        ...(finished !== null ? { finished: { ...state.finished, [ticketId]: [...before.filter((id) => id !== finished), finished].slice(-20) } } : {}),
+      };
     }),
   );
+
+/** One write at a time per review: every change to its drafts and pending
+ *  comments waits while a finish is under way — two tabs, or the page and
+ *  the agent, can neither finish it twice nor delete what is being sent. */
+const locks = new Map<string, Semaphore.Semaphore>();
+const one = <A, E, R>(ticketId: string, effect: Effect.Effect<A, E, R>) => {
+  let lock = locks.get(ticketId);
+  if (!lock) {
+    lock = Semaphore.makeUnsafe(1);
+    locks.set(ticketId, lock);
+  }
+  return lock.withPermit(effect);
+};
+
+
 
 /** Draft comments on a review's code, each placed on the diff as the reader's
  *  clone has it now (the commit it was read at goes with it): what cannot sit
  *  on a line of the diff is refused, with why, and the rest kept. */
-export const draftComments = Effect.fn("ReviewTalk.draft")(function* (ticketId: string, items: ReadonlyArray<DraftInput>) {
+export const draftComments = (ticketId: string, items: ReadonlyArray<DraftInput>) => one(ticketId, draftOnce(ticketId, items));
+const draftOnce = Effect.fn("ReviewTalk.draft")(function* (ticketId: string, items: ReadonlyArray<DraftInput>) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` };
   if (found.ticket.kind !== "review") return { error: `"${found.ticket.goal}" is a ${found.ticket.kind}: comments go on a review's code` };
@@ -83,7 +109,8 @@ export const draftComments = Effect.fn("ReviewTalk.draft")(function* (ticketId: 
 /** Accept AI drafts — the ones named, or all — into the reader's review: they
  *  are pending now, with their words as edited where an edit is given, and
  *  said when the review is finished. */
-export const acceptDrafts = Effect.fn("ReviewTalk.accept")(function* (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>> = {}) {
+export const acceptDrafts = (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>> = {}) => one(ticketId, acceptOnce(ticketId, ids, edits));
+const acceptOnce = Effect.fn("ReviewTalk.accept")(function* (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>>) {
   const waiting = (yield* draftsOf(ticketId)).filter(isAi);
   const chosen = ids === null ? waiting : waiting.filter((d) => ids.includes(d.id));
   const failed: Array<{ readonly id: string; readonly error: string }> = (ids ?? []).filter((id) => !waiting.some((d) => d.id === id)).map((id) => ({ id, error: "no such draft — accepted or declined already" }));
@@ -98,7 +125,8 @@ export const acceptDrafts = Effect.fn("ReviewTalk.accept")(function* (ticketId: 
 });
 
 /** A comment the reader wrote on the page, into their review: pending, said when they finish it. */
-export const addToReview = Effect.fn("ReviewTalk.addToReview")(function* (ticketId: string, spot: Spot, commit: string, body: string) {
+export const addToReview = (ticketId: string, spot: Spot, commit: string, body: string) => one(ticketId, addOnce(ticketId, spot, commit, body));
+const addOnce = Effect.fn("ReviewTalk.addToReview")(function* (ticketId: string, spot: Spot, commit: string, body: string) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies HostWrite;
   const text = body.trim();
@@ -109,7 +137,8 @@ export const addToReview = Effect.fn("ReviewTalk.addToReview")(function* (ticket
 });
 
 /** New words for a pending comment or a draft. */
-export const editDraft = Effect.fn("ReviewTalk.edit")(function* (ticketId: string, id: string, body: string) {
+export const editDraft = (ticketId: string, id: string, body: string) => one(ticketId, editOnce(ticketId, id, body));
+const editOnce = Effect.fn("ReviewTalk.edit")(function* (ticketId: string, id: string, body: string) {
   const text = body.trim();
   if (text.length === 0) return { done: 0, failed: [{ id, error: "it says nothing — delete it instead" }] } satisfies DraftsResult;
   if (!(yield* draftsOf(ticketId)).some((d) => d.id === id && !isPosted(d))) return { done: 0, failed: [{ id, error: "no such comment — said or deleted already" }] } satisfies DraftsResult;
@@ -119,7 +148,8 @@ export const editDraft = Effect.fn("ReviewTalk.edit")(function* (ticketId: strin
 
 /** Drop drafts or pending comments — the ones named; or, with none named,
  *  every one of a kind: the AI's drafts ("ai") or the review's ("pending"). */
-export const dropDrafts = Effect.fn("ReviewTalk.drop")(function* (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending" = "ai") {
+export const dropDrafts = (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending" = "ai") => one(ticketId, dropOnce(ticketId, ids, kind));
+const dropOnce = Effect.fn("ReviewTalk.drop")(function* (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending") {
   const before = (yield* draftsOf(ticketId)).length;
   yield* setDrafts(ticketId, (ds) => ds.filter((d) => isPosted(d) || (ids === null ? !(kind === "pending" ? isPending(d) : isAi(d)) : !ids.includes(d.id))));
   return before - (yield* draftsOf(ticketId)).length;
@@ -218,17 +248,11 @@ const sayOnce = Effect.fn("ReviewTalk.say")(function* (ticketId: string, spot: S
   return { ok: true as const, comment: shown ?? asShown(r.logged[0]!) } satisfies HostWrite;
 });
 
-/** One write at a time per review: two tabs, or the page and the agent,
- *  finishing the same review at once must not say it twice. */
-const locks = new Map<string, Semaphore.Semaphore>();
-const one = <A, E, R>(ticketId: string, effect: Effect.Effect<A, E, R>) => {
-  let lock = locks.get(ticketId);
-  if (!lock) {
-    lock = Semaphore.makeUnsafe(1);
-    locks.set(ticketId, lock);
-  }
-  return lock.withPermit(effect);
-};
+/** A finish from the page: its own id, and the pending comments it saw. */
+export interface Finish {
+  readonly id: string;
+  readonly pending: ReadonlyArray<string>;
+}
 
 const short = (c: string) => c.slice(0, 7);
 
@@ -241,9 +265,14 @@ const short = (c: string) => c.slice(0, 7);
  *  the host has it resumes in the room without writing to the host again.
  *  The review is of one commit: `commit`, the one the page shows (else the
  *  one its comments were written at) — comments written at another are
- *  refused until the reader confirms where they sit. One at a time per review. */
-export const submitReview = (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null) => one(ticketId, submitOnce(ticketId, verdict, body, commit, shownAs));
-const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null) {
+ *  refused until the reader confirms where they sit. One at a time per review.
+ *  From the page a finish names itself and the pending comments it saw
+ *  (`seen`): sent again once done, it is not said again; finding the review
+ *  changed under it (finished elsewhere, comments come or gone), it is
+ *  refused for the reader to look again. */
+export const submitReview = (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish | null = null) =>
+  one(ticketId, submitOnce(ticketId, verdict, body, commit, shownAs, seen));
+const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish | null) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies SubmitResult;
   const mine = yield* draftsOf(ticketId);
@@ -251,7 +280,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   if (refuses) return { error: refuses } satisfies SubmitResult;
   const sayAll = (ds: ReadonlyArray<DraftComment>) =>
     logComments(found, ds.map((d) => ({ id: d.id, spot: spotOf(d), commit: d.commit, body: d.body, drafted: d.drafted === true, ...(d.host ? { host: d.host } : {}) })));
-  const done = (ids: ReadonlyArray<string>) => setDrafts(ticketId, (ds) => ds.filter((d) => !ids.includes(d.id)));
+  const done = (ids: ReadonlyArray<string>, finished: string | null = null) => setDrafts(ticketId, (ds) => ds.filter((d) => !ids.includes(d.id)), finished);
 
   // a finish that stopped after the host had it: tell the room, nothing more
   const halfSaid = mine.filter(isPosted);
@@ -263,6 +292,12 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   }
 
   const pending = mine.filter(isPending);
+  if (seen !== null) {
+    if ((yield* finishedOf(ticketId)).includes(seen.id)) return { ok: true as const, said: 0, already: true as const } satisfies SubmitResult;
+    const now = new Set(pending.map((d) => d.id));
+    if (seen.pending.length !== now.size || seen.pending.some((id) => !now.has(id)))
+      return { error: "Your review changed since the page last read it — finished elsewhere, or comments added or deleted. Look again, then finish it." } satisfies SubmitResult;
+  }
   const text = body.trim();
   const to = yield* hostFor(found, shownAs);
   if ("refused" in to) return { error: to.refused } satisfies SubmitResult;
@@ -273,7 +308,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     // said by their own ids: a stop half way and a second go say each once
     const r = yield* sayAll(pending);
     if ("error" in r) return { error: r.error } satisfies SubmitResult;
-    yield* done(pending.map((d) => d.id));
+    yield* done(pending.map((d) => d.id), seen?.id ?? null);
     return { ok: true as const, said: pending.length, roomOnly: to.roomOnly } satisfies SubmitResult;
   }
 
@@ -306,8 +341,9 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     const copy = i === -1 ? undefined : unclaimed.splice(i, 1)[0];
     return { ...d, status: "posted", ...(copy ? { host: { id: Number(copy.id), url: copy.url } } : {}) };
   });
-  // the host has it: kept as posted until the room has it too
-  yield* setDrafts(ticketId, (ds) => ds.map((d) => posted.find((p) => p.id === d.id) ?? d));
+  // the host has it: kept as posted until the room has it too, and the
+  // finish recorded as done in the same write
+  yield* setDrafts(ticketId, (ds) => ds.map((d) => posted.find((p) => p.id === d.id) ?? d), seen?.id ?? null);
   const r = yield* sayAll(posted);
   if ("error" in r) return { error: `${r.error} — the review is on the pull request; finishing again tells the room without posting it twice` } satisfies SubmitResult;
   yield* done(posted.map((d) => d.id));
@@ -316,7 +352,8 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
 
 /** Confirm where a comment not said yet sits, at the commit the page shows
  *  now — after the branch moved under it. */
-export const repinDraft = Effect.fn("ReviewTalk.repin")(function* (ticketId: string, id: string, commit: string) {
+export const repinDraft = (ticketId: string, id: string, commit: string) => one(ticketId, repinOnce(ticketId, id, commit));
+const repinOnce = Effect.fn("ReviewTalk.repin")(function* (ticketId: string, id: string, commit: string) {
   if (!(yield* draftsOf(ticketId)).some((d) => d.id === id && !isPosted(d))) return { done: 0, failed: [{ id, error: "no such comment waiting" }] } satisfies DraftsResult;
   yield* setDrafts(ticketId, (ds) => ds.map((d) => (d.id === id ? { ...d, commit } : d)));
   return { done: 1, failed: [] } satisfies DraftsResult;

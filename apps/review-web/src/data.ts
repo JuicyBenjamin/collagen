@@ -301,6 +301,13 @@ export interface DraftsResult {
 /** A review finished: its pending comments said — in the room, and with the
  *  verdict on the pull request when there is one — or why not (all of it
  *  stays pending then). */
+/** A finish of the reader's review from the page: its own id (the same when
+ *  it is sent again) and the ids of the pending comments the page showed. */
+export interface Finish {
+  readonly id: string;
+  readonly pending: ReadonlyArray<string>;
+}
+
 export type SubmitResult =
   | {
       readonly ok: true;
@@ -309,6 +316,8 @@ export type SubmitResult =
       readonly url?: string;
       /** said in the room only — why not on the host too (no pull request, say) */
       readonly roomOnly?: string;
+      /** this finish was done already: nothing said again */
+      readonly already?: true;
     }
   | { readonly error: string };
 

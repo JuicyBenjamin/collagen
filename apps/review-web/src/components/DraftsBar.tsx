@@ -7,8 +7,9 @@ import { hostNow } from "../hostNow";
 export function DraftsBar() {
   const waiting = () => hostNow.drafts();
   const first = () => {
-    const d = waiting()[0];
-    if (d) document.getElementById(`draft-${d.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    // the first under a line; with none, the list of those on no line shown
+    const d = waiting().find((x) => !hostNow.unplaced().includes(x));
+    document.getElementById(d ? `draft-${d.id}` : "unplaced")?.scrollIntoView({ block: "center", behavior: "smooth" });
   };
   return (
     <Show when={waiting().length > 0}>
