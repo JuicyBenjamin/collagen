@@ -239,7 +239,7 @@ expect "filed: who wrote it read from the pull request" "$ASSUMED" "BUILT FROM A
 AT=$(echo "$ASSUMED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 QAT="{\"ticketId\":\"$AT\"}"
 CTX=$(call $A "$SA" review-context "$QAT")
-expect "review-context says the why is guessed, and from what" "$CTX" "assumed: .?alice-gh does not use collagen: every decision and fork here is alice.s AI.s guess"
+expect "review-context says the why is guessed, and from what" "$CTX" "assumed: .?alice.s AI guessed every decision and fork here about alice-gh.s code"
 expect "…each guess with what it rests on and how sure" "$CTX" "decisions\\[1\\]\\{id,title,what,assumedWhy,basis,confidence,where\\}:"
 expect "…the fork too" "$CTX" "a stream,paging,fewer round trips,the code,low"
 expect "the ticket is alice's to read: her review step, nobody to address it" "$(call $A "$SA" get-tickets '{}' | grep -A12 "id: $AT" | grep -cE '^ +address,')" "^0$"
@@ -261,14 +261,16 @@ COLLAGEN_GH="$E2E/fake-gh.mjs" FAKE_GH_DIR="$GH" start bob
 SB=$(mcp $B); wait_for_peer $B "$SB" alice; admitted bob
 wait_until "bob's agent reads the guesses, and how to answer them if he wrote the code" "IF YOUR USER WROTE THIS CODE .alice-gh's pull request.: they can take this review over" call $B "$SB" review-context "$QAT"
 CLAIM="{\"ticketId\":\"$AT\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"},{\"id\":\"d2\",\"verdict\":\"corrected\",\"title\":\"Pages of fifty\",\"what\":\"a page holds 50 rows\",\"userWhy\":\"the phone app runs out of memory\"},{\"id\":\"f1\",\"verdict\":\"wrong\",\"userWhy\":\"paging was never considered\"}],\"decisions\":[{\"title\":\"Sessions untouched\",\"what\":\"exports keep the session they run in\",\"userWhy\":\"auth is out of scope\"}]}"
-expect "its guesser cannot answer its own guesses" "$(call $A "$SA" claim-review "$CLAIM")" "only the code's author can answer them"
+git -C "$R" config user.email someone@example.com
+expect "its guesser cannot answer its own guesses — not being the code's author" "$(call $A "$SA" claim-review "$CLAIM")" "here you are someone@example.com in git, bob on GitHub. Only its author can take it over"
+git -C "$R" config user.email e2e@collagen.test
 echo carol > "$GH/login"; git -C "$R" config user.email carol@example.com
 expect "sharing no identity with the code's author, bob is refused, saying who is who" "$(call $B "$SB" claim-review "$CLAIM")" "written by alice-gh on GitHub, e2e@collagen.test in git .{1,3} and here you are carol@example.com in git, carol on GitHub"
 echo alice-gh > "$GH/login"
 CLAIMED=$(call $B "$SB" claim-review "$CLAIM")
 rm "$GH/login"; git -C "$R" config user.email e2e@collagen.test
 expect "signed in to the host as alice-gh, bob takes it over (his git email no help): each guess answered" "$CLAIMED" "taken over .Exports stream.*1 confirmed, 1 corrected, 1 wrong"
-wait_until "alice reads it as bob's now" "takenOver: .?bob wrote the code and took this over from alice's AI's guesses" call $A "$SA" review-context "$QAT"
+wait_until "alice reads it as bob's now" "takenOver: .?alice.s AI guessed this; bob, who wrote the code, answered each guess" call $A "$SA" review-context "$QAT"
 CTX=$(call $A "$SA" review-context "$QAT")
 expect "…the confirmed guess" "$CTX" "d1,Stream the rows,rows go out as they are read,confirmed"
 expect "…the corrected one, beside what was guessed" "$CTX" "d2,Pages of fifty,a page holds 50 rows,corrected,the phone app runs out of memory,..,a page holds 100 rows .{1,5}memory"

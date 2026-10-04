@@ -262,15 +262,15 @@ never calling GitHub itself: collagen wires it.
 
 ## A review built from assumptions
 
-Not everyone uses collagen. For a pull request whose author does not, ask your agent to
-review it and it builds the review from **assumptions** (`assume-review`): it reads what it
+For a change its author did not file in collagen — a colleague's pull request, say — ask
+your agent to review it and it builds the review from **assumptions** (`assume-review`): it reads what it
 can reach — the pull request's description and commits, the tickets it links (a Jira or
 Linear ticket, through whatever tools it has), the code — and infers the decisions and forks
 the author made. The page reads as any review does, units and all, but nothing on it passes
 for the author's word:
 
-- a banner says the review is built from assumptions, whose code it is, and what was read,
-  with how many of the guesses you have checked;
+- a banner says it is an assumption-based review, and whose, with how many guesses you
+  have checked;
 - every assumption carries its mark and **how sure** the AI is (high: the author said as
   much; medium: the code makes it likely; low: a reading of the code), what it **rests on**,
   and the AI's reading of the reason — in place of the person's words a told decision has;
@@ -279,8 +279,8 @@ for the author's word:
   **Ask** puts it to the author as a question, pending in your review on the line it is
   about, for you to edit and send with the rest when you finish the review.
 
-The ticket is yours to read: your review step, and nobody to address it, since the author
-is not in the room. Your agent adds to the assumptions with `assume-review` as it learns more.
+The ticket is yours to read: your review step, and nobody to address it, since its author
+did not file it. Your agent adds to the assumptions with `assume-review` as it learns more.
 
 **When the author joins**, their agent can take the review over (`claim-review`) — only
 theirs: they must share an identity with whoever wrote the code — signed in to the code's
