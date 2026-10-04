@@ -14,7 +14,7 @@ export function DraftsBar() {
     <Show when={waiting().length > 0}>
       <div class="drafts-bar" role="status">
         <span>
-          Your AI drafted <strong>{waiting().length === 1 ? "1 comment" : `${waiting().length} comments`}</strong> on this change — they sit beside the code, for you to accept, edit or decline.
+          Your AI drafted <strong>{waiting().length === 1 ? "1 comment" : `${waiting().length} comments`}</strong> on this change — they sit beside the code, for you to add to your review, edit or decline.
         </span>
         <button type="button" class="quiet small" onClick={first}>
           Show the first
@@ -22,8 +22,8 @@ export function DraftsBar() {
         <button type="button" class="quiet small" onClick={() => void hostNow.decline(null)}>
           Decline all
         </button>
-        <button type="button" class="banner-go" onClick={() => void hostNow.accept(null)} title="Say them all as yours: in the room, and on the pull request when there is one">
-          Post all
+        <button type="button" class="banner-go" onClick={() => void hostNow.accept(null)} title="Put them all in your review — said with the rest when you finish it">
+          Add all to review
         </button>
       </div>
     </Show>

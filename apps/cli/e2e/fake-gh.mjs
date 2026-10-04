@@ -44,6 +44,24 @@ if (a === "pr" && b === "review") {
   if (args.includes("--approve") && process.env.FAKE_GH_AUTHOR === "bob") fail("failed to create review: GraphQL: Can not approve your own pull request (addPullRequestReview)");
   out(null);
 }
+// a whole review: its body comes on stdin (gh api --input -); kept in reviews.log, its comments with the rest
+const reviewsFile = join(dir, "reviews.json");
+const reviews = () => (existsSync(reviewsFile) ? JSON.parse(readFileSync(reviewsFile, "utf8")) : {});
+if (a === "api" && args.includes("POST") && args.some((x) => /pulls\/7\/reviews$/.test(x))) {
+  const review = JSON.parse(readFileSync(0, "utf8"));
+  appendFileSync(join(dir, "reviews.log"), JSON.stringify(review) + "\n");
+  if (review.comments.some((c) => !["src/export.ts", "src/page.ts", "src/use.ts"].includes(c.path))) fail("gh: Unprocessable Entity (HTTP 422)");
+  const id = 500 + Object.keys(reviews()).length;
+  const made = review.comments.map((c, i) => ({ id: 2000 + id * 10 + i, body: c.body, path: c.path, line: c.line, side: c.side, start_line: c.start_line ?? null, start_side: c.start_side ?? null, commit_id: review.commit_id }));
+  writeFileSync(commentsFile, JSON.stringify([...comments(), ...made]));
+  writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [id]: made.map((c) => c.id) }));
+  out({ id, state: review.event === "APPROVE" ? "APPROVED" : review.event === "REQUEST_CHANGES" ? "CHANGES_REQUESTED" : "COMMENTED", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` });
+}
+const ofReview = args.map((x) => x.match(/pulls\/7\/reviews\/(\d+)\/comments$/)).find(Boolean);
+if (a === "api" && ofReview) {
+  const ids = reviews()[ofReview[1]] ?? [];
+  out([comments().filter((c) => ids.includes(c.id)).map(commentJson)]);
+}
 if (a === "api" && args.includes("POST")) {
   const f = { ...fields("-f"), ...fields("-F") };
   if (!["src/export.ts", "src/page.ts", "src/use.ts"].includes(f.path)) fail("gh: Validation Failed (HTTP 422)");

@@ -48,6 +48,13 @@ describe("reading the user's state file", () => {
     expect(state.preferredAi).toBe("codex");
   });
 
+  it("comments not said yet survive another part being unreadable — one broken draft takes only itself", () => {
+    const draft = { id: "d1", ticketId: "t1", file: "src/a.ts", line: 3, side: "RIGHT", commit: "abc", body: "why?", status: "pending", ts: 1 };
+    const got = salvageState(JSON.stringify({ preferredAi: null, rooms: {}, sent: [{ broken: true }], drafts: { t1: [draft, { id: "d2" }] } }));
+    expect(got.state.drafts).toEqual({ t1: [draft] });
+    expect(got.dropped.join(", ")).toMatch(/1 unsaid review comment/);
+  });
+
   it("junk is junk: a fresh state, and it says so", () => {
     expect(salvageState("not json").dropped[0]).toMatch(/not readable JSON/);
     expect(salvageState("[]").dropped[0]).toMatch(/not a state file/);

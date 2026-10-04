@@ -3,26 +3,35 @@ import type { Verdict } from "../data";
 import { hostNow } from "../hostNow";
 
 const VERDICTS: ReadonlyArray<{ readonly value: Verdict; readonly label: string; readonly hint: string }> = [
-  { value: "comment", label: "Comment", hint: "Say something without a verdict" },
+  { value: "comment", label: "Comment", hint: "Feedback without a verdict" },
   { value: "approve", label: "Approve", hint: "It can be merged" },
   { value: "request-changes", label: "Request changes", hint: "It needs changes before it is merged" },
 ];
 
-/** A review of the pull request, as GitHub's "Review changes" has it: words,
- *  and one of comment, approve or request changes — sent in the reader's
- *  name through their own gh. Your own pull request takes comments only.
- *  This reviews the pull request on GitHub; your take on the collagen ticket
- *  still goes through your agent. */
-export function ReviewComposer(props: { mine: boolean; onDone: () => void }) {
+/** Finishing the reader's review, as GitHub's "Finish your review" has it:
+ *  their words on the whole, a verdict, and every comment pending in the
+ *  review, said at once — in the room, and on the pull request as one review
+ *  through their own gh. Their own pull request takes comments only; with no
+ *  pull request the pending comments are said in the room alone. Their take
+ *  on the collagen ticket itself still goes through their agent. */
+export function ReviewComposer(props: { onDone: () => void }) {
   const [body, setBody] = createSignal("");
   const [verdict, setVerdict] = createSignal<Verdict>("comment");
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
+  const count = () => hostNow.pending().length;
+  const pull = () => hostNow.host()?.pull ?? null;
+  const onHost = () => hostNow.canWrite();
+  /** why a verdict cannot be picked, or null */
+  const barred = (v: Verdict): string | null =>
+    v === "comment" ? null : !onHost() ? "No open pull request to give a verdict on — your comments are said in the room" : pull()?.mine ? "You opened this pull request: GitHub only lets you comment on your own" : null;
+  const ready = () => !sending() && (verdict() === "approve" || (verdict() === "request-changes" ? body().trim().length > 0 : body().trim().length > 0 || count() > 0));
   const send = async () => {
+    if (!ready()) return;
     setSending(true);
     setSaid(null);
     try {
-      const r = await hostNow.review(verdict(), body());
+      const r = await hostNow.submit(verdict(), body());
       if ("error" in r) return setSaid(r.error);
       setBody("");
       props.onDone();
@@ -40,8 +49,12 @@ export function ReviewComposer(props: { mine: boolean; onDone: () => void }) {
         void send();
       }}
     >
+      <div class="composer-head">
+        <strong>Finish your review</strong>
+        <span>{count() === 0 ? "no comments pending" : count() === 1 ? "1 comment pending" : `${count()} comments pending`}</span>
+      </div>
       <textarea
-        placeholder={verdict() === "approve" ? "Anything to add (optional)" : "What do you think?"}
+        placeholder={verdict() === "approve" ? "Anything to add (optional)" : count() > 0 && verdict() === "comment" ? "Leave a comment on the whole (optional)" : "Leave a comment"}
         value={body()}
         onInput={(e) => setBody(e.currentTarget.value)}
         rows={4}
@@ -51,19 +64,27 @@ export function ReviewComposer(props: { mine: boolean; onDone: () => void }) {
       />
       <fieldset class="verdicts">
         {VERDICTS.map((v) => (
-          <label class={{ disabled: props.mine && v.value !== "comment" }} title={props.mine && v.value !== "comment" ? "You opened this pull request: GitHub only lets you comment on your own" : v.hint}>
-            <input type="radio" name="verdict" value={v.value} checked={verdict() === v.value} disabled={props.mine && v.value !== "comment"} onChange={() => setVerdict(v.value)} />
+          <label class={{ disabled: barred(v.value) !== null }} title={barred(v.value) ?? v.hint}>
+            <input type="radio" name="verdict" value={v.value} checked={verdict() === v.value} disabled={barred(v.value) !== null} onChange={() => setVerdict(v.value)} />
             {v.label}
           </label>
         ))}
       </fieldset>
+      <Show when={!onHost() && count() > 0}>
+        <p class="host-note left">Your comments are said in the room — there is no open pull request to put them on.</p>
+      </Show>
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">
+        <Show when={count() > 0}>
+          <button type="button" class="quiet discard" onClick={() => void hostNow.unpend(null)} title="Take every pending comment out of the review — said nowhere">
+            Discard review
+          </button>
+        </Show>
         <button type="button" class="quiet" onClick={() => props.onDone()}>
           Cancel
         </button>
-        <button type="submit" class="banner-go" disabled={sending() || (verdict() !== "approve" && body().trim().length === 0)}>
-          {sending() ? "Sending…" : "Submit review"}
+        <button type="submit" class="banner-go" disabled={!ready()}>
+          {sending() ? "Submitting…" : "Submit review"}
         </button>
       </div>
     </form>

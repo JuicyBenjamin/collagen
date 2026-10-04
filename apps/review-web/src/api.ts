@@ -1,5 +1,5 @@
 import { GET, live } from "@solidjs/web/server-functions";
-import type { AcceptResult, DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { DefinitionResult, DraftsResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -72,16 +72,19 @@ export const hostView = GET(async (ticketId: string): Promise<HostView> => {
   return run((b) => b.host(ticketId));
 });
 
-/** A review on the pull request in the reader's name — only ever on their
- *  click. Not a read: Solid refuses it from any page but this one. */
-export const sendReview = async (ticketId: string, verdict: Verdict, body: string): Promise<HostWrite> => {
+/** Finish the reader's review — only ever on their click: its pending
+ *  comments said, on the pull request as one review with their verdict and
+ *  words, and in the room. Not a read: Solid refuses it from any page but
+ *  this one. */
+export const submitReview = async (ticketId: string, verdict: Verdict, body: string, commit: string | null): Promise<SubmitResult> => {
   "use server";
-  return run((b) => b.review(ticketId, verdict, body));
+  return run((b) => b.submit(ticketId, verdict, body, commit));
 };
 
-/** A comment on a line — or a block of lines, from `start` to `line` — at
- *  the commit the page shows: said in the room as the reader's, and on the
- *  pull request too when there is an open one. */
+/** A single comment on a line — or a block of lines, from `start` to `line`
+ *  — at the commit the page shows, said at once (GitHub's "Add single
+ *  comment"): in the room as the reader's, and on the pull request too when
+ *  there is an open one. */
 export const sendLineComment = async (
   ticketId: string,
   file: string,
@@ -103,15 +106,36 @@ export const talkView = GET(async (ticketId: string): Promise<TalkView> => {
   return run((b) => b.talk(ticketId));
 });
 
-/** Accept the AI's drafts — by id, or all (null) — each said as the reader's,
- *  in the room and on the pull request; `edits` holds words the reader changed. */
-export const acceptDrafts = async (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>>): Promise<AcceptResult> => {
+/** A comment into the reader's review: pending, said when they finish it. */
+export const addToReview = async (
+  ticketId: string,
+  file: string,
+  line: number,
+  side: "LEFT" | "RIGHT",
+  body: string,
+  commit: string,
+  start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
+): Promise<HostWrite> => {
+  "use server";
+  return run((b) => b.addToReview(ticketId, file, line, side, body, commit, start));
+};
+
+/** Accept the AI's drafts — by id, or all (null) — into the reader's review;
+ *  `edits` holds words the reader changed. */
+export const acceptDrafts = async (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>>): Promise<DraftsResult> => {
   "use server";
   return run((b) => b.accept(ticketId, ids, edits));
 };
 
-/** Decline the AI's drafts — by id, or all (null). */
-export const declineDrafts = async (ticketId: string, ids: ReadonlyArray<string> | null): Promise<number> => {
+/** New words for a draft or a pending comment. */
+export const editDraft = async (ticketId: string, id: string, body: string): Promise<DraftsResult> => {
   "use server";
-  return run((b) => b.decline(ticketId, ids));
+  return run((b) => b.edit(ticketId, id, body));
+};
+
+/** Drop drafts or pending comments — by id; or, with null, every one of a
+ *  kind: the AI's ("ai") or the review's ("pending"). */
+export const dropDrafts = async (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending"): Promise<number> => {
+  "use server";
+  return run((b) => b.drop(ticketId, ids, kind));
 };

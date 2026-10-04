@@ -98,7 +98,14 @@ export function Hunk(props: {
     <Show when={!(props.continued && state() === "viewed")}>
     <div class={["hunk", { viewed: state() === "viewed", continued: props.continued }]}>
       <div class={["file", { continued: props.continued }]}>
-        <span class="head">{props.continued ? "⋯" : props.hunk.file}</span>
+        {/* a later change in the file: the band naming where it jumps to — and
+            the file, since it is what stays at the top while this part is read */}
+        <Show when={props.continued} fallback={<span class="head">{props.hunk.file}</span>}>
+          <span class="head">
+            <span class="cont-file">{props.hunk.file}</span>
+            <span class="cont-at">⋯ {props.hunk.header}</span>
+          </span>
+        </Show>
         <span class="file-side">
           <Show when={mine() !== null && !open()}>
             <button type="button" class="whole-toggle" onClick={() => setFull(!full())} title="Switch between what changed since you viewed it and the whole change against the base">

@@ -281,36 +281,6 @@ export const hostView = Effect.fn("ReviewView.host")(function* (ticketId: string
   } satisfies HostView;
 });
 
-/** The open pull request a write goes to — found from the ticket here, never
- *  taken from the page — and its host; or why there is none to write to. */
-const openPull = (ticketId: string) =>
-  Effect.gen(function* () {
-    const found = yield* reviewNamed(ticketId);
-    const link = found ? hostLink(found.review, found.project) : undefined;
-    const host = link ? hostOf(link) : undefined;
-    if (!found || !link || !host) return { error: "This review has no pull request collagen can reach." };
-    const named = yield* host.pull(link, found.review.branch);
-    if ("none" in named) return { error: named.none };
-    if (named.pull.state !== "open") return { error: `Pull request #${named.pull.number} is ${named.pull.state}: it takes no more reviews.` };
-    return { host, link, pull: named.pull } as { readonly host: RepoHost; readonly link: string; readonly pull: HostPull };
-  });
-
-/** A review on the pull request, in the reader's name: a comment, an
- *  approval, or a request for changes. A host keeps you from approving your
- *  own, and asks for words with anything but an approval — said here first. */
-export const sendReview = Effect.fn("ReviewView.sendReview")(function* (ticketId: string, verdict: Verdict, body: string) {
-  const to = yield* openPull(ticketId);
-  if ("error" in to) return to satisfies HostWrite;
-  const text = body.trim();
-  if (verdict !== "approve" && text.length === 0) return { error: verdict === "comment" ? "Write the comment first." : "Say what should change — GitHub asks for it." } satisfies HostWrite;
-  if (verdict !== "comment") {
-    const viewer = yield* to.host.viewer;
-    if ("user" in viewer && viewer.user.login === to.pull.author) return { error: "You opened this pull request: GitHub does not let you approve or request changes on your own." } satisfies HostWrite;
-  }
-  return yield* to.host.review(to.link, to.pull.number, verdict, text);
-});
-
-
 /** Only this machine's own browser, by name: the server listens on loopback,
  *  and a page elsewhere that re-points a hostname at 127.0.0.1 (DNS
  *  rebinding) still arrives with its own Host header — refused. */

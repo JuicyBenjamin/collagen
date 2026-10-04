@@ -306,14 +306,19 @@ export const ReviewComment = Schema.Struct({
 });
 export type ReviewComment = typeof ReviewComment.Type;
 
-/** A comment the reader's AI drafted on a review, waiting on the reader: on
- *  this machine only, never the log, until it is accepted (then it is said,
- *  a ReviewComment) or declined (then it is gone). */
+/** A comment not said yet, on this machine only, never the log: drafted by
+ *  the reader's AI and waiting on the reader ("ai" — absent on one written
+ *  before review comments could be pending), or in the reader's review in
+ *  progress ("pending": accepted from their AI, or written by them), said
+ *  with the rest when they finish the review. Declined or deleted, it is gone. */
 export const DraftComment = Schema.Struct({
   id: Schema.String,
   ticketId: Schema.String,
   ...CommentSpot,
   body: Schema.String,
+  status: Schema.optional(Schema.Literals(["ai", "pending"])),
+  /** in the review because the reader accepted it from their AI */
+  drafted: Schema.optional(Schema.Boolean),
   ts: Schema.Finite,
 });
 export type DraftComment = typeof DraftComment.Type;

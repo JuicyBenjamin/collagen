@@ -208,23 +208,31 @@ writes are not reads: Solid refuses them from any page but this one, so a site y
 cannot send a review in your name; collagen finds the pull request from the ticket itself
 and never takes a number from the page.
 
-## Your AI's comments
+## Your review, as on GitHub
+
+A review is written, then finished. Comments go into **your review** — pending, on your
+machine only — and are said together when you **finish** it: **Finish review** (top right,
+with how many are pending) takes your words on the whole and a verdict — Comment, Approve or
+Request changes — and says every pending comment at once: **in the room** as yours (the
+author's agent reads them in `review-context`) and, when the review has an open pull request,
+**on it as one review**, through your own `gh`. A refusal leaves the whole review pending;
+with no pull request the comments are said in the room alone, and a verdict has nowhere to
+go. **Discard review** drops what is pending.
+
+On a line's composer, **Start a review** (then **Add review comment**) puts a comment in your
+review; **Add single comment** says it at once, on its own, as GitHub's button does. A pending
+comment sits under its line marked **Pending**, to edit or delete until you finish.
+
+### Your AI's comments
 
 Ask your agent to review the change and it reads the code, then leaves each remark about
-particular lines as a **draft** on the page (`review-comments`), under the lines it is
-about — not as a wall of text in the chat. Drafts stay on your machine. A bar at the top
-says how many are waiting; each draft is marked **Draft from your AI**, its suggested
-changes shown as changes, with **Accept**, **Edit** and **Decline**.
-
-Accepting one says it as yours: **in the room** — a comment on the review's code that the
-author's agent reads in `review-context` — and, when the review has an open pull request,
-**on it too**, through your own `gh`, at the commit your AI read. Nothing else has to call
-GitHub: collagen wires it. **Post all** and **Decline all** take them at once, and your
-agent can do the same when you tell it to ("looks good, post them"). One GitHub refuses
-stays a draft with GitHub's reason; with no pull request the comments are said in the room
-alone, and the page and your agent say so. A comment you type on the page goes the same
-way. Comments said in the room show on the page once each, with the pull request's own;
-those your AI drafted are marked **with AI**.
+particular lines as a **draft** on the page (`review-comments`), under the lines it is about
+— not as a wall of text in the chat. A bar at the top says how many are waiting; each draft
+is marked **Draft from your AI**, its suggested changes shown as changes, with **Add to
+review**, **Edit** and **Decline**. Added, a draft is pending in your review like any comment
+you wrote, and goes out when you finish it — marked **with AI** once said. Your agent can do
+the same on your word ("looks good, post them": it adds them, then finishes the review),
+never calling GitHub itself: collagen wires it.
 
 ## Saying what you think
 

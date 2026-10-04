@@ -93,8 +93,8 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
 }
 
 /** A comment the reader's AI drafted, waiting on the reader: its words (a
- *  suggestion in them shown as one), and Accept — said as theirs, in the room
- *  and on the pull request — Edit, or Decline. */
+ *  suggestion in them shown as one), and Add to review — pending in their
+ *  review, said when they finish it — Edit, or Decline. */
 function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
   const [editing, setEditing] = createSignal(false);
   const [body, setBody] = createSignal(props.draft.body);
@@ -111,6 +111,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
       setBusy(false);
     }
   };
+
   return (
     <div class="line-comment draft" id={`draft-${props.draft.id}`}>
       <div class="line-comment-head">
@@ -131,25 +132,75 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
         <button type="button" class="quiet" disabled={busy()} onClick={() => setEditing(!editing())}>
           {editing() ? "Done editing" : "Edit"}
         </button>
-        <button type="button" class="banner-go" disabled={busy() || body().trim().length === 0} onClick={() => void accept()} title="Say it as yours: in the room, and on the pull request when there is one">
-          {busy() ? "Posting…" : "Accept"}
+        <button type="button" class="banner-go" disabled={busy() || body().trim().length === 0} onClick={() => void accept()} title="Put it in your review — said with the rest when you finish it">
+          {busy() ? "Adding…" : "Add to review"}
         </button>
       </div>
     </div>
   );
 }
 
-/** The comments on one line of a hunk, and the drafts the reader's AI left
- *  there — a block of lines' sit under its last line, as on GitHub. */
+/** A comment pending in the reader's review: theirs (or their AI's, taken
+ *  in), said with the rest when they finish it — to edit or delete till then. */
+function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
+  const [editing, setEditing] = createSignal(false);
+  const [body, setBody] = createSignal(props.comment.body);
+  const replaces = () => {
+    const d = props.comment;
+    return d.side === "RIGHT" && (d.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(d.startLine ?? d.line, d.line) : null;
+  };
+  const save = () => {
+    const text = body().trim();
+    if (text.length > 0 && text !== props.comment.body) void hostNow.edit(props.comment.id, text);
+    setEditing(false);
+  };
+  return (
+    <div class="line-comment pending-review">
+      <div class="line-comment-head">
+        <span class="pending-badge">Pending</span>
+        <Show when={props.comment.drafted}>
+          <span class="drafted-mark" title="Drafted by your AI, taken into your review">with AI</span>
+        </Show>
+        <span class="line-comment-when">on {linesOf(props.comment)}</span>
+      </div>
+      <Show
+        when={editing()}
+        fallback={<For each={bodyParts(props.comment.body)}>{(part) => (part.kind === "text" ? <p class="line-comment-body">{part.text}</p> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
+      >
+        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
+      </Show>
+      <Show when={hostNow.refusal(props.comment.id)}>{(why) => <p class="host-error">{why()}</p>}</Show>
+      <div class="composer-actions">
+        <button type="button" class="quiet" onClick={() => void hostNow.unpend([props.comment.id])}>
+          Delete
+        </button>
+        <Show when={editing()} fallback={<button type="button" class="quiet" onClick={() => setEditing(true)}>Edit</button>}>
+          <button type="button" class="quiet" onClick={() => (setBody(props.comment.body), setEditing(false))}>
+            Cancel
+          </button>
+          <button type="button" class="banner-go" onClick={save}>
+            Save
+          </button>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+/** The comments on one line of a hunk, the ones pending in the reader's
+ *  review, and the drafts their AI left there — a block of lines' sit under
+ *  its last line, as on GitHub. */
 export function LineThread(props: { file: string; side: "LEFT" | "RIGHT"; line: number; codeOf: CodeOf }) {
   const here = () => hostNow.commentsAt(props.file, props.side, props.line);
+  const inReview = () => hostNow.pendingAt(props.file, props.side, props.line);
   const drafted = () => hostNow.draftsAt(props.file, props.side, props.line);
   return (
-    <Show when={here().length > 0 || drafted().length > 0}>
+    <Show when={here().length > 0 || inReview().length > 0 || drafted().length > 0}>
       <tr class="thread-row">
         <td colspan={3}>
           <div class="thread">
             <For each={here()}>{(c) => <Comment comment={c} codeOf={props.codeOf} />}</For>
+            <For each={inReview()}>{(d) => <Pending comment={d} codeOf={props.codeOf} />}</For>
             <For each={drafted()}>{(d) => <Draft draft={d} codeOf={props.codeOf} />}</For>
           </div>
         </td>
@@ -187,13 +238,15 @@ export function LineComposer(props: {
       box!.setSelectionRange(at + insert.length, at + insert.length);
     });
   };
-  const send = async () => {
+  /** into the review (pending, as GitHub's "Start a review") or, single, said at once */
+  const send = async (single: boolean) => {
     const text = body().trim();
     if (text.length === 0 || sending()) return;
     setSending(true);
     setSaid(null);
     try {
-      const r = await hostNow.comment(props.file, props.to.side, props.to.line, text, block() ? props.from : null);
+      const start = block() ? props.from : null;
+      const r = single ? await hostNow.comment(props.file, props.to.side, props.to.line, text, start) : await hostNow.addToReview(props.file, props.to.side, props.to.line, text, start);
       if ("error" in r) return setSaid(r.error);
       setBody("");
       close();
@@ -211,7 +264,7 @@ export function LineComposer(props: {
             class="line-composer"
             onSubmit={(e) => {
               e.preventDefault();
-              void send();
+              void send(false);
             }}
           >
             <div class="composer-head">
@@ -232,7 +285,7 @@ export function LineComposer(props: {
               value={body()}
               onInput={(e) => setBody(e.currentTarget.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send();
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send(false);
                 if (e.key === "Escape") close();
               }}
             />
@@ -241,8 +294,11 @@ export function LineComposer(props: {
               <button type="button" class="quiet" onClick={close}>
                 Cancel
               </button>
-              <button type="submit" class="banner-go" disabled={sending() || body().trim().length === 0}>
-                {sending() ? "Sending…" : "Comment"}
+              <button type="button" class="quiet" disabled={sending() || body().trim().length === 0} onClick={() => void send(true)} title="Say it now, on its own — not as part of your review">
+                Add single comment
+              </button>
+              <button type="submit" class="banner-go" disabled={sending() || body().trim().length === 0} title="Keep it in your review, said with the rest when you finish it">
+                {sending() ? "Adding…" : hostNow.pending().length > 0 ? "Add review comment" : "Start a review"}
               </button>
             </div>
           </form>
