@@ -10,6 +10,8 @@ import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
 import { steeringLine, steeringOf } from "../lib/steering";
+import { describeIdentity, ownIdentities } from "./Authorship";
+import { hostOf } from "./RepoHost";
 
 export type RoomService = Context.Service.Shape<typeof Room>;
 
@@ -227,6 +229,47 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
                 const fresh = prev?.has(r.ticketId) !== true;
                 yield* notify(myThreadFor(ticket, trace, identity.pubkey, r.author), r.author, r.authorName, ticket, "revised the why", reviewUpdateText(ticket, r, fresh));
+              }
+            }),
+          ),
+          Stream.runDrain,
+          Effect.forkScoped,
+        );
+        // a review built from guesses about this person's own code: their agent
+        // is told once — whenever it arrived — so it can answer the guesses
+        // from what it knows of why its person wrote it, with little asked.
+        // Who wrote what does not change in a run: a review that is not theirs is asked about once
+        const notMine = new Set<string>();
+        yield* SubscriptionRef.changes(room.reviews).pipe(
+          Stream.mapEffect(
+            Effect.fnUntraced(function* (all) {
+              const guessed = all.filter((r) => r.assumed && !r.claimed && r.author !== identity.pubkey && (r.assumed.identities?.length ?? 0) > 0);
+              if (guessed.length === 0) return;
+              const told = new Set((yield* store.get).toldGuessed ?? []);
+              const tickets = yield* SubscriptionRef.get(room.tickets);
+              for (const r of guessed) {
+                const asked = `${r.ticketId}|${r.assumed!.identities!.join(",")}`;
+                if (told.has(r.ticketId) || notMine.has(asked)) continue;
+                const ticket = tickets.get(r.ticketId);
+                if (!ticket) continue;
+                const clone = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+                const mine = yield* ownIdentities(clone?.path, r.link ? hostOf(r.link) : undefined);
+                const shared = mine.find((m) => r.assumed!.identities!.includes(m));
+                if (!shared) {
+                  notMine.add(asked);
+                  continue;
+                }
+                yield* store.update((s) => ({ ...s, toldGuessed: [...(s.toldGuessed ?? []), r.ticketId] }));
+                const steer = steeringLine(steeringOf(yield* store.get));
+                const trace = yield* SubscriptionRef.get(room.trace);
+                yield* notify(
+                  myThreadFor(ticket, trace, identity.pubkey, r.author),
+                  r.author,
+                  r.authorName,
+                  ticket,
+                  "guessed why your user wrote their code",
+                  `${r.authorName}'s AI built a review of your user's code from guesses about why they wrote it: "${ticket.title ?? ticket.goal}" [ticket ${ticket.id}] — the code is theirs (${describeIdentity(shared)}). ${steer} Answer the guesses for them with claim-review: read them (review-context), then answer from what you already know of why your user wrote it — your conversations with them, their commits, the tickets behind it — and add the decisions the guesses missed. Ask your user only what that does not settle. Then tell them in one line that the review is theirs.`,
+                );
               }
             }),
           ),
