@@ -227,8 +227,10 @@ Request changes — and says every pending comment at once: **in the room** as y
 author's agent reads them in `review-context`) and, when the review has an open pull request,
 **on it as one review**, through your own `gh`, under whoever `gh` is signed in as at that
 moment — if that is no longer who the page showed, nothing is sent and the page says who it
-is now. A refusal leaves the whole review pending; two finishes at once (two tabs, or the
-page and your agent) say it once. With no pull request the comments are said in the room
+is now. A refusal leaves the whole review pending. A finish is said once: sent again it
+is not repeated, and one from a tab that no longer shows the review as it is (finished in
+another tab, comments added or deleted since) is refused for you to look again. While a
+finish is under way, nothing in the review can be changed or deleted. With no pull request the comments are said in the room
 alone: a verdict, or words on the whole, would have nowhere to go, so the page asks for
 neither. On **your own pull request** — the one you are signed in to `gh` as opened —
 nothing is posted to GitHub, where you would be its only reader: your comments stay in
@@ -236,7 +238,9 @@ collagen, and the page says so. **Discard review** drops what is pending.
 
 A review is of one commit: the one the page shows. A comment written before the branch moved
 says **Written at …** under it, as its lines may not be the ones it meant; **Keep it here**
-confirms it where it shows now, or delete it — until then, finishing refuses it. Should a
+confirms it where it shows now, or delete it — until then, finishing refuses it. A comment
+whose line the diff no longer shows at all — its file gone or renamed — is listed at the top
+of the page, to delete or decline there. Should a
 finish stop after GitHub has the review but before the room does, its comments stay marked
 **On GitHub**; finishing again tells the room without posting them twice.
 

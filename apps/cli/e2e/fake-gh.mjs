@@ -48,6 +48,8 @@ if (a === "pr" && b === "review") {
 const reviewsFile = join(dir, "reviews.json");
 const reviews = () => (existsSync(reviewsFile) ? JSON.parse(readFileSync(reviewsFile, "utf8")) : {});
 if (a === "api" && args.includes("POST") && args.some((x) => /pulls\/7\/reviews$/.test(x))) {
+  // GitHub taking its time, while a test does something else meanwhile
+  if (existsSync(join(dir, "slow-review"))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
   const review = JSON.parse(readFileSync(0, "utf8"));
   appendFileSync(join(dir, "reviews.log"), JSON.stringify(review) + "\n");
   if (review.comments.some((c) => !["src/export.ts", "src/page.ts", "src/use.ts"].includes(c.path))) fail("gh: Unprocessable Entity (HTTP 422)");

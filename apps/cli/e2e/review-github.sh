@@ -42,6 +42,9 @@ sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" 
 sfn() { node "$E2E/sfn.mjs" "$ORIGIN/review/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 post() { node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
 calls() { cat "$GH/calls.log" 2>/dev/null; }
+# a finish from the page: its own id (fresh unless given) and the pending comments it shows
+seen() { python3 -c 'import json,sys,uuid; v=json.loads(sys.argv[1]); print(json.dumps({"id": sys.argv[2] or str(uuid.uuid4()), "pending": [p["id"] for p in v["pending"]]}, separators=(",", ":")))' "$(sfn talkView "[\"$1\"]")" "${2:-}"; }
+submit() { post submitReview "[\"$1\",\"$2\",\"$3\",${4:-null},${5:-null},$(seen "$1" "${6:-}")]"; }
 reviewed() { tail -1 "$GH/reviews.log" 2>/dev/null; }
 wait_until "the review's data is served" '"commit"' sfn reviewData "[\"$TICKET\"]"
 SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
@@ -50,7 +53,7 @@ echo "## not signed in: the page says how to sign in, and offers nothing to send
 touch "$GH/signed-out"
 OUTSIDE=$(sfn hostView "[\"$TICKET\"]")
 expect "who is signed in: nobody, and how to fix it" "$OUTSIDE" '"viewer":null,"signIn":"Not signed in to GitHub \(.*gh auth login'
-expect "…and a review sent anyway is refused in words" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null,null]")" '"error":"Cannot approve here — Could not read pull request #7: .*gh auth login'
+expect "…and a review sent anyway is refused in words" "$(submit "$TICKET" approve "")" '"error":"Cannot approve here — Could not read pull request #7: .*gh auth login'
 rm "$GH/signed-out"
 
 echo "## the review on GitHub: who is signed in, its pull request, its comments, its stack"
@@ -76,7 +79,6 @@ expect "…and when GitHub was asked" "$VIEW" '"checkedAt":"20[0-9]{2}-'
 expect "gh was asked for the pull request by the number in the link" "$(calls)" '\["pr","view","7","--repo","acme/sandbox","--json"'
 
 echo "## a review in the reader's name, finished at once"
-submit() { post submitReview "[\"$1\",\"$2\",\"$3\",${4:-null},${5:-null}]"; }
 expect "approving, with nothing pending" "$(submit "$TICKET" approve "")" '^\{"ok":true,"said":0,"url":"https://github.com/acme/sandbox/pull/7#pullrequestreview-500"\}$'
 expect "…goes to GitHub as one review, on the pull request found from the ticket" "$(calls | grep -c '"api","-X","POST","repos/acme/sandbox/pulls/7/reviews","--input","-"')" "^1$"
 expect "…an approval, at the commit the page shows" "$(reviewed)" "^\{\"commit_id\":\"$SHOWN\",\"event\":\"APPROVE\",\"comments\":\[\]\}$"
@@ -91,7 +93,7 @@ N=$(calls | wc -l)
 expect "a comment on your own pull request is kept in collagen" "$(post sendLineComment "[\"$OWN\",\"src/export.ts\",2,\"RIGHT\",\"note to self\",\"$SHOWN\",null,null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"note to self"'
 expect "…and never posted to GitHub, where you would be its only reader" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
 N=$(calls | wc -l)
-expect "a write from another site is refused" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null,null]" http://evil.example)" "^HTTP 403$"
+expect "a write from another site is refused" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null,null,{\"id\":\"0123abcd\",\"pending\":[]}]" http://evil.example)" "^HTTP 403$"
 expect "…and gh was never asked" "$(calls | wc -l | tr -d ' ')" "^$(echo $N | tr -d ' ')$"
 
 echo "## a write goes out under whoever gh is signed in as now"
@@ -167,15 +169,35 @@ expect "…still pending, saying where it was written" "$TALK" "\"pending\":\[\{
 MID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["pending"][0]["id"])' <<< "$TALK")
 expect "the reader confirms where it sits" "$(post repinDraft "[\"$TICKET\",\"$MID\",\"$SHOWN\"]")" '^\{"done":1,"failed":\[\]\}$'
 
-echo "## two finishes at once say the review once"
-N=$(calls | grep -c '"POST","repos/acme/sandbox/pulls/7/reviews"')
-submit "$TICKET" comment "" "\"$SHOWN\"" > "$OUT/finish1" & F1=$!
-submit "$TICKET" comment "" "\"$SHOWN\"" > "$OUT/finish2" & F2=$!
+echo "## two tabs finish the same review at once: it is said once"
+REVIEWS() { calls | grep -c '"POST","repos/acme/sandbox/pulls/7/reviews"'; }
+N=$(REVIEWS)
+TAB1=$(seen "$TICKET"); TAB2=$(seen "$TICKET")
+post submitReview "[\"$TICKET\",\"comment\",\"Both tabs say this\",\"$SHOWN\",null,$TAB1]" > "$OUT/finish1" & F1=$!
+post submitReview "[\"$TICKET\",\"comment\",\"Both tabs say this\",\"$SHOWN\",null,$TAB2]" > "$OUT/finish2" & F2=$!
 wait $F1 $F2
 expect "one finishes it" "$(cat "$OUT/finish1" "$OUT/finish2" | grep -c '"ok":true,"said":1')" "^1$"
-expect "…the other finds nothing left to finish" "$(cat "$OUT/finish1" "$OUT/finish2")" 'Write something, or add comments to your review first.'
-expect "…one review on GitHub" "$(calls | grep -c '"POST","repos/acme/sandbox/pulls/7/reviews"')" "^$((N + 1))$"
+expect "…the other finds the review changed under it, and says nothing" "$(cat "$OUT/finish1" "$OUT/finish2")" 'Your review changed since the page last read it'
+expect "…one review on GitHub" "$(REVIEWS)" "^$((N + 1))$"
 expect "…said once in the room" "$(talk "$TICKET" | grep -o '"body":"from before"' | wc -l | tr -d ' ')" "^1$"
+
+echo "## the same finish sent again is not said again"
+N=$(REVIEWS)
+expect "an approval with words" "$(submit "$TICKET" approve "Ship it." "\"$SHOWN\"" null 5eed0001-0000-4000-8000-000000000001)" '"ok":true,"said":0,"url"'
+expect "…sent again (a retry, a second click): done already, nothing said" "$(submit "$TICKET" approve "Ship it." "\"$SHOWN\"" null 5eed0001-0000-4000-8000-000000000001)" '^\{"ok":true,"said":0,"already":true\}$'
+expect "…one review on GitHub" "$(REVIEWS)" "^$((N + 1))$"
+
+echo "## a comment deleted while GitHub takes the review waits for it"
+post addToReview "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"on its way\",\"$SHOWN\",null]" > /dev/null
+touch "$GH/slow-review"
+submit "$TICKET" comment "" "\"$SHOWN\"" > "$OUT/finish3" & F3=$!
+sleep 0.5
+DROPPED=$(post dropDrafts "[\"$TICKET\",null,\"pending\"]")
+wait $F3
+rm "$GH/slow-review"
+expect "the finish says it" "$(cat "$OUT/finish3")" '"ok":true,"said":1'
+expect "…the delete, waiting its turn, finds nothing left to delete" "$DROPPED" "^0$"
+expect "…in the room as on GitHub" "$(talk "$TICKET")" '"body":"on its way"'
 
 expect "a draft on a ticket that is not one is refused" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"nope\"}")" "^failed: no ticket nope"
 
@@ -185,8 +207,8 @@ BARE=$(echo "$BARE_ASK" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 call $A "$SA" review-comments "{\"action\":\"draft\",\"ticketId\":\"$BARE\",\"comments\":[{\"file\":\"src/export.ts\",\"line\":2,\"body\":\"room only\"}]}" > /dev/null
 call $A "$SA" review-comments "{\"action\":\"accept\",\"ticketId\":\"$BARE\"}" > /dev/null
 N=$(calls | wc -l)
-expect "a verdict has nowhere to go" "$(post submitReview "[\"$BARE\",\"approve\",\"\",null,null]")" '"error":"Cannot approve here — the review names no pull request'
-expect "words on the whole have nowhere to go either: refused, nothing said" "$(post submitReview "[\"$BARE\",\"comment\",\"Looks fine overall\",null,null]")" '"error":"Words on the whole have nowhere to go here — the review names no pull request'
+expect "a verdict has nowhere to go" "$(submit "$BARE" approve "")" '"error":"Cannot approve here — the review names no pull request'
+expect "words on the whole have nowhere to go either: refused, nothing said" "$(submit "$BARE" comment "Looks fine overall")" '"error":"Words on the whole have nowhere to go here — the review names no pull request'
 expect "…the review still pending" "$(talk "$BARE" | count pending)" "^1$"
 expect "finished, the review is said in the room only, and why" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$BARE\"}")" "^review finished: 1 comment\(s\) said in the room as your user's — not on GitHub: the review names no pull request"
 expect "…GitHub never asked to post" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"

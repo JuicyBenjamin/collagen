@@ -497,5 +497,8 @@ export const LocalState = Schema.Struct({
   /** What the person's AI drafted on reviews, waiting on their word: ticket
    *  id → drafts. Never leaves this machine; accepted ones go on the log. */
   drafts: Schema.optional(Schema.Record(Schema.String, Schema.Array(DraftComment))),
+  /** The reader's reviews finished from the page: ticket id → the ids of
+   *  its latest finishes, so the same finish sent again is not said twice. */
+  finished: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
 });
 export type LocalState = typeof LocalState.Type;
