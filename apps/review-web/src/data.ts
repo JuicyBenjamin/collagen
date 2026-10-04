@@ -42,6 +42,20 @@ export interface Decision {
   /** on a review built from assumptions: what the guess rests on, and how sure the AI is */
   readonly basis?: string;
   readonly confidence?: Confidence;
+  /** once the code's author took it over: what they made of the guess (absent: still a guess) */
+  readonly verdict?: GuessVerdict;
+  /** the guess a correction replaced */
+  readonly guess?: Guess;
+}
+
+/** What the code's author made of a guess. */
+export type GuessVerdict = "confirmed" | "corrected" | "wrong";
+
+/** A guess as the AI made it, kept beside the decision that replaced it. */
+export interface Guess {
+  readonly what: string;
+  readonly why?: string;
+  readonly basis?: string;
 }
 
 /** How sure an AI is of something it inferred rather than was told. */
@@ -64,6 +78,8 @@ export interface Fork {
   readonly by?: "user" | "agent";
   readonly basis?: string;
   readonly confidence?: Confidence;
+  readonly verdict?: GuessVerdict;
+  readonly guess?: Guess;
 }
 
 /** A unit of the change: code that together achieves one thing, each hunk
@@ -114,6 +130,8 @@ export interface ReviewPageData {
     readonly forks: ReadonlyArray<Fork>;
     /** present when the why was inferred, not told */
     readonly assumed?: Assumed;
+    /** present once the code's author took it over: whose AI guessed it */
+    readonly claimed?: { readonly guessedBy: string; readonly guessedByName: string; readonly at: number };
     readonly ts: number;
   };
   /** where the diff came from, in words for the page */

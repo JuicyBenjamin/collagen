@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
-import { emptyReview, mergeReview, ReviewContext } from "./review";
+import { claimReview, emptyReview, mergeReview, ReviewContext, supersedes } from "./review";
 
 const base = emptyReview("t1", "k-alice", "alice");
 
@@ -96,5 +96,61 @@ describe("a review built from assumptions", () => {
     const got = Schema.decodeUnknownSync(ReviewContext)(old);
     expect(got.assumed).toBeUndefined();
     expect(got.decisions[0]!.basis).toBeUndefined();
+  });
+});
+
+describe("the code's author takes an assumed review over", () => {
+  const guessed = mergeReview(emptyReview("t", "alice-key", "alice"), {
+    summary: "Big exports finish",
+    assumed: { author: "octocat", sources: ["PR #7"] },
+    decisions: [
+      { title: "Stream the rows", what: "rows go out as read", agentWhy: "timeouts", basis: "the description", confidence: "high", where: ["src/export.ts:2"] },
+      { title: "Pages of 100", what: "a page holds 100 rows", agentWhy: "memory", basis: "a constant", confidence: "low", where: ["src/page.ts:2"] },
+      { title: "Strings out", what: "rows become strings", agentWhy: "simpler", basis: "the map", confidence: "medium", where: ["src/export.ts:2"] },
+      { title: "Retry", what: "it retries", agentWhy: "flaky", basis: "a loop", confidence: "low", where: [] },
+    ],
+    forks: [{ at: "src/export.ts:2", chose: "a stream", instead: "paging", why: "round trips", basis: "the code", confidence: "low" }],
+  }, 5);
+
+  it("answers each guess as they say, keeps the unanswered ones guesses, and is theirs from then on", () => {
+    const told = claimReview(
+      guessed,
+      { key: "octo-key", name: "octocat" },
+      [
+        { id: "d1", verdict: "confirmed" },
+        { id: "d2", verdict: "corrected", title: "Pages of 50", what: "a page holds 50 rows", userWhy: "the mobile client's memory" },
+        { id: "d3", verdict: "wrong", userWhy: "strings were a stopgap; objects next" },
+        { id: "f1", verdict: "corrected", chose: "a stream", instead: "a job queue", userWhy: "no infra for a queue" },
+      ],
+      { decisions: [{ title: "No auth change", what: "exports keep the session", userWhy: "out of scope" }] },
+      9,
+    );
+    expect(told.author).toBe("octo-key");
+    expect(told.claimed).toEqual({ guessedBy: "alice-key", guessedByName: "alice", at: 9 });
+    expect(told.assumed).toEqual(guessed.assumed);
+    const [d1, d2, d3, d4, d5] = told.decisions;
+    expect(d1).toMatchObject({ verdict: "confirmed", basis: "the description" });
+    expect(d2).toMatchObject({ verdict: "corrected", title: "Pages of 50", what: "a page holds 50 rows", userWhy: "the mobile client's memory", guess: { what: "a page holds 100 rows", why: "memory", basis: "a constant" } });
+    expect(d2!.basis).toBeUndefined();
+    expect(d3).toMatchObject({ verdict: "wrong", userWhy: "strings were a stopgap; objects next" });
+    expect(d4!.verdict).toBeUndefined();
+    expect(d5).toMatchObject({ id: "d5", title: "No auth change", userWhy: "out of scope" });
+    expect(told.forks[0]).toMatchObject({ verdict: "corrected", instead: "a job queue", why: "no infra for a queue", by: "user", guess: { what: "a stream over paging" } });
+    expect(Schema.decodeUnknownSync(ReviewContext)(JSON.parse(JSON.stringify(told)))).toEqual(told);
+  });
+
+  it("a taken-over review beats a guessed one, whatever their clocks say and however they arrive", () => {
+    const told = claimReview(guessed, { key: "octo-key", name: "octocat" }, [{ id: "d1", verdict: "confirmed" }], {}, 9);
+    const lateGuess = mergeReview(guessed, { decisions: [{ title: "x", what: "y", agentWhy: "z", basis: "b", confidence: "low" }] }, 99);
+    expect(supersedes(told, lateGuess)).toBe(true);
+    expect(supersedes(lateGuess, told)).toBe(false);
+    // between two of one kind, the later
+    expect(supersedes(lateGuess, guessed)).toBe(true);
+    const laterTold = mergeReview(told, { decisions: [{ title: "More", what: "m", userWhy: "u" }] }, 12);
+    expect(supersedes(laterTold, told)).toBe(true);
+    expect(supersedes(told, laterTold)).toBe(false);
+    // a told review never filed from guesses is ranked with the taken over
+    const plain = mergeReview(emptyReview("t", "k", "n"), { summary: "s", decisions: [{ title: "a", what: "b", userWhy: "c" }] }, 1);
+    expect(supersedes(plain, lateGuess)).toBe(true);
   });
 });
