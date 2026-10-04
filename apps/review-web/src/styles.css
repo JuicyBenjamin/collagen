@@ -98,7 +98,10 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 /* the code */
 /* not clipped, so the also-under list can open over what follows; the
    rounding is the header's and the code's own instead */
-.hunk { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+/* the card clips to its own rounded edge (out to its border, where the header
+   overlaps it): so the header pushed to the card's bottom as it scrolls away
+   rounds with it — while stuck mid-card it is out of reach of the clip */
+.hunk { margin-bottom: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: clip; overflow-clip-margin: 1px; }
 /* the file's header — its name, Whole file, Viewed — stays at the top of the
    window while its hunk is read, as the why beside it does, and keeps its
    rounded top there. It is a square of the page's own colour laid over the
