@@ -86,7 +86,10 @@ expect "requesting changes without saying which is refused before GitHub is aske
 expect "a comment saying nothing, with nothing pending, is refused" "$(submit "$TICKET" comment "")" '"error":"Write something, or add comments to your review first."'
 expect "a verdict that is not one is a bad request" "$(submit "$TICKET" merge "")" '"error":"bad request"'
 expect "your own pull request is yours to comment on, not to approve" "$(sfn hostView "[\"$OWN\"]")" '"pull":\{"number":6,.*"mine":true'
-expect "…approving it is refused in words, before GitHub is asked" "$(submit "$OWN" approve "")" '"error":"You opened this pull request'
+expect "…approving it is refused in words, before GitHub is asked" "$(submit "$OWN" approve "")" '"error":"Cannot approve here — it is your own pull request'
+N=$(calls | wc -l)
+expect "a comment on your own pull request is kept in collagen" "$(post sendLineComment "[\"$OWN\",\"src/export.ts\",2,\"RIGHT\",\"note to self\",\"$SHOWN\",null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"note to self"'
+expect "…and never posted to GitHub, where you would be its only reader" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
 N=$(calls | wc -l)
 expect "a write from another site is refused" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null]" http://evil.example)" "^HTTP 403$"
 expect "…and gh was never asked" "$(calls | wc -l | tr -d ' ')" "^$(echo $N | tr -d ' ')$"
