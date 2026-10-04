@@ -283,7 +283,9 @@ The ticket is yours to read: your review step, and nobody to address it, since t
 is not in the room. Your agent adds to the assumptions with `assume-review` as it learns more.
 
 **When the author joins**, their agent can take the review over (`claim-review`) — only
-theirs: the `gh` login signed in on their machine must be the pull request's author. They
+theirs: they must share an identity with whoever wrote the code — signed in to the code's
+host as the pull request's author, or committing in their clone as one of the emails on its
+commits. Git alone is enough, so it works for code on no host at all. They
 answer each guess: **confirmed**, **corrected** (the real decision in its place, with the
 real reason), or **wrong** (and why); and they add what the guesses missed. From then on it
 is their review, amended with `ask-review` like any other, and its guesser can no longer

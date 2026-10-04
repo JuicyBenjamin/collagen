@@ -13,7 +13,7 @@ import { HostBar } from "./components/HostBar";
 import { StackRow } from "./components/StackRow";
 import { DraftsBar } from "./components/DraftsBar";
 import { Unplaced } from "./components/Unplaced";
-import { GitHubActivity } from "./components/GitHubActivity";
+import { HostActivity } from "./components/HostActivity";
 import { diffNow } from "./diffNow";
 import { placeWhy, whyOpening } from "./whyPanel";
 import { assumedNow } from "./assumedNow";
@@ -40,7 +40,7 @@ export function App() {
   // or the branch's commit in the clone changes — opened again whenever the
   // connection breaks (collagen restarted), its first value catching up
   const state = createMemo(() => lasting(() => reviewChanges(ticketId)));
-  // the review on its host (GitHub), read beside the data and never before it
+  // the review on its host, read beside the data and never before it
   hostNow.start(state);
   // its data, read again whenever that state moves — what is on screen
   // stays until the new data is in
@@ -172,7 +172,7 @@ function Page(props: { data: ReviewPageData }) {
 
       <main>
         <Header data={props.data} />
-        <GitHubActivity />
+        <HostActivity />
         {/* one offer per language the review's code is in */}
         <For each={[...new Set((props.data.grouped?.hunks ?? []).map((h) => toolOf(h.file)).filter((t) => t !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
         <Show

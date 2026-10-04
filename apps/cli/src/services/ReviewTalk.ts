@@ -176,7 +176,7 @@ const hostFor = (found: Found, shownAs: string | null): Effect.Effect<Target> =>
     // never remembered; if the page showed someone else, it says so first
     const viewer = yield* host.viewerNow;
     if (!("user" in viewer)) return { refused: viewer.signIn };
-    if (shownAs !== null && viewer.user.login !== shownAs) return { refused: `gh is signed in as ${viewer.user.login} now, not ${shownAs} as the page showed — reload the page to see whose name this goes out under.` };
+    if (shownAs !== null && viewer.user.login !== shownAs) return { refused: `${host.name} has ${viewer.user.login} signed in now, not ${shownAs} as the page showed — reload the page to see whose name this goes out under.` };
     if (viewer.user.login === named.pull.author) return { roomOnly: "it is your own pull request, where you would be its only reader" };
     return { host, link, number: named.pull.number, author: named.pull.author };
   });
@@ -331,7 +331,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     return { ok: true as const, said: recovered + pending.length, roomOnly: to.roomOnly } satisfies SubmitResult;
   }
 
-  if (verdict === "request-changes" && text.length === 0) return { error: "Say what should change — GitHub asks for it." } satisfies SubmitResult;
+  if (verdict === "request-changes" && text.length === 0) return { error: `Say what should change — ${to.host.name} asks for it.` } satisfies SubmitResult;
   if (verdict === "comment" && text.length === 0 && pending.length === 0) return { error: "Write something, or add comments to your review first." } satisfies SubmitResult;
   // the one commit the review is of; every comment in it written there
   const written = [...new Set(pending.map((d) => d.commit))];

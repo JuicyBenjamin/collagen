@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { repoWebUrl } from "../lib/gitInfo";
 import { Effect } from "effect";
 import type { HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
 import { githubRepo, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, readComments, readConversation, readOutdated, readPull, readReviews, readUser, refusal } from "../lib/github";
@@ -34,7 +35,14 @@ export interface SubmittedReview {
   readonly comments: ReadonlyArray<{ readonly body: string } & Omit<LineSpot, "commit">>;
 }
 
+/** Where code is hosted, as collagen speaks to it. Everything that differs
+ *  from one host to the next — its tool, its API, its words, its refs — is
+ *  behind this; the rest of collagen speaks only this (skill: repo-hosts).
+ *  Another host is another implementation in HOSTS, nothing else. */
 export interface RepoHost {
+  /** short and stable: the namespace of its logins in an identity ("github:octocat") */
+  readonly id: string;
+  /** its name for people: "GitHub" */
   readonly name: string;
   readonly matches: (link: string) => boolean;
   /** base...branch as a diff, for a reader with no clone */
@@ -59,6 +67,11 @@ export interface RepoHost {
    *  held in it — GitHub's "Finish your review" */
   readonly submit: (link: string, pull: number, review: SubmittedReview) => Effect.Effect<{ readonly ok: true; readonly url: string; readonly comments: ReadonlyArray<LineComment> } | { readonly error: string }>;
   readonly comment: (link: string, pull: number, at: LineSpot, body: string) => Effect.Effect<HostWrite>;
+  /** where the host keeps a pull request's head in the repository itself —
+   *  how a clone reads one opened from a fork */
+  readonly pullRef: (pull: number) => string;
+  /** a branch's page, from the repository's web address */
+  readonly branchUrl: (repo: string, branch: string) => string;
 }
 
 interface Ran {
@@ -109,7 +122,10 @@ const askViewer: Effect.Effect<Viewer> = Effect.gen(function* () {
 
 /** GitHub, through the person's own `gh` login. */
 export const github: RepoHost = {
+  id: "github",
   name: "GitHub",
+  pullRef: (pull) => `refs/pull/${pull}/head`,
+  branchUrl: (repo, branch) => `${repo}/tree/${branch.split("/").map(encodeURIComponent).join("/")}`,
   matches: (link) => githubRepo(link) !== null,
   compare: (link, base, branch) => {
     const r = githubRepo(link);
@@ -211,3 +227,14 @@ export const HOSTS: ReadonlyArray<RepoHost> = [github];
 
 /** The host a link is on, if collagen has an integration for it. */
 export const hostOf = (link: string): RepoHost | undefined => HOSTS.find((h) => h.matches(link));
+/** A link the reviewer can open for a branch of the clone at `root` — the
+ *  fallback when the agent has no pull request to give: the branch's page on
+ *  its host, or, on a host collagen does not know, the repository itself. */
+export const branchLink = (root: string, branch: string): string | null => {
+  const repo = repoWebUrl(root);
+  if (!repo) return null;
+  return hostOf(repo)?.branchUrl(repo, branch) ?? repo;
+};
+
+/** A host by its id — what an identity names. */
+export const hostById = (id: string): RepoHost | undefined => HOSTS.find((h) => h.id === id);

@@ -80,7 +80,7 @@ export function ReviewComposer(props: { onDone: () => void }) {
       </Show>
       <Show when={!onHost()}>
         <p class="host-note left">
-          {pull()?.mine ? "Your own pull request: your comments stay in collagen — on GitHub you would be their only reader." : "Your comments are said in the room — there is no open pull request to put them on."} A word on the whole, or a verdict, goes through your agent.
+          {pull()?.mine ? `Your own pull request: your comments stay in collagen — on ${hostNow.hostName()} you would be their only reader.` : "Your comments are said in the room — there is no open pull request to put them on."} A word on the whole, or a verdict, goes through your agent.
         </p>
       </Show>
       <Show when={hostNow.unplaced().filter((d) => !hostNow.isDraft(d)).length}>

@@ -117,11 +117,14 @@ export const hostNow = {
     return v && "host" in v ? v : null;
   },
 
-  /** Ask GitHub again now — the reader's Refresh. */
+  /** The host's name for people — "GitHub" — or a word for it before it is read. */
+  hostName: (): string => hostNow.host()?.host ?? "the host",
+
+  /** Ask the host again now — the reader's Refresh. */
   refresh: (): void => {
     setAsked((n) => n + 1);
   },
-  /** When GitHub was last asked (ms), or null before it has been. */
+  /** When the host was last asked (ms), or null before it has been. */
   checkedAt: (): number | null => {
     const h = hostNow.host();
     return h ? Date.parse(h.checkedAt) : null;

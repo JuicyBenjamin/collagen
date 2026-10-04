@@ -18,7 +18,7 @@ type Item = ({ readonly kind: "review" } & HostReview) | ({ readonly kind: "note
 function Words(props: { body: string }) {
   return (
     <For each={bodyParts(props.body)}>
-      {(part) => (part.kind === "text" ? <p class="gh-body">{part.text}</p> : <pre class="gh-suggestion">{part.code}</pre>)}
+      {(part) => (part.kind === "text" ? <p class="host-body">{part.text}</p> : <pre class="host-suggestion">{part.code}</pre>)}
     </For>
   );
 }
@@ -27,13 +27,13 @@ function Words(props: { body: string }) {
  *  with its verdict and words on the whole, the conversation, and line
  *  comments on code that has changed since — oldest first, so a review of
  *  the review reads in order. The line comments themselves sit under their
- *  lines. GitHub is asked when the page opens and on the reader's word, not
+ *  lines. The host is asked when the page opens and on the reader's word, not
  *  on a timer: when it was last asked is said here, with Refresh beside it. */
 /** How many of the latest show before the rest are asked for — a busy pull
  *  request's conversation should not push the code far down the page. */
 const LATEST = 3;
 
-export function GitHubActivity() {
+export function HostActivity() {
   const h = hostNow.host;
   const [all, setAll] = createSignal(false);
   const items = (): ReadonlyArray<Item> => {
@@ -51,27 +51,27 @@ export function GitHubActivity() {
   return (
     <Show when={h()?.pull}>
       {(pull) => (
-        <section class="gh-activity" aria-label="On GitHub">
-          <div class="gh-head">
-            <h2>On GitHub</h2>
-            <span class="gh-counts">{counts() || `nothing said on #${pull().number} yet`}</span>
-            <span class="gh-checked">
+        <section class="host-activity" aria-label={`On ${hostNow.hostName()}`}>
+          <div class="host-head">
+            <h2>On {hostNow.hostName()}</h2>
+            <span class="host-counts">{counts() || `nothing said on #${pull().number} yet`}</span>
+            <span class="host-checked">
               {hostNow.checking() ? "checking…" : `checked ${ago(hostNow.checkedAt() ?? hostNow.now(), hostNow.now())}`}
             </span>
-            <button type="button" class="quiet small" onClick={() => hostNow.refresh()} disabled={hostNow.checking()} title="Ask GitHub again for its reviews and comments">
+            <button type="button" class="quiet small" onClick={() => hostNow.refresh()} disabled={hostNow.checking()} title={`Ask ${hostNow.hostName()} again for its reviews and comments`}>
               ↻ Refresh
             </button>
           </div>
           <Show when={items().length > LATEST}>
-            <button type="button" class="quiet small gh-earlier" onClick={() => setAll(!all())}>
+            <button type="button" class="quiet small host-earlier" onClick={() => setAll(!all())}>
               {all() ? "Show only the latest" : `Show ${items().length - LATEST} earlier`}
             </button>
           </Show>
           <Show when={items().length > 0}>
-            <ol class="gh-items">
+            <ol class="host-items">
               <For each={all() ? items() : items().slice(-LATEST)}>
                 {(it) => (
-                  <li class="gh-item">
+                  <li class="host-item">
                     <div class="line-comment-head">
                       <Show when={it.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(e) => (e.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
                       <strong>{it.author.login}</strong>
@@ -85,7 +85,7 @@ export function GitHubActivity() {
                       <Show when={it.url}>
                         {(url) => (
                           <a class="line-comment-link" href={url()} target="_blank" rel="noreferrer">
-                            on GitHub
+                            on {hostNow.hostName()}
                           </a>
                         )}
                       </Show>

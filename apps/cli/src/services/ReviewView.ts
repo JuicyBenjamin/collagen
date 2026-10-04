@@ -23,7 +23,7 @@ import { StateStore } from "./StateStore";
 
 /** Run a command, its stdout or null — never a failure: no git, no clone, no
  *  network all degrade the page, they do not break it. */
-const run = (cmd: string, args: ReadonlyArray<string>, cwd: string | undefined, timeoutMs: number): Effect.Effect<string | null> =>
+export const run = (cmd: string, args: ReadonlyArray<string>, cwd: string | undefined, timeoutMs: number): Effect.Effect<string | null> =>
   Effect.callback<string | null>((resume) => {
     const child = execFile(cmd, [...args], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "utf8" }, (err, stdout) =>
       resume(Effect.succeed(err ? null : stdout)),
@@ -35,7 +35,7 @@ const run = (cmd: string, args: ReadonlyArray<string>, cwd: string | undefined, 
 
 
 /** The first of `refs` the repo knows as a commit. */
-const firstRef = (cwd: string, refs: ReadonlyArray<string>) =>
+export const firstRef = (cwd: string, refs: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     for (const ref of refs) {
       const ok = yield* run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], cwd, 5_000);
@@ -47,15 +47,15 @@ const firstRef = (cwd: string, refs: ReadonlyArray<string>) =>
 /** The diff of base...branch from the clone at `path`: fetch first (the
  *  reviewer may not have the branch yet), then the refs as they are, local
  *  or origin's. Null with the reason when it cannot. */
-const fromClone = (path: string, base: string, branch: string, fetch = true) =>
+const fromClone = (path: string, base: string, branch: string, fetch = true, pullRef?: (pull: number) => string) =>
   Effect.gen(function* () {
     if (!gitDir(path)) return { diff: null, why: `${path} is not a git repository` };
     // best effort: offline, or a remote that needs a password, still has whatever is local
     if (fetch) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin"], path, 20_000);
-    // a pull request from a fork has its head on the fork: the host keeps it
-    // on this repository as refs/pull/<n>/head, read here as origin/pr/<n>
+    // a pull request from a fork has its head on the fork: its host keeps it
+    // in this repository too (its pullRef), read here as origin/pr/<n>
     const pr = /^pr\/(\d+)$/.exec(branch);
-    if (fetch && pr) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin", `+refs/pull/${pr[1]}/head:refs/remotes/origin/pr/${pr[1]}`], path, 20_000);
+    if (fetch && pr && pullRef) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin", `+${pullRef(Number(pr[1]))}:refs/remotes/origin/pr/${pr[1]}`], path, 20_000);
     const b = yield* firstRef(path, [branch, `origin/${branch}`]);
     const a = yield* firstRef(path, [base, `origin/${base}`]);
     if (!b) return { diff: null, why: `the branch ${branch} is not in your clone at ${path}, nor on its origin` };
@@ -168,7 +168,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     let commit: string | undefined;
     if (!branch) source = { kind: "none", detail: "this review names no branch — the decisions are listed with where they landed" };
     else if (project) {
-      const got = yield* fromClone(project.path, base, branch);
+      const got = yield* fromClone(project.path, base, branch, true, host?.pullRef);
       diff = got.diff;
       commit = "commit" in got ? got.commit : undefined;
       source = { kind: diff === null ? "none" : "clone", detail: got.why };
@@ -233,7 +233,7 @@ export const reviewHunks = (found: { readonly review: ReviewContext; readonly pr
     if (!found.project) return { error: "the review's project is not located on this machine (the projects panel) — its code cannot be read here" };
     const base = found.review.base ?? "main";
     let got = yield* fromClone(found.project.path, base, found.review.branch, false);
-    if (got.diff === null) got = yield* fromClone(found.project.path, base, found.review.branch, true);
+    if (got.diff === null) got = yield* fromClone(found.project.path, base, found.review.branch, true, found.review.link ? hostOf(found.review.link)?.pullRef : undefined);
     if (got.diff === null || !("commit" in got) || !got.commit) return { error: got.why };
     return { hunks: parseDiff(got.diff), commit: got.commit };
   });
