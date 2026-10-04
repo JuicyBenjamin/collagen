@@ -118,7 +118,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | --- | --- |
 | Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room` |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
-| Tickets | `create-ticket`, `settle-step`, `get-tickets`, `ask-review` — a review with the why behind the change; `open-review` — a review's page in your browser, as `o` does; `epic` — folders of tickets, shaped by anyone, only when asked |
+| Tickets | `create-ticket`, `settle-step`, `get-tickets`, `ask-review` — a review with the why behind the change; `assume-review` — a review of someone else's pull request, its why inferred and marked as guesses; `open-review` — a review's page in your browser, as `o` does; `epic` — folders of tickets, shaped by anyone, only when asked |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks |
 | Settings | `add-project`, `remove-project`, `set-ai`, `set-steering`, `set-name`, `set-settings` — your switches, listed or set |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |

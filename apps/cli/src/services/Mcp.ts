@@ -8,12 +8,13 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { encode as toToon } from "@toon-format/toon";
 import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
-import { afterProblem, AI_OPTIONS, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { hostOf } from "./RepoHost";
+import { afterProblem, AI_OPTIONS, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchLink, branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
-import { reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
+import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketView } from "../lib/ticketView";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
@@ -216,6 +217,67 @@ const duplicateWorkId = (work: ReadonlyArray<{ readonly id?: string; readonly in
   }
   return null;
 };
+
+export const AssumeReview = Tool.make("assume-review", {
+  description: [
+    "Build a review of SOMEONE ELSE'S change — a pull request whose author does not use collagen — from ASSUMPTIONS: no chat holds their why, so you infer the decisions and forks they made. Only when your user asks you to review such a change (\"review PR 42\", \"go through octocat's pull request\"). For your user's own change, ask-review.",
+    "FIRST read everything you can reach, and keep a list of it for 'sources': the pull request (gh pr view <n> --json title,body,commits,files,comments), the issues and tickets it links (a Jira or Linear ticket, through whatever tools you have), its commit messages, and the code — the diff and the code around it.",
+    "THEN build it as ask-review would have it from a chat, with every why a guess you can show the grounds for. 'title' and 'summary': what the change is for, as you read it. 'decisions': each a choice you think the author made — 'title' (a few words, what it achieves), 'what' (one line), 'why' (your reading of their reason), 'basis' (what it rests on: quote the pull request or the ticket when it says so; else name the commit, or the code that makes you think it), 'confidence' (high: the author said as much; medium: the code makes it likely; low: a reading of the code, nothing more), and 'where' (file, or file:line). 'forks': only the roads you have some evidence they weighed — 'at', 'chose', 'instead', 'why', 'basis', 'confidence'. 'units': as for ask-review — the change grouped into code that achieves one thing each. Never invent: a guess you cannot ground is not one to file.",
+    "'link' is the pull request: who wrote it ('author'), its 'branch' and 'base' are read from it when you omit them. 'peers' names others in the room to read it too — only who your user named.",
+    "It files a review ticket that is your user's to read: a review step of theirs, and the review page shows every assumption marked as a guess, with what it rests on, for them to confirm or put to the author as a question. Amend it with 'ticketId' as you learn more.",
+    "WHAT TO TELL YOUR USER: that the review is on the review page, built from your assumptions for them to check — and nothing more; open-review opens it.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    project: Schema.optional(Schema.String),
+    ticketId: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
+    summary: Schema.optional(Schema.String),
+    link: Schema.optional(Schema.String),
+    branch: Schema.optional(Schema.String),
+    base: Schema.optional(Schema.String),
+    author: Schema.optional(Schema.String),
+    sources: Schema.optional(Schema.Array(Schema.String)),
+    peers: Schema.optional(Schema.Array(Schema.String)),
+    decisions: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          title: Schema.String,
+          what: Schema.String,
+          why: Schema.String,
+          basis: Schema.String,
+          confidence: Confidence,
+          where: Schema.optional(Schema.Array(Schema.String)),
+        }),
+      ),
+    ),
+    forks: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          at: Schema.String,
+          chose: Schema.String,
+          instead: Schema.String,
+          why: Schema.String,
+          basis: Schema.String,
+          confidence: Confidence,
+        }),
+      ),
+    ),
+    units: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          title: Schema.String,
+          what: Schema.String,
+          where: Schema.Array(Schema.String),
+        }),
+      ),
+    ),
+    retireUnits: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  success: Schema.String,
+});
 
 export const AskPlan = Tool.make("ask-plan", {
   description: [
@@ -531,6 +593,7 @@ export const CollagenToolkit = Toolkit.make(
   DescribeScripting,
   CreateTicket,
   AskReview,
+  AssumeReview,
   AskPlan,
   Propose,
   ReportBug,
@@ -570,6 +633,7 @@ export const DevCollagenToolkit = Toolkit.make(
   DescribeScripting,
   CreateTicket,
   AskReview,
+  AssumeReview,
   AskPlan,
   Propose,
   ReportBug,
@@ -708,6 +772,8 @@ const makeHandlers = Effect.gen(function* () {
         retire?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
         retireUnits?: ReadonlyArray<string>;
+        /** the why is the filer's AI's assumptions about someone else's change (assume-review) */
+        assumed?: { readonly author: string; readonly sources: ReadonlyArray<string> };
       }) {
         const { id: roomId, room } = yield* focusedRoom;
         const myName = yield* SubscriptionRef.get(nameRef);
@@ -752,6 +818,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(retireBug ? { retireBug } : {}),
           ...(units ? { units } : {}),
           ...(retireUnits ? { retireUnits } : {}),
+          ...(input.assumed ? { assumed: { author: input.assumed.author.trim(), sources: input.assumed.sources.map((x) => x.trim()).filter((x) => x.length > 0) } } : {}),
         };
 
         // amending a review already on a ticket: only its author writes it
@@ -766,6 +833,12 @@ const makeHandlers = Effect.gen(function* () {
           const existing = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId);
           if (existing && existing.author !== identity.pubkey) {
             return `failed: that review's why is ${existing.authorName}'s to write — your user's own reading of the code goes to them with send-to-peer (pass ticketId so it lands on the ticket)`;
+          }
+          // a why told and a why guessed are never mixed on one review
+          if (existing && (existing.assumed !== undefined) !== (input.assumed !== undefined)) {
+            return existing.assumed
+              ? `failed: that review is built from assumptions — amend it with assume-review, so what you add is marked as a guess too`
+              : `failed: that review's why was told, not guessed — amend it with ask-review`;
           }
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
@@ -865,6 +938,7 @@ const makeHandlers = Effect.gen(function* () {
           if (!reviewers.some((r) => r.key === who.person.key)) reviewers.push(who.person);
         }
         const asked = reviewers.map((r) => r.name);
+        if (input.assumed && reviewers.some((r) => r.key === identity.pubkey)) return "failed: your user reads it anyway — a review built from assumptions is theirs to read; 'peers' names others";
         if (reviewers.some((r) => r.key === identity.pubkey)) {
           return `failed: a ${kind} goes to someone other than your user — leave 'peers' out to open it to whoever picks it up, including their own second agent${kind === "proposal" ? "; their own take goes on it with post-review" : ""}`;
         }
@@ -905,7 +979,9 @@ const makeHandlers = Effect.gen(function* () {
             input.summary ?? goal,
             where,
             input.focus ? `what your user wants looked at: ${input.focus}` : "",
-            kind === "review"
+            kind === "review" && input.assumed
+              ? `${input.assumed.author}'s change, who does not use collagen: the why on this ticket is ${myName}'s AI's ASSUMPTIONS — ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s) inferred from ${input.assumed.sources.join(", ")}, each with what it rests on. Read it with review-context {ticketId} when your person asks — and review nothing on your own.`
+              : kind === "review"
               ? `the why behind it is on this ticket: ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s), with what steered each one. Read it with review-context {ticketId} when your person asks why something is the way it is — and review nothing on your own.`
               : kind === "bug"
                 ? `symptom: ${bug?.symptom ?? goal}\nThe reporter's reading of it (cause, importance, suggestion, remedy) is on this ticket. Ask your person for THEIR OWN diagnosis FIRST — what is happening, how bad, what would fix it — and post it with post-review (failed: true asks the reporter for changes); only then read the reporter's reading with review-context {ticketId}. A second independent diagnosis is the point. Never take a position on your own.`
@@ -937,7 +1013,22 @@ const makeHandlers = Effect.gen(function* () {
           // The author's own step is always there — it waits on everyone asked
           // (on nobody, when nobody was asked) and settling it is how the
           // ticket finishes.
-          steps: [
+          // built from assumptions: the filer reads it — their review step, the
+          // author is not in the room to act on what comes back
+          steps: input.assumed
+            ? [
+                ...reviewSteps,
+                {
+                  id: reviewStepId(myName, identity.pubkey, taken),
+                  owner: identity.pubkey,
+                  intent: takeIntent(kind),
+                  description: `your review of ${input.assumed.author}'s change, built from your AI's assumptions — confirm or challenge each on the review page, then post your review`,
+                  needs: [],
+                  status: "pending" as const,
+                  updatedAt: now,
+                },
+              ]
+            : [
             ...reviewSteps,
             {
               id: "address",
@@ -1158,6 +1249,59 @@ const makeHandlers = Effect.gen(function* () {
         return yield* outbox.tell({ roomId, to, title: `${project} · ${input.title.trim()}`, outgoing: { kind: "ticket", ticket } });
       }),
       "ask-review": (input: Parameters<typeof fileJudged>[1]) => fileJudged("review", input),
+      "assume-review": Effect.fn("Mcp.assumeReview")(function* (input: {
+        project?: string;
+        ticketId?: string;
+        title?: string;
+        summary?: string;
+        link?: string;
+        branch?: string;
+        base?: string;
+        author?: string;
+        sources?: ReadonlyArray<string>;
+        peers?: ReadonlyArray<string>;
+        decisions?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly why: string; readonly basis: string; readonly confidence: Confidence; readonly where?: ReadonlyArray<string> }>;
+        forks?: ReadonlyArray<{ readonly id?: string; readonly at: string; readonly chose: string; readonly instead: string; readonly why: string; readonly basis: string; readonly confidence: Confidence }>;
+        units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
+        retireUnits?: ReadonlyArray<string>;
+      }) {
+        // the pull request, read from its host: who wrote it and where its
+        // code is — a fork's branch is on the fork, so its head is read as pr/<n>
+        let author = input.author?.trim() || undefined;
+        let branch = input.branch;
+        let base = input.base;
+        const host = input.link ? hostOf(input.link) : undefined;
+        if (host && input.link && (!author || !branch || !base)) {
+          const got = yield* host.pull(input.link, input.branch);
+          if ("pull" in got) {
+            author ??= got.pull.author || undefined;
+            branch ??= got.pull.fork ? `pr/${got.pull.number}` : got.pull.branch;
+            base ??= got.pull.base;
+          }
+        }
+        const existing = input.ticketId ? (yield* SubscriptionRef.get((yield* focusedRoom).room.reviews)).find((r) => r.ticketId === input.ticketId) : undefined;
+        const assumed = { author: author ?? existing?.assumed?.author ?? "", sources: [...(existing?.assumed?.sources ?? []), ...(input.sources ?? []).filter((x) => !(existing?.assumed?.sources ?? []).includes(x))] };
+        const decisions: ReadonlyArray<DecisionInput> = (input.decisions ?? []).map((d) => ({ ...(d.id ? { id: d.id } : {}), title: d.title, what: d.what, agentWhy: d.why, basis: d.basis, confidence: d.confidence, ...(d.where ? { where: d.where } : {}) }));
+        const forks: ReadonlyArray<ForkInput> = (input.forks ?? []).map((f) => ({ ...(f.id ? { id: f.id } : {}), at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis, confidence: f.confidence }));
+        const gap = assumedGaps({ decisions, forks, assumed }, input.ticketId !== undefined);
+        if (gap) return gap;
+        const filed = yield* fileJudged("review", {
+          ...(input.project ? { project: input.project } : {}),
+          ...(input.ticketId ? { ticketId: input.ticketId } : {}),
+          ...(input.title !== undefined ? { title: input.title } : {}),
+          ...(input.summary ? { summary: input.summary } : {}),
+          ...(input.link ? { link: input.link } : {}),
+          ...(branch ? { branch } : {}),
+          ...(base ? { base } : {}),
+          ...(input.peers ? { peers: input.peers } : {}),
+          ...(input.units ? { units: input.units } : {}),
+          ...(input.retireUnits ? { retireUnits: input.retireUnits } : {}),
+          decisions,
+          forks,
+          assumed,
+        });
+        return filed.startsWith("failed") ? filed : `${filed}\nBUILT FROM ASSUMPTIONS about ${assumed.author}'s change: the review page marks each as a guess, with what it rests on, for your user to confirm or put to the author. To add to it or correct it, call assume-review with this ticketId — never ask-review.`;
+      }),
       "ask-plan": (input: Parameters<typeof fileJudged>[1]) => fileJudged("plan", input),
       propose: (input: Parameters<typeof fileJudged>[1]) => fileJudged("proposal", input),
       "report-bug": (input: Parameters<typeof fileJudged>[1]) => fileJudged("bug", input),

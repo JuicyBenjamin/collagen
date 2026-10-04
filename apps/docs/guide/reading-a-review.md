@@ -260,6 +260,29 @@ you wrote, and goes out when you finish it — marked **with AI** once said. You
 the same on your word ("looks good, post them": it adds them, then finishes the review),
 never calling GitHub itself: collagen wires it.
 
+## A review built from assumptions
+
+Not everyone uses collagen. For a pull request whose author does not, ask your agent to
+review it and it builds the review from **assumptions** (`assume-review`): it reads what it
+can reach — the pull request's description and commits, the tickets it links (a Jira or
+Linear ticket, through whatever tools it has), the code — and infers the decisions and forks
+the author made. The page reads as any review does, units and all, but nothing on it passes
+for the author's word:
+
+- a banner says the review is built from assumptions, whose code it is, and what was read,
+  with how many of the guesses you have checked;
+- every assumption carries its mark and **how sure** the AI is (high: the author said as
+  much; medium: the code makes it likely; low: a reading of the code), what it **rests on**,
+  and the AI's reading of the reason — in place of the person's words a told decision has;
+  its chip beside the code is dashed until you check it;
+- **Holds** marks a guess you have checked against the code (yours, on this browser);
+  **Ask** puts it to the author as a question, pending in your review on the line it is
+  about, for you to edit and send with the rest when you finish the review.
+
+The ticket is yours to read: your review step, and nobody to address it, since the author
+is not in the room. Your agent adds to the assumptions with `assume-review` as it learns more;
+a told why and a guessed one are never mixed on one review.
+
 ## Saying what you think
 
 A review sent from the page reviews the **pull request**. Your take on the collagen ticket
