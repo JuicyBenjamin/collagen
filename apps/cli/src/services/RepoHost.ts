@@ -24,6 +24,16 @@ export interface LineSpot {
   readonly commit: string;
 }
 
+/** A review as it is finished: a verdict, words (may be empty with an
+ *  approval, or with comments), the commit it is of, and the comments held
+ *  in it until now. */
+export interface SubmittedReview {
+  readonly verdict: Verdict;
+  readonly body: string;
+  readonly commit: string;
+  readonly comments: ReadonlyArray<{ readonly body: string } & Omit<LineSpot, "commit">>;
+}
+
 export interface RepoHost {
   readonly name: string;
   readonly matches: (link: string) => boolean;
@@ -37,7 +47,9 @@ export interface RepoHost {
   readonly comments: (link: string, pull: number) => Effect.Effect<ReadonlyArray<LineComment>>;
   /** the repository's open pull requests, for the stack a branch sits in */
   readonly openPulls: (link: string) => Effect.Effect<ReadonlyArray<HostPull>>;
-  readonly review: (link: string, pull: number, verdict: Verdict, body: string) => Effect.Effect<HostWrite>;
+  /** a whole review, at once: its verdict, its words, and every comment
+   *  held in it — GitHub's "Finish your review" */
+  readonly submit: (link: string, pull: number, review: SubmittedReview) => Effect.Effect<{ readonly ok: true; readonly url: string; readonly comments: ReadonlyArray<LineComment> } | { readonly error: string }>;
   readonly comment: (link: string, pull: number, at: LineSpot, body: string) => Effect.Effect<HostWrite>;
 }
 
@@ -54,12 +66,15 @@ interface Ran {
 const ghCommand = (): string => process.env.COLLAGEN_GH ?? "gh";
 
 /** Run gh: what it printed, and whether it did what was asked. Never a
- *  failure — no gh, no network and no login all read as words on the page. */
-const gh = (args: ReadonlyArray<string>, timeoutMs = 20_000): Effect.Effect<Ran> =>
+ *  failure — no gh, no network and no login all read as words on the page.
+ *  `input` goes to its stdin (a request body for `gh api --input -`). */
+const gh = (args: ReadonlyArray<string>, timeoutMs = 20_000, input?: string): Effect.Effect<Ran> =>
   Effect.callback<Ran>((resume) => {
     const child = execFile(ghCommand(), [...args], { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "utf8", env: { ...process.env, GH_PROMPT_DISABLED: "1", NO_COLOR: "1" } }, (err, stdout, stderr) =>
       resume(Effect.succeed({ ok: !err, out: stdout ?? "", err: stderr ?? (err ? String(err) : ""), missing: (err as NodeJS.ErrnoException | null)?.code === "ENOENT" })),
     );
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(input ?? "");
     return Effect.sync(() => child.kill());
   });
 
@@ -130,13 +145,26 @@ export const github: RepoHost = {
       const list = ran.ok ? parse(ran.out) : null;
       return (Array.isArray(list) ? list : []).flatMap((p) => readPull(p, undefined) ?? []);
     }),
-  review: (link, pull, verdict, body) =>
+  submit: (link, pull, review) =>
     Effect.gen(function* () {
       const r = githubRepo(link)!;
-      const flag = verdict === "approve" ? "--approve" : verdict === "request-changes" ? "--request-changes" : "--comment";
-      const ran = yield* gh(["pr", "review", String(pull), "--repo", `${r.owner}/${r.repo}`, flag, ...(body.length > 0 ? ["--body", body] : [])]);
+      const repo = `repos/${r.owner}/${r.repo}/pulls/${pull}`;
+      const event = review.verdict === "approve" ? "APPROVE" : review.verdict === "request-changes" ? "REQUEST_CHANGES" : "COMMENT";
+      const payload = {
+        commit_id: review.commit,
+        event,
+        ...(review.body.length > 0 ? { body: review.body } : {}),
+        comments: review.comments.map((c) => ({ path: c.file, line: c.line, side: c.side, body: c.body, ...(c.start ? { start_line: c.start.line, start_side: c.start.side } : {}) })),
+      };
+      const ran = yield* gh(["api", "-X", "POST", `${repo}/reviews`, "--input", "-"], 30_000, JSON.stringify(payload));
       if (ran.missing) return { error: NO_GH };
-      return ran.ok ? { ok: true as const } : { error: refusal(ran.err) };
+      if (!ran.ok) return { error: refusal(ran.err) };
+      const made = parse(ran.out) as { id?: unknown; html_url?: unknown } | null;
+      const id = typeof made?.id === "number" ? made.id : null;
+      const url = typeof made?.html_url === "string" ? made.html_url : "";
+      // its comments as GitHub placed them — their ids, to show each once
+      const listed = id !== null && review.comments.length > 0 ? yield* gh(["api", "--paginate", "--slurp", `${repo}/reviews/${id}/comments`]) : null;
+      return { ok: true as const, url, comments: listed?.ok ? readComments(parse(listed.out)) : [] };
     }),
   comment: (link, pull, at, body) =>
     Effect.gen(function* () {

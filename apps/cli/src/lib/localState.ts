@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, LocalState, Project, Proposal, Settings, Steering, TranscriptAsk } from "@collagen/p2p";
+import { AdoptedThread, DraftComment, LocalState, Project, Proposal, Settings, Steering, TranscriptAsk } from "@collagen/p2p";
 
 /** Reading the user's own state file must never cost them their rooms.
  *
@@ -88,6 +88,23 @@ export const salvageState = (text: string): Salvaged => {
   const attachedFiles = salvageRecord(src.attachedFiles, Schema.String, fileDrops.hit);
   fileDrops.done();
 
+  // the comments not said yet, per review: one unreadable takes only itself
+  const draftDrops = count("unsaid review comment");
+  const draftsRaw = obj(src.drafts);
+  const drafts = draftsRaw
+    ? Object.fromEntries(
+        Object.entries(draftsRaw).flatMap(([ticket, list]) => {
+          const kept = (Array.isArray(list) ? list : []).flatMap((d) => {
+            const one = decode(DraftComment, d);
+            if (one === null) draftDrops.hit();
+            return one === null ? [] : [one];
+          });
+          return kept.length > 0 ? [[ticket, kept]] : [];
+        }),
+      )
+    : undefined;
+  draftDrops.done();
+
   const proposalDrops = count("sent record");
   const sent = Array.isArray(src.sent)
     ? src.sent.flatMap((p) => {
@@ -136,6 +153,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(attachedFiles ? { attachedFiles } : {}),
       ...(sent ? { sent } : {}),
       ...(transcriptAsks ? { transcriptAsks } : {}),
+      ...(drafts && Object.keys(drafts).length > 0 ? { drafts } : {}),
     },
     dropped: dropped.length > 0 ? dropped : ["parts of the state file no longer readable"],
   };

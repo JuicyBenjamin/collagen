@@ -1,5 +1,8 @@
 import { Context, Effect, Stream } from "effect";
-import type { AcceptResult, DefinitionResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { DefinitionResult, DraftsResult, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+
+/** Where a block of lines starts, or null for one line. */
+type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
 
 // What the review page's server functions (src/api.ts) ask of the collagen
 // instance that serves them. The page declares it; the instance provides it
@@ -29,24 +32,21 @@ export class ReviewBackend extends Context.Service<
     readonly since: (ticketId: string, file: string, from: string, to: string) => Effect.Effect<SinceResult>;
     /** the review on its host: who is signed in, its pull request, that request's line comments, the stack */
     readonly host: (ticketId: string) => Effect.Effect<HostView>;
-    /** a review on the pull request, in the reader's name (through their own gh) */
-    readonly review: (ticketId: string, verdict: Verdict, body: string) => Effect.Effect<HostWrite>;
-    /** a comment on a line — or a block of lines, from `start` — of the pull request, at the commit the page shows */
-    readonly lineComment: (
-      ticketId: string,
-      file: string,
-      line: number,
-      side: "LEFT" | "RIGHT",
-      body: string,
-      commit: string,
-      start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
-    ) => Effect.Effect<HostWrite>;
-    /** the comments on the review collagen holds: the reader's AI's drafts waiting here, and what the room has said */
+    /** finish the reader's review: its pending comments said — on the pull request as one review with
+     *  their verdict and words, and in the room; `commit`: the one the page shows */
+    readonly submit: (ticketId: string, verdict: Verdict, body: string, commit: string | null) => Effect.Effect<SubmitResult>;
+    /** a single comment, said at once — on a line, or a block of lines from `start`, at the commit the page shows */
+    readonly lineComment: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart) => Effect.Effect<HostWrite>;
+    /** a comment into the reader's review: pending, said when they finish it */
+    readonly addToReview: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart) => Effect.Effect<HostWrite>;
+    /** the comments on the review collagen holds: the AI's drafts and the pending review here, and what the room has said */
     readonly talk: (ticketId: string) => Effect.Effect<TalkView>;
-    /** accept drafts (by id, or all: null), said as the reader's — with their words where edited */
-    readonly accept: (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>>) => Effect.Effect<AcceptResult>;
-    /** decline drafts (by id, or all: null); how many went */
-    readonly decline: (ticketId: string, ids: ReadonlyArray<string> | null) => Effect.Effect<number>;
+    /** accept AI drafts (by id, or all: null) into the review — with the reader's words where edited */
+    readonly accept: (ticketId: string, ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>>) => Effect.Effect<DraftsResult>;
+    /** new words for a draft or a pending comment */
+    readonly edit: (ticketId: string, id: string, body: string) => Effect.Effect<DraftsResult>;
+    /** drop drafts or pending comments (by id; or, with null, all of a kind); how many went */
+    readonly drop: (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending") => Effect.Effect<number>;
   }
 >()("review-web/ReviewBackend") {}
 
