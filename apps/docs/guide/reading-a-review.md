@@ -265,8 +265,8 @@ never calling GitHub itself: collagen wires it.
 For a change its author did not file in collagen — a colleague's pull request, say — ask
 your agent to review it and it builds the review from **assumptions** (`assume-review`): it reads what it
 can reach — the pull request's description and commits, the tickets it links (a Jira or
-Linear ticket, through whatever tools it has), the code — and infers the decisions and forks
-the author made. The page reads as any review does, units and all, but nothing on it passes
+Linear ticket, through whatever tools it has), the code — and infers what the change cannot
+say: the problem behind it, and why the author solved it this way. The page reads as any review does, units and all, but nothing on it passes
 for the author's word:
 
 - a banner says it is an assumption-based review, and whose, with how many guesses you
