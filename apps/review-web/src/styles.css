@@ -116,7 +116,10 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
    rounded top there. It is a square of the page's own colour laid over the
    card's top edge, the rounded panel drawn inside it: at rest its corners
    are the page around the card, stuck they hide what scrolls beneath. */
-.hunk .file { position: sticky; top: 0; z-index: 3; margin: -1px -1px 0; background: var(--bg); }
+.hunk .file { position: sticky; top: 24px; z-index: 3; margin: -1px -1px 0; background: var(--bg); }
+/* stuck, the header sits a little below the window's top, level with the why's
+   rail; the band above it is the page's own colour, so nothing shows through */
+.hunk .file.stuck { box-shadow: 0 -25px 0 var(--bg); }
 .hunk .file::before { content: ""; position: absolute; inset: 0 0 -1px; z-index: -1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px 10px 0 0; }
 .hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 9px 13px 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .hunk .file .head { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
