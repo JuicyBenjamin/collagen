@@ -313,4 +313,4 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 nav .nav-done .nav-what { color: var(--dim); }
 
 /* the progress, kept in view once the header's has scrolled away */
-.progress-float { position: fixed; right: 18px; bottom: 18px; z-index: 6; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
+.progress-float { position: fixed; right: 18px; bottom: 18px; z-index: 6; display: flex; align-items: center; line-height: 1; padding: 9px 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
