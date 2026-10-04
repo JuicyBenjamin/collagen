@@ -7,7 +7,7 @@ import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, reviewData, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
-import { acceptDrafts, addToReview, dropDrafts, editDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
+import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -51,6 +51,9 @@ const startOk = (start: unknown, line: number, side: "LEFT" | "RIGHT"): start is
   return lineOk(s.line, 0) && sideOk(s.side) && (s.side !== side || (s.line as number) < line);
 };
 
+/** The login the page shows signed in: none, or a GitHub login. */
+const shownOk = (s: unknown): s is string | null => s === null || (typeof s === "string" && /^[A-Za-z0-9-]{1,39}$/.test(s));
+
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
   const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>();
@@ -66,15 +69,16 @@ const backend = Effect.gen(function* () {
     wholeFile: (ticketId, file, commit) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(commit) ? on(wholeFile(ticketId, file, commit)) : Effect.succeed(bad)),
     since: (ticketId, file, from, to) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(from) && commitOk(to) ? on(sinceViewed(ticketId, file, from, to)) : Effect.succeed(bad)),
     host: (ticketId) => (ticketIdOk(ticketId) ? on(hostView(ticketId)) : Effect.succeed({ none: "bad request", stack: null })),
-    submit: (ticketId, verdict, body, commit) =>
-      ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) && (commit === null || commitOk(commit)) ? on(submitReview(ticketId, verdict, body, commit)) : Effect.succeed(bad),
-    lineComment: (ticketId, file, line, side, body, commit, start) =>
-      spotOk(ticketId, file, line, side, body, commit, start) ? on(sayComment(ticketId, spot(file, line, side, start), commit, body)) : Effect.succeed(bad),
+    submit: (ticketId, verdict, body, commit, shownAs) =>
+      ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) && (commit === null || commitOk(commit)) && shownOk(shownAs) ? on(submitReview(ticketId, verdict, body, commit, shownAs)) : Effect.succeed(bad),
+    lineComment: (ticketId, file, line, side, body, commit, start, shownAs) =>
+      spotOk(ticketId, file, line, side, body, commit, start) && shownOk(shownAs) ? on(sayComment(ticketId, spot(file, line, side, start), commit, body, shownAs)) : Effect.succeed(bad),
     addToReview: (ticketId, file, line, side, body, commit, start) =>
       spotOk(ticketId, file, line, side, body, commit, start) ? on(addToReview(ticketId, spot(file, line, side, start), commit, body)) : Effect.succeed(bad),
     talk: (ticketId) => (ticketIdOk(ticketId) ? on(talkView(ticketId)) : Effect.succeed({ drafts: [], pending: [], said: [] })),
     accept: (ticketId, ids, edits) => (ticketIdOk(ticketId) && idsOk(ids) && editsOk(edits) ? on(acceptDrafts(ticketId, ids, edits)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     edit: (ticketId, id, body) => (ticketIdOk(ticketId) && idsOk([id]) && bodyOk(body) ? on(editDraft(ticketId, id, body)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
+    repin: (ticketId, id, commit) => (ticketIdOk(ticketId) && idsOk([id]) && commitOk(commit) ? on(repinDraft(ticketId, id, commit)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });

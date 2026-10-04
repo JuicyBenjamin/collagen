@@ -1,6 +1,6 @@
 import { action, createMemo, createOptimistic, createSignal, isPending, NotReadyError, refresh, type Accessor, type SourceAccessor } from "solid-js";
-import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, sendLineComment, submitReview, talkView } from "./api";
-import type { DraftsResult, DraftView, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
+import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, repinDraft, sendLineComment, submitReview, talkView } from "./api";
+import type { DraftsResult, DraftView, HostUser, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
 import { diffNow } from "./diffNow";
 import { ticketId } from "./ticket";
 
@@ -186,7 +186,7 @@ export const hostNow = {
   addToReview: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string, start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null) {
     const commit = diffNow.commit();
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
-    setPending((l) => [...l, { id: `new-${Date.now()}`, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), body }]);
+    setPending((l) => [...l, { id: `new-${Date.now()}`, commit, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), body }]);
     const r = (yield addToReview(ticketId, file, line, side, body, commit, start)) as HostWrite;
     if (talk) refresh(talk);
     return r;
@@ -206,15 +206,31 @@ export const hostNow = {
     yield dropDrafts(ticketId, ids, "pending");
     if (talk) refresh(talk);
   }),
+  /** Whether a comment not said yet was written at another commit than the
+   *  one the page shows — its lines may have moved since. */
+  moved: (d: DraftView): boolean => {
+    const at = diffNow.commit();
+    return at !== null && at !== undefined && d.commit !== at;
+  },
+  /** Confirm a comment where it shows now, at the commit the page shows. */
+  repin: action(function* (id: string) {
+    const commit = diffNow.commit();
+    if (!commit) return;
+    setPending((l) => l.map((d) => (d.id === id ? { ...d, commit } : d)));
+    setDrafts((l) => l.map((d) => (d.id === id ? { ...d, commit } : d)));
+    const r = (yield repinDraft(ticketId, id, commit)) as DraftsResult;
+    note([id], r.failed);
+    if (talk) refresh(talk);
+  }),
   /** Finish the review: a verdict, words, and every pending comment, said at
    *  once — each shows as on its way until the host and the room have it;
    *  a refusal leaves the review pending, all of it. */
-  submit: action(function* (verdict: Verdict, body: string) {
-    const me = hostNow.host()?.viewer;
+  submit: action(function* (verdict: Verdict, body: string): Generator<Promise<SubmitResult>, SubmitResult, unknown> {
+    const me: HostUser | null | undefined = hostNow.host()?.viewer;
     const going = ready(pending, []);
     setPending(() => []);
     setComments((l) => [...l, ...going.map((d): LineComment => ({ id: `sending-${d.id}`, author: me ?? { login: "you" }, body: d.body, file: d.file, line: d.line, side: d.side, ...(d.startLine !== undefined ? { startLine: d.startLine, startSide: d.startSide ?? d.side } : {}), url: "", at: new Date().toISOString(), pending: true, ...(d.drafted ? { drafted: true as const } : {}) }))]);
-    const r = (yield submitReview(ticketId, verdict, body, diffNow.commit() ?? null)) as SubmitResult;
+    const r = (yield submitReview(ticketId, verdict, body, diffNow.commit() ?? null, me?.login ?? null)) as SubmitResult;
     if (talk) refresh(talk);
     if ("ok" in r && view) refresh(view);
     return r;
@@ -252,13 +268,13 @@ export const hostNow = {
    *  comment"). It shows at once as the reader's, marked as on
    *  its way; the host's answer (read again) takes its place, or a refusal
    *  takes it away. */
-  comment: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string, start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null) {
+  comment: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string, start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null): Generator<Promise<HostWrite>, HostWrite, unknown> {
     const commit = diffNow.commit();
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
-    const me = hostNow.host()?.viewer;
+    const me: HostUser | null | undefined = hostNow.host()?.viewer;
     const mine: LineComment = { id: `pending-${Date.now()}`, author: me ?? { login: "you" }, body, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), url: "", at: new Date().toISOString(), pending: true };
     setComments((l) => [...l, mine]);
-    const said = (yield sendLineComment(ticketId, file, line, side, body, commit, start)) as HostWrite;
+    const said = (yield sendLineComment(ticketId, file, line, side, body, commit, start, me?.login ?? null)) as HostWrite;
     if ("ok" in said) {
       if (talk) refresh(talk);
       if (view) refresh(view);

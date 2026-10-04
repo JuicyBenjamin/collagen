@@ -299,6 +299,8 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .pending-badge { font-size: 11px; font-weight: 600; color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 0 7px; }
 .review-composer .composer-head { font-size: 13px; }
 .host-note.left { text-align: left; max-width: none; margin: 0; }
+.moved-note { margin: 6px 0 0; font-size: 12.5px; color: var(--warn); }
+.moved-note button.link { margin-left: 8px; background: none; border: 0; padding: 0; font: inherit; font-weight: 600; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .quiet.discard { margin-right: auto; color: var(--warn); }
 
 /* the band between two changes: a button when it can show what it hides */

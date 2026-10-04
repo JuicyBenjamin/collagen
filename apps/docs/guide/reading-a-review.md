@@ -225,11 +225,20 @@ machine only — and are said together when you **finish** it: **Finish review**
 with how many are pending) takes your words on the whole and a verdict — Comment, Approve or
 Request changes — and says every pending comment at once: **in the room** as yours (the
 author's agent reads them in `review-context`) and, when the review has an open pull request,
-**on it as one review**, through your own `gh`. A refusal leaves the whole review pending;
-with no pull request the comments are said in the room alone, and a verdict has nowhere to
-go. On **your own pull request** — the one you are signed in to `gh` as opened — nothing is
-posted to GitHub, where you would be its only reader: your comments and finished reviews
-stay in collagen, and the page says so. **Discard review** drops what is pending.
+**on it as one review**, through your own `gh`, under whoever `gh` is signed in as at that
+moment — if that is no longer who the page showed, nothing is sent and the page says who it
+is now. A refusal leaves the whole review pending; two finishes at once (two tabs, or the
+page and your agent) say it once. With no pull request the comments are said in the room
+alone: a verdict, or words on the whole, would have nowhere to go, so the page asks for
+neither. On **your own pull request** — the one you are signed in to `gh` as opened —
+nothing is posted to GitHub, where you would be its only reader: your comments stay in
+collagen, and the page says so. **Discard review** drops what is pending.
+
+A review is of one commit: the one the page shows. A comment written before the branch moved
+says **Written at …** under it, as its lines may not be the ones it meant; **Keep it here**
+confirms it where it shows now, or delete it — until then, finishing refuses it. Should a
+finish stop after GitHub has the review but before the room does, its comments stay marked
+**On GitHub**; finishing again tells the room without posting them twice.
 
 On a line's composer, **Start a review** (then **Add review comment**) puts a comment in your
 review; **Add single comment** says it at once, on its own, as GitHub's button does. A pending

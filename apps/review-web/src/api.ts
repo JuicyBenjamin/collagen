@@ -76,9 +76,9 @@ export const hostView = GET(async (ticketId: string): Promise<HostView> => {
  *  comments said, on the pull request as one review with their verdict and
  *  words, and in the room. Not a read: Solid refuses it from any page but
  *  this one. */
-export const submitReview = async (ticketId: string, verdict: Verdict, body: string, commit: string | null): Promise<SubmitResult> => {
+export const submitReview = async (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null): Promise<SubmitResult> => {
   "use server";
-  return run((b) => b.submit(ticketId, verdict, body, commit));
+  return run((b) => b.submit(ticketId, verdict, body, commit, shownAs));
 };
 
 /** A single comment on a line — or a block of lines, from `start` to `line`
@@ -93,9 +93,10 @@ export const sendLineComment = async (
   body: string,
   commit: string,
   start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
+  shownAs: string | null,
 ): Promise<HostWrite> => {
   "use server";
-  return run((b) => b.lineComment(ticketId, file, line, side, body, commit, start));
+  return run((b) => b.lineComment(ticketId, file, line, side, body, commit, start, shownAs));
 };
 
 /** The comments on the review collagen holds: what the reader's AI drafted
@@ -138,4 +139,11 @@ export const editDraft = async (ticketId: string, id: string, body: string): Pro
 export const dropDrafts = async (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending"): Promise<number> => {
   "use server";
   return run((b) => b.drop(ticketId, ids, kind));
+};
+
+/** Confirm where a comment not said yet sits, at the commit the page shows
+ *  now — after the branch moved under it. */
+export const repinDraft = async (ticketId: string, id: string, commit: string): Promise<DraftsResult> => {
+  "use server";
+  return run((b) => b.repin(ticketId, id, commit));
 };
