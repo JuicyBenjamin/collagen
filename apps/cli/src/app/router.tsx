@@ -4,6 +4,9 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 export interface TicketRoute {
   readonly name: "room/ticket";
   readonly ticketId: string;
+  /** Where esc / ← go when it was opened from another ticket's page — an
+   *  epic's; from the list, the list. */
+  readonly back?: TicketRoute;
 }
 export interface TranscriptsRoute {
   readonly name: "room/transcripts";
@@ -43,7 +46,7 @@ export const routeName = (route: Route): RouteName => (typeof route === "string"
 
 /** Constructors for the routes that carry parameters. */
 export const to = {
-  ticket: (ticketId: string): Route => ({ name: "room/ticket", ticketId }),
+  ticket: (ticketId: string, back?: TicketRoute): Route => ({ name: "room/ticket", ticketId, ...(back ? { back } : {}) }),
   transcripts: (subject: string, back: Route): Route => ({ name: "room/transcripts", subject, back }),
   transcript: (path: string, file: string, back: Route): Route => ({ name: "room/transcript", path, file, back }),
   attach: (ticketId: string, back: Route): Route => ({ name: "room/attach", ticketId, back }),

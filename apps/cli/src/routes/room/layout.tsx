@@ -50,7 +50,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     typeof r === "string"
       ? ["overview"]
       : r.name === "room/ticket"
-        ? [...trailOf("room/overview"), goalOf(r.ticketId)]
+        ? [...trailOf(r.back ?? "room/overview"), goalOf(r.ticketId)]
         : r.name === "room/transcripts"
           ? [...trailOf(r.back), "transcripts"]
           : r.name === "room/attach"
@@ -62,7 +62,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     page === null
       ? null
       : page.name === "room/ticket"
-        ? { trail: ["overview"], label: goalOf(page.ticketId), back: "room/overview" as const, focus: "tickets" }
+        ? // opened from an epic's page, back to it — its list under the cursor
+          { trail: trailOf(page.back ?? "room/overview"), label: goalOf(page.ticketId), back: page.back ?? ("room/overview" as const), focus: page.back ? "ticket-parts" : "tickets" }
         : page.name === "room/transcripts"
           ? { trail: trailOf(page.back), label: "transcripts", back: page.back, focus: typeof page.back === "object" ? "ticket-diagnostics" : "tickets" }
           : page.name === "room/attach"
