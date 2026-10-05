@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.21.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.20.0-alpha...p2p-v0.21.0-alpha) (2026-10-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** a ticket closed as done counts toward its epic
+
+### Features
+
+* **cli:** a guess can be withdrawn, so an assumed review is amended, never refiled ([c727b61](https://github.com/JuicyBenjamin/collagen/commit/c727b61840173be2a7fdfc37f32aaf3405f070fe))
+* **cli:** review someone else's pull request from your AI's assumptions ([8c0bf5c](https://github.com/JuicyBenjamin/collagen/commit/8c0bf5c44581901606a0947f71101c2c7996279a))
+* **cli:** the code's author takes an assumed review over and answers each guess ([2308564](https://github.com/JuicyBenjamin/collagen/commit/23085645df11179235296566516feab8baba86cb))
+* **cli:** the code's author's agent is told of guesses about their code, and answers them itself ([8f9063d](https://github.com/JuicyBenjamin/collagen/commit/8f9063d56899065ba0371fd5454b9074a092f1f9))
+
+
+### Bug Fixes
+
+* **cli:** an assumed review says so in one line, and claims nothing about its author ([90b442c](https://github.com/JuicyBenjamin/collagen/commit/90b442c904ed245d52e8c698182375c72451f408))
+* **p2p:** a ticket changed a moment ago is never shown as it was before ([ec3be45](https://github.com/JuicyBenjamin/collagen/commit/ec3be4556940384c1a820087fa28654cf8875014))
+* **p2p:** a ticket closed as done counts toward its epic ([6f7bf57](https://github.com/JuicyBenjamin/collagen/commit/6f7bf5754f07252555439dbbf63ec1fcfe9cc5e6))
+* **p2p:** one review wins at one moment, and an author's edit keeps a guess's answer ([2804e0d](https://github.com/JuicyBenjamin/collagen/commit/2804e0d1483c1001ae591e1c6205a07f9e06d945))
+
 ## [0.20.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.19.0-alpha...p2p-v0.20.0-alpha) (2026-10-04)
 
 

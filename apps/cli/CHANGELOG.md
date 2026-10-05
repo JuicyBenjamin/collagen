@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.21.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.20.0-alpha...cli-v0.21.0-alpha) (2026-10-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** a ticket closed as done counts toward its epic
+
+### Features
+
+* **cli:** a guess can be withdrawn, so an assumed review is amended, never refiled ([c727b61](https://github.com/JuicyBenjamin/collagen/commit/c727b61840173be2a7fdfc37f32aaf3405f070fe))
+* **cli:** review someone else's pull request from your AI's assumptions ([8c0bf5c](https://github.com/JuicyBenjamin/collagen/commit/8c0bf5c44581901606a0947f71101c2c7996279a))
+* **cli:** the code's author takes an assumed review over and answers each guess ([2308564](https://github.com/JuicyBenjamin/collagen/commit/23085645df11179235296566516feab8baba86cb))
+* **cli:** the code's author's agent is told of guesses about their code, and answers them itself ([8f9063d](https://github.com/JuicyBenjamin/collagen/commit/8f9063d56899065ba0371fd5454b9074a092f1f9))
+* **cli:** the ticket list has a tab per kind, and lists closed tickets on request ([5ad545d](https://github.com/JuicyBenjamin/collagen/commit/5ad545db42f89ee65d3cd760d999f6e7273c6cb6))
+
+
+### Bug Fixes
+
+* **cli:** ← goes back from every ticket, and from a ticket in an epic back to the epic ([dbd73ed](https://github.com/JuicyBenjamin/collagen/commit/dbd73ed56eb4348872c6dfd17f862879d55be12b))
+* **cli:** a row's relations, and the ticket page, show only what the reader may see ([3f0a02f](https://github.com/JuicyBenjamin/collagen/commit/3f0a02f975f4b61498839103bf653c5debd34b5c))
+* **cli:** an assumed review says so in one line, and claims nothing about its author ([90b442c](https://github.com/JuicyBenjamin/collagen/commit/90b442c904ed245d52e8c698182375c72451f408))
+* **cli:** assumptions guess the problem behind a change and why it was solved this way ([e932736](https://github.com/JuicyBenjamin/collagen/commit/e932736e543b12afa35cfd7fe3fdbc7a5b37968c))
+* **cli:** nobody takes over a review when who wrote the code is unknown; reviewers judge, CI tests ([8448165](https://github.com/JuicyBenjamin/collagen/commit/84481650472354bc3b4d1f95df7289ab6a16767a))
+* **cli:** the open ticket tab stays whole in a narrow pane ([6976586](https://github.com/JuicyBenjamin/collagen/commit/69765867d3abfb73b33b3ba4947cf6ec0e23555d))
+* **cli:** the ticket tabs are hovered and switched with the arrows ([0f78b2e](https://github.com/JuicyBenjamin/collagen/commit/0f78b2ebe27ce68059244430eff0c4522215402d))
+* **p2p:** a ticket closed as done counts toward its epic ([6f7bf57](https://github.com/JuicyBenjamin/collagen/commit/6f7bf5754f07252555439dbbf63ec1fcfe9cc5e6))
+
 ## [0.20.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.19.0-alpha...cli-v0.20.0-alpha) (2026-10-04)
 
 
