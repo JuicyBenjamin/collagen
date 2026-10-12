@@ -25,6 +25,17 @@ _Last updated: 2026-09-14._
   full text on `enter`) — approving your own request was theatre, and a thing that "exists
   but is not quite sent" was a state nobody wanted to reason about. `Dispatch` is still
   the single writer: everything reaching a room's log on an agent's behalf goes through it.
+- **Which agent did it** — a review, a settle, a filing or amendment and a message carry
+  the agent that made it (`agent`: Claude Code, Codex …, from the MCP connection's
+  `clientInfo`, `lib/agents`; a script run through `execute` too) beside the person it
+  acted for — with the model and effort of the turn that made the call, as the call says
+  them: Codex in its `_meta` (`x-codex-turn-metadata`), Claude Code by the call's id
+  (`claudecode/toolUseId`) on its session log's entry. Never guessed: a call that says
+  neither names the agent alone. `Claude Code (Opus 5.5, high effort)`. The person still owns the step; the agent is attribution. Shown as
+  `via Codex` on the ticket page, its steps, the row's `self ✓`, the review page,
+  messages and the outbox; agents read
+  `Juicy's Codex` in get-tickets, review-context and every delivery. Protocol 11: an
+  older build would drop the field from a ticket it re-shares.
 - **Ticket page + diagnostics registry** — `enter` on a ticket opens it: steps, the
   conversation on its threads, and the diagnostics that apply. Diagnostics are one file
   each in `src/diagnostics/`; the MCP server and the ticket page both read the registry.
