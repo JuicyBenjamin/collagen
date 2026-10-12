@@ -277,7 +277,7 @@ sections attached (the `ask` becomes the goal). Delivery stays the same as for a
 message — inbox or adopted session — so the earlier idea of a per-peer "direct vs queued"
 dispatch policy is gone: there is only one policy, and it's yours.
 
-## Solo player <Badge type="info" text="planned" />
+## Single player <Badge type="info" text="planned" />
 
 Collagen is built for two people, but the same machinery is useful with **one person and
 two agents** — Claude Code writes the change and asks for a review, Codex reads it with

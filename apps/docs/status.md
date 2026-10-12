@@ -123,7 +123,7 @@ Rough order, not committed.
 - [ ] Membership enforcement: drop connections from keys the log doesn't know; revoke a
   member (`removeWriter`). Admission to the log exists; it's automatic today.
 
-### 4. Solo player — [spec](/guide/conversations#solo-player)
+### 4. Single player — [spec](/guide/conversations#single-player)
 
 One person, two agents: Claude Code writes the change and asks for a review, Codex reads
 it with the why attached. Filing that review works today; the nudge does not.
