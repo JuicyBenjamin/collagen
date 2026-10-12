@@ -78,7 +78,7 @@ export function proposalText(proposal: Proposal): string {
         "",
         "why it is the way it is — this goes on the room's log for everyone in it:",
         ...review.decisions.map((decision) => `- ${decision.id} ${decision.title ?? `(${NO_TITLE})`}\n    ${decision.what}${decision.userWhy ? `\n    you: ${decision.userWhy}` : ""}${decision.agentWhy ? `\n    agent: ${decision.agentWhy}` : ""}${decision.guidedBy && decision.guidedBy.length > 0 ? `\n    guided by: ${decision.guidedBy.join(", ")}` : ""}${decision.where.length > 0 ? `\n    ${decision.where.join(", ")}` : ""}`),
-        ...(review.units && review.units.length > 0 ? ["", "units — how the code reads:", ...review.units.map((unit) => `- ${unit.id} ${unit.title}${unit.what ? `\n    ${unit.what}` : ""}\n    ${unit.where.join(", ")}`)] : []),
+        ...(review.units && review.units.length > 0 ? ["", "units — how the code reads:", ...review.units.map((unit) => `- ${unit.id} ${unit.title}${unit.usesOf ? ` (uses of ${unit.usesOf})` : ""}${unit.what ? `\n    ${unit.what}` : ""}\n    ${unit.where.join(", ")}`)] : []),
         ...(review.forks.length > 0 ? ["", "forks in the road:"] : []),
         ...review.forks.map((fork) => `- ${fork.id} ${fork.at}: chose ${fork.chose} over ${fork.instead} — ${fork.why}${fork.by ? ` (${fork.by}'s call)` : ""}`),
       ].join("\n");

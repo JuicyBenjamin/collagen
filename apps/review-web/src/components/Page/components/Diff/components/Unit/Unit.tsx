@@ -2,18 +2,25 @@ import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { NO_TITLE, type Decision, type Hunk as HunkData, type Unit as UnitData } from "~/data";
 import { assumedNow } from "~/assumedNow";
 import { Masked } from "~/components/Masked";
-import { reading } from "~/viewedNow";
+import { diffNow } from "~/diffNow";
+import { animateDetails } from "~/fold";
+import { hostNow } from "~/hostNow";
+import { reading, viewed } from "~/viewedNow";
 import { wide } from "~/wide";
 import { keepEdges, placeWhy, whyOpening } from "~/whyPanel";
-import { Hunk, wholeRun } from "./components/Hunk";
+import { Run } from "./components/Run";
 import { Why } from "./components/Why";
 import { WhyToggle } from "./components/WhyToggle";
 
 /** A unit: what it achieves, a line on what it does, the decisions that
  *  shaped it (each a chip leading to its full why beside the code), then its
- *  code — each change in it shown once, a file's changes under one header. */
+ *  code — each change in it shown once, a file's changes under one header.
+ *  A group of repeated uses shows one use, folds the others that match it,
+ *  marks them viewed together, and shows a use that differs in full. */
 export function Unit(props: {
   unit: UnitData;
+  /** for a group of uses: the unit whose change it applies */
+  of: UnitData | undefined;
   hunks: ReadonlyMap<string, HunkData>;
   decisions: ReadonlyMap<string, Decision>;
   unitsOf: ReadonlyMap<string, ReadonlyArray<UnitData>>;
@@ -25,16 +32,6 @@ export function Unit(props: {
       .filter((decision): decision is Decision => decision !== undefined);
   const files = () => new Set(props.unit.hunks.map((id) => props.hunks.get(id)?.file)).size;
   const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
-  /** What the diff skips between one change of a file and the next in this
-   *  unit: how many lines, and how many changes among them sit in another unit. */
-  const skippedBefore = (above: HunkData, hunk: HunkData) => {
-    const from = above.newStart + above.newLines;
-    const elsewhere = [...props.hunks.values()].filter(
-      (other) =>
-        other.file === hunk.file && other.newStart >= from && other.newStart < hunk.newStart,
-    ).length;
-    return { lines: hunk.newStart - from, elsewhere };
-  };
   // the unit's changes in runs of one file each, in order
   const runs = createMemo(() => {
     const out: Array<Array<HunkData>> = [];
@@ -48,6 +45,24 @@ export function Unit(props: {
     return out;
   });
   const unexplained = () => new Set(props.unit.unexplained);
+  // a group of uses: the files that match each other, and those that do not;
+  // of the matching rest, one with something said on it stays in sight
+  const same = () => runs().filter((run) => !props.unit.uses?.differs.includes(run[0]!.file));
+  const apart = () => runs().filter((run) => props.unit.uses?.differs.includes(run[0]!.file));
+  const talked = () => same().slice(1).filter((run) => hostNow.talkIn(run[0]!.file));
+  const folded = () => same().slice(1).filter((run) => !hostNow.talkIn(run[0]!.file));
+  const unread = () => same().map((run) => run[0]!.file).filter((file) => viewed.state(file) !== "viewed");
+  const markSame = () => {
+    for (const file of unread()) {
+      viewed.mark(file, diffNow.commit());
+      reading.marked(file);
+    }
+  };
+  /** A group of uses, counted: its files, and those that differ. */
+  const usesCount = (differs: ReadonlyArray<string>) => {
+    const count = new Set(props.unit.hunks.map((id) => id.slice(0, id.lastIndexOf("#")))).size;
+    return `${count === 1 ? "1 use" : `${count} uses`}${differs.length > 0 ? ` · ${differs.length} ${differs.length === 1 ? "differs" : "differ"}` : ""}`;
+  };
   // a unit that is a decision names it in its title already: its chips are the others
   const chips = () => shaped().filter((decision) => props.unit.id !== `d-${decision.id}`);
   // is there a why to show beside it: decisions, forks, or — when that is
@@ -111,6 +126,13 @@ export function Unit(props: {
           <Show when={props.unit.what}>
             <p class="decision-what">{props.unit.what}</p>
           </Show>
+          <Show when={props.of}>
+            {(of) => (
+              <p class="uses-of">
+                Uses of <a href={`#${of().id}`}>{of().title}</a>
+              </p>
+            )}
+          </Show>
           <Show when={chips().length > 0}>
             <p class="unit-why">
               <span class="who">Why</span>
@@ -141,9 +163,25 @@ export function Unit(props: {
               </For>
             </p>
           </Show>
-          <p class="unit-size">
-            {changes(props.unit.hunks.length)} in {files() === 1 ? "1 file" : `${files()} files`}
-          </p>
+          <Show
+            when={props.unit.uses}
+            fallback={
+              <p class="unit-size">
+                {changes(props.unit.hunks.length)} in {files() === 1 ? "1 file" : `${files()} files`}
+              </p>
+            }
+          >
+            {(uses) => (
+              <p class="unit-size">
+                {usesCount(uses().differs)}
+                <Show when={unread().length > 0}>
+                  <button type="button" class="mark-uses" onClick={markSame}>
+                    Mark {unread().length} viewed
+                  </button>
+                </Show>
+              </p>
+            )}
+          </Show>
         </div>
         {/* a narrow window unfolds the why under the head: its toggle is here */}
         <Show when={hasWhy()}>
@@ -160,26 +198,28 @@ export function Unit(props: {
         <div class="decision-main">
           {/* one card per file: its changes in this unit together, so its header
               stays at the top of the window through all of them */}
-          <For each={runs()}>
-            {(run) => {
-              const whole = wholeRun(run);
-              return (
-                <div class="hunk-group">
-                  <For each={run}>
-                    {(hunk, index) => (
-                      <Hunk
-                        hunk={hunk}
-                        whole={whole}
-                        continued={index() > 0}
-                        skipped={index() > 0 ? skippedBefore(run[index() - 1]!, hunk) : undefined}
-                        unexplained={unexplained().has(hunk.id)}
-                      />
-                    )}
-                  </For>
+          <Show when={props.unit.uses} fallback={<For each={runs()}>{(run) => <Run run={run} hunks={props.hunks} unexplained={unexplained()} />}</For>}>
+            {/* one use read, the matching rest folded under it, a use that
+                differs shown whole — a wrong grouping must not hide it */}
+            <Show when={same()[0]}>{(first) => <Run run={first()} hunks={props.hunks} unexplained={unexplained()} />}</Show>
+            <For each={talked()}>{(run) => <Run run={run} hunks={props.hunks} unexplained={unexplained()} />}</For>
+            <Show when={folded().length > 0}>
+              <details class="uses-rest" ref={animateDetails}>
+                <summary>{folded().length} more, the same</summary>
+                <div>
+                  <For each={folded()}>{(run) => <Run run={run} hunks={props.hunks} unexplained={unexplained()} />}</For>
                 </div>
-              );
-            }}
-          </For>
+              </details>
+            </Show>
+            <For each={apart()}>
+              {(run) => (
+                <>
+                  <p class="differs">Differs from the rest</p>
+                  <Run run={run} hunks={props.hunks} unexplained={unexplained()} />
+                </>
+              )}
+            </For>
+          </Show>
         </div>
         {/* a wide window keeps the why in a rail beside the code: its toggle
             on top, sticking with it down the unit, so it can be folded or

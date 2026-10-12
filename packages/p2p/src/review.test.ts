@@ -60,6 +60,11 @@ describe("a review's why, amended as the work goes on", () => {
     // a unit stored before units had a line beneath the title still decodes, review and all
     const older = Schema.decodeUnknownSync(ReviewContext)({ ...fixed, units: [{ id: "u2", title: "Paging by id", where: ["src/page.ts"] }] });
     expect(older.units?.[0]?.what).toBeUndefined();
+    // a group of repeated uses names the unit whose change it applies; given again without it, it is a unit again
+    const grouped = mergeReview(fixed, { units: [{ id: "u3", title: "Pages page by id", what: "each list page uses it", where: ["src/a.ts", "src/b.ts"], usesOf: "u2" }] }, 3);
+    expect(grouped.units?.[1]?.usesOf).toBe("u2");
+    expect(Schema.decodeUnknownSync(ReviewContext)(grouped).units?.[1]?.usesOf).toBe("u2");
+    expect(mergeReview(grouped, { units: [{ id: "u3", title: "Pages page by id", what: "each list page uses it", where: ["src/a.ts"] }] }, 4).units?.[1]?.usesOf).toBeUndefined();
     // a review that never named units has none
     expect(mergeReview(base, { summary: "x" }, 3).units).toBeUndefined();
   });
