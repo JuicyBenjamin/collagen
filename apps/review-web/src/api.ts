@@ -4,8 +4,8 @@ import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
 // the collagen instance on its own services (server/backend). Reads are
-// GETs, so Solid can cache and refresh them; installing a tool is the one
-// write. Nothing else goes between the page and the instance.
+// GETs, so Solid can cache and refresh them; installing a tool and starting
+// its server are not. Nothing else goes between the page and the instance.
 
 export const reviewData = GET(async (ticketId: string): Promise<ReviewPageData | null> => {
   "use server";
@@ -33,6 +33,13 @@ export const definitionAt = GET(async (ticketId: string, file: string, line: num
   "use server";
   return run((b) => b.definition(ticketId, file, line, col, commit));
 });
+
+/** Start the review's server for a language as the page opens, at the
+ *  commit it shows — it reads the project while the reader reads the diff. */
+export const warmTypes = async (ticketId: string, tool: ToolId, commit: string): Promise<void> => {
+  "use server";
+  return run((b) => b.warm(ticketId, tool, commit));
+};
 
 /** A language server's state, live: the offer, its install, its notices
  *  follow it as it moves. Held open while the page is. */

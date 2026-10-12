@@ -71,6 +71,7 @@ const backend = Effect.gen(function* () {
     changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(ctx)) : Stream.empty),
     hover: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.hover(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
     definition: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.definition(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
+    warm: (ticketId, tool, commit) => (ticketIdOk(ticketId) && toolNamed(tool) && commitOk(commit) ? on(types.warm(ticketId, tool, commit)) : Effect.void),
     tool: (tool) => (toolNamed(tool) ? types.watchTool(tool) : Stream.empty),
     install: (tool) => (toolNamed(tool) ? types.startInstall(tool) : Effect.succeed(null)),
     wholeFile: (ticketId, file, commit) => (ticketIdOk(ticketId) && treePathOk(file) && commitOk(commit) ? on(wholeFile(ticketId, file, commit)) : Effect.succeed(bad)),
