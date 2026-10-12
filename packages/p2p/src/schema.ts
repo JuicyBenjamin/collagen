@@ -531,5 +531,9 @@ export const LocalState = Schema.Struct({
   /** Assumed reviews of this person's own code their agent has been told of
    *  — once each, whenever it arrived. */
   toldGuessed: Schema.optional(Schema.Array(Schema.String)),
+  /** The person's own tokens for where a review's requests run: origin →
+   *  token. This profile's alone — never on the log, never to a peer, never
+   *  back to the page. */
+  signIns: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 export type LocalState = typeof LocalState.Type;

@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SendResult, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -175,4 +175,19 @@ export const mergeView = async (ticketId: string): Promise<MergeView | null> => 
 export const setMerge = async (ticketId: string, level: MergeFor | null): Promise<MergeView | null> => {
   "use server";
   return run((backend) => backend.setMerge(ticketId, level));
+};
+
+/** Send a review's request again — only ever on the reader's click: from
+ *  this machine, with `body` in place of its own when given, signed in with
+ *  the reader's own token when they have one. */
+export const sendShow = async (ticketId: string, showId: string, body: string | null): Promise<SendResult> => {
+  "use server";
+  return run((backend) => backend.send(ticketId, showId, body));
+};
+
+/** Keep the reader's token for a request's origin — on this machine, never
+ *  on the ticket, never back to the page; null forgets it. */
+export const signInShow = async (ticketId: string, showId: string, token: string | null): Promise<{ readonly ok: true } | { readonly error: string }> => {
+  "use server";
+  return run((backend) => backend.signIn(ticketId, showId, token));
 };

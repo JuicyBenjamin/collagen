@@ -18,6 +18,7 @@ import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, s
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
 import { MERGE_HELP, mergeForOf, withMergeFor } from "../lib/merging";
+import { cleanShow, showGap, type ShowInput } from "../lib/shows";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
@@ -415,6 +416,7 @@ export const AskReview = Tool.make("ask-review", {
     "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
     "It creates a review ticket: a step per person asked (their review) and one you own (acting on what comes back). The why goes on the room's log beside it, so it is there when you are offline — and a reader's agent pulls it only when their person asks.",
     "WHAT TO TELL YOUR USER: that the review ticket has been filed (or updated), and nothing more. They asked for it, so do not read the summary, the decisions, the forks or their counts back to them — the ticket carries all of it for whoever reviews it, and their TUI shows the ticket.",
+    "SHOW IT RUNNING. 'shows' are where a reader can see the change work — only what you or your user actually ran, never a guess: a page it touches ('title', 'url': localhost, a preview environment, a Storybook story), or a request it changes ('title', 'method', 'url', and the 'body' and plain 'headers' you sent) — the reader can send it again and edit the body. NEVER a credential: no token, cookie, password or key in the url, headers or body — every reader signs in on their own machine and their token stays there. For a request behind a sign-in, 'signIn' is the page where a reader gets their own token for it (a login page, a token settings page). A localhost url runs on your user's machine only: the page says so. Repeating an id corrects one; 'retireShows' withdraws one.",
     "KEEP IT CURRENT. A review is not a snapshot: your user will change the code, before or after anyone reads it. Whenever they do, call ask-review again with 'ticketId' — add a decision for what changed and why (their words for it), correct a decision that no longer holds by repeating its id, and pass the new 'branch' or 'link' if the code moved. Everyone reading the ticket is told it was revised, so what they review is what exists. When your user has acted on the feedback, settle your own step with settle-step; if the review was open, settling it closes the invitation.",
   ].join("\n"),
   parameters: Schema.Struct({
@@ -462,6 +464,20 @@ export const AskReview = Tool.make("ask-review", {
     retireUnits: Schema.optional(Schema.Array(Schema.String)),
     machine: Schema.optional(Schema.NullOr(ReviewMachine)),
     merge: Schema.optional(Schema.NullOr(Schema.Literals(["off", "theirs", "mine", "both"]))),
+    shows: Schema.optional(
+      Schema.Array(
+        Schema.Struct({
+          id: Schema.optional(Schema.String),
+          title: Schema.String,
+          url: Schema.String,
+          method: Schema.optional(Schema.String),
+          body: Schema.optional(Schema.String),
+          headers: Schema.optional(Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.String }))),
+          signIn: Schema.optional(Schema.String),
+        }),
+      ),
+    ),
+    retireShows: Schema.optional(Schema.Array(Schema.String)),
   }),
   success: Schema.String,
 });
@@ -910,6 +926,9 @@ const makeHandlers = Effect.gen(function* () {
         machine?: ReviewMachine | null;
         /** whose approval collagen waits for before it merges this review (ask-review); null gives it back to the room's */
         merge?: MergeFor | null;
+        /** where the change runs (ask-review) */
+        shows?: ReadonlyArray<ShowInput>;
+        retireShows?: ReadonlyArray<string>;
         /** guesses withdrawn by id (assume-review, amending) */
         retireGuesses?: ReadonlyArray<string>;
         /** the why is the filer's AI's assumptions about someone else's change (assume-review) */
@@ -952,6 +971,14 @@ const makeHandlers = Effect.gen(function* () {
         const machine = kind === "review" ? input.machine : undefined;
         const wrong = machine ? machineProblems(machine) : [];
         if (wrong.length > 0) return `failed: the machine cannot be drawn as given —\n${wrong.map((problem) => `- ${problem}`).join("\n")}`;
+        // where it runs: a review's own, told by its author — never a credential
+        const shows = kind === "review" && !input.assumed && input.shows && input.shows.length > 0 ? input.shows : undefined;
+        for (const show of shows ?? []) {
+          const gap = showGap(show);
+          if (gap) return gap;
+        }
+        const retireShows = kind === "review" && input.retireShows && input.retireShows.length > 0 ? input.retireShows : undefined;
+        const showsMove = shows !== undefined || retireShows !== undefined;
         const delta = {
           ...(input.summary ? { summary: input.summary } : {}),
           ...(input.base ? { base: input.base } : {}),
@@ -964,6 +991,8 @@ const makeHandlers = Effect.gen(function* () {
           ...(units ? { units } : {}),
           ...(retireUnits ? { retireUnits } : {}),
           ...(machine !== undefined ? { machine } : {}),
+          ...(shows ? { shows: shows.map(cleanShow) } : {}),
+          ...(retireShows ? { retireShows } : {}),
           ...(input.retireGuesses && input.retireGuesses.length > 0 ? { retireGuesses: input.retireGuesses } : {}),
           ...(input.assumed
             ? {
@@ -998,7 +1027,7 @@ const makeHandlers = Effect.gen(function* () {
           }
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
-            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves || unitsMove || machine !== undefined || (input.retireGuesses?.length ?? 0) > 0;
+            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves || unitsMove || machine !== undefined || showsMove || (input.retireGuesses?.length ?? 0) > 0;
           if (input.title !== undefined) {
             const gap = ticketTitleGap(input.title);
             if (gap) return gap;

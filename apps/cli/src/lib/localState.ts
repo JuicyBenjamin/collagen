@@ -108,6 +108,10 @@ export const salvageState = (text: string): Salvaged => {
   // which assumed reviews of their code the agent was told of: plain ids, the bad ones dropped
   const toldGuessed = Array.isArray(src.toldGuessed) ? src.toldGuessed.filter((entry): entry is string => typeof entry === "string") : undefined;
 
+  const signInDrops = count("sign-in");
+  const signIns = salvageRecord(src.signIns, Schema.String, signInDrops.hit);
+  signInDrops.done();
+
   const finishDrops = count("finished review record");
   const finished = salvageRecord(src.finished, Schema.Array(Schema.String), finishDrops.hit);
   finishDrops.done();
@@ -168,6 +172,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(drafts && Object.keys(drafts).length > 0 ? { drafts } : {}),
       ...(finished ? { finished } : {}),
       ...(toldGuessed && toldGuessed.length > 0 ? { toldGuessed } : {}),
+      ...(signIns && Object.keys(signIns).length > 0 ? { signIns } : {}),
     },
     dropped: dropped.length > 0 ? dropped : ["parts of the state file no longer readable"],
   };

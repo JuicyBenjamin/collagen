@@ -12,6 +12,8 @@ import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
 import { closeReview, mergeView, setMerge, takeReview } from "./ReviewFinish";
 import { Outbox } from "./Outbox";
+import { sendShow, signInShow } from "./ReviewShows";
+import { BODY_MAX, tokenOk } from "../lib/shows";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -67,6 +69,8 @@ const finishOk = (finish: unknown): finish is { readonly id: string; readonly pe
 /** How many merges the page shows of each project: a few names, each a whole count. */
 const shownCountsOk = (counts: unknown): counts is Readonly<Record<string, number>> =>
   typeof counts === "object" && counts !== null && !Array.isArray(counts) && Object.keys(counts).length <= 64 && Object.values(counts).every((count) => Number.isInteger(count) && count >= 0 && count <= 100_000);
+/** A show as the page names it: "s1", "s2" … */
+const showIdOk = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,32}$/.test(id);
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
@@ -104,6 +108,9 @@ const backend = Effect.gen(function* () {
     setMerge: (ticketId, level) => (ticketIdOk(ticketId) && (level === null || level === "off" || level === "theirs" || level === "mine" || level === "both") ? on(setMerge(ticketId, level)) : Effect.succeed(null)),
     close: (ticketId, outcome) => (ticketIdOk(ticketId) && (outcome === "done" || outcome === "dropped") ? on(closeReview(ticketId, outcome)) : Effect.succeed(bad)),
     merges: (roomId, shown, fresh) => (ticketIdOk(roomId) && shownCountsOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, shown, fresh)) : Effect.succeed(null)),
+    send: (ticketId, showId, body) =>
+      ticketIdOk(ticketId) && showIdOk(showId) && (body === null || (typeof body === "string" && body.length <= BODY_MAX)) ? on(sendShow(ticketId, showId, body)) : Effect.succeed(bad),
+    signIn: (ticketId, showId, token) => (ticketIdOk(ticketId) && showIdOk(showId) && (token === null || tokenOk(token)) ? on(signInShow(ticketId, showId, token)) : Effect.succeed(bad)),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });

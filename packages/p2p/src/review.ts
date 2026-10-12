@@ -130,6 +130,27 @@ export const ReviewUnit = Schema.Struct({
 });
 export type ReviewUnit = typeof ReviewUnit.Type;
 
+/** Where the change can be seen running, as its author's agent knows it ran:
+ *  a page it touches (localhost, a preview environment, a Storybook story),
+ *  or — with a `method` — a request it changes, which a reader can send again
+ *  and edit the body of. Never a credential: each reader signs in on their own
+ *  machine (`signIn` is where they get a token for the request's origin), and
+ *  what they get stays there. */
+export const ReviewShow = Schema.Struct({
+  id: Schema.String,
+  /** what it shows, a few words */
+  title: Schema.String,
+  url: Schema.String,
+  /** present: a request (GET, POST …); absent: a page to open */
+  method: Schema.optional(Schema.String),
+  body: Schema.optional(Schema.String),
+  /** headers the request needs that are not a credential (content-type, say) */
+  headers: Schema.optional(Schema.Array(Schema.Struct({ name: Schema.String, value: Schema.String }))),
+  /** a page where a reader gets their own token for the request's origin */
+  signIn: Schema.optional(Schema.String),
+});
+export type ReviewShow = typeof ReviewShow.Type;
+
 /** One item of a proposal's outline: what the work MIGHT involve and who
  *  MIGHT do it, as the author sees it. Non-binding — nobody owes anything
  *  until a plan names them. Kept by id so a revision can correct one line. */
@@ -201,6 +222,8 @@ export const ReviewContext = Schema.Struct({
   forks: Schema.Array(ReviewFork),
   /** The change in units, as its author's agent named them (see ReviewUnit). */
   units: Schema.optional(Schema.Array(ReviewUnit)),
+  /** Where the change can be seen running (see ReviewShow). */
+  shows: Schema.optional(Schema.Array(ReviewShow)),
   /** A proposal's idea of the work, when its author has one (see OutlineItem). */
   outline: Schema.optional(Schema.Array(OutlineItem)),
   /** A bug ticket's report (see BugReport). */
@@ -251,6 +274,10 @@ export interface ReviewDelta {
   readonly units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string>; readonly usesOf?: string }>;
   /** Unit ids withdrawn — units are how the change reads, not history. */
   readonly retireUnits?: ReadonlyArray<string>;
+  /** Where it runs, merged by id like units: a repeated id corrects one. */
+  readonly shows?: ReadonlyArray<Omit<ReviewShow, "id"> & { readonly id?: string }>;
+  /** Show ids withdrawn — a page gone, a request no longer changed. */
+  readonly retireShows?: ReadonlyArray<string>;
   /** Outline items, merged by id like decisions. */
   readonly outline?: ReadonlyArray<OutlineItem>;
   /** Outline ids withdrawn — an outline is intent, not history, so they go. */
@@ -333,6 +360,17 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
     }
     if (delta.retireUnits && delta.retireUnits.length > 0) units = units.filter((unit) => !delta.retireUnits!.includes(unit.id));
   }
+  let shows = base.shows === undefined && delta.shows === undefined ? undefined : [...(base.shows ?? [])];
+  if (shows !== undefined) {
+    for (const given of delta.shows ?? []) {
+      const id = given.id ?? nextId("s", shows.map((show) => show.id));
+      const at = shows.findIndex((show) => show.id === id);
+      const entry: ReviewShow = { ...given, id };
+      if (at === -1) shows.push(entry);
+      else shows[at] = entry;
+    }
+    if (delta.retireShows && delta.retireShows.length > 0) shows = shows.filter((show) => !delta.retireShows!.includes(show.id));
+  }
   let outline = base.outline === undefined && delta.outline === undefined ? undefined : [...(base.outline ?? [])];
   if (outline !== undefined) {
     for (const given of delta.outline ?? []) {
@@ -370,6 +408,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
     decisions,
     forks,
     ...(units !== undefined ? { units } : {}),
+    ...(shows !== undefined ? { shows } : {}),
     ...(outline !== undefined ? { outline } : {}),
     ...(bug !== undefined ? { bug } : {}),
     ...(machine !== undefined ? { machine } : {}),

@@ -12,6 +12,9 @@ export function portForProfile(profile: string, net: Net = NET): number {
   return (net === "devnet" ? 45000 : 41000) + (hash % 4000);
 }
 
+/** Whether a port is one a collagen instance may listen on, any net or profile. */
+export const isInstancePort = (port: number): boolean => port >= 41000 && port < 49000;
+
 /** MCP server name as the agents' configs know it: `collagen` for the
  *  installed app, `collagen-devnet` for a run from source, `-<profile>` appended
  *  for any profile but the default — so every local instance coexists in

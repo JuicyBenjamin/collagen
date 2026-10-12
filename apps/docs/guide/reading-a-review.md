@@ -159,6 +159,27 @@ touch are not listed. The decisions and forks pointing into the file sit above i
 Tests are found as `describe` / `it` / `test` calls (Vitest, Jest, Mocha, Pest), else as
 named test functions (`testFoo`, `TestFoo`, `test_foo`). With no clone to read the files
 from, they are read from the diff alone, as far as it goes.
+## See it running
+
+A diff does not show whether the change works. When the author's agent knows where it ran,
+it says so on the review (`shows` on `ask-review`), and the page lists them under the
+summary:
+
+- **A page** the change touches — localhost, a preview environment, a Storybook story —
+  opens in a new tab. A loopback address runs on the author's machine, and the page says
+  "local to" them.
+- **A request** the change makes or alters — its method, url and body — opens into a panel
+  where you edit the body and **Send** it. It goes from your own collagen, not the browser,
+  and the answer shows beneath: status, time, and the body (JSON indented). A redirect is
+  shown, not followed.
+
+**Sign-in stays on your machine.** Nothing on a review may be a credential: a token, cookie,
+password or key in a url, a header or a body is refused when it is filed, since the ticket
+reaches every peer. For a request behind a sign-in, paste your own token into **Token** —
+**Get one** links the page the author named for it. Your collagen keeps it for that origin
+in this profile's state alone: never on a ticket, never to a peer, never back to the page,
+and sent only to that origin (a bare token as `Bearer`, one with a scheme as it is).
+**Sign out** forgets it.
 
 ## Types and definitions
 

@@ -152,6 +152,40 @@ export interface Grouped {
   readonly outside: ReadonlyArray<string>;
 }
 
+/** Where the change can be seen running: a page to open, or — with a
+ *  `method` — a request the reader can send again, its body theirs to edit. */
+export interface Show {
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+  readonly method?: string;
+  readonly body?: string;
+  readonly headers?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
+  /** where the reader gets their own token for the request's origin */
+  readonly signIn?: string;
+  /** a loopback address: it runs on its author's machine */
+  readonly local: boolean;
+  /** a request: the reader has a token here for its origin (never the token itself) */
+  readonly signedIn?: boolean;
+}
+
+/** sendShow(ticketId, showId, body) — the request sent from the reader's
+ *  instance, with their own token when they signed in: what came back, or why not. */
+export type SendResult =
+  | {
+      readonly status: number;
+      readonly statusText: string;
+      readonly type?: string;
+      readonly body: string;
+      /** the body is only the start of what came back */
+      readonly cut?: true;
+      /** how long it took to answer, in milliseconds */
+      readonly elapsed: number;
+      /** a redirect, not followed: where it points */
+      readonly location?: string;
+    }
+  | { readonly error: string };
+
 /** How a change works: states, the moves between them, the things that run
  *  it and where what moves them comes from, with one walk-through. `before`
  *  when the change alters a machine that was there. */
@@ -192,6 +226,8 @@ export interface ReviewPageHead {
     readonly claimed?: { readonly guessedBy: string; readonly guessedByName: string; readonly at: number };
     /** how the change works, drawn and played, when its author drew it */
     readonly machine?: Machine;
+    /** where the change can be seen running */
+    readonly shows?: ReadonlyArray<Show>;
     readonly ts: number;
   };
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;

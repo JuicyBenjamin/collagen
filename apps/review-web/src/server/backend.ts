@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SendResult, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -65,6 +65,11 @@ export class ReviewBackend extends Context.Service<
     /** set a review's own merge setting; null gives it back to its room's */
     readonly setMerge: (ticketId: string, level: MergeFor | null) => Effect.Effect<MergeView | null>;
     readonly merges: (roomId: string, shown: MergesShown, fresh: boolean) => Effect.Effect<MergeHistory | null>;
+    /** a review's request sent again from this machine — with `body` in place of its own when
+     *  given — and the reader's token for its origin when they have one */
+    readonly send: (ticketId: string, showId: string, body: string | null) => Effect.Effect<SendResult>;
+    /** keep the reader's token for a request's origin, on this machine only; null forgets it */
+    readonly signIn: (ticketId: string, showId: string, token: string | null) => Effect.Effect<{ readonly ok: true } | { readonly error: string }>;
   }
 >()("review-web/ReviewBackend") {}
 
