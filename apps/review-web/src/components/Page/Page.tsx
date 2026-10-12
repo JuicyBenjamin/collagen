@@ -4,6 +4,7 @@ import { Header } from "./components/Header";
 import { HostActivity } from "./components/HostActivity";
 import { Outline } from "./components/Outline";
 import { Corner } from "./components/ReviewDial";
+import { Running } from "./components/Running";
 
 // One section per unit — what it achieves, a line on what it does, the
 // decisions that shaped it, then its code, each change shown once; beside
@@ -27,6 +28,7 @@ export function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
         </nav>
         <main>
           <Header head={props.head} />
+          <Running head={props.head} />
           <HostActivity head={props.head} />
           <Diff head={props.head} data={props.data} />
         </main>

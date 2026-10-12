@@ -152,6 +152,15 @@ export interface Grouped {
   readonly outside: ReadonlyArray<string>;
 }
 
+/** Where the change can be seen running: a page to open. */
+export interface Show {
+  readonly id: string;
+  readonly title: string;
+  readonly url: string;
+  /** a loopback address: it runs on its author's machine */
+  readonly local: boolean;
+}
+
 /** How a change works: states, the moves between them, the things that run
  *  it and where what moves them comes from, with one walk-through. `before`
  *  when the change alters a machine that was there. */
@@ -192,6 +201,8 @@ export interface ReviewPageHead {
     readonly claimed?: { readonly guessedBy: string; readonly guessedByName: string; readonly at: number };
     /** how the change works, drawn and played, when its author drew it */
     readonly machine?: Machine;
+    /** where the change can be seen running */
+    readonly shows?: ReadonlyArray<Show>;
     readonly ts: number;
   };
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
