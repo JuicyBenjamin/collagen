@@ -2,6 +2,7 @@ import { createSignal, For, Show } from "solid-js";
 import type { DraftView, LineComment } from "../data";
 import { hostNow } from "../hostNow";
 import { bodyParts, suggestionBlock } from "../suggest";
+import { Markdown } from "./Markdown";
 
 /** When a comment was written, as a reader says it. */
 const when = (iso: string): string => {
@@ -57,7 +58,7 @@ function Suggestion(props: { code: string; replaces: ReadonlyArray<string> | nul
   );
 }
 
-/** One comment: who, when, which lines, what — its words as written, never
+/** One comment: who, when, which lines, what — its words as markdown, never
  *  as HTML; a suggested change in it shown as one. The reader's own, on its
  *  way, is marked so. */
 function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
@@ -86,7 +87,7 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
         </Show>
       </div>
       <For each={bodyParts(props.comment.body)}>
-        {(part) => (part.kind === "text" ? <p class="line-comment-body">{part.text}</p> : <Suggestion code={part.code} replaces={replaces()} />)}
+        {(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}
       </For>
     </div>
   );
@@ -136,7 +137,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
       </div>
       <Show
         when={editing()}
-        fallback={<For each={bodyParts(props.draft.body)}>{(part) => (part.kind === "text" ? <p class="line-comment-body">{part.text}</p> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
+        fallback={<For each={bodyParts(props.draft.body)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
         <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
       </Show>
@@ -182,7 +183,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
       </div>
       <Show
         when={editing()}
-        fallback={<For each={bodyParts(props.comment.body)}>{(part) => (part.kind === "text" ? <p class="line-comment-body">{part.text}</p> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
+        fallback={<For each={bodyParts(props.comment.body)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
         <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
       </Show>
