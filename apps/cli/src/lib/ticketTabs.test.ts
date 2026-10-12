@@ -40,8 +40,8 @@ describe("the ticket list's tabs", () => {
 
   it("a closed ticket says how it ended", () => {
     expect(closedLine(t({}))).toBeNull();
-    expect(closedLine(t({ closed: { by: "alice", ts: 2, outcome: "dropped", reason: "superseded" } }))).toBe("dropped: superseded");
-    expect(closedLine(t({ closed: { by: "alice", ts: 2 } }))).toBe("closed as done");
+    expect(closedLine(t({ closed: { by: "alice", ts: 2, outcome: "dropped", reason: "superseded" } }))).toBe("⊗ superseded");
+    expect(closedLine(t({ closed: { by: "alice", ts: 2 } }))).toBe("✓");
   });
 });
 

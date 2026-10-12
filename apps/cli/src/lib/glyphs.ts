@@ -42,6 +42,15 @@ export const STACK_HELP: Record<keyof typeof STACK, string> = {
   waits: "yours, waiting on a ticket not yet answered: nobody else is shown it until then",
 };
 
+/** How a closed ticket ended, on its dim row: the row's dimness says it is
+ *  over, the mark says how. */
+export const ENDED = { done: "✓", dropped: "⊗" } as const;
+
+export const ENDED_HELP: Record<keyof typeof ENDED, string> = {
+  done: "on a dim row: closed as done",
+  dropped: "on a dim row: dropped",
+};
+
 /** An epic's row: a crown — a folder of work above the tickets in it. */
 export const EPIC_MARK = "♛";
 
