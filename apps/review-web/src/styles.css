@@ -471,3 +471,29 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .md .md-table table { width: auto; font: inherit; }
 .md .md-table th, .md .md-table td { padding: 3px 10px; border: 1px solid var(--line); text-align: left; white-space: normal; background: none; }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+
+/* the merge history: a timeline, the latest first — each merge a dot on the
+   line, the tickets it came from under it */
+.merges-page { max-width: 880px; margin: 0 auto; padding: 32px 24px 80px; }
+@media (max-width: 900px) { .merges-page { padding: 20px 16px 64px; } }
+.merges-again { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.merges-again:disabled { color: var(--dim); cursor: default; }
+.merges-project { margin-top: 32px; }
+.merges-project h2 { font-size: 17px; margin: 0 0 12px; }
+.merges-project-note { color: var(--dim); font-weight: 400; font-size: 14px; }
+.merges-none { color: var(--dim); }
+.timeline { list-style: none; margin: 0; padding: 0 0 0 20px; border-left: 2px solid var(--line); }
+.merge { position: relative; padding: 0 0 22px 4px; }
+.merge::before { content: ""; position: absolute; left: -28px; top: 7px; width: 10px; height: 10px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); }
+.merge-title { font-weight: 600; overflow-wrap: anywhere; }
+.merge-title a { color: var(--fg); text-decoration: none; }
+.merge-title a:hover { color: var(--accent); text-decoration: underline; }
+.merge-info { color: var(--dim); font-size: 13px; overflow-wrap: anywhere; }
+.merge-info code { color: var(--fg); font-size: 12px; }
+.merge-tickets { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.merge-tickets li { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+.merge-tickets li a { color: var(--fg); text-decoration: none; overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.merge-tickets li a:hover { color: var(--accent); text-decoration: underline; }
+.merge-tickets li.closed a { color: var(--dim); }
+.merge-ticket-by { color: var(--dim); font-size: 13px; white-space: nowrap; }
+.merge-ticket-by.mine { color: var(--accent); }

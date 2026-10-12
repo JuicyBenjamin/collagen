@@ -10,12 +10,12 @@ import { to, useRouter } from "../../../app/router";
 import { clamp } from "../../../lib/math";
 import { cells, clip, fitColumns } from "../../../lib/columns";
 import { KIND_GLYPH } from "../../../lib/glyphs";
-import { reviewedCode, ticketsOfMerges } from "../../../lib/mergeTickets";
 import { age } from "../../../lib/ticketSummary";
-import { hostOf, type HostMerge } from "../../../services/RepoHost";
+import type { HostMerge } from "../../../services/RepoHost";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { commentsAtom, identityAtom, membersAtom, reviewsAtom, rosterAtom } from "../atoms";
-import { mergesAtom, mergesCursorAtom, openLinkAtom, type ProjectMerges } from "./atoms";
+import { timelineOf, type ProjectMerges } from "../../../services/MergeHistory";
+import { mergesAtom, mergesCursorAtom, openLinkAtom, openMergesPageAtom } from "./atoms";
 
 /** One line of the list: a project's header (not a stop), a merge, or a
  *  ticket it came from, drawn under it. */
@@ -29,7 +29,7 @@ type Line =
  *  line per collagen ticket it came from (lib/mergeTickets), as the
  *  overview draws an epic's tickets; none when it came from none. Read from
  *  the host when the tab opens; `r` reads again. enter opens a ticket's page,
- *  `o` the pull request in the browser. The cursor holds its row when a read
+ *  `o` the pull request in the browser, `w` the same history as a web page. The cursor holds its row when a read
  *  brings new merges in above it. */
 export function MergesPage() {
   const result = useAtomValue(mergesAtom);
@@ -43,6 +43,7 @@ export function MergesPage() {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const openLink = useAtomSet(openLinkAtom);
+  const openPage = useAtomSet(openMergesPageAtom);
   const { navigate } = useRouter();
   // the selected row by what it is, not where: a re-read must not move it
   const selKey = useAtomValue(mergesCursorAtom);
@@ -57,14 +58,11 @@ export function MergesPage() {
   const now = Date.now();
 
   const lines: Array<Line> = [];
-  for (const p of projects) {
+  for (const p of timelineOf(projects, byId, reviews, comments, me)) {
     if (projects.length > 1 || "none" in p) lines.push({ kind: "project", key: `p-${p.project}`, text: p.project, ...("none" in p ? { note: p.none } : { note: `into ${p.base}${p.merges.length === 0 ? " · none" : ""}` }) });
     if ("none" in p) continue;
-    const host = hostOf(p.repo);
-    const code = host ? reviewedCode(p.project, byId, reviews, comments, me, host) : [];
-    for (const { merge, tickets: ids } of ticketsOfMerges(p.merges, code)) {
+    for (const { merge, tickets: shown } of p.merges) {
       lines.push({ kind: "merge", key: `m-${p.project}-${merge.number}`, merge });
-      const shown = ids.flatMap((id) => byId.get(id) ?? []);
       shown.forEach((ticket, i) => lines.push({ kind: "ticket", key: `t-${p.project}-${merge.number}-${ticket.id}`, merge, ticket, last: i === shown.length - 1 }));
     }
   }
@@ -96,12 +94,13 @@ export function MergesPage() {
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
       <Focusable
         id="merges"
-        hint={`↑↓ select${current?.kind === "ticket" ? " · enter open" : ""}${current ? " · o in browser" : ""} · r read again`}
+        hint={`↑↓ select${current?.kind === "ticket" ? " · enter open" : ""}${current ? " · o in browser" : ""} · w web page · r read again`}
         flexDirection="column"
         flexGrow={1}
         flexShrink={1}
         onKey={(key) => {
           if (key.name === "r") return refresh(), true;
+          if (key.name === "w") return openPage(), true;
           if (stops.length === 0) return false;
           if (key.name === "up" && sel > 0) return at(sel - 1);
           if (key.name === "down" && sel < last) return at(sel + 1);
