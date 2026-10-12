@@ -46,7 +46,7 @@ function Suggestion(props: { code: string; replaces: ReadonlyArray<string> | nul
     <div class="suggestion">
       <div class="suggestion-head">
         <span>Suggested change</span>
-        <button type="button" class="quiet small" onClick={copy} title="Copy the suggested code">
+        <button type="button" class="btn btn-xs" onClick={copy} title="Copy the suggested code">
           {copied() ? "Copied" : "Copy"}
         </button>
       </div>
@@ -150,19 +150,19 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
         when={editing()}
         fallback={<For each={bodyParts(words().text)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
-        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
+        <textarea class="textarea draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
         <StrengthPicker value={strength()} onChange={setStrength} />
       </Show>
       <Moved comment={props.draft} />
       <Show when={hostNow.refusal(props.draft.id)}>{(why) => <p class="host-error">Not posted: {why()}</p>}</Show>
       <div class="composer-actions">
-        <button type="button" class="quiet" disabled={busy()} onClick={() => void hostNow.decline([props.draft.id])}>
+        <button type="button" class="btn btn-sm" disabled={busy()} onClick={() => void hostNow.decline([props.draft.id])}>
           Decline
         </button>
-        <button type="button" class="quiet" disabled={busy()} onClick={() => setEditing(!editing())}>
+        <button type="button" class="btn btn-sm" disabled={busy()} onClick={() => setEditing(!editing())}>
           {editing() ? "Done editing" : "Edit"}
         </button>
-        <button type="button" class="banner-go" disabled={busy() || body().trim().length === 0} onClick={() => void accept()} title="Put it in your review — said with the rest when you finish it">
+        <button type="button" class="btn btn-primary btn-sm" disabled={busy() || body().trim().length === 0} onClick={() => void accept()} title="Put it in your review — said with the rest when you finish it">
           {busy() ? "Adding…" : "Add to review"}
         </button>
       </div>
@@ -202,7 +202,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
         when={editing()}
         fallback={<For each={bodyParts(words().text)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
-        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
+        <textarea class="textarea draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
         <StrengthPicker value={strength()} onChange={setStrength} />
       </Show>
       <Show when={!props.comment.posted} fallback={<p class="moved-note">On the pull request already — finish the review again to say it in the room.</p>}>
@@ -211,14 +211,14 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
       <Show when={hostNow.refusal(props.comment.id)}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <Show when={!props.comment.posted}>
       <div class="composer-actions">
-        <button type="button" class="quiet" onClick={() => void hostNow.unpend([props.comment.id])}>
+        <button type="button" class="btn btn-sm" onClick={() => void hostNow.unpend([props.comment.id])}>
           Delete
         </button>
-        <Show when={editing()} fallback={<button type="button" class="quiet" onClick={() => setEditing(true)}>Edit</button>}>
-          <button type="button" class="quiet" onClick={() => (setBody(words().text), setStrength(words().strength), setEditing(false))}>
+        <Show when={editing()} fallback={<button type="button" class="btn btn-sm" onClick={() => setEditing(true)}>Edit</button>}>
+          <button type="button" class="btn btn-sm" onClick={() => (setBody(words().text), setStrength(words().strength), setEditing(false))}>
             Cancel
           </button>
-          <button type="button" class="banner-go" onClick={save}>
+          <button type="button" class="btn btn-primary btn-sm" onClick={save}>
             Save
           </button>
         </Show>
@@ -316,12 +316,13 @@ export function LineComposer(props: {
             <div class="composer-head">
               <span>Comment on {linesOf({ ...props.to, startLine: block() ? props.from.line : undefined, startSide: props.from.side })}</span>
               <Show when={props.suggestable}>
-                <button type="button" class="quiet small" onClick={suggest} title="Put these lines in a suggestion to edit — the author can take it as it is">
+                <button type="button" class="btn btn-xs" onClick={suggest} title="Put these lines in a suggestion to edit — the author can take it as it is">
                   ± Suggest a change
                 </button>
               </Show>
             </div>
             <textarea
+              class="textarea"
               ref={(element) => {
                 box = element;
                 requestAnimationFrame(() => element.focus());
@@ -338,13 +339,13 @@ export function LineComposer(props: {
             <StrengthPicker value={strength()} onChange={setStrength} />
             <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
             <div class="composer-actions">
-              <button type="button" class="quiet" onClick={close}>
+              <button type="button" class="btn btn-sm" onClick={close}>
                 Cancel
               </button>
-              <button type="button" class="quiet" disabled={sending() || body().trim().length === 0} onClick={() => void send(true)} title="Say it now, on its own — not as part of your review">
+              <button type="button" class="btn btn-sm" disabled={sending() || body().trim().length === 0} onClick={() => void send(true)} title="Say it now, on its own — not as part of your review">
                 Add single comment
               </button>
-              <button type="submit" class="banner-go" disabled={sending() || body().trim().length === 0} title="Keep it in your review, said with the rest when you finish it">
+              <button type="submit" class="btn btn-primary btn-sm" disabled={sending() || body().trim().length === 0} title="Keep it in your review, said with the rest when you finish it">
                 {sending() ? "Adding…" : hostNow.pending().length > 0 ? "Add review comment" : "Start a review"}
               </button>
             </div>

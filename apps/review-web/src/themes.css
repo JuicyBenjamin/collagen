@@ -1,0 +1,122 @@
+/* The page's themes: daisyUI's, each a block of variables under a
+   data-theme on <html> (theme.ts swaps it), and collagen's own — the TUI's
+   palette, Tokyo Night in the dark — when none is chosen. Only the
+   components the page uses are loaded. daisyUI's themes sit in a layer:
+   collagen's own and a custom one (theme.ts), unlayered, win over them
+   whatever their selectors weigh. */
+@import "daisyui/base/properties.css";
+@import "daisyui/components/button.css";
+@import "daisyui/components/textarea.css";
+@import "daisyui/components/checkbox.css";
+@import "daisyui/components/radio.css";
+@import "daisyui/components/select.css";
+@import "daisyui/components/input.css";
+@import "daisyui/theme/light.css" layer(daisyui-themes);
+@import "daisyui/theme/cupcake.css" layer(daisyui-themes);
+@import "daisyui/theme/nord.css" layer(daisyui-themes);
+@import "daisyui/theme/corporate.css" layer(daisyui-themes);
+@import "daisyui/theme/lofi.css" layer(daisyui-themes);
+@import "daisyui/theme/dark.css" layer(daisyui-themes);
+@import "daisyui/theme/dim.css" layer(daisyui-themes);
+@import "daisyui/theme/night.css" layer(daisyui-themes);
+@import "daisyui/theme/dracula.css" layer(daisyui-themes);
+@import "daisyui/theme/sunset.css" layer(daisyui-themes);
+
+/* collagen's own, as a daisyUI theme. The --collagen-* are the shades
+   styles.css would otherwise mix from the theme, kept as they were. */
+:root:not([data-theme]) {
+  color-scheme: light;
+  --color-base-100: #ffffff;
+  --color-base-200: #f7f7fb;
+  --color-base-300: #e3e5ee;
+  --color-base-content: #1f2335;
+  --color-primary: #3d59a1;
+  --color-primary-content: #ffffff;
+  --color-secondary: #9854f1;
+  --color-secondary-content: #ffffff;
+  --color-accent: #007197;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2335;
+  --color-neutral-content: #e3e5ee;
+  --color-info: #2e7de9;
+  --color-info-content: #ffffff;
+  --color-success: #1a7f37;
+  --color-success-content: #ffffff;
+  --color-warning: #8f5e15;
+  --color-warning-content: #ffffff;
+  --color-error: #cf222e;
+  --color-error-content: #ffffff;
+  --radius-selector: 0.25rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.625rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+  --collagen-dim: #6b7089;
+  --collagen-faint: #9aa0b8;
+  --collagen-line: #e3e5ee;
+  --collagen-warn: #8f5e15;
+  --collagen-add-bg: #e6f4ea;
+  --collagen-del-bg: #fbe9eb;
+  --collagen-sign-add: #1a7f37;
+  --collagen-sign-del: #cf222e;
+  --collagen-chg-bg: #fdf6dc;
+  --collagen-sign-chg: #9a6700;
+  --collagen-moved-bg: #f2d98b;
+  --collagen-kind-proposal: #a16207;
+  --collagen-kind-plan: #2563eb;
+  --collagen-kind-task: #0e7490;
+  --collagen-kind-bug: #c2410c;
+  --collagen-kind-review: #15803d;
+  --collagen-kind-epic: #8b5cf6;
+  --collagen-sk-word: #dfe2ec;
+  --collagen-sk-block: #eef0f6;
+  --collagen-tone-say: #3d59a1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-base-100: #1f2335;
+    --color-base-200: #1a1b26;
+    --color-base-300: #2f3549;
+    --color-base-content: #c0caf5;
+    --color-primary: #7aa2f7;
+    --color-primary-content: #1a1b26;
+    --color-secondary: #bb9af7;
+    --color-secondary-content: #1a1b26;
+    --color-accent: #7dcfff;
+    --color-accent-content: #1a1b26;
+    --color-neutral: #414868;
+    --color-neutral-content: #c0caf5;
+    --color-info: #7dcfff;
+    --color-info-content: #1a1b26;
+    --color-success: #9ece6a;
+    --color-success-content: #1a1b26;
+    --color-warning: #e0af68;
+    --color-warning-content: #1a1b26;
+    --color-error: #f7768e;
+    --color-error-content: #1a1b26;
+    --collagen-dim: #8189b0;
+    --collagen-faint: #565f89;
+    --collagen-line: #2f3549;
+    --collagen-warn: #e0af68;
+    --collagen-add-bg: #1e3a2a;
+    --collagen-del-bg: #3d1f29;
+    --collagen-sign-add: #9ece6a;
+    --collagen-sign-del: #f7768e;
+    --collagen-chg-bg: #33301f;
+    --collagen-sign-chg: #e0af68;
+    --collagen-moved-bg: #6b5a1f;
+    --collagen-kind-proposal: #e0af68;
+    --collagen-kind-plan: #7aa2f7;
+    --collagen-kind-task: #7dcfff;
+    --collagen-kind-bug: #ff9e64;
+    --collagen-kind-review: #9ece6a;
+    --collagen-kind-epic: #bb9af7;
+    --collagen-sk-word: #2a2f45;
+    --collagen-sk-block: #20243a;
+    --collagen-tone-say: #7aa2f7;
+  }
+}

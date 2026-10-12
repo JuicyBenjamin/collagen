@@ -311,6 +311,7 @@ export function Hunk(props: {
           <label class={["mark-viewed", { changed: state() === "changed" }]} title="Fold this file everywhere on the page, as read; it opens again if its changes move, showing what moved">
             <input
               type="checkbox"
+              class="checkbox checkbox-primary checkbox-xs"
               checked={state() === "viewed"}
               onChange={async () => {
                 // marking it folds it: closed smoothly first, then marked
