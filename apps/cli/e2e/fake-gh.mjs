@@ -36,6 +36,11 @@ const login = existsSync(join(dir, "login")) ? readFileSync(join(dir, "login"), 
 if (command === "api" && subcommand === "user") out({ login, name: login === "bob" ? "Bob Reviewer" : login, avatar_url: `http://127.0.0.1:9/${login}.png` });
 // what was merged into main: #6 squashed, #5 by a merge commit, and 120
 // older ones squashed — a hundred to a page, as GitHub pages them
+// or the pull requests a test wrote to $FAKE_GH_DIR/merges.json, as GitHub has them
+if (command === "api" && subcommand === "graphql" && (fields("-f").query ?? "").includes("states: MERGED") && existsSync(join(dir, "merges.json"))) {
+  const nodes = fields("-f").base === "main" ? JSON.parse(readFileSync(join(dir, "merges.json"), "utf8")) : [];
+  out({ data: { repository: { pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } });
+}
 if (command === "api" && subcommand === "graphql" && (fields("-f").query ?? "").includes("states: MERGED")) {
   const merged = (number, title, headRefName, mergedAt, oid, parents, last) => ({
     number, title, headRefName, mergedAt, updatedAt: mergedAt, url: `https://github.com/acme/sandbox/pull/${number}`,
