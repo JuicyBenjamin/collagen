@@ -21,6 +21,9 @@ explaining is the goal, not a risk.
   an agent's review-context) — not in what everyone sees.
 - **Numbers that mean "you have something to do" stay**; counts that only
   describe go.
+- **The terminal has no room.** A label there is a word or two: a count and
+  a noun ("2 relations"), never a phrase ("2 grew from it", "in ♛ epic"). A
+  glyph that the tabs already teach needs no word beside it.
 
 Agent-facing text (tool descriptions, outcomes) may explain more — agents
 need instructions — but what an agent is told to tell the person is a line.
@@ -30,6 +33,8 @@ need instructions — but what an agent is told to tell the person is a line.
 - The assumed-review banner was three lines: who does not use collagen, how
   the AI inferred it, every source read, and what to do — and it was wrong
   about the person. It is now "Assumption-based review by Juicy · 0 of 5 checked".
+- A ticket row said "in ♛ Better Review Experience" and "4 grew from it".
+  Now "♛ Better Review Experience" and "4 relations".
 
 ## Checklist
 
