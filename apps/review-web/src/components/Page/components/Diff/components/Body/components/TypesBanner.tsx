@@ -73,7 +73,7 @@ export function TypesBanner(props: { tool: ToolId }) {
                       )}
                     </Show>
                   </span>
-                  <button type="button" class="banner-go" onClick={() => void installTool(props.tool)}>
+                  <button type="button" class="btn btn-primary btn-sm" onClick={() => void installTool(props.tool)}>
                     {tool().error ? "Try again" : "Install"}
                   </button>
                   <button type="button" class="banner-close" aria-label="Not now" onClick={dismiss}>

@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Fiber, Layer, Stream } from "effect";
+import { Effect, Fiber, Layer, Stream, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
@@ -14,6 +14,7 @@ import { closeReview, mergeView, setMerge, takeReview } from "./ReviewFinish";
 import { Outbox } from "./Outbox";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
+import { checkedThemes } from "@collagen/review-web/themeData";
 
 // The review page talks to this instance through Solid's server functions
 // (apps/review-web src/api.ts) — no routes of its own. The page's build
@@ -73,11 +74,17 @@ const backend = Effect.gen(function* () {
   const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox>();
   const types = yield* ReviewTypes;
   const history = yield* MergeHistory;
+  const store = yield* StateStore;
   const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
   return {
     head: (ticketId) => (ticketIdOk(ticketId) ? on(reviewHead(ticketId)) : Effect.succeed(null)),
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),
     changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(context)) : Stream.empty),
+    themes: SubscriptionRef.changes(store.state).pipe(
+      Stream.map((state) => state.themes ?? null),
+      Stream.changesWith((before, after) => JSON.stringify(before) === JSON.stringify(after)),
+    ),
+    saveThemes: (given) => store.update((state) => ({ ...state, themes: checkedThemes(given) })).pipe(Effect.andThen(store.get), Effect.map((state) => state.themes ?? checkedThemes(null))),
     hover: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.hover(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
     definition: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.definition(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
     warm: (ticketId, tool, commit) => (ticketIdOk(ticketId) && toolNamed(tool) && commitOk(commit) ? on(types.warm(ticketId, tool, commit)) : Effect.void),
@@ -139,13 +146,13 @@ const handle = (load: Effect.Effect<ServerEntry | null>) => (request: HttpServer
 
 /** What a page asks its live socket for: a stream opened under its own id,
  *  or one it no longer needs. */
-type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool"; readonly subject: string } | { readonly close: string };
+type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "themes"; readonly subject: string } | { readonly close: string };
 const liveIdOk = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,32}$/.test(id);
 const liveAskOf = (text: string): LiveAsk | null => {
   try {
     const ask = JSON.parse(text) as Record<string, unknown>;
     if (liveIdOk(ask["close"])) return { close: ask["close"] };
-    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
+    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "themes") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
   } catch {
     // not one: ignored
   }
@@ -182,7 +189,8 @@ const liveSocket = (impl: ReviewBackend["Service"]) => (request: HttpServerReque
             continue;
           }
           yield* stop(ask.open);
-          const values: Stream.Stream<unknown> = ask.topic === "changes" ? impl.changes(ask.subject) : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
+          const values: Stream.Stream<unknown> =
+            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "themes" ? impl.themes : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
           const fiber = yield* values.pipe(
             Stream.runForEach((value) => write(JSON.stringify({ id: ask.open, value }))),
             // its stream ended: the page is told, to open it again
