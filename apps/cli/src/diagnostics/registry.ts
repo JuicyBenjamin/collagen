@@ -17,6 +17,9 @@ export interface DiagnosticDeps {
    *  their browser if their setting says so. Says what happened, or null.
    *  Absent where no browser is the person's (the TUI's own runs). */
   readonly reviewStarted?: (ticketId: string) => Effect.Effect<string | null>;
+  /** Each tool collagen serves its agents, by the size of its description
+   *  and schema. Absent where no MCP server is (the TUI's own runs). */
+  readonly toolDefinitions?: ReadonlyArray<{ readonly name: string; readonly chars: number }>;
 }
 
 /** Where the person (or agent) is when they run it. */
