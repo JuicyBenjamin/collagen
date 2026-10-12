@@ -75,10 +75,12 @@ hold part of a file (one route of a big routes file) and another unit the rest.
 Forks that fall in no change of the diff close the page. With no diff to read, the page
 lists the decisions and where they point.
 
-**Whole file**, on a hunk's header, opens the file as the branch has it — read from your
-clone, never its working tree — every line numbered, this diff's added lines marked, scrolled
-to the change; types and peeks work on it as on the hunk. "Just the change" folds it back.
-It is offered when the diff came from your clone, and not on a deleted file.
+**Whole file**, on a file's header or on the band above any of its later changes, opens the
+file as the branch has it — read from your clone, never its working tree — every line
+numbered, this diff's added lines marked. It opens in place of that file's changes, not
+beside them, with the line you were reading where it was on screen; types and peeks work on
+it as on the hunk. "Just the changes" folds it back, again keeping your place. It is offered
+when the diff came from your clone, and not on a deleted file.
 
 **Viewed**, on each file's header, marks it as read, as on GitHub: the file folds to its
 header everywhere it shows on the page, and the top of the decisions list counts how many
