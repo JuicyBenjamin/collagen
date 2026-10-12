@@ -36,7 +36,7 @@ No files are written into your projects.
  you alice · ai codex
 
   ╭────╮ ╭─ room · dev room ──────────────────────────────────────────╮
-  │ WO │ │ › [1] overview   [2] messages   …   [5] projects  ·  2 online│
+  │ WO │ │ › [1] overview   [2] projects   …   [5] outbox  ·  2 online  │
   ╰────╯ │                                                            │
  ▌╭────╮ │ ● alice (you) codex · 1 project                            │
  ▌│ DR │ │ ● bob claude-code · 2 projects                             │
@@ -63,6 +63,15 @@ No files are written into your projects.
   changes, `✕` a step failed, `…` said something, a bare name means nothing from them
   yet. So `bob ✓  carol ✓  dave ↻` is two readers happy and one asking for changes. You
   are never in that list: whether a row wants you is said by its place and its colour.
+- **projects tab** — each project in the room once, with who shares it. `enter` on a dim
+  `not here yet` row points collagen at your copy; `+ add project` adds a folder; `d`
+  removes one of yours.
+- **merges tab** — what was merged into each of your projects' default branch, the
+  latest first, each by its pull request's title with its number, branch and age.
+  Under a merge, a line per review ticket it came from (by the pull request its link
+  names, else its branch, else a commit it was read at); none when it came from none.
+  `enter` on a ticket's line opens it (`esc` comes back here), `o` opens the pull
+  request in your browser, `r` reads the merges again.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
 - **outbox tab** — everything of yours that has gone out, in one list, newest first,
@@ -72,15 +81,6 @@ No files are written into your projects.
   There is nothing to approve here: your agent acts on your word, and this is the
   receipt. Neither this tab nor **messages** carries a count: both are logs that only
   grow, so their size is not something a person acts on.
-- **merges tab** — what was merged into each of your projects' default branch, the
-  latest first, each by its pull request's title with its number, branch and age.
-  Under a merge, a line per review ticket it came from (by the pull request its link
-  names, else its branch, else a commit it was read at); none when it came from none.
-  `enter` on a ticket's line opens it (`esc` comes back here), `o` opens the pull
-  request in your browser, `r` reads the merges again.
-- **projects tab** — each project in the room once, with who shares it. `enter` on a dim
-  `not here yet` row points collagen at your copy; `+ add project` adds a folder; `d`
-  removes one of yours.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.
@@ -94,7 +94,7 @@ what's natural there. Number keys work from anywhere.
 
 | Key | Action |
 | --- | --- |
-| `1` / `2` / `3` / `4` | Overview / messages / outbox / merges tab |
+| `1` – `5` | Overview / projects / merges / messages / outbox tab |
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |

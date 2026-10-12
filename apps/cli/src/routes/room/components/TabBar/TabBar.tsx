@@ -49,13 +49,13 @@ export function TabBar() {
             <span fg={focused ? theme.accent : theme.dim}>{focused ? "› " : "  "}</span>
             <span fg={active === "room/overview" ? theme.accent : theme.dim}>[1] overview</span>
             <span fg={theme.dim}>  </span>
-            <span fg={active === "room/messages" ? theme.accent : theme.dim}>[2] messages</span>
+            <span fg={active === "room/projects" ? theme.accent : theme.dim}>[2] projects</span>
             <span fg={theme.dim}>  </span>
-            <span fg={active === "room/outbox" ? theme.accent : theme.dim}>[3] outbox</span>
+            <span fg={active === "room/merges" ? theme.accent : theme.dim}>[3] merges</span>
             <span fg={theme.dim}>  </span>
-            <span fg={active === "room/merges" ? theme.accent : theme.dim}>[4] merges</span>
+            <span fg={active === "room/messages" ? theme.accent : theme.dim}>[4] messages</span>
             <span fg={theme.dim}>  </span>
-            <span fg={active === "room/projects" ? theme.accent : theme.dim}>[5] projects</span>
+            <span fg={active === "room/outbox" ? theme.accent : theme.dim}>[5] outbox</span>
           </text>
           <text truncate wrapMode="none" flexShrink={1} minWidth={0}>
             <span fg={theme.dim}>  ·  </span>
