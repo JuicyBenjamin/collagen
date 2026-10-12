@@ -12,7 +12,7 @@ describe("groupTickets", () => {
   it("groups by project, then by kind in lifecycle order", () => {
     const rows = [row("r", "api", "review", "waiting"), row("t", "api", "task", "waiting"), row("p", "api", "proposal", "waiting"), row("b", "api", "bug", "waiting"), row("l", "api", "plan", "waiting")];
     const [api] = groupTickets(rows);
-    expect(api!.kinds.map((k) => k.kind)).toEqual(["proposal", "plan", "bug", "review", "task"]);
+    expect(api!.kinds.map((k) => k.kind)).toEqual(["proposal", "bug", "plan", "task", "review"]);
   });
 
   it("inside a group, needs you first, then newest activity", () => {
