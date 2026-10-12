@@ -2,7 +2,7 @@
 # The merges tab: what was merged into alice's project's default branch, the
 # latest first, named by its pull request — her review of pull request #6
 # drawn under it, #5 (from no ticket) with nothing under it. The host is a
-# stand-in (fake-gh.mjs). In the pty: `4` opens the tab, enter drops into the
+# stand-in (fake-gh.mjs). In the pty: `3` opens the tab, enter drops into the
 # list, `o` hands #6's url to the browser opener (a stand-in on PATH), ↓
 # reaches the ticket under it, enter opens its page, esc comes back to the
 # merges with the cursor where it was.
@@ -19,7 +19,7 @@ rm -f "$PTY" "$MARKS" "$OUT/merges-tui.go" "$LOG" "$LOG.keys" "$OUT/opened"
 mkdir -p "$OUT/bin"; for b in open xdg-open; do printf '#!/bin/sh\necho "$@" >> "%s/opened"\n' "$OUT" > "$OUT/bin/$b"; chmod +x "$OUT/bin/$b"; done
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/merges-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
-  printf '4'; sleep 3; mark M0_tab
+  printf '3'; sleep 3; mark M0_tab
   printf '\r'; sleep 1; mark M1_list
   printf 'o'; sleep 2
   printf '\033[B'; sleep 1; mark M2_ticket_row
@@ -49,7 +49,7 @@ HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
 if [ "$HAVE_PYTE" = yes ]; then
   render() { python3 "$E2E/render.py" "$PTY" "$MARKS" "${ROWS:-30}" "${COLS:-100}" "$1"; }
   SCREEN=$(render M1_list)
-  expect "the tab is in the bar" "$SCREEN" "\[4\] merges"
+  expect "the tab is in the bar" "$SCREEN" "\[3\] merges"
   expect "into the default branch" "$SCREEN" "merges into main"
   expect "the latest first, named by its pull request" "$(echo "$SCREEN" | grep -nE 'Rows a page|Fix the header' | head -1)" "Rows a page"
   expect "…its number, branch and age beside it" "$SCREEN" "Rows a page +#6 · feat/paging · "

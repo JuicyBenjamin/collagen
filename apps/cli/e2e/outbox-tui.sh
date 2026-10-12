@@ -2,7 +2,7 @@
 # The outbox in the TUI: everything of alice's that went out, in one list.
 # Her "agent" (curl) sends two messages and creates a ticket, all on her word
 # — nothing waits for anyone's approval. In the pty: the overview lists the
-# ticket the moment it lands, `3` opens the outbox with all three records
+# ticket the moment it lands, `5` opens the outbox with all three records
 # newest first, and `enter` unfolds the text one carried — whole, scrolled
 # with ↑↓ / pgup / home / end, nothing capped, the brand above it unmoved; ←
 # comes back out to the list, and only then does ← walk the tabs.
@@ -14,7 +14,7 @@ rm -f "$PTY" "$MARKS" "$OUT/outbox-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/outbox-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1; mark M0_overview
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M1_tickets
-  printf '3'; sleep 2; mark M2_outbox
+  printf '5'; sleep 2; mark M2_outbox
   printf '\r'; sleep 1              # off the tab bar, into the list
   printf '\r'; sleep 2; mark M3_expanded
   printf '\033[4~'; sleep 2; mark M3b_end
