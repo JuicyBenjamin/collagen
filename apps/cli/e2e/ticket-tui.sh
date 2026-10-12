@@ -15,9 +15,9 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/ticket-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; mark M0_tabs
   printf '\033[C'; sleep 1; mark M0a_epics
-  for i in 1 2 3 4 5; do printf '\033[C'; sleep 0.4; done; sleep 1; mark M0b_tasks
+  for i in 1 2 3 4; do printf '\033[C'; sleep 0.4; done; sleep 1; mark M0b_tasks
   printf '\033[B'; sleep 1; printf 'h'; sleep 1; mark M0c_closed; printf 'h'; sleep 0.5
-  printf '\033[A'; sleep 1; for i in 1 2 3 4 5 6; do printf '\033[D'; sleep 0.4; done; sleep 1; mark M0d_all
+  printf '\033[A'; sleep 1; for i in 1 2 3 4 5; do printf '\033[D'; sleep 0.4; done; sleep 1; mark M0d_all
   printf '\033[B'; sleep 1; mark M0_tickets
   printf '\r'; sleep 2; mark M1_opened
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M1a_attachments   # two steps now: s1, s2, then out
@@ -81,11 +81,11 @@ HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
 [ -n "${PYTE_PATH:-}" ] && HAVE_PYTE=yes
 if [ "$HAVE_PYTE" = yes ]; then
   screen() { python3 "$E2E/render.py" "$PTY" "$MARKS" "${ROWS:-45}" 120 "$1"; }
-  expect "above the list, its tabs: every ticket, then a kind each with its glyph" "$(screen M0_tabs)" "all tickets 1 +♛ epics 0 +✦ proposals 0 +≡ plans 0 +⚑ bugs 0 +± reviews 0 +☐ tasks 1"
+  expect "above the list, its tabs: every ticket, then a kind each with its glyph" "$(screen M0_tabs)" "all tickets 1 +♛ epics 0 +✦ proposals 0 +⚑ bugs 0 +≡ plans 0 +☐ tasks 1 +± reviews 0"
   expect "→: the epics tab, its list empty" "$(screen M0a_epics)" "♛ epics 0"
   expect "…and says so" "$(screen M0a_epics)" "│ +none +│"
   SHOT=$(screen M0b_tasks)
-  expect "→ five more: the tasks tab, only tasks under it" "$SHOT" "☐ bob "
+  expect "→ four more: the tasks tab, only tasks under it" "$SHOT" "☐ bob "
   expect "…with no kind heading: the tab says the kind" "$(echo "$SHOT" | grep -cE '^ +tasks$')" "^0$"
   expect "h lists the closed ones too, below, each saying how it ended" "$(screen M0c_closed)" "a spike nobody needs +⊗ not needed"
   expect "…and not before h" "$(screen M0b_tasks | grep -c 'a spike nobody needs')" "^0$"

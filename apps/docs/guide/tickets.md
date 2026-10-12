@@ -48,10 +48,10 @@ guide and the screen cannot say two different things (a test holds this table to
 | --- | --- | --- | --- |
 | `epic` | a folder of tickets that together make one body of work | nothing of its own — its parts ask; anyone may add, move or take them out | anyone — once everything in it is resolved; reopened with a reason |
 | `proposal` | an idea, written down; owed to no one | is it worth doing — and would you do it, or should I | its author — when a plan grew out of it, or it was dropped |
-| `plan` | something its author intends to do, and how | do you agree, what would you change, what am I missing | its author — having folded the takes in and decided |
 | `bug` | a symptom, with its reporter's reading of cause, importance and fix | what do you make of the symptom — your diagnosis before theirs | its reporter — fixed, planned, or let be |
-| `review` | code that exists, with the why behind it | read the change against its reasons; approve it, or ask for changes | its author — once they have acted on the reviews |
+| `plan` | something its author intends to do, and how | do you agree, what would you change, what am I missing | its author — having folded the takes in and decided |
 | `task` | agreed work: a goal, and steps with an owner each | do your step, and settle it when it is done | its author — when the work is over |
+| `review` | code that exists, with the why behind it | read the change against its reasons; approve it, or ask for changes | its author — once they have acted on the reviews |
 
 ## How a step gets done
 
@@ -462,8 +462,8 @@ dependency order is enforced by delivery, not by remembering.
 
 The overview tab lists **every** ticket in the room, whoever made it and whoever it is
 for, **grouped**: a block per project (no header when the room has one), and inside it a
-group per kind in the order work moves through them — proposals, plans, bugs, reviews,
-then tasks — so a project reads as its pipeline. A row is a glance and nothing more:
+group per kind in the order work moves through them — proposals, bugs, plans, tasks,
+then reviews — so a project reads as its pipeline. A row is a glance and nothing more:
 **whose** it is — `you`, bright, or the author's name, dim — its **goal**, a `▸` when it is
 yours to act on, and **what has been said** on it: `↻` changes were asked for, `✓` someone
 approved, `✕` a step failed, `…` someone spoke — one glyph per kind of answer however many
