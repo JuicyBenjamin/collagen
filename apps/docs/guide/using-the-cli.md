@@ -72,6 +72,12 @@ No files are written into your projects.
   There is nothing to approve here: your agent acts on your word, and this is the
   receipt. Neither this tab nor **messages** carries a count: both are logs that only
   grow, so their size is not something a person acts on.
+- **merges tab** — what was merged into each of your projects' default branch, the
+  latest first, each by its pull request's title with its number, branch and age.
+  Under a merge, a line per review ticket it came from (by the pull request its link
+  names, else its branch, else a commit it was read at); none when it came from none.
+  `enter` on a ticket's line opens it (`esc` comes back here), `o` opens the pull
+  request in your browser, `r` reads the merges again.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.
@@ -85,7 +91,7 @@ what's natural there. Number keys work from anywhere.
 
 | Key | Action |
 | --- | --- |
-| `1` / `2` / `3` | Overview / messages / outbox tab |
+| `1` / `2` / `3` / `4` | Overview / messages / outbox / merges tab |
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |

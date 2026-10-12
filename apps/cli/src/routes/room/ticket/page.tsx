@@ -11,7 +11,7 @@ import { focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
-import { to, useRouter } from "../../../app/router";
+import { to, useRouter, type TicketRoute } from "../../../app/router";
 import { roomAtom } from "../../atoms";
 import { attachmentsAtom, fetchAttachmentAtom, heldAttachmentsAtom, identityAtom, membersAtom, outboxAtom, reviewsAtom, rosterAtom, traceAtom } from "../atoms";
 import { reviewHeadline } from "../../../lib/review";
@@ -50,7 +50,8 @@ const STEP_GLYPH: Record<Ticket["steps"][number]["status"], string> = {
 /** The sections of a ticket's page: where the cursor may already be when it opens. */
 const PAGE_SECTIONS: ReadonlyArray<string> = ["ticket-review", "ticket-steps", "ticket-attachments", "ticket-conversation", "ticket-diagnostics"];
 
-export function TicketPage({ ticketId }: { ticketId: string }) {
+/** `route` is how this page was reached: the pages it opens come back to it, and from it to where it came from. */
+export function TicketPage({ ticketId, route }: { ticketId: string; route: TicketRoute }) {
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
@@ -206,7 +207,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
           flexDirection="column"
           flexShrink={0}
           onKey={(key) => {
-            if (isEnter(key)) return navigate(to.review(ticketId, to.ticket(ticketId))), true;
+            if (isEnter(key)) return navigate(to.review(ticketId, route)), true;
             // the code itself, grouped under the why — a page of its own, in the browser
             if (key.name === "o") return openPage({ ticketId }), true;
             return false;
@@ -280,7 +281,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
             if (key.name === "y" && !held[a.id]) return fetch({ roomId, attachmentId: a.id }), true;
             if (isEnter(key)) {
               const file = held[a.id];
-              if (file && a.transcript) navigate(to.transcript(file, a.name, to.ticket(ticketId)));
+              if (file && a.transcript) navigate(to.transcript(file, a.name, route));
               else if (!file) fetch({ roomId, attachmentId: a.id });
               return true;
             }
@@ -369,7 +370,7 @@ export function TicketPage({ ticketId }: { ticketId: string }) {
           if (isEnter(key)) {
             const x = available[dSel];
             if (x) {
-              if (x.d.open) navigate(x.d.open(ctx, to.ticket(ticketId)));
+              if (x.d.open) navigate(x.d.open(ctx, route));
               else run({ id: x.d.id, params: x.params, ctx });
             }
             return true;

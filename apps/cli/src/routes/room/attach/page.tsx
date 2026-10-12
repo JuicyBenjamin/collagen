@@ -8,7 +8,7 @@ import { Focusable } from "../../../components/Focusable";
 import { captureAtom, focusAtom } from "../../../components/focus";
 import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
-import { to, useRouter } from "../../../app/router";
+import { useRouter, type Route } from "../../../app/router";
 import { clamp } from "../../../lib/math";
 import { age } from "../../../lib/ticketSummary";
 import { roomAtom } from "../../atoms";
@@ -24,7 +24,8 @@ const PATH_HINT = "enter add the file · esc cancel";
  *  marked ones — the references go on the ticket for everyone at once, the
  *  files go to whoever fetches them while you are online, and the outbox
  *  records what went. ← / esc back to the ticket. */
-export function AttachPage({ ticketId }: { ticketId: string }) {
+/** `back` is the ticket page it was opened from, as it was reached. */
+export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }) {
   const { navigate } = useRouter();
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
@@ -90,7 +91,7 @@ export function AttachPage({ ticketId }: { ticketId: string }) {
             const chosen = marked.length > 0 ? marked : f ? [f.path] : [];
             if (chosen.length > 0) {
               attach({ roomId, ticketId, goal, paths: chosen });
-              navigate(to.ticket(ticketId));
+              navigate(back);
               setFocus("ticket-diagnostics");
             }
             return true;
