@@ -1,0 +1,51 @@
+# Working on collagen
+
+Read before building. Skills for recurring review findings live in
+[`skills/`](skills/README.md); load the ones whose description matches.
+`CLAUDE.md` is a link to this file: edit it here.
+
+## Tests are a choice, not a default
+
+Tests cost velocity. Write one only where a regression would be costly and
+hard to see. Before writing a test, ask:
+
+> If this broke, would we notice quickly and fix it cheaply?
+
+Yes: no test. It would break quietly, or corrupt shared data: test it.
+
+**Test**
+
+- Pure logic with real branching: ticket state, visibility, epic and step
+  ordering, column fitting.
+- p2p sync, merge and persistence (`packages/p2p`, `RoomLog`, anything peers
+  write; see `replicated-merges`).
+- Anything touching security or a person's data.
+- A bug that already came back once: one test that pins it.
+
+**Skip**
+
+- TUI layout and rendering; a glance shows it.
+- Wording of hints, labels and messages.
+- Thin wrappers and glue between services.
+- One-line fixes, and code about to change shape.
+- Anything the type checker already guards.
+
+**Cap:** at most one focused test file per change. None is a fine answer.
+
+**When you do write one**
+
+- Test through the public interface, at the seam a caller uses, never
+  internals. It should survive a refactor that keeps behaviour.
+- Expected values come from somewhere independent: a literal, a worked
+  example, the ticket. Never recompute them the way the code does.
+- Mock only at system boundaries: spawned CLIs, the model, time, the network.
+  Never our own modules.
+- Name it for what is true ("a closed ticket counts toward its epic"), not how.
+
+**Existing tests:** no big cleanup. When a test that only restates wording or
+layout gets in your way, delete it in that change.
+
+These "when you do write one" points come from Matt Pocock's
+[`tdd` skill](https://github.com/mattpocock/skills/tree/main/skills/engineering/tdd).
+We don't use it as is: it writes a failing test first for every slice, which is
+the habit this rule breaks.
