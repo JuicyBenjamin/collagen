@@ -84,6 +84,9 @@ export interface ReviewInput {
   /** A review's units, and the ids withdrawn — how its code reads. */
   readonly units?: ReadonlyArray<unknown>;
   readonly retireUnits?: ReadonlyArray<string>;
+  /** Where the change runs, and the ids withdrawn. */
+  readonly shows?: ReadonlyArray<unknown>;
+  readonly retireShows?: ReadonlyArray<string>;
   /** the why is inferred, not told (see p2p Assumed) */
   readonly assumed?: Assumed;
   /** guesses withdrawn, by id */
@@ -132,7 +135,7 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
   }
   const outlineMoves = (input.outline?.length ?? 0) > 0 || (input.retireOutline?.length ?? 0) > 0;
   const bugMoves = Object.keys(input.bug ?? {}).length > 0 || (input.retireBug?.length ?? 0) > 0;
-  const unitsMove = (input.units?.length ?? 0) > 0 || (input.retireUnits?.length ?? 0) > 0;
+  const unitsMove = (input.units?.length ?? 0) > 0 || (input.retireUnits?.length ?? 0) > 0 || (input.shows?.length ?? 0) > 0 || (input.retireShows?.length ?? 0) > 0;
   if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves && !unitsMove && (input.retireGuesses?.length ?? 0) === 0) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
   }
@@ -231,6 +234,8 @@ export const reviewRows = (review: ReviewContext, about?: string) => {
     forks: forks.map((fork) => (review.claimed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, verdict: fork.verdict ?? (fork.basis !== undefined ? "still a guess" : "told"), guessed: fork.guess ? fork.guess.what : "" } : review.assumed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, basis: fork.basis ?? "", confidence: fork.confidence ?? "" } : { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, by: fork.by ?? "" })),
     // how the change reads, as its author's agent grouped it
     ...(review.units && review.units.length > 0 ? { units: review.units.map((unit) => ({ id: unit.id, title: unit.title, ...(unit.what ? { what: unit.what } : {}), where: unit.where.join(" "), ...(review.units!.some((other) => other.usesOf) ? { usesOf: unit.usesOf ?? "" } : {}) })) } : {}),
+    // where it can be seen running: a page to open
+    ...(review.shows && review.shows.length > 0 ? { shows: review.shows.map((show) => ({ id: show.id, title: show.title, url: show.url })) } : {}),
     // a proposal's outline: what the work might be and who might do it — the
     // author's suggestion, binding on nobody; a plan lifts it into real steps
     ...(outline.length > 0 ? { outline: outline.map((item) => ({ id: item.id, intent: item.intent, description: item.description, owner: item.owner ?? "" })) } : {}),
