@@ -33,8 +33,8 @@ export interface ProjectGroup<R extends Row> {
 const rank = new Map(KIND_ORDER.map((k, i) => [k, i]));
 
 /** The overview's shape: a block per project, and inside it a group per
- *  kind in the order work moves through them (KIND_ORDER — proposal, plan,
- *  bug, review, task), so reading down a project is reading its pipeline.
+ *  kind in the order work moves through them (KIND_ORDER — proposal, bug,
+ *  plan, task, review), so reading down a project is reading its pipeline.
  *
  *  Inside a group the old order stands: needs you first, then waiting,
  *  failed, done; newest activity first within. Projects are ordered the same
