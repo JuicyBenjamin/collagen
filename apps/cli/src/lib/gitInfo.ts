@@ -62,4 +62,15 @@ export const repoWebUrl = (root: string): string | null => {
   return null;
 };
 
-
+/** The branch the repo's code lands on: the one `origin/HEAD` names, else
+ *  `main` or `master` when origin has it — null when none is known. */
+export const defaultBranchOf = (root: string): string | null => {
+  const dir = gitDir(root);
+  if (!dir) return null;
+  const common = commonDir(dir);
+  const head = read(join(common, "refs", "remotes", "origin", "HEAD"))?.match(/^ref:\s*refs\/remotes\/origin\/(.+)$/m)?.[1]?.trim();
+  if (head) return head;
+  const packed = read(join(common, "packed-refs")) ?? "";
+  const has = (b: string) => read(join(common, "refs", "remotes", "origin", b)) !== null || packed.split("\n").some((l) => l.endsWith(` refs/remotes/origin/${b}`));
+  return ["main", "master"].find(has) ?? null;
+};
