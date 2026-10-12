@@ -197,10 +197,10 @@ export function Hunk(props: {
         <Show
           when={props.continued}
           fallback={
-            <Show when={state() === "viewed"} fallback={<span class="head">{props.hunk.file}</span>}>
+            <Show when={state() === "viewed"} fallback={<span class="head path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>}>
               {/* viewed: the chevron opens it again to read, the mark stays */}
               <button type="button" class="head reread-toggle" onClick={() => reading.toggle(props.hunk.file)} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
-                <span class="chevron">{folded() ? "▸" : "▾"}</span> {props.hunk.file}
+                <span class="chevron">{folded() ? "▸" : "▾"}</span><span class="path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>
               </button>
             </Show>
           }

@@ -123,6 +123,10 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .hunk .file::before { content: ""; position: absolute; inset: 0 0 -1px; z-index: -1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px 10px 0 0; }
 .hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 9px 13px 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .hunk .file .head { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a path too long for the header loses its start, not its file name: it is laid
+   out right to left so the ellipsis falls on the left, the <bdi> inside keeping
+   the characters in reading order; the whole path is in the title on hover */
+.hunk .file .path { direction: rtl; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whole-toggle { font: 12px -apple-system, sans-serif; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
 .whole-toggle:hover { color: var(--accent); border-color: var(--accent); }
 .code.whole { max-height: 70vh; overflow: auto; }
@@ -334,9 +338,10 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .code.gap td.t { color: var(--dim); }
 
 /* a viewed file's name: a chevron that opens it again to read, the mark kept */
-.reread-toggle { all: unset; cursor: pointer; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reread-toggle { all: unset; display: flex; min-width: 0; cursor: pointer; color: var(--dim); white-space: nowrap; }
 .reread-toggle:hover, .reread-toggle:focus-visible { color: var(--accent); }
-.reread-toggle .chevron { display: inline-block; width: 1em; color: var(--faint); }
+.reread-toggle .chevron { flex: none; width: 1.2em; color: var(--faint); }
+.reread-toggle .path { min-width: 0; }
 
 /* how far through the files the reader is: a count and a thin bar */
 .viewed-progress { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--dim); white-space: nowrap; }
