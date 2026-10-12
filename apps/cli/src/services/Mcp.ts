@@ -31,6 +31,8 @@ import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
 import { acceptDrafts, draftComments, draftsOf, dropDrafts, submitReview } from "./ReviewTalk";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
+import { askWhy } from "./AskWhy";
+import { MergeHistory } from "./MergeHistory";
 import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
@@ -605,6 +607,19 @@ export const ReviewComments = Tool.make("review-comments", {
   success: Schema.String,
 });
 
+export const AskWhy = Tool.make("ask-why", {
+  description:
+    "Why some code is the way it is, from its history: the merges that made it — the one that last changed a line (git blame), the latest that touched a file, or a pull request by number — and, on the review tickets each merge came from, what was decided and why, and the forks taken. Call it before changing or removing code whose reason you do not know, or when your user asks why it was done this way; relay what is there, and say when nothing was recorded. 'file' is a path in the project's clone (absolute, or relative to the project — a worktree's own path reads its copy), 'line' as the file reads now; 'project' when the path does not say it; 'limit' how many merges (3, at most 10). Small on purpose: the decisions and forks about the file first, a few per ticket, the rest counted — review-context {ticketId} reads a ticket's whole why. A decision whose 'standing' is not empty was guessed by an AI, not told by the code's author ('guess'), or answered by them since ('confirmed', 'corrected', 'wrong'). Nothing leaves this machine but reading the merges from the code's host.",
+  parameters: Schema.Struct({
+    file: Schema.optional(Schema.String),
+    line: Schema.optional(Schema.Number),
+    pull: Schema.optional(Schema.Number),
+    project: Schema.optional(Schema.String),
+    limit: Schema.optional(Schema.Number),
+  }),
+  success: Schema.String,
+});
+
 export const SetName = Tool.make("set-name", {
   description: "Change the user's display name as peers see it. Applies live.",
   parameters: Schema.Struct({ name: Schema.String }),
@@ -687,6 +702,7 @@ export const CollagenToolkit = Toolkit.make(
   SetSettings,
   OpenReview,
   ReviewComments,
+  AskWhy,
   SetName,
   RenameRoom,
   ListRooms,
@@ -728,6 +744,7 @@ export const DevCollagenToolkit = Toolkit.make(
   SetSettings,
   OpenReview,
   ReviewComments,
+  AskWhy,
   SetName,
   RenameRoom,
   ListRooms,
@@ -750,7 +767,7 @@ const makeHandlers = Effect.gen(function* () {
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
-    const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore>();
+    const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore | MergeHistory>();
 
     // Every tool is scoped to the room the user is looking at — resolved per
     // call, so switching rooms retargets all of them without a reconnect.
@@ -1726,6 +1743,10 @@ const makeHandlers = Effect.gen(function* () {
           const now = describeSettings(yield* store.get);
           return changes.length > 0 ? `set — applies now. Your user's switches:\n${now}` : now;
         }).pipe(Effect.withSpan("Mcp.setSettings")),
+      "ask-why": Effect.fn("Mcp.askWhy")(function* (input: { file?: string; line?: number; pull?: number; project?: string; limit?: number }) {
+        const { id } = yield* focusedRoom;
+        return yield* askWhy(id, input);
+      }, Effect.provideContext(talkContext)),
       "open-review": Effect.fn("Mcp.openReview")(function* ({ ticketId }: { ticketId: string }) {
         const { room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);

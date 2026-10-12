@@ -6,7 +6,7 @@ import { latestMerges, type MergesPage } from "../lib/github";
 import { lineage, reviewedCode, ticketsOfMerges, whyOpen } from "../lib/mergeTickets";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostCliMissing, type HostMerge, type HostRefused, type RepoHost } from "./RepoHost";
-import { Rooms } from "./Rooms";
+import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 
 // What was merged into a room's projects: the TUI's merges tab and the
@@ -63,6 +63,16 @@ export const timelineOf = (
     };
   });
 
+/** Who a key is in a room, as the TUI names them: "you", a peer's name, a
+ *  member's, else the key's start. */
+export const namesIn = (room: RoomHandle["room"], me: string) =>
+  Effect.gen(function* () {
+    const peers = yield* SubscriptionRef.get(room.roster);
+    const members = yield* SubscriptionRef.get(room.members);
+    return (key: string): string =>
+      key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
+  });
+
 export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHistory", {
   make: Effect.gen(function* () {
     const store = yield* StateStore;
@@ -115,6 +125,8 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
       });
 
     return {
+      /** A project's latest `want` merges, read from its host (ask-why). */
+      projectMerges,
       /** The merges tab's room: its merges, read again as the reader scrolls
        *  on (more), and from scratch on a refresh — null while it is. */
       view: (roomId: string): Stream.Stream<ReadonlyArray<ProjectMerges> | null> =>
@@ -162,11 +174,8 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
           const reviews = yield* SubscriptionRef.get(room.reviews);
           const why = new Map(reviews.map((review) => [review.ticketId, review] as const));
           const comments = yield* SubscriptionRef.get(room.comments);
-          const peers = yield* SubscriptionRef.get(room.roster);
-          const members = yield* SubscriptionRef.get(room.members);
           const name = (yield* SubscriptionRef.get(room.meta)).name;
-          const nameFor = (key: string): string =>
-            key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
+          const nameFor = yield* namesIn(room, me);
           return {
             room: name,
             readAt: new Date().toISOString(),
