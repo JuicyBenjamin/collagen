@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Hunk } from "@collagen/review-web/data";
-import { groupByUnit, ownersOf, uncovered, type Imports } from "./units";
+import { differing, groupByUnit, ownersOf, uncovered, type Imports } from "./units";
 
 const hunk = (file: string, number: number, newStart: number, newLines = 3): Hunk => ({
   id: `${file}#${number}`,
@@ -96,5 +96,51 @@ describe("what a changed file belongs with", () => {
     expect(owners.get("src/Tickets/components/Row.tsx")).toBe("src/Tickets/Tickets.tsx");
     // a module used from beside it is its own thing
     expect(owners.get("src/Outbox.ts")).toBe("src/Outbox.ts");
+  });
+});
+
+// a page that swaps its table for the new <DataTable>, each with its own rows
+const use = (file: string, rows: string, extra: ReadonlyArray<string> = []): Hunk => {
+  const text = [`import { DataTable } from "${file.split("/").length > 3 ? "../../" : "../"}components/DataTable";`, `-  <table>{${rows}.map(renderRow)}</table>`, `+  <DataTable rows={${rows}} />`, ...extra];
+  return {
+    id: `${file}#0`,
+    file,
+    header: "@@",
+    newStart: 1,
+    newLines: text.length,
+    lines: text.map((line, index) => (line.startsWith("-") ? { kind: "-" as const, text: line.slice(1), old: index + 1 } : { kind: "+" as const, text: line.startsWith("+") ? line.slice(1) : line, new: index + 1 })),
+  };
+};
+
+describe("a group of repeated uses", () => {
+  const table = hunk("src/components/DataTable.tsx", 0, 1, 20);
+  const pages = [use("src/pages/Users.tsx", "users"), use("src/pages/Orders.tsx", "orders"), use("src/pages/admin/Audit.tsx", "entries"), use("src/pages/Teams.tsx", "teams")];
+
+  it("is one unit read right after the unit it uses, whatever order it was named in", () => {
+    const grouped = groupByUnit(
+      { decisions: [], forks: [], units: [{ ...unit("u2", "Lists use the table", pages.map((page) => page.file)), usesOf: "u1" }, unit("u1", "One table for every list", ["src/components/DataTable.tsx"])] },
+      [table, ...pages],
+      new Map(),
+    );
+    expect(grouped.units.map((unit) => unit.id)).toEqual(["u1", "u2"]);
+    expect(grouped.units[1]!.uses).toEqual({ of: "u1", differs: [] });
+    expect(grouped.units[0]!.uses).toBeUndefined();
+  });
+
+  it("names a use that does something of its own, and leads nowhere when the unit it names is gone", () => {
+    const odd = use("src/pages/Teams.tsx", "teams", ["  if (!teams.length) return <Empty />;"]);
+    const grouped = groupByUnit({ decisions: [], forks: [], units: [{ ...unit("u2", "Lists use the table", [...pages.slice(0, 3), odd].map((page) => page.file)), usesOf: "u9" }] }, [...pages.slice(0, 3), odd], new Map());
+    expect(grouped.units[0]!.uses).toEqual({ differs: ["src/pages/Teams.tsx"] });
+  });
+
+  it("names a use that left out part of the change or added to it, and both of two that differ each way", () => {
+    const short: Hunk = { ...pages[3]!, lines: pages[3]!.lines.slice(1) };
+    expect(differing([...pages.slice(0, 3), short])).toEqual(["src/pages/Teams.tsx"]);
+    expect(differing(pages)).toEqual([]);
+    const odd = use("src/pages/Orders.tsx", "orders", ["  const total = sum(orders);"]);
+    expect(differing([pages[0]!, odd])).toEqual(["src/pages/Orders.tsx"]);
+    const other = use("src/pages/Users.tsx", "users", ["  if (!users) return null;"]);
+    expect(differing([other, odd])).toEqual(["src/pages/Users.tsx", "src/pages/Orders.tsx"]);
+    expect(differing([pages[0]!])).toEqual([]);
   });
 });
