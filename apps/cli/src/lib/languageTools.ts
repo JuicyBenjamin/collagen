@@ -36,13 +36,15 @@ export interface LanguageTool {
    *  into the review's tree beside each `marker` file: `dir`, or what the
    *  marker itself says (`dirFrom`, given its text). */
   readonly deps: { readonly marker: string; readonly dir: string; readonly dirFrom?: (marker: string) => string | null };
-  /** initialize's initializationOptions; `storage` is a folder of the
-   *  review's own for whatever the server keeps. */
+  /** initialize's initializationOptions; `storage` is a folder kept beside
+   *  the review's tree for whatever the server keeps (its index), from one
+   *  start to the next (lib/typeTrees). */
   readonly initializationOptions?: (storage: string) => unknown;
   /** The answer to the server's workspace/configuration, per item. */
   readonly settings?: unknown;
   /** The server says it is ready to answer (its index is built): until then
-   *  a first question waits, up to a minute. Absent: ready at once. */
+   *  its answers are said as partial, with how far it has read. Absent:
+   *  ready at once. */
   readonly readyWhen?: (method: string, params: unknown) => boolean;
 }
 
@@ -89,7 +91,7 @@ export const TOOLS: Readonly<Record<ToolId, LanguageTool>> = {
     languageId: () => "php",
     // Composer's own setting, when a project moves vendor/ elsewhere
     deps: { marker: "composer.json", dir: "vendor", dirFrom: composerVendorDir },
-    initializationOptions: (storage) => ({ storagePath: storage, globalStoragePath: join(storage, "global"), clearCache: true, telemetry: { enabled: false } }),
+    initializationOptions: (storage) => ({ storagePath: storage, globalStoragePath: join(storage, "global"), clearCache: false, telemetry: { enabled: false } }),
     settings: { telemetry: { enabled: false } },
     // it indexes the whole workspace (vendor included) before it answers well
     readyWhen: (method, params) =>

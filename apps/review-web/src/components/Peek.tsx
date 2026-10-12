@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import { stillReading, type DefinitionResult, type Peek as PeekData } from "../data";
+import { readSoFar, stillReading, type DefinitionResult, type Peek as PeekData } from "../data";
 import { highlightCode, languageOf } from "../highlight";
 import { closePeek, retryPeek } from "../intel";
 import { CodeLine } from "./Code";
@@ -60,12 +60,18 @@ function Declaration(props: { peek: PeekData }) {
   );
 }
 
-/** Ask again, for an answer that was not a final one. */
+/** Ask again, after a failure. */
 const Retry = () => (
   <button type="button" class="peek-toggle" onClick={() => retryPeek()}>
     Try again
   </button>
 );
+
+/** "reading the project · 40%" */
+const reading = (r: DefinitionResult): string => {
+  const at = readSoFar(r);
+  return `reading the project${at === null ? "…" : ` · ${at}%`}`;
+};
 
 /** Where a symbol is declared, opened under the line it was clicked on: its
  *  file and line, its doc comment as text, and the declaration. A symbol
@@ -84,30 +90,22 @@ export function Peek(props: { result: DefinitionResult | null }) {
       <Show when={props.result} fallback={<p class="peek-note">Finding the definition…</p>}>
         {(r) => (
           <Show
-            when={!("error" in r()) && !("indexing" in r())}
+            when={!("error" in r())}
             fallback={
               <p class="peek-note">
-                {"indexing" in r() ? "Still reading the project — nothing to show yet." : (r() as { error: string }).error} <Retry />
+                {(r() as { error: string }).error} <Retry />
               </p>
             }
           >
-            {/* an answer from a server still reading may be missing things: said, with a way to ask again */}
+            {/* an answer from a server still reading may be missing things: said, and asked again by the page */}
             <Show when={stillReading(r()) && peeks().length > 0}>
-              <p class="peek-note">
-                May be incomplete — the project is still being read. <Retry />
-              </p>
+              <p class="peek-note">May be incomplete — {reading(r())}</p>
             </Show>
             <Show
               when={peeks().length > 0}
               fallback={
                 <p class="peek-note">
-                  {stillReading(r()) ? (
-                    <>
-                      Nothing found yet — the project is still being read. <Retry />
-                    </>
-                  ) : (
-                    "No definition found."
-                  )}
+                  {stillReading(r()) ? `Nothing found yet — ${reading(r())}` : "No definition found."}
                 </p>
               }
             >
