@@ -2,6 +2,7 @@ import { createSignal, For, Show } from "solid-js";
 import type { HostNote, HostReview } from "../data";
 import { hostNow } from "../hostNow";
 import { bodyParts } from "../suggest";
+import { Markdown } from "./Markdown";
 
 /** "just now", "4 min ago", "3 h ago", a date — from `now`. */
 const ago = (t: number, now: number): string => {
@@ -14,11 +15,11 @@ const ago = (t: number, now: number): string => {
 
 type Item = ({ readonly kind: "review" } & HostReview) | ({ readonly kind: "note" } & HostNote);
 
-/** Words as written, never as HTML; a suggested change in them as code. */
+/** Words as markdown, never as HTML; a suggested change in them as code. */
 function Words(props: { body: string }) {
   return (
     <For each={bodyParts(props.body)}>
-      {(part) => (part.kind === "text" ? <p class="host-body">{part.text}</p> : <pre class="host-suggestion">{part.code}</pre>)}
+      {(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <pre class="host-suggestion">{part.code}</pre>)}
     </For>
   );
 }

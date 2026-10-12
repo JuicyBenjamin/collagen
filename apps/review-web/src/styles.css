@@ -328,7 +328,7 @@ tr.thread-row td { padding: 0; white-space: normal; background: var(--bg); }
 .line-comment-head strong { color: var(--fg); font-weight: 600; }
 .line-comment-when { color: var(--faint); }
 .line-comment-link { margin-left: auto; color: var(--faint); font-size: 12px; }
-.line-comment-body { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg); }
+.line-comment .md { margin-top: 4px; }
 .line-composer { display: grid; gap: 8px; }
 
 /* the stack the branch sits in: trunk first, this one marked, what builds on it after */
@@ -436,7 +436,7 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .host-checked { margin-left: auto; color: var(--faint); font-size: 12.5px; }
 .host-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
 .host-item { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font: 13.5px/1.5 -apple-system, sans-serif; }
-.host-body { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.host-item .md { margin-top: 4px; }
 .host-suggestion { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; background: var(--add-bg); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
 .verdict { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 0 8px; border: 1px solid currentColor; }
 .verdict.approved { color: var(--sign-add); }
@@ -445,3 +445,24 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 /* a reply sits under the comment it answers, a step in */
 .line-comment.reply { margin-left: 24px; }
 .host-earlier { margin-top: 10px; }
+
+/* a comment's words as markdown */
+.md { overflow-wrap: anywhere; color: var(--fg); }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table { margin: 0 0 8px; }
+.md .md-h { font-weight: 600; }
+.md .md-h1 { font-size: 1.2em; }
+.md .md-h2 { font-size: 1.1em; }
+.md ul, .md ol { padding-left: 22px; }
+.md li > p { margin: 0 0 2px; }
+.md li.md-task { list-style: none; margin-left: -18px; }
+.md li.md-task > input { margin: 0 6px 0 0; vertical-align: middle; }
+.md li.md-task > p { display: inline; }
+.md blockquote { padding: 0 12px; border-left: 3px solid var(--line); color: var(--dim); }
+.md code { padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 9%, transparent); font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.md pre.md-code { padding: 8px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre; overflow-x: auto; color: var(--th-token, var(--fg)); }
+.md .md-table { overflow-x: auto; }
+.md .md-table table { width: auto; font: inherit; }
+.md .md-table th, .md .md-table td { padding: 3px 10px; border: 1px solid var(--line); text-align: left; white-space: normal; background: none; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }

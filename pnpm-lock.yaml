@@ -186,6 +186,12 @@ importers:
       effect:
         specifier: 4.0.0
         version: 4.0.0
+      gemoji:
+        specifier: 8.1.0
+        version: 8.1.0
+      marked:
+        specifier: 17.0.1
+        version: 17.0.1
       motion:
         specifier: 14.0.0
         version: 14.0.0(react@19.2.8)
@@ -2823,6 +2829,9 @@ packages:
 
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
+
+  gemoji@8.1.0:
+    resolution: {integrity: sha512-HA4Gx59dw2+tn+UAa7XEV4ufUKI4fH1KgcbenVA9YKSj1QJTT0xh5Mwv5HMFNN3l2OtUe3ZIfuRwSyZS5pLIWw==}
 
   generate-object-property@2.0.0:
     resolution: {integrity: sha512-KwuURPyqn2Mz8DdV29pJwQu0Y7tcsbkULr82eeOcY/ZllFK6I9Wm8dsRByIu7CKWlFi9BdW1b3mcXMp/kQBQsw==}
@@ -6747,6 +6756,8 @@ snapshots:
     optional: true
 
   function-bind@1.1.2: {}
+
+  gemoji@8.1.0: {}
 
   generate-object-property@2.0.0:
     dependencies:
