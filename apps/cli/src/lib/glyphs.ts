@@ -38,7 +38,7 @@ export const GLYPH: Record<Mark, string> = {
 export const STACK = { follows: "↳", waits: "⧗" } as const;
 
 export const STACK_HELP: Record<keyof typeof STACK, string> = {
-  follows: "read after the ticket it sits under, one level deeper per step of a chain (after) — a stacked review, a second phase",
+  follows: "under the ticket it is read after (after) or grew out of (from), a level per step",
   waits: "yours, waiting on a ticket not yet answered: nobody else is shown it until then",
 };
 
