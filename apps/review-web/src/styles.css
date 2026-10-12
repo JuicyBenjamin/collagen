@@ -213,6 +213,13 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .chip.wrong { text-decoration: line-through; color: var(--dim); }
 .fork.wrong { opacity: 0.7; }
 .unit-size { margin: 6px 0 0; font-size: 12.5px; color: var(--faint); }
+/* a group of repeated uses: one shown, the matching rest folded, one that differs flagged */
+.uses-of { margin: 6px 0 0; font-size: 13px; color: var(--dim); }
+.mark-uses { margin-left: 12px; font: 12px -apple-system, sans-serif; color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
+.mark-uses:hover { border-color: var(--accent); }
+.uses-rest { margin-bottom: 16px; }
+.uses-rest > summary { margin-bottom: 12px; font-size: 13px; color: var(--dim); cursor: pointer; user-select: none; }
+.differs { margin: 0 0 6px; font-size: 12.5px; font-weight: 600; color: var(--warn); }
 .why-decision.flash { animation: flash 1.2s ease-out; }
 @keyframes flash { from { background: var(--panel); box-shadow: -18px 0 0 var(--accent); } to { background: transparent; box-shadow: none; } }
 section.unexplained .decision-what { color: var(--warn); }

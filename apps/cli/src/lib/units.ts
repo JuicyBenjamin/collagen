@@ -8,7 +8,9 @@ import { claimed, parsePointer, sameFile } from "./reviewView";
 // it. The author's agent names the units; what it leaves out goes under the
 // decision that points at it, so every section still says what it is for;
 // what nothing points at is "Not explained". Each unit carries the decisions
-// that shaped it — its why.
+// that shaped it — its why. A group of repeated uses — files that only apply
+// another unit's change, each the same way — is a unit too, read right after
+// the unit it uses, with the files that do not match the rest named.
 // Pure: the review, the diff's hunks, and which changed files import which
 // (services/ReviewView reads those from the clone).
 
@@ -20,6 +22,7 @@ interface AuthorUnit {
   readonly title: string;
   readonly what?: string;
   readonly where: ReadonlyArray<string>;
+  readonly usesOf?: string;
 }
 
 /** How precisely a pointer claims a hunk: a line beats a whole file. */
@@ -75,6 +78,51 @@ const readingOrder = <U extends { readonly files: ReadonlyArray<string> }>(units
   return out;
 };
 
+/** A line with its strings made alike — import paths differ by folder. */
+const stripped = (line: string): string => line.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, '""');
+
+/** A line's shape for comparing uses: strings, numbers and spacing made
+ *  alike, and every name the files do not mostly share made alike — so
+ *  `rows={users}` on one page and `rows={orders}` on the next are one use. */
+const shapeOf = (line: string, shared: (word: string) => boolean): string =>
+  stripped(line)
+    .replace(/\b\d[\w.]*/g, "0")
+    .replace(/[A-Za-z_$][\w$]*/g, (word) => (shared(word) ? word : "_"))
+    .replace(/\s+/g, " ");
+
+/** The files of a group of repeated uses whose changes are not the same as
+ *  the rest's: a changed line most of the files do not have, or one most
+ *  have and it lacks, sets a file apart. Of two files that each have what
+ *  the other lacks, both are — there is no rest to side with. Cheap and
+ *  strict: a use wrapped onto more lines differs too, which only asks the
+ *  reader to look. */
+export const differing = (hunks: ReadonlyArray<Hunk>): ReadonlyArray<string> => {
+  const changed = new Map<string, Array<string>>();
+  for (const hunk of hunks)
+    for (const line of hunk.lines) {
+      if (line.kind === " " || line.text.trim().length === 0) continue;
+      const lines = changed.get(hunk.file) ?? [];
+      lines.push(`${line.kind}${line.text.trim()}`);
+      changed.set(hunk.file, lines);
+    }
+  const files = [...changed.keys()];
+  if (files.length < 2) return [];
+  const most = (count: number) => count > files.length / 2;
+  const tally = (sets: ReadonlyArray<ReadonlySet<string>>) => {
+    const counts = new Map<string, number>();
+    for (const set of sets) for (const item of set) counts.set(item, (counts.get(item) ?? 0) + 1);
+    return counts;
+  };
+  const words = tally([...changed.values()].map((lines) => new Set(lines.flatMap((line) => stripped(line).match(/[A-Za-z_$][\w$]*/g) ?? []))));
+  const shapes = new Map(files.map((file) => [file, new Set(changed.get(file)!.map((line) => shapeOf(line, (word) => most(words.get(word) ?? 0))))]));
+  const spread = tally([...shapes.values()]);
+  const common = [...spread].filter(([, count]) => most(count)).map(([shape]) => shape);
+  return files.filter((file) => {
+    const mine = shapes.get(file)!;
+    return [...mine].some((shape) => !most(spread.get(shape)!)) || common.some((shape) => !mine.has(shape));
+  });
+};
+
 /** Lay a diff out in units. Each hunk goes to the author's unit that claims
  *  it most precisely (a line over a whole file; the first unit on a tie);
  *  what no unit claims goes with the file it belongs with (a test, a
@@ -105,7 +153,7 @@ export function groupByUnit(
 
   // the author's units first
   const unitHome = homes(review.units ?? []);
-  const named = (review.units ?? []).map((unit, index) => ({ id: unit.id, title: unit.title, what: unit.what ?? "", by: "author" as const, ids: hunks.filter((hunk) => unitHome.get(hunk.id) === index).map((hunk) => hunk.id) }));
+  const named = (review.units ?? []).map((unit, index) => ({ id: unit.id, title: unit.title, what: unit.what ?? "", by: "author" as const, usesOf: unit.usesOf, ids: hunks.filter((hunk) => unitHome.get(hunk.id) === index).map((hunk) => hunk.id) }));
 
   // what they leave out: a test or a sub-component with the code it belongs
   // to, if that is in a unit; else under the decision that points at it most
@@ -113,7 +161,7 @@ export function groupByUnit(
   // still reads by purpose; a test with its code there too. What no decision
   // covers is "Not explained", read last.
   const decisionHome = homes(review.decisions);
-  const byDecision = review.decisions.map((decision) => ({ id: `d-${decision.id}`, title: decision.title ?? decision.what, what: decision.title ? decision.what : "", by: "decision" as const, ids: [] as Array<string> }));
+  const byDecision = review.decisions.map((decision) => ({ id: `d-${decision.id}`, title: decision.title ?? decision.what, what: decision.title ? decision.what : "", by: "decision" as const, usesOf: undefined, ids: [] as Array<string> }));
   const unexplainedIds: Array<string> = [];
   const homeOfFile = (file: string): (typeof named)[number] | (typeof byDecision)[number] | undefined =>
     named.find((unit) => filesOf(unit.ids).includes(file)) ?? byDecision.find((unit) => unit.ids.some((id) => fileOf.get(id) === file));
@@ -154,9 +202,11 @@ export function groupByUnit(
   }
   const forkHunks = new Map(review.forks.map((fork) => [fork.id, new Set(claimed(parsePointer(fork.at), hunks).map((hunk) => hunk.id))]));
 
-  const shape = (unit: { readonly id: string; readonly title: string; readonly what: string; readonly by: Unit["by"]; readonly ids: ReadonlyArray<string> }): Unit => {
+  const shape = (unit: { readonly id: string; readonly title: string; readonly what: string; readonly by: Unit["by"]; readonly usesOf?: string | undefined; readonly ids: ReadonlyArray<string> }): Unit => {
     const ids = tidy(unit.ids);
     const mine = new Set(ids);
+    // a group's unit is named only when it is here to lead to
+    const of = unit.usesOf !== undefined && unit.usesOf !== unit.id && named.some((other) => other.id === unit.usesOf && other.ids.length > 0) ? unit.usesOf : undefined;
     return {
       id: unit.id,
       title: unit.title,
@@ -166,12 +216,17 @@ export function groupByUnit(
       decisions: review.decisions.filter((decision) => ids.some((id) => claims.get(id)?.includes(decision.id))).map((decision) => decision.id),
       forks: review.forks.filter((fork) => [...forkHunks.get(fork.id)!].some((id) => mine.has(id))),
       unexplained: ids.filter((id) => !claims.has(id)),
+      ...(unit.usesOf !== undefined ? { uses: { ...(of ? { of } : {}), differs: differing(hunks.filter((hunk) => mine.has(hunk.id))) } } : {}),
     };
   };
-  const ordered = readingOrder(
+  const inOrder = readingOrder(
     [...named, ...byDecision].filter((unit) => unit.ids.length > 0).map((unit) => ({ ...unit, files: filesOf(unit.ids) })),
     imports,
   );
+  // a group of uses right after the unit it uses — the real change once, then
+  // its copies; a group naming another group stays where its imports put it
+  const follows = (group: (typeof inOrder)[number]) => group.usesOf !== undefined && inOrder.some((other) => other !== group && other.id === group.usesOf && other.usesOf === undefined);
+  const ordered = inOrder.filter((unit) => !follows(unit)).flatMap((unit) => [unit, ...inOrder.filter((group) => follows(group) && group.usesOf === unit.id)]);
   const units: Array<Unit> = [
     ...ordered.map(shape),
     ...(unexplainedIds.length > 0 ? [shape({ id: "unexplained", title: "Not explained", what: "Changes no decision covers — worth a question to the author.", by: "unexplained", ids: unexplainedIds })] : []),
