@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { closedAs, excludedFromEpic, heldBy, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { excludedFromEpic, heldBy, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../../../components/Focusable";
 import { FollowScroll } from "../../../../../components/FollowScroll";
 import { isEnter } from "../../../../../components/keys";
@@ -14,7 +14,7 @@ import { epicProgress, marksLabel, progressShort, rowTitle, summarize, type Tick
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
-import { closedLine, fitTabs, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
+import { closedLine, endedMark, fitTabs, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
 import { openReviewPageAtom } from "../../../review/atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
@@ -557,11 +557,8 @@ function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
   );
 }
 
-/** A relative's row says only whether it is over: what it is to the row above is its other column. */
-const ghostStatus = (t: Ticket): string => {
-  const as = closedAs(t);
-  return as === null ? "" : as === "dropped" ? "dropped" : "done";
-};
+/** A relative's row says only whether it is over, and how: what it is to the row above is its other column. */
+const ghostStatus = (t: Ticket): string => endedMark(t) ?? "";
 
 /** A ticket's relative that is not drawn where it is — closed, in another
  *  epic, of another kind's tab — one level under it, dim: what it is to the

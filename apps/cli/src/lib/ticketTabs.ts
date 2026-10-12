@@ -1,6 +1,6 @@
 import { closedAs, epicOf, KIND_ORDER, ticketName, visibleTo, type Ticket, type TicketKind } from "@collagen/p2p";
 import { cells } from "./columns";
-import { EPIC_MARK, KIND_GLYPH } from "./glyphs";
+import { ENDED, EPIC_MARK, KIND_GLYPH } from "./glyphs";
 
 // The ticket list's tabs: every ticket, or one kind at a time — each kind's
 // tab carrying its glyph, so the mark on the rows is learned from the tab.
@@ -52,11 +52,16 @@ export function relativesOf(t: Ticket, all: ReadonlyMap<string, Ticket>, me: str
   return [...parents.map((x) => ({ t: x, as: "parent" as const })), ...children.map((x) => ({ t: x, as: "child" as const }))];
 }
 
-/** How a closed ticket ended, for its row: "done", or "dropped" with why. */
-export const closedLine = (t: Ticket): string | null => {
+/** How a closed ticket ended, as its mark (ENDED): ✓ done, ⊗ dropped. */
+export const endedMark = (t: Ticket): string | null => {
   const as = closedAs(t);
-  if (as === null) return null;
-  return `${as === "dropped" ? "dropped" : "closed as done"}${t.closed?.reason ? `: ${t.closed.reason}` : ""}`;
+  return as === null ? null : as === "dropped" ? ENDED.dropped : ENDED.done;
+};
+
+/** How a closed ticket ended, for its row: its mark, then why. */
+export const closedLine = (t: Ticket): string | null => {
+  const mark = endedMark(t);
+  return mark === null ? null : `${mark}${t.closed?.reason ? ` ${t.closed.reason}` : ""}`;
 };
 
 /** One tab as drawn: its words, and whether it is the open one. */
