@@ -1,4 +1,6 @@
 import type { HostNote, HostReview, HostUser, LineComment, PullRequest } from "@collagen/review-web/data";
+import { Schema } from "effect";
+import type { HostMerge } from "../services/RepoHost";
 
 // What `gh` answers, read into the review page's shapes. Pure: the calls
 // are services/RepoHost's. Anything gh says that is not the shape asked for
@@ -81,6 +83,104 @@ export const readPull = (v: unknown, viewer: string | undefined): (PullRequest &
 /** The pull request a branch is: the open one, else the latest closed or
  *  merged — `gh pr list --head` lists newest first. */
 export const pickPull = <P extends { readonly state: string }>(pulls: ReadonlyArray<P>): P | null => pulls.find((p) => p.state === "open") ?? pulls[0] ?? null;
+
+/** The pull requests merged into a branch, as GraphQL has them, a page at
+ *  a time: no merge kind is stored, so it is read from the commit that
+ *  landed — two parents is a merge; one, the very head, is a fast-forward;
+ *  one, with the last commit's words and author date kept, is a rebase;
+ *  else a squash. */
+export const MERGES_QUERY = `query($owner: String!, $repo: String!, $base: String!, $after: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequests(baseRefName: $base, states: MERGED, first: 100, after: $after, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        number title url headRefName mergedAt updatedAt
+        mergeCommit { oid messageHeadline authoredDate parents { totalCount } }
+        commits(last: 1) { totalCount nodes { commit { oid messageHeadline authoredDate } } }
+      }
+    }
+  }
+}`;
+
+const Commit = Schema.Struct({ oid: Schema.String, messageHeadline: Schema.String, authoredDate: Schema.String });
+
+/** A merged pull request, as MERGES_QUERY has it. */
+const MergedPull = Schema.Struct({
+  number: Schema.Int,
+  title: Schema.String,
+  url: Schema.String,
+  headRefName: Schema.String,
+  mergedAt: Schema.String,
+  updatedAt: Schema.String,
+  /** null once its history was rewritten: nothing on the branch to point at */
+  mergeCommit: Schema.NullOr(Schema.Struct({ ...Commit.fields, parents: Schema.Struct({ totalCount: Schema.Int }) })),
+  commits: Schema.Struct({ totalCount: Schema.Int, nodes: Schema.Array(Schema.Struct({ commit: Commit })) }),
+});
+export type MergedPull = typeof MergedPull.Type;
+
+/** One page of MERGES_QUERY's answer, as gh prints it. */
+export const MergesAnswer = Schema.fromJsonString(
+  Schema.Struct({
+    data: Schema.Struct({
+      repository: Schema.Struct({
+        pullRequests: Schema.Struct({
+          pageInfo: Schema.Struct({ hasNextPage: Schema.Boolean, endCursor: Schema.NullOr(Schema.String) }),
+          nodes: Schema.Array(MergedPull),
+        }),
+      }),
+    }),
+  }),
+);
+
+/** How a pull request landed, read from the commit it landed as; null when
+ *  that commit is gone. */
+export const landedAs = (p: MergedPull): HostMerge | null => {
+  const landed = p.mergeCommit;
+  if (!landed) return null;
+  const last = p.commits.nodes.at(-1)?.commit;
+  const kind: HostMerge["kind"] =
+    landed.parents.totalCount > 1
+      ? "merge"
+      : last?.oid === landed.oid
+        ? "fast-forward"
+        : last?.messageHeadline === landed.messageHeadline && last.authoredDate === landed.authoredDate
+          ? "rebase"
+          : "squash";
+  return { number: p.number, url: p.url, title: p.title, branch: p.headRefName, kind, commit: landed.oid, commits: p.commits.totalCount, at: p.mergedAt };
+};
+
+/** One page of merges: those that landed, when the least recently changed
+ *  of its pull requests last changed, and the cursor to the next page. */
+export interface MergesPage {
+  readonly merges: ReadonlyArray<HostMerge>;
+  readonly oldestUpdate: string | null;
+  readonly next: string | null;
+}
+
+export const mergesPage = (answer: typeof MergesAnswer.Type): MergesPage => {
+  const { pageInfo, nodes } = answer.data.repository.pullRequests;
+  return {
+    merges: nodes.flatMap((p) => landedAs(p) ?? []),
+    oldestUpdate: nodes.map((p) => p.updatedAt).sort()[0] ?? null,
+    next: pageInfo.hasNextPage ? pageInfo.endCursor : null,
+  };
+};
+
+/** The latest `limit` merges of the pages read so far, the latest first —
+ *  and whether they are surely the latest of all. Pages come in the order
+ *  pull requests last changed, and a pull request changes no earlier than
+ *  it merged: once the last page read changed before the `limit`th merge,
+ *  no page after it holds a later one. */
+export const latestMerges = (pages: ReadonlyArray<MergesPage>, limit: number): { readonly merges: ReadonlyArray<HostMerge>; readonly done: boolean } => {
+  // a pull request changed while the pages were read can be on two of them
+  const merges = [...new Map(pages.flatMap((p) => p.merges).map((m) => [m.number, m] as const)).values()]
+    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+    .slice(0, limit);
+  const last = pages.at(-1);
+  const cutoff = merges[limit - 1]?.at;
+  const done = !last || last.next === null || (cutoff !== undefined && last.oldestUpdate !== null && last.oldestUpdate <= cutoff);
+  return { merges, done };
+};
 
 /** Pages from `gh api --paginate --slurp`, flattened. */
 const pages = (v: unknown): ReadonlyArray<unknown> => (Array.isArray(v) ? v.flatMap((page) => (Array.isArray(page) ? page : [page])) : []);
