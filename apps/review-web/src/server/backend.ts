@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -13,6 +13,8 @@ type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | nu
 export class ReviewBackend extends Context.Service<
   ReviewBackend,
   {
+    /** the review's why, ticket and links alone — from the room, no diff read */
+    readonly head: (ticketId: string) => Effect.Effect<ReviewPageHead | null>;
     /** the review: its why, its diff laid out under it, where both came from */
     readonly data: (ticketId: string) => Effect.Effect<ReviewPageData | null>;
     /** the review's state as a token — its why's revision, the ticket, the
