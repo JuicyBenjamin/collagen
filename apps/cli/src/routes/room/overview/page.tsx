@@ -4,14 +4,13 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { captureAtom } from "../../../components/focus";
 import { Help, HELP_HINT } from "./components/Help/Help";
 import { Peers } from "./components/Peers/Peers";
-import { Projects } from "./components/Projects/Projects";
 import { Tickets } from "./components/Tickets/Tickets";
 
-/** Overview tab: the lists — who's here, what's in flight, what's shared.
- *  Two columns: peers + tickets on the left, projects sidebar on the right.
- *  Each section owns its keys and its cursor. Every ticket in the room is
- *  here, whoever made it and whoever it is for; what your agent wants to send
- *  is the outbox tab's job.
+/** Overview tab: the lists — who's here and what's in flight.
+ *  One column: peers, then tickets. Each section owns its keys and its
+ *  cursor. Every ticket in the room is here, whoever made it and whoever it
+ *  is for; what your agent wants to send is the outbox tab's job, the
+ *  projects themselves the projects tab's.
  *
  *  `?` swaps the lists for what their words and marks mean (Help), and takes
  *  the keyboard while it is open, so nothing behind it moves; `?` or esc
@@ -39,12 +38,9 @@ export function OverviewPage() {
 
   if (help) return <Help />;
   return (
-    <box flexDirection="row" gap={2} marginTop={1} flexGrow={1} flexShrink={1}>
-      <box flexDirection="column" flexGrow={1} flexShrink={1}>
-        <Peers />
-        <Tickets />
-      </box>
-      <Projects />
+    <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1}>
+      <Peers />
+      <Tickets />
     </box>
   );
 }

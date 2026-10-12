@@ -13,8 +13,8 @@ export interface ProjectRow {
   holders: string[];
 }
 
-/** Pure derivation of state we already subscribe to — used by the tab bar
- *  (shared count) and the projects section (the list itself). Your spelling
+/** Pure derivation of state we already subscribe to — the projects tab's
+ *  list. Your spelling
  *  wins for a project you hold; otherwise the first peer's. */
 export function projectRows(state: LocalState, roomId: string, peers: ReadonlyArray<Peer>): ProjectRow[] {
   const byName = new Map<string, ProjectRow>();
