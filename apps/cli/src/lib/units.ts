@@ -1,18 +1,19 @@
 import type { Decision, Fork, Grouped, Hunk, Unit } from "@collagen/review-web/data";
 import { claimed, parsePointer, sameFile } from "./reviewView";
+import { isTest, testsOfFile } from "./tests";
 
 // A review read by units: code that together achieves one thing — a
-// component with its sub-components, its implementation and its tests —
-// each hunk of the diff shown exactly once, titled by what it achieves and
-// read in the order it is built: what something is made of before what uses
-// it. The author's agent names the units; what it leaves out goes under the
+// component with its sub-components and its implementation — each hunk of
+// the diff shown exactly once, titled by what it achieves and read in the
+// order it is built: what something is made of before what uses it. The author's agent names the units; what it leaves out goes under the
 // decision that points at it, so every section still says what it is for;
 // what nothing points at is "Not explained". Each unit carries the decisions
 // that shaped it — its why. A group of repeated uses — files that only apply
 // another unit's change, each the same way — is a unit too, read right after
-// the unit it uses, with the files that do not match the rest named.
-// Pure: the review, the diff's hunks, and which changed files import which
-// (services/ReviewView reads those from the clone).
+// the unit it uses, with the files that do not match the rest named. Tests
+// are in no unit: they are read apart, each judged by its title (lib/tests).
+// Pure: the review, the diff's hunks, which changed files import which, and
+// the test files' text (services/ReviewView reads those from the clone).
 
 /** Which changed files each changed file imports. */
 export type Imports = ReadonlyMap<string, ReadonlySet<string>>;
@@ -28,25 +29,16 @@ interface AuthorUnit {
 /** How precisely a pointer claims a hunk: a line beats a whole file. */
 const precision = (pointer: string): number => (parsePointer(pointer).line === undefined ? 1 : 2);
 
-/** A test file, by its name or its folder. */
-const isTest = (file: string): boolean => /\.(test|spec)\.[a-z]+$/i.test(file) || /(^|\/)(tests?|__tests__)\//.test(file);
-
-/** The file each changed file belongs with, by imports: a test with the
- *  code it tests; a file in a folder below the one changed file importing
- *  it with that one (a component's sub-components); every other file with
- *  itself — a module used from beside it is its own thing, whoever else
- *  outside the change uses it too. Followed to the end, so a part of a
- *  part lands with the file that uses them. */
+/** The file each changed file belongs with, by imports: a file in a
+ *  folder below the one changed file importing it with that one (a
+ *  component's sub-components); every other file with itself — a module
+ *  used from beside it is its own thing, whoever else outside the change
+ *  uses it too. Followed to the end, so a part of a part lands with the
+ *  file that uses them. */
 export const ownersOf = (files: ReadonlyArray<string>, imports: Imports): ReadonlyMap<string, string> => {
   const importers = (file: string) => files.filter((other) => other !== file && imports.get(other)?.has(file));
   const step = (file: string): string => {
-    if (isTest(file)) {
-      // the code it tests: the one its name says (Outbox.test.ts → Outbox.ts), else the first it imports
-      const subject = file.replace(/\.(test|spec)(\.[a-z]+)$/i, "$2");
-      const used = [...(imports.get(file) ?? [])].filter((candidate) => files.includes(candidate) && !isTest(candidate));
-      return used.find((candidate) => candidate === subject) ?? files.find((candidate) => candidate === subject) ?? used[0] ?? file;
-    }
-    const by = importers(file).filter((importer) => !isTest(importer));
+    const by = importers(file);
     const dir = (path: string) => path.slice(0, path.lastIndexOf("/") + 1);
     return by.length === 1 && dir(file).startsWith(dir(by[0]!)) && dir(file) !== dir(by[0]!) ? by[0]! : file;
   };
@@ -123,16 +115,24 @@ export const differing = (hunks: ReadonlyArray<Hunk>): ReadonlyArray<string> => 
   });
 };
 
+/** A test file's text at the branch (`after`) and at the base it forked
+ *  from (`before`): null where it cannot be read, or is not there. */
+export type TestTexts = (file: string) => { readonly after: ReadonlyArray<string> | null; readonly before: ReadonlyArray<string> | null };
+
 /** Lay a diff out in units. Each hunk goes to the author's unit that claims
  *  it most precisely (a line over a whole file; the first unit on a tie);
- *  what no unit claims goes with the file it belongs with (a test, a
- *  sub-component) when that is in a unit, else under the decision that
- *  claims it most precisely; the rest is "Not explained", last. */
+ *  what no unit claims goes with the file it belongs with (a sub-component)
+ *  when that is in a unit, else under the decision that claims it most
+ *  precisely; the rest is "Not explained", last. Test files go to none:
+ *  they are laid out test by test, apart. */
 export function groupByUnit(
   review: { readonly decisions: ReadonlyArray<Decision>; readonly forks: ReadonlyArray<Fork>; readonly units?: ReadonlyArray<AuthorUnit> },
-  hunks: ReadonlyArray<Hunk>,
+  all: ReadonlyArray<Hunk>,
   imports: Imports,
+  texts: TestTexts = () => ({ after: null, before: null }),
 ): Grouped {
+  // the code, read in units; pointers are still read against every hunk
+  const hunks = all.filter((hunk) => !isTest(hunk.file));
   // each hunk's home among a list of claimants (units, or decisions): the
   // one whose pointer claims it most precisely, the first on a tie
   const homes = (claimants: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>): Map<string, number> => {
@@ -155,11 +155,11 @@ export function groupByUnit(
   const unitHome = homes(review.units ?? []);
   const named = (review.units ?? []).map((unit, index) => ({ id: unit.id, title: unit.title, what: unit.what ?? "", by: "author" as const, usesOf: unit.usesOf, ids: hunks.filter((hunk) => unitHome.get(hunk.id) === index).map((hunk) => hunk.id) }));
 
-  // what they leave out: a test or a sub-component with the code it belongs
-  // to, if that is in a unit; else under the decision that points at it most
+  // what they leave out: a sub-component with the code it belongs to, if
+  // that is in a unit; else under the decision that points at it most
   // precisely — the section is that decision, titled by it, so the page
-  // still reads by purpose; a test with its code there too. What no decision
-  // covers is "Not explained", read last.
+  // still reads by purpose. What no decision covers is "Not explained",
+  // read last.
   const decisionHome = homes(review.decisions);
   const byDecision = review.decisions.map((decision) => ({ id: `d-${decision.id}`, title: decision.title ?? decision.what, what: decision.title ? decision.what : "", by: "decision" as const, usesOf: undefined, ids: [] as Array<string> }));
   const unexplainedIds: Array<string> = [];
@@ -194,13 +194,13 @@ export function groupByUnit(
   for (const decision of review.decisions) {
     const missed: Array<string> = [];
     for (const pointer of decision.where) {
-      const got = claimed(parsePointer(pointer), hunks);
+      const got = claimed(parsePointer(pointer), all);
       if (got.length === 0) missed.push(pointer);
       for (const hunk of got) if (!claims.get(hunk.id)?.includes(decision.id)) claims.set(hunk.id, [...(claims.get(hunk.id) ?? []), decision.id]);
     }
     if (missed.length > 0) unmatched[decision.id] = missed;
   }
-  const forkHunks = new Map(review.forks.map((fork) => [fork.id, new Set(claimed(parsePointer(fork.at), hunks).map((hunk) => hunk.id))]));
+  const forkHunks = new Map(review.forks.map((fork) => [fork.id, new Set(claimed(parsePointer(fork.at), all).map((hunk) => hunk.id))]));
 
   const shape = (unit: { readonly id: string; readonly title: string; readonly what: string; readonly by: Unit["by"]; readonly usesOf?: string | undefined; readonly ids: ReadonlyArray<string> }): Unit => {
     const ids = tidy(unit.ids);
@@ -231,21 +231,33 @@ export function groupByUnit(
     ...ordered.map(shape),
     ...(unexplainedIds.length > 0 ? [shape({ id: "unexplained", title: "Not explained", what: "Changes no decision covers — worth a question to the author.", by: "unexplained", ids: unexplainedIds })] : []),
   ];
-  const inUnits = new Set(units.flatMap((unit) => unit.decisions));
+  // each test file: its tests, and the decisions and forks pointing into it
+  const tests = [...new Set(all.filter((hunk) => isTest(hunk.file)).map((hunk) => hunk.file))].map((file) => {
+    const text = texts(file);
+    const ids = new Set(all.filter((hunk) => hunk.file === file).map((hunk) => hunk.id));
+    return {
+      ...testsOfFile(file, all, text.after, text.before),
+      decisions: review.decisions.filter((decision) => [...ids].some((id) => claims.get(id)?.includes(decision.id))).map((decision) => decision.id),
+      forks: review.forks.filter((fork) => [...forkHunks.get(fork.id)!].some((id) => ids.has(id))),
+    };
+  });
+  const shown = new Set([...units.flatMap((unit) => unit.decisions), ...tests.flatMap((file) => file.decisions)]);
+  const forksShown = new Set([...units, ...tests].flatMap((part) => part.forks.map((fork) => fork.id)));
   return {
     units,
-    hunks,
+    tests,
+    hunks: all,
     unmatched,
-    looseForks: review.forks.filter((fork) => forkHunks.get(fork.id)!.size === 0),
-    outside: review.decisions.filter((decision) => !inUnits.has(decision.id)).map((decision) => decision.id),
+    looseForks: review.forks.filter((fork) => !forksShown.has(fork.id)),
+    outside: review.decisions.filter((decision) => !shown.has(decision.id)).map((decision) => decision.id),
   };
 }
 
 /** The files with changes no unit claims, in diff order — what the author's
- *  units leave to the page's own grouping. */
+ *  units leave to the page's own grouping. Tests need no unit. */
 export const uncovered = (units: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>, hunks: ReadonlyArray<Hunk>): ReadonlyArray<string> => {
   const covered = new Set(units.flatMap((unit) => unit.where.flatMap((pointer) => claimed(parsePointer(pointer), hunks).map((hunk) => hunk.id))));
-  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id)).map((hunk) => hunk.file))];
+  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id) && !isTest(hunk.file)).map((hunk) => hunk.file))];
 };
 
 /** A file named in a pointer, as the diff spells it — for the import reader. */

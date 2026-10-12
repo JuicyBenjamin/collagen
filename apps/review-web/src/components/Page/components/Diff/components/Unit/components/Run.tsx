@@ -1,6 +1,6 @@
 import { For } from "solid-js";
 import type { Hunk as HunkData } from "~/data";
-import { Hunk, wholeRun } from "./Hunk";
+import { Hunk, wholeRun } from "../../Hunk";
 
 /** One file's changes in a unit, in one card: its header stays at the top of
  *  the window through all of them. */

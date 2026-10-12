@@ -10,6 +10,7 @@ import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, 
 import { parseDiff } from "../lib/reviewView";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
+import { isTest } from "../lib/tests";
 import { stackOf, type Edge } from "../lib/stack";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type LineSpot, type RepoHost } from "./RepoHost";
@@ -64,7 +65,8 @@ const fromClone = (path: string, base: string, branch: string, fetch = true, pul
     if (!left) return { diff: null, why: `${branch} shares no history with ${base} in ${path}` };
     const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${left.at}..${branchRef}`], path, 30_000);
     const commit = (yield* run("git", ["rev-parse", `${branchRef}^{commit}`], path, 5_000))?.trim() || undefined;
-    return diff === null ? { diff: null, why: `git diff ${left.ref}...${branchRef} failed in ${path}` } : { diff, why: `${left.ref}...${branchRef} from your clone at ${path}`, commit };
+    // where the branch forked: the old side of the diff, what a removed test is read from
+    return diff === null ? { diff: null, why: `git diff ${left.ref}...${branchRef} failed in ${path}` } : { diff, why: `${left.ref}...${branchRef} from your clone at ${path}`, commit, forked: left.at };
   });
 
 /** Is `commit` a commit the clone at `path` has? */
@@ -89,12 +91,14 @@ const fromPull = (path: string, pull: HostPull, host: RepoHost, fetch: boolean) 
     if (!baseRef) return { diff: null, why: `the base ${pull.base} is not in your clone, nor on its origin` };
     const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${baseRef}...${pull.head}`], path, 30_000);
     if (diff === null) return { diff: null, why: `git diff ${baseRef}...${short(pull.head)} failed in ${path}` };
-    return { diff, why: `#${pull.number} (${baseRef === before ? `merged as ${short(pull.merged!)}` : pull.base}...${short(pull.head)}) from your clone at ${path}`, commit: pull.head };
+    // where it forked: the old side of the diff, what a removed test is read from
+    const forked = (yield* run("git", ["merge-base", baseRef, pull.head], path, 5_000))?.trim() || undefined;
+    return { diff, why: `#${pull.number} (${baseRef === before ? `merged as ${short(pull.merged!)}` : pull.base}...${short(pull.head)}) from your clone at ${path}`, commit: pull.head, forked };
   });
 
 /** Where a review's diff came from, and why when it has none. */
 export type ReadDiff =
-  | { readonly kind: "clone"; readonly diff: string; readonly why: string; readonly commit: string | undefined }
+  | { readonly kind: "clone"; readonly diff: string; readonly why: string; readonly commit: string | undefined; readonly forked: string | undefined }
   | { readonly kind: "host"; readonly diff: string; readonly why: string }
   | { readonly kind: "none"; readonly why: string };
 
@@ -122,7 +126,7 @@ export const readDiff = (
       const repo = repoWebUrl(clone.path) ?? (review.link && host?.pullIn(review.link) === null ? review.link : null);
       const merged = host && repo ? host.pull(repo, base).pipe(Effect.map((result) => ("pull" in result && result.pull.merged ? result.pull.base : null))) : undefined;
       const got = yield* fromClone(clone.path, base, branch, fetch, host?.pullRef, merged);
-      if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: "commit" in got ? got.commit : undefined } satisfies ReadDiff;
+      if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: "commit" in got ? got.commit : undefined, forked: got.forked } satisfies ReadDiff;
       unread = got.diff === null;
       why = got.diff === null ? got.why : `${branch} has no changes against ${base}`;
     } else why = clone.noClone;
@@ -138,7 +142,7 @@ export const readDiff = (
     if ("pull" in named && "path" in clone) {
       // in the clone first: a commit there is what a comment can be drafted on
       const got = yield* fromPull(clone.path, named.pull, host, fetch);
-      if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: got.commit } satisfies ReadDiff;
+      if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: got.commit, forked: got.forked } satisfies ReadDiff;
       why = `${why}; ${got.diff === null ? got.why : `#${named.pull.number} has no changes`}`;
     }
     if (unread && "path" in clone) {
@@ -272,21 +276,29 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const source: ReviewPageData["source"] = { kind: got.kind, detail: got.why };
     const diff = got.kind === "none" ? null : got.diff;
     const commit = got.kind === "clone" ? got.commit : undefined;
+    const forked = got.kind === "clone" ? got.forked : undefined;
     // which changed files import which, as the branch has them in the clone:
-    // what groups the code no unit names, and orders the units
+    // what groups the code no unit names, and orders the units — and each
+    // test file at both ends, to read its tests from
     const hunks = diff === null ? [] : parseDiff(diff);
     let imports: Imports = new Map();
+    const tests = new Map<string, { after: ReadonlyArray<string> | null; before: ReadonlyArray<string> | null }>();
     if (project && commit && hunks.length > 0) {
       const files = [...new Set(hunks.map((hunk) => hunk.file))];
       const texts = new Map<string, string | null>();
       for (const file of files) texts.set(file, yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
       imports = importsAmong(files, (file) => texts.get(file) ?? null);
+      const lines = (text: string | null | undefined) => (text == null || text.includes("\0") ? null : text.replace(/\n$/, "").split("\n"));
+      for (const file of files.filter(isTest)) {
+        const before = forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
+        tests.set(file, { after: lines(texts.get(file)), before: forked ? (lines(before) ?? []) : null });
+      }
     }
     return {
       ...headOf(ticket, review),
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
-      grouped: diff === null ? null : groupByUnit(review, hunks, imports),
+      grouped: diff === null ? null : groupByUnit(review, hunks, imports, (file) => tests.get(file) ?? { after: null, before: null }),
     } satisfies ReviewPageData;
   }
   return null;

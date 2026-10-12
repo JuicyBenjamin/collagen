@@ -24,6 +24,7 @@ git -C "$R" checkout -qb feat/stream-export
 printf 'export const a = 1;\nexport const stream = (rows) => rows.map(String);\n' > "$R/src/export.ts"
 printf '/** A hundred rows a page. */\nexport function page(n: number): number {\n  return n * 100;\n}\n' > "$R/src/page.ts"
 printf 'import { page } from "./page";\nimport { stream } from "./export";\nexport const first = stream([page(1)]);\n' > "$R/src/use.ts"
+printf 'import { describe, expect, it } from "vitest";\nimport { page } from "./page";\n\ndescribe("page", () => {\n  it("is a hundred rows", () => {\n    expect(page(1)).toBe(100);\n  });\n});\n' > "$R/src/page.test.ts"
 sed -i.bak '25s/line/changed, and nobody said why/' "$R/src/notes.txt"; rm -f "$R/src/notes.txt.bak"
 git -C "$R" add -A; git -C "$R" commit -qm change
 
@@ -61,8 +62,12 @@ d = json.loads(sys.stdin.read()); g = d["grouped"]
 print("source", d["source"]["kind"], d["source"]["detail"])
 for u in g["units"]:
     print("unit", u["title"], "by", u["by"], "hunks", " ".join(u["hunks"]), "decisions", " ".join(u["decisions"]), "forks", " ".join(f["id"] for f in u["forks"]), "unexplained", " ".join(u["unexplained"]))
+for t in g["tests"]:
+    print("tests", t["file"] + ":", " | ".join(c["change"] + " " + " › ".join(c["under"] + [c["title"]]) for c in t["tests"]))
+tested = {t["file"] for t in g["tests"]}
 every = [h for u in g["units"] for h in u["hunks"]]
-print("hunks", len(every), "once" if len(every) == len(set(every)) == len(g["hunks"]) else "NOT ONCE")
+code = [h for h in g["hunks"] if h["file"] not in tested]
+print("hunks", len(every), "once" if len(every) == len(set(every)) == len(code) else "NOT ONCE")
 print("order", " ".join(u["title"] for u in g["units"]))'; }
 SHAPE=$(shape <<< "$DATA")
 echo "$SHAPE" | sed 's/^/    /'
@@ -72,6 +77,7 @@ expect "no unit named: each change under the decision that points at it, titled 
 expect "…the page under its own decision" "$SHAPE" "unit Page by id by decision hunks src/page.ts#[0-9]+ decisions d2 forks  unexplained $"
 expect "…what no decision covers under Not explained, together" "$SHAPE" "unit Not explained by unexplained hunks src/notes.txt#[0-9]+ src/use.ts#[0-9]+ decisions  forks  unexplained src/notes.txt#[0-9]+ src/use.ts#[0-9]+"
 expect "…and read last" "$SHAPE" "order .* Not explained$"
+expect "a test is in no unit: it is read apart, by its describe and title" "$SHAPE" "^tests src/page.test.ts: added page › is a hundred rows$"
 UNITS="{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Big exports finish\",\"what\":\"Rows are streamed, so a long export no longer times out.\",\"where\":[\"src/export.ts\",\"src/use.ts\"]}]}"
 NAMED=$(call $A "$SA" ask-review "$UNITS")
 expect "the author's agent names a unit by what it achieves" "$NAMED" "review ticket .*updated|updated"
