@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { branchOf, repoWebUrl } from "./gitInfo";
+import { branchOf, defaultBranchOf, repoWebUrl } from "./gitInfo";
 import { branchLink } from "../services/RepoHost";
 
 const CONFIG = (url: string) => `[core]\n\tbare = false\n[remote "origin"]\n\turl = ${url}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`;
@@ -53,7 +53,20 @@ describe("what a project's .git says", () => {
     expect(branchOf(plain)).toBe(null);
   });
 
+  it("the branch code lands on: origin's HEAD, else a main or master origin has", () => {
+    const remotes = join(plain, ".git", "refs", "remotes", "origin");
+    expect(defaultBranchOf(plain)).toBe(null);
+    writeFileSync(join(plain, ".git", "packed-refs"), "# pack-refs with: peeled fully-peeled sorted\n9c1f0b2e refs/remotes/origin/master\n");
+    expect(defaultBranchOf(worktree)).toBe("master");
+    mkdirSync(remotes, { recursive: true });
+    writeFileSync(join(remotes, "main"), "9c1f0b2e\n");
+    expect(defaultBranchOf(plain)).toBe("main");
+    writeFileSync(join(remotes, "HEAD"), "ref: refs/remotes/origin/release\n");
+    expect(defaultBranchOf(plain)).toBe("release");
+  });
+
   it("a folder that is not a repo says nothing", () => {
+    expect(defaultBranchOf(bare)).toBe(null);
     expect(branchOf(bare)).toBe(null);
     expect(repoWebUrl(bare)).toBe(null);
     expect(branchLink(bare, "x")).toBe(null);

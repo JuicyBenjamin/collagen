@@ -84,5 +84,7 @@ describe("a project's review tickets, as where their code was", () => {
     expect(got).toEqual([{ ticketId: "r", filedAt: 5, pull: 7, branch: "feat", commits: ["c1", "c2"] }]);
     // its author sees their own while it waits
     expect(reviewedCode("shop", all, [], [], "alice", github).map((c) => c.ticketId)).toEqual(["r", "gated"]);
+    // a project is one project however this machine cases its name
+    expect(reviewedCode("Shop", all, [], [], "bob", github).map((c) => c.ticketId)).toEqual(["r"]);
   });
 });

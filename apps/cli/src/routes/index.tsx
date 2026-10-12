@@ -3,6 +3,7 @@ import { routeName, useRouter, type Route, type RouteName } from "../app/router"
 import { NewRoomPage } from "./new-room/page";
 import { RoomLayout } from "./room/layout";
 import { MessagesPage } from "./room/messages/page";
+import { MergesPage } from "./room/merges/page";
 import { OutboxPage } from "./room/outbox/page";
 import { OverviewPage } from "./room/overview/page";
 import { AttachPage } from "./room/attach/page";
@@ -20,10 +21,11 @@ const pages: { readonly [N in RouteName]: (route: Extract<Route, N | { readonly 
   "room/overview": () => <OverviewPage />,
   "room/messages": () => <MessagesPage />,
   "room/outbox": () => <OutboxPage />,
-  "room/ticket": (route) => <TicketPage ticketId={route.ticketId} />,
+  "room/merges": () => <MergesPage />,
+  "room/ticket": (route) => <TicketPage ticketId={route.ticketId} route={route} />,
   "room/transcripts": (route) => <TranscriptsPage subject={route.subject} />,
   "room/transcript": (route) => <TranscriptPage path={route.path} file={route.file} />,
-  "room/attach": (route) => <AttachPage ticketId={route.ticketId} />,
+  "room/attach": (route) => <AttachPage ticketId={route.ticketId} back={route.back} />,
   "room/review": (route) => <ReviewPage ticketId={route.ticketId} />,
 };
 
