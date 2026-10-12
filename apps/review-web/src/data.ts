@@ -421,6 +421,8 @@ export type SubmitResult =
       readonly roomOnly?: string;
       /** this finish was done already: nothing said again */
       readonly already?: true;
+      /** a must comment in it made the review request changes */
+      readonly changesRequested?: true;
     }
   | {
       readonly error: string;

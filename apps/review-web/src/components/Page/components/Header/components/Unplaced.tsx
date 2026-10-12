@@ -2,6 +2,8 @@ import { For, Show } from "solid-js";
 import type { DraftView } from "~/data";
 import { Appear } from "~/components/Appear";
 import { hostNow } from "~/hostNow";
+import { StrengthMark } from "~/components/Strength";
+import { readStrength } from "~/strength";
 
 const where = (draft: DraftView) => `${draft.file}:${draft.startLine !== undefined ? `${draft.startLine}–` : ""}${draft.line}${draft.side === "LEFT" ? " (old)" : ""}`;
 
@@ -24,7 +26,8 @@ export function Unplaced() {
               <li>
                 <span class={hostNow.isDraft(draft) ? "draft-badge" : "pending-badge"}>{hostNow.isDraft(draft) ? "Draft from your AI" : draft.posted ? `On ${hostNow.hostName()}` : "Pending"}</span>
                 <code>{where(draft)}</code>
-                <span class="unplaced-body">{draft.body}</span>
+                <StrengthMark strength={readStrength(draft.body).strength} />
+                <span class="unplaced-body">{readStrength(draft.body).text}</span>
                 <Show when={!draft.posted}>
                   <button type="button" class="quiet small" onClick={() => void (hostNow.isDraft(draft) ? hostNow.decline([draft.id]) : hostNow.unpend([draft.id]))}>
                     {hostNow.isDraft(draft) ? "Decline" : "Delete"}

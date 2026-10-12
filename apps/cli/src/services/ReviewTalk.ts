@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Effect, Semaphore, SubscriptionRef } from "effect";
 import type { DraftComment, ReviewComment } from "@collagen/p2p";
 import type { DraftsResult, DraftView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "@collagen/review-web/data";
+import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
 import { placeComment, type Spot } from "../lib/comments";
 import { IdentityService } from "./Identity";
 import { hostOf, type RepoHost } from "./RepoHost";
@@ -28,6 +29,8 @@ export interface DraftInput {
   readonly startLine?: number;
   readonly side?: "LEFT" | "RIGHT";
   readonly body: string;
+  /** how strongly it asks for a change — a prefix on its words */
+  readonly strength?: Strength;
 }
 
 type Found = NonNullable<Effect.Success<ReturnType<typeof reviewNamed>>>;
@@ -38,6 +41,9 @@ const spotOf = (comment: { readonly file: string; readonly line: number; readonl
   side: comment.side,
   ...(comment.startLine !== undefined ? { startLine: comment.startLine, startSide: comment.startSide ?? comment.side } : {}),
 });
+
+/** Words with nothing in them but, at most, a strength. */
+const saysNothing = (body: string) => readStrength(body).text.trim().length === 0;
 
 const isPending = (draft: DraftComment) => draft.status === "pending";
 const isAi = (draft: DraftComment) => draft.status === "ai" || draft.status === undefined;
@@ -98,9 +104,10 @@ const draftOnce = Effect.fn("ReviewTalk.draft")(function* (ticketId: string, ite
   items.forEach((item, index) => {
     const side = item.side ?? "RIGHT";
     const spot: Spot = { file: item.file.trim(), line: item.line, side, ...(item.startLine !== undefined && item.startLine !== item.line ? { startLine: item.startLine, startSide: side } : {}) };
-    const why = item.body.trim().length === 0 ? "it says nothing" : placeComment(diff.hunks, spot);
+    const body = withStrength(item.strength ?? null, item.body.trim());
+    const why = saysNothing(body) ? "it says nothing" : placeComment(diff.hunks, spot);
     if (why) refused.push({ at: `#${index + 1} (${item.file}:${item.line})`, why });
-    else kept.push({ id: randomUUID(), ticketId, ...spot, body: item.body.trim(), commit: diff.commit, status: "ai", ts: now + index });
+    else kept.push({ id: randomUUID(), ticketId, ...spot, body, commit: diff.commit, status: "ai", ts: now + index });
   });
   if (kept.length > 0) yield* setDrafts(ticketId, (drafts) => [...drafts, ...kept]);
   return { drafted: kept, refused };
@@ -117,7 +124,7 @@ const acceptOnce = Effect.fn("ReviewTalk.accept")(function* (ticketId: string, i
   const moved = new Map<string, string>();
   for (const draft of chosen) {
     const body = (edits[draft.id] ?? draft.body).trim();
-    if (body.length === 0) failed.push({ id: draft.id, error: "it says nothing — decline it instead" });
+    if (saysNothing(body)) failed.push({ id: draft.id, error: "it says nothing — decline it instead" });
     else moved.set(draft.id, body);
   }
   if (moved.size > 0) yield* setDrafts(ticketId, (drafts) => drafts.map((draft) => (moved.has(draft.id) ? { ...draft, body: moved.get(draft.id)!, status: "pending" as const, drafted: true } : draft)));
@@ -130,7 +137,7 @@ const addOnce = Effect.fn("ReviewTalk.addToReview")(function* (ticketId: string,
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies HostWrite;
   const text = body.trim();
-  if (text.length === 0) return { error: "Write the comment first." } satisfies HostWrite;
+  if (saysNothing(text)) return { error: "Write the comment first." } satisfies HostWrite;
   const draft: DraftComment = { id: randomUUID(), ticketId, ...spot, commit, body: text, status: "pending", ts: Date.now() };
   yield* setDrafts(ticketId, (drafts) => [...drafts, draft]);
   return { ok: true as const } satisfies HostWrite;
@@ -140,7 +147,7 @@ const addOnce = Effect.fn("ReviewTalk.addToReview")(function* (ticketId: string,
 export const editDraft = (ticketId: string, id: string, body: string) => one(ticketId, editOnce(ticketId, id, body));
 const editOnce = Effect.fn("ReviewTalk.edit")(function* (ticketId: string, id: string, body: string) {
   const text = body.trim();
-  if (text.length === 0) return { done: 0, failed: [{ id, error: "it says nothing — delete it instead" }] } satisfies DraftsResult;
+  if (saysNothing(text)) return { done: 0, failed: [{ id, error: "it says nothing — delete it instead" }] } satisfies DraftsResult;
   if (!(yield* draftsOf(ticketId)).some((draft) => draft.id === id && !isPosted(draft))) return { done: 0, failed: [{ id, error: "no such comment — said or deleted already" }] } satisfies DraftsResult;
   yield* setDrafts(ticketId, (drafts) => drafts.map((draft) => (draft.id === id ? { ...draft, body: text } : draft)));
   return { done: 1, failed: [] } satisfies DraftsResult;
@@ -228,7 +235,7 @@ const sayOnce = Effect.fn("ReviewTalk.say")(function* (ticketId: string, spot: S
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies HostWrite;
   const text = body.trim();
-  if (text.length === 0) return { error: "Write the comment first." } satisfies HostWrite;
+  if (saysNothing(text)) return { error: "Write the comment first." } satisfies HostWrite;
   const refuses = yield* roomRefuses(found);
   if (refuses) return { error: refuses } satisfies HostWrite;
   const to = yield* hostFor(found, shownAs);
@@ -331,8 +338,13 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     return { ok: true as const, said: recovered + pending.length, roomOnly: to.roomOnly } satisfies SubmitResult;
   }
 
+  // one must in the review asks for changes: the review does, the host having
+  // one verdict for all of it — and an approval cannot go with it
+  const musts = pending.filter((draft) => asksForChanges(draft.body)).length;
+  if (musts > 0 && verdict === "approve") return { error: `${musts === 1 ? "A must comment" : `${musts} must comments`} in your review cannot go with an approval: request changes, or soften ${musts === 1 ? "it" : "them"}.` } satisfies SubmitResult;
+  const asked: Verdict = musts > 0 ? "request-changes" : verdict;
   // the comments say what should change; with none, the words must
-  if (verdict === "request-changes" && text.length === 0 && pending.length === 0) return { error: `Say what should change — ${to.host.name} asks for it.` } satisfies SubmitResult;
+  if (asked === "request-changes" && text.length === 0 && pending.length === 0) return { error: `Say what should change — ${to.host.name} asks for it.` } satisfies SubmitResult;
   if (verdict === "comment" && text.length === 0 && pending.length === 0) return { error: "Write something, or add comments to your review first." } satisfies SubmitResult;
   // the one commit the review is of; every comment in it written there
   const written = [...new Set(pending.map((draft) => draft.commit))];
@@ -348,7 +360,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
       error: `${elsewhere.length || pending.length} comment(s) in your review were written on ${at === null ? "different commits" : `another commit than the one ${commit ? "the page shows" : "the others were"} (${short(at)})`}: their lines may have moved. Confirm where each sits ("Keep it here") or delete it, then finish the review.`,
     } satisfies SubmitResult;
   const sent = yield* to.host.submit(to.link, to.number, {
-    verdict,
+    verdict: asked,
     body: text,
     commit: at,
     comments: pending.map((draft) => ({ file: draft.file, line: draft.line, side: draft.side, body: draft.body, ...(draft.startLine !== undefined ? { start: { line: draft.startLine, side: draft.startSide ?? draft.side } } : {}) })),
@@ -367,7 +379,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   const result = yield* sayAll(posted);
   if ("error" in result) return { error: `${result.error} — the review is on the pull request with its words and verdict; finishing again with none tells the room without posting it twice`, onHost: true as const } satisfies SubmitResult;
   yield* done(posted.map((draft) => draft.id));
-  return { ok: true as const, said: recovered + pending.length, ...(sent.url ? { url: sent.url } : {}) } satisfies SubmitResult;
+  return { ok: true as const, said: recovered + pending.length, ...(sent.url ? { url: sent.url } : {}), ...(asked !== verdict ? { changesRequested: true as const } : {}) } satisfies SubmitResult;
 });
 
 /** Confirm where a comment not said yet sits, at the commit the page shows

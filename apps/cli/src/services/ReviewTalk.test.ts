@@ -37,7 +37,7 @@ afterAll(() => {
 
 const reviewsPosted = () => (existsSync(join(dir, "reviews.log")) ? readFileSync(join(dir, "reviews.log"), "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as { event: string; body?: string; comments: ReadonlyArray<{ body: string }> }) : []);
 
-const make = (open: { taking: boolean }) => {
+const make = (open: { taking: boolean }, held: ReadonlyArray<DraftComment> = [earlier, fresh]) => {
   const said: Array<ReviewComment> = [];
   const rooms = Layer.effect(
     Rooms,
@@ -60,7 +60,7 @@ const make = (open: { taking: boolean }) => {
       const state = yield* SubscriptionRef.make<LocalState>({
         preferredAi: null,
         rooms: { testroom: [{ id: "p1", name: "sandbox", path: dir }] },
-        drafts: { [TICKET]: [earlier, fresh] },
+        drafts: { [TICKET]: [...held] },
         finished: { [TICKET]: ["finish-a"] },
       });
       return { state, update: (change: (current: LocalState) => LocalState) => SubscriptionRef.update(state, change).pipe(Effect.asVoid), get: SubscriptionRef.get(state) } as unknown as StateStore["Service"];
@@ -103,5 +103,38 @@ describe("a finish while an earlier one is half done", () => {
         expect(yield* drafts).toEqual([]);
       }).pipe(Effect.provide(layer)),
     );
+  });
+});
+
+describe("a must comment in a review", () => {
+  const must: DraftComment = { ...spot, id: "m1", body: "must: this drops rows past 10k", status: "pending" };
+  const nit: DraftComment = { ...spot, id: "n1", line: 1, body: "nit: trailing space", status: "pending" };
+
+  it("cannot go with an approval", async () => {
+    const { layer, said } = make({ taking: true }, [must, nit]);
+    const before = reviewsPosted().length;
+    const result = await Effect.runPromise(submitReview(TICKET, "approve", "", COMMIT, null).pipe(Effect.provide(layer)));
+    expect(result).toEqual({ error: expect.stringContaining("cannot go with an approval") });
+    expect(reviewsPosted().length).toBe(before);
+    expect(said).toEqual([]);
+  });
+
+  it("makes the whole review request changes, its words carrying the prefix to the host", async () => {
+    const { layer } = make({ taking: true }, [must, nit]);
+    const before = reviewsPosted().length;
+    const result = await Effect.runPromise(submitReview(TICKET, "comment", "", COMMIT, null).pipe(Effect.provide(layer)));
+    expect(result).toMatchObject({ ok: true, said: 2, changesRequested: true });
+    const posted = reviewsPosted().slice(before);
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ event: "REQUEST_CHANGES", comments: [{ body: "must: this drops rows past 10k" }, { body: "nit: trailing space" }] });
+  });
+
+  it("a nit alone leaves the verdict as chosen", async () => {
+    const { layer } = make({ taking: true }, [nit]);
+    const before = reviewsPosted().length;
+    const result = await Effect.runPromise(submitReview(TICKET, "approve", "", COMMIT, null).pipe(Effect.provide(layer)));
+    expect(result).toMatchObject({ ok: true, said: 1 });
+    expect("changesRequested" in result).toBe(false);
+    expect(reviewsPosted().slice(before)[0]).toMatchObject({ event: "APPROVE" });
   });
 });
