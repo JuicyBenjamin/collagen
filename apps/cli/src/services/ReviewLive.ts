@@ -103,7 +103,7 @@ export const reviewChanges = (ticketId: string): Stream.Stream<string, never, Ro
       const token = Effect.gen(function* () {
         const why = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === ticketId)?.ts ?? 0;
         const ticket = createHash("sha1").update(JSON.stringify((yield* SubscriptionRef.get(room.tickets)).get(ticketId) ?? null)).digest("hex");
-        const commit = typeof tree === "string" ? "" : ((yield* commitOf(tree.projectPath, tree.ref)) ?? "");
+        const commit = typeof tree === "string" || !tree.ref ? "" : ((yield* commitOf(tree.projectPath, tree.ref)) ?? "");
         // the comments on it: the drafts waiting here, and what the room said
         const drafts = (yield* store.get).drafts?.[ticketId] ?? [];
         const said = (yield* SubscriptionRef.get(room.comments)).filter((c) => c.ticketId === ticketId);
@@ -117,7 +117,7 @@ export const reviewChanges = (ticketId: string): Stream.Stream<string, never, Ro
         SubscriptionRef.changes(room.tickets),
         SubscriptionRef.changes(room.comments),
         SubscriptionRef.changes(store.state),
-        ...(typeof tree === "string" ? [] : [Stream.tick(COMMIT_EVERY)]),
+        ...(typeof tree === "string" || !tree.ref ? [] : [Stream.tick(COMMIT_EVERY)]),
       ];
       pages.opened(ticketId);
       return Stream.mergeAll(moved, { concurrency: "unbounded" }).pipe(

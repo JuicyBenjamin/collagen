@@ -202,5 +202,11 @@ expect "a project with its own vendor-dir: its package hovers" "$(sfn hoverAt "[
 expect "…and peeks as the package's file" "$(sfn definitionAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now),\"$PHPAT\"]")" "\"file\":\"acme/clock/src/Clock.php\",\"where\":\"package\""
 expect "peeking a PHP function says it is built into PHP" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
 
+echo "## merged into main: no change left to show, and the page says so"
+git -C "$R" checkout -q main; git -C "$R" merge -q --no-ff -m merge feat/stream-export
+MERGED=$(sfn reviewData "[\"$TICKET\"]")
+expect "an empty diff is no diff, never empty blocks" "$MERGED" '"grouped":null'
+expect "…and the reason names what is missing" "$MERGED" '"source":\{"kind":"none","detail":"feat/stream-export has no changes against main"\}'
+
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all; summary

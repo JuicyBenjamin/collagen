@@ -12,7 +12,13 @@ import { githubRepo, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, re
 // the person's own `gh` login, so collagen keeps no token of its own.
 
 /** A pull request as a host has it, with the branches it joins. */
-export type HostPull = PullRequest & { readonly branch: string; readonly base: string; readonly fork?: true };
+export type HostPull = PullRequest & {
+  readonly branch: string;
+  readonly base: string;
+  readonly fork?: true;
+  /** once merged: the commit it went into its base as */
+  readonly merged?: string;
+};
 
 /** Where on the pull request's diff a line comment goes: the file, its
  *  (last) line on one side, where a block of lines starts, at the commit the
@@ -47,6 +53,9 @@ export interface RepoHost {
   readonly matches: (link: string) => boolean;
   /** base...branch as a diff, for a reader with no clone */
   readonly compare: (link: string, base: string, branch: string) => Effect.Effect<string | null>;
+  /** a pull request's own diff, as the host keeps it — still there once it
+   *  is merged and its branch is gone */
+  readonly pullDiff: (link: string, pull: number) => Effect.Effect<string | null>;
   readonly links: (link: string, base: string | undefined, branch: string | undefined) => ReadonlyArray<{ readonly label: string; readonly url: string }>;
   /** who is signed in — or how to sign in; remembered a while, for reading */
   readonly viewer: Effect.Effect<{ readonly user: HostUser } | { readonly signIn: string }>;
@@ -131,6 +140,11 @@ export const github: RepoHost = {
     const r = githubRepo(link);
     if (!r) return Effect.succeed(null);
     return gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${r.owner}/${r.repo}/compare/${base}...${branch}`]).pipe(Effect.map((ran) => (ran.ok ? ran.out : null)));
+  },
+  pullDiff: (link, pull) => {
+    const r = githubRepo(link);
+    if (!r) return Effect.succeed(null);
+    return gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${r.owner}/${r.repo}/pulls/${pull}`]).pipe(Effect.map((ran) => (ran.ok ? ran.out : null)));
   },
   links: (link, base, branch) => {
     const r = githubRepo(link);
