@@ -118,7 +118,9 @@ export interface Grouped {
   readonly outside: ReadonlyArray<string>;
 }
 
-export interface ReviewPageData {
+/** The review's own part of the page: its ticket, its why and its links,
+ *  known as soon as the room is read — the diff comes after. */
+export interface ReviewPageHead {
   readonly ticket: { readonly id: string; readonly title?: string; readonly goal: string; readonly kind: string; readonly project: string };
   readonly review: {
     readonly summary: string;
@@ -134,13 +136,16 @@ export interface ReviewPageData {
     readonly claimed?: { readonly guessedBy: string; readonly guessedByName: string; readonly at: number };
     readonly ts: number;
   };
+  readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
+}
+
+export interface ReviewPageData extends ReviewPageHead {
   /** where the diff came from, in words for the page */
   readonly source: { readonly kind: "clone" | "host" | "none"; readonly detail: string };
   /** the branch's commit the diff was read at, when it came from a clone —
    *  what a file marked as viewed remembers, to show what moved since */
   readonly commit?: string;
   readonly grouped: Grouped | null;
-  readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
 }
 
 /** wholeFile(ticketId, file) — the whole file as the review's

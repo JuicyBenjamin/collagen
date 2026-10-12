@@ -1,12 +1,12 @@
 import { createEffect, createMemo, createSignal, Errored, For, Loading, Show } from "solid-js";
-import { NO_TITLE, toolOf, type Decision, type Hunk as HunkData, type ReviewPageData, type Unit } from "./data";
+import { NO_TITLE, toolOf, type Decision, type Hunk as HunkData, type ReviewPageData, type ReviewPageHead, type Unit } from "./data";
 import { Fork } from "./components/Fork";
 import { Hunk, wholeRun } from "./components/Hunk";
 import { Popover } from "./components/Popover";
 import { TypesBanner } from "./components/TypesBanner";
 import { ticketId } from "./ticket";
 import { reading, viewed } from "./viewedNow";
-import { reviewChanges, reviewData } from "./api";
+import { reviewChanges, reviewData, reviewHead } from "./api";
 import { lasting } from "./lasting";
 import { hostNow } from "./hostNow";
 import { HostBar } from "./components/HostBar";
@@ -19,6 +19,8 @@ import { keepEdges, placeWhy, whyOpening } from "./whyPanel";
 import { assumedNow } from "./assumedNow";
 import { AssumedMark, AssumedWhy, VerdictMark } from "./components/Assumption";
 import { animateDetails } from "./fold";
+import { HeaderSkeleton, NavSkeleton, UnitsSkeleton } from "./components/Skeleton";
+import { entering } from "./enter";
 
 // The review page: a review ticket's diff read by purpose. One section per
 // unit — what it achieves, a line on what it does, the decisions that shaped
@@ -28,6 +30,17 @@ import { animateDetails } from "./fold";
 // itself a finding. Ids, pointers and where the diff came
 // from are plumbing — kept out of the reader's way. Read-only: a take goes
 // back through the person's agent (post-review).
+//
+// It builds as it loads: the review's own part (title, why) is read from the
+// room and stands at once; the outline and the code, which wait on the diff,
+// show their shape pending and fill in when it is read — each with a light
+// entrance (enter.ts), the first time only.
+
+async function loadHead(): Promise<ReviewPageHead> {
+  const head = await reviewHead(ticketId);
+  if (!head) throw new Error(`no review ticket ${ticketId} in your rooms`);
+  return head;
+}
 
 async function load(): Promise<ReviewPageData> {
   const data = await reviewData(ticketId);
@@ -45,14 +58,38 @@ export function App() {
   hostNow.start(state);
   // its data, read again whenever that state moves — what is on screen
   // stays until the new data is in
+  // The head is read on its own only until the diff is first in: after that
+  // it is the data's own, so the title and the why above never show a later
+  // moment than the code beneath them
+  let read = false;
   const data = createMemo(() => {
     state();
-    return load();
+    return load().then((loaded) => {
+      read = true;
+      return loaded;
+    });
+  });
+  const head = createMemo((): ReviewPageHead | Promise<ReviewPageHead> => {
+    if (read) return data();
+    state();
+    return loadHead();
   });
   return (
     <Errored fallback={(error) => <p class="failed">{String(error())}</p>}>
-      <Loading fallback={<p class="loading">Reading the review…</p>}>
-        <Page data={data()} />
+      <Loading
+        fallback={
+          <div class="wrap">
+            <nav aria-label="Outline">
+              <NavSkeleton />
+            </nav>
+            <main>
+              <HeaderSkeleton />
+              <UnitsSkeleton count={2} />
+            </main>
+          </div>
+        }
+      >
+        <Page head={head()} data={data()} />
         <Popover />
       </Loading>
     </Errored>
@@ -78,7 +115,98 @@ const unitViewed = (unit: Unit): boolean => {
 /** "2 changes" — a count in words, for the outline. */
 const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
 
-function Page(props: { data: ReviewPageData }) {
+function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
+  createEffect(
+    () => props.head.ticket.title ?? props.head.ticket.goal,
+    (name) => {
+      document.title = `${name} — review`;
+    },
+  );
+
+  // what is waiting on the diff gets its shape at once and fills in when it is read
+  const waiting = () => Math.min(3, Math.max(1, props.head.review.decisions.length));
+  return (
+    <div class="wrap">
+      <nav aria-label="Outline">
+        <Loading fallback={<NavSkeleton />}>
+          <Outline data={props.data} />
+        </Loading>
+      </nav>
+
+      <main>
+        <Header head={props.head} />
+        <HostActivity />
+        <Loading fallback={<UnitsSkeleton count={waiting()} />}>
+          <Diff data={props.data} />
+        </Loading>
+      </main>
+    </div>
+  );
+}
+
+/** The outline, once the diff is read: its units, else the decisions alone. */
+function Outline(props: { data: ReviewPageData }) {
+  const enter = entering();
+  return (
+    <div ref={(element) => enter(element)}>
+      <p class="nav-title">{props.data.grouped ? "Units" : "Decisions"}</p>
+      <Show when={viewed.count().files > 0}>
+        <p class={["nav-viewed", { done: viewed.count().viewed === viewed.count().files }]}>
+          {viewed.count().viewed} of {viewed.count().files} files viewed
+        </p>
+      </Show>
+      <ol>
+        <Show
+          when={props.data.grouped}
+          fallback={
+            <For each={props.data.review.decisions}>
+              {(decision) => (
+                <li>
+                  <a href={`#${decision.id}`}>
+                    <span class={["nav-what", { untitled: !decision.title }]}>{decision.title ?? NO_TITLE}</span>
+                  </a>
+                </li>
+              )}
+            </For>
+          }
+        >
+          {(grouped) => (
+            <For each={grouped().units}>
+              {(unit) => (
+                <li class={{ "nav-unexplained": unit.by === "unexplained", "nav-done": unitViewed(unit) }}>
+                  <a href={`#${unit.id}`} title={unitViewed(unit) ? "Every file here is viewed" : undefined}>
+                    <span class="nav-what">
+                      <Show when={unitViewed(unit)}>
+                        <span class="nav-check">✓ </span>
+                      </Show>
+                      {unit.title}
+                    </span>
+                    <span class="count">
+                      {changes(unit.hunks.length)}
+                      {unit.unexplained.length > 0 ? ` · ${unit.unexplained.length} not explained` : ""}
+                    </span>
+                  </a>
+                </li>
+              )}
+            </For>
+          )}
+        </Show>
+        <Show when={(props.data.grouped?.outside.length ?? 0) > 0}>
+          <li class="nav-unexplained">
+            <a href="#outside">
+              <span class="nav-what">Decisions outside the diff</span>
+              <span class="count">{props.data.grouped!.outside.length}</span>
+            </a>
+          </li>
+        </Show>
+      </ol>
+    </div>
+  );
+}
+
+/** Everything under the header that waits on the diff: the units with their
+ *  code and why, the decisions outside it, and the page's footer. */
+function Diff(props: { data: ReviewPageData }) {
   const hunks = createMemo(() => new Map<string, HunkData>((props.data.grouped?.hunks ?? []).map((hunk) => [hunk.id, hunk])));
   const decisions = createMemo(() => new Map(props.data.review.decisions.map((decision) => [decision.id, decision])));
   // the units each decision shaped — a decision spanning units links the others
@@ -108,116 +236,53 @@ function Page(props: { data: ReviewPageData }) {
       assumedNow.setClaimedBy(by);
     },
   );
-  createEffect(
-    () => props.data.ticket.title ?? props.data.ticket.goal,
-    (name) => {
-      document.title = `${name} — review`;
-    },
-  );
-
+  const enter = entering();
   return (
-    <div class="wrap">
-      <nav aria-label={props.data.grouped ? "Units" : "Decisions"}>
-        <p class="nav-title">{props.data.grouped ? "Units" : "Decisions"}</p>
-        <Show when={viewed.count().files > 0}>
-          <p class={["nav-viewed", { done: viewed.count().viewed === viewed.count().files }]}>
-            {viewed.count().viewed} of {viewed.count().files} files viewed
-          </p>
-        </Show>
-        <ol>
-          <Show
-            when={props.data.grouped}
-            fallback={
-              <For each={props.data.review.decisions}>
-                {(decision) => (
-                  <li>
-                    <a href={`#${decision.id}`}>
-                      <span class={["nav-what", { untitled: !decision.title }]}>{decision.title ?? NO_TITLE}</span>
-                    </a>
-                  </li>
-                )}
-              </For>
-            }
-          >
-            {(grouped) => (
-              <For each={grouped().units}>
-                {(unit) => (
-                  <li class={{ "nav-unexplained": unit.by === "unexplained", "nav-done": unitViewed(unit) }}>
-                    <a href={`#${unit.id}`} title={unitViewed(unit) ? "Every file here is viewed" : undefined}>
-                      <span class="nav-what">
-                        <Show when={unitViewed(unit)}>
-                          <span class="nav-check">✓ </span>
-                        </Show>
-                        {unit.title}
-                      </span>
-                      <span class="count">
-                        {changes(unit.hunks.length)}
-                        {unit.unexplained.length > 0 ? ` · ${unit.unexplained.length} not explained` : ""}
-                      </span>
-                    </a>
-                  </li>
-                )}
-              </For>
-            )}
-          </Show>
-          <Show when={(props.data.grouped?.outside.length ?? 0) > 0}>
-            <li class="nav-unexplained">
-              <a href="#outside">
-                <span class="nav-what">Decisions outside the diff</span>
-                <span class="count">{props.data.grouped!.outside.length}</span>
-              </a>
-            </li>
-          </Show>
-        </ol>
-      </nav>
-
-      <main>
-        <Header data={props.data} />
-        <HostActivity />
-        {/* one offer per language the review's code is in */}
-        <For each={[...new Set((props.data.grouped?.hunks ?? []).map((hunk) => toolOf(hunk.file)).filter((tool) => tool !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
-        <Show
-          when={props.data.grouped}
-          fallback={
-            <>
-              {/* by id: the data is read again whenever the review moves (a draft
-                  accepted, a guess answered), and what was folded stays folded */}
-              <For each={props.data.review.decisions} keyed={(decision) => decision.id}>
-                {(decision) => <BareDecision decision={decision()} why={props.data.source.detail} />}
-              </For>
-              <Show when={props.data.review.forks.length > 0}>
-                <section class="decision">
-                  <div class="decision-head">
-                    <h2>Forks in the road</h2>
+    <>
+      {/* one offer per language the review's code is in */}
+      <For each={[...new Set((props.data.grouped?.hunks ?? []).map((hunk) => toolOf(hunk.file)).filter((tool) => tool !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
+      <Show
+        when={props.data.grouped}
+        fallback={
+          <>
+            {/* by id: the data is read again whenever the review moves (a draft
+                accepted, a guess answered), and what was folded stays folded */}
+            <For each={props.data.review.decisions} keyed={(decision) => decision.id}>
+              {(decision, index) => <BareDecision decision={decision()} why={props.data.source.detail} enter={(element) => enter(element, index())} />}
+            </For>
+            <Show when={props.data.review.forks.length > 0}>
+              <section class="decision">
+                <div class="decision-head">
+                  <h2>Forks in the road</h2>
+                </div>
+                <div class="decision-main" />
+                <details class="why" open={wide()} ref={animateDetails}>
+                  <summary>Why</summary>
+                  <div>
+                    <For each={props.data.review.forks}>{(fork) => <Fork fork={fork} />}</For>
                   </div>
-                  <div class="decision-main" />
-                  <details class="why" open={wide()} ref={animateDetails}>
-                    <summary>Why</summary>
-                    <div>
-                      <For each={props.data.review.forks}>{(fork) => <Fork fork={fork} />}</For>
-                    </div>
-                  </details>
-                </section>
-              </Show>
-            </>
-          }
-        >
-          {(grouped) => (
-            <>
-              {/* by id, so a unit's folded why stays folded when the data is read again */}
-              <For each={grouped().units} keyed={(unit) => unit.id}>
-                {(unit) => <UnitSection unit={unit()} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={grouped().unmatched} />}
-              </For>
-              <Show when={grouped().outside.length > 0}>
-                <section class="decision" id="outside">
-                  <div class="decision-head">
-                    <h2>Decisions outside the diff</h2>
-                    <p class="decision-what">Their code is in no change here — the why may be older than the branch, or points at nothing.</p>
-                  </div>
-                  <div class="decision-main" />
-                  <details class="why" open={wide()} ref={animateDetails}>
-                    <summary>Why</summary>
-                    <div>
+                </details>
+              </section>
+            </Show>
+          </>
+        }
+      >
+        {(grouped) => (
+          <>
+            {/* by id, so a unit's folded why stays folded when the data is read again */}
+            <For each={grouped().units} keyed={(unit) => unit.id}>
+              {(unit, index) => <UnitSection unit={unit()} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={grouped().unmatched} enter={(element) => enter(element, index())} />}
+            </For>
+            <Show when={grouped().outside.length > 0}>
+              <section class="decision" id="outside">
+                <div class="decision-head">
+                  <h2>Decisions outside the diff</h2>
+                  <p class="decision-what">Their code is in no change here — the why may be older than the branch, or points at nothing.</p>
+                </div>
+                <div class="decision-main" />
+                <details class="why" open={wide()} ref={animateDetails}>
+                  <summary>Why</summary>
+                  <div>
                     <For each={grouped().outside.map((id) => decisions().get(id)).filter((decision): decision is Decision => decision !== undefined)}>
                       {(decision) => (
                         <div class="why-decision">
@@ -228,68 +293,68 @@ function Page(props: { data: ReviewPageData }) {
                         </div>
                       )}
                     </For>
-                    </div>
-                  </details>
-                </section>
-              </Show>
-              <Show when={grouped().looseForks.length > 0}>
-                <section class="decision">
-                  <div class="decision-head">
-                    <h2>Forks outside the diff</h2>
                   </div>
-                  <div class="decision-main" />
-                  <details class="why" open={wide()} ref={animateDetails}>
-                    <summary>Why</summary>
-                    <div>
-                      <For each={grouped().looseForks}>{(fork) => <Fork fork={fork} />}</For>
-                    </div>
-                  </details>
-                </section>
-              </Show>
-            </>
-          )}
-        </Show>
-        <footer class="note">
-          <p>A review or comment sent from here goes to the pull request on its host, in your name. Your take on the collagen ticket still goes through your agent.</p>
-          <p title={props.data.source.detail}>
-            {props.data.source.kind === "clone"
-              ? "Diff read from your own clone."
-              : props.data.source.kind === "host"
-                ? "Diff read from the host, not your clone."
-                : `No diff: ${props.data.source.detail}`}
-          </p>
-        </footer>
-      </main>
-    </div>
+                </details>
+              </section>
+            </Show>
+            <Show when={grouped().looseForks.length > 0}>
+              <section class="decision">
+                <div class="decision-head">
+                  <h2>Forks outside the diff</h2>
+                </div>
+                <div class="decision-main" />
+                <details class="why" open={wide()} ref={animateDetails}>
+                  <summary>Why</summary>
+                  <div>
+                    <For each={grouped().looseForks}>{(fork) => <Fork fork={fork} />}</For>
+                  </div>
+                </details>
+              </section>
+            </Show>
+          </>
+        )}
+      </Show>
+      <footer class="note">
+        <p>A review or comment sent from here goes to the pull request on its host, in your name. Your take on the collagen ticket still goes through your agent.</p>
+        <p title={props.data.source.detail}>
+          {props.data.source.kind === "clone"
+            ? "Diff read from your own clone."
+            : props.data.source.kind === "host"
+              ? "Diff read from the host, not your clone."
+              : `No diff: ${props.data.source.detail}`}
+        </p>
+      </footer>
+    </>
   );
 }
 
-function Header(props: { data: ReviewPageData }) {
+function Header(props: { head: ReviewPageHead }) {
   // the title leads — a few words, what the change is for — and the summary
   // is the line beneath it. A review filed before titles has only its
   // branch's name for a goal: its summary leads instead
   const headline = () =>
-    props.data.ticket.title ?? (props.data.ticket.kind === "review" && props.data.review.summary.trim().length > 0 ? props.data.review.summary : props.data.ticket.goal);
-  const beneath = () => (headline() === props.data.review.summary ? "" : props.data.review.summary.trim());
+    props.head.ticket.title ?? (props.head.ticket.kind === "review" && props.head.review.summary.trim().length > 0 ? props.head.review.summary : props.head.ticket.goal);
+  const beneath = () => (headline() === props.head.review.summary ? "" : props.head.review.summary.trim());
+  const enter = entering();
   return (
-    <header>
+    <header ref={(element) => enter(element)}>
       <div class="header-top">
       <p class="meta">
-        <Show when={props.data.review.branch}>
+        <Show when={props.head.review.branch}>
           {(branch) => (
             <>
-              <code>{branch()}</code> into <code>{props.data.review.base ?? "main"}</code> ·{" "}
+              <code>{branch()}</code> into <code>{props.head.review.base ?? "main"}</code> ·{" "}
             </>
           )}
         </Show>
-        <Show when={props.data.review.assumed} fallback={<>by {props.data.review.authorName}</>}>
+        <Show when={props.head.review.assumed} fallback={<>by {props.head.review.authorName}</>}>
           {(assumed) => (
-            <Show when={props.data.review.claimed} fallback={<>by {assumed().author}</>}>
-              <>by {props.data.review.authorName}</>
+            <Show when={props.head.review.claimed} fallback={<>by {assumed().author}</>}>
+              <>by {props.head.review.authorName}</>
             </Show>
           )}
         </Show>
-        <For each={props.data.links}>
+        <For each={props.head.links}>
           {(link) => (
             <>
               {" · "}
@@ -309,24 +374,24 @@ function Header(props: { data: ReviewPageData }) {
       <Show when={beneath()}>
         <p class="summary">{beneath()}</p>
       </Show>
-      <Show when={props.data.review.assumed}>
+      <Show when={props.head.review.assumed}>
         {(_assumed) => {
           // the guesses not answered yet — all of them, until the code's author took it over
-          const ids = () => props.data.review.decisions.filter((decision) => assumedNow.isGuess(decision)).map((decision) => decision.id);
-          const said = (verdict: string) => props.data.review.decisions.filter((decision) => decision.verdict === verdict).length + props.data.review.forks.filter((fork) => fork.verdict === verdict).length;
+          const ids = () => props.head.review.decisions.filter((decision) => assumedNow.isGuess(decision)).map((decision) => decision.id);
+          const said = (verdict: string) => props.head.review.decisions.filter((decision) => decision.verdict === verdict).length + props.head.review.forks.filter((fork) => fork.verdict === verdict).length;
           return (
             <Show
-              when={props.data.review.claimed}
+              when={props.head.review.claimed}
               fallback={
                 <div class="assumed-banner" role="note">
-                  <p>Assumption-based review by {props.data.review.authorName}</p>
+                  <p>Assumption-based review by {props.head.review.authorName}</p>
                 </div>
               }
             >
               {(claimed) => (
                 <div class="assumed-banner claimed" role="note">
                   <p>
-                    Assumption-based review by {claimed().guessedByName}, answered by {props.data.review.authorName}
+                    Assumption-based review by {claimed().guessedByName}, answered by {props.head.review.authorName}
                   </p>
                   <p class="assumed-count">
                     {said("confirmed")} confirmed · {said("corrected")} corrected · {said("wrong")} wrong{ids().length > 0 ? ` · ${ids().length} open` : ""}
@@ -493,6 +558,7 @@ function UnitSection(props: {
   decisions: ReadonlyMap<string, Decision>;
   unitsOf: ReadonlyMap<string, ReadonlyArray<Unit>>;
   unmatched: Readonly<Record<string, ReadonlyArray<string>>>;
+  enter: (element: HTMLElement) => void;
 }) {
   const shaped = () => props.unit.decisions.map((id) => props.decisions.get(id)).filter((decision): decision is Decision => decision !== undefined);
   const files = () => new Set(props.unit.hunks.map((id) => props.hunks.get(id)?.file)).size;
@@ -563,7 +629,7 @@ function UnitSection(props: {
     },
   );
   return (
-    <section class={["decision", "unit", { unexplained: props.unit.by === "unexplained" }]} id={props.unit.id}>
+    <section class={["decision", "unit", { unexplained: props.unit.by === "unexplained" }]} id={props.unit.id} ref={(element) => props.enter(element)}>
       <div class="unit-head">
         <div class="decision-head">
           <h2>{props.unit.title}</h2>
@@ -636,9 +702,9 @@ function UnitSection(props: {
 
 /** A decision on a review read without a diff: its words, and in place of
  *  its code why there is none — never an empty block. */
-function BareDecision(props: { decision: Decision; why: string }) {
+function BareDecision(props: { decision: Decision; why: string; enter: (element: HTMLElement) => void }) {
   return (
-    <section class="decision" id={props.decision.id}>
+    <section class="decision" id={props.decision.id} ref={(element) => props.enter(element)}>
       <div class="decision-head">
         <h2 class={{ untitled: !props.decision.title }}>{props.decision.title ?? NO_TITLE}</h2>
         <p class="decision-what">{props.decision.what}</p>

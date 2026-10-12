@@ -543,3 +543,18 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .host-avatars .avatar:first-child { margin-left: 0; }
 .host-initial { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; box-sizing: border-box; font-size: 10px; font-weight: 600; }
 .host-more { margin-left: 5px; font-size: 12px; color: var(--faint); }
+
+/* the page's shape while it waits (components/Skeleton): bars where the
+   words and the code will be, breathing slowly; still when the reader asks
+   their system for less motion */
+.sk-bar { display: inline-block; height: 12px; max-width: 100%; border-radius: 6px; background: var(--line); vertical-align: middle; animation: sk-breathe 1.6s ease-in-out infinite; }
+.sk-bar.tall { height: 20px; }
+.sk-row { display: flex; flex-direction: column; gap: 6px; padding: 6px 10px; }
+.sk .nav-title .sk-bar { height: 10px; }
+.sk-card { margin-bottom: 0; }
+.sk-card-head { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.sk-line { padding: 5px 14px; }
+@keyframes sk-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sk-bar { animation: none; } }
+/* a part not yet entered (enter.ts): unseen until its animation takes it over */
+.entering { opacity: 0; }
