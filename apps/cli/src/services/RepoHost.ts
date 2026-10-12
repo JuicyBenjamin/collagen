@@ -88,6 +88,8 @@ export interface RepoHost {
   readonly viewerNow: Effect.Effect<{ readonly user: HostUser } | { readonly signIn: string }>;
   /** the pull request a review is: the one its link names, else its branch's */
   readonly pull: (link: string, branch: string | undefined) => Effect.Effect<{ readonly pull: HostPull } | { readonly none: string }>;
+  /** the number of the pull request a link names (or a page of it), if it names one */
+  readonly pullIn: (link: string) => number | null;
   /** its line comments: those on a line now, and those on code changed since */
   readonly comments: (link: string, pull: number) => Effect.Effect<{ readonly inline: ReadonlyArray<LineComment>; readonly outdated: ReadonlyArray<HostNote> }>;
   /** the reviews submitted on it */
@@ -166,6 +168,7 @@ export const github: RepoHost = {
   pullRef: (pull) => `refs/pull/${pull}/head`,
   branchUrl: (repo, branch) => `${repo}/tree/${branch.split("/").map(encodeURIComponent).join("/")}`,
   matches: (link) => githubRepo(link) !== null,
+  pullIn: pullNumberIn,
   compare: (link, base, branch) => {
     const r = githubRepo(link);
     if (!r) return Effect.succeed(null);
