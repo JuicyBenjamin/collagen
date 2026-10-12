@@ -179,7 +179,7 @@ function Page(props: { data: ReviewPageData }) {
           when={props.data.grouped}
           fallback={
             <>
-              <For each={props.data.review.decisions}>{(d) => <BareDecision decision={d} />}</For>
+              <For each={props.data.review.decisions}>{(d) => <BareDecision decision={d} why={props.data.source.detail} />}</For>
               <Show when={props.data.review.forks.length > 0}>
                 <section class="decision">
                   <h2>Forks in the road</h2>
@@ -231,7 +231,7 @@ function Page(props: { data: ReviewPageData }) {
             {props.data.source.kind === "clone"
               ? "Diff read from your own clone."
               : props.data.source.kind === "host"
-                ? "No clone of this project here — diff read from the host."
+                ? "Diff read from the host, not your clone."
                 : `No diff: ${props.data.source.detail}`}
           </p>
         </footer>
@@ -610,8 +610,9 @@ function UnitSection(props: {
   );
 }
 
-/** A decision on a review read without a diff: its words, no code. */
-function BareDecision(props: { decision: Decision }) {
+/** A decision on a review read without a diff: its words, and in place of
+ *  its code why there is none — never an empty block. */
+function BareDecision(props: { decision: Decision; why: string }) {
   return (
     <section class="decision" id={props.decision.id}>
       <div class="decision-head">
@@ -619,9 +620,12 @@ function BareDecision(props: { decision: Decision }) {
         <p class="decision-what">{props.decision.what}</p>
       </div>
       <div class="decision-main">
-        <Show when={props.decision.where.length > 0}>
-          <p class="empty">{props.decision.where.join(", ")}</p>
-        </Show>
+        <div class="no-code">
+          <p class="no-code-why">No code: {props.why}</p>
+          <Show when={props.decision.where.length > 0}>
+            <p class="empty">{props.decision.where.join(", ")}</p>
+          </Show>
+        </div>
       </div>
       <details class="why" open={wide()}>
         <summary>Why</summary>
