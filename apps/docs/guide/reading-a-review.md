@@ -32,6 +32,9 @@ author's agent amends it whenever the code moves), when the ticket moves, or whe
 branch's commit in your clone changes, and it reloads its data in place — what is on screen
 stays until the new data is in.
 
+Opening it, the title stands at once; the outline and the code show their shape and fill in
+as the diff is read.
+
 It is served by your own running collagen, beside the MCP server, on **loopback only** —
 nothing about the code leaves your machine, and a request that names another host is
 refused. The url also goes to the activity log, for a machine with no browser to open.
