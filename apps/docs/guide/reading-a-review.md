@@ -329,6 +329,25 @@ On a line's composer, **Start a review** (then **Add review comment**) puts a co
 review; **Add single comment** says it at once, on its own, as GitHub's button does. A pending
 comment sits under its line marked **Pending**, to edit or delete until you finish.
 
+### How strongly a comment asks
+
+Each comment can say how strongly it asks for a change — pick one under the box, or none
+for a plain comment:
+
+| Strength  | Means                                   |
+| --------- | --------------------------------------- |
+| `nit`     | take it or leave it                     |
+| `suggest` | worth considering                       |
+| `wish`    | you would like it changed               |
+| `must`    | it has to change                        |
+
+It is written as a prefix on the comment's words — `nit: trailing space` — so it goes
+wherever they go: the room, and GitHub, which has no such thing. The page reads it back from
+the words, whoever wrote them, and marks each comment with it. One **must** in your review
+makes the whole review **Request changes** (GitHub has one verdict per review): the other
+verdicts are off while it is there, and it needs no words on the whole. Your agent's drafts
+carry a strength too, when it can tell (`review-comments`, `strength`).
+
 ### Your AI's comments
 
 Ask your agent to review the change and it reads the code, then leaves each remark about

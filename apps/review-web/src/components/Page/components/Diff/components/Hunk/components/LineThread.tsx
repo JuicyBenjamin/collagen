@@ -4,6 +4,8 @@ import { enter } from "~/fold";
 import { hostNow } from "~/hostNow";
 import { bodyParts, suggestionBlock } from "~/suggest";
 import { Markdown } from "~/components/Markdown";
+import { StrengthMark, StrengthPicker } from "~/components/Strength";
+import { readStrength, withStrength, type Strength } from "~/strength";
 
 /** When a comment was written, as a reader says it. */
 const when = (iso: string): string => {
@@ -63,6 +65,7 @@ function Suggestion(props: { code: string; replaces: ReadonlyArray<string> | nul
  *  as HTML; a suggested change in it shown as one. The reader's own, on its
  *  way, is marked so. */
 function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
+  const words = () => readStrength(props.comment.body);
   const replaces = () => {
     const comment = props.comment;
     return comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(comment.startLine ?? comment.line, comment.line) : null;
@@ -72,6 +75,7 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
       <div class="line-comment-head">
         <Show when={props.comment.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
         <strong>{props.comment.author.login}</strong>
+        <StrengthMark strength={words().strength} />
         <Show when={props.comment.drafted}>
           <span class="drafted-mark" title="Drafted by their AI, accepted by them">with AI</span>
         </Show>
@@ -87,7 +91,7 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
           )}
         </Show>
       </div>
-      <For each={bodyParts(props.comment.body)}>
+      <For each={bodyParts(words().text)}>
         {(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}
       </For>
     </div>
@@ -114,9 +118,12 @@ function Moved(props: { comment: DraftView }) {
 }
 
 function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
+  const words = () => readStrength(props.draft.body);
   const [editing, setEditing] = createSignal(false);
-  const [body, setBody] = createSignal(props.draft.body);
+  const [body, setBody] = createSignal(words().text);
+  const [strength, setStrength] = createSignal<Strength | null>(words().strength);
   const [busy, setBusy] = createSignal(false);
+  const edited = () => withStrength(strength(), body().trim());
   const replaces = () => {
     const draft = props.draft;
     return draft.side === "RIGHT" && (draft.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(draft.startLine ?? draft.line, draft.line) : null;
@@ -124,7 +131,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
   const accept = async () => {
     setBusy(true);
     try {
-      await hostNow.accept([props.draft.id], editing() && body().trim() !== props.draft.body ? { [props.draft.id]: body().trim() } : {});
+      await hostNow.accept([props.draft.id], editing() && edited() !== props.draft.body ? { [props.draft.id]: edited() } : {});
     } finally {
       setBusy(false);
     }
@@ -134,13 +141,17 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
     <div class="line-comment draft" id={`draft-${props.draft.id}`}>
       <div class="line-comment-head">
         <span class="draft-badge">Draft from your AI</span>
+        <Show when={!editing()}>
+          <StrengthMark strength={words().strength} />
+        </Show>
         <span class="line-comment-when">on {linesOf(props.draft)}</span>
       </div>
       <Show
         when={editing()}
-        fallback={<For each={bodyParts(props.draft.body)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
+        fallback={<For each={bodyParts(words().text)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
         <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
+        <StrengthPicker value={strength()} onChange={setStrength} />
       </Show>
       <Moved comment={props.draft} />
       <Show when={hostNow.refusal(props.draft.id)}>{(why) => <p class="host-error">Not posted: {why()}</p>}</Show>
@@ -162,21 +173,26 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
 /** A comment pending in the reader's review: theirs (or their AI's, taken
  *  in), said with the rest when they finish it — to edit or delete till then. */
 function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
+  const words = () => readStrength(props.comment.body);
   const [editing, setEditing] = createSignal(false);
-  const [body, setBody] = createSignal(props.comment.body);
+  const [body, setBody] = createSignal(words().text);
+  const [strength, setStrength] = createSignal<Strength | null>(words().strength);
   const replaces = () => {
     const comment = props.comment;
     return comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(comment.startLine ?? comment.line, comment.line) : null;
   };
   const save = () => {
-    const text = body().trim();
-    if (text.length > 0 && text !== props.comment.body) void hostNow.edit(props.comment.id, text);
+    const text = withStrength(strength(), body().trim());
+    if (body().trim().length > 0 && text !== props.comment.body) void hostNow.edit(props.comment.id, text);
     setEditing(false);
   };
   return (
     <div class="line-comment pending-review">
       <div class="line-comment-head">
         <span class="pending-badge">{props.comment.posted ? `On ${hostNow.hostName()}` : "Pending"}</span>
+        <Show when={!editing()}>
+          <StrengthMark strength={words().strength} />
+        </Show>
         <Show when={props.comment.drafted}>
           <span class="drafted-mark" title="Drafted by your AI, taken into your review">with AI</span>
         </Show>
@@ -184,9 +200,10 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
       </div>
       <Show
         when={editing()}
-        fallback={<For each={bodyParts(props.comment.body)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
+        fallback={<For each={bodyParts(words().text)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
         <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
+        <StrengthPicker value={strength()} onChange={setStrength} />
       </Show>
       <Show when={!props.comment.posted} fallback={<p class="moved-note">On the pull request already — finish the review again to say it in the room.</p>}>
         <Moved comment={props.comment} />
@@ -198,7 +215,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
           Delete
         </button>
         <Show when={editing()} fallback={<button type="button" class="quiet" onClick={() => setEditing(true)}>Edit</button>}>
-          <button type="button" class="quiet" onClick={() => (setBody(props.comment.body), setEditing(false))}>
+          <button type="button" class="quiet" onClick={() => (setBody(words().text), setStrength(words().strength), setEditing(false))}>
             Cancel
           </button>
           <button type="button" class="banner-go" onClick={save}>
@@ -250,6 +267,7 @@ export function LineComposer(props: {
   suggestable: ReadonlyArray<string> | null;
 }) {
   const [body, setBody] = createSignal("");
+  const [strength, setStrength] = createSignal<Strength | null>(null);
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
   let box: HTMLTextAreaElement | undefined;
@@ -268,8 +286,8 @@ export function LineComposer(props: {
   };
   /** into the review (pending, as GitHub's "Start a review") or, single, said at once */
   const send = async (single: boolean) => {
-    const text = body().trim();
-    if (text.length === 0 || sending()) return;
+    if (body().trim().length === 0 || sending()) return;
+    const text = withStrength(strength(), body().trim());
     setSending(true);
     setSaid(null);
     try {
@@ -317,6 +335,7 @@ export function LineComposer(props: {
                 if (event.key === "Escape") close();
               }}
             />
+            <StrengthPicker value={strength()} onChange={setStrength} />
             <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
             <div class="composer-actions">
               <button type="button" class="quiet" onClick={close}>

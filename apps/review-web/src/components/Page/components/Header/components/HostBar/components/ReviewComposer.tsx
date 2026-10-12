@@ -1,6 +1,7 @@
 import { createSignal, flush, Show } from "solid-js";
 import type { Verdict } from "~/data";
 import { hostNow } from "~/hostNow";
+import { asksForChanges } from "~/strength";
 
 const VERDICTS: ReadonlyArray<{ readonly value: Verdict; readonly label: string; readonly hint: string }> = [
   { value: "comment", label: "Comment", hint: "Feedback without a verdict" },
@@ -23,8 +24,11 @@ export function ReviewComposer(props: { onDone: () => void }) {
   const count = () => hostNow.pending().length;
   const pull = () => hostNow.host()?.pull ?? null;
   const onHost = () => hostNow.canWrite();
+  /** a must in the review asks for changes: the whole review does, the host having one verdict for all of it */
+  const musts = () => hostNow.pending().filter((draft) => asksForChanges(draft.body)).length;
+  const chosen = (): Verdict => (musts() > 0 ? "request-changes" : verdict());
   // words are needed only where nothing else says it: a verdict or comments do
-  const ready = () => !sending() && (!onHost() ? count() > 0 : verdict() === "approve" || body().trim().length > 0 || count() > 0);
+  const ready = () => !sending() && (!onHost() ? count() > 0 : chosen() === "approve" || body().trim().length > 0 || count() > 0);
   // one finish at a time: a second click while one is on its way sends nothing
   let busy = false;
   const send = async () => {
@@ -36,7 +40,7 @@ export function ReviewComposer(props: { onDone: () => void }) {
     flush();
     try {
       // in the room alone there is nowhere for words on the whole, or a verdict
-      const result = await hostNow.submit(onHost() ? verdict() : "comment", onHost() ? body() : "");
+      const result = await hostNow.submit(onHost() ? chosen() : "comment", onHost() ? body() : "");
       if ("error" in result) {
         // its words and verdict reached the pull request: only the room is left to tell
         if (result.onHost) {
@@ -68,7 +72,7 @@ export function ReviewComposer(props: { onDone: () => void }) {
       </div>
       <Show when={onHost()}>
       <textarea
-        placeholder={verdict() === "approve" || count() > 0 ? "Anything to add (optional)" : verdict() === "request-changes" ? "What should change" : "Leave a comment"}
+        placeholder={chosen() === "approve" || count() > 0 ? "Anything to add (optional)" : chosen() === "request-changes" ? "What should change" : "Leave a comment"}
         value={body()}
         onInput={(event) => setBody(event.currentTarget.value)}
         rows={4}
@@ -78,12 +82,15 @@ export function ReviewComposer(props: { onDone: () => void }) {
       />
       <fieldset class="verdicts">
         {VERDICTS.map((option) => (
-          <label title={option.hint}>
-            <input type="radio" name="verdict" value={option.value} checked={verdict() === option.value} onChange={() => setVerdict(option.value)} />
+          <label title={option.hint} class={{ disabled: musts() > 0 && option.value !== "request-changes" }}>
+            <input type="radio" name="verdict" value={option.value} checked={chosen() === option.value} disabled={musts() > 0 && option.value !== "request-changes"} onChange={() => setVerdict(option.value)} />
             {option.label}
           </label>
         ))}
       </fieldset>
+      <Show when={musts() > 0}>
+        <p class="host-note left">{musts() === 1 ? "A must comment requests changes." : `${musts()} must comments request changes.`}</p>
+      </Show>
       </Show>
       <Show when={!onHost()}>
         <p class="host-note left">
