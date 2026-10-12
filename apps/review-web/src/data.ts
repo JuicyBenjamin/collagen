@@ -420,3 +420,38 @@ export type Verdict = "comment" | "approve" | "request-changes";
 /** What the host said to a write: done (the comment as it now stands), or
  *  its refusal in words. */
 export type HostWrite = { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
+
+/** A ticket a merge came from, as the merge history names it — one the
+ *  reader may see. */
+export interface MergeTicket {
+  readonly id: string;
+  readonly name: string;
+  /** "you" for the reader's own */
+  readonly author: string;
+  readonly mine: boolean;
+  readonly closed: boolean;
+}
+
+/** One merge into a project's default branch, with the tickets it came from — none, often. */
+export interface MergeEntry {
+  readonly number: number;
+  readonly url: string;
+  readonly title: string;
+  readonly branch: string;
+  /** when it was merged, ISO */
+  readonly at: string;
+  readonly tickets: ReadonlyArray<MergeTicket>;
+}
+
+/** A project's merges, the latest first — or why they cannot be read. */
+export type ProjectHistory = { readonly project: string } & ({ readonly base: string; readonly merges: ReadonlyArray<MergeEntry> } | { readonly none: string });
+
+/** mergeHistory(roomId) — what was merged into each of a room's projects
+ *  here, as the TUI's merges tab has it: the host's merges and the room's
+ *  tickets, read together. */
+export interface MergeHistory {
+  readonly room: string;
+  readonly projects: ReadonlyArray<ProjectHistory>;
+  /** when it was read, ISO */
+  readonly readAt: string;
+}

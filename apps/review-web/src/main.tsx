@@ -3,6 +3,7 @@ import { createThemeBaseCss, createThemeRule } from "@tanstack/highlight/theme";
 import { githubLightTheme } from "@tanstack/highlight/themes/github-light";
 import { oneDarkProTheme } from "@tanstack/highlight/themes/one-dark-pro";
 import { App } from "./App";
+import { MergesApp, mergesRoom } from "./Merges";
 import { startHandoff } from "./handoff";
 import "./styles.css";
 
@@ -16,5 +17,7 @@ theme.textContent = [
 ].join("\n");
 document.head.append(theme);
 
-startHandoff();
-render(() => <App />, document.getElementById("root")!);
+// one document for both pages: /review/<ticketId>, and /merges/<roomId>
+const room = mergesRoom;
+if (room === null) startHandoff();
+render(() => (room === null ? <App /> : <MergesApp roomId={room} />), document.getElementById("root")!);
