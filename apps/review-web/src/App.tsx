@@ -179,11 +179,21 @@ function Page(props: { data: ReviewPageData }) {
           when={props.data.grouped}
           fallback={
             <>
-              <For each={props.data.review.decisions}>{(decision) => <BareDecision decision={decision} why={props.data.source.detail} />}</For>
+              {/* by id: the data is read again whenever the review moves (a draft
+                  accepted, a guess answered), and what was folded stays folded */}
+              <For each={props.data.review.decisions} keyed={(decision) => decision.id}>
+                {(decision) => <BareDecision decision={decision()} why={props.data.source.detail} />}
+              </For>
               <Show when={props.data.review.forks.length > 0}>
                 <section class="decision">
-                  <h2>Forks in the road</h2>
-                  <For each={props.data.review.forks}>{(fork) => <Fork fork={fork} />}</For>
+                  <div class="decision-head">
+                    <h2>Forks in the road</h2>
+                  </div>
+                  <div class="decision-main" />
+                  <details class="why" open={wide()}>
+                    <summary>Why</summary>
+                    <For each={props.data.review.forks}>{(fork) => <Fork fork={fork} />}</For>
+                  </details>
                 </section>
               </Show>
             </>
@@ -191,7 +201,10 @@ function Page(props: { data: ReviewPageData }) {
         >
           {(grouped) => (
             <>
-              <For each={grouped().units}>{(unit) => <UnitSection unit={unit} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={grouped().unmatched} />}</For>
+              {/* by id, so a unit's folded why stays folded when the data is read again */}
+              <For each={grouped().units} keyed={(unit) => unit.id}>
+                {(unit) => <UnitSection unit={unit()} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={grouped().unmatched} />}
+              </For>
               <Show when={grouped().outside.length > 0}>
                 <section class="decision" id="outside">
                   <div class="decision-head">
@@ -216,10 +229,14 @@ function Page(props: { data: ReviewPageData }) {
               </Show>
               <Show when={grouped().looseForks.length > 0}>
                 <section class="decision">
-                  <h2>Forks outside the diff</h2>
-                  <div class="decision-main">
-                    <For each={grouped().looseForks}>{(fork) => <Fork fork={fork} />}</For>
+                  <div class="decision-head">
+                    <h2>Forks outside the diff</h2>
                   </div>
+                  <div class="decision-main" />
+                  <details class="why" open={wide()}>
+                    <summary>Why</summary>
+                    <For each={grouped().looseForks}>{(fork) => <Fork fork={fork} />}</For>
+                  </details>
                 </section>
               </Show>
             </>
