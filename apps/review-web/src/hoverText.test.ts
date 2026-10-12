@@ -46,11 +46,11 @@ describe("signatures", () => {
 });
 
 describe("which answers the page keeps", () => {
-  it("a final answer is kept; one given mid-index, partial, missing or failed is asked again", () => {
+  it("a final answer is kept; one given mid-index, missing or failed is asked again", () => {
     expect(final({ markdown: "x" })).toBe(true);
     expect(final({ none: true })).toBe(true);
     expect(final({ peeks: [] })).toBe(true);
-    expect(final({ indexing: true })).toBe(false);
+    expect(final({ none: true, partial: true, progress: 40 })).toBe(false);
     expect(final({ markdown: "x", partial: true })).toBe(false);
     expect(final({ missing: true })).toBe(false);
     expect(final({ error: "the server exited" })).toBe(false);

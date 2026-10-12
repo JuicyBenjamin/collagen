@@ -22,6 +22,8 @@ export class ReviewBackend extends Context.Service<
     /** what the type checker says at a position — of the code at `commit`, the one the page shows */
     readonly hover: (ticketId: string, file: string, line: number, col: number, commit: string) => Effect.Effect<HoverResult>;
     readonly definition: (ticketId: string, file: string, line: number, col: number, commit: string) => Effect.Effect<DefinitionResult>;
+    /** start the review's server for a language at `commit`, so it reads the project before the first hover */
+    readonly warm: (ticketId: string, tool: ToolId, commit: string) => Effect.Effect<void>;
     /** a language server's state, now and each time it changes — installing,
      *  ready, failed, a notice it asked to show */
     readonly tool: (tool: ToolId) => Stream.Stream<ToolState>;

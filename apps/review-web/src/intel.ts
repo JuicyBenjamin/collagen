@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { final, toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
+import { final, stillReading, toolOf, type DefinitionResult, type HoverResult, type ToolId, type ToolState } from "./data";
 import { ticketId } from "./ticket";
 import { definitionAt, hoverAt, installTool as install } from "./api";
 import { diffNow } from "./diffNow";
@@ -62,6 +62,9 @@ const ask = <A>(call: (ticketId: string, file: string, line: number, col: number
   return p;
 };
 const hovers = new Map<string, Promise<HoverResult>>();
+/** How soon an answer given while the server was still reading the project
+ *  is asked again — the page does it, the reader never has to. */
+export const REASK_MS = 1_500;
 const definitions = new Map<string, Promise<DefinitionResult>>();
 
 /** The word under a character of a line: where it starts, or null when the
@@ -115,18 +118,24 @@ export function pointAt(spot: Spot | null, x: number, y: number): void {
     setPopover(null);
     return;
   }
-  const timer = setTimeout(() => {
+  // this word's answer is on screen: asking again keeps it there, rather
+  // than "Starting…" (another word's answer is replaced as before)
+  let answered = false;
+  const asking = () => {
     // a slow first answer (the server starting) says so rather than nothing
-    const slow = setTimeout(() => pending?.spot === spot && setPopover({ x, y, file: spot.file, state: "loading" }), 400);
+    const slow = setTimeout(() => pending?.spot === spot && !answered && setPopover({ x, y, file: spot.file, state: "loading" }), 400);
     void ask(hoverAt, spot, hovers).then((result) => {
       clearTimeout(slow);
       if (pending?.spot !== spot) return;
+      answered = true;
       // nothing to say is no popover — unless the server was still reading,
       // when "nothing yet" is worth saying rather than looking definitive
-      setPopover("none" in result && !result.partial ? null : { x, y, file: spot.file, state: "ready", result });
+      setPopover("none" in result && !stillReading(result) ? null : { x, y, file: spot.file, state: "ready", result });
+      // still reading: asked again while the pointer stays, until whole
+      if (stillReading(result)) pending.timer = setTimeout(asking, REASK_MS);
     });
-  }, 220);
-  pending = { spot, timer };
+  };
+  pending = { spot, timer: setTimeout(asking, 220) };
 }
 
 export interface PeekAt {
@@ -140,20 +149,30 @@ const [peek, setPeek] = createSignal<PeekAt | null>(null);
 export { peek };
 
 /** A click on a word peeks where it is declared, under the line; a click on
- *  the same word, the ×, or Esc folds it away — except while the answer is
- *  not a final one (the server still reading, or a failure): then the same
- *  click asks again, as the peek says. */
+ *  the same word, the ×, or Esc folds it away — except after a failure:
+ *  then the same click asks again, as the peek says. An answer given while
+ *  the server is still reading is asked again by itself. */
 export function peekAt(hunk: string, index: number, spot: Spot): void {
   const now = peek();
   const same = now !== null && now.hunk === hunk && now.index === index && key(now.spot) === key(spot);
-  if (same && now.result !== null && final(now.result)) return closePeek();
+  if (same && now.result !== null && (final(now.result) || stillReading(now.result))) return closePeek();
   if (same && now.result === null) return; // still asking
   setPeek({ hunk, index, spot, result: null });
+  askPeek(hunk, index, spot);
+}
+
+let peekTimer: ReturnType<typeof setTimeout> | undefined;
+const askPeek = (hunk: string, index: number, spot: Spot): void => {
+  clearTimeout(peekTimer);
+  const open = (p: PeekAt | null) => p !== null && p.hunk === hunk && p.index === index && key(p.spot) === key(spot);
   void ask(definitionAt, spot, definitions).then((result) => {
     const still = peek();
-    if (still && key(still.spot) === key(spot)) setPeek({ ...still, result });
+    if (!open(still)) return;
+    setPeek({ ...still!, result });
+    // still reading: asked again while it is open, until whole
+    if (stillReading(result)) peekTimer = setTimeout(() => open(peek()) && askPeek(hunk, index, spot), REASK_MS);
   });
-}
+};
 
 /** Ask the open peek's question again (its Try again). */
 export function retryPeek(): void {
@@ -162,6 +181,7 @@ export function retryPeek(): void {
 }
 
 export function closePeek(): void {
+  clearTimeout(peekTimer);
   setPeek(null);
 }
 

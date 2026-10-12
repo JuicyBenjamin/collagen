@@ -152,15 +152,21 @@ export type WholeFileResult = { readonly lines: ReadonlyArray<string> } | { read
  *  not (the branch was rewritten and that commit is gone, say). */
 export type SinceResult = { readonly hunks: ReadonlyArray<Hunk> } | { readonly error: string };
 
+/** While a server is still reading the project, what it answers is
+ *  `partial` — perhaps missing what it has not read yet — with how much it
+ *  has read (`progress`, 0–100) when it says. */
+export interface Reading {
+  readonly partial?: true;
+  readonly progress?: number;
+}
+
 /** hoverAt(ticketId, file, line, col) — what the type checker says
  *  about the symbol there: markdown (a code fence with the signature, then
- *  its doc comment), nothing, that its server is still indexing (ask
- *  again), or why it could not answer. */
+ *  its doc comment), nothing, or why it could not answer. */
 export type HoverResult =
-  | { readonly markdown: string; readonly partial?: true }
-  | { readonly none: true; readonly partial?: true }
+  | ({ readonly markdown: string } & Reading)
+  | ({ readonly none: true } & Reading)
   | { readonly missing: true }
-  | { readonly indexing: true }
   | { readonly error: string };
 
 /** One declaration a symbol resolves to. `code` is the declaration itself (a
@@ -180,17 +186,19 @@ export interface Peek {
 }
 
 /** definitionAt(ticketId, file, line, col) */
-export type DefinitionResult = { readonly peeks: ReadonlyArray<Peek>; readonly partial?: true } | { readonly missing: true } | { readonly indexing: true } | { readonly error: string };
+export type DefinitionResult = ({ readonly peeks: ReadonlyArray<Peek> } & Reading) | { readonly missing: true } | { readonly error: string };
 
-/** An answer that may change if asked again — the server was still
- *  indexing (`indexing`, or `partial` from a server that never said it was
- *  done), or something failed — is not one to keep. */
-/** The server was still reading the project when it answered: no answer
- *  yet (`indexing`), or one that may be incomplete (`partial`). Said on the
- *  page, never shown as if it were the whole answer. */
-export const stillReading = (r: HoverResult | DefinitionResult): boolean => "indexing" in r || ("partial" in r && r.partial === true);
+/** The server was still reading the project when it answered: what it said
+ *  may be incomplete. Said on the page, never shown as if it were the whole
+ *  answer, and asked again by the page until it is. */
+export const stillReading = (r: HoverResult | DefinitionResult): boolean => "partial" in r && r.partial === true;
 
-export const final = (r: HoverResult | DefinitionResult): boolean => !("indexing" in r) && !("error" in r) && !("missing" in r) && !("partial" in r && r.partial);
+/** How far it had read, when it said — for "reading the project · 40%". */
+export const readSoFar = (r: HoverResult | DefinitionResult): number | null => ("progress" in r && typeof r.progress === "number" ? r.progress : null);
+
+/** An answer that may change if asked again — partial, or a failure — is
+ *  not one to keep. */
+export const final = (r: HoverResult | DefinitionResult): boolean => !("error" in r) && !("missing" in r) && !stillReading(r);
 
 /** The languages the review page can ask a language server about, each
  *  answered by a tool collagen installs on the reader's click. */
