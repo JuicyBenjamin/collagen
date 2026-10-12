@@ -83,9 +83,10 @@ export function Tickets() {
   const related = (t: Ticket, insideEpic: boolean): ReadonlyArray<Part> => {
     const r = relationsOf(t, byId, me);
     return [
-      ...(r.epic && !insideEpic ? [{ text: `${EPIC_MARK} ${clip(r.epic.name, RELATION_MAX)}` }] : []),
-      ...(r.parent ? [{ text: `from "${clip(r.parent.name, RELATION_MAX)}"` }] : []),
-      ...(r.children > 0 ? [{ text: `${r.children} grew from it` }] : []),
+      // whole names: the column takes what the titles leave and cuts there
+      ...(r.epic && !insideEpic ? [{ text: `${EPIC_MARK} ${r.epic.name}` }] : []),
+      ...(r.parent ? [{ text: `from "${r.parent.name}"` }] : []),
+      ...(r.children > 0 ? [{ text: `${r.children} ${r.children === 1 ? "relation" : "relations"}` }] : []),
     ];
   };
   const counts = new Map<TicketTab, number>(TICKET_TABS.map((k) => [k, k === "all" ? open.length : open.filter((r) => r.t.kind === k).length]));
@@ -100,20 +101,31 @@ export function Tickets() {
     ]),
     ...[...groups, ...closedGroups].flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => leadOf(r.t, k.depth.get(r.t.id) ?? 0, undefined)))),
   ]);
-  // and one info column, as wide as its widest info
-  const infoWidth = Math.max(
+  // then two info columns, each as wide as its widest: where a ticket stands
+  // (marks, holds, an epic's progress, how a closed one ended), and apart
+  // from it what the ticket hangs from
+  const statusWidth = Math.max(
     0,
     ...epics.flatMap((e) => [
       cells(progressShort(epicProgress(e.epic.t, byId))),
-      ...(unfolded.has(e.epic.t.id) ? e.rows.map((r) => partsWidth([...rowInfo(r.s, undefined, nameOf, excludedFromEpic(r.t)), ...related(r.t, true)])) : []),
+      ...(unfolded.has(e.epic.t.id) ? e.rows.map((r) => partsWidth(rowInfo(r.s, undefined, nameOf, excludedFromEpic(r.t)))) : []),
     ]),
-    ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth([...rowInfo(r.s, k.parent.get(r.t.id), nameOf, undefined), ...related(r.t, false)])))),
-    ...closedGroups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(closedInfo(r.t, related(r.t, false)))))),
+    ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(rowInfo(r.s, k.parent.get(r.t.id), nameOf, undefined))))),
+    ...closedGroups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(closedInfo(r.t))))),
   );
+  const relationWidth = Math.max(
+    0,
+    ...epics.flatMap((e) => (unfolded.has(e.epic.t.id) ? e.rows.map((r) => partsWidth(related(r.t, true))) : [])),
+    ...[...groups, ...closedGroups].flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(related(r.t, false))))),
+  );
+  const infoWidth = statusWidth + relationWidth + (statusWidth > 0 && relationWidth > 0 ? GAP : 0);
   // both bounded by the pane, as it is drawn: the titles first, the info in
   // what is left (lib/columns), truncated inside it
   const indent = groups.length > 1 || closedGroups.length > 1 ? 4 : 2;
   const { lead: leadCol, info: infoCol } = fitColumns({ lead: width, info: infoWidth }, pane === undefined ? undefined : pane - (indent - 2 + HEAD + NAME) - GAP);
+  // the status keeps its column whole; what the ticket hangs from gets the rest
+  const statusCol = Math.min(statusWidth, infoCol);
+  const relationCol = Math.max(0, infoCol - statusCol - (statusCol > 0 ? GAP : 0));
   const index = new Map(shown.map((r, i) => [r.t.id, i]));
 
   const last = Math.max(0, shown.length - 1);
@@ -165,7 +177,7 @@ export function Tickets() {
       {(focused) => (
         <>
           {shown.length === 0 && !showClosed && (unknownTickets.length === 0 || tab !== "all") ? (
-            <text fg={theme.dim} truncate wrapMode="none">
+            <text fg={theme.dim} truncate wrapMode="none" marginTop={1}>
               {"  "}none
             </text>
           ) : (
@@ -180,7 +192,8 @@ export function Tickets() {
                 first={epics[0] === e}
                 indent={indent}
                 width={leadCol}
-                infoWidth={infoCol}
+                infoWidth={statusCol}
+                relationWidth={relationCol}
                 selectedId={focused ? current?.t.id : undefined}
                 progress={progressShort(epicProgress(e.epic.t, byId))}
                 nameFor={nameFor}
@@ -189,8 +202,9 @@ export function Tickets() {
                 related={(t) => related(t, true)}
               />
             ))}
-            {groups.map((g) => (
-              <box key={g.project} flexDirection="column" flexShrink={0}>
+            {groups.map((g, i) => (
+              // a line between the tabs and the rows, as an open epic has above it
+              <box key={g.project} flexDirection="column" flexShrink={0} marginTop={i === 0 && epics.length === 0 ? 1 : 0}>
                 {groups.length > 1 ? (
                   <text fg={theme.fg} truncate wrapMode="none">
                     {"  "}
@@ -218,7 +232,8 @@ export function Tickets() {
                         under={k.parent.get(r.t.id)}
                         goalOf={nameOf}
                         width={leadCol}
-                        infoWidth={infoCol}
+                        infoWidth={statusCol}
+                        relationWidth={relationCol}
                         related={related(r.t, false)}
                       />
                     ))}
@@ -251,8 +266,10 @@ export function Tickets() {
                         under={undefined}
                         goalOf={nameOf}
                         width={leadCol}
-                        infoWidth={infoCol}
-                        info={closedInfo(r.t, related(r.t, false))}
+                        infoWidth={statusCol}
+                        relationWidth={relationCol}
+                        info={closedInfo(r.t)}
+                        related={related(r.t, false)}
                       />
                     ))}
                   </box>
@@ -338,6 +355,7 @@ function EpicView({
   indent,
   width,
   infoWidth,
+  relationWidth,
   related,
 }: {
   block: EpicBlock<Row>;
@@ -351,9 +369,10 @@ function EpicView({
   nameFor: (key: string) => string;
   projects: boolean;
   goalOf: (ticketId: string) => string | undefined;
-  /** the rows' lead width, so the epic's progress sits on their info column */
+  /** the rows' lead width, so the epic's progress sits on their status column */
   width: number;
   infoWidth: number;
+  relationWidth: number;
   /** what a row inside hangs from besides this epic */
   related: (t: Ticket) => ReadonlyArray<Part>;
 }) {
@@ -397,6 +416,7 @@ function EpicView({
               branch={i === block.rows.length - 1 ? "last" : "mid"}
               width={width}
               infoWidth={infoWidth}
+              relationWidth={relationWidth}
             />
           ))
         : null}
@@ -409,11 +429,9 @@ function EpicView({
 const HEAD = 8;
 /** The most a waiting row spends naming what it waits on. */
 const AFTER_MAX = 24;
-/** The most a row spends naming its epic or what it grew from. */
-const RELATION_MAX = 20;
 
-/** A closed row's info: how it ended, then what it hangs from. */
-const closedInfo = (t: Ticket, related: ReadonlyArray<Part>): ReadonlyArray<Part> => [{ text: closedLine(t) ?? "closed" }, ...related];
+/** A closed row's status: how it ended. */
+const closedInfo = (t: Ticket): ReadonlyArray<Part> => [{ text: closedLine(t) ?? "closed" }];
 
 /** Between the title and the info column. */
 const GAP = 2;
@@ -523,6 +541,7 @@ function TicketRow({
   branch,
   width,
   infoWidth,
+  relationWidth,
   related = [],
   info,
 }: {
@@ -545,11 +564,13 @@ function TicketRow({
   branch?: "mid" | "last";
   /** the lead column's width: the info after it starts on the same column on every row */
   width: number;
-  /** the info column's width, the widest info on screen */
+  /** the status column's width, the widest status on screen */
   infoWidth: number;
+  /** the column after it: what the ticket hangs from */
+  relationWidth: number;
   /** what it hangs from, said last and quietly */
   related?: ReadonlyArray<Part>;
-  /** the info in place of its own (a closed row's: how it ended) */
+  /** the status in place of its own (a closed row's: how it ended) */
   info?: ReadonlyArray<Part>;
 }) {
   const yours = s.state === "needs-you";
@@ -581,7 +602,8 @@ function TicketRow({
         {project ? <span fg={theme.dim}>{project} · </span> : null}
         {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
       </text>
-      <Info parts={info ?? [...rowInfo(s, under, goalOf, excluded), ...related]} width={infoWidth} />
+      <Info parts={info ?? rowInfo(s, under, goalOf, excluded)} width={infoWidth} />
+      <Info parts={related} width={relationWidth} />
     </box>
   );
 }
