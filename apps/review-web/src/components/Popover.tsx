@@ -1,6 +1,6 @@
 import { createMemo, For, Show } from "solid-js";
 import { highlightCode } from "../highlight";
-import { stillReading } from "../data";
+import { readSoFar, stillReading, type HoverResult } from "../data";
 import { brief, inline } from "../hoverText";
 import { popover, toolNameFor } from "../intel";
 import { CodeLine } from "./Code";
@@ -14,6 +14,13 @@ function Prose(props: { text: string }) {
     </p>
   );
 }
+
+/** "Intelephense is reading the project · 40%" — why an answer may be
+ *  missing things; the page asks again by itself until it is whole. */
+const reading = (name: string, r: HoverResult): string => {
+  const at = readSoFar(r);
+  return `${name} is reading the project${at === null ? "…" : ` · ${at}%`}`;
+};
 
 /** The type of what the pointer rests on, beside the pointer. */
 export function Popover() {
@@ -33,13 +40,11 @@ export function Popover() {
             {(r) => (
               <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={
                   <p class="hint-text muted">
-                    {"indexing" in r()
-                      ? `${toolNameFor(p().file)} is still reading the project — move off the word and back to ask again.`
-                      : "none" in r()
-                        ? `Nothing yet — ${toolNameFor(p().file)} is still reading the project; move off the word and back to ask again.`
-                        : "error" in r()
-                          ? (r() as { error: string }).error
-                          : ""}
+                    {"none" in r()
+                      ? reading(toolNameFor(p().file), r())
+                      : "error" in r()
+                        ? (r() as { error: string }).error
+                        : ""}
                   </p>
                 }>
                 {(md) => (
@@ -64,7 +69,7 @@ export function Popover() {
                     }
                   </For>
                   <Show when={stillReading(r())}>
-                    <p class="hint-text muted">May be incomplete — {toolNameFor(p().file)} is still reading the project.</p>
+                    <p class="hint-text muted">May be incomplete — {reading(toolNameFor(p().file), r())}</p>
                   </Show>
                   <Show when={brief(md()).overloads > 0}>
                     <p class="hint-text muted">+{brief(md()).overloads} {brief(md()).overloads === 1 ? "overload" : "overloads"}</p>

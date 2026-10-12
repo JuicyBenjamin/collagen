@@ -189,8 +189,11 @@ PHPAT=$(git -C "$R" rev-parse HEAD)
 # the column a word starts at on a line of a file of the branch (0-based)
 colof() { awk -v w="$3" -v n="$2" 'NR == n { print index($0, w) - 1 }' "$R/$1"; }
 expect "the page can see the pinned Intelephense is there" "$(sfn_live toolStates '["php"]')" "\"php\".*\"PHP\".*\"Intelephense\".*\"ready\""
-H=$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch),\"$PHPAT\"]")
-expect "hovering a method of the branch's own interface: its name and signature" "$H" "Rows::fetch.*public function fetch\\(int \\\$limit\\): array"
+# the page starts its server as it opens, so the project is read before the first hover
+expect "opening the page starts its PHP server" "$(node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id warmTypes)" "[\"$TICKET\",\"php\",\"$PHPAT\"]")" "^null$"
+# until it has read the project an answer is partial, with how far it has
+# read; the page asks again by itself until it is whole (it ends on its markdown)
+wait_until "hovering a method of the branch's own interface: its name and signature" "Rows::fetch.*public function fetch\\(int \\\$limit\\): array.*\"\\}$" sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch),\"$PHPAT\"]"
 expect "hovering a Composer package's method, from the clone's vendor/" "$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 hello),\"$PHPAT\"]")" "Greeter::hello.*public function hello\\(string \\\$name\\): string"
 expect "hovering a PHP function: its signature, from PHP's own stubs" "$(sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "function strlen\\(string \\\$string\\): int"
 P=$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch),\"$PHPAT\"]")

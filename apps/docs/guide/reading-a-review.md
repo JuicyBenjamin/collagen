@@ -139,15 +139,21 @@ Intelephense is not open source. Hover and go to definition — all the page ask
 in its free tier, so no licence key or purchase is needed; installing it means agreeing to
 [its licence](https://intelephense.com/eula), which the offer links. Collagen never ships,
 changes or bundles it, keeps its telemetry off (its default), and shows on the page any
-message it asks to show you. It indexes the whole tree on start — your `vendor/` included —
-before its first answer: under a second for a small project, longer for a large `vendor/`.
+message it asks to show you. It reads the whole tree — your `vendor/` included — before it
+knows every type: under a second for a small project, a minute or more the first time for a
+large `vendor/`. Until then a hover shows what it knows so far with "Intelephense is reading
+the project · 40%", and the page asks again by itself until the answer is whole. What it read
+is kept, so the next time — a new commit, a restart, another review of the same clone — it
+reads only what changed.
 
 The project gives the code: the branch's commit is unpacked from your clone into a folder
 of its own (`git archive`; your repository and its working tree are never touched), with
 the clone's `node_modules` (beside each `package.json`) and `vendor/` (beside each
 `composer.json`) linked in so imports resolve to what you have installed. A branch that
-changes its dependencies is therefore checked against yours. The server starts
-on the first hover (a moment), stays for the page, and stops after ten idle minutes.
+changes its dependencies is therefore checked against yours. That folder is kept per clone
+and moved from commit to commit by what changed, so a file that did not change is not read
+again. The server starts as the page opens, stays for the page, and stops after ten idle
+minutes.
 Removed lines are the base's and are not asked about.
 
 ## Where the diff comes from

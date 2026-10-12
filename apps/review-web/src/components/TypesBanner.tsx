@@ -1,8 +1,10 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { ToolId } from "../data";
-import { toolStates } from "../api";
+import { toolStates, warmTypes } from "../api";
+import { diffNow } from "../diffNow";
 import { lasting } from "../lasting";
 import { installTool, keepTool, toolState } from "../intel";
+import { ticketId } from "../ticket";
 
 const dismissedKey = (tool: ToolId) => `collagen.typesBanner.dismissed.${tool}`;
 const remembered = (tool: ToolId): boolean => {
@@ -29,6 +31,12 @@ export function TypesBanner(props: { tool: ToolId }) {
   const live = createMemo(() => lasting(() => toolStates(props.tool)));
   createEffect(live, (t) => {
     keepTool(t);
+  });
+  // installed: its server starts now, at the commit the page shows, and
+  // reads the project while the reader reads the diff
+  const warmAt = createMemo(() => (toolState(props.tool)?.state === "ready" ? (diffNow.commit() ?? null) : null));
+  createEffect(warmAt, (commit) => {
+    if (commit) void warmTypes(ticketId, props.tool, commit).catch(() => {});
   });
   const dismiss = () => {
     setDismissed(true);
