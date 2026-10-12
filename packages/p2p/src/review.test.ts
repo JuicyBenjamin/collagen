@@ -52,6 +52,16 @@ describe("a review's why, amended as the work goes on", () => {
     expect(fixed.decisions[0]?.guidedBy).toBeUndefined();
   });
 
+  it("shows merge by id like units, and a review without them still decodes", () => {
+    const first = mergeReview(base, { shows: [{ title: "Narrow pane", url: "http://localhost:5173/tickets" }, { title: "Export", url: "https://staging.example.com/export" }] }, 1);
+    expect(first.shows?.map((show) => `${show.id} ${show.title}`)).toEqual(["s1 Narrow pane", "s2 Export"]);
+    const fixed = mergeReview(first, { shows: [{ id: "s2", title: "Export", url: "https://staging.example.com/export?rows=10" }], retireShows: ["s1"] }, 2);
+    expect(fixed.shows).toEqual([{ id: "s2", title: "Export", url: "https://staging.example.com/export?rows=10" }]);
+    expect(mergeReview(base, { summary: "x" }, 3).shows).toBeUndefined();
+    const { shows: _s, ...older } = fixed;
+    expect(Schema.decodeUnknownSync(ReviewContext)(older).shows).toBeUndefined();
+  });
+
   it("units merge by id: new ones numbered, a repeated id corrects one, a retired one goes", () => {
     const first = mergeReview(base, { units: [{ title: "Export streams", what: "rows are streamed", where: ["src/export.ts"] }, { title: "Paging", what: "a hundred a page", where: ["src/page.ts"] }] }, 1);
     expect(first.units?.map((unit) => `${unit.id} ${unit.title}`)).toEqual(["u1 Export streams", "u2 Paging"]);

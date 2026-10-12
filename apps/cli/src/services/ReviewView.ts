@@ -16,6 +16,7 @@ import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type LineSpot, type RepoHost } from "./RepoHost";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
+import { shownShows } from "../lib/shows";
 
 // The review page's data: the diff of a review ticket's branch, read from
 // the reviewer's own clone, laid out under the why (lib/reviewView). Served
@@ -261,7 +262,10 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
     const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
     if (!review) return null;
     const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ room: handle.room, ticket })) : null;
-    return { ...headOf(ticket, review, me), stack };
+    // where it runs comes with the head: its section stands from the first paint
+    const shows = shownShows(review.shows);
+    const head = headOf(ticket, review, me);
+    return { ...head, review: { ...head.review, ...(shows ? { shows } : {}) }, stack };
   }
   return null;
 });
@@ -297,8 +301,11 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
         tests.set(file, { after: lines(texts.get(file)), before: forked ? (lines(before) ?? []) : null });
       }
     }
+    const shows = shownShows(review.shows);
+    const head = headOf(ticket, review, (yield* IdentityService).identity.pubkey);
     return {
-      ...headOf(ticket, review, (yield* IdentityService).identity.pubkey),
+      ...head,
+      review: { ...head.review, ...(shows ? { shows } : {}) },
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
       grouped: diff === null ? null : groupByUnit(review, hunks, imports, (file) => tests.get(file) ?? { after: null, before: null }),
