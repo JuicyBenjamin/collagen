@@ -31,7 +31,8 @@ describe("what gh answers, read for the review page", () => {
 
   it("a pull request: its state and decision in words, and whether the reader opened it", () => {
     expect(readPull(pull(), "bob")).toMatchObject({ number: 7, state: "open", decision: "review required", mine: false, branch: "feat/stream", base: "main" });
-    expect(readPull(pull({ state: "MERGED", reviewDecision: "" }), "alice")).toMatchObject({ state: "merged", mine: true });
+    expect(readPull(pull({ state: "MERGED", reviewDecision: "", mergeCommit: { oid: "abc" } }), "alice")).toMatchObject({ state: "merged", mine: true, merged: "abc" });
+    expect(readPull(pull({ mergeCommit: null }), "bob")?.merged).toBeUndefined();
     expect(readPull(pull({ reviewDecision: "" }), "alice")?.decision).toBeUndefined();
     expect(readPull({ number: 7 }, "bob")).toBeNull();
   });
