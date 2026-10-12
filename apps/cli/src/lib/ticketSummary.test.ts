@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
-import { age, compareSummaries, marksLabel, summarize } from "./ticketSummary";
+import { age, atRest, compareSummaries, marksLabel, summarize } from "./ticketSummary";
 
 const ALICE = "a".repeat(64);
 const BOB = "b".repeat(64);
@@ -90,6 +90,19 @@ describe("summarize", () => {
     expect(marksLabel(summarize(reviewStep, [], ALICE))).toBe("↻");
     // the same failed status on a task step is a failure, and says so
     expect(marksLabel(summarize(ticket([step("s1", BOB, "failed")]), [], ALICE))).toBe("✕");
+  });
+
+  it("a ↻ keeps a ticket from reading as finished, for every viewer, the author's own ↻ too; an approval does not", () => {
+    const review = { ...ticket([{ ...step("review-bob", BOB, "failed"), intent: "review" }, { ...step("address", ALICE, "settled"), intent: "address" }]), kind: "review" as const };
+    // every step answered, so done to bob — yet the ↻ stands, and it is not drawn at rest
+    const bob = summarize(review, [], BOB);
+    expect([bob.state, bob.changesAsked, atRest(bob)]).toEqual(["done", true, false]);
+    expect(summarize(review, [], ALICE).changesAsked).toBe(true);
+    const self = { ...review, steps: [{ ...review.steps[0]!, owner: ALICE }, review.steps[1]!] };
+    expect(summarize(self, [], BOB).changesAsked).toBe(true);
+    const approved = { ...review, steps: [{ ...review.steps[0]!, status: "settled" as const }, review.steps[1]!] };
+    const ok = summarize(approved, [], BOB);
+    expect([ok.changesAsked, atRest(ok)]).toEqual([false, true]);
   });
 
   it("the overview agrees with the agent nudges: an open review is not needs-you", () => {
