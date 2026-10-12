@@ -341,7 +341,7 @@ export const localHost = (host: string | undefined): boolean => host !== undefin
 
 const notFound = (text: string) => HttpServerResponse.text(text, { status: 404 });
 
-/** A ticket id as collagen makes them; anything else is not looked up. */
+/** A ticket id as collagen makes them (a room's too); anything else is not looked up. */
 export const ticketIdOk = (id: string | undefined): id is string => id !== undefined && /^[0-9A-Za-z-]{1,64}$/.test(id);
 
 /** Where the built page is (apps/review-web, a Solid app): beside the
@@ -367,6 +367,17 @@ export const ReviewRoutes = Layer.mergeAll(
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
       const { ticketId } = yield* HttpRouter.params;
       if (!ticketIdOk(ticketId)) return notFound("no ticket");
+      const root = webRoot();
+      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
+      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
+    }),
+  ),
+  // the merge history: the same document, for a room
+  HttpRouter.add("GET", "/merges/:roomId", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      const { roomId } = yield* HttpRouter.params;
+      if (!ticketIdOk(roomId)) return notFound("no room");
       const root = webRoot();
       if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
       return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));

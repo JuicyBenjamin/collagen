@@ -9,6 +9,7 @@ import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, reviewData, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
+import { mergeHistory } from "./MergeHistory";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -89,6 +90,7 @@ const backend = Effect.gen(function* () {
     accept: (ticketId, ids, edits) => (ticketIdOk(ticketId) && idsOk(ids) && editsOk(edits) ? on(acceptDrafts(ticketId, ids, edits)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     edit: (ticketId, id, body) => (ticketIdOk(ticketId) && idsOk([id]) && bodyOk(body) ? on(editDraft(ticketId, id, body)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     repin: (ticketId, id, commit) => (ticketIdOk(ticketId) && idsOk([id]) && commitOk(commit) ? on(repinDraft(ticketId, id, commit)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
+    merges: (roomId) => (ticketIdOk(roomId) ? on(mergeHistory(roomId)) : Effect.succeed(null)),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });
