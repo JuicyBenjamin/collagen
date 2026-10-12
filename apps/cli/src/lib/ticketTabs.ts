@@ -16,27 +16,40 @@ export const kindGlyph = (kind: TicketKind): string => (kind === "epic" ? EPIC_M
 /** "all tickets", or "✦ proposals" — a kind's glyph and its plural. */
 export const tabLabel = (tab: TicketTab): string => (tab === "all" ? "all tickets" : `${kindGlyph(tab)} ${tab}s`);
 
-/** What a ticket hangs from, for a row to say quietly: the epic it is in,
- *  the ticket it grew out of, and how many grew out of it — only what `me`
- *  may see: a ticket still waiting on another is its author's alone, and is
- *  neither named, counted nor opened through another's row. */
+/** What a ticket hangs from: the epic it is in and the ticket it grew out
+ *  of — only what `me` may see: a ticket still waiting on another is its
+ *  author's alone, and is neither named nor opened through another's row. */
 export interface Relations {
   readonly epic?: { readonly id: string; readonly name: string };
   readonly parent?: { readonly id: string; readonly name: string };
-  readonly children: number;
 }
 
+const seenBy = (all: ReadonlyMap<string, Ticket>, me: string) => (x: Ticket | undefined): x is Ticket => x !== undefined && visibleTo(x, all, me);
+
 export function relationsOf(t: Ticket, all: ReadonlyMap<string, Ticket>, me: string): Relations {
-  const seen = (x: Ticket | undefined): x is Ticket => x !== undefined && visibleTo(x, all, me);
+  const seen = seenBy(all, me);
   const e = epicOf(t);
   const epic = e ? all.get(e) : undefined;
   const p = (t.from ?? []).map((id) => all.get(id)).find(seen);
-  const children = [...all.values()].filter((x) => x.id !== t.id && (x.from ?? []).includes(t.id) && seen(x)).length;
   return {
     ...(seen(epic) ? { epic: { id: epic.id, name: ticketName(epic) } } : {}),
     ...(p ? { parent: { id: p.id, name: ticketName(p) } } : {}),
-    children,
   };
+}
+
+/** A ticket's relatives by `from`, each with what it is to the ticket: the
+ *  tickets it grew out of, then those that grew out of it — under the same
+ *  gate as relationsOf. */
+export interface Relative {
+  readonly t: Ticket;
+  readonly as: "parent" | "child";
+}
+
+export function relativesOf(t: Ticket, all: ReadonlyMap<string, Ticket>, me: string): ReadonlyArray<Relative> {
+  const seen = seenBy(all, me);
+  const parents = (t.from ?? []).filter((id) => id !== t.id).map((id) => all.get(id)).filter(seen);
+  const children = [...all.values()].filter((x) => x.id !== t.id && (x.from ?? []).includes(t.id) && seen(x));
+  return [...parents.map((x) => ({ t: x, as: "parent" as const })), ...children.map((x) => ({ t: x, as: "child" as const }))];
 }
 
 /** How a closed ticket ended, for its row: "done", or "dropped" with why. */

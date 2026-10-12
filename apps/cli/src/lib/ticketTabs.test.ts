@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Ticket } from "@collagen/p2p";
-import { closedLine, fitTabs, relationsOf, tabLabel, TICKET_TABS } from "./ticketTabs";
+import { closedLine, fitTabs, relationsOf, relativesOf, tabLabel, TICKET_TABS } from "./ticketTabs";
 
 const t = (over: Partial<Ticket>): Ticket => ({ id: "t", project: "collagen", goal: "g", createdBy: "alice", kind: "task", steps: [], structureAt: 1, updatedAt: 1, ...over });
 
@@ -12,27 +12,30 @@ describe("the ticket list's tabs", () => {
     expect(tabLabel("epic")).toBe("♛ epics");
   });
 
-  it("a row's relations: its epic, what it grew out of, and how many grew out of it", () => {
+  it("a row's relations: its epic, what it grew out of, and its relatives either way", () => {
     const epic = t({ id: "e", kind: "epic", title: "More languages" });
     const parent = t({ id: "p", kind: "proposal", title: "PHP" });
     const me = t({ id: "m", kind: "plan", from: ["p"], partOf: [{ id: "x", epic: "e", by: "alice", at: 1 }] });
     const kid = t({ id: "k", from: ["m"] });
     const all = new Map([epic, parent, me, kid].map((x) => [x.id, x]));
-    expect(relationsOf(me, all, "alice")).toEqual({ epic: { id: "e", name: "More languages" }, parent: { id: "p", name: "PHP" }, children: 1 });
-    expect(relationsOf(parent, all, "alice")).toEqual({ children: 1 });
+    expect(relationsOf(me, all, "alice")).toEqual({ epic: { id: "e", name: "More languages" }, parent: { id: "p", name: "PHP" } });
+    expect(relativesOf(me, all, "alice").map((r) => [r.t.id, r.as])).toEqual([["p", "parent"], ["k", "child"]]);
+    expect(relativesOf(parent, all, "alice").map((r) => [r.t.id, r.as])).toEqual([["m", "child"]]);
   });
 
-  it("names, counts and opens only what the reader may see: a ticket waiting on another is its author's alone", () => {
+  it("names, shows and opens only what the reader may see: a ticket waiting on another is its author's alone", () => {
     const blocker = t({ id: "b", kind: "plan", title: "Blocker", createdBy: "bob" });
     // carol's ticket waits on the blocker: nobody but carol sees it yet
     const gatedParent = t({ id: "g", kind: "proposal", title: "Secret plan", createdBy: "carol", after: ["b"] });
     const child = t({ id: "c", from: ["g"], createdBy: "alice" });
     const gatedChild = t({ id: "gc", from: ["c"], createdBy: "carol", after: ["b"] });
     const all = new Map([blocker, gatedParent, child, gatedChild].map((x) => [x.id, x]));
-    // to alice: no hidden parent, no hidden descendant counted
-    expect(relationsOf(child, all, "alice")).toEqual({ children: 0 });
+    // to alice: no hidden parent, no hidden descendant
+    expect(relationsOf(child, all, "alice")).toEqual({});
+    expect(relativesOf(child, all, "alice")).toEqual([]);
     // to carol, their author: both are there
-    expect(relationsOf(child, all, "carol")).toEqual({ parent: { id: "g", name: "Secret plan" }, children: 1 });
+    expect(relationsOf(child, all, "carol")).toEqual({ parent: { id: "g", name: "Secret plan" } });
+    expect(relativesOf(child, all, "carol").map((r) => [r.t.id, r.as])).toEqual([["g", "parent"], ["gc", "child"]]);
   });
 
   it("a closed ticket says how it ended", () => {

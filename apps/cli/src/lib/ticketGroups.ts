@@ -6,17 +6,23 @@ export interface Row {
   readonly s: TicketSummary;
 }
 
-export interface KindGroup<R extends Row> {
-  readonly kind: TicketKind;
+/** Rows drawn as a tree: a ticket under the one it waits on (`after`) or
+ *  grew out of (`from`), when that one is drawn in the same place. */
+export interface Stack<R extends Row> {
   readonly rows: ReadonlyArray<R>;
-  /** How deep a row sits in its group's stack (`after`): 0 for a ticket
-   *  that waits on nothing here, one more than the ticket it is drawn under
-   *  otherwise — so a chain reads as a staircase, not a flat list under its
-   *  first ticket. */
+  /** How deep a row sits: 0 for a ticket under nothing here, one more than
+   *  the ticket it is drawn under otherwise — so a chain reads as a
+   *  staircase, not a flat list under its first ticket. */
   readonly depth: ReadonlyMap<string, number>;
   /** The ticket a row is drawn under — the last-drawn of those it waits on
-   *  in this group — when it has one. */
+   *  or grew out of here — when it has one. */
   readonly parent: ReadonlyMap<string, string>;
+  /** The rows drawn under the ticket they grew out of (not one they wait on). */
+  readonly grew: ReadonlySet<string>;
+}
+
+export interface KindGroup<R extends Row> extends Stack<R> {
+  readonly kind: TicketKind;
 }
 
 export interface ProjectGroup<R extends Row> {
@@ -52,21 +58,22 @@ export function groupTickets<R extends Row>(rows: ReadonlyArray<R>): ReadonlyArr
     .map(({ project, kinds }) => ({ project, kinds }));
 }
 
-/** A group's rows with the order its tickets keep (`after`) made visible:
- *  a ticket that waits on another in the same group is drawn under it, one
- *  level deeper — under the last-drawn one when it waits on two, so it
+/** Rows with how their tickets relate made visible: a ticket that waits on
+ *  another drawn here (`after`), or grew out of one (`from`), is drawn under
+ *  it, one level deeper — under the last-drawn one when there are two, so it
  *  appears once, never duplicated — after whatever is already drawn under
- *  that one. A chain is a staircase; two tickets waiting on one are siblings
- *  at the same depth. Everything else keeps the state order it came in.
+ *  that one. A chain is a staircase; two tickets under one are siblings at
+ *  the same depth. Everything else keeps the order it came in.
  *  Deterministic: the same rows give the same drawing on every peer. A
- *  cycle cannot be filed (afterProblem); should one arrive anyway, its rows
- *  are drawn plainly at the end. */
-function stacked<R extends Row>(sorted: ReadonlyArray<R>): { rows: ReadonlyArray<R>; depth: ReadonlyMap<string, number>; parent: ReadonlyMap<string, string> } {
+ *  cycle (an `after` one cannot be filed, afterProblem; a `from` one should
+ *  not exist) draws its rows plainly at the end. */
+export function stacked<R extends Row>(sorted: ReadonlyArray<R>): Stack<R> {
   const here = new Set(sorted.map((r) => r.t.id));
-  const preds = (r: R) => (r.t.after ?? []).filter((id) => here.has(id) && id !== r.t.id);
+  const preds = (r: R) => [...new Set([...(r.t.after ?? []), ...(r.t.from ?? [])])].filter((id) => here.has(id) && id !== r.t.id);
   const out: Array<R> = [];
   const depth = new Map<string, number>();
   const parent = new Map<string, string>();
+  const grew = new Set<string>();
   const at = (id: string) => out.findIndex((o) => o.t.id === id);
   let pending = [...sorted];
   while (pending.length > 0) {
@@ -92,6 +99,7 @@ function stacked<R extends Row>(sorted: ReadonlyArray<R>): { rows: ReadonlyArray
       out.splice(i, 0, r);
       depth.set(r.t.id, d);
       parent.set(r.t.id, under);
+      if (!(r.t.after ?? []).includes(under)) grew.add(r.t.id);
     }
     if (!moved) {
       for (const r of later) {
@@ -102,14 +110,14 @@ function stacked<R extends Row>(sorted: ReadonlyArray<R>): { rows: ReadonlyArray
     }
     pending = later;
   }
-  return { rows: out, depth, parent };
+  return { rows: out, depth, parent, grew };
 }
 
 /** An open epic on the overview: its own row, and the tickets put in it,
- *  which are drawn here and not again in the project groups. */
-export interface EpicBlock<R extends Row> {
+ *  which are drawn here and not again in the project groups — a ticket
+ *  under the one in it that it waits on or grew out of. */
+export interface EpicBlock<R extends Row> extends Stack<R> {
   readonly epic: R;
-  readonly rows: ReadonlyArray<R>;
 }
 
 /** Split the overview's rows into open epics, each with the tickets put in
@@ -128,13 +136,13 @@ export function epicBlocks<R extends Row>(rows: ReadonlyArray<R>, all: ReadonlyM
     else rest.push(r);
   }
   // an epic is as pressing as the most pressing ticket in it
-  const lead = (b: EpicBlock<R>): R => [b.epic, ...b.rows].reduce((x, y) => (compareSummaries(x.s, y.s) <= 0 ? x : y));
+  const lead = (b: { readonly epic: R; readonly rows: ReadonlyArray<R> }): R => [b.epic, ...b.rows].reduce((x, y) => (compareSummaries(x.s, y.s) <= 0 ? x : y));
   const epics = [...open.values()]
     .map((b): EpicBlock<R> => {
       const order = epicParts(b.epic.t, all).parts.map((t) => t.id);
       const ordered = (latestOrder(b.epic.t) ?? []).length > 0;
       const rank = (r: R) => order.indexOf(r.t.id);
-      return { epic: b.epic, rows: [...b.rows].sort((x, y) => (ordered ? rank(x) - rank(y) : 0) || x.t.project.localeCompare(y.t.project) || compareSummaries(x.s, y.s)) };
+      return { epic: b.epic, ...stacked([...b.rows].sort((x, y) => (ordered ? rank(x) - rank(y) : 0) || x.t.project.localeCompare(y.t.project) || compareSummaries(x.s, y.s))) };
     })
     .sort((a, b) => compareSummaries(lead(a).s, lead(b).s) || ticketName(a.epic.t).localeCompare(ticketName(b.epic.t)));
   return { epics, rest };
