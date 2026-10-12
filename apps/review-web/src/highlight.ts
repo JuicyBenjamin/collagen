@@ -71,10 +71,12 @@ export function highlightHunk(hunk: Pick<Hunk, "file" | "lines">): Array<Array<S
   return hunk.lines.map((l, i) => (l.kind === "-" ? before.get(i) : after.get(i)) ?? [{ value: l.text }]);
 }
 
-/** Any code as lines of spans — a peeked declaration, a hover's signature.
- *  `lang` is a file name or a language name (typescript, ts, tsx…). */
+/** Any code as lines of spans — a peeked declaration, a hover's signature, a
+ *  comment's code fence. `lang` is a file name, an extension (py, yml…) or a
+ *  language name (typescript, ts, tsx…). */
 export function highlightCode(code: string, lang: string): Array<Array<Span>> {
-  const asFile = lang.includes(".") ? languageOf(lang) : lang === "typescript" ? "ts" : lang === "javascript" ? "js" : lang;
+  const l = lang.toLowerCase();
+  const asFile = l.includes(".") ? languageOf(l) : l === "typescript" ? "ts" : l === "javascript" ? "js" : (BY_EXT[l] ?? l);
   return splitLines(highlighter.tokenize(code, { lang: asFile }).tokens);
 }
 
