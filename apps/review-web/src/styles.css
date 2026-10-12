@@ -534,3 +534,12 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .lineage-decision .lineage-decision-title { color: var(--fg); font-weight: 600; margin-bottom: 2px; }
 .lineage-decision blockquote { margin: 6px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--accent); color: var(--fg); font-size: 14px; font-style: italic; }
 .lineage-decision .lineage-decision-agent { margin-top: 4px; }
+/* the conversation folded: who said it, and how much */
+.host-fold { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 2px 0; font: 13px -apple-system, sans-serif; color: var(--dim); background: none; border: 0; cursor: pointer; }
+.host-fold:hover { color: var(--fg); }
+.host-fold-mark { font-size: 11px; width: 10px; }
+.host-avatars { display: inline-flex; align-items: center; }
+.host-avatars .avatar { margin-left: -5px; box-shadow: 0 0 0 2px var(--panel); background: var(--panel); }
+.host-avatars .avatar:first-child { margin-left: 0; }
+.host-initial { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; box-sizing: border-box; font-size: 10px; font-weight: 600; }
+.host-more { margin-left: 5px; font-size: 12px; color: var(--faint); }
