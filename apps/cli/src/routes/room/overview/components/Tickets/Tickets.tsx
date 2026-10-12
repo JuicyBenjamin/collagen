@@ -10,7 +10,7 @@ import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
 import { cells, clip, fitColumns } from "../../../../../lib/columns";
 import { EPIC_MARK, GLYPH, KIND_GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
-import { epicProgress, marksLabel, progressShort, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
+import { atRest, epicProgress, marksLabel, progressShort, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
@@ -679,7 +679,7 @@ function TicketRow({
 }) {
   const yours = summary.state === "needs-you";
   // waiting on another ticket: only its author sees the row, dim, saying on what
-  const dim = summary.state === "done" || summary.state === "closed" || summary.held.length > 0 || excluded === true;
+  const dim = atRest(summary) || summary.held.length > 0 || excluded === true;
   const color = selected ? theme.accent : dim ? theme.dim : theme.fg;
   return (
     <box id={rowId(ticket.id)} flexDirection="row" flexShrink={0}>
