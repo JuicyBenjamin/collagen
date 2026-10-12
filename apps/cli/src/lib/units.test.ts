@@ -42,11 +42,18 @@ describe("a review in units", () => {
     expect(grouped.units[1]!.decisions).toEqual(["d1", "d2"]);
   });
 
-  it("a test goes with its code — into the author's unit, or the decision's — never on its own", () => {
-    const withUnit = groupByUnit({ decisions: [], forks: [], units: [unit("u1", "Paging", ["src/page.ts"])] }, [page, pageTest], imports([["src/page.test.ts", "src/page.ts"]]));
-    expect(line(withUnit)).toEqual(["Paging [author]: src/page.ts#2 src/page.test.ts#3"]);
-    const withDecision = groupByUnit({ decisions: [decision("d1", "A hundred a page", ["src/page.ts"])], forks: [] }, [page, pageTest], imports([["src/page.test.ts", "src/page.ts"]]));
-    expect(line(withDecision)).toEqual(["A hundred a page [decision]: src/page.ts#2 src/page.test.ts#3"]);
+  it("a test is in no unit, even one naming it: it is read apart, with what points into it", () => {
+    const withUnit = groupByUnit({ decisions: [], forks: [], units: [unit("u1", "Paging", ["src/page.ts", "src/page.test.ts"])] }, [page, pageTest], imports([["src/page.test.ts", "src/page.ts"]]));
+    expect(line(withUnit)).toEqual(["Paging [author]: src/page.ts#2"]);
+    expect(withUnit.tests.map((file) => file.file)).toEqual(["src/page.test.ts"]);
+    const onlyTests = groupByUnit({ decisions: [decision("d1", "Pages are pinned", ["src/page.test.ts:2"])], forks: [{ id: "f1", at: "src/page.test.ts:1", chose: "a", instead: "b", why: "c" }] }, [pageTest], new Map());
+    expect(onlyTests.units).toEqual([]);
+    // shown with the tests: neither outside the diff nor loose
+    expect(onlyTests.tests[0]!.decisions).toEqual(["d1"]);
+    expect(onlyTests.tests[0]!.forks.map((fork) => fork.id)).toEqual(["f1"]);
+    expect(onlyTests.outside).toEqual([]);
+    expect(onlyTests.looseForks).toEqual([]);
+    expect(onlyTests.unmatched).toEqual({});
   });
 
   it("what nothing points at is one 'Not explained', read last — never a unit named after a file", () => {
@@ -81,18 +88,17 @@ describe("a review in units", () => {
 });
 
 describe("what the author's units leave out", () => {
-  it("names each file with a change no unit claims, once, in diff order", () => {
+  it("names each file with a change no unit claims, once, in diff order — tests need none", () => {
     const all = [routesA, routesB, page, pageTest, rows, notes];
-    expect(uncovered([unit("a", "Signing in works", ["src/routes.ts:10", "src/page.ts"])], all)).toEqual(["src/routes.ts", "src/page.test.ts", "src/rows.ts", "notes.txt"]);
-    expect(uncovered([unit("a", "Everything", ["src/routes.ts", "src/page.ts", "src/page.test.ts", "src/rows.ts", "notes.txt"])], all)).toEqual([]);
+    expect(uncovered([unit("a", "Signing in works", ["src/routes.ts:10", "src/page.ts"])], all)).toEqual(["src/routes.ts", "src/rows.ts", "notes.txt"]);
+    expect(uncovered([unit("a", "Everything", ["src/routes.ts", "src/page.ts", "src/rows.ts", "notes.txt"])], all)).toEqual([]);
   });
 });
 
 describe("what a changed file belongs with", () => {
-  it("a test with the code its name says it tests; a sub-component below its only user; else itself", () => {
-    const files = ["src/Dispatch.ts", "src/Outbox.ts", "src/Outbox.test.ts", "src/Tickets/Tickets.tsx", "src/Tickets/components/Row.tsx", "src/mcp.ts"];
-    const owners = ownersOf(files, imports([["src/Outbox.test.ts", "src/Dispatch.ts"], ["src/Outbox.test.ts", "src/Outbox.ts"], ["src/Tickets/Tickets.tsx", "src/Tickets/components/Row.tsx"], ["src/mcp.ts", "src/Outbox.ts"]]));
-    expect(owners.get("src/Outbox.test.ts")).toBe("src/Outbox.ts");
+  it("a sub-component below its only user; else itself", () => {
+    const files = ["src/Dispatch.ts", "src/Outbox.ts", "src/Tickets/Tickets.tsx", "src/Tickets/components/Row.tsx", "src/mcp.ts"];
+    const owners = ownersOf(files, imports([["src/Tickets/Tickets.tsx", "src/Tickets/components/Row.tsx"], ["src/mcp.ts", "src/Outbox.ts"]]));
     expect(owners.get("src/Tickets/components/Row.tsx")).toBe("src/Tickets/Tickets.tsx");
     // a module used from beside it is its own thing
     expect(owners.get("src/Outbox.ts")).toBe("src/Outbox.ts");

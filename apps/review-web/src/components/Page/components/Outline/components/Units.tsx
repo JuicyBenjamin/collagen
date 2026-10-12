@@ -1,12 +1,10 @@
 import { For, Show } from "solid-js";
 import { NO_TITLE, type ReviewPageData, type Unit } from "~/data";
-import { Arrives } from "~/components/Arrives";
-import { Masked } from "~/components/Masked";
 import { viewed } from "~/viewedNow";
 
-/** The outline, once the diff is read: its units, else the decisions alone,
- *  each a link to its section, ticked off as its files are viewed. */
-export function Outline(props: { data: ReviewPageData }) {
+/** The outline of the code: its units, else the decisions alone, each a
+ *  link to its section, ticked off as its files are viewed. */
+export function Units(props: { data: ReviewPageData }) {
   /** Every file of a unit marked viewed — the outline ticks it off. */
   const unitViewed = (unit: Unit): boolean => {
     const files = new Set(unit.hunks.map((id) => id.slice(0, id.lastIndexOf("#"))));
@@ -19,7 +17,7 @@ export function Outline(props: { data: ReviewPageData }) {
     return `${count === 1 ? "1 use" : `${count} uses`}${differs.length > 0 ? ` · ${differs.length} ${differs.length === 1 ? "differs" : "differ"}` : ""}`;
   };
   return (
-    <Arrives skeleton={Outline.Skeleton}>
+    <>
       <p class="nav-title">{props.data.grouped ? "Units" : "Decisions"}</p>
       {/* counted as the diff comes in: it arrives with the outline */}
       <Show when={viewed.count().files > 0 ? viewed.count() : null}>
@@ -86,42 +84,6 @@ export function Outline(props: { data: ReviewPageData }) {
           </li>
         </Show>
       </ol>
-    </Arrives>
+    </>
   );
 }
-
-const ROWS = [
-  "The parts that read first",
-  "What the change is for",
-  "Where its code goes",
-] as const;
-
-/** The outline before the diff is read: its title and a few rows. */
-Outline.Skeleton = function Skeleton() {
-  return (
-    <div class="sk" role="status" aria-busy="true" aria-label="Reading the review">
-      <p class="nav-title">
-        <Masked>Units</Masked>
-      </p>
-      <p class="nav-viewed">
-        <Masked>0 of 10 files viewed</Masked>
-      </p>
-      <ol>
-        <For each={ROWS}>
-          {(row) => (
-            <li>
-              <a>
-                <span class="nav-what">
-                  <Masked>{row}</Masked>
-                </span>
-                <span class="count">
-                  <Masked>2 changes</Masked>
-                </span>
-              </a>
-            </li>
-          )}
-        </For>
-      </ol>
-    </div>
-  );
-};
