@@ -120,6 +120,11 @@ export const ReviewUnit = Schema.Struct({
   // required field would drop each such review whole, on every peer
   what: Schema.optional(Schema.String),
   where: Schema.Array(Schema.String),
+  /** Set on a group of repeated uses: files that only apply another unit's
+   *  change, each the same way (ten pages using a new component). The id of
+   *  that unit. The page shows the group as one item, read and marked
+   *  viewed together, and flags a file in it that differs from the rest. */
+  usesOf: Schema.optional(Schema.String),
 });
 export type ReviewUnit = typeof ReviewUnit.Type;
 
@@ -236,7 +241,7 @@ export interface ReviewDelta {
     readonly confidence?: Confidence;
   }>;
   /** Units, merged by id like decisions: a repeated id corrects one. */
-  readonly units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string> }>;
+  readonly units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string>; readonly usesOf?: string }>;
   /** Unit ids withdrawn — units are how the change reads, not history. */
   readonly retireUnits?: ReadonlyArray<string>;
   /** Outline items, merged by id like decisions. */
@@ -313,7 +318,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
     for (const given of delta.units ?? []) {
       const id = given.id ?? nextId("u", units.map((unit) => unit.id));
       const at = units.findIndex((unit) => unit.id === id);
-      const entry: ReviewUnit = { id, title: given.title, what: given.what, where: [...given.where] };
+      const entry: ReviewUnit = { id, title: given.title, what: given.what, where: [...given.where], ...(given.usesOf ? { usesOf: given.usesOf } : {}) };
       if (at === -1) units.push(entry);
       else units[at] = entry;
     }

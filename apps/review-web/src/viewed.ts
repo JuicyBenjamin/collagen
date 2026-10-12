@@ -81,6 +81,11 @@ export const viewedStore = (ticketId: string) => {
       // private window, storage off: the mark lasts the page, not the browser
     }
   };
+  /** marked as it is now, whatever it was — a group of uses marked at once */
+  const mark = (file: string, commit: string | undefined) => {
+    if (state(file) === "viewed") return;
+    toggle(file, commit);
+  };
   const count = () => {
     const files = [...now().keys()];
     return { viewed: files.filter((file) => state(file) === "viewed").length, files: files.length };
@@ -93,5 +98,5 @@ export const viewedStore = (ticketId: string) => {
     setNow(fingerprints(hunks));
     setRead(true);
   };
-  return { state, toggle, count, viewedAt, read, setFiles };
+  return { state, toggle, mark, count, viewedAt, read, setFiles };
 };
