@@ -67,7 +67,8 @@ hold part of a file (one route of a big routes file) and another unit the rest.
   told the agent to do it that way, how the person steered it (their words) and what their
   agent reasoned. A decision that shaped other units too links them. Then the **forks in
   the road** that fall in this unit — what was chosen over what, why, and whose call it was.
-  It stays in view as you scroll; on a narrower window it folds under the title, a click
+  It stays in view as you scroll, and a why taller than the window scrolls on its own,
+  the code staying put; on a narrower window it folds under the title, a click
   away. When a decision also points at code the diff does not change, a quiet note says the
   why may be older than the branch.
 

@@ -45,7 +45,9 @@ p { margin: 0; }
 }
 
 /* the outline: titles only, a count in words */
-nav { position: sticky; top: 24px; align-self: start; font-size: 14px; }
+/* as tall as the window at most: a long list scrolls on its own, not with the code */
+nav { position: sticky; top: 24px; align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; font-size: 14px; }
+@media (max-width: 900px) { nav { max-height: none; overflow-y: visible; } }
 .nav-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 10px; }
 nav ol { list-style: none; margin: 0; padding: 0; }
 nav li { margin: 0 0 4px; }
@@ -88,8 +90,8 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .lead { color: var(--dim); margin-bottom: 4px; }
 .empty { color: var(--dim); font-style: italic; }
 
-.why { position: sticky; top: 24px; font-size: 13.5px; line-height: 1.55; color: var(--dim); border-left: 2px solid var(--line); padding-left: 16px; }
-@media (max-width: 1320px) { .why { position: static; } .why:not([open]) summary { margin-bottom: 0; } }
+.why { position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; font-size: 13.5px; line-height: 1.55; color: var(--dim); border-left: 2px solid var(--line); padding-left: 16px; }
+@media (max-width: 1320px) { .why { position: static; max-height: none; overflow-y: visible; } .why:not([open]) summary { margin-bottom: 0; } }
 .why summary::before { content: "▸ "; }
 .why[open] summary::before { content: "▾ "; }
 .why summary { cursor: pointer; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); list-style: none; margin-bottom: 10px; }
@@ -368,16 +370,18 @@ section.decision.unit { display: block; }
 .unit-body { display: flex; align-items: flex-start; }
 .unit-body > .decision-main { flex: 1; min-width: 0; }
 /* the rail beside the code: the toggle, then the why — sticking together */
-.why-rail { flex: none; position: sticky; top: 24px; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; margin-left: 16px; }
-.why-panel { overflow: hidden; width: 0; height: 0; }
-.why-panel > .why { position: static; width: 280px; box-sizing: border-box; }
+/* as tall as the window at most — a long why scrolls inside the rail, on its own,
+   while the code stays put; the rail still sticks beside the unit it explains */
+.why-rail { flex: none; position: sticky; top: 24px; max-height: calc(100vh - 48px); display: flex; flex-direction: column; align-items: flex-end; gap: 10px; margin-left: 16px; }
+.why-panel { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; width: 0; height: 0; }
+.why-panel > .why { position: static; max-height: none; overflow-y: visible; width: 280px; box-sizing: border-box; }
 .head-toggle { display: none; margin-top: 3px; padding: 4px 10px; }
 @media (max-width: 1320px) {
   .unit-body { flex-direction: column; align-items: stretch; }
-  .why-rail { order: -1; position: static; margin-left: 0; align-items: stretch; }
+  .why-rail { order: -1; position: static; max-height: none; margin-left: 0; align-items: stretch; }
   .rail-toggle { display: none; }
   .head-toggle { display: inline-flex; }
-  .why-panel { width: auto; height: 0; }
+  .why-panel { overflow: hidden; width: auto; height: 0; }
   .why-panel > .why { width: auto; }
 }
 
