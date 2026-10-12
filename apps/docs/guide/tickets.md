@@ -477,9 +477,11 @@ rest: the kinds, every mark and the states.
 Above the list are its **tabs**: `all tickets`, then one per kind with its glyph and how
 many are open (`✦ proposals 4`; a kind with none shows its glyph alone). Hover them and ←→
 switch, as on the room's tab bar; ↓ goes into the list, which shows only that tab's tickets. A kind's tab lists only that
-kind, grouped by project, and each row says quietly what it hangs from: `♛` its epic, `from
-"…"` the ticket it grew out of, `2 relations` how many grew out of it — `e` opens the epic, `p` the
-parent. `h` lists the **closed** tickets too, set apart below the open ones, each saying how
+kind, grouped by project, and a row's last column says what it hangs from: `♛` its epic.
+A ticket that grew out of another (`from`) is drawn under it when both are in one place —
+an epic, or a kind's group — and says `child`. A relative drawn elsewhere, closed, or in
+another epic still shows under the ticket, dim: `parent` or `child`, and `done` or
+`dropped` if it is over; `enter` on one opens it. `e` opens the epic, `p` the parent. `h` lists the **closed** tickets too, set apart below the open ones, each saying how
 it ended (`closed as done`, or `dropped` and why).
 
 **Completion and closure are two facts.** A ticket is *finished* when every step is
