@@ -475,7 +475,7 @@ comes before one that does not. The key line under the list spells out the verdi
 rest: the kinds, every mark and the states.
 
 Above the list are its **tabs**: `all tickets`, then one per kind with its glyph and how
-many are open (`✦ proposals 4`; a kind with none shows its glyph alone). Hover them and ←→
+many are open (`✦ proposals 4`, `☐ tasks 0`). Hover them and ←→
 switch, as on the room's tab bar; ↓ goes into the list, which shows only that tab's tickets. A kind's tab lists only that
 kind, grouped by project, and a row's last column says what it hangs from: `♛` its epic.
 A ticket that grew out of another (`from`) is drawn under it when both are in one place —
