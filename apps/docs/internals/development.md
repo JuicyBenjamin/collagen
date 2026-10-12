@@ -33,6 +33,10 @@ pnpm test                                  # all workspaces (turbo)
 pnpm --filter @collagen/cli test:watch     # vitest watch mode
 ```
 
+We test only what earns it: logic that breaks quietly or corrupts shared data,
+not layout, wording or glue. The rule, and what a test we keep looks like, is in
+[`AGENTS.md`](https://github.com/JuicyBenjamin/collagen/blob/main/AGENTS.md).
+
 Tests never call real AI APIs or spawn real agent CLIs. The AI boundary in this
 app is **process spawn**, and both sides of it are injectable:
 
