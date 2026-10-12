@@ -4,27 +4,22 @@ import { Focusable } from "../../../../components/Focusable";
 import { focusAtom, nearestFocusable } from "../../../../components/focus";
 import { isEnter } from "../../../../components/keys";
 import { theme } from "../../../../app/theme";
-import { roomAtom } from "../../../atoms";
-import { admittedAtom, rosterAtom, stateAtom } from "../../atoms";
-import { projectRows } from "../../projectRows";
+import { admittedAtom, rosterAtom } from "../../atoms";
 import { TABS, useTabs } from "../../tabs";
 
 /** The tab bar is a section: hover it and ←→ switch tabs (← past the first
  *  tab leaves for whatever sits to the left — the rooms rail); ↓ (or enter)
  *  drops the cursor into whatever section sits below. Also carries the
- *  room's vitals — who is online, what is shared. No counts on the tabs: the
+ *  room's vitals — who is online. No counts on the tabs: the
  *  trace and the outbox are logs that only grow, so their size says nothing
  *  a person would act on. A number earns its place here only when it means
  *  "you have something to do". */
 export function TabBar() {
-  const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { active, jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
-  const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null, rooms: {} }));
   const admitted = AsyncResult.getOrElse(useAtomValue(admittedAtom), () => true);
 
-  const shared = projectRows(state, room.id, peers).filter((r) => r.holders.length >= 2).length;
   const online = peers.filter((p) => !p.away).length + 1;
 
   return (
@@ -32,7 +27,7 @@ export function TabBar() {
       id="tabs"
       // one row, always: a page that grows must not push the bar off its line
       flexShrink={0}
-      hint="←→ switch tab · ↓ into the tab · 1-4 jump · a cycle ai · g steering · c copy invite · s settings · q quit"
+      hint="←→ switch tab · ↓ into the tab · 1-5 jump · a cycle ai · g steering · c copy invite · s settings · q quit"
       onKey={(key) => {
         const i = TABS.indexOf(active);
         if (key.name === "left" && i > 0) return jump(TABS[i - 1]!), true;
@@ -59,13 +54,12 @@ export function TabBar() {
             <span fg={active === "room/outbox" ? theme.accent : theme.dim}>[3] outbox</span>
             <span fg={theme.dim}>  </span>
             <span fg={active === "room/merges" ? theme.accent : theme.dim}>[4] merges</span>
+            <span fg={theme.dim}>  </span>
+            <span fg={active === "room/projects" ? theme.accent : theme.dim}>[5] projects</span>
           </text>
           <text truncate wrapMode="none" flexShrink={1} minWidth={0}>
             <span fg={theme.dim}>  ·  </span>
             <span fg={theme.fg}>{online} online</span>
-            <span fg={theme.dim}> · </span>
-            <span fg={theme.fg}>{shared} shared</span>
-            <span fg={theme.dim}> {shared === 1 ? "project" : "projects"}</span>
             {admitted ? null : <span fg={theme.warn}> · waiting for a member to admit you</span>}
           </text>
         </box>

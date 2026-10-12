@@ -117,6 +117,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "2") return jump("room/messages");
     if (key.name === "3") return jump("room/outbox");
     if (key.name === "4") return jump("room/merges");
+    if (key.name === "5") return jump("room/projects");
     if (key.name === "escape") {
       // inside a page (ticket, transcripts), esc is "back"; on a tab, back to the tab bar
       if (crumb) return goBack();
