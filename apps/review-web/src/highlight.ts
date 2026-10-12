@@ -15,13 +15,15 @@ import { ts } from "@tanstack/highlight/languages/ts";
 import { tsx } from "@tanstack/highlight/languages/tsx";
 import { yaml } from "@tanstack/highlight/languages/yaml";
 import type { Hunk } from "./data";
+import { rust } from "./rust";
 
 // Syntax colour for a diff, with TanStack Highlight: synchronous, tiny, and
 // it hands back TOKENS — so the page renders them as its own spans and never
 // sets HTML. Only the languages a code review usually meets are registered;
-// anything else is plain text, still a readable diff.
+// anything else is plain text, still a readable diff. Rust is our own
+// grammar (./rust): TanStack has none yet.
 
-const highlighter = createHighlighter({ languages: [css, go, html, js, json, jsx, markdown, php, python, shell, sql, toml, ts, tsx, yaml] });
+const highlighter = createHighlighter({ languages: [css, go, html, js, json, jsx, markdown, php, python, rust, shell, sql, toml, ts, tsx, yaml] });
 
 /** The languages the page colours; anything else reads as plain text. */
 export type Language = "css" | "go" | "html" | "js" | "json" | "jsx" | "markdown" | "php" | "python" | "shell" | "sql" | "toml" | "ts" | "tsx" | "yaml" | "plaintext";
@@ -32,7 +34,7 @@ const BY_EXT: Readonly<Record<string, Language>> = {
   json: "json", css: "css", html: "html", htm: "html",
   md: "markdown", markdown: "markdown",
   php: "php", phtml: "php",
-  py: "python", go: "go", sh: "shell", bash: "shell", zsh: "shell",
+  py: "python", go: "go", rs: "rust", sh: "shell", bash: "shell", zsh: "shell",
   sql: "sql", toml: "toml", yml: "yaml", yaml: "yaml",
 };
 
