@@ -50,7 +50,7 @@ describe("the tabs in a narrow pane", () => {
   const row = (r: ReturnType<typeof fitTabs>) => `${r.before ? "‹ " : ""}${r.tabs.map((d) => (d.open ? `[${d.text}]` : d.text)).join(" ")}${r.after ? " ›" : ""}`;
 
   it("all of them, when they fit", () => {
-    expect(row(fitTabs("all", counts, 120))).toBe("[all tickets 12] ♛ 0 ✦ proposals 9 ≡ 0 ⚑ 0 ± 0 ☐ tasks 3");
+    expect(row(fitTabs("all", counts, 120))).toBe("[all tickets 12] ♛ epics 0 ✦ proposals 9 ≡ plans 0 ⚑ bugs 0 ± reviews 0 ☐ tasks 3");
   });
 
   it("the open one whole, the others by glyph, when they do not", () => {
