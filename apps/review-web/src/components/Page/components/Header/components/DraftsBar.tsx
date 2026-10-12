@@ -18,13 +18,13 @@ export function DraftsBar() {
         <span>
           Your AI drafted <strong>{waiting().length === 1 ? "1 comment" : `${waiting().length} comments`}</strong> on this change — they sit beside the code, for you to add to your review, edit or decline.
         </span>
-        <button type="button" class="quiet small" onClick={first}>
+        <button type="button" class="btn btn-xs" onClick={first}>
           Show the first
         </button>
-        <button type="button" class="quiet small" onClick={() => void hostNow.decline(null)}>
+        <button type="button" class="btn btn-xs" onClick={() => void hostNow.decline(null)}>
           Decline all
         </button>
-        <button type="button" class="banner-go" onClick={() => void hostNow.accept(null)} title="Put them all in your review — said with the rest when you finish it">
+        <button type="button" class="btn btn-primary btn-sm" onClick={() => void hostNow.accept(null)} title="Put them all in your review — said with the rest when you finish it">
           Add all to review
         </button>
       </div>

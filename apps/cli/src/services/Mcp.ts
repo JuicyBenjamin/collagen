@@ -17,6 +17,8 @@ import { branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
+import type { PageThemes } from "@collagen/p2p";
+import { describeThemes, nameTaken, NO_THEMES, ownNamed, themeFromText, valueNamed, withEdit, withoutTheme, withTheme } from "../lib/pageThemes";
 import { MERGE_HELP, mergeForOf, withMergeFor } from "../lib/merging";
 import { cleanShow, showGap, type ShowInput } from "../lib/shows";
 import { MOCK_AI_OPTIONS } from "./Adapters";
@@ -586,6 +588,43 @@ export const SetMerging = Tool.make("set-merging", {
   success: Schema.String,
 });
 
+const OWN_THEMES = "Your user's own themes are theirs: change them only when they say so. Every open review page follows at once, and the page's theme picker shows the same.";
+
+export const Themes = Tool.make("themes", {
+  description: `The review page's themes: collagen's own, daisyUI's, and your user's own — each of theirs with its colours — and which is on. Read it before choosing or editing one. ${OWN_THEMES}`,
+  success: Schema.String,
+});
+
+export const SetTheme = Tool.make("set-theme", {
+  description: `Put a theme on the review page, by its name ('name'): collagen's own, one of daisyUI's, or one of your user's own (see themes). Only when your user says so — it is their look. ${OWN_THEMES}`,
+  parameters: Schema.Struct({ name: Schema.String }),
+  success: Schema.String,
+});
+
+export const AddTheme = Tool.make("add-theme", {
+  description: `Add a theme of your user's own, named 'name', from 'from': a daisyUI theme generator link as they paste it (https://daisyui.com/theme-generator/#theme=…) or a theme's CSS. It is put on unless 'choose' is false. A name must be free — to change one they have, use edit-theme. ${OWN_THEMES}`,
+  parameters: Schema.Struct({ name: Schema.String, from: Schema.String, choose: Schema.optional(Schema.Boolean) }),
+  success: Schema.String,
+});
+
+export const EditTheme = Tool.make("edit-theme", {
+  description: `Change one of your user's own themes in place, by its name ('name'): 'rename' it; set 'colours' by daisyUI's short names ({"primary": "#3d59a1", "base-100": "oklch(98% 0 0)", "radius-box": "0.5rem"} — see themes for what it has); set its 'scheme' (light or dark: the code's colours follow it); or take a generator link or CSS over it ('from'), its other colours kept. ${OWN_THEMES}`,
+  parameters: Schema.Struct({
+    name: Schema.String,
+    rename: Schema.optional(Schema.String),
+    colours: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    scheme: Schema.optional(Schema.Literals(["light", "dark"])),
+    from: Schema.optional(Schema.String),
+  }),
+  success: Schema.String,
+});
+
+export const RemoveTheme = Tool.make("remove-theme", {
+  description: `Remove one of your user's own themes, by its name; the page goes back to collagen's own if it was on. ${OWN_THEMES}`,
+  parameters: Schema.Struct({ name: Schema.String }),
+  success: Schema.String,
+});
+
 export const SetSettings = Tool.make("set-settings", {
   description:
     "Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. openReviewPage (on by default): when you start on a review ticket (review-context), collagen opens its page — the diff read by intent — in their browser, once. Applies live, and the settings page in their TUI shows the same switches.",
@@ -730,6 +769,11 @@ export const CollagenToolkit = Toolkit.make(
   SetAi,
   SetSteering,
   SetMerging,
+  Themes,
+  SetTheme,
+  AddTheme,
+  EditTheme,
+  RemoveTheme,
   SetSettings,
   OpenReview,
   ReviewComments,
@@ -774,6 +818,11 @@ export const DevCollagenToolkit = Toolkit.make(
   SetAi,
   SetSteering,
   SetMerging,
+  Themes,
+  SetTheme,
+  AddTheme,
+  EditTheme,
+  RemoveTheme,
   SetSettings,
   OpenReview,
   ReviewComments,
@@ -792,6 +841,8 @@ const makeHandlers = Effect.gen(function* () {
     const rooms = yield* Rooms;
     const updates = yield* Updates;
     const store = yield* StateStore;
+    /** The page's themes kept, and said back: every open page follows. */
+    const keepThemes = (themes: PageThemes) => store.update((state) => ({ ...state, themes })).pipe(Effect.as(`set — every open review page follows now.\n${describeThemes(themes)}`));
     const mcpInfo = yield* McpInfo;
     const pages = yield* ReviewPages;
     const { profile } = yield* CliArgs;
@@ -1840,6 +1891,44 @@ const makeHandlers = Effect.gen(function* () {
           ...(input.ticketId ? [`review ${input.ticketId}: ${level(state.merging?.tickets?.[input.ticketId])} — in effect: ${mergeForOf(state, roomId, input.ticketId)}`] : []),
           "Whatever the level: green checks and no take asking for changes, and the host's own rules come first.",
         ].join("\n");
+      }),
+      themes: () => store.get.pipe(Effect.map((state) => describeThemes(state.themes ?? NO_THEMES))),
+      "set-theme": Effect.fn("Mcp.setTheme")(function* (input: { name: string }) {
+        const themes = (yield* store.get).themes ?? NO_THEMES;
+        const value = valueNamed(themes, input.name);
+        if (value === null) return `failed: no theme named "${input.name}"\n${describeThemes(themes)}`;
+        return yield* keepThemes({ ...themes, chosen: value });
+      }),
+      "add-theme": Effect.fn("Mcp.addTheme")(function* (input: { name: string; from: string; choose?: boolean }) {
+        const themes = (yield* store.get).themes ?? NO_THEMES;
+        const name = input.name.trim();
+        if (name === "") return "failed: pass a 'name' for it — your user's word for this theme";
+        const taken = nameTaken(themes, name);
+        if (taken) return `failed: ${taken}${taken.startsWith("your user already") ? " — change it with edit-theme" : ""}`;
+        const theme = themeFromText(input.from);
+        if (!theme) return "failed: no theme in 'from' — pass a daisyUI theme generator link (https://daisyui.com/theme-generator/#theme=…) or a theme's CSS";
+        return yield* keepThemes(withTheme(themes, name, theme, crypto.randomUUID().slice(0, 8), input.choose ?? true));
+      }),
+      "edit-theme": Effect.fn("Mcp.editTheme")(function* (input: { name: string; rename?: string; colours?: Readonly<Record<string, string>>; scheme?: "light" | "dark"; from?: string }) {
+        const themes = (yield* store.get).themes ?? NO_THEMES;
+        const theme = ownNamed(themes, input.name);
+        if (!theme) return `failed: your user has no theme of their own named "${input.name}"\n${describeThemes(themes)}`;
+        if (input.rename !== undefined) {
+          if (input.rename.trim() === "") return "failed: 'rename' takes the new name";
+          const taken = nameTaken(themes, input.rename, theme);
+          if (taken) return `failed: ${taken}`;
+        }
+        const from = input.from === undefined ? undefined : themeFromText(input.from);
+        if (from === null) return "failed: no theme in 'from' — pass a daisyUI theme generator link or a theme's CSS";
+        if (input.rename === undefined && input.colours === undefined && input.scheme === undefined && from === undefined) return "failed: nothing to change — pass rename, colours, scheme or from";
+        const edited = withEdit(themes, theme, { ...(input.rename ? { rename: input.rename } : {}), ...(from ? { from } : {}), ...(input.colours ? { colours: input.colours } : {}), ...(input.scheme ? { scheme: input.scheme } : {}) });
+        return typeof edited === "string" ? `failed: ${edited}` : yield* keepThemes(edited);
+      }),
+      "remove-theme": Effect.fn("Mcp.removeTheme")(function* (input: { name: string }) {
+        const themes = (yield* store.get).themes ?? NO_THEMES;
+        const without = withoutTheme(themes, input.name);
+        if (!without) return `failed: your user has no theme of their own named "${input.name}"\n${describeThemes(themes)}`;
+        return yield* keepThemes(without);
       }),
       "set-settings": (input: { openReviewPage?: boolean }) =>
         Effect.gen(function* () {

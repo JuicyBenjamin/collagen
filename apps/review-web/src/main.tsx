@@ -5,17 +5,22 @@ import { oneDarkProTheme } from "@tanstack/highlight/themes/one-dark-pro";
 import { App } from "./App";
 import { MergesApp, mergesRoom } from "./Merges";
 import { startHandoff } from "./handoff";
+import { applyTheme, cachedThemes } from "./theme";
+import "./themes.css";
 import "./styles.css";
 
 // Token colours from TanStack Highlight's themes: GitHub Light, One Dark Pro
-// when the system is dark. CSS only — the markup is the same in both.
+// when the page is dark — the theme chosen says which (data-scheme, theme.ts),
+// or, with none, the system. CSS only — the markup is the same in both.
 const theme = document.createElement("style");
 theme.textContent = [
   createThemeBaseCss(),
   createThemeRule(":root", githubLightTheme),
-  `@media (prefers-color-scheme: dark) {\n${createThemeRule(":root", oneDarkProTheme)}\n}`,
+  `@media (prefers-color-scheme: dark) {\n${createThemeRule(":root:not([data-scheme])", oneDarkProTheme)}\n}`,
+  createThemeRule(':root[data-scheme="dark"]', oneDarkProTheme),
 ].join("\n");
 document.head.append(theme);
+applyTheme(cachedThemes());
 
 // one document for both pages: /review/<ticketId>, and /merges/<roomId>
 const room = mergesRoom;

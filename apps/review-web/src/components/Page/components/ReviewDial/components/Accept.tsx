@@ -72,7 +72,7 @@ export function Accept(props: { onDone: () => void }) {
         {(view) => (
           <label class="merge-for">
             Merge for me
-            <select value={view().own ?? "room"} onChange={(event) => void choose(event.currentTarget.value)}>
+            <select class="select select-sm" value={view().own ?? "room"} onChange={(event) => void choose(event.currentTarget.value)}>
               <option value="room">as the room: {labelOf(view().room)}</option>
               <For each={LEVELS}>{(option) => <option value={option.value}>{option.label}</option>}</For>
             </select>
@@ -82,13 +82,13 @@ export function Accept(props: { onDone: () => void }) {
       <p class="host-note left">{NOTES[effect()]}</p>
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">
-        <button type="button" class="quiet" onClick={() => props.onDone()}>
+        <button type="button" class="btn btn-sm" onClick={() => props.onDone()}>
           Cancel
         </button>
-        <button type="button" class="quiet" disabled={sending() !== null} onClick={() => void finish("dropped")}>
+        <button type="button" class="btn btn-sm" disabled={sending() !== null} onClick={() => void finish("dropped")}>
           {sending() === "dropped" ? "Dropping…" : "Drop"}
         </button>
-        <button type="button" class="banner-go" disabled={sending() !== null} onClick={() => void finish("done")}>
+        <button type="button" class="btn btn-primary btn-sm" disabled={sending() !== null} onClick={() => void finish("done")}>
           {sending() === "done" ? "Accepting…" : "Accept"}
         </button>
       </div>

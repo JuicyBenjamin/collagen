@@ -1,5 +1,6 @@
 import { Context, Effect, Stream } from "effect";
 import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { PageThemes } from "../themeData";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -65,6 +66,11 @@ export class ReviewBackend extends Context.Service<
     /** set a review's own merge setting; null gives it back to its room's */
     readonly setMerge: (ticketId: string, level: MergeFor | null) => Effect.Effect<MergeView | null>;
     readonly merges: (roomId: string, shown: MergesShown, fresh: boolean) => Effect.Effect<MergeHistory | null>;
+    /** the page's themes as collagen keeps them — now, then on every change, whoever made it
+     *  (a page, the person's agent); null while it keeps none yet */
+    readonly themes: Stream.Stream<PageThemes | null>;
+    /** keep the page's themes: checked as a pasted theme is, then kept; what is kept now */
+    readonly saveThemes: (themes: unknown) => Effect.Effect<PageThemes>;
   }
 >()("review-web/ReviewBackend") {}
 

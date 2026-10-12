@@ -78,6 +78,7 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
         <span>{count() === 0 ? "no comments pending" : count() === 1 ? "1 comment pending" : `${count()} comments pending`}</span>
       </div>
       <textarea
+        class="textarea"
         placeholder={chosen() === "approve" || count() > 0 ? "Anything to add (optional)" : chosen() === "request-changes" ? "What should change" : "Leave a comment"}
         value={body()}
         onInput={(event) => setBody(event.currentTarget.value)}
@@ -98,14 +99,14 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">
         <Show when={count() > 0}>
-          <button type="button" class="quiet discard" onClick={() => void hostNow.unpend(null)} title="Take every pending comment out of the review — said nowhere">
+          <button type="button" class="btn btn-sm discard" onClick={() => void hostNow.unpend(null)} title="Take every pending comment out of the review — said nowhere">
             Discard review
           </button>
         </Show>
-        <button type="button" class="quiet" onClick={() => props.onDone()}>
+        <button type="button" class="btn btn-sm" onClick={() => props.onDone()}>
           Cancel
         </button>
-        <button type="submit" class="banner-go" disabled={!ready()}>
+        <button type="submit" class="btn btn-primary btn-sm" disabled={!ready()}>
           {sending() ? "Submitting…" : "Submit review"}
         </button>
       </div>

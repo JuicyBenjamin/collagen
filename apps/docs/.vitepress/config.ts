@@ -51,6 +51,7 @@ export default withMermaid({
             { text: "Effect patterns", link: "/internals/effect-patterns" },
             { text: "Roles and outsiders", link: "/internals/roles-and-outsiders" },
             { text: "Token cost", link: "/internals/token-cost" },
+            { text: "Review page themes", link: "/internals/theming" },
             { text: "Local development", link: "/internals/development" },
           ],
         },

@@ -36,7 +36,7 @@ HostActivity.Skeleton = function Skeleton() {
         <span class="host-checked">
           <Masked>checked just now</Masked>
         </span>
-        <span class="quiet small sk-button">
+        <span class="btn btn-xs sk-button">
           <Masked>↻ Refresh</Masked>
         </span>
       </div>

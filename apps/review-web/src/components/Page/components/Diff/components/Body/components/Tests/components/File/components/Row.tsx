@@ -32,7 +32,7 @@ export function Row(props: { test: TestCase }) {
             Question
           </button>
           <label class="test-code-toggle">
-            <input type="checkbox" checked={open()} onChange={() => setOpen(!open())} />
+            <input type="checkbox" class="checkbox checkbox-primary checkbox-xs" checked={open()} onChange={() => setOpen(!open())} />
             Code
           </label>
         </span>

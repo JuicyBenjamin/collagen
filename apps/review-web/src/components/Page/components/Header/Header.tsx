@@ -1,4 +1,5 @@
 import type { ReviewPageHead } from "~/data";
+import { ThemePicker } from "~/components/ThemePicker";
 import { DraftsBar } from "./components/DraftsBar";
 import { HostBar } from "./components/HostBar";
 import { Pull } from "./components/HostBar/components/Pull";
@@ -8,8 +9,8 @@ import { Purpose } from "./components/Purpose";
 import { StackRow } from "./components/StackRow";
 import { Unplaced } from "./components/Unplaced";
 
-/** The review's header: where it is (branch, author, links) beside who is
- *  signed in to its host; under them, its pull request on the left and the
+/** The review's header: where it is (branch, author, links) beside the
+ *  page's theme and who is signed in to its host; under them, its pull request on the left and the
  *  pill of files viewed and the review's buttons on the right, balanced, the stack it is in, what waits on the reader, then what the
  *  change is for. Each part arrives on its own read. */
 export function Header(props: { head: ReviewPageHead }) {
@@ -17,7 +18,10 @@ export function Header(props: { head: ReviewPageHead }) {
     <header>
       <div class="header-top">
         <Meta head={props.head} />
-        <Viewer />
+        <div class="header-corner">
+          <ThemePicker />
+          <Viewer />
+        </div>
         <div class="pull-line">
           <Pull />
         </div>
@@ -37,7 +41,10 @@ Header.Skeleton = function Skeleton() {
     <header>
       <div class="header-top">
         <Meta.Skeleton />
-        <Viewer.Skeleton />
+        <div class="header-corner">
+          <ThemePicker />
+          <Viewer.Skeleton />
+        </div>
         <div class="pull-line">
           <Pull.Skeleton />
         </div>

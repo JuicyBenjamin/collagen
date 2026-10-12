@@ -499,6 +499,19 @@ export const Merging = Schema.Struct({
 });
 export type Merging = typeof Merging.Type;
 
+/** A theme of the person's own for the review page: daisyUI's variables, named. */
+export const PageTheme = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  scheme: Schema.Literals(["light", "dark"]),
+  vars: Schema.Record(Schema.String, Schema.String),
+});
+/** The review page's theme: the one chosen ("" collagen's own, a daisyUI
+ *  theme's name, or "custom:<id>") and the person's own. Local, never
+ *  broadcast; the page and the person's agent (set-theme) both set it. */
+export const PageThemes = Schema.Struct({ chosen: Schema.String, saved: Schema.Array(PageTheme) });
+export type PageThemes = typeof PageThemes.Type;
+
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
   /** absent = "ask": autonomy is opted into */
@@ -506,6 +519,8 @@ export const LocalState = Schema.Struct({
   settings: Schema.optional(Settings),
   /** absent = never merged for them */
   merging: Schema.optional(Merging),
+  /** absent = collagen's own, and none of the person's yet */
+  themes: Schema.optional(PageThemes),
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
   /** threadId → the user's adopted conversation for it. */
   threads: Schema.optional(Schema.Record(Schema.String, AdoptedThread)),
