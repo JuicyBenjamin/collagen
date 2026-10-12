@@ -47,6 +47,7 @@ export default withMermaid({
           items: [
             { text: "Architecture", link: "/internals/architecture" },
             { text: "Message flow", link: "/internals/message-flow" },
+            { text: "Agent loops", link: "/internals/agent-loops" },
             { text: "Effect patterns", link: "/internals/effect-patterns" },
             { text: "Roles and outsiders", link: "/internals/roles-and-outsiders" },
             { text: "Local development", link: "/internals/development" },
