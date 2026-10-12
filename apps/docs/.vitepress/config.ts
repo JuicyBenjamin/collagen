@@ -48,6 +48,7 @@ export default withMermaid({
             { text: "Architecture", link: "/internals/architecture" },
             { text: "Message flow", link: "/internals/message-flow" },
             { text: "Effect patterns", link: "/internals/effect-patterns" },
+            { text: "Token cost", link: "/internals/token-cost" },
             { text: "Local development", link: "/internals/development" },
           ],
         },
