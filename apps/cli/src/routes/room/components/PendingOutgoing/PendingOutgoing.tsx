@@ -1,6 +1,7 @@
 import type { Proposal } from "@collagen/p2p";
 import { outgoingSummary, proposalText } from "../../../../services/Outbox";
 import { theme } from "../../../../app/theme";
+import { via } from "../../../../lib/agents";
 
 /** One thing that went out, as its head row: what it was, which project, who
  *  it was for when it was for a person, and what it was about. The text it
@@ -32,6 +33,7 @@ export function OutgoingRow({
         </>
       ) : null}
       {summary.subject}
+      {proposal.agent ? <span fg={theme.dim}>{via(proposal.agent)}</span> : null}
       {note ? <span fg={theme.dim}> · {note}</span> : null}
     </text>
   );

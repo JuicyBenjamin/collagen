@@ -138,6 +138,14 @@ describe("summarize", () => {
     expect(marksLabel(summarize(plain, [], ALICE))).toBe("");
   });
 
+  it("your own review given by one of your agents says which: a second agent's ✓ is not your own word", () => {
+    const solo = {
+      ...ticket([{ ...step("review-alice", ALICE, "settled"), intent: "review", agent: "Codex" }]),
+      kind: "review" as const,
+    };
+    expect(marksLabel(summarize(solo, [], ALICE))).toBe("self ✓ via Codex");
+  });
+
   it("the author's own take is theirs on the row: self ✓, never mistaken for a colleague's", () => {
     // alice proposes, takes her own idea, and bob asks for changes
     const own = {

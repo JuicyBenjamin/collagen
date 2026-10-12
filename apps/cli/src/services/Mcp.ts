@@ -41,6 +41,7 @@ import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { STEERING_LABEL, steeringLine, steeringOf } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
+import { actingAgent } from "../lib/agents";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
 // `structuredContent` as an object, and Claude Code rejects array roots.
@@ -683,7 +684,7 @@ export const GetTickets = Tool.make("get-tickets", {
 
 export const GetTicket = Tool.make("get-ticket", {
   description:
-    "One ticket in full, by id (from get-tickets): its goal, who made it, what it follows and waits on, its epic (an epic: its parts and what keeps it open), how it was closed, and every step with its owner, status, needs and settled result. Read it when your user asks about a ticket or wants the steps behind a headline — relay what is there, never fill gaps from your own head. A review's why is review-context's. Returns TOON text.",
+    "One ticket in full, by id (from get-tickets): its goal, who made it, what it follows and waits on, its epic (an epic: its parts and what keeps it open), how it was closed, and every step with its owner, status, needs and settled result. Read it when your user asks about a ticket or wants the steps behind a headline — relay what is there, never fill gaps from your own head. A review's why is review-context's. Returns TOON text. 'agent' on a ticket or a step names which of its person's agents filed or wrote it (Claude Code, Codex …; \"\" — the person, or not known): a take by another agent, even your own user's second one, is a reading to weigh, not their word.",
   parameters: Schema.Struct({ ticketId: Schema.String }),
   success: Schema.String,
 });
@@ -1341,7 +1342,8 @@ const makeHandlers = Effect.gen(function* () {
           return toToon(messages.length > 0 ? { steering, messages } : { messages });
         }).pipe(Effect.withSpan("Mcp.getMessages")),
       execute: ({ script, input }: { script: string; input?: unknown }) =>
-        Effect.promise(() => scripting.execute(script, input)).pipe(
+        actingAgent.pipe(
+          Effect.flatMap((agent) => Effect.promise(() => scripting.execute(script, input, agent))),
           Effect.map((result) => ({ ...result }) as Record<string, unknown>),
           Effect.withSpan("Mcp.execute"),
         ),

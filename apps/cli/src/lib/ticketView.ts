@@ -37,6 +37,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   title: rowTitle(ticket),
   goal: ticket.goal,
   createdBy: nameFor(ticket.createdBy),
+  /** which of the author's agents filed it or last revised it — not the person themselves */
+  ...(ticket.agent ? { agent: ticket.agent } : {}),
   /** the tickets this one follows; walk them with review-context when your user asks why */
   ...(ticket.from && ticket.from.length > 0 ? { from: ticket.from.join(" ") } : {}),
   /** the tickets this one waits on (read after them) */
@@ -66,6 +68,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
     needs: step.needs.join("+"),
     description: step.description,
     result: step.result ?? "",
+    /** which of the owner's agents wrote its state ("" — the person, or not known) */
+    agent: step.agent ?? "",
   })),
 });
 

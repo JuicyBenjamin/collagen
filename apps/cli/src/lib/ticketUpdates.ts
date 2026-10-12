@@ -1,4 +1,5 @@
 import { type ReviewContext, type RoomMessage, type StepStatus, type Ticket, type TicketStep, deriveThreadId, isJudged, isTake, stepThreadId, ticketName } from "@collagen/p2p";
+import { actedBy } from "./agents";
 import { aboutTicket, ticketThreads } from "./ticketSummary";
 
 /** Everyone a ticket concerns: its creator, its step owners, and anyone who
@@ -64,7 +65,7 @@ export function reviewChanges(
 /** What a participant is told when the why behind a review is revised. */
 export const reviewUpdateText = (ticket: Ticket, review: ReviewContext, fresh: boolean): string =>
   [
-    `${review.authorName} ${fresh ? "put the why behind" : "revised the why behind"} the ticket "${ticketName(ticket)}" (${ticket.id})`,
+    `${actedBy(review.authorName, review.agent)} ${fresh ? "put the why behind" : "revised the why behind"} the ticket "${ticketName(ticket)}" (${ticket.id})`,
     review.branch ? `now ${review.base ? `${review.branch} → ${review.base}` : review.branch}` : "",
     review.link ?? "",
     `${review.decisions.length} decision(s), ${review.forks.length} fork(s)`,
@@ -91,4 +92,4 @@ export const stepUpdateText = (change: StepChange, actorName: string): string =>
 
 /** What a participant is told when someone weighs in. */
 export const weighInText = (ticket: Ticket, message: RoomMessage, toName: string): string =>
-  `${message.fromName} weighed in on the ticket "${ticketName(ticket)}" (${ticket.id}), to ${toName}: ${firstLine(message.findings)}`;
+  `${actedBy(message.fromName, message.agent)} weighed in on the ticket "${ticketName(ticket)}" (${ticket.id}), to ${toName}: ${firstLine(message.findings)}`;

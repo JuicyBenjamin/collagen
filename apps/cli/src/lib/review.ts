@@ -1,4 +1,5 @@
 import { IMPORTANCE, type Assumed, type BugReport, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork } from "@collagen/p2p";
+import { actedBy } from "./agents";
 
 /** A review's why, as the agent hands it over and as a reader gets it back.
  *  The point of the whole thing: a diff shows the what, and the reviewer has
@@ -196,7 +197,7 @@ export const reviewRows = (review: ReviewContext, about?: string) => {
   const bug = review.bug && (query.length === 0 || hayBug(review.bug).includes(query)) ? review.bug : undefined;
   return {
     review: {
-      by: review.authorName,
+      by: actedBy(review.authorName, review.agent),
       ...(review.branch ? { branch: review.base ? `${review.branch} → ${review.base}` : review.branch } : {}),
       ...(review.link ? { link: review.link } : {}),
       summary: review.summary,

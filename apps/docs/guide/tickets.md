@@ -33,6 +33,7 @@ A **step**:
 | needs | step ids that must settle first |
 | status | `pending` → `suspended` (delivered to the owner) → `settled` / `failed` |
 | result | the owner's findings, or the failure reason |
+| agent | which of the owner's agents wrote it — `Claude Code`, `Codex` — absent when they did it themselves |
 
 ```mermaid
 flowchart LR
@@ -238,9 +239,14 @@ have updated. Other records you cannot read yet are a count under the list.
 
 You may take your own proposal: `post-review` on your own ticket is allowed, and the row
 says so — `self ✓` — so a colleague's ✓ and a self-approval never read alike, and others
-can still add theirs. Accepting is judgment, not work: the settle outcome points your
-agent at the plan that would come next (`ask-plan` with `from` the proposal, the outline
-and suggested owners as prefills) and assigns nothing on its own.
+can still add theirs. When one of your agents gave that take it says which —
+`self ✓ via Codex (GPT-6.1-sol, medium effort)` — so your second agent's reading is not
+mistaken for your own. The model and effort are what the call itself says of its turn:
+Codex sends them with each call, and Claude Code sends the call's id, which its session
+log holds them under. Nothing is guessed: an agent whose call says neither is named alone.
+Accepting is judgment, not work: the settle outcome points your agent at the plan that
+would come next (`ask-plan` with `from` the proposal, the outline and suggested owners as
+prefills) and assigns nothing on its own.
 
 ### What sits on the ticket
 

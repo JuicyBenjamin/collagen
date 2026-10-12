@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isTake, moveToEpic, orderEpic, postReview, settleStep, ticketName, turnEpic, visibleTo, type Outgoing, type Ticket } from "@collagen/p2p";
+import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isTake, moveToEpic, orderEpic, postReview, settleStep, ticketName, turnEpic, visibleTo, withAgent, type Outgoing, type Ticket } from "@collagen/p2p";
 import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
@@ -42,7 +42,10 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
     const store = yield* StateStore;
     const { identity, nameRef } = yield* IdentityService;
 
-    const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing) {
+    /** `agent`: which of the person's agents is doing this (Claude Code,
+     *  Codex …), recorded beside them on what it writes; none when the person
+     *  acts themselves. */
+    const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing, agent?: string) {
       const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === roomId);
       if (!handle) return refused("failed: that room is gone");
       const { room } = handle;
@@ -54,6 +57,16 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           ? myName
           : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 12));
       const render = (ticket: Ticket) => toToon({ ticket: ticketView(ticket, nameFor) });
+      // a ticket's agent names who wrote the author's latest revision: stamped
+      // when this write moves the author's clock (a filing, an amendment),
+      // never on a copy that only adds a step to someone else's ticket
+      const authored = (ticket: Ticket) =>
+        SubscriptionRef.get(room.tickets).pipe(
+          Effect.map((all) => {
+            const had = all.get(ticket.id);
+            return had && had.structureAt >= ticket.structureAt ? ticket : withAgent(ticket, agent);
+          }),
+        );
 
       switch (out.kind) {
         case "message": {
@@ -62,13 +75,13 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (who._tag === "refused") return refused(who.text);
           const target = who.person;
           const online = peers.some((peer) => peer.key === target.key);
-          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}) }).pipe(
+          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}), ...(agent ? { agent } : {}) }).pipe(
             Effect.map(() => sent(online ? `sent to ${target.name}` : `sent to ${target.name} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),
           );
         }
         case "ticket": {
-          const merged = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+          const merged = yield* room.shareTicket(yield* authored(out.ticket)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
           const all = yield* SubscriptionRef.get(room.tickets);
           return sent(`${render(merged)}${inEpicNote(merged, all)}${relatedHint(merged, all, identity.pubkey)}`);
@@ -79,10 +92,10 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // ticket that is already on the log is being revised, not filed.
           const known = (yield* SubscriptionRef.get(room.tickets)).has(out.review.ticketId);
           if (out.ticket) {
-            const shared = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+            const shared = yield* room.shareTicket(yield* authored(out.ticket)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
             if (!shared) return NOT_ADMITTED;
           }
-          const ok = yield* room.shareReview(out.review).pipe(
+          const ok = yield* room.shareReview(withAgent(out.review, agent)).pipe(
             Effect.as(true),
             Effect.catchTag("NotWritable", () => Effect.succeed(false)),
           );
@@ -136,7 +149,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (!step) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
           const now = yield* Clock.currentTimeMillis;
           // one rule, shared with the drive path (see p2p settleStep)
-          const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now);
+          const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now, agent);
           if (!done || done.outcome === "not-yours") {
             return refused(`failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${isJudged(ticket.kind) ? " — put your user's own take on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
           }
@@ -256,7 +269,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const now = yield* Clock.currentTimeMillis;
           // a review lands on a step of its reader's own: nobody's is taken,
           // and posting again revises theirs
-          const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now, out.comment ?? false);
+          const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now, agent, out.comment ?? false);
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
           const others = merged.steps.filter((step) => isTake(step) && step.owner !== identity.pubkey).length;
