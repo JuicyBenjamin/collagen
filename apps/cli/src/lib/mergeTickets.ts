@@ -1,5 +1,6 @@
 import { visibleTo, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
 import type { HostMerge, RepoHost } from "../services/RepoHost";
+import { projectKey } from "./projects";
 
 // Which collagen tickets each merge came from. Pure — the merges are the
 // host's, the reviews the room's. A review ticket names where its code is:
@@ -74,7 +75,8 @@ export const ticketsOfMerges = (merges: ReadonlyArray<HostMerge>, reviewed: Read
 };
 
 /** A project's review tickets that `me` may see, as where their code was —
- *  what `ticketsOfMerges` ties to merges. `host` is the project's. */
+ *  what `ticketsOfMerges` ties to merges. `host` is the project's; the
+ *  project is matched however it is cased. */
 export const reviewedCode = (
   project: string,
   all: ReadonlyMap<string, Ticket>,
@@ -84,8 +86,9 @@ export const reviewedCode = (
   host: Pick<RepoHost, "pullIn">,
 ): ReadonlyArray<ReviewedCode> => {
   const why = new Map(reviews.map((r) => [r.ticketId, r] as const));
+  const key = projectKey(project);
   return [...all.values()].flatMap((t): ReadonlyArray<ReviewedCode> => {
-    if (t.kind !== "review" || t.project !== project || !visibleTo(t, all, me)) return [];
+    if (t.kind !== "review" || projectKey(t.project) !== key || !visibleTo(t, all, me)) return [];
     const r = why.get(t.id);
     const pull = r?.link ? host.pullIn(r.link) : null;
     const commits = [...new Set(comments.filter((c) => c.ticketId === t.id).map((c) => c.commit))];

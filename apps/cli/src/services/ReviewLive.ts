@@ -1,7 +1,8 @@
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import { focusTab } from "../lib/focusTab";
+import { openerOverride, openInBrowser } from "../lib/opener";
 import { settingOf } from "../lib/settings";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
@@ -17,21 +18,10 @@ import { commitOf, reviewTree } from "./ReviewView";
 // the agent's open-review) can bring that tab forward instead of opening
 // another.
 
-/** The browser's own opener for this platform — or COLLAGEN_OPENER, a
- *  program handed the url instead (a browser of the person's choosing, or a
- *  test that must never open one). */
-const opener = (url: string): readonly [string, ReadonlyArray<string>] =>
-  process.env.COLLAGEN_OPENER
-    ? [process.env.COLLAGEN_OPENER, [url]]
-    : process.platform === "darwin"
-      ? ["open", [url]]
-      : process.platform === "win32"
-        ? ["cmd", ["/c", "start", "", url]]
-        : ["xdg-open", [url]];
-
 export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages", {
   make: Effect.gen(function* () {
     const mcp = yield* McpInfo;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const store = yield* StateStore;
     const open = new Map<string, number>();
     // reviews whose page this process opened on its own: once each, so a
@@ -47,11 +37,8 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
     const show = Effect.fn("ReviewPages.show")(function* (ticketId: string) {
       const url = `${(yield* mcp.awaitUrl).replace(/\/mcp$/, "")}/review/${encodeURIComponent(ticketId)}`;
       const already = isOpen(ticketId);
-      if (already && !process.env.COLLAGEN_OPENER && (yield* Effect.promise(() => focusTab(url)))) return `review page brought forward: ${url}`;
-      const [cmd, args] = opener(already ? `${url}?take` : url);
-      const ok = yield* Effect.callback<boolean>((resume) => {
-        execFile(cmd, [...args], (err) => resume(Effect.succeed(err === null)));
-      });
+      if (already && Option.isNone(yield* openerOverride) && (yield* Effect.promise(() => focusTab(url)))) return `review page brought forward: ${url}`;
+      const ok = yield* openInBrowser(already ? `${url}?take` : url).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
       return ok ? `review page opened: ${url}` : `review page: ${url} (could not open a browser — paste it into one)`;
     });
 
