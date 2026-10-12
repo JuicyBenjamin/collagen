@@ -50,6 +50,7 @@ export default withMermaid({
             { text: "Agent loops", link: "/internals/agent-loops" },
             { text: "Effect patterns", link: "/internals/effect-patterns" },
             { text: "Roles and outsiders", link: "/internals/roles-and-outsiders" },
+            { text: "Token cost", link: "/internals/token-cost" },
             { text: "Local development", link: "/internals/development" },
           ],
         },

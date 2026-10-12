@@ -1927,9 +1927,19 @@ export const ToolHandlers = CollagenToolkit.toLayer(
 );
 export const DevToolHandlers = DevCollagenToolkit.toLayer(makeHandlers);
 
+/** Dev runs (pnpm dev sets COLLAGEN_DEV=1) also serve the drive-peer test
+ *  tool; anything else serves the plain toolkit — the tool doesn't exist. */
+const isDevRun = () => process.env.COLLAGEN_DEV === "1";
+
+/** What each tool's definition weighs in an agent's window: its description
+ *  and its parameters' schema, as the agent is sent them. */
+const definitionSizes = (tools: Record<string, Tool.Any>) =>
+  Object.values(tools).map((tool) => ({ name: tool.name, chars: (Tool.getDescription(tool) ?? "").length + JSON.stringify(Tool.getJsonSchema(tool)).length }));
+
 /** The diagnostics registry as tools: one handler per entry, run against the
  *  focused room. Adding a diagnostic touches src/diagnostics only. */
 const makeDiagnosticHandlers = Effect.gen(function* () {
+  const toolDefinitions = definitionSizes({ ...(isDevRun() ? DevCollagenToolkit : CollagenToolkit).tools, ...DiagnosticToolkit.tools });
   const { identity } = yield* IdentityService;
   const rooms = yield* Rooms;
   const transcripts = yield* Transcripts;
@@ -1939,7 +1949,7 @@ const makeDiagnosticHandlers = Effect.gen(function* () {
   for (const diagnostic of diagnostics) {
     handlers[diagnostic.id] = (params) =>
       rooms.current.pipe(
-        Effect.flatMap((handle) => diagnostic.run(params ?? {}, { roomId: handle.id }, { rooms, transcripts, attachments, me: identity.pubkey, reviewStarted: pages.started })),
+        Effect.flatMap((handle) => diagnostic.run(params ?? {}, { roomId: handle.id }, { rooms, transcripts, attachments, me: identity.pubkey, reviewStarted: pages.started, toolDefinitions })),
         Effect.withSpan(`Mcp.${diagnostic.id}`),
       );
   }
@@ -2005,12 +2015,9 @@ export const McpLive = Layer.unwrap(
       }),
     );
 
-    // dev runs (pnpm dev sets COLLAGEN_DEV=1) expose the drive-peer test
-    // tool; anything else serves the plain toolkit — the tool doesn't exist.
-    const toolkitLayer =
-      process.env.COLLAGEN_DEV === "1"
-        ? McpServer.toolkit(Toolkit.merge(DevCollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(DevToolHandlers, DiagnosticHandlers)))
-        : McpServer.toolkit(Toolkit.merge(CollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(ToolHandlers, DiagnosticHandlers)));
+    const toolkitLayer = isDevRun()
+      ? McpServer.toolkit(Toolkit.merge(DevCollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(DevToolHandlers, DiagnosticHandlers)))
+      : McpServer.toolkit(Toolkit.merge(CollagenToolkit, DiagnosticToolkit)).pipe(Layer.provide(Layer.merge(ToolHandlers, DiagnosticHandlers)));
 
     // Loopback only: the tools act for this person — send, settle, attach
     // their files, hand over their transcripts — and are for agents on this
