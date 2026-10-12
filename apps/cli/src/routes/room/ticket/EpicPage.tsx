@@ -7,7 +7,7 @@ import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { to, useRouter } from "../../../app/router";
 import { clamp } from "../../../lib/math";
-import { age, epicProgress, progressLabel, rowTitle, STATE_LABEL, type TicketSummary } from "../../../lib/ticketSummary";
+import { age, atRest, epicProgress, progressLabel, rowTitle, STATE_LABEL, type TicketSummary } from "../../../lib/ticketSummary";
 
 /** An epic, as a page: a folder, not a ticket with steps.
  *    header — its goal (purple, as on the list), how far along its parts
@@ -121,7 +121,7 @@ export function EpicPage({
               const summary = summaries(ticket);
               const excluded = excludedFromEpic(ticket);
               return (
-                <text key={ticket.id} fg={focused && index === selected ? theme.accent : summary.state === "closed" || summary.state === "done" ? theme.dim : theme.fg} truncate wrapMode="none">
+                <text key={ticket.id} fg={focused && index === selected ? theme.accent : atRest(summary) ? theme.dim : theme.fg} truncate wrapMode="none">
                   {focused && index === selected ? "› " : "  "}
                   <span fg={theme.dim}>{(stageOf.get(ticket.id)?.stage ?? 0) === 0 ? "" : stageOf.get(ticket.id)?.last ? "└ " : "├ "}</span>
                   <span fg={theme.dim}>{ticket.kind.padEnd(9)}</span>
