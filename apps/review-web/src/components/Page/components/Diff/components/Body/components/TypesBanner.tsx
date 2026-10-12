@@ -19,7 +19,8 @@ const remembered = (tool: ToolId): boolean => {
 /** The offer, on a review with code in a language a server reads: type
  *  hints need that language's pinned server, fetched once on the person's
  *  click — and the offer says what it is, a licence included when it is not
- *  open source. Gone once it is installed, or when they wave it away
+ *  open source. A server that also needs something of the machine (Rust's
+ *  toolchain) says what is missing instead. Gone once it is installed, or when they wave it away
  *  (remembered in this browser, per language). Once installed, anything the
  *  server asked to show the person is shown here. */
 export function TypesBanner(props: { tool: ToolId }) {
@@ -54,7 +55,7 @@ export function TypesBanner(props: { tool: ToolId }) {
         {(tool) => (
           <div class="banner" role="status">
             <Show
-              when={tool().state === "installing"}
+              when={tool().state === "installing" || tool().state === "needs"}
               fallback={
                 <>
                   <span>
@@ -81,9 +82,21 @@ export function TypesBanner(props: { tool: ToolId }) {
                 </>
               }
             >
-              <span>
-                Installing {tool().name} {tool().version}…
-              </span>
+              <Show
+                when={tool().state === "needs"}
+                fallback={
+                  <span>
+                    Installing {tool().name} {tool().version}…
+                  </span>
+                }
+              >
+                <span>
+                  {tool().language} type hints need {tool().needs}.
+                </span>
+                <button type="button" class="banner-close" aria-label="Not now" onClick={dismiss}>
+                  ×
+                </button>
+              </Show>
             </Show>
           </div>
         )}

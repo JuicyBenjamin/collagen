@@ -5,8 +5,8 @@ import { highlightCode, languageOf } from "./highlight";
 const pieces = (code: string) =>
   highlightCode(code, "rust")
     .flat()
-    .filter((s) => s.className)
-    .map((s) => [s.className, s.value]);
+    .filter((span) => span.className)
+    .map((span) => [span.className, span.value]);
 
 describe("Rust", () => {
   it("is what a .rs file is coloured as", () => {
@@ -46,7 +46,7 @@ describe("Rust", () => {
       ["operator", "="],
       ["number", "1"],
     ]);
-    expect(pieces('b"bytes" br"raw" c"text" b\'x\'').map(([c]) => c)).toEqual(["string", "string", "string", "string"]);
+    expect(pieces('b"bytes" br"raw" c"text" b\'x\'').map(([className]) => className)).toEqual(["string", "string", "string", "string"]);
   });
 
   it("block comments nest", () => {

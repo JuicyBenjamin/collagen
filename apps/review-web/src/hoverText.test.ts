@@ -36,6 +36,22 @@ describe("a PHP hover (Intelephense)", () => {
   });
 });
 
+describe("a Rust hover (rust-analyzer)", () => {
+  // as rust-analyzer sends it: module, impl header, where clause, generics
+  const hover = "```rust\ncore::option::Option\n```\n\n```rust\nimpl<T> Option<T>\npub const fn map<U, F>(self, f: F) -> Option<U>\nwhere\n    F: FnOnce(T) -> U,\n```\n\n---\n\n`T` = `i32`, `U` = `…`\n\n---\n\nMaps an `Option<T>`.\n\nAt length.";
+  it("names the module, then the whole item, impl header and where clause included, then its doc", () => {
+    expect(brief(hover).blocks).toEqual([
+      { label: "core::option::Option" },
+      { code: "impl<T> Option<T>\npub const fn map<U, F>(self, f: F) -> Option<U>\nwhere\n    F: FnOnce(T) -> U,", lang: "rust" },
+      { text: "Maps an `Option<T>`." },
+    ]);
+    expect(brief(hover).overloads).toBe(0);
+  });
+  it("a hover of one fence keeps it as the code", () => {
+    expect(brief("```rust\ni32\n```").blocks).toEqual([{ code: "i32", lang: "rust" }]);
+  });
+});
+
 describe("signatures", () => {
   it("splits overloads, keeping each one's closing line with it", () => {
     const code = "(alias) function Show<T>(props: {\n    when: T;\n}): Element\n(alias) function Show<T, F>(props: {\n    keyed: true;\n}): Element";

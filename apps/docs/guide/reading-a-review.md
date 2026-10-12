@@ -162,7 +162,7 @@ from, they are read from the diff alone, as far as it goes.
 
 ## Types and definitions
 
-On TypeScript, JavaScript and PHP files the code answers to the pointer, on added and
+On TypeScript, JavaScript, PHP and Rust files the code answers to the pointer, on added and
 unchanged lines:
 
 - a word you can ask about is underlined under the pointer, and the cursor says it can be
@@ -175,19 +175,22 @@ unchanged lines:
   declaration itself, coloured — long ones fold after eighteen lines, and further overloads
   or definitions fold under one line. It works the same for the branch's own code and for
   a package's types, Effect's or Solid's from your `node_modules`, Laravel's or Symfony's
-  from your `vendor/`; a language's own functions say "built into TypeScript" or "built
-  into PHP". `×`, Esc, or a second click closes it.
+  from your `vendor/`, a crate's from your `~/.cargo`; a language's own functions say
+  "built into TypeScript", "built into PHP" or "built into Rust". `×`, Esc, or a second
+  click closes it.
 
 Each language's server is collagen's own, not the project's, pinned to one version and
 not shipped with collagen. The first time a review has code in that language, the page
-offers it, and only your click installs it — that exact version, from npm's registry, its
-install scripts not run, into collagen's own folder (`~/.config/collagen/tools/`). `×` puts
+offers it, and only your click installs it — that exact version, from npm's registry with
+its install scripts not run (rust-analyzer: its GitHub release, checked against the
+sha256 collagen carries), into collagen's own folder (`~/.config/collagen/tools/`). `×` puts
 the offer away in that browser; nothing changes for anyone who never clicks.
 
 | Language | Server | The offer |
 | --- | --- | --- |
 | TypeScript, JavaScript | TypeScript `7.0.2`, run as `tsc --lsp` — whatever version the project uses, or none | "TypeScript type hints for this review? Installs TypeScript 7.0.2 (about 30 MB), once." |
 | PHP | Intelephense `1.18.5`, run on the Node collagen already has — no PHP install needed | "PHP type hints for this review? Installs Intelephense 1.18.5 (about 150 MB), once. Not open source: Intelephense's licence." |
+| Rust | rust-analyzer `2026-09-28`, on your own toolchain: it needs cargo and the rust-src component (`rustup component add rust-src`) | "Rust type hints for this review? Installs rust-analyzer 2026-09-28 (about 14 MB), once." — or, without the toolchain, "Rust type hints need cargo and rust-src." |
 
 Intelephense is not open source. Hover and go to definition — all the page asks of it — are
 in its free tier, so no licence key or purchase is needed; installing it means agreeing to
@@ -199,6 +202,17 @@ large `vendor/`. Until then a hover shows what it knows so far with "Intelephens
 the project · 40%", and the page asks again by itself until the answer is whole. What it read
 is kept, so the next time — a new commit, a restart, another review of the same clone — it
 reads only what changed.
+
+rust-analyzer never runs the branch's code. Build scripts (`build.rs`), procedural macros
+and `cargo check` are off, so what a derive or an attribute macro makes — serde's
+`Serialize` impl, `#[tokio::main]` — has no type on hover. The branch's `.cargo/` config,
+`rust-toolchain` files and `rust-analyzer.toml` are removed from its unpacked tree, since
+each can name a program to run or turn those back on: the branch is read with your
+default toolchain, and a project that vendors its crates through `.cargo/config.toml`
+loses their types. cargo runs offline: crates already in your `~/.cargo` registry give
+their types, nothing is fetched, and what cargo writes goes to a folder of the review's
+own. Loading a workspace takes longer than TypeScript's first answer, "Starting
+rust-analyzer…" until it is ready.
 
 The project gives the code: the branch's commit is unpacked from your clone into a folder
 of its own (`git archive`; your repository and its working tree are never touched), with

@@ -35,7 +35,16 @@ git -C "$R" add -A; git -C "$R" commit -qm change
 IP_VERSION=$(cd "$ROOT" && node --import tsx -e 'import("./src/lib/languageTools.ts").then((m) => console.log(m.TOOLS.php.version))')
 IP="$ROOT_OUT/tools/intelephense-$IP_VERSION"
 [ -f "$IP/node_modules/intelephense/lib/intelephense.js" ] || npm install --prefix "$IP" --no-save --no-package-lock --no-audit --no-fund --ignore-scripts --loglevel=error "intelephense@$IP_VERSION" > /dev/null 2>&1
-COLLAGEN_TYPESCRIPT="$ROOT/node_modules/typescript" COLLAGEN_INTELEPHENSE="$IP/node_modules/intelephense" start alice
+# Rust's is rust-analyzer's pinned release, fetched and checked by the same
+# code the page's install runs, and kept; the Rust section runs only on a
+# machine with cargo and rust-src, and otherwise checks the page says so
+lang_tools() { (cd "$ROOT" && node --import tsx -e "import('./src/lib/languageTools.ts').then(async (m) => { $1 })" "${@:2}"); }
+RA="$ROOT_OUT/tools/rust-analyzer-$(lang_tools 'console.log(m.TOOLS.rust.version)')"
+[ -x "$RA/rust-analyzer" ] || { mkdir -p "$RA"; lang_tools 'const e = await m.fetchRelease(process.argv[1], m.TOOLS.rust); if (e) console.error(e)' "$RA"; }
+RUST_NEEDS=$(lang_tools 'console.log((await m.rustNeeds()) ?? "")')
+# the instance runs with the scenario's HOME: point it at the developer's toolchain
+export RUSTUP_HOME="${RUSTUP_HOME:-$HOME/.rustup}" CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
+COLLAGEN_TYPESCRIPT="$ROOT/node_modules/typescript" COLLAGEN_INTELEPHENSE="$IP/node_modules/intelephense" COLLAGEN_RUST_ANALYZER="$RA/rust-analyzer" start alice
 SA=$(mcp $A)
 D1='{"title":"Stream the rows","what":"stream the rows","userWhy":"she said the export times out","agentWhy":"a map keeps memory flat","where":["src/export.ts:2"],"guidedBy":["CLAUDE.md"]}'
 D2='{"title":"Page by id","what":"page by id","userWhy":"pages of a hundred","where":["src/page.ts"]}'
@@ -210,6 +219,32 @@ expect "a function documented on its own line: the peek keeps its declaration, t
 expect "a project with its own vendor-dir: its package hovers" "$(sfn hoverAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now),\"$PHPAT\"]")" "Clock::now.*public function now\\(\\): string"
 expect "…and peeks as the package's file" "$(sfn definitionAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now),\"$PHPAT\"]")" "\"file\":\"acme/clock/src/Clock.php\",\"where\":\"package\""
 expect "peeking a PHP function says it is built into PHP" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
+
+echo "## Rust: rust-analyzer over the branch, its code never run"
+if [ -n "$RUST_NEEDS" ]; then
+  expect "without a Rust toolchain the page says what is missing" "$(sfn_live toolStates '["rust"]' 10)" "\"rust\".*\"Rust\".*\"needs\".*\"(cargo|rust-src)[a-z -]*\""
+else
+  # a build script, and a cargo config naming a rustc wrapper: either would
+  # run code from the branch if anything built it or obeyed the config
+  printf '[package]\nname = "demo"\nversion = "0.1.0"\nedition = "2021"\n' > "$R/Cargo.toml"
+  printf 'fn main() {\n    std::fs::write("%s", "").unwrap();\n}\n' "$OUT/build-script-ran" > "$R/build.rs"
+  mkdir -p "$R/.cargo" "$R/src"
+  printf '#!/bin/sh\ntouch "%s"\nexec "$@"\n' "$OUT/wrapper-ran" > "$R/wrap.sh"; chmod +x "$R/wrap.sh"
+  printf '[build]\nrustc-wrapper = "%s"\n' "$R/wrap.sh" > "$R/.cargo/config.toml"
+  printf 'pub mod util;\n\n/// Greets everyone.\npub fn all(names: &[&str]) -> Vec<String> {\n    names.iter().map(|n| util::greet(n)).collect()\n}\n' > "$R/src/lib.rs"
+  printf '/// Says hello.\npub fn greet(name: &str) -> String {\n    format!("hello {name}")\n}\n' > "$R/src/util.rs"
+  printf 'target/\n' >> "$R/.gitignore"
+  git -C "$R" add -A; git -C "$R" commit -qm rust
+  RSAT=$(git -C "$R" rev-parse HEAD)
+  expect "the page can see the pinned rust-analyzer is there" "$(sfn_live toolStates '["rust"]')" "\"rust\".*\"Rust\".*\"rust-analyzer\".*\"ready\""
+  WAIT_TRIES=360 wait_until "hovering a call into another module: its module and signature" "demo::util.*pub fn greet\\(name: &str\\) -> String" sfn hoverAt "[\"$TICKET\",\"src/lib.rs\",5,$(colof src/lib.rs 5 greet),\"$RSAT\"]"
+  P=$(sfn definitionAt "[\"$TICKET\",\"src/lib.rs\",5,$(colof src/lib.rs 5 greet),\"$RSAT\"]")
+  expect "peeking it opens the function in its own file" "$P" "\"file\":\"src/util.rs\",\"where\":\"branch\""
+  expect "…its /// comment as the doc, the code from the declaration" "$P" "\"doc\":\"Says hello.\",\"code\":\"pub fn greet"
+  expect "peeking std's Vec says it is built into Rust" "$(sfn definitionAt "[\"$TICKET\",\"src/lib.rs\",4,$(colof src/lib.rs 4 Vec),\"$RSAT\"]")" "\"file\":\"alloc/src/vec/mod.rs\",\"where\":\"builtin\",\"builtInto\":\"Rust\""
+  expect "the build script never ran" "$([ -e "$OUT/build-script-ran" ] && echo ran || echo never)" "^never$"
+  expect "the branch's cargo config was never obeyed" "$([ -e "$OUT/wrapper-ran" ] && echo ran || echo never)" "^never$"
+fi
 
 echo "## merged into main: no change left to show, and the page says so"
 git -C "$R" checkout -q main; git -C "$R" merge -q --no-ff -m merge feat/stream-export

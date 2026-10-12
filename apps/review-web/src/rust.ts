@@ -13,81 +13,81 @@ const KEYWORDS = new Set(
 const LITERALS = new Set(["true", "false"]);
 const PRIMITIVES = new Set("i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize f32 f64 bool char str".split(" "));
 
-const identStart = (c: string | undefined): boolean => c !== undefined && /[\p{L}_]/u.test(c);
-const identPart = (c: string | undefined): boolean => c !== undefined && /[\p{L}\p{N}_]/u.test(c);
+const identStart = (character: string | undefined): boolean => character !== undefined && /[\p{L}_]/u.test(character);
+const identPart = (character: string | undefined): boolean => character !== undefined && /[\p{L}\p{N}_]/u.test(character);
 
-/** The end of a `"…"` string body that starts at `i` (just after the quote). */
-const stringEnd = (code: string, i: number): number => {
-  while (i < code.length) {
-    if (code[i] === "\\") i += 2;
-    else if (code[i] === '"') return i + 1;
-    else i++;
+/** The end of a `"…"` string body that starts at `at` (just after the quote). */
+const stringEnd = (code: string, at: number): number => {
+  while (at < code.length) {
+    if (code[at] === "\\") at += 2;
+    else if (code[at] === '"') return at + 1;
+    else at++;
   }
   return code.length;
 };
 
-/** The end of a block comment starting at `i` (on its `/*`): they nest. */
-const blockCommentEnd = (code: string, i: number): number => {
+/** The end of a block comment starting at `at` (on its `/*`): they nest. */
+const blockCommentEnd = (code: string, at: number): number => {
   let depth = 0;
-  while (i < code.length) {
-    if (code.startsWith("/*", i)) {
+  while (at < code.length) {
+    if (code.startsWith("/*", at)) {
       depth++;
-      i += 2;
-    } else if (code.startsWith("*/", i)) {
+      at += 2;
+    } else if (code.startsWith("*/", at)) {
       depth--;
-      i += 2;
-      if (depth === 0) return i;
-    } else i++;
+      at += 2;
+      if (depth === 0) return at;
+    } else at++;
   }
   return code.length;
 };
 
-/** A raw string at `i` (`r"…"`, `r#"…"#`, with a b or c before it): its end,
+/** A raw string at `at` (`r"…"`, `r#"…"#`, with a b or c before it): its end,
  *  or -1 when it is not one. */
-const rawStringEnd = (code: string, i: number): number => {
-  let j = i;
-  if (code[j] === "b" || code[j] === "c") j++;
-  if (code[j] !== "r") return -1;
-  j++;
+const rawStringEnd = (code: string, at: number): number => {
+  let scan = at;
+  if (code[scan] === "b" || code[scan] === "c") scan++;
+  if (code[scan] !== "r") return -1;
+  scan++;
   let hashes = 0;
-  while (code[j] === "#") {
+  while (code[scan] === "#") {
     hashes++;
-    j++;
+    scan++;
   }
-  if (code[j] !== '"') return -1;
+  if (code[scan] !== '"') return -1;
   const close = `"${"#".repeat(hashes)}`;
-  const end = code.indexOf(close, j + 1);
+  const end = code.indexOf(close, scan + 1);
   return end < 0 ? code.length : end + close.length;
 };
 
-/** A char literal at `i` (on its `'`): its end, or -1 when the quote opens a
+/** A char literal at `at` (on its `'`): its end, or -1 when the quote opens a
  *  lifetime or a label instead (`'a`, `'static`, `'outer:`). */
-const charEnd = (code: string, i: number): number => {
-  if (code[i + 1] === "\\") {
-    const end = code.indexOf("'", i + 3);
-    return end < 0 || end - i > 12 ? -1 : end + 1;
+const charEnd = (code: string, at: number): number => {
+  if (code[at + 1] === "\\") {
+    const end = code.indexOf("'", at + 3);
+    return end < 0 || end - at > 12 ? -1 : end + 1;
   }
-  const cp = code.codePointAt(i + 1);
-  if (cp === undefined || code[i + 1] === "\n") return -1;
-  const after = i + 1 + (cp > 0xffff ? 2 : 1);
+  const codePoint = code.codePointAt(at + 1);
+  if (codePoint === undefined || code[at + 1] === "\n") return -1;
+  const after = at + 1 + (codePoint > 0xffff ? 2 : 1);
   return code[after] === "'" ? after + 1 : -1;
 };
 
-/** The end of an attribute, `#[…]` or `#![…]`, starting at `i`: brackets
+/** The end of an attribute, `#[…]` or `#![…]`, starting at `at`: brackets
  *  matched, strings inside skipped. */
-const attributeEnd = (code: string, i: number): number => {
-  let j = code.indexOf("[", i) + 1;
+const attributeEnd = (code: string, at: number): number => {
+  let scan = code.indexOf("[", at) + 1;
   let depth = 1;
-  while (j < code.length && depth > 0) {
-    const c = code[j]!;
-    if (c === '"') j = stringEnd(code, j + 1);
+  while (scan < code.length && depth > 0) {
+    const character = code[scan]!;
+    if (character === '"') scan = stringEnd(code, scan + 1);
     else {
-      if (c === "[") depth++;
-      else if (c === "]") depth--;
-      j++;
+      if (character === "[") depth++;
+      else if (character === "]") depth--;
+      scan++;
     }
   }
-  return j;
+  return scan;
 };
 
 const NUMBER = /^(?:0x[\da-fA-F_]+|0o[0-7_]+|0b[01_]+|\d[\d_]*(?:\.(?![.\p{L}_])[\d_]*)?(?:[eE][+-]?[\d_]+)?)(?:[iu](?:8|16|32|64|128|size)|f32|f64)?/u;
@@ -101,120 +101,120 @@ export function tokenizeRust(code: string): Array<TokenRange> {
   };
   // the previous word, to colour what a keyword introduces (fn name, struct Name)
   let prevWord = "";
-  let i = 0;
-  while (i < code.length) {
-    const c = code[i]!;
-    const rest = (n: number) => code.slice(i, i + n);
-    if (/\s/.test(c)) {
-      i++;
+  let at = 0;
+  while (at < code.length) {
+    const character = code[at]!;
+    const rest = (length: number) => code.slice(at, at + length);
+    if (/\s/.test(character)) {
+      at++;
       continue;
     }
     if (rest(2) === "//") {
-      const nl = code.indexOf("\n", i);
-      const end = nl < 0 ? code.length : nl;
-      push("comment", i, end);
-      i = end;
+      const newline = code.indexOf("\n", at);
+      const end = newline < 0 ? code.length : newline;
+      push("comment", at, end);
+      at = end;
       continue;
     }
     if (rest(2) === "/*") {
-      const end = blockCommentEnd(code, i);
-      push("comment", i, end);
-      i = end;
+      const end = blockCommentEnd(code, at);
+      push("comment", at, end);
+      at = end;
       continue;
     }
-    if (c === "#" && (code[i + 1] === "[" || (code[i + 1] === "!" && code[i + 2] === "["))) {
-      const end = attributeEnd(code, i);
-      push("meta", i, end);
-      i = end;
+    if (character === "#" && (code[at + 1] === "[" || (code[at + 1] === "!" && code[at + 2] === "["))) {
+      const end = attributeEnd(code, at);
+      push("meta", at, end);
+      at = end;
       continue;
     }
     // b"…", c"…", r"…", br#"…"#, b'x'
-    if (c === "b" || c === "c" || c === "r") {
-      const raw = rawStringEnd(code, i);
+    if (character === "b" || character === "c" || character === "r") {
+      const raw = rawStringEnd(code, at);
       if (raw > 0) {
-        push("string", i, raw);
-        i = raw;
+        push("string", at, raw);
+        at = raw;
         prevWord = "";
         continue;
       }
-      if (code[i + 1] === '"' && c !== "r") {
-        const end = stringEnd(code, i + 2);
-        push("string", i, end);
-        i = end;
+      if (code[at + 1] === '"' && character !== "r") {
+        const end = stringEnd(code, at + 2);
+        push("string", at, end);
+        at = end;
         prevWord = "";
         continue;
       }
-      if (c === "b" && code[i + 1] === "'") {
-        const end = charEnd(code, i + 1);
+      if (character === "b" && code[at + 1] === "'") {
+        const end = charEnd(code, at + 1);
         if (end > 0) {
-          push("string", i, end);
-          i = end;
+          push("string", at, end);
+          at = end;
           prevWord = "";
           continue;
         }
       }
     }
-    if (c === '"') {
-      const end = stringEnd(code, i + 1);
-      push("string", i, end);
-      i = end;
+    if (character === '"') {
+      const end = stringEnd(code, at + 1);
+      push("string", at, end);
+      at = end;
       prevWord = "";
       continue;
     }
-    if (c === "'") {
-      const end = charEnd(code, i);
+    if (character === "'") {
+      const end = charEnd(code, at);
       if (end > 0) {
-        push("string", i, end);
-        i = end;
+        push("string", at, end);
+        at = end;
       } else {
         // a lifetime or a label
-        let j = i + 1;
-        while (identPart(code[j])) j++;
-        push("type", i, j);
-        i = j > i + 1 ? j : i + 1;
+        let scan = at + 1;
+        while (identPart(code[scan])) scan++;
+        push("type", at, scan);
+        at = scan > at + 1 ? scan : at + 1;
       }
       prevWord = "";
       continue;
     }
-    if (/\d/.test(c)) {
-      const m = NUMBER.exec(code.slice(i, i + 80))!;
-      push("number", i, i + m[0].length);
-      i += m[0].length;
+    if (/\d/.test(character)) {
+      const digits = NUMBER.exec(code.slice(at, at + 80))!;
+      push("number", at, at + digits[0].length);
+      at += digits[0].length;
       prevWord = "";
       continue;
     }
-    if (identStart(c) || (c === "r" && code[i + 1] === "#" && identStart(code[i + 2]))) {
-      let j = c === "r" && code[i + 1] === "#" ? i + 2 : i;
-      while (identPart(code[j])) j++;
-      const word = code.slice(i, j);
-      let after = j;
+    if (identStart(character) || (character === "r" && code[at + 1] === "#" && identStart(code[at + 2]))) {
+      let scan = character === "r" && code[at + 1] === "#" ? at + 2 : at;
+      while (identPart(code[scan])) scan++;
+      const word = code.slice(at, scan);
+      let after = scan;
       while (after < code.length && /\s/.test(code[after]!)) after++;
-      if (code[j] === "!" && code[j + 1] !== "=") {
+      if (code[scan] === "!" && code[scan + 1] !== "=") {
         // a macro: its name and its bang
-        push(word === "macro_rules" ? "keyword" : "function", i, j + 1);
-        i = j + 1;
+        push(word === "macro_rules" ? "keyword" : "function", at, scan + 1);
+        at = scan + 1;
         prevWord = word;
         continue;
       }
-      if (KEYWORDS.has(word) && !word.startsWith("r#")) push("keyword", i, j);
-      else if (LITERALS.has(word)) push("literal", i, j);
-      else if (PRIMITIVES.has(word)) push("type", i, j);
-      else if (prevWord === "fn") push("function", i, j);
-      else if (/^[A-Z]/.test(word.replace(/^r#/, ""))) push("type", i, j);
-      else if (code[after] === "(" || code.startsWith("::<", j)) push("function", i, j);
-      else if (code[i - 1] === "." && code[i - 2] !== ".") push("property", i, j);
-      i = j;
+      if (KEYWORDS.has(word) && !word.startsWith("r#")) push("keyword", at, scan);
+      else if (LITERALS.has(word)) push("literal", at, scan);
+      else if (PRIMITIVES.has(word)) push("type", at, scan);
+      else if (prevWord === "fn") push("function", at, scan);
+      else if (/^[A-Z]/.test(word.replace(/^r#/, ""))) push("type", at, scan);
+      else if (code[after] === "(" || code.startsWith("::<", scan)) push("function", at, scan);
+      else if (code[at - 1] === "." && code[at - 2] !== ".") push("property", at, scan);
+      at = scan;
       prevWord = word;
       continue;
     }
     prevWord = "";
-    const op = OPERATOR.exec(code.slice(i, i + 3));
-    if (op) {
-      push("operator", i, i + op[0].length);
-      i += op[0].length;
+    const operator = OPERATOR.exec(code.slice(at, at + 3));
+    if (operator) {
+      push("operator", at, at + operator[0].length);
+      at += operator[0].length;
       continue;
     }
-    i++;
+    at++;
   }
   return out;
 }

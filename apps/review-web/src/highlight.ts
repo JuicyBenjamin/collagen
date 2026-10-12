@@ -26,7 +26,7 @@ import { rust } from "./rust";
 const highlighter = createHighlighter({ languages: [css, go, html, js, json, jsx, markdown, php, python, rust, shell, sql, toml, ts, tsx, yaml] });
 
 /** The languages the page colours; anything else reads as plain text. */
-export type Language = "css" | "go" | "html" | "js" | "json" | "jsx" | "markdown" | "php" | "python" | "shell" | "sql" | "toml" | "ts" | "tsx" | "yaml" | "plaintext";
+export type Language = "css" | "go" | "html" | "js" | "json" | "jsx" | "markdown" | "php" | "python" | "rust" | "shell" | "sql" | "toml" | "ts" | "tsx" | "yaml" | "plaintext";
 
 const BY_EXT: Readonly<Record<string, Language>> = {
   ts: "ts", mts: "ts", cts: "ts", tsx: "tsx",
@@ -44,7 +44,7 @@ export const languageOf = (file: string): Language => BY_EXT[file.split(".").pop
 /** A code fence's language as someone else wrote it — a comment on the pull
  *  request, a language server's hover — read once, where it comes in: by the
  *  names and extensions people put after the backticks. */
-const BY_FENCE: Readonly<Record<string, Language>> = { ...BY_EXT, typescript: "ts", javascript: "js", golang: "go" };
+const BY_FENCE: Readonly<Record<string, Language>> = { ...BY_EXT, typescript: "ts", javascript: "js", golang: "go", rust: "rust" };
 export const fenceLanguage = (name: string): Language => BY_FENCE[name] ?? "plaintext";
 
 export interface Span {

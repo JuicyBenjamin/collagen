@@ -11,6 +11,7 @@ describe("docAbove", () => {
   });
   it("takes a run of // lines, and nothing from a plain /* */ block or code", () => {
     expect(docAbove(["// one", "// two", "const a = 1"], 2)).toBe("one\ntwo");
+    expect(docAbove(["/// Says hello.", "///", "/// At length.", "pub fn greet() {}"], 3)).toBe("Says hello.\n\nAt length.");
     expect(docAbove(["/* not docs */", "const a = 1"], 1)).toBeNull();
     expect(docAbove(["const b = 2", "const a = 1"], 1)).toBeNull();
   });
@@ -33,6 +34,10 @@ describe("splitLeadingDoc", () => {
   it("a doc block above the declaration: the code starts on the line after it", () => {
     const lines = ["    /**", "     * The rows.", "     * @return array", "     */", "    public function fetch(): array;"];
     expect(splitLeadingDoc(lines, 0, 4)).toEqual({ doc: "The rows.\n@return array", code: ["    public function fetch(): array;"], line: 4 });
+  });
+  it("a Rust item's /// lines: the doc, and the code from the line after them, attributes kept", () => {
+    const lines = ["/// Says hello.", "///", "/// At length.", "#[inline]", "pub fn greet() {}"];
+    expect(splitLeadingDoc(lines, 0, 4)).toEqual({ doc: "Says hello.\n\nAt length.", code: ["#[inline]", "pub fn greet() {}"], line: 3 });
   });
   it("a range that does not start on a doc comment is left alone", () => {
     expect(splitLeadingDoc(["function f() {}", "/** later */"], 0, 1)).toBeNull();

@@ -60,13 +60,15 @@ export interface LspHandlers {
   /** answer a request the server makes of us; undefined answers null */
   readonly onRequest?: (method: string, params: unknown) => unknown;
   readonly onNotification?: (method: string, params: unknown) => void;
+  /** added to the server's environment */
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 /** Start a language server and talk to it. `command` and `args` run with
  *  `cwd` as their working directory. */
 export function startLsp(command: string, args: ReadonlyArray<string>, cwd: string, handlers: LspHandlers = {}): LspClient {
   const { onStderr = () => {}, onRequest = () => null, onNotification = () => {} } = handlers;
-  const child: ChildProcessWithoutNullStreams = spawn(command, [...args], { cwd, stdio: ["pipe", "pipe", "pipe"] });
+  const child: ChildProcessWithoutNullStreams = spawn(command, [...args], { cwd, stdio: ["pipe", "pipe", "pipe"], ...(handlers.env ? { env: { ...process.env, ...handlers.env } } : {}) });
   const pending = new Map<number, Pending>();
   let nextId = 1;
   let buffer: Buffer = Buffer.alloc(0);

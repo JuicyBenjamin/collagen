@@ -262,7 +262,7 @@ export const final = (answer: HoverResult | DefinitionResult): boolean => !("err
 
 /** The languages the review page can ask a language server about, each
  *  answered by a tool collagen installs on the reader's click. */
-export type ToolId = "typescript" | "php";
+export type ToolId = "typescript" | "php" | "rust";
 
 /** Which tool answers for a file, by its extension — one table, read by the
  *  instance (which files it may be asked about) and the page (which words
@@ -271,6 +271,7 @@ const TOOL_OF_EXTENSION: Readonly<Record<string, ToolId>> = {
   ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
   js: "typescript", jsx: "typescript", mjs: "typescript", cjs: "typescript",
   php: "php", phtml: "php",
+  rs: "rust",
 };
 export const toolOf = (file: string): ToolId | null => TOOL_OF_EXTENSION[file.split(".").pop()?.toLowerCase() ?? ""] ?? null;
 export const toolIds = (): ReadonlyArray<ToolId> => [...new Set(Object.values(TOOL_OF_EXTENSION))];
@@ -279,14 +280,16 @@ export const toolIds = (): ReadonlyArray<ToolId> => [...new Set(Object.values(TO
  *  installed yet, being installed, or ready; installTool(tool), on the
  *  reader's click, installs it. What the offer says comes with it: the
  *  language, the tool's name, its size, and its licence where that is not
- *  open source.
+ *  open source. `needs`: what the reader's machine lacks for it (Rust's
+ *  cargo and rust-src) — said instead of an offer that would half-work.
  *  `notices` are messages the server itself asked to show the person. */
 export interface ToolState {
   readonly tool: ToolId;
   /** the language it answers for ("PHP") and the tool itself ("Intelephense") */
   readonly language: string;
   readonly name: string;
-  readonly state: "missing" | "installing" | "ready";
+  readonly state: "missing" | "installing" | "ready" | "needs";
+  readonly needs?: string;
   readonly version: string;
   readonly size: string;
   readonly licence?: { readonly name: string; readonly url: string };

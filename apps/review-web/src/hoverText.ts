@@ -15,7 +15,11 @@ const tidy = (code: string, lang: Language): string =>
 export function blocks(markdown: string): Array<Block> {
   const out: Array<Block> = [];
   const prose = (text: string) => {
-    const trimmed = text.trim();
+    // a rule between parts (rust-analyzer's `---`) says nothing on its own,
+    // nor do rust-analyzer's generic substitutions (`T` = `Point`)
+    let trimmed = text.replace(/^\s*(?:-{3,}|_{3,}|\*{3,})\s*$/gm, "");
+    if (out.some((block) => "code" in block && block.lang === "rust")) trimmed = trimmed.replace(/^\s*`[^`\n]+` = `[^`\n]*`(?:, `[^`\n]+` = `[^`\n]*`)*\s*$/gm, "");
+    trimmed = trimmed.trim();
     if (!trimmed) return;
     // a heading that names the symbol: the first paragraph, bold and alone
     const head = out.length === 0 ? /^__([^\n]+?)__(?:\n\s*\n|$)/.exec(trimmed) : null;
@@ -36,6 +40,10 @@ export function blocks(markdown: string): Array<Block> {
     at = match.index + match[0].length;
   }
   prose(markdown.slice(at));
+  // rust-analyzer heads a hover with the item's module in a fence of its
+  // own (`demo::util`): a label, as PHP's bold name is
+  const [first, second] = out;
+  if (first && "code" in first && first.lang === "rust" && second && "code" in second && /^[\w:]+$/.test(first.code.trim())) out[0] = { label: first.code.trim() };
   return out;
 }
 
@@ -66,8 +74,10 @@ export function brief(markdown: string): { readonly blocks: ReadonlyArray<Block>
   const all = blocks(markdown);
   const label = all.find((block) => "label" in block);
   const fence = all.find((block) => "code" in block) as { code: string; lang: Language } | undefined;
-  // an overloaded function's signatures arrive in one fence; the first says enough
-  const sigs = fence ? signatures(fence.code) : [];
+  // an overloaded function's signatures arrive in one fence; the first says
+  // enough. Rust has none: its fence is one item, an `impl` header above it
+  // and a `where` clause below it included
+  const sigs = fence ? (fence.lang === "rust" ? [fence.code] : signatures(fence.code)) : [];
   const code = fence ? { ...fence, code: sigs[0] ?? fence.code } : undefined;
   const firstText = all.find((block) => "text" in block) as { text: string } | undefined;
   const para = firstText?.text.split(/\n\s*\n/)[0]?.trim();

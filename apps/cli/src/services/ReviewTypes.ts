@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { toolOf, type DefinitionResult, type HoverResult, type Peek, type ToolId, type ToolState } from "@collagen/review-web/data";
 import { startLsp, type LspClient } from "../lib/lsp";
-import { install, installed, packageDir, toolRoot, TOOLS, type LanguageTool } from "../lib/languageTools";
+import { install, installed, packageDir, serverPath, stripTree, toolRoot, TOOLS, type LanguageTool } from "../lib/languageTools";
 import { claimSlot, releaseSlot, sweepSlots, treeAt, type Slot } from "../lib/typeTrees";
 import { configDir } from "./Identity";
 import { commitIn, reviewTree } from "./ReviewView";
@@ -18,9 +18,10 @@ import { commitIn, reviewTree } from "./ReviewView";
 // folder of its own (git archive: the clone and its working tree are never
 // touched; lib/typeTrees keeps that folder, and the server's index, from one
 // start to the next), with the clone's dependencies (node_modules, vendor)
-// linked in so imported packages have their types. A review's server starts
-// when its page opens, not on the first hover. Nothing leaves the machine; a
-// server stops when nobody has asked it anything for a while.
+// linked in so imported packages have their types — Rust's crates come from
+// the reader's own ~/.cargo instead. A review's server starts when its page
+// opens, not on the first hover. Nothing leaves the machine; a server stops
+// when nobody has asked it anything for a while.
 
 /** Where a tool is installed — collagen's own, never the project's. */
 const toolDir = (tool: LanguageTool): string => packageDir(configDir, tool);
@@ -65,7 +66,7 @@ const STOP_MS = 2_000;
 /** Where a marker file says its dependencies live, relative to it: the
  *  tool's own reading (composer.json's config.vendor-dir) or its default,
  *  refused when it would leave the tree. */
-const depDirAt = (deps: LanguageTool["deps"], marker: string): string | null => {
+const depDirAt = (deps: NonNullable<LanguageTool["deps"]>, marker: string): string | null => {
   let dir = deps.dir;
   if (deps.dirFrom) {
     try {
@@ -81,7 +82,7 @@ const depDirAt = (deps: LanguageTool["deps"], marker: string): string | null => 
  *  unpacked tree, beside every marker file (package.json, composer.json)
  *  that has one in the clone — a monorepo has several — so imports resolve
  *  to what the reader has installed. Returns the real paths linked. */
-const linkDeps = (deps: LanguageTool["deps"], projectPath: string, root: string, rel = "", depth = 0, linked: Array<string> = []): Array<string> => {
+const linkDeps = (deps: NonNullable<LanguageTool["deps"]>, projectPath: string, root: string, rel = "", depth = 0, linked: Array<string> = []): Array<string> => {
   if (depth > 4) return linked;
   const here = join(root, rel);
   const dir = existsSync(join(here, deps.marker)) ? depDirAt(deps, join(here, deps.marker)) : null;
@@ -115,10 +116,16 @@ const linkDeps = (deps: LanguageTool["deps"], projectPath: string, root: string,
   return linked;
 };
 
-/** A declaration's range that starts on its own doc comment (PHP's servers
- *  do): the comment is the doc, and the code starts right after its `*\/` —
- *  on the same line when the declaration follows it there. */
+/** A declaration's range that starts on its own doc comment (PHP's and
+ *  Rust's servers do): the comment is the doc, and the code starts right
+ *  after its `*\/` — on the same line when the declaration follows it there
+ *  — or after the last of its `///` lines. */
 export function splitLeadingDoc(lines: ReadonlyArray<string>, from: number, last: number): { readonly doc: string | null; readonly code: ReadonlyArray<string>; readonly line: number } | null {
+  if (lines[from]?.trim().startsWith("///")) {
+    let end = from;
+    while (end < last && lines[end + 1]!.trim().startsWith("///")) end++;
+    return { doc: docAbove(lines.slice(from, end + 1), end + 1 - from), code: lines.slice(end + 1, last + 1), line: end + 1 };
+  }
   if (!lines[from]?.trim().startsWith("/**")) return null;
   let end = from;
   while (end <= last && !lines[end]!.includes("*/")) end++;
@@ -131,8 +138,9 @@ export function splitLeadingDoc(lines: ReadonlyArray<string>, from: number, last
 }
 
 /** The doc comment right above line `at`, as text — whole or not at all: a
- *  JSDoc block back to its opening, or a run of // lines. Markers stripped,
- *  so the page shows it as prose rather than as comment syntax. */
+ *  JSDoc block back to its opening, or a run of // lines (Rust's /// too).
+ *  Markers stripped, so the page shows it as prose rather than as comment
+ *  syntax. */
 export function docAbove(lines: ReadonlyArray<string>, at: number): string | null {
   let end = at - 1;
   while (end >= 0 && lines[end]!.trim() === "") end--;
@@ -147,7 +155,7 @@ export function docAbove(lines: ReadonlyArray<string>, at: number): string | nul
   } else return null;
   const text = lines
     .slice(start, end + 1)
-    .map((line) => line.replace(/^\s*\/\*\*?\s?/, "").replace(/\s*\*\/\s*$/, "").replace(/^\s*\*\s?/, "").replace(/^\s*\/\/\s?/, ""))
+    .map((line) => line.replace(/^\s*\/\*\*?\s?/, "").replace(/\s*\*\/\s*$/, "").replace(/^\s*\*\s?/, "").replace(/^\s*\/\/[/!]?\s?/, ""))
     .join("\n")
     .trim();
   return text.length > 0 ? text : null;
@@ -170,20 +178,33 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const installing = new Map<ToolId, Promise<string | null>>();
     const installError = new Map<ToolId, string>();
     const notices = new Map<ToolId, Array<string>>();
+    // what the machine lacks for a tool (Rust's toolchain), checked when a
+    // page follows the tool and before an install or a question
+    const lacking = new Map<ToolId, string | null>();
     // moves whenever any of those does — an install started, done or failed,
     // a server's notice — so an open page follows a tool's state live
     const moved = yield* SubscriptionRef.make(0);
     const bump = () => Effect.runSync(SubscriptionRef.update(moved, (count) => count + 1));
+    const checkNeeds = async (id: ToolId): Promise<string | null> => {
+      const needs = (await TOOLS[id].needs?.()) ?? null;
+      if (lacking.get(id) !== needs) {
+        lacking.set(id, needs);
+        bump();
+      }
+      return needs;
+    };
     const toolState = (id: ToolId): ToolState => {
       const tool = TOOLS[id];
       const about = { tool: id, language: tool.language, name: tool.name, version: tool.version, size: tool.size, ...(tool.licence ? { licence: tool.licence } : {}) };
+      const needs = lacking.get(id);
+      if (needs) return { ...about, state: "needs", needs };
       if (installing.has(id)) return { ...about, state: "installing" };
       if (installed(toolDir(tool), tool)) return { ...about, state: "ready", ...(notices.get(id)?.length ? { notices: notices.get(id)! } : {}) };
       return { ...about, state: "missing", ...(installError.has(id) ? { error: installError.get(id)! } : {}) };
     };
     const startInstall = (id: ToolId): ToolState => {
       const tool = TOOLS[id];
-      if (!installing.has(id) && !installed(toolDir(tool), tool)) {
+      if (!lacking.get(id) && !installing.has(id) && !installed(toolDir(tool), tool)) {
         installError.delete(id);
         installing.set(
           id,
@@ -198,11 +219,18 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       }
       return toolState(id);
     };
-    /** A tool's state, now and each time it changes. */
+    /** A tool's state, now and each time it changes — what the machine
+     *  lacks for it checked afresh first. */
     const watchTool = (id: ToolId): Stream.Stream<ToolState> =>
-      SubscriptionRef.changes(moved).pipe(
-        Stream.map(() => toolState(id)),
-        Stream.changesWith((previous, next) => JSON.stringify(previous) === JSON.stringify(next)),
+      Stream.unwrap(
+        Effect.promise(() => checkNeeds(id)).pipe(
+          Effect.as(
+            SubscriptionRef.changes(moved).pipe(
+              Stream.map(() => toolState(id)),
+              Stream.changesWith((previous, next) => JSON.stringify(previous) === JSON.stringify(next)),
+            ),
+          ),
+        ),
       );
 
     /** Stopped, its slot given back — tree and index kept for the next. */
@@ -263,9 +291,11 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const startIn = async (slot: Slot, tool: LanguageTool, projectPath: string, commit: string): Promise<Session> => {
       const root = slot.tree;
       await treeAt(projectPath, commit, root, slot.stamp);
-      const deps = linkDeps(tool.deps, projectPath, root);
-      // ready when the server says so — never on a timer: until then its
-      // answers are partial, not answers that look final
+      // what the branch could make its toolchain run goes before anything reads the tree
+      if (tool.strip) stripTree(root, tool.strip);
+      const deps = tool.deps ? linkDeps(tool.deps, projectPath, root) : [];
+      // ready when the server says so — never on a timer: an index still
+      // being built answers "ask again", not an answer that looks final
       const indexed = { done: !tool.readyWhen };
       const progress = { at: null as number | null, when: null as number | null };
       let isReady = () => {};
@@ -277,7 +307,11 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
             };
           })
         : Promise.resolve();
-      const lsp = startLsp(process.execPath, [join(toolDir(tool), tool.bin), ...tool.args], root, {
+      // an npm package's server runs on collagen's Node; a download is the binary
+      const server = serverPath(configDir, tool);
+      const [command, args] = tool.download ? [server, tool.args] : [process.execPath, [server, ...tool.args]];
+      const lsp = startLsp(command, args, root, {
+        ...(tool.spawnEnv ? { env: tool.spawnEnv(slot.storage) } : {}),
         onRequest: (method, params) =>
           method === "workspace/configuration" ? ((params as { items?: Array<unknown> } | null)?.items ?? []).map(() => tool.settings ?? null) : null,
         onNotification: (method, params) => {
@@ -301,7 +335,12 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         processId: process.pid,
         rootUri: uri,
         workspaceFolders: [{ uri, name: "review" }],
-        capabilities: { textDocument: { hover: { contentFormat: ["markdown", "plaintext"] }, definition: { linkSupport: true } }, window: { workDoneProgress: true } },
+        capabilities: {
+          textDocument: { hover: { contentFormat: ["markdown", "plaintext"] }, definition: { linkSupport: true } },
+          window: { workDoneProgress: true },
+          // rust-analyzer says when it is loaded and indexed (quiescent)
+          experimental: { serverStatusNotification: true },
+        },
         ...(tool.initializationOptions ? { initializationOptions: tool.initializationOptions(slot.storage) } : {}),
       });
       lsp.notify("initialized", {});
@@ -336,6 +375,8 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       const id = toolOf(file);
       if (id === null) return { _tag: "failed", error: `no language server reads ${extname(file) || file}` } as const;
       const tool = TOOLS[id];
+      const needs = lacking.has(id) ? lacking.get(id) : yield* Effect.promise(() => checkNeeds(id));
+      if (needs) return { _tag: "failed", error: `${tool.language} type hints need ${needs}` } as const;
       if (!installed(toolDir(tool), tool)) return { _tag: "missing" } as const;
       const server = yield* session(ticketId, tool, commit);
       if (typeof server === "string") return { _tag: "failed", error: server } as const;
@@ -414,6 +455,10 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         const code = lifted ? lifted.code : lines.slice(from, range.end.line + 1);
         const shown = code.slice(0, PEEK_LINES);
         const body = { line: from + 1, doc: lifted ? lifted.doc : docAbove(lines, from), code: shown.join("\n"), more: code.length - shown.length };
+        // the tool knows its language's places (Rust's std, cargo's registry)
+        // — never for the branch's own files, wherever its clone sits
+        const placed = real.startsWith(realRoot + sep) ? null : tool.place?.(real);
+        if (placed) return [{ file: placed.file, where: placed.where, ...(placed.where === "builtin" ? { builtInto: tool.language } : {}), ...body }];
         // a file of the server itself: the language's own declarations (stubs)
         if (real.startsWith(realTool + sep)) return [{ file: relative(realTool, real).replace(/^lib\/stubs?\//, ""), where: "builtin", builtInto: tool.language, ...body }];
         // a dependency's file by the package, not by the folder it sits in:
@@ -422,8 +467,9 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         if (depRoot) return [{ file: relative(depRoot, real), where: "package", ...body }];
         const inTree = real.startsWith(realRoot + sep);
         const full = inTree ? relative(realRoot, real) : real.startsWith(projectPath + sep) ? relative(projectPath, real) : real;
-        const dep = `${tool.deps.dir}${sep}`;
-        const inPackage = full.split(sep).includes(tool.deps.dir);
+        const depDir = tool.deps?.dir;
+        const dep = `${depDir}${sep}`;
+        const inPackage = depDir !== undefined && full.split(sep).includes(depDir);
         return [{ file: inPackage ? full.slice(full.lastIndexOf(dep) + dep.length) : full, where: inPackage ? "package" : "branch", ...body }];
       });
       // a name that is both a value and a namespace of types (Effect.fn):
