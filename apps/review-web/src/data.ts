@@ -101,6 +101,11 @@ export interface Unit {
   readonly forks: ReadonlyArray<Fork>;
   /** hunks here no decision covers — worth a question to the author */
   readonly unexplained: ReadonlyArray<string>;
+  /** a group of repeated uses: files that only apply another unit's change,
+   *  read and marked viewed together. `of`: that unit's id, when it is in
+   *  the review; `differs`: the files whose changes are not the same as the
+   *  rest's — a wrong grouping must not hide a real difference */
+  readonly uses?: { readonly of?: string; readonly differs: ReadonlyArray<string> };
 }
 
 export interface Grouped {

@@ -89,6 +89,7 @@ export function Body(props: { data: ReviewPageData }) {
               {(unit) => (
                 <Unit
                   unit={unit()}
+                  of={grouped().units.find((other) => other.id === unit().uses?.of)}
                   hunks={hunks()}
                   decisions={decisions()}
                   unitsOf={unitsOf()}

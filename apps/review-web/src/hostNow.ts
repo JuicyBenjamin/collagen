@@ -265,6 +265,10 @@ export const hostNow = {
     return ready(comments, []).filter((comment) => spot(comment.file, comment.side, comment.line) === at);
   },
 
+  /** Whether anything is said or waiting on a file: a comment, a pending
+   *  comment or a draft — a file holding one is never folded out of sight. */
+  talkIn: (file: string): boolean => ready(comments, []).some((comment) => comment.file === file) || ready(pending, []).some((draft) => draft.file === file) || ready(drafts, []).some((draft) => draft.file === file),
+
   /** The lines picked for a comment, and whether the pointer is still dragging them out. */
   pick,
   dragging,

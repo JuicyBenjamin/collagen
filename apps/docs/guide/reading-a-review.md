@@ -65,6 +65,13 @@ hold part of a file (one route of a big routes file) and another unit the rest.
   shaped it — each a chip that opens its full why beside the code — then how many changes
   in how many files, and its code: a file's changes under one header. A change no decision
   covers says so where it sits.
+- **Repeated uses.** Files that only apply one change, each the same way — a new component
+  put to use on ten pages — are one item: the author's agent names them as a unit that is
+  *uses of* another, and it is read right after that unit. One use is shown; the rest that
+  match it fold under it (one with a comment on it stays in sight), and **Mark N viewed**
+  marks them all. Collagen compares the uses
+  itself: a file whose change is not the same as the rest's — it does more, or less — is
+  flagged **Differs from the rest** and shown whole, so a wrong grouping cannot hide it.
 - **Beside it, the why in full**: the decisions that shaped this unit — each with its title, what
   was done, "Guided by …" naming any skill or agent file (`CLAUDE.md`, `AGENTS.md`) that
   told the agent to do it that way, how the person steered it (their words) and what their

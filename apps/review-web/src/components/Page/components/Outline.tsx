@@ -13,6 +13,11 @@ export function Outline(props: { data: ReviewPageData }) {
     return files.size > 0 && [...files].every((file) => viewed.state(file) === "viewed");
   };
   const changes = (count: number) => (count === 1 ? "1 change" : `${count} changes`);
+  /** A group of uses, counted: its files, and those that differ. */
+  const usesCount = (unit: Unit, differs: ReadonlyArray<string>) => {
+    const count = new Set(unit.hunks.map((id) => id.slice(0, id.lastIndexOf("#")))).size;
+    return `${count === 1 ? "1 use" : `${count} uses`}${differs.length > 0 ? ` · ${differs.length} ${differs.length === 1 ? "differs" : "differ"}` : ""}`;
+  };
   return (
     <Arrives skeleton={Outline.Skeleton}>
       <p class="nav-title">{props.data.grouped ? "Units" : "Decisions"}</p>
@@ -61,7 +66,7 @@ export function Outline(props: { data: ReviewPageData }) {
                       {unit.title}
                     </span>
                     <span class="count">
-                      {changes(unit.hunks.length)}
+                      {unit.uses ? usesCount(unit, unit.uses.differs) : changes(unit.hunks.length)}
                       {unit.unexplained.length > 0
                         ? ` · ${unit.unexplained.length} not explained`
                         : ""}
