@@ -102,7 +102,7 @@ side's agent never reads your files; it asks *your* agent, which answers.
 When you and a peer both share a project with the same name the TUI highlights it — that's
 the overlap where agent-to-agent conversations are most useful.
 
-The projects tab (`5`) lists each **project** once, with who shares it — not a row per person. Two
+The projects tab (`2`) lists each **project** once, with who shares it — not a row per person. Two
 actions, kept apart:
 
 - **Locate** a project someone already shares: it shows as a dim row, `not here yet`, and
