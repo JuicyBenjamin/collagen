@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { githubRepo, pickPull, pullNumberIn, readComments, readConversation, readOutdated, readPull, readReviews, readUser, refusal } from "./github";
+import { githubRepo, landedAs, latestMerges, type MergedPull, pickPull, pullNumberIn, readComments, readConversation, readOutdated, readPull, readReviews, readUser, refusal } from "./github";
 
 const pull = (over: Record<string, unknown> = {}) => ({
   number: 7,
@@ -77,6 +77,28 @@ describe("what gh answers, read for the review page", () => {
 
   it("the conversation, comment by comment", () => {
     expect(readConversation([[{ id: 3, body: "Ship Friday?", user: { login: "carol" }, created_at: "t", html_url: "c3" }]])).toEqual([{ id: "3", author: { login: "carol" }, body: "Ship Friday?", at: "t", url: "c3" }]);
+  });
+
+  it("how a pull request landed, read from the commit it landed as", () => {
+    const head = { oid: "h", messageHeadline: "feat: stream it", authoredDate: "2026-10-01T09:00:00Z" };
+    const landed = (mergeCommit: MergedPull["mergeCommit"]) =>
+      landedAs({ number: 1, title: "", url: "", headRefName: "b", mergedAt: "", updatedAt: "", mergeCommit, commits: { totalCount: 3, nodes: [{ commit: head }] } })?.kind;
+    expect(landed({ oid: "m", messageHeadline: "Merge pull request #1", authoredDate: "2026-10-02T00:00:00Z", parents: { totalCount: 2 } })).toBe("merge");
+    expect(landed({ ...head, parents: { totalCount: 1 } })).toBe("fast-forward");
+    expect(landed({ ...head, oid: "r", parents: { totalCount: 1 } })).toBe("rebase");
+    expect(landed({ oid: "s", messageHeadline: "PR 1 (#1)", authoredDate: "2026-10-02T00:00:00Z", parents: { totalCount: 1 } })).toBe("squash");
+    // its merge commit gone, history rewritten since: nothing on the branch to point at
+    expect(landed(null)).toBe(undefined);
+  });
+
+  it("the latest merges are certain once a page changed before the last one wanted merged", () => {
+    const merge = (number: number, at: string) => ({ number, url: `u${number}`, title: "", branch: `b${number}`, kind: "squash" as const, commit: `c${number}`, commits: 1, at });
+    // an old pull request commented on today comes first; a newer merge, untouched since, on the next page
+    const first = { merges: [merge(1, "2026-01-01"), merge(2, "2026-10-01")], oldestUpdate: "2026-10-05", next: "p2" };
+    expect(latestMerges([first], 2)).toEqual({ merges: [merge(2, "2026-10-01"), merge(1, "2026-01-01")], done: false });
+    const second = { merges: [merge(3, "2026-09-01"), merge(2, "2026-10-01")], oldestUpdate: "2026-09-01", next: "p3" };
+    expect(latestMerges([first, second], 2)).toEqual({ merges: [merge(2, "2026-10-01"), merge(3, "2026-09-01")], done: true });
+    expect(latestMerges([{ ...first, next: null }], 5).done).toBe(true);
   });
 
   it("gh's refusal, in its own words", () => {
