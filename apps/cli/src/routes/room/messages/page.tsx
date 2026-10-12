@@ -10,6 +10,7 @@ import { clamp } from "../../../lib/math";
 import { roomAtom } from "../../atoms";
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../atoms";
 import { Arrow } from "../components/Arrow/Arrow";
+import { via } from "../../../lib/agents";
 
 type Row = { readonly kind: "msg"; readonly id: string; readonly message: RoomMessage };
 
@@ -92,7 +93,7 @@ export function MessagesPage() {
                   id={msgRowId(row.id)}
                   message={row.message}
                   mine={row.message.from === identity?.pubkey}
-                  from={nameFor(row.message.from)}
+                  from={`${nameFor(row.message.from)}${via(row.message.agent)}`}
                   to={nameFor(row.message.to)}
                   selected={focused && index === sel}
                   expanded={expanded === row.id}

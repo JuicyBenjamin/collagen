@@ -187,6 +187,9 @@ export const ReviewContext = Schema.Struct({
   /** Whose agent wrote this (key), and their name at the time. */
   author: Schema.String,
   authorName: Schema.String,
+  /** Which of the author's agents wrote this revision (Claude Code, Codex …);
+   *  absent when the person did, or nobody knows. */
+  agent: Schema.optional(Schema.String),
   /** The change in the author's own words — the what. */
   summary: Schema.String,
   /** Where the code is: the branch, what it is cut from, and a link (a pull

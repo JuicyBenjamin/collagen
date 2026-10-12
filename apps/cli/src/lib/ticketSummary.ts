@@ -6,6 +6,7 @@ import { NO_TITLE } from "./review";
  *  goal was always a name. */
 export const rowTitle = (ticket: Pick<Ticket, "title" | "goal" | "kind">): string => ticket.title ?? (ticket.kind === "epic" ? ticket.goal : `(${NO_TITLE})`);
 import { GLYPH, type Mark } from "./glyphs";
+import { via } from "./agents";
 
 /** What a ticket wants from the person, now. "done": every step answered
  *  and the author has not closed it yet — theirs to close, so on their own
@@ -30,6 +31,8 @@ export interface TicketSummary {
    *  self-approval is allowed, and shown as the author's so nobody reads it
    *  as a colleague's. */
   readonly authorMark: Mark | null;
+  /** Which of the author's agents gave their own take, when one did. */
+  readonly authorAgent?: string;
   readonly author: string;
   /** Did this person start it? The lists colour their own tickets. */
   readonly mine: boolean;
@@ -130,12 +133,19 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     settledBy,
     marks,
     authorMark: marks.get(ticket.createdBy) ?? null,
+    ...authorAgentOf(ticket),
     author: ticket.createdBy,
     mine,
     lastActivity,
     held,
   };
 }
+
+/** The agent behind the author's own take on a judged ticket, if any. */
+const authorAgentOf = (ticket: Ticket): { authorAgent?: string } => {
+  const agent = ticket.steps.find((step) => step.owner === ticket.createdBy && isTake(step) && (step.status === "settled" || step.status === "failed") && step.agent)?.agent;
+  return agent ? { authorAgent: agent } : {};
+};
 
 /** needs-you first, then waiting, failed, done; newest activity first within. */
 export const compareSummaries = (first: TicketSummary, second: TicketSummary): number =>
@@ -153,7 +163,8 @@ export function marksLabel(summary: TicketSummary): string {
   const said = (["changes", "failed", "approved", "spoke"] as const).filter((mark) => others.has(mark)).map((mark) => GLYPH[mark]);
   // the author's own take is attributed — "self ✓" — the one place a word
   // stays beside a glyph: a colleague's ✓ and a self-approval must not read alike
-  return [...said, ...(summary.authorMark !== null ? [`self ${GLYPH[summary.authorMark]}`] : [])].join(" ");
+  // — and when one of their agents gave it, which: "self ✓ via Codex"
+  return [...said, ...(summary.authorMark !== null ? [`self ${GLYPH[summary.authorMark]}${via(summary.authorAgent)}`] : [])].join(" ");
 }
 
 /** "2m" · "3h" · "5d" — compact, for a list column. */
