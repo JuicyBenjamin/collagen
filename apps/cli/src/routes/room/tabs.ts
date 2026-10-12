@@ -2,7 +2,7 @@ import { useAtomSet } from "@effect/atom-react";
 import { focusAtom } from "../../components/focus";
 import { routeName, useRouter, type Route } from "../../app/router";
 
-export const TABS = ["room/overview", "room/messages", "room/outbox", "room/merges", "room/projects"] as const satisfies ReadonlyArray<Route>;
+export const TABS = ["room/overview", "room/projects", "room/merges", "room/messages", "room/outbox"] as const satisfies ReadonlyArray<Route>;
 export type TabRoute = (typeof TABS)[number];
 
 /** The room's tabs are sub-routes. Jumping to one also puts the cursor back
