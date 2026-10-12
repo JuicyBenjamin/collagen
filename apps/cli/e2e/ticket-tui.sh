@@ -87,7 +87,7 @@ if [ "$HAVE_PYTE" = yes ]; then
   SHOT=$(screen M0b_tasks)
   expect "→ five more: the tasks tab, only tasks under it" "$SHOT" "☐ bob "
   expect "…with no kind heading: the tab says the kind" "$(echo "$SHOT" | grep -cE '^ +tasks$')" "^0$"
-  expect "h lists the closed ones too, below, each saying how it ended" "$(screen M0c_closed)" "a spike nobody needs +dropped: not needed"
+  expect "h lists the closed ones too, below, each saying how it ended" "$(screen M0c_closed)" "a spike nobody needs +⊗ not needed"
   expect "…and not before h" "$(screen M0b_tasks | grep -c 'a spike nobody needs')" "^0$"
   expect "↑ back onto the tabs, ← to every ticket" "$(screen M0d_all)" "› all tickets 1 "
 else
