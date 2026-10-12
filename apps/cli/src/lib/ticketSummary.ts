@@ -34,6 +34,9 @@ export interface TicketSummary {
   /** Which of the author's agents gave their own take, when one did. */
   readonly authorAgent?: string;
   readonly author: string;
+  /** Did anyone — the author's own take included — ask for changes? Then no
+   *  screen draws it as finished: a ↻, never a ✓, and never dimmed (`atRest`). */
+  readonly changesAsked: boolean;
   /** Did this person start it? The lists colour their own tickets. */
   readonly mine: boolean;
   /** Newest of the ticket's own update and its last message. */
@@ -135,6 +138,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     authorMark: marks.get(ticket.createdBy) ?? null,
     ...authorAgentOf(ticket),
     author: ticket.createdBy,
+    changesAsked: [...marks.values()].includes("changes"),
     mine,
     lastActivity,
     held,
@@ -146,6 +150,10 @@ const authorAgentOf = (ticket: Ticket): { authorAgent?: string } => {
   const agent = ticket.steps.find((step) => step.owner === ticket.createdBy && isTake(step) && (step.status === "settled" || step.status === "failed") && step.agent)?.agent;
   return agent ? { authorAgent: agent } : {};
 };
+
+/** Nothing more to come from it, at a glance — drawn dim: closed, or done
+ *  with no changes asked. Done after a ↻ is not at rest: the ↻ still stands. */
+export const atRest = (summary: TicketSummary): boolean => summary.state === "closed" || (summary.state === "done" && !summary.changesAsked);
 
 /** needs-you first, then waiting, failed, done; newest activity first within. */
 export const compareSummaries = (first: TicketSummary, second: TicketSummary): number =>

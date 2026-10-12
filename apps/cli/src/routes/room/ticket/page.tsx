@@ -5,6 +5,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { heldBy, KINDS, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { diagnostics } from "../../../diagnostics";
+import { GLYPH } from "../../../lib/glyphs";
 import { aboutTicket, age, marksLabel, rowTitle, STATE_LABEL, summarize, ticketThreads } from "../../../lib/ticketSummary";
 import { Focusable } from "../../../components/Focusable";
 import { focusAtom } from "../../../components/focus";
@@ -150,8 +151,10 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
   const done = ticket.steps.filter((step) => step.status === "settled").length;
   // what has been said on it, not by whom — the steps below say who
   const people = marksLabel(summary);
-  const glyph = summary.state === "done" ? "✓" : summary.state === "failed" ? "✗" : "⧉";
-  const glyphColor = summary.state === "done" ? theme.ok : theme.warn;
+  // a ticket every step of which is answered is done — unless the answer was a
+  // request for changes: the same ↻ the list shows, never a check
+  const glyph = summary.changesAsked && summary.state !== "closed" ? GLYPH.changes : summary.state === "done" ? "✓" : summary.state === "failed" ? "✗" : "⧉";
+  const glyphColor = summary.changesAsked ? (summary.state === "needs-you" ? theme.warn : theme.dim) : summary.state === "done" ? theme.ok : theme.warn;
   const stateText = summary.state === "waiting" ? `waiting on ${summary.waitingOn.map(nameFor).join(", ")}` : STATE_LABEL[summary.state];
   const sSel = clamp(stepSel, 0, Math.max(0, ticket.steps.length - 1));
   const mSel = msgSel === null ? Math.max(0, rows.length - 1) : clamp(msgSel, 0, Math.max(0, rows.length - 1));
