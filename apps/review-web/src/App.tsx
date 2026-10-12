@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, Errored, For, Loading, Show } from "solid-js";
 import { NO_TITLE, toolOf, type Decision, type Hunk as HunkData, type ReviewPageData, type Unit } from "./data";
 import { Fork } from "./components/Fork";
-import { Hunk } from "./components/Hunk";
+import { Hunk, wholeRun } from "./components/Hunk";
 import { Popover } from "./components/Popover";
 import { TypesBanner } from "./components/TypesBanner";
 import { ticketId } from "./ticket";
@@ -572,13 +572,16 @@ function UnitSection(props: {
           {/* one card per file: its changes in this unit together, so its header
               stays at the top of the window through all of them */}
           <For each={runs()}>
-            {(run) => (
-              <div class="hunk-group">
-                <For each={run}>
-                  {(h, j) => <Hunk hunk={h} continued={j() > 0} skipped={j() > 0 ? skippedBefore(run[j() - 1]!, h) : undefined} unexplained={unexplained().has(h.id)} />}
-                </For>
-              </div>
-            )}
+            {(run) => {
+              const whole = wholeRun(run);
+              return (
+                <div class="hunk-group">
+                  <For each={run}>
+                    {(h, j) => <Hunk hunk={h} whole={whole} continued={j() > 0} skipped={j() > 0 ? skippedBefore(run[j() - 1]!, h) : undefined} unexplained={unexplained().has(h.id)} />}
+                  </For>
+                </div>
+              );
+            }}
           </For>
         </div>
         {/* a wide window keeps the why in a rail beside the code: its toggle
