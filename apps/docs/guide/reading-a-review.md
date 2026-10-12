@@ -159,6 +159,14 @@ touch are not listed. The decisions and forks pointing into the file sit above i
 Tests are found as `describe` / `it` / `test` calls (Vitest, Jest, Mocha, Pest), else as
 named test functions (`testFoo`, `TestFoo`, `test_foo`). With no clone to read the files
 from, they are read from the diff alone, as far as it goes.
+## See it running
+
+A diff does not show whether the change works. When the author's agent knows where it ran,
+it says so on the review (`shows` on `ask-review`), and the page lists those pages under the
+header — localhost, a preview environment, a Storybook story — each opening in a new tab. A
+loopback address runs on the author's machine, and the page says "local to" them. A url
+carrying a password or a token is refused when the review is filed: the ticket reaches every
+peer.
 
 ## Types and definitions
 
