@@ -159,7 +159,7 @@ Removed lines are the base's and are not asked about.
 ## Where the diff comes from
 
 **Your own clone**, which is git, which is the source of truth: the project's folder on
-your machine (the one you shared or located on the projects panel), `git fetch`, then
+your machine (the one you shared or located on the projects tab), `git fetch`, then
 `git diff <base>...<branch>`, local refs first, then `origin/`. No host API, no copy of the
 code anywhere new. When the ticket names no base, `main` is assumed.
 
