@@ -45,19 +45,18 @@ It is for a person reading code, so the code is the loudest thing on it — afte
 purpose. A review's title heads the page — a few words, what the change is for — with its
 summary beneath it and where the code is above it, small, so you know what the change is
 for before reading any of it (a review filed before titles leads with its summary). Then the change in **units**: code
-that together achieves one thing — a component with its sub-components, its implementation
-and its tests; a service and its routes — each titled by what it achieves ("Big exports
-finish"), never by a file. **Every change is shown once**, in exactly one unit; a unit can
-hold part of a file (one route of a big routes file) and another unit the rest.
+that together achieves one thing — a component with its sub-components and its
+implementation; a service and its routes — each titled by what it achieves ("Big exports
+finish"), never by a file. Tests are in no unit: they have [a tab of their own](#tests).
+**Every change is shown once**, in exactly one unit; a unit can hold part of a file (one route of a big routes file) and another unit the rest.
 
 - **Who decides.** The author's agent names the units when it asks for the review: a title
   saying what the unit achieves, a line beneath it on what that code does, and the files —
   or `file:line` for one part of a file — it holds. A title that is a file name is refused,
   and the agent is told which changes its units leave out. What they leave out (and all of
   a review filed without units) goes under the decision that points at it most precisely —
-  the section titled by that decision — a test with the code it tests (`Outbox.test.ts`
-  with `Outbox.ts`), a sub-component in a folder below with the component using it. What
-  no decision covers is **Not explained**, read last: a finding in itself, worth a
+  the section titled by that decision — a sub-component in a folder below with the
+  component using it. What no decision covers is **Not explained**, read last: a finding in itself, worth a
   question to the author.
 - **Order.** Building blocks first: a unit comes before the units that import it, so you
   read what something is made of before what uses it. Otherwise the author's order.
@@ -115,6 +114,31 @@ browser, per review.
 
 The plumbing stays out of the way: no decision ids, no pointer lists (each hunk names its
 file), and where the diff came from is one line at the foot of the page.
+
+## Tests
+
+Agents write tests by the dozen, and a reader skims them as surely right — so tests nobody
+needed pile up and slow every CI run. The **Tests** tab, beside **Code** under the title,
+takes them out of the units and asks a different question: not how a test is written, but
+whether it should exist at all.
+
+A test file is one named `*.test.*` or `*.spec.*`, or in a `test/`, `tests/` or
+`__tests__/` folder. Each file lists the tests this diff adds, changes or removes — each by
+its title, under the describes it sits in, marked **new**, **changed** or **removed** —
+read from the file at the branch and at the base it forked from. Tests the diff does not
+touch are not listed. The decisions and forks pointing into the file sit above its tests.
+
+- **Worth testing** or **Question** records your call on a test, by its file and titles,
+  so a push that rewrites its body keeps it; the outline counts how many you have judged
+  and how many you questioned. Calls stay in your browser, per review.
+- **Code** opens the whole test as one hunk, what the diff changed in it marked; a line the
+  diff shows takes a comment, as anywhere else.
+- A change outside every test — a helper, setup — is a click away under the file's tests.
+  Beside a changed test, imports and the lines of a describe added whole do not count.
+
+Tests are found as `describe` / `it` / `test` calls (Vitest, Jest, Mocha, Pest), else as
+named test functions (`testFoo`, `TestFoo`, `test_foo`). With no clone to read the files
+from, they are read from the diff alone, as far as it goes.
 
 ## Types and definitions
 

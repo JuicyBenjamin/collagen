@@ -8,16 +8,19 @@ import {
 } from "~/data";
 import { assumedNow } from "~/assumedNow";
 import { diffNow } from "~/diffNow";
+import { tab } from "~/testsNow";
 import { viewed } from "~/viewedNow";
 import { Unit } from "../Unit";
 import { BareDecision } from "./components/BareDecision";
 import { Forks } from "./components/Forks";
 import { Outside } from "./components/Outside";
+import { Tabs } from "./components/Tabs";
+import { Tests } from "./components/Tests";
 import { TypesBanner } from "./components/TypesBanner";
 
 /** The diff once read: an offer of type hints per language in it, its
  *  units (else its decisions alone, with no code), what falls outside it,
- *  and where the diff came from. */
+ *  and where the diff came from. Its tests are apart, in a tab of their own. */
 export function Body(props: { data: ReviewPageData }) {
   const hunks = createMemo(
     () =>
@@ -34,11 +37,13 @@ export function Body(props: { data: ReviewPageData }) {
         byDecision.set(decisionId, [...(byDecision.get(decisionId) ?? []), unit]);
     return byDecision;
   });
-  // the files a mark can be for, as this diff has them
+  const tests = () => props.data.grouped?.tests ?? [];
+  // the files a mark can be for, as this diff has them — tests are judged, not viewed
   createEffect(
     () => props.data.grouped?.hunks ?? [],
     (all) => {
-      viewed.setFiles(all);
+      const testFiles = new Set(tests().map((file) => file.file));
+      viewed.setFiles(all.filter((hunk) => !testFiles.has(hunk.file)));
       diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
     },
   );
@@ -69,6 +74,13 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
+      <Show when={tests().length > 0}>
+        <Tabs tests={tests()} />
+      </Show>
+      <Show when={tab() === "tests" && tests().length > 0}>
+        <Tests files={tests()} hunks={hunks()} decisions={decisions()} />
+      </Show>
+      <Show when={tab() === "code" || tests().length === 0}>
       <Show
         when={props.data.grouped}
         fallback={
@@ -106,6 +118,7 @@ export function Body(props: { data: ReviewPageData }) {
             <Forks title="Forks outside the diff" forks={grouped().looseForks} />
           </>
         )}
+      </Show>
       </Show>
       <footer class="note">
         <p>

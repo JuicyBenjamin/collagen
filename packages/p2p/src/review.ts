@@ -106,10 +106,11 @@ export const ReviewFork = Schema.Struct({
 export type ReviewFork = typeof ReviewFork.Type;
 
 /** A unit of the change: code that together achieves one thing — a
- *  component with its sub-components, its implementation and its tests; a
- *  service and its routes. The review page's sections are units, each piece
- *  of code shown once. `title` is what it achieves ("Big exports finish"),
- *  never a file name; `what` is the line beneath it. `where` points at the
+ *  component with its sub-components and its implementation; a service and
+ *  its routes. The review page's sections are units, each piece of code
+ *  shown once; tests are read apart, in a tab of their own. `title` is
+ *  what it achieves ("Big exports finish"), never a file name; `what` is
+ *  the line beneath it. `where` points at the
  *  code it holds, as a decision's does — a file, or file:line for one part of
  *  a file (one route of a big routes file). Named by the author's agent; what
  *  it leaves out is grouped by the decision that points at it. */
