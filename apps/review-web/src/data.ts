@@ -108,9 +108,38 @@ export interface Unit {
   readonly uses?: { readonly of?: string; readonly differs: ReadonlyArray<string> };
 }
 
+/** A test this diff adds, changes or removes: judged by its title — what it
+ *  claims to protect — with its code one step away. */
+export interface TestCase {
+  /** its file and titles: what a reader's mark on it follows across pushes */
+  readonly id: string;
+  readonly file: string;
+  /** the describes it sits in, outermost first */
+  readonly under: ReadonlyArray<string>;
+  readonly title: string;
+  readonly change: "added" | "changed" | "removed";
+  /** the whole test as one hunk, the lines this diff adds or removes marked */
+  readonly code: Hunk;
+}
+
+/** A test file of the diff: its tests that changed, its hunks in no test
+ *  (imports, helpers, setup), and the decisions and forks pointing into it. */
+export interface TestFile {
+  readonly file: string;
+  readonly tests: ReadonlyArray<TestCase>;
+  /** hunk ids */
+  readonly other: ReadonlyArray<string>;
+  /** decision ids */
+  readonly decisions: ReadonlyArray<string>;
+  readonly forks: ReadonlyArray<Fork>;
+}
+
 export interface Grouped {
-  /** in reading order: what something is built from before what uses it */
+  /** in reading order: what something is built from before what uses it —
+   *  test files are in none: they are `tests` */
   readonly units: ReadonlyArray<Unit>;
+  /** the diff's test files, apart from the code */
+  readonly tests: ReadonlyArray<TestFile>;
   readonly hunks: ReadonlyArray<Hunk>;
   /** per decision id, its pointers that matched no change: the code there
    *  did not move, or the why is older than the branch */
