@@ -207,7 +207,9 @@ chain between them (below).
 ### Bugs: the symptom is the fact, the rest is a reading
 
 A **bug** is filed with `report-bug`. One field is required: the **symptom**, what is
-wrong as experienced, in your words. The goal line defaults to its first sentence. The
+wrong as experienced, in your words. The title names the problem as someone meets it
+("Export freezes on large files"), not a code fact or the fix; why it matters, or the fix,
+goes in the goal line, which defaults to the symptom's first sentence. The
 rest is your reading and arrives as it is known, a field at a time:
 
 | field | what it holds |
