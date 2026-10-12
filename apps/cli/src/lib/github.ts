@@ -41,13 +41,13 @@ export const readUser = (v: unknown): HostUser | null => {
 };
 
 /** The fields asked of `gh pr view` / `gh pr list`. */
-export const PULL_FIELDS = "number,url,title,state,isDraft,author,headRefOid,headRefName,baseRefName,reviewDecision,isCrossRepository";
+export const PULL_FIELDS = "number,url,title,state,isDraft,author,headRefOid,headRefName,baseRefName,reviewDecision,isCrossRepository,mergeCommit";
 
 const DECISION: Readonly<Record<string, string>> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" };
 
 /** One pull request as `gh pr view --json PULL_FIELDS` has it, with the head
  *  and base branches it joins (for a stack). `viewer`: the login signed in. */
-export const readPull = (v: unknown, viewer: string | undefined): (PullRequest & { readonly branch: string; readonly base: string; readonly fork?: true }) | null => {
+export const readPull = (v: unknown, viewer: string | undefined): (PullRequest & { readonly branch: string; readonly base: string; readonly fork?: true; readonly merged?: string }) | null => {
   const o = obj(v);
   const number = int(o?.number);
   const url = str(o?.url);
@@ -58,6 +58,7 @@ export const readPull = (v: unknown, viewer: string | undefined): (PullRequest &
   const state = String(o.state).toLowerCase();
   const author = str(obj(o.author)?.login) ?? "";
   const decision = DECISION[String(o.reviewDecision)];
+  const merged = state === "merged" ? str(obj(o.mergeCommit)?.oid) : undefined;
   return {
     number,
     url,
@@ -72,6 +73,8 @@ export const readPull = (v: unknown, viewer: string | undefined): (PullRequest &
     base,
     // its head on a fork: the branch is not on this repository's origin
     ...(o.isCrossRepository === true ? { fork: true as const } : {}),
+    // the commit it went into its base as: a merge, a squash, the last of a rebase
+    ...(merged ? { merged } : {}),
   };
 };
 

@@ -42,10 +42,91 @@ const fromClone = (path: string, base: string, branch: string, fetch = true, pul
     return diff === null ? { diff: null, why: `git diff ${a}...${b} failed in ${path}` } : { diff, why: `${a}...${b} from your clone at ${path}`, commit };
   });
 
+/** Is `commit` a commit the clone at `path` has? */
+export const commitIn = (path: string, commit: string) => run("git", ["cat-file", "-e", `${commit}^{commit}`], path, 5_000).pipe(Effect.map((ok) => ok !== null));
+
+const short = (commit: string) => commit.slice(0, 7);
+
+/** A pull request's diff from the clone at `path`, read by its commits, not
+ *  its branch's name — what is left of it once it is merged and its branch
+ *  deleted: its last commit (fetched from where its host keeps it, when the
+ *  clone lacks it) against the base as it was just before the merge. */
+const fromPull = (path: string, pull: HostPull, host: RepoHost, fetch: boolean) =>
+  Effect.gen(function* () {
+    if (fetch && !(yield* commitIn(path, pull.head))) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin", `+${host.pullRef(pull.number)}:refs/remotes/origin/pr/${pull.number}`], path, 20_000);
+    if (!(yield* commitIn(path, pull.head))) return { diff: null, why: `#${pull.number}'s last commit ${short(pull.head)} is not in your clone, nor on ${host.name}` };
+    // merged: read against its merge's first parent, the base as it was
+    // then, so the merge itself does not hide it (a fast-forward has none:
+    // its head is the merge). Diffed from the merge-base, so a squash or a
+    // rebase reads the same.
+    const before = pull.merged && pull.merged !== pull.head && (yield* commitIn(path, pull.merged)) ? `${pull.merged}^1` : null;
+    const a = before ?? (yield* firstRef(path, [pull.base, `origin/${pull.base}`]));
+    if (!a) return { diff: null, why: `the base ${pull.base} is not in your clone, nor on its origin` };
+    const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${a}...${pull.head}`], path, 30_000);
+    if (diff === null) return { diff: null, why: `git diff ${a}...${short(pull.head)} failed in ${path}` };
+    return { diff, why: `#${pull.number} (${a === before ? `merged as ${short(pull.merged!)}` : pull.base}...${short(pull.head)}) from your clone at ${path}`, commit: pull.head };
+  });
+
+/** Where a review's diff came from, and why when it has none. */
+export type ReadDiff =
+  | { readonly kind: "clone"; readonly diff: string; readonly why: string; readonly commit: string | undefined }
+  | { readonly kind: "host"; readonly diff: string; readonly why: string }
+  | { readonly kind: "none"; readonly why: string };
+
+/** A review's diff: its branch against its base in the reader's clone
+ *  (`clone`; `noClone` says why there is none), else on its host. When that
+ *  holds no change — the branch gone, or merged into the base — the pull
+ *  request the review is, by its commits: in the clone, else the host's own
+ *  diff of it. An empty diff is none: the reason names what is missing. */
+export const readDiff = (
+  review: { readonly base?: string; readonly branch?: string; readonly link?: string },
+  clone: { readonly path: string } | { readonly noClone: string },
+  fetch: boolean,
+  host: RepoHost | undefined = review.link ? hostOf(review.link) : undefined,
+) =>
+  Effect.gen(function* () {
+    if (!review.branch) return { kind: "none", why: "this review names no branch" } satisfies ReadDiff;
+    const base = review.base ?? "main";
+    const branch = review.branch;
+    let why: string;
+    // the branch unread (no clone, or not in it): the host may still have it
+    let unread = true;
+    if ("path" in clone) {
+      const got = yield* fromClone(clone.path, base, branch, fetch, host?.pullRef);
+      if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: "commit" in got ? got.commit : undefined } satisfies ReadDiff;
+      unread = got.diff === null;
+      why = got.diff === null ? got.why : `${branch} has no changes against ${base}`;
+    } else why = clone.noClone;
+    if (!host || !review.link) return { kind: "none", why } satisfies ReadDiff;
+    const link = review.link;
+    const compare = (note: string) =>
+      host.compare(link, base, branch).pipe(Effect.map((hosted) => (hosted ? ({ kind: "host", diff: hosted, why: `${base}...${branch} from ${host.name} (${note})` } satisfies ReadDiff) : null)));
+    if (!("path" in clone)) {
+      const hosted = yield* compare(`no clone: ${why}`);
+      if (hosted) return hosted;
+    }
+    const named = yield* host.pull(link, branch);
+    if ("pull" in named && "path" in clone) {
+      // in the clone first: a commit there is what a comment can be drafted on
+      const got = yield* fromPull(clone.path, named.pull, host, fetch);
+      if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: got.commit } satisfies ReadDiff;
+      why = `${why}; ${got.diff === null ? got.why : `#${named.pull.number} has no changes`}`;
+    }
+    if (unread && "path" in clone) {
+      const hosted = yield* compare(why);
+      if (hosted) return hosted;
+    }
+    if ("pull" in named) {
+      const hosted = yield* host.pullDiff(link, named.pull.number);
+      if (hosted) return { kind: "host", diff: hosted, why: `#${named.pull.number} from ${host.name} (${why})` } satisfies ReadDiff;
+    }
+    return { kind: "none", why } satisfies ReadDiff;
+  });
+
 /** The code a review's branch holds, for reading it as code (type hints,
- *  definitions): the reader's clone of the project and the branch's commit
- *  in it — local first, then origin's, fetched by the page's data request.
- *  Or why there is none, in words for the page. */
+ *  definitions): the reader's clone of the project, and the branch's ref in
+ *  it when it still has one — local first, then origin's, fetched by the
+ *  page's data request. Or why there is none, in words for the page. */
 export const reviewTree = Effect.fn("ReviewView.tree")(function* (ticketId: string) {
   const rooms = yield* Rooms;
   const store = yield* StateStore;
@@ -56,10 +137,10 @@ export const reviewTree = Effect.fn("ReviewView.tree")(function* (ticketId: stri
     if (!review?.branch) return "this review names no branch";
     const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
     if (!project || !gitDir(project.path)) return `no clone of "${ticket.project}" on this machine to read the code from`;
+    // a branch deleted once its pull request merged: the clone still holds
+    // the code (its last commit, fetched from the host by the page's data)
     const ref = yield* firstRef(project.path, [review.branch, `origin/${review.branch}`]);
-    const commit = ref ? (yield* run("git", ["rev-parse", `${ref}^{commit}`], project.path, 5_000))?.trim() : undefined;
-    if (!commit) return `the branch ${review.branch} is not in your clone`;
-    return { projectPath: project.path, commit, ref: ref! };
+    return { projectPath: project.path, ...(ref ? { ref } : {}) };
   }
   return `no review ticket ${ticketId} in your rooms`;
 });
@@ -87,9 +168,6 @@ export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: 
   if (lines.at(-1) === "") lines.pop();
   return { lines } satisfies WholeFileResult;
 });
-
-/** Is `commit` a commit the clone at `path` has? */
-export const commitIn = (path: string, commit: string) => run("git", ["cat-file", "-e", `${commit}^{commit}`], path, 5_000).pipe(Effect.map((ok) => ok !== null));
 
 /** A commit as the page names it: a full or abbreviated hash, nothing else. */
 export const commitOk = (c: string | undefined): c is string => c !== undefined && /^[0-9a-f]{7,40}$/.test(c);
@@ -140,24 +218,10 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const branch = review.branch;
     const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
     const host = review.link ? hostOf(review.link) : undefined;
-    let source: ReviewPageData["source"] = { kind: "none", detail: "" };
-    let diff: string | null = null;
-    let commit: string | undefined;
-    if (!branch) source = { kind: "none", detail: "this review names no branch — the decisions are listed with where they landed" };
-    else if (project) {
-      const got = yield* fromClone(project.path, base, branch, true, host?.pullRef);
-      diff = got.diff;
-      commit = "commit" in got ? got.commit : undefined;
-      source = { kind: diff === null ? "none" : "clone", detail: got.why };
-    } else source = { kind: "none", detail: `you have not located "${ticket.project}" on this machine (the projects panel)` };
-    // no clone to read: the host, when the link names one and its tool is logged in
-    if (diff === null && branch && host && review.link) {
-      const hosted = yield* host.compare(review.link, base, branch);
-      if (hosted !== null) {
-        diff = hosted;
-        source = { kind: "host", detail: `${base}...${branch} from ${host.name} (no clone: ${source.detail})` };
-      }
-    }
+    const got = yield* readDiff(review, project ? { path: project.path } : { noClone: `you have not located "${ticket.project}" on this machine (the projects panel)` }, true);
+    const source: ReviewPageData["source"] = { kind: got.kind, detail: got.why };
+    const diff = got.kind === "none" ? null : got.diff;
+    const commit = got.kind === "clone" ? got.commit : undefined;
     // which changed files import which, as the branch has them in the clone:
     // what groups the code no unit names, and orders the units
     const hunks = diff === null ? [] : parseDiff(diff);
@@ -208,15 +272,16 @@ export const reviewHunks = (found: { readonly review: ReviewContext; readonly pr
   Effect.gen(function* () {
     if (!found.review.branch) return { error: "this review names no branch" };
     if (!found.project) return { error: "the review's project is not located on this machine (the projects panel) — its code cannot be read here" };
-    const base = found.review.base ?? "main";
-    let got = yield* fromClone(found.project.path, base, found.review.branch, false);
-    if (got.diff === null) got = yield* fromClone(found.project.path, base, found.review.branch, true, found.review.link ? hostOf(found.review.link)?.pullRef : undefined);
-    if (got.diff === null || !("commit" in got) || !got.commit) return { error: got.why };
+    const clone = { path: found.project.path };
+    // the clone as it is first, asking nobody; then fetched, and by its pull request
+    let got = yield* readDiff({ ...(found.review.base ? { base: found.review.base } : {}), branch: found.review.branch }, clone, false);
+    if (got.kind !== "clone") got = yield* readDiff(found.review, clone, true);
+    if (got.kind !== "clone" || !got.commit) return { error: got.why };
     return { hunks: parseDiff(got.diff), commit: got.commit };
   });
 
 /** A pull request as the page shows it: without the branches it joins. */
-const shown = ({ branch: _branch, base: _base, ...pull }: HostPull, viewer: string | undefined) => ({ ...pull, mine: viewer !== undefined && pull.author === viewer });
+const shown = ({ branch: _branch, base: _base, merged: _merged, ...pull }: HostPull, viewer: string | undefined) => ({ ...pull, mine: viewer !== undefined && pull.author === viewer });
 
 /** The room's own open reviews of the same project as stack edges: each
  *  names its branch and the base it builds on — only those the reader may

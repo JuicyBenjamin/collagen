@@ -162,8 +162,17 @@ not in it — and the review's link is on GitHub, the page asks GitHub for the c
 through **your own `gh` login**, and says so at the top. Hosts sit behind one interface
 (`RepoHost`, `apps/cli/src/services/RepoHost.ts`), GitHub the only one so far; they are also
 where the page's back-links come from (the pull request, its checks, the compare), and what
-the page acts on the pull request through (below). With neither, the page
-lists the decisions and forks with their pointers, and says why there is no diff.
+the page acts on the pull request through (below).
+
+**A merged pull request** is still reviewed. Once it is in its base, `<base>...<branch>`
+holds no change, and its branch may be deleted; the page then reads the pull request by
+its commits — its last commit, fetched from where the host keeps it (`refs/pull/<n>/head`
+on GitHub) when your clone lacks it, against the base just before the merge — and, with no
+clone that can, the host's own diff of it.
+
+With none of these, the page lists the decisions and forks with their pointers, and in
+place of each one's code says why there is none: the branch gone, the commit not found,
+no change against the base.
 
 ## The page itself
 
