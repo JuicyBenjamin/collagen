@@ -6,6 +6,8 @@ import { Masked } from "~/components/Masked";
 /** Where the review is: its branch into its base, who it is by, and its
  *  links (the pull request, the comparison). */
 export function Meta(props: { head: ReviewPageHead }) {
+  // which of the author's agents wrote it, when one did
+  const via = () => (props.head.review.agent ? ` via ${props.head.review.agent}` : "");
   return (
     <Arrives skeleton={Meta.Skeleton}>
       <p class="meta">
@@ -16,10 +18,10 @@ export function Meta(props: { head: ReviewPageHead }) {
             </>
           )}
         </Show>
-        <Show when={props.head.review.assumed} fallback={<>by {props.head.review.authorName}</>}>
+        <Show when={props.head.review.assumed} fallback={<>by {props.head.review.authorName}{via()}</>}>
           {(assumed) => (
             <Show when={props.head.review.claimed} fallback={<>by {assumed().author}</>}>
-              <>by {props.head.review.authorName}</>
+              <>by {props.head.review.authorName}{via()}</>
             </Show>
           )}
         </Show>

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { Context, Layer, Option } from "effect";
 import type { RoomMessage, Steering } from "@collagen/p2p";
 import { steeringLine } from "../lib/steering";
+import { actedBy } from "../lib/agents";
 
 export interface SpawnCtx {
   cwd: string;
@@ -36,8 +37,8 @@ export function nudgePrompt(spawnContext: SpawnCtx): string {
   // repo, under direction) or the other peer's (then it drafts the question).
   const ticketNote = spawnContext.message.ticketId ? ` (ticket ${spawnContext.message.ticketId}; get-ticket shows it)` : "";
   const headline = spawnContext.message.intent.startsWith("ticket-update:")
-    ? `Collagen: ${spawnContext.message.fromName} ${spawnContext.message.intent.slice("ticket-update:".length)} on a ticket your user is part of, project "${spawnContext.message.project}"${ticketNote}.`
-    : `Collagen: ${verb} — ${spawnContext.message.fromName} asks your user to address "${spawnContext.message.intent}" on project "${spawnContext.message.project}"${ticketNote}.`;
+    ? `Collagen: ${actedBy(spawnContext.message.fromName, spawnContext.message.agent)} ${spawnContext.message.intent.slice("ticket-update:".length)} on a ticket your user is part of, project "${spawnContext.message.project}"${ticketNote}.`
+    : `Collagen: ${verb} — ${actedBy(spawnContext.message.fromName, spawnContext.message.agent)} asks your user to address "${spawnContext.message.intent}" on project "${spawnContext.message.project}"${ticketNote}.`;
   const level = spawnContext.steering ?? "ask";
   return [
     headline,

@@ -182,6 +182,8 @@ export interface ReviewPageHead {
     readonly base?: string;
     readonly link?: string;
     readonly authorName: string;
+    /** which of the author's agents wrote it (Claude Code, Codex …) */
+    readonly agent?: string;
     readonly decisions: ReadonlyArray<Decision>;
     readonly forks: ReadonlyArray<Fork>;
     /** present when the why was inferred, not told */

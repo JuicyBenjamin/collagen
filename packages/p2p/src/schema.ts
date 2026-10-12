@@ -22,7 +22,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "10";
+export const PROTOCOL_VERSION = "11";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -63,6 +63,10 @@ export const RoomMessage = Schema.Struct({
   /** Set when the message weighs in on a ticket — anyone in the room may,
    *  asked or not; the ticket's page gathers these. */
   ticketId: Schema.optional(Schema.String),
+  /** Which of the sender's agents wrote it (Claude Code, Codex …); absent
+   *  when the person did, or nobody knows. Attribution: the words are still
+   *  the sender's. */
+  agent: Schema.optional(Schema.String),
 });
 export type RoomMessage = typeof RoomMessage.Type;
 
@@ -457,6 +461,8 @@ export const Proposal = Schema.Struct({
   title: Schema.String,
   ts: Schema.Finite,
   outgoing: Outgoing,
+  /** Which agent sent it (Claude Code, Codex …); absent when the person did. */
+  agent: Schema.optional(Schema.String),
 });
 export type Proposal = typeof Proposal.Type;
 
