@@ -1,4 +1,4 @@
-import type { ToolId, ToolState } from "./data";
+import type { ChatView, ToolId, ToolState } from "./data";
 
 // The page's live updates — the review moving, a language server's state —
 // all on one WebSocket to collagen (ReviewServer's /review/_live). A browser
@@ -55,10 +55,11 @@ const send = (target: WebSocket, ask: object) => {
 
 /** A live stream over the page's socket: its values as they come; it ends
  *  when collagen ends it, and breaks when the socket goes. The review's
- *  state as a token, or a language server's state. */
+ *  state as a token, a language server's state, or the reader's chat with their AI. */
 export function overSocket(topic: "changes", subject: string): AsyncIterable<string>;
 export function overSocket(topic: "tool", subject: ToolId): AsyncIterable<ToolState>;
-export function overSocket(topic: "changes" | "tool", subject: string): AsyncIterable<unknown> {
+export function overSocket(topic: "chat", subject: string): AsyncIterable<ChatView>;
+export function overSocket(topic: "changes" | "tool" | "chat", subject: string): AsyncIterable<unknown> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<unknown> {
       const id = `s${++nextId}`;

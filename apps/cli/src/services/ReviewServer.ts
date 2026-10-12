@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { Effect, Fiber, Layer, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
+import type { ChatSelection } from "@collagen/review-web/data";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
@@ -12,6 +13,7 @@ import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
 import { closeReview, mergeView, setMerge, takeReview } from "./ReviewFinish";
 import { Outbox } from "./Outbox";
+import { ReviewChat } from "./ReviewChat";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -67,12 +69,24 @@ const finishOk = (finish: unknown): finish is { readonly id: string; readonly pe
 /** How many merges the page shows of each project: a few names, each a whole count. */
 const shownCountsOk = (counts: unknown): counts is Readonly<Record<string, number>> =>
   typeof counts === "object" && counts !== null && !Array.isArray(counts) && Object.keys(counts).length <= 64 && Object.values(counts).every((count) => Number.isInteger(count) && count >= 0 && count <= 100_000);
+/** A line by its side, as the page names it. */
+const sideLineOk = (sideLine: unknown): boolean => typeof sideLine === "object" && sideLine !== null && lineOk((sideLine as { line?: unknown }).line, 0) && sideOk((sideLine as { side?: unknown }).side);
+/** A question to the reader's AI: some words, not a book. */
+const questionOk = (question: unknown): question is string => typeof question === "string" && question.trim().length > 0 && question.length <= 8_000;
+/** Lines selected to ask about — or none: one file, its lines as the diff shows them. */
+const selectionOk = (selection: unknown): selection is ChatSelection | null => {
+  if (selection === null) return true;
+  if (typeof selection !== "object" || selection === undefined) return false;
+  const { file, from, to, text } = selection as { file?: unknown; from?: unknown; to?: unknown; text?: unknown };
+  return typeof file === "string" && treePathOk(file) && sideLineOk(from) && sideLineOk(to) && typeof text === "string" && text.length <= 50_000;
+};
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
   const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox>();
   const types = yield* ReviewTypes;
   const history = yield* MergeHistory;
+  const chat = yield* ReviewChat;
   const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
   return {
     head: (ticketId) => (ticketIdOk(ticketId) ? on(reviewHead(ticketId)) : Effect.succeed(null)),
@@ -104,6 +118,11 @@ const backend = Effect.gen(function* () {
     setMerge: (ticketId, level) => (ticketIdOk(ticketId) && (level === null || level === "off" || level === "theirs" || level === "mine" || level === "both") ? on(setMerge(ticketId, level)) : Effect.succeed(null)),
     close: (ticketId, outcome) => (ticketIdOk(ticketId) && (outcome === "done" || outcome === "dropped") ? on(closeReview(ticketId, outcome)) : Effect.succeed(bad)),
     merges: (roomId, shown, fresh) => (ticketIdOk(roomId) && shownCountsOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, shown, fresh)) : Effect.succeed(null)),
+    chat: (ticketId) => (ticketIdOk(ticketId) ? chat.view(ticketId) : Stream.empty),
+    ask: (ticketId, question, selection, commit) =>
+      ticketIdOk(ticketId) && questionOk(question) && selectionOk(selection) && (commit === null || commitOk(commit)) ? on(chat.ask(ticketId, question.trim(), selection, commit)) : Effect.succeed({ error: "bad request" }),
+    stopAnswer: (ticketId) => (ticketIdOk(ticketId) ? chat.stop(ticketId) : Effect.void),
+    newChat: (ticketId) => (ticketIdOk(ticketId) ? chat.clear(ticketId) : Effect.void),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });
@@ -139,13 +158,13 @@ const handle = (load: Effect.Effect<ServerEntry | null>) => (request: HttpServer
 
 /** What a page asks its live socket for: a stream opened under its own id,
  *  or one it no longer needs. */
-type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool"; readonly subject: string } | { readonly close: string };
+type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "chat"; readonly subject: string } | { readonly close: string };
 const liveIdOk = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,32}$/.test(id);
 const liveAskOf = (text: string): LiveAsk | null => {
   try {
     const ask = JSON.parse(text) as Record<string, unknown>;
     if (liveIdOk(ask["close"])) return { close: ask["close"] };
-    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
+    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "chat") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
   } catch {
     // not one: ignored
   }
@@ -182,7 +201,8 @@ const liveSocket = (impl: ReviewBackend["Service"]) => (request: HttpServerReque
             continue;
           }
           yield* stop(ask.open);
-          const values: Stream.Stream<unknown> = ask.topic === "changes" ? impl.changes(ask.subject) : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
+          const values: Stream.Stream<unknown> =
+            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "chat" ? impl.chat(ask.subject) : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
           const fiber = yield* values.pipe(
             Stream.runForEach((value) => write(JSON.stringify({ id: ask.open, value }))),
             // its stream ended: the page is told, to open it again

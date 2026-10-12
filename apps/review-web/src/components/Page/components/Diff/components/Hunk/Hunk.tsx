@@ -453,14 +453,14 @@ export function Lines(props: {
   };
 
   return (
-    <table>
+    <table data-file={props.hunk.file}>
       <tbody>
         <For each={rows()}>
           {(row, index) => {
             const line = row.line;
             return (
             <>
-              <tr class={{ add: line.kind === "+" && !row.was, del: line.kind === "-", changed: row.was !== undefined, picked: inPick(index()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, index())}>
+              <tr class={{ add: line.kind === "+" && !row.was, del: line.kind === "-", changed: row.was !== undefined, picked: inPick(index()) }} data-code="" data-old={line.old} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, index())}>
                 <td class="n">{row.was?.line.old ?? line.old ?? ""}</td>
                 <td class="n">{line.new ?? ""}</td>
                 <td

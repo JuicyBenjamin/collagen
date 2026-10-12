@@ -369,6 +369,16 @@ you wrote, and goes out when you finish it — marked **with AI** once said. You
 the same on your word ("looks good, post them": it adds them, then finishes the review),
 never calling GitHub itself: collagen wires it.
 
+### Asking your AI about code
+
+Select code in the diff and **Ask AI** appears under it: the lines go with your question,
+and the answer streams into a panel in the corner as your AI writes it. Collagen brings no
+model of its own — it runs the AI you set (`set-ai`; Claude Code or Codex) in your clone,
+read-only, told which commit the page shows, and the next question goes on with the same
+conversation. **Stop** ends an answer where it is; **New chat** starts over. The
+conversation is your collagen's: every tab on the review shows it, a reload finds it again,
+a restart forgets it, and nothing of it reaches the room or the host.
+
 ## A review built from assumptions
 
 For a change its author did not file in collagen — a colleague's pull request, say — ask

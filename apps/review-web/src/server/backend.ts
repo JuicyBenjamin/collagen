@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { ChatAsked, ChatSelection, ChatView, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -65,6 +65,14 @@ export class ReviewBackend extends Context.Service<
     /** set a review's own merge setting; null gives it back to its room's */
     readonly setMerge: (ticketId: string, level: MergeFor | null) => Effect.Effect<MergeView | null>;
     readonly merges: (roomId: string, shown: MergesShown, fresh: boolean) => Effect.Effect<MergeHistory | null>;
+    /** the reader's conversation with their AI on the review, whole — now, then on every change */
+    readonly chat: (ticketId: string) => Stream.Stream<ChatView>;
+    /** ask their AI — about lines they selected, or not — at `commit`, the one the page shows */
+    readonly ask: (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null) => Effect.Effect<ChatAsked>;
+    /** stop the answer under way */
+    readonly stopAnswer: (ticketId: string) => Effect.Effect<void>;
+    /** a new conversation: the old one gone */
+    readonly newChat: (ticketId: string) => Effect.Effect<void>;
   }
 >()("review-web/ReviewBackend") {}
 

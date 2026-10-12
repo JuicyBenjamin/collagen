@@ -4,6 +4,7 @@ import { Context, Layer, Option } from "effect";
 import type { RoomMessage, Steering } from "@collagen/p2p";
 import { steeringLine } from "../lib/steering";
 import { actedBy } from "../lib/agents";
+import { claudeChat, codexChat, mockChat, type ChatAdapter } from "./ChatAdapters";
 
 export interface SpawnCtx {
   cwd: string;
@@ -25,6 +26,8 @@ export interface Adapter {
     /** exitCode/out from running `cmd auth.args` */
     loggedIn: (out: string, exitCode: number) => boolean;
   };
+  /** asked about code on the review page, its answer streamed there (ReviewChat) — absent: it cannot be */
+  chat?: ChatAdapter;
 }
 
 export function nudgePrompt(spawnContext: SpawnCtx): string {
@@ -55,6 +58,7 @@ export function nudgePrompt(spawnContext: SpawnCtx): string {
 // server even if others are registered. session_id in the single JSON object.
 export const claudeAdapter: Adapter = {
   cmd: "claude",
+  chat: claudeChat,
   auth: {
     args: ["auth", "status"],
     loggedIn: (out) => {
@@ -97,6 +101,7 @@ export const claudeAdapter: Adapter = {
 // observe. --json streams events; scan for the resumable thread_id.
 export const codexAdapter: Adapter = {
   cmd: "codex",
+  chat: codexChat,
   auth: {
     args: ["login", "status"],
     loggedIn: (out, exitCode) => exitCode === 0 && !/not logged in/i.test(out),
@@ -152,6 +157,7 @@ const mockAgentPath = [new URL("./mock-agent.mjs", import.meta.url), new URL("..
 
 export const mockAdapter: Adapter = {
   cmd: process.execPath,
+  chat: mockChat,
   auth: {
     args: ["--version"],
     loggedIn: (_out, exitCode) => exitCode === 0,

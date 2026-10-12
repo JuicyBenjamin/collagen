@@ -567,3 +567,45 @@ export interface MergeHistory {
   /** when it was read, ISO */
   readonly readAt: string;
 }
+/** A line of the diff by the side it is on: a removed line by its old number, any other by its new one. */
+export interface SideLine {
+  readonly line: number;
+  readonly side: "LEFT" | "RIGHT";
+}
+
+/** Lines the reader selected to ask their AI about, in one file of the diff. */
+export interface ChatSelection {
+  readonly file: string;
+  readonly from: SideLine;
+  readonly to: SideLine;
+  /** the lines as the diff shows them, each after its +, - or space */
+  readonly text: string;
+}
+
+/** One question to the reader's AI on the page, and its answer as it stands. */
+export interface ChatTurn {
+  readonly id: string;
+  readonly question: string;
+  readonly selection: ChatSelection | null;
+  /** the commit the page showed when it was asked — what the selection is of */
+  readonly commit: string | null;
+  /** the answer so far: it grows while `state` is "answering" */
+  readonly answer: string;
+  /** what the AI is doing now, between words: a file it reads, a command it runs */
+  readonly doing: string | null;
+  readonly state: "answering" | "done" | "stopped" | "failed";
+  readonly error?: string;
+}
+
+/** chat(ticketId) — the reader's conversation with their AI on this review,
+ *  held by their collagen: whole, again on every change. */
+export interface ChatView {
+  /** the reader's AI, as collagen has it set; null: none */
+  readonly ai: string | null;
+  /** why it cannot be asked here, in words; null: it can */
+  readonly cannot: string | null;
+  readonly turns: ReadonlyArray<ChatTurn>;
+}
+
+/** What asking said: under way, or refused in words. */
+export type ChatAsked = { readonly ok: true } | { readonly error: string };

@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { ChatAsked, ChatSelection, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -175,4 +175,23 @@ export const mergeView = async (ticketId: string): Promise<MergeView | null> => 
 export const setMerge = async (ticketId: string, level: MergeFor | null): Promise<MergeView | null> => {
   "use server";
   return run((backend) => backend.setMerge(ticketId, level));
+};
+
+/** Ask the reader's own AI — only ever on their word — about the lines they
+ *  selected (or none), at the commit the page shows. */
+export const askAi = async (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null): Promise<ChatAsked> => {
+  "use server";
+  return run((backend) => backend.ask(ticketId, question, selection, commit));
+};
+
+/** Stop the answer under way; what it said so far stays. */
+export const stopAnswer = async (ticketId: string): Promise<void> => {
+  "use server";
+  return run((backend) => backend.stopAnswer(ticketId));
+};
+
+/** Start the conversation over. */
+export const newChat = async (ticketId: string): Promise<void> => {
+  "use server";
+  return run((backend) => backend.newChat(ticketId));
 };
