@@ -6,7 +6,7 @@ import { HttpRouter, HttpServerResponse } from "effect/http";
 import { isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
-import type { HostView, HostWrite, ReviewPageData, SinceResult, Verdict, WholeFileResult } from "@collagen/review-web/data";
+import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
@@ -235,6 +235,30 @@ export const unitCoverageNote = (path: string, review: { readonly base?: string;
 
 export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((output) => output?.trim() || null));
 
+/** The review's own part of the page — ticket, why, links — read from the
+ *  room alone: no clone, no diff, so it is there at once, before the code is. */
+const headOf = (ticket: Ticket, review: ReviewContext): ReviewPageHead => {
+  const base = review.base ?? "main";
+  const host = review.link ? hostOf(review.link) : undefined;
+  return {
+    ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
+    review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ts: review.ts },
+    links: host && review.link ? host.links(review.link, base, review.branch) : review.link ? [{ label: "link", url: review.link }] : [],
+  };
+};
+
+/** The review without its diff: what the page stands on while the code is read. */
+export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: string) {
+  const rooms = yield* Rooms;
+  for (const handle of yield* SubscriptionRef.get(rooms.handles)) {
+    const ticket = (yield* SubscriptionRef.get(handle.room.tickets)).get(ticketId);
+    if (!ticket) continue;
+    const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
+    return review ? headOf(ticket, review) : null;
+  }
+  return null;
+});
+
 export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: string) {
   const rooms = yield* Rooms;
   const store = yield* StateStore;
@@ -243,10 +267,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     if (!ticket) continue;
     const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
     if (!review) return null;
-    const base = review.base ?? "main";
-    const branch = review.branch;
     const project = roomProjects(yield* store.get, handle.id).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
-    const host = review.link ? hostOf(review.link) : undefined;
     const got = yield* readDiff(review, project ? { path: project.path } : { noClone: `you have not located "${ticket.project}" on this machine (the projects panel)` }, true);
     const source: ReviewPageData["source"] = { kind: got.kind, detail: got.why };
     const diff = got.kind === "none" ? null : got.diff;
@@ -262,12 +283,10 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       imports = importsAmong(files, (file) => texts.get(file) ?? null);
     }
     return {
-      ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
-      review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ts: review.ts },
+      ...headOf(ticket, review),
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
       grouped: diff === null ? null : groupByUnit(review, hunks, imports),
-      links: host && review.link ? host.links(review.link, base, branch) : review.link ? [{ label: "link", url: review.link }] : [],
     } satisfies ReviewPageData;
   }
   return null;

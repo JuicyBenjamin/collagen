@@ -6,7 +6,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
-import { commitOk, hostView, localHost, reviewData, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
+import { commitOk, hostView, localHost, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
@@ -73,6 +73,7 @@ const backend = Effect.gen(function* () {
   const history = yield* MergeHistory;
   const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
   return {
+    head: (ticketId) => (ticketIdOk(ticketId) ? on(reviewHead(ticketId)) : Effect.succeed(null)),
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),
     changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(context)) : Stream.empty),
     hover: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.hover(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
