@@ -81,6 +81,79 @@ const readFile = (file: string, commit: string): Promise<WholeFileResult> => {
   return got;
 };
 
+/** A line on screen in a file's card: its number in the new file, and how far
+ *  down the window it is. */
+type Place = { readonly n: number; readonly y: number };
+
+/** Where the reader is in a card: its first numbered line not under the
+ *  card's header (which sticks over what scrolls past it). */
+const placeIn = (card: Element): Place | null => {
+  const below = Math.max(0, card.querySelector(".file")?.getBoundingClientRect().bottom ?? 0);
+  for (const tr of card.querySelectorAll<HTMLElement>("tr[data-new]")) {
+    const r = tr.getBoundingClientRect();
+    if (r.bottom > below) return { n: Number(tr.dataset.new), y: r.top };
+  }
+  return null;
+};
+
+/** Once the card is drawn again, its line `at.n` — or the shown line nearest
+ *  it — is put back where that line was on screen. */
+const keepPlace = (card: Element, at: Place) =>
+  requestAnimationFrame(() => {
+    let best: HTMLElement | null = null;
+    let off = Infinity;
+    for (const tr of card.querySelectorAll<HTMLElement>("tr[data-new]")) {
+      const d = Math.abs(Number(tr.dataset.new) - at.n);
+      if (d < off) [best, off] = [tr, d];
+    }
+    if (best) window.scrollBy(0, best.getBoundingClientRect().top - at.y);
+  });
+
+/** A file's changes in one unit, read whole on the reader's word: one view
+ *  for the card, opened from any of its changes and shown in their place —
+ *  never beside them — with the line read before at the same spot on screen. */
+export function wholeRun(run: ReadonlyArray<HunkData>) {
+  const first = run[0]!;
+  const [read, setRead] = createSignal<WholeFileResult | "loading" | null>(null);
+  const [open, setOpen] = createSignal(false);
+  // the change it was opened from: a failure is said there
+  const [asked, setAsked] = createSignal<string | null>(null);
+  const shown = createMemo((): HunkData | null => {
+    const w = read();
+    return open() && w && w !== "loading" && "lines" in w ? wholeHunk(first, w.lines, diffNow.addedIn(first.file)) : null;
+  });
+  return {
+    count: run.length,
+    /** some of the file is left on the branch to read (not a deleted file) */
+    readable: run.some(hasNewSide),
+    shown,
+    loading: () => open() && read() === "loading",
+    asked,
+    failed: () => {
+      const w = read();
+      return open() && w && w !== "loading" && "error" in w ? w.error : null;
+    },
+    show: async (by: string, card: Element | null, at: Place | null) => {
+      setAsked(by);
+      setOpen(true);
+      // asked once; asked again only after it failed
+      const w = read();
+      if (w === null || (w !== "loading" && "error" in w)) {
+        setRead("loading");
+        const c = diffNow.commit();
+        setRead(c ? await readFile(first.file, c) : { error: "the page does not know which commit its diff is" });
+      }
+      if (open() && card && at) keepPlace(card, at);
+    },
+    hide: (card: Element | null) => {
+      const at = card && placeIn(card);
+      setOpen(false);
+      if (card && at) keepPlace(card, at);
+    },
+  };
+}
+export type WholeRun = ReturnType<typeof wholeRun>;
+
 /** One hunk: file and header, then its code (Lines). Its header offers the
  *  file whole, and a mark as viewed. A file marked as viewed folds here and
  *  wherever else it shows; once it moves, this hunk shows only what changed
@@ -88,6 +161,8 @@ const readFile = (file: string, commit: string): Promise<WholeFileResult> => {
  *  folded — and the whole change against the base is a click away. */
 export function Hunk(props: {
   hunk: HunkData;
+  /** the file whole, for every change of it in the card */
+  whole: WholeRun;
   /** a later change in the same file of the same unit: no header of its own,
    *  the file's is the one above it */
   continued?: boolean;
@@ -97,8 +172,6 @@ export function Hunk(props: {
   /** no decision covers this change — worth a question to the author */
   unexplained?: boolean;
 }) {
-  // the file whole, on the reader's word: asked once, kept while the page is
-  const [whole, setWhole] = createSignal<WholeFileResult | "loading" | null>(null);
   // the lines the band above this change hides, shown on the reader's click:
   // unchanged lines of the file, numbered on both sides
   const [gap, setGap] = createSignal<HunkData | "loading" | { readonly error: string } | null>(null);
@@ -132,38 +205,20 @@ export function Hunk(props: {
     const g = gap();
     return g !== null && g !== "loading" && "lines" in g ? g : null;
   };
-  const [open, setOpen] = createSignal(false);
+  let head: HTMLDivElement | undefined;
   let box: HTMLDivElement | undefined;
-  const wholeShown = createMemo((): HunkData | null => {
-    const w = whole();
-    return open() && w && w !== "loading" && "lines" in w ? wholeHunk(props.hunk, w.lines, diffNow.addedIn(props.hunk.file)) : null;
-  });
-  const failed = () => {
-    const w = whole();
-    return open() && w && w !== "loading" && "error" in w ? w.error : null;
+  const wholeShown = () => (props.continued ? null : props.whole.shown());
+  const failed = () => (props.whole.asked() === props.hunk.id ? props.whole.failed() : null);
+  const card = () => head?.closest(".hunk-group") ?? null;
+  // the whole file, opened where the reader is: from the file's header, at
+  // the line under it; from a later change, at that change
+  const toggleWhole = () => {
+    if (props.whole.shown() !== null || props.whole.loading()) return props.whole.hide(card());
+    const row = props.continued ? box?.querySelector<HTMLElement>("tr[data-new]") : null;
+    const c = card();
+    void props.whole.show(props.hunk.id, c, row ? { n: Number(row.dataset.new), y: row.getBoundingClientRect().top } : c && placeIn(c));
   };
-  // opened at the change, not at the top of the file
-  const toChange = () =>
-    requestAnimationFrame(() => {
-      const row = box?.querySelector<HTMLElement>(`tr[data-new="${props.hunk.newStart}"]`);
-      if (box && row) box.scrollTop = Math.max(0, row.offsetTop - box.clientHeight / 3);
-    });
-  const toggleWhole = async () => {
-    if (open()) return setOpen(false);
-    setOpen(true);
-    // asked once; asked again only after it failed
-    const w = whole();
-    if (w === null || (w !== "loading" && "error" in w)) {
-      setWhole("loading");
-      try {
-        const at = diffNow.commit();
-        setWhole(at ? await wholeFile(ticketId, props.hunk.file, at) : { error: "the page does not know which commit its diff is" });
-      } catch (e) {
-        setWhole({ error: String(e) });
-      }
-    }
-    toChange();
-  };
+  const canWhole = () => diffNow.canReadWhole() && props.whole.readable && !folded();
   // read already: the file folds to its header here and wherever else it shows
   const state = () => viewed.state(props.hunk.file);
   // folded: viewed and not opened again to read
@@ -185,13 +240,17 @@ export function Hunk(props: {
     return r && r !== "loading" && "error" in r ? r.error : null;
   };
   const [full, setFull] = createSignal(false);
-  const sinceMode = () => !open() && !full() && mine() !== null;
+  const sinceMode = () => props.whole.shown() === null && !full() && mine() !== null;
   const counts = () => moved(mine() ?? []);
 
   return (
-    <Show when={!(props.continued && folded())}>
+    // the file whole stands in for all its changes here, drawn at the first
+    <Show when={!(props.continued && (folded() || props.whole.shown() !== null))}>
     <div class={["hunk", { viewed: folded(), reread: state() === "viewed" && !folded(), continued: props.continued }]}>
-      <div class={["file", { continued: props.continued }]} ref={(el) => !props.continued && watchStuck(el)}>
+      <div class={["file", { continued: props.continued }]} ref={(el) => {
+        head = el;
+        if (!props.continued) watchStuck(el);
+      }}>
         {/* a later change in the file: a band saying how much unchanged code
             lies between it and the one above — the file's header stays above */}
         <Show
@@ -212,14 +271,14 @@ export function Hunk(props: {
           </Show>
         </Show>
         <span class="file-side">
-          <Show when={mine() !== null && !open()}>
+          <Show when={mine() !== null && props.whole.shown() === null}>
             <button type="button" class="whole-toggle" onClick={() => setFull(!full())} title="Switch between what changed since you viewed it and the whole change against the base">
               {full() ? "Since you viewed" : "Whole change"}
             </button>
           </Show>
-          <Show when={!props.continued && diffNow.canReadWhole() && hasNewSide(props.hunk) && !folded()}>
-            <button type="button" class="whole-toggle" onClick={() => void toggleWhole()} title="The whole file as the branch has it, this diff's added lines marked">
-              {open() ? (whole() === "loading" ? "Reading…" : "Just the change") : "Whole file"}
+          <Show when={canWhole()}>
+            <button type="button" class="whole-toggle" onClick={toggleWhole} title="The whole file as the branch has it, this diff's added lines marked">
+              {props.whole.loading() ? "Reading…" : props.whole.shown() !== null ? (props.whole.count > 1 ? "Just the changes" : "Just the change") : "Whole file"}
             </button>
           </Show>
           <Show when={!props.continued}>
@@ -254,7 +313,7 @@ export function Hunk(props: {
         <Show
           when={sinceMode()}
           fallback={
-            <div class={["code", { whole: wholeShown() !== null }]} ref={box}>
+            <div class="code" ref={box}>
               {/* comments on the pull request sit under their lines; a line of
                   the diff itself takes a new one (the whole file's other lines
                   are not in the pull request's diff) */}
