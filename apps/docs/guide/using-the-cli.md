@@ -36,12 +36,12 @@ No files are written into your projects.
  you alice · ai codex
 
   ╭────╮ ╭─ room · dev room ──────────────────────────────────────────╮
-  │ WO │ │ › [1] overview   [2] messages (3)   ·   2 online · 1 shared│
+  │ WO │ │ › [1] overview   [2] messages   …   [5] projects  ·  2 online│
   ╰────╯ │                                                            │
- ▌╭────╮ │ ● alice (you) codex             ╭─ projects ─────────────╮ │
- ▌│ DR │ │ ● bob claude-code               │   sandbox — you, bob   │ │
- ▌╰──2─╯ │                                 │   + add project        │ │
-  ╭────╮ │   tickets                       ╰────────────────────────╯ │
+ ▌╭────╮ │ ● alice (you) codex · 1 project                            │
+ ▌│ DR │ │ ● bob claude-code · 2 projects                             │
+ ▌╰──2─╯ │                                                            │
+  ╭────╮ │   tickets                                                  │
   │ +  │ │   ⧉ explain average() · sandbox · 1/2 ✓ ⟳                  │
   ╰────╯ │                                                            │
          │ ←→ switch tab · ↓ into the tab · 1/2 jump · a cycle ai · … │
@@ -56,8 +56,8 @@ No files are written into your projects.
   waiting for you elsewhere, corner number = people online there. `+` joins or creates.
 - **overview tab** — who's here (with their AI and its auth badge; `○ (away)` for peers
   looking at another room), every ticket in the room its author has not closed — whoever
-  made it and whoever it is for; a closed one has left the list and stays on the log — and
-  the projects section. A ticket row says whose
+  made it and whoever it is for; a closed one has left the list and stays on the log. Each
+  person's line ends with how many projects they share here. A ticket row says whose
   it is by the colour of its kind (bright for yours, dim for somebody else's) and lists
   the *other* people on it with what each did: `✓` asked for no changes, `↻` asked for
   changes, `✕` a step failed, `…` said something, a bare name means nothing from them
@@ -78,6 +78,9 @@ No files are written into your projects.
   names, else its branch, else a commit it was read at); none when it came from none.
   `enter` on a ticket's line opens it (`esc` comes back here), `o` opens the pull
   request in your browser, `r` reads the merges again.
+- **projects tab** — each project in the room once, with who shares it. `enter` on a dim
+  `not here yet` row points collagen at your copy; `+ add project` adds a folder; `d`
+  removes one of yours.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.
@@ -86,7 +89,7 @@ No files are written into your projects.
 ### Navigation
 
 One grammar everywhere: **arrows move between sections** (tab bar, peers, tickets,
-projects, the rail) by where they are on screen; inside a section, arrows and `enter` do
+the rail) by where they are on screen; inside a section, arrows and `enter` do
 what's natural there. Number keys work from anywhere.
 
 | Key | Action |
