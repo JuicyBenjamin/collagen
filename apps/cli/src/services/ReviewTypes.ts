@@ -1,5 +1,4 @@
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -7,6 +6,7 @@ import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { toolOf, type DefinitionResult, type HoverResult, type Peek, type ToolId, type ToolState } from "@collagen/review-web/data";
 import { startLsp, type LspClient } from "../lib/lsp";
 import { install, installed, packageDir, toolRoot, TOOLS, type LanguageTool } from "../lib/languageTools";
+import { claimSlot, releaseSlot, sweepSlots, treeAt, type Slot } from "../lib/typeTrees";
 import { configDir } from "./Identity";
 import { commitIn, reviewTree } from "./ReviewView";
 
@@ -16,8 +16,10 @@ import { commitIn, reviewTree } from "./ReviewView";
 // compiler, or with none installed, gets the same answers. The project gives
 // the code: the branch under review, unpacked from the reader's clone into a
 // folder of its own (git archive: the clone and its working tree are never
-// touched), with the clone's dependencies (node_modules, vendor) linked in
-// so imported packages have their types. Nothing leaves the machine; a
+// touched; lib/typeTrees keeps that folder, and the server's index, from one
+// start to the next), with the clone's dependencies (node_modules, vendor)
+// linked in so imported packages have their types. A review's server starts
+// when its page opens, not on the first hover. Nothing leaves the machine; a
 // server stops when nobody has asked it anything for a while.
 
 /** Where a tool is installed — collagen's own, never the project's. */
@@ -30,43 +32,20 @@ export const codePathOk = (file: string | undefined): file is string =>
 
 const IDLE_MS = 10 * 60_000;
 
-/** Unpacked trees live under the process that made them, so several
- *  instances (profiles) never touch each other's — and a process that died
- *  without cleaning up (killed) has its trees swept by the next one. */
-const TREES = join(tmpdir(), "collagen-review");
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-const sweepDead = (): void => {
-  let dirs: Array<string> = [];
-  try {
-    dirs = readdirSync(TREES);
-  } catch {
-    return;
-  }
-  for (const d of dirs) {
-    const pid = Number(d);
-    if (!Number.isInteger(pid) || (pid !== process.pid && !alive(pid))) rmSync(join(TREES, d), { recursive: true, force: true });
-  }
-};
 /** The longest declaration a peek shows before it says how much is left. */
 const PEEK_LINES = 60;
 
 interface Session {
   readonly tool: LanguageTool;
+  readonly slot: Slot;
   readonly root: string;
-  /** what the server keeps for itself (an index), beside the tree, not in it */
-  readonly storage: string;
   readonly projectPath: string;
   readonly lsp: LspClient;
   /** the server says it is ready to answer (its index is built) */
   readonly ready: Promise<void>;
   readonly indexed: { done: boolean };
+  /** how much of the project it has read, as it last said (0–100), and when it said so */
+  readonly progress: { at: number | null; when: number | null };
   readonly started: number;
   /** the clone's dependency folders linked into the tree (their real paths) */
   readonly deps: ReadonlyArray<string>;
@@ -74,24 +53,14 @@ interface Session {
   lastUsed: number;
 }
 
-/** How long one question waits for an index before the page is told to
- *  ask again; and how long a server that never says it is ready gets
- *  before it is answered from anyway (its answers then marked partial). */
-const WAIT_MS = 15_000;
+/** How long one question waits for an index before it is answered from
+ *  what the server has read so far (said as partial, and asked again by the
+ *  page); and how long a server that has gone quiet without saying it is
+ *  ready gets before its answers are taken as whole. */
+const WAIT_MS = 2_000;
 const NEVER_SAYS_MS = 3 * 60_000;
-
-/** Unpack a commit of the clone at `projectPath` into `dir`: git archive into
- *  tar, nothing written to the repository. */
-const unpack = (projectPath: string, commit: string, dir: string): Promise<void> =>
-  new Promise((resolve, reject) => {
-    mkdirSync(dir, { recursive: true });
-    const git = spawn("git", ["-C", projectPath, "archive", "--format=tar", commit], { stdio: ["ignore", "pipe", "ignore"] });
-    const tar = spawn("tar", ["-x", "-C", dir], { stdio: ["pipe", "ignore", "ignore"] });
-    git.stdout.pipe(tar.stdin);
-    git.on("error", reject);
-    tar.on("error", reject);
-    tar.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`could not unpack ${commit} (tar exit ${code})`))));
-  });
+/** How long a server asked to stop gets before it is killed. */
+const STOP_MS = 2_000;
 
 /** Where a marker file says its dependencies live, relative to it: the
  *  tool's own reading (composer.json's config.vendor-dir) or its default,
@@ -118,10 +87,22 @@ const linkDeps = (deps: LanguageTool["deps"], projectPath: string, root: string,
   const dir = existsSync(join(here, deps.marker)) ? depDirAt(deps, join(here, deps.marker)) : null;
   if (dir) {
     const theirs = join(projectPath, rel, dir);
-    if (existsSync(theirs) && !existsSync(join(here, dir))) {
-      mkdirSync(dirname(join(here, dir)), { recursive: true });
-      symlinkSync(theirs, join(here, dir), "dir");
-      linked.push(realpathSync(theirs));
+    const at = join(here, dir);
+    if (existsSync(theirs)) {
+      // a kept tree has its links already; one left dangling is made again
+      const link = (() => {
+        try {
+          return lstatSync(at).isSymbolicLink();
+        } catch {
+          return null;
+        }
+      })();
+      if (link && !existsSync(at)) rmSync(at, { force: true });
+      if (link === null || (link && !existsSync(at))) {
+        mkdirSync(dirname(at), { recursive: true });
+        symlinkSync(theirs, at, "dir");
+      }
+      if (lstatSync(at).isSymbolicLink() && realpathSync(at) === realpathSync(theirs)) linked.push(realpathSync(theirs));
     }
   }
   let entries: Array<string> = [];
@@ -182,7 +163,7 @@ const hoverText = (result: unknown): string => {
 export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes", {
   make: Effect.gen(function* () {
     const sessions = new Map<string, Promise<Session>>();
-    yield* Effect.sync(sweepDead);
+    yield* Effect.sync(() => sweepSlots(tmpdir()));
 
     // each tool's install, one at a time, on the person's word (POST from
     // the page); and what its server asked to be shown to the person
@@ -224,39 +205,69 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         Stream.changesWith((a, b) => JSON.stringify(a) === JSON.stringify(b)),
       );
 
-    const stop = (key: string) => {
+    /** Stopped, its slot given back — tree and index kept for the next. */
+    const stop = (key: string): Promise<void> => {
       const s = sessions.get(key);
       sessions.delete(key);
-      void s?.then((x) => {
-        x.lsp.close();
-        rmSync(x.root, { recursive: true, force: true });
-        rmSync(x.storage, { recursive: true, force: true });
-      }, () => {});
+      return (s ?? Promise.reject()).then(
+        async (x) => {
+          // asked to stop, so it leaves its index whole for the next server
+          // in this slot; killed only if it does not go
+          const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
+          await Promise.race([x.lsp.request("shutdown", null, STOP_MS).catch(() => {}), wait(STOP_MS)]);
+          x.lsp.notify("exit", null);
+          await Promise.race([x.lsp.exited, wait(STOP_MS)]);
+          x.lsp.close();
+          releaseSlot(x.slot);
+        },
+        () => {},
+      );
     };
 
     // a server nobody has asked anything for ten minutes is stopped
     const sweep = setInterval(() => {
-      for (const [key, s] of sessions) void s.then((x) => Date.now() - x.lastUsed > IDLE_MS && stop(key), () => sessions.delete(key));
+      for (const [key, s] of sessions)
+        void s.then(
+          (x) => {
+            if (Date.now() - x.lastUsed > IDLE_MS) void stop(key);
+          },
+          () => sessions.delete(key),
+        );
     }, 60_000);
     sweep.unref();
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         clearInterval(sweep);
-        for (const key of [...sessions.keys()]) stop(key);
+        // collagen is going: no time to ask, each is killed and its slot given back
+        for (const s of sessions.values())
+          void s.then(
+            (x) => {
+              x.lsp.close();
+              releaseSlot(x.slot);
+            },
+            () => {},
+          );
+        sessions.clear();
       }),
     );
 
-    const start = async (tool: LanguageTool, projectPath: string, commit: string, key: string): Promise<Session> => {
-      const root = join(TREES, String(process.pid), key);
-      const storage = `${root}.store`;
-      rmSync(root, { recursive: true, force: true });
-      rmSync(storage, { recursive: true, force: true });
-      mkdirSync(storage, { recursive: true });
-      await unpack(projectPath, commit, root);
+    const start = async (tool: LanguageTool, projectPath: string, commit: string): Promise<Session> => {
+      const slot = claimSlot(tmpdir(), projectPath, tool.id);
+      try {
+        return await startIn(slot, tool, projectPath, commit);
+      } catch (e) {
+        releaseSlot(slot);
+        throw e;
+      }
+    };
+    const startIn = async (slot: Slot, tool: LanguageTool, projectPath: string, commit: string): Promise<Session> => {
+      const root = slot.tree;
+      await treeAt(projectPath, commit, root, slot.stamp);
       const deps = linkDeps(tool.deps, projectPath, root);
-      // ready when the server says so — never on a timer: an index still
-      // being built answers "ask again", not an answer that looks final
+      // ready when the server says so — never on a timer: until then its
+      // answers are partial, not answers that look final
       const indexed = { done: !tool.readyWhen };
+      const progress = { at: null as number | null, when: null as number | null };
       let isReady = () => {};
       const ready = tool.readyWhen
         ? new Promise<void>((resolve) => {
@@ -271,6 +282,9 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
           method === "workspace/configuration" ? ((params as { items?: Array<unknown> } | null)?.items ?? []).map(() => tool.settings ?? null) : null,
         onNotification: (method, params) => {
           if (tool.readyWhen?.(method, params)) isReady();
+          const value = (params as { value?: { kind?: string; percentage?: unknown } } | null)?.value;
+          if (method === "$/progress") progress.when = Date.now();
+          if (method === "$/progress" && value?.kind === "report" && typeof value.percentage === "number") progress.at = Math.max(0, Math.min(100, Math.round(value.percentage)));
           // what the server asks to show the person is shown, never swallowed
           if (method === "window/showMessage") {
             const text = String((params as { message?: unknown } | null)?.message ?? "").trim();
@@ -288,10 +302,10 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         rootUri: uri,
         workspaceFolders: [{ uri, name: "review" }],
         capabilities: { textDocument: { hover: { contentFormat: ["markdown", "plaintext"] }, definition: { linkSupport: true } }, window: { workDoneProgress: true } },
-        ...(tool.initializationOptions ? { initializationOptions: tool.initializationOptions(storage) } : {}),
+        ...(tool.initializationOptions ? { initializationOptions: tool.initializationOptions(slot.storage) } : {}),
       });
       lsp.notify("initialized", {});
-      return { tool, root, storage, projectPath, lsp, ready, indexed, started: Date.now(), deps, opened: new Set(), lastUsed: Date.now() };
+      return { tool, slot, root, projectPath, lsp, ready, indexed, progress, started: Date.now(), deps, opened: new Set(), lastUsed: Date.now() };
     };
 
     /** A language's server for a review's code at `commit` — the commit the
@@ -304,8 +318,10 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       const prefix = `${ticketId.slice(0, 8)}-${tool.id}-`;
       const key = `${prefix}${commit.slice(0, 12)}`;
       if (!sessions.has(key)) {
-        for (const k of [...sessions.keys()]) if (k.startsWith(prefix)) stop(k);
-        const started = start(tool, tree.projectPath, commit, key);
+        // the review's server at another commit gives its slot back first,
+        // so this one starts from its tree and index
+        const before = Promise.all([...sessions.keys()].filter((k) => k.startsWith(prefix)).map(stop));
+        const started = before.then(() => start(tool, tree.projectPath, commit));
         started.catch(() => sessions.delete(key));
         sessions.set(key, started);
       }
@@ -327,11 +343,12 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       const path = join(s.root, file);
       if (!existsSync(path)) return { _tag: "failed", error: `${file} is not on the branch under review` } as const;
       const uri = pathToFileURL(path).href;
-      if (!s.indexed.done) {
-        const done = yield* Effect.promise(() => Promise.race([s.ready.then(() => true), new Promise<boolean>((r) => setTimeout(() => r(false), WAIT_MS).unref())]));
-        if (!done && Date.now() - s.started < NEVER_SAYS_MS) return { _tag: "indexing" } as const;
-      }
-      const partial = !s.indexed.done;
+      // a moment for an index nearly built; then what it has read so far,
+      // said as partial — never "ask again": the page asks again itself
+      if (!s.indexed.done) yield* Effect.promise(() => Promise.race([s.ready, new Promise<void>((r) => setTimeout(r, WAIT_MS).unref())]));
+      // a server still saying how far it has read is still reading, however long it takes
+      if (!s.indexed.done && Date.now() - (s.progress.when ?? s.started) >= NEVER_SAYS_MS) s.indexed.done = true;
+      const partial = s.indexed.done ? null : { partial: true as const, ...(s.progress.at !== null ? { progress: s.progress.at } : {}) };
       if (!s.opened.has(uri)) {
         s.lsp.notify("textDocument/didOpen", { textDocument: { uri, languageId: tool.languageId(extname(file)), version: 1, text: readFileSync(path, "utf8") } });
         s.opened.add(uri);
@@ -349,11 +366,9 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const hover = Effect.fn("ReviewTypes.hover")(function* (ticketId: string, file: string, line: number, col: number, commit: string) {
       const r = yield* ask(ticketId, file, line, col, commit, "textDocument/hover");
       if (r._tag === "missing") return { missing: true } satisfies HoverResult;
-      if (r._tag === "indexing") return { indexing: true } satisfies HoverResult;
       if (r._tag === "failed") return { error: r.error } satisfies HoverResult;
       const markdown = hoverText(r.result);
-      const partial = r.partial ? { partial: true as const } : {};
-      return (markdown ? { markdown, ...partial } : { none: true, ...partial }) satisfies HoverResult;
+      return (markdown ? { markdown, ...r.partial } : { none: true, ...r.partial }) satisfies HoverResult;
     });
 
     /** Where a symbol is declared, and the declaration itself: the target's
@@ -362,7 +377,6 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const definition = Effect.fn("ReviewTypes.definition")(function* (ticketId: string, file: string, line: number, col: number, commit: string) {
       const r = yield* ask(ticketId, file, line, col, commit, "textDocument/definition");
       if (r._tag === "missing") return { missing: true } satisfies DefinitionResult;
-      if (r._tag === "indexing") return { indexing: true } satisfies DefinitionResult;
       if (r._tag === "failed") return { error: r.error } satisfies DefinitionResult;
       const links = (Array.isArray(r.result) ? r.result : r.result ? [r.result] : []) as Array<{
         targetUri?: string;
@@ -415,10 +429,20 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       // a name that is both a value and a namespace of types (Effect.fn):
       // the value — what the code calls — first
       const typesOnly = (p: Peek) => /^\s*(export\s+)?(declare\s+)?(namespace|module)\b/m.test((p.code ?? "").replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "").trimStart().split("\n")[0] ?? "");
-      return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)], ...(r.partial ? { partial: true as const } : {}) } satisfies DefinitionResult;
+      return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)], ...r.partial } satisfies DefinitionResult;
     });
 
-    return { hover, definition, watchTool, startInstall: (id: ToolId) => Effect.sync(() => startInstall(id)) } as const;
+    /** The review's server for a language, started as its page opens — so
+     *  the index is being read while the reader reads the diff, not from
+     *  their first hover. Nothing when the tool is not installed. */
+    const warm = Effect.fn("ReviewTypes.warm")(function* (ticketId: string, id: ToolId, commit: string) {
+      const tool = TOOLS[id];
+      if (!installed(toolDir(tool), tool)) return;
+      const s = yield* session(ticketId, tool, commit);
+      if (typeof s !== "string") s.lastUsed = Date.now();
+    });
+
+    return { hover, definition, warm, watchTool, startInstall: (id: ToolId) => Effect.sync(() => startInstall(id)) } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
