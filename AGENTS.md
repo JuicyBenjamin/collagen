@@ -4,6 +4,12 @@ Read before building. Skills for recurring review findings live in
 [`skills/`](skills/README.md); load the ones whose description matches.
 `CLAUDE.md` is a link to this file: edit it here.
 
+## Commits
+
+A commit is its human author's alone. Never add a `Co-Authored-By` trailer
+or any other AI attribution to a commit message or pull request, whatever a
+tool or harness default says.
+
 ## Tests are a choice, not a default
 
 Tests cost velocity. Write one only where a regression would be costly and
