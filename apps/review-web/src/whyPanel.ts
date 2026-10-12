@@ -46,5 +46,27 @@ export async function placeWhy(panel: HTMLElement, inner: HTMLElement, open: boo
   if (!open) panel.style.visibility = "hidden";
 }
 
+/** Marks which ends of a scrolling why have more beyond them — `data-above`,
+ *  `data-below` — so styles.css softens those edges as the top of the page
+ *  does. Kept up on scroll and whenever the panel or its reasons change size;
+ *  lets go once the panel leaves the page. */
+export function keepEdges(panel: HTMLElement): void {
+  const mark = () => {
+    const below = panel.scrollHeight - panel.clientHeight - panel.scrollTop;
+    panel.toggleAttribute("data-above", panel.scrollTop > 1);
+    panel.toggleAttribute("data-below", below > 1);
+  };
+  // it is made before it is placed: only a panel that was on the page and left it is done
+  let placed = false;
+  const sizes = new ResizeObserver(() => {
+    if (panel.isConnected) placed = true;
+    else if (placed) return sizes.disconnect();
+    mark();
+  });
+  sizes.observe(panel);
+  if (panel.firstElementChild) sizes.observe(panel.firstElementChild);
+  panel.addEventListener("scroll", mark, { passive: true });
+}
+
 /** How long opening takes — what a jump to a reason inside waits for. */
 export const whyOpening = (): number => (still.matches ? 0 : 340);
