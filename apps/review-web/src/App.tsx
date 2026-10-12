@@ -15,7 +15,7 @@ import { DraftsBar } from "./components/DraftsBar";
 import { Unplaced } from "./components/Unplaced";
 import { HostActivity } from "./components/HostActivity";
 import { diffNow } from "./diffNow";
-import { placeWhy, whyOpening } from "./whyPanel";
+import { keepEdges, placeWhy, whyOpening } from "./whyPanel";
 import { assumedNow } from "./assumedNow";
 import { AssumedMark, AssumedWhy, VerdictMark } from "./components/Assumption";
 
@@ -587,7 +587,15 @@ function UnitSection(props: {
         <Show when={hasWhy(props.unit, shaped())}>
           <div class="why-rail">
             <WhyToggle open={open()} onToggle={() => setOpen(!open())} controls={`why-${props.unit.id}`} class="rail-toggle" />
-            <aside class="why-panel" id={`why-${props.unit.id}`} ref={(el) => (panel = el)} aria-label="Why">
+            <aside
+              class="why-panel"
+              id={`why-${props.unit.id}`}
+              ref={(el) => {
+                panel = el;
+                keepEdges(el);
+              }}
+              aria-label="Why"
+            >
               <div class="why" ref={(el) => (inner = el)}>
                 <Why unit={props.unit} decisions={shaped()} unitsOf={props.unitsOf} unmatched={props.unmatched} />
               </div>
