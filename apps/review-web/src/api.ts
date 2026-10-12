@@ -1,5 +1,5 @@
 import { GET, live } from "@solidjs/web/server-functions";
-import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -154,3 +154,10 @@ export const repinDraft = async (ticketId: string, id: string, commit: string): 
   "use server";
   return run((b) => b.repin(ticketId, id, commit));
 };
+
+/** The merge history page's one read: a room's merges and the tickets each
+ *  came from, from one moment — read again on the reader's ask. */
+export const mergeHistory = GET(async (roomId: string): Promise<MergeHistory | null> => {
+  "use server";
+  return run((b) => b.merges(roomId));
+});

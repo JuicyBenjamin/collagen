@@ -5,9 +5,13 @@
 # stand-in (fake-gh.mjs). In the pty: `3` opens the tab, enter drops into the
 # list, `o` hands #6's url to the browser opener (a stand-in on PATH), ↓
 # reaches the ticket under it, enter opens its page, esc comes back to the
-# merges with the cursor where it was.
+# merges with the cursor where it was, and `w` opens the same history as a
+# web page (review-web, /merges/<roomId>), whose data is read here as the
+# page reads it.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
+# the web page is a Solid app served from its build; build it if this checkout has not
+[ -f "$ROOT/../review-web/dist/server/entry.js" ] || (cd "$ROOT/../review-web" && pnpm build > /dev/null 2>&1)
 mkdir -p "$OUT/sandbox/.git/refs/remotes/origin"
 printf 'ref: refs/heads/feat/paging\n' > "$OUT/sandbox/.git/HEAD"
 printf '[remote "origin"]\n\turl = git@github.com:acme/sandbox.git\n' > "$OUT/sandbox/.git/config"
@@ -15,7 +19,7 @@ printf 'ref: refs/remotes/origin/main\n' > "$OUT/sandbox/.git/refs/remotes/origi
 GH="$OUT/gh"; mkdir -p "$GH"
 start bob
 PTY="$OUT/merges-tui.out"; MARKS="$OUT/merges-tui.marks"; LOG="$OUT/merges-tui.log"
-rm -f "$PTY" "$MARKS" "$OUT/merges-tui.go" "$LOG" "$LOG.keys" "$OUT/opened"
+rm -f "$PTY" "$MARKS" "$OUT/merges-tui.go" "$OUT/merges-tui.done" "$LOG" "$LOG.keys" "$OUT/opened"
 mkdir -p "$OUT/bin"; for b in open xdg-open; do printf '#!/bin/sh\necho "$@" >> "%s/opened"\n' "$OUT" > "$OUT/bin/$b"; chmod +x "$OUT/bin/$b"; done
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/merges-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
@@ -24,7 +28,9 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf 'o'; sleep 2
   printf '\033[B'; sleep 1; mark M2_ticket_row
   printf '\r'; sleep 2; mark M3_ticket
-  printf '\033'; sleep 2; mark M4_back; sleep 1; printf 'q' ) | \
+  printf '\033'; sleep 2; mark M4_back; sleep 1
+  printf 'w'; sleep 2; mark M5_web
+  for i in $(seq 1 30); do [ -f "$OUT/merges-tui.done" ] && break; sleep 1; done; printf 'q' ) | \
   PATH="$OUT/bin:$PATH" COLLAGEN_GH="$E2E/fake-gh.mjs" FAKE_GH_DIR="$GH" HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-30} cols ${COLS:-100}; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
 
@@ -35,7 +41,7 @@ ASKED=$(call $A "$SA" ask-review "$ASK")
 expect "the review ticket is on the log" "$ASKED" "review ticket filed"
 touch "$OUT/merges-tui.go"
 await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
-await_mark M4_back; sleep 1
+await_mark M5_web; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
 
@@ -44,6 +50,20 @@ expect "the host was asked what was merged into main" "$(grep -c '"base=main"' "
 expect "the cursor reached the list" "$KEYS" "merges"
 expect "enter on the ticket's line opened its page" "$KEYS" "ticket-steps"
 expect "o handed the pull request to the browser" "$(cat "$OUT/opened" 2>/dev/null)" "^https://github.com/acme/sandbox/pull/6$"
+echo "## the same history as a web page"
+WEB=$(grep -oE 'http://[^ ]+/merges/[^ ]+' "$OUT/opened" 2>/dev/null | head -1)
+expect "w handed the merges page to the browser" "$WEB" "^${A%/mcp}/merges/[0-9A-Za-z-]+$"
+ROOM=${WEB##*/}
+expect "the page is served" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$WEB")" "^200 text/html"
+SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
+SFN=$(grep -oE 'registerServerReference\("mergeHistory-[0-9a-f]+"' "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')
+HISTORY=$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "[\"$ROOM\"]")")
+expect "its data: into main, the latest first" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["projects"][0]; print(d["base"], *[m["number"] for m in d["merges"]])')" "^main 6 5$"
+expect "…#6 linked to its pull request, her ticket under it as hers" "$(echo "$HISTORY" | python3 -c 'import json,sys; m=json.load(sys.stdin)["projects"][0]["merges"][0]; t=m["tickets"][0]; print(m["url"], t["name"], t["author"], t["mine"])')" "^https://github.com/acme/sandbox/pull/6 Paging the rows you True$"
+expect "…#5 from no ticket" "$(echo "$HISTORY" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["projects"][0]["merges"][1]["tickets"]))')" "^0$"
+expect "a room not here has no history" "$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=%5B%22not-a-room%22%5D")" "^null$"
+touch "$OUT/merges-tui.done"
+
 HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
 [ -n "${PYTE_PATH:-}" ] && HAVE_PYTE=yes
 if [ "$HAVE_PYTE" = yes ]; then
