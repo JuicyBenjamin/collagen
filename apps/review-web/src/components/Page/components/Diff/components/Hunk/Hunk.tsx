@@ -362,7 +362,7 @@ export function Hunk(props: {
  *  to peek where it is declared (removed lines are not the branch's, not
  *  asked). A line changed in place is one row, its removed and added words
  *  marked (inline.ts). */
-function Lines(props: {
+export function Lines(props: {
   hunk: HunkData;
   /** the pull request's line comments to show under their lines: all, the
    *  new file's only (the whole file: its old numbers are not the diff's),
@@ -370,6 +370,8 @@ function Lines(props: {
   threads?: "all" | "new" | "none";
   /** a line's + (on hover) opens a comment on it, or on a block dragged out from it */
   talk?: boolean;
+  /** with talk: the lines that take one — those of the pull request's diff (all, unless said) */
+  talkOn?: (line: DiffLine) => boolean;
 }) {
   const spans = createMemo(() => highlightHunk(props.hunk));
   // the rows drawn; a pick and a peek are by row, never by line
@@ -464,7 +466,7 @@ function Lines(props: {
                 >
                   {/* GitHub's +: shown on hover; press and drag down (or shift-click
                       another line's) for a block of lines */}
-                  <Show when={talks()}>
+                  <Show when={talks() && (props.talkOn?.(line) ?? true)}>
                     <button
                       type="button"
                       class="add-comment"
