@@ -13,6 +13,7 @@ import { StateStore } from "./StateStore";
 import { steeringLine, steeringOf } from "../lib/steering";
 import { describeIdentity, ownIdentities } from "./Authorship";
 import { hostOf } from "./RepoHost";
+import { actedBy } from "../lib/agents";
 
 export type RoomService = Context.Service.Shape<typeof Room>;
 
@@ -172,7 +173,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
             const members = yield* SubscriptionRef.get(room.members);
             return peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8);
           });
-        const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string) =>
+        // `agent`: which of their agents did it, so the agent told can tell a
+        // person's own word from another agent's
+        const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string, agent?: string) =>
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis;
             const message: RoomMessage = {
@@ -186,6 +189,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               findings,
               ts: now,
               ticketId: ticket.id,
+              ...(agent ? { agent } : {}),
             };
             // where it goes next is the runner's line: inbox, codex queue or a background resume
             yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)}: ${fromName} ${what}`);
@@ -206,7 +210,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (!isParticipant(change.ticket, trace, identity.pubkey)) continue;
                 if (actionableSteps(change.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
                 const actorName = yield* nameOf(change.step.owner);
-                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actorName));
+                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent);
               }
             }),
           ),
@@ -229,7 +233,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
                 if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
                 const fresh = prev?.has(review.ticketId) !== true;
-                yield* notify(myThreadFor(ticket, trace, identity.pubkey, review.author), review.author, review.authorName, ticket, "revised the why", reviewUpdateText(ticket, review, fresh));
+                yield* notify(myThreadFor(ticket, trace, identity.pubkey, review.author), review.author, review.authorName, ticket, "revised the why", reviewUpdateText(ticket, review, fresh), review.agent);
               }
             }),
           ),
@@ -289,7 +293,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 const ticket = tickets.get(message.ticketId);
                 if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
                 if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
-                yield* notify(myThreadFor(ticket, trace, identity.pubkey, message.from), message.from, message.fromName, ticket, "weighed in", weighInText(ticket, message, yield* nameOf(message.to)));
+                yield* notify(myThreadFor(ticket, trace, identity.pubkey, message.from), message.from, message.fromName, ticket, "weighed in", weighInText(ticket, message, yield* nameOf(message.to)), message.agent);
               }
             }),
           ),

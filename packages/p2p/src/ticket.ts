@@ -42,6 +42,11 @@ export const TicketStep = Schema.Struct({
   /** A take that says something without a verdict: it answers the ticket,
    *  but approves nothing. Absent on every other step (and on older takes). */
   comment: Schema.optional(Schema.Boolean),
+  /** Which of the owner's agents wrote this state (Claude Code, Codex …) —
+   *  attribution, never ownership: the step stays the person's. Absent when
+   *  the person acted themselves, or nobody knows. Set by every write to the
+   *  step, so it names who did what it says now. */
+  agent: Schema.optional(Schema.String),
   updatedAt: Schema.Finite,
 });
 export type TicketStep = typeof TicketStep.Type;
@@ -182,6 +187,10 @@ export const Ticket = Schema.Struct({
    *  their agent in the close outcome, and acted on then: not on the last
    *  settle, because that is a reader's word, not the author's acceptance. */
   whenClosed: Schema.optional(Schema.String),
+  /** Which of the author's agents wrote their latest revision — filed it, or
+   *  last amended it. The author's structure, like the goal: it follows
+   *  `structureAt`. Absent when the author did it themselves, or nobody knows. */
+  agent: Schema.optional(Schema.String),
   updatedAt: Schema.Finite,
 });
 export type Ticket = typeof Ticket.Type;
@@ -193,7 +202,7 @@ export type Ticket = typeof Ticket.Type;
  *  - steps are unioned by id — the creator adds structure, owners never lose steps
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
  *    by updatedAt, then lexicographic result as the final tiebreak
- *  - title, goal, kind, from, after and whenClosed follow the copy with the newer
+ *  - title, goal, kind, from, after, whenClosed and agent follow the copy with the newer
  *    `structureAt` — the author's own clock, which only the author advances,
  *    so a peer's take or settle (which advances updatedAt on a possibly stale
  *    copy) can never revert the author's latest decision
@@ -222,7 +231,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
         : structureTiebreak(local, incoming);
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
-  const { from: _lf, after: _la, whenClosed: _lw, partOf: _lp, turns: _lt, order: _lo, ...rest } = local;
+  const { from: _lf, after: _la, whenClosed: _lw, partOf: _lp, turns: _lt, order: _lo, agent: _lag, ...rest } = local;
   const partOf = union(local.partOf, incoming.partOf, (partMove) => partMove.id);
   const turns = union(local.turns, incoming.turns, (turn) => turn.id);
   const order = union(local.order, incoming.order, (ordering) => `${ordering.at}|${ordering.by}|${ordering.ids.join(",")}`);
@@ -246,6 +255,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     ...(author.from !== undefined ? { from: author.from } : {}),
     ...(author.after !== undefined ? { after: author.after } : {}),
     ...(author.whenClosed !== undefined ? { whenClosed: author.whenClosed } : {}),
+    ...(author.agent !== undefined ? { agent: author.agent } : {}),
     structureAt: author.structureAt,
     steps: [...steps.values()],
     ...(closed ? { closed } : {}),
@@ -502,7 +512,7 @@ export function turnEpic(
 }
 
 /** The author-controlled structure, as one comparable string. */
-const structureKey = (ticket: Ticket): string => JSON.stringify([ticket.goal, ticket.kind, ticket.from ?? null, ticket.whenClosed ?? null, ticket.after ?? null, ticket.title ?? null]);
+const structureKey = (ticket: Ticket): string => JSON.stringify([ticket.goal, ticket.kind, ticket.from ?? null, ticket.whenClosed ?? null, ticket.after ?? null, ticket.title ?? null, ticket.agent ?? null]);
 
 /** Two author revisions in the same millisecond: pick one the same way on
  *  every peer, whichever side it arrived from, so the merge still commutes. */
@@ -549,7 +559,8 @@ function mergeStep(first: TicketStep, second: TicketStep): TicketStep {
   if (firstRank !== secondRank) return firstRank > secondRank ? first : second;
   if (first.updatedAt !== second.updatedAt) return first.updatedAt > second.updatedAt ? first : second;
   // deterministic final tiebreak so all peers converge on the same copy
-  return (first.result ?? "") >= (second.result ?? "") ? first : second;
+  if ((first.result ?? "") !== (second.result ?? "")) return (first.result ?? "") > (second.result ?? "") ? first : second;
+  return (first.agent ?? "") >= (second.agent ?? "") ? first : second;
 }
 
 /** The conversation a step belongs to. A ticket has no thread of its own:
@@ -581,6 +592,14 @@ export const reviewStepId = (name: string, key: string, taken: ReadonlyMap<strin
   return owner === undefined || owner === key ? base : `${base}-${key.slice(0, 4)}`;
 };
 
+/** A record (a step, a ticket's revision, a review) as its latest writer
+ *  left it: their agent named, or — when the person acted themselves — none,
+ *  so an earlier agent's name does not stay on words it did not write. */
+export const withAgent = <A extends { readonly agent?: string | undefined }>(record: A, agent: string | undefined): A => {
+  const { agent: _, ...rest } = record;
+  return (agent ? { ...rest, agent } : rest) as A;
+};
+
 export type SettleOutcome =
   /** the step was yours: settled (or failed) in place */
   | "settled"
@@ -604,6 +623,7 @@ export function settleStep(
   result: string,
   failed: boolean,
   now: number,
+  agent?: string,
 ): Settlement | null {
   const step = ticket.steps.find((ticketStep) => ticketStep.id === stepId);
   if (!step) return null;
@@ -613,7 +633,7 @@ export function settleStep(
     ticket: {
       ...ticket,
       updatedAt: now,
-      steps: ticket.steps.map((ticketStep) => (ticketStep.id === stepId ? { ...ticketStep, status, result, updatedAt: now } : ticketStep)),
+      steps: ticket.steps.map((ticketStep) => (ticketStep.id === stepId ? withAgent({ ...ticketStep, status, result, updatedAt: now }, agent) : ticketStep)),
     },
     outcome: "settled",
   };
@@ -632,6 +652,7 @@ export function postReview(
   findings: string,
   failed: boolean,
   now: number,
+  agent?: string,
   comment = false,
 ): { readonly ticket: Ticket; readonly stepId: string } {
   const id = reviewStepId(by.name, by.key, new Map(ticket.steps.map((ticketStep) => [ticketStep.id, ticketStep.owner])));
@@ -644,6 +665,7 @@ export function postReview(
     needs: existing?.needs ?? [],
     status: failed ? "failed" : "settled",
     result: findings,
+    ...(agent ? { agent } : {}),
     ...(comment && !failed ? { comment: true } : {}),
     updatedAt: now,
   };

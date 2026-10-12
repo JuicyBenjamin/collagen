@@ -1,5 +1,6 @@
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { ticketName, type Outgoing, type Proposal } from "@collagen/p2p";
+import { actingAgent } from "../lib/agents";
 import { NO_TITLE } from "../lib/review";
 import { Dispatch } from "./Dispatch";
 import { StateStore } from "./StateStore";
@@ -127,11 +128,13 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
      *  outbox is a receipt of what left this machine, so a failure recorded
      *  as a send would be a lie the person cannot see through. The caller
      *  gets the outcome, tag and all: some of them have to retry. */
-    const send = (proposal: Omit<Proposal, "id" | "ts">) =>
+    const send = (proposal: Omit<Proposal, "id" | "ts" | "agent">) =>
       Effect.gen(function* () {
-        const outcome = yield* dispatch.perform(proposal.roomId, proposal.outgoing);
+        // the agent whose tool call this is — none when the person acted
+        const agent = yield* actingAgent;
+        const outcome = yield* dispatch.perform(proposal.roomId, proposal.outgoing, agent);
         if (outcome._tag === "sent") {
-          const full: Proposal = { ...proposal, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis };
+          const full: Proposal = { ...proposal, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis, ...(agent ? { agent } : {}) };
           yield* store.update((state) => ({ ...state, sent: [full, ...(state.sent ?? [])].slice(0, KEPT) }));
         }
         const mark = outcome._tag === "sent" ? "↗" : "✕";
@@ -142,7 +145,7 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
     /** For a caller that only relays what happened to its agent: the text,
      *  without the tag. Anything that must react to a refusal (retry, keep a
      *  peer's request alive) uses `send` and reads the tag. */
-    const tell = (proposal: Omit<Proposal, "id" | "ts">) => send(proposal).pipe(Effect.map((outcome) => outcome.text));
+    const tell = (proposal: Omit<Proposal, "id" | "ts" | "agent">) => send(proposal).pipe(Effect.map((outcome) => outcome.text));
 
     return { all, changes, send, tell } as const;
   }),

@@ -21,6 +21,7 @@ import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { runDiagnosticAtom } from "./atoms";
 import { openReviewPageAtom } from "../review/atoms";
 import { EpicPage } from "./EpicPage";
+import { via } from "../../../lib/agents";
 
 /** A section title. Space does the chunking — two blank lines above, no
  *  box, no rule — and the title sits at the margin while its rows indent. */
@@ -133,7 +134,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
   const lines = rows.flatMap((entry, row) => {
     const head = (
       <>
-        <Arrow from={nameFor(entry.m.from)} to={nameFor(entry.m.to)} mine={entry.m.from === me} />
+        <Arrow from={`${nameFor(entry.m.from)}${via(entry.m.agent)}`} to={nameFor(entry.m.to)} mine={entry.m.from === me} />
         <span fg={theme.dim}> · {entry.m.intent}</span>
       </>
     );
@@ -179,7 +180,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
       </text>
       <text fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
         {"  "}
-        {ticket.project} · by {nameFor(ticket.createdBy)} · {done}/{ticket.steps.length} settled
+        {ticket.project} · by {nameFor(ticket.createdBy)}{via(ticket.agent)} · {done}/{ticket.steps.length} settled
         {people.length > 0 ? ` · ${people}` : ""}
       </text>
       {/* what kind of thing this is, in the app's own words (p2p KINDS — the
@@ -221,7 +222,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
                 {review.summary}
               </text>
               <text fg={focused ? theme.accent : theme.dim} truncate wrapMode="none">
-                {"  "}enter reads it · o shows the diff by decision · by {nameFor(review.author)}
+                {"  "}enter reads it · o shows the diff by decision · by {nameFor(review.author)}{via(review.agent)}
               </text>
             </>
           )}
@@ -250,7 +251,8 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
                   <text fg={focused && index === sSel ? theme.accent : theme.fg} truncate wrapMode="none">
                     {focused && index === sSel ? "› " : "  "}
                     <span fg={step.status === "settled" ? theme.ok : step.status === "failed" ? theme.warn : theme.dim}>{STEP_GLYPH[step.status]}</span> {step.id}{" "}
-                    {nameFor(step.owner)} · {step.intent}
+                    {nameFor(step.owner)}
+                    {step.agent ? <span fg={theme.dim}>{via(step.agent)}</span> : null} · {step.intent}
                     {step.needs.length > 0 ? <span fg={theme.dim}> · needs {step.needs.join("+")}</span> : null}
                   </text>
                   <text fg={theme.dim} wrapMode="word">

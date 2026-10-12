@@ -13,7 +13,7 @@ const peers: Peer[] = [
   { key: "k-dave", name: "dave", ai: null, projects: [], ...here },
 ];
 
-const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: string }>) =>
+const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: string; agent?: string }>) =>
   Layer.effect(
     Rooms,
     Effect.gen(function* () {
@@ -21,12 +21,12 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
       const inbound = yield* PubSub.unbounded<RoomMessage>();
       const sendTo = (
         peerKey: string,
-        payload: { project: string; intent: string; findings: string },
+        payload: { project: string; intent: string; findings: string; agent?: string },
       ) =>
         peerKey === "k-dave"
           ? Effect.fail(new NotWritable({ roomId: "testroom" }))
           : Effect.sync(() => {
-              sent.push({ peerKey, intent: payload.intent, findings: payload.findings });
+              sent.push({ peerKey, intent: payload.intent, findings: payload.findings, ...(payload.agent ? { agent: payload.agent } : {}) });
               const message: RoomMessage = {
                 id: `m-${sent.length}`,
                 threadId: deriveThreadId("me", peerKey, payload.project),
@@ -112,7 +112,7 @@ const stateStoreStub = Layer.effect(
 );
 
 const make = () => {
-  const sent: Array<{ peerKey: string; intent: string; findings: string }> = [];
+  const sent: Array<{ peerKey: string; intent: string; findings: string; agent?: string }> = [];
   const layer = Scripting.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(roomsStub(sent), Inbox.layer)),
     Layer.provideMerge(stateStoreStub),
@@ -163,6 +163,19 @@ describe("Scripting", () => {
     expect(result.status).toBe("ok");
     expect((result as { output: { asked: number } }).output).toEqual({ asked: 2 });
     expect(sent.map((delivery) => delivery.peerKey).sort()).toEqual(["k-bob", "k-carol"]);
+  });
+
+  it("a script's sends name the agent that ran it, as its tool calls do", async () => {
+    const { layer, sent } = make();
+    await run(
+      layer,
+      Effect.gen(function* () {
+        const scripting = yield* Scripting;
+        yield* Effect.promise(() => scripting.execute(`return await collagen.sendToPeer({ peer: "bob", project: "sandbox", intent: "ping", findings: "hi" });`, undefined, "Codex"));
+        yield* Effect.promise(() => scripting.execute(`return await collagen.sendToPeer({ peer: "bob", project: "sandbox", intent: "ping", findings: "hi" });`));
+      }),
+    );
+    expect(sent.map((message) => message.agent)).toEqual(["Codex", undefined]);
   });
 
   it("rejects unbounded loops at validation, before anything runs", async () => {
