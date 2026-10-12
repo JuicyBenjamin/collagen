@@ -1,5 +1,6 @@
 import { Option, Schema } from "effect";
 import { AdoptedThread, DraftComment, LocalState, Merging, Project, Proposal, Settings, Steering, TranscriptAsk } from "@collagen/p2p";
+import { checkedThemes } from "@collagen/review-web/themeData";
 
 /** Reading the user's own state file must never cost them their rooms.
  *
@@ -153,12 +154,18 @@ export const salvageState = (text: string): Salvaged => {
   const merging = decode(Merging, src.merging);
   if (src.merging !== undefined && merging === null) dropped.push("unreadable merge settings (back to: never)");
 
+  // the page's themes, each checked as a pasted one is: what could not be shown is left out
+  const themes = src.themes === undefined ? undefined : checkedThemes(src.themes);
+  const savedGiven = typeof src.themes === "object" && src.themes !== null && Array.isArray((src.themes as { saved?: unknown }).saved) ? (src.themes as { saved: ReadonlyArray<unknown> }).saved.length : 0;
+  if (themes && themes.saved.length < savedGiven) dropped.push("unreadable page themes");
+
   return {
     state: {
       preferredAi,
       ...(steering ? { steering } : {}),
       ...(settings ? { settings } : {}),
       ...(merging ? { merging } : {}),
+      ...(themes ? { themes } : {}),
       rooms,
       ...(threads ? { threads } : {}),
       ...(consumed ? { consumed } : {}),

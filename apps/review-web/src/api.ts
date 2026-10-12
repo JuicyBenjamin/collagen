@@ -1,5 +1,6 @@
 import { GET } from "@solidjs/web/server-functions";
 import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -175,4 +176,11 @@ export const mergeView = async (ticketId: string): Promise<MergeView | null> => 
 export const setMerge = async (ticketId: string, level: MergeFor | null): Promise<MergeView | null> => {
   "use server";
   return run((backend) => backend.setMerge(ticketId, level));
+};
+
+/** Keep the page's themes in collagen — where the person's agent can choose
+ *  and add them too (set-theme). What comes back is what is kept. */
+export const saveThemes = async (themes: PageThemes): Promise<PageThemes> => {
+  "use server";
+  return run((backend) => backend.saveThemes(themes));
 };

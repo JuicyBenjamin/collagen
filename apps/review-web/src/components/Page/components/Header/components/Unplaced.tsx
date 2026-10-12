@@ -29,7 +29,7 @@ export function Unplaced() {
                 <StrengthMark strength={readStrength(draft.body).strength} />
                 <span class="unplaced-body">{readStrength(draft.body).text}</span>
                 <Show when={!draft.posted}>
-                  <button type="button" class="quiet small" onClick={() => void (hostNow.isDraft(draft) ? hostNow.decline([draft.id]) : hostNow.unpend([draft.id]))}>
+                  <button type="button" class="btn btn-xs" onClick={() => void (hostNow.isDraft(draft) ? hostNow.decline([draft.id]) : hostNow.unpend([draft.id]))}>
                     {hostNow.isDraft(draft) ? "Decline" : "Delete"}
                   </button>
                 </Show>

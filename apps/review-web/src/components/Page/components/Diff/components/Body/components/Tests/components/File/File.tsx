@@ -53,7 +53,7 @@ export function File(props: { file: TestFile; hunks: ReadonlyMap<string, HunkDat
       <Show when={other().length > 0}>
         <div class="tests-other">
           <label class="test-code-toggle">
-            <input type="checkbox" checked={otherOpen()} onChange={() => setOtherOpen(!otherOpen())} />
+            <input type="checkbox" class="checkbox checkbox-primary checkbox-xs" checked={otherOpen()} onChange={() => setOtherOpen(!otherOpen())} />
             {other().length === 1 ? "1 change outside a test" : `${other().length} changes outside a test`}
           </label>
           <Appear when={otherOpen()}>

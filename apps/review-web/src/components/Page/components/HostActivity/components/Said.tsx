@@ -89,7 +89,7 @@ export function Said() {
             <span class="host-checked">
               {hostNow.checking() ? "checking…" : `checked ${ago(hostNow.checkedAt() ?? hostNow.now(), hostNow.now())}`}
             </span>
-            <button type="button" class="quiet small" onClick={() => hostNow.refresh()} disabled={hostNow.checking()} title={`Ask ${hostNow.hostName()} again for its reviews and comments`}>
+            <button type="button" class="btn btn-xs" onClick={() => hostNow.refresh()} disabled={hostNow.checking()} title={`Ask ${hostNow.hostName()} again for its reviews and comments`}>
               ↻ Refresh
             </button>
           </div>
@@ -123,7 +123,7 @@ export function Said() {
               }}
             >
           <Show when={items().length > LATEST}>
-            <button type="button" class="quiet small host-earlier" onClick={() => setAll(!all())}>
+            <button type="button" class="btn btn-xs host-earlier" onClick={() => setAll(!all())}>
               {all() ? "Show only the latest" : `Show ${items().length - LATEST} earlier`}
             </button>
           </Show>

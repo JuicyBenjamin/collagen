@@ -186,6 +186,9 @@ importers:
       '@tanstack/highlight':
         specifier: 1.0.0
         version: 1.0.0
+      daisyui:
+        specifier: 5.7.47
+        version: 5.7.47
       effect:
         specifier: 4.0.0
         version: 4.0.0
@@ -2719,6 +2722,9 @@ packages:
 
   dagre-d3-es@7.0.14:
     resolution: {integrity: sha512-P4rFMVq9ESWqmOgK+dlXvOtLwYg0i7u0HBGJER0LZDJT2VHIPAMZ/riPxqJceWMStH5+E61QxFra9kIS3AqdMg==}
+
+  daisyui@5.7.47:
+    resolution: {integrity: sha512-NOl4vPifelRqB3CMzoU751zc44KCDD9HdHMTTqQ30uiYVpIyK7+s94/ySDWgYqjdl1tQCaCrgGBx4KCizm+a3Q==}
 
   dateformat@3.0.3:
     resolution: {integrity: sha512-jyCETtSl3VMZMWeRo7iY1FL19ges1t55hMo5yaam4Jrsm5EPL89UQkoQRyiI+Yf4k8r2ZpdngkV8hr1lIdjb3Q==}
@@ -6640,6 +6646,8 @@ snapshots:
     dependencies:
       d3: 7.9.0
       lodash-es: 4.18.1
+
+  daisyui@5.7.47: {}
 
   dateformat@3.0.3: {}
 
