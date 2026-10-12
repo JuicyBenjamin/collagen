@@ -29,6 +29,7 @@ import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
 import { acceptDrafts, draftComments, draftsOf, dropDrafts, submitReview } from "./ReviewTalk";
+import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
@@ -573,7 +574,7 @@ export const OpenReview = Tool.make("open-review", {
 
 export const ReviewComments = Tool.make("review-comments", {
   description: [
-    "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line, startLine?, side?, body}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
+    "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line, startLine?, side?, strength?, body}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
     "Drafts stay on this machine. Your user reads them beside the code and accepts (into their review, as on GitHub), edits or declines each; their review is said when they finish it — in the room as theirs and, when the review is an open pull request someone else opened, on it as one review with their verdict (through their own gh; on their own pull request it stays in collagen, where it has readers); you call nothing else for that. Say in the chat what you found in a line or two and that the comments are drafts on the review page; do not repeat them there.",
     "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
   ].join("\n"),
@@ -587,6 +588,7 @@ export const ReviewComments = Tool.make("review-comments", {
           line: Schema.Number,
           startLine: Schema.optional(Schema.Number),
           side: Schema.optional(Schema.Literals(["new", "old"])),
+          strength: Schema.optional(Schema.Literals(["nit", "suggest", "wish", "must"])),
           body: Schema.String,
         }),
       ),
@@ -1790,7 +1792,7 @@ const makeHandlers = Effect.gen(function* () {
       "review-comments": Effect.fn("Mcp.reviewComments")(function* (input: {
         action: "draft" | "accept" | "decline" | "submit" | "list";
         ticketId: string;
-        comments?: ReadonlyArray<{ readonly file: string; readonly line: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly body: string }>;
+        comments?: ReadonlyArray<{ readonly file: string; readonly line: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly strength?: Strength; readonly body: string }>;
         ids?: ReadonlyArray<string>;
         verdict?: "comment" | "approve" | "request-changes";
         body?: string;
@@ -1805,7 +1807,7 @@ const makeHandlers = Effect.gen(function* () {
         if (input.action === "draft") {
           const items = (input.comments ?? []).filter((comment) => Number.isInteger(comment.line) && comment.line > 0 && (comment.startLine === undefined || Number.isInteger(comment.startLine)));
           if (items.length === 0) return "failed: pass 'comments' — each with file, line (a whole number of the branch's code) and body";
-          const result = yield* draftComments(input.ticketId, items.map((comment) => ({ file: comment.file, line: comment.line, ...(comment.startLine !== undefined ? { startLine: comment.startLine } : {}), side: comment.side === "old" ? ("LEFT" as const) : ("RIGHT" as const), body: comment.body })));
+          const result = yield* draftComments(input.ticketId, items.map((comment) => ({ file: comment.file, line: comment.line, ...(comment.startLine !== undefined ? { startLine: comment.startLine } : {}), side: comment.side === "old" ? ("LEFT" as const) : ("RIGHT" as const), ...(comment.strength ? { strength: comment.strength } : {}), body: comment.body })));
           if ("error" in result) return `failed: ${result.error}`;
           if (result.drafted.length > 0) yield* pages.started(input.ticketId);
           const refused = result.refused.length > 0 ? `\nREFUSED (not drafted — fix and draft them again):\n${result.refused.map((refusal) => `- ${refusal.at}: ${refusal.why}`).join("\n")}` : "";
@@ -1823,7 +1825,7 @@ const makeHandlers = Effect.gen(function* () {
         if (input.action === "submit") {
           const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null);
           if ("error" in result) return `failed: ${result.error} — the review stays pending`;
-          return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
+          return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request${"changesRequested" in result && result.changesRequested ? ", requesting changes (a must comment in it)" : ""}${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
         }
         if (input.action === "decline") {
           const dropped = yield* dropDrafts(input.ticketId, ids, "ai");
@@ -1831,10 +1833,15 @@ const makeHandlers = Effect.gen(function* () {
         }
         const mine = yield* draftsOf(input.ticketId);
         const said = (yield* SubscriptionRef.get(room.comments)).filter((comment) => comment.ticketId === input.ticketId);
+        // each one's strength apart from its words, read from the prefix they carry
+        const words = (body: string) => {
+          const read = readStrength(body);
+          return { ...(read.strength ? { strength: read.strength } : {}), body: read.text };
+        };
         return toToon({
-          drafts: mine.filter((draft) => draft.status !== "pending").map((draft) => ({ id: draft.id, at: where(draft), body: draft.body })),
-          pending: mine.filter((draft) => draft.status === "pending").map((draft) => ({ id: draft.id, at: where(draft), body: draft.body })),
-          said: said.map((comment) => ({ by: comment.authorName, at: where(comment), body: comment.body, ...(comment.host ? { onHost: comment.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) })),
+          drafts: mine.filter((draft) => draft.status !== "pending").map((draft) => ({ id: draft.id, at: where(draft), ...words(draft.body) })),
+          pending: mine.filter((draft) => draft.status === "pending").map((draft) => ({ id: draft.id, at: where(draft), ...words(draft.body) })),
+          said: said.map((comment) => ({ by: comment.authorName, at: where(comment), ...words(comment.body), ...(comment.host ? { onHost: comment.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) })),
         });
       }, Effect.provideContext(talkContext)),
       "set-name": ({ name }: { name: string }) =>

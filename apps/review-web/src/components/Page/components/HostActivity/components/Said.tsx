@@ -7,8 +7,12 @@ import { lastActivity } from "../lastActivity";
 import { Appear } from "~/components/Appear";
 import { bodyParts } from "~/suggest";
 import { Markdown } from "~/components/Markdown";
+import { StrengthMark } from "~/components/Strength";
+import { readStrength } from "~/strength";
 
 type Item = ({ readonly kind: "review" } & HostReview) | ({ readonly kind: "note" } & HostNote);
+/** A comment's strength apart from its words; a review's words on the whole carry none. */
+const words = (item: Item) => (item.kind === "note" ? readStrength(item.body) : { strength: null, text: item.body });
 
 /** Words as markdown, never as HTML; a suggested change in them as code. */
 function Words(props: { body: string }) {
@@ -133,6 +137,7 @@ export function Said() {
                       <Show when={item.kind === "review"}>
                         <span class={["verdict", (item as HostReview).verdict.replace(" ", "-")]}>{(item as HostReview).verdict}</span>
                       </Show>
+                      <StrengthMark strength={words(item).strength} />
                       <Show when={item.kind === "note" && (item as HostNote).outdated}>
                         {(where) => <span class="line-comment-when">on {where()} · since changed</span>}
                       </Show>
@@ -146,7 +151,7 @@ export function Said() {
                       </Show>
                     </div>
                     <Show when={item.body.trim().length > 0}>
-                      <Words body={item.body} />
+                      <Words body={words(item).text} />
                     </Show>
                   </li>
                 )}
