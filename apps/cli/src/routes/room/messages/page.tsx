@@ -46,7 +46,7 @@ export function MessagesPage() {
   return (
     <Focusable
       id="messages"
-      hint="↑↓ scroll · enter details · ↑ at the top leaves · 1-5 jump · esc"
+      hint="↑↓ scroll · enter details · ↑ at the top leaves · 1-6 jump · esc"
       flexDirection="column"
       marginTop={1}
       flexGrow={1}

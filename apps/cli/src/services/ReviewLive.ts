@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+import { shortRoomId } from "@collagen/p2p";
 import { focusTab } from "../lib/focusTab";
 import { openerOverride, openInBrowser } from "../lib/opener";
 import { settingOf } from "../lib/settings";
@@ -34,8 +35,8 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
      *  otherwise a new tab (marked to take over from an open one, which
      *  hands it the reader's place). Says what happened, url included, for a
      *  machine with no browser to open. */
-    /** One of this instance's pages: /review/<ticketId> or /merges/<roomId>. */
-    const pageUrl = (page: "review" | "merges", id: string) =>
+    /** One of this instance's pages: /review/<ticketId>, /merges/<roomId> or /board/<room>. */
+    const pageUrl = (page: "review" | "merges" | "board", id: string) =>
       Effect.map(mcp.awaitUrl, (mcpUrl) => `${mcpUrl.replace(/\/mcp$/, "")}/${page}/${encodeURIComponent(id)}`);
     const launch = (url: string) => openInBrowser(url).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
     const show = Effect.fn("ReviewPages.show")(function* (ticketId: string) {
@@ -45,7 +46,16 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
       return (yield* launch(already ? `${url}?take` : url)) ? `review page opened: ${url}` : `review page: ${url} (could not open a browser — paste it into one)`;
     });
 
+    /** Open a room's board in the person's browser: its tickets in to do,
+     *  in progress and done, as the terminal's board has them. */
+    const showBoard = Effect.fn("ReviewPages.showBoard")(function* (roomId: string) {
+      // by its short id: the full one is the invite, and a url stays in the browser's history
+      const url = yield* pageUrl("board", shortRoomId(roomId));
+      return (yield* launch(url)) ? `board opened: ${url}` : `board: ${url} (could not open a browser — paste it into one)`;
+    });
+
     return {
+      showBoard,
       opened: (id: string) => open.set(id, (open.get(id) ?? 0) + 1),
       closed: (id: string) => {
         const count = (open.get(id) ?? 1) - 1;

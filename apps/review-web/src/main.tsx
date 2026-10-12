@@ -4,6 +4,7 @@ import { githubLightTheme } from "@tanstack/highlight/themes/github-light";
 import { oneDarkProTheme } from "@tanstack/highlight/themes/one-dark-pro";
 import { App } from "./App";
 import { MergesApp, mergesRoom } from "./Merges";
+import { BoardApp, onBoard } from "./components/Board";
 import { startHandoff } from "./handoff";
 import "./styles.css";
 
@@ -17,7 +18,8 @@ theme.textContent = [
 ].join("\n");
 document.head.append(theme);
 
-// one document for both pages: /review/<ticketId>, and /merges/<roomId>
+// one document for three pages: /review/<ticketId>, /merges/<roomId> and a room's board at /board/<room>
 const room = mergesRoom;
-if (room === null) startHandoff();
-render(() => (room === null ? <App /> : <MergesApp roomId={room} />), document.getElementById("root")!);
+const board = onBoard();
+if (room === null && !board) startHandoff();
+render(() => (board ? <BoardApp /> : room === null ? <App /> : <MergesApp roomId={room} />), document.getElementById("root")!);

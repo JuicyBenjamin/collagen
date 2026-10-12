@@ -5,8 +5,8 @@ export interface TicketRoute {
   readonly name: "room/ticket";
   readonly ticketId: string;
   /** Where esc / ← go when it was opened from another ticket's page — an
-   *  epic's — or from the merges tab; from the list, the list. */
-  readonly back?: TicketRoute | "room/merges";
+   *  epic's — or from the merges tab or the board; from the list, the list. */
+  readonly back?: TicketRoute | "room/merges" | "room/board";
 }
 export interface TranscriptsRoute {
   readonly name: "room/transcripts";
@@ -43,7 +43,7 @@ export interface TranscriptRoute {
 /** Where the configured app can be. Plain routes are strings; a route with
  *  parameters is an object. `room/*` routes render inside the room layout
  *  (see routes/index.tsx for the table that maps each to its page). */
-export type Route = "settings" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
+export type Route = "settings" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | "room/board" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
 
 export type RouteName = Route extends infer R ? (R extends string ? R : R extends { readonly name: infer N } ? N : never) : never;
 
@@ -51,7 +51,7 @@ export const routeName = (route: Route): RouteName => (typeof route === "string"
 
 /** Constructors for the routes that carry parameters. */
 export const to = {
-  ticket: (ticketId: string, back?: TicketRoute | "room/merges"): Route => ({ name: "room/ticket", ticketId, ...(back ? { back } : {}) }),
+  ticket: (ticketId: string, back?: TicketRoute | "room/merges" | "room/board"): Route => ({ name: "room/ticket", ticketId, ...(back ? { back } : {}) }),
   transcripts: (subject: string, back: Route): Route => ({ name: "room/transcripts", subject, back }),
   transcript: (path: string, file: string, back: Route): Route => ({ name: "room/transcript", path, file, back }),
   attach: (ticketId: string, back: Route): Route => ({ name: "room/attach", ticketId, back }),

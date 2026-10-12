@@ -48,7 +48,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   // the trail of names above a route: overview › ticket › transcripts › …
   const trailOf = (destination: Route): ReadonlyArray<string> =>
     typeof destination === "string"
-      ? [destination === "room/merges" ? "merges" : "overview"]
+      ? [destination === "room/merges" ? "merges" : destination === "room/board" ? "board" : "overview"]
       : destination.name === "room/ticket"
         ? [...trailOf(destination.back ?? "room/overview"), goalOf(destination.ticketId)]
         : destination.name === "room/transcripts"
@@ -64,8 +64,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     page === null
       ? null
       : page.name === "room/ticket"
-        ? // opened from an epic's page, back to it — its list under the cursor; from the merges, back to them
-          { trail: trailOf(page.back ?? "room/overview"), label: goalOf(page.ticketId), back: page.back ?? ("room/overview" as const), focus: page.back === "room/merges" ? "merges" : page.back ? "ticket-parts" : "tickets" }
+        ? // opened from an epic's page, back to it — its list under the cursor; from the merges or the board, back to them
+          { trail: trailOf(page.back ?? "room/overview"), label: goalOf(page.ticketId), back: page.back ?? ("room/overview" as const), focus: page.back === "room/merges" ? "merges" : page.back === "room/board" ? "board" : page.back ? "ticket-parts" : "tickets" }
         : page.name === "room/transcripts"
           ? { trail: trailOf(page.back), label: "transcripts", back: page.back, focus: typeof page.back === "object" ? "ticket-diagnostics" : "tickets" }
           : page.name === "room/attach"
@@ -122,6 +122,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "3") return jump("room/merges");
     if (key.name === "4") return jump("room/messages");
     if (key.name === "5") return jump("room/outbox");
+    if (key.name === "6") return jump("room/board");
     if (key.name === "escape") {
       // inside a page (ticket, transcripts), esc is "back"; on a tab, back to the tab bar
       if (crumb) return goBack();

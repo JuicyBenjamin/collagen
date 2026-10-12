@@ -12,6 +12,7 @@ import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isTest } from "../lib/tests";
 import { stackOf, type Edge } from "../lib/stack";
+import { shortIdOk } from "./BoardView";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type LineSpot, type RepoHost } from "./RepoHost";
 import { Rooms } from "./Rooms";
@@ -438,6 +439,17 @@ export const ReviewRoutes = Layer.mergeAll(
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
       const { roomId } = yield* HttpRouter.params;
       if (!ticketIdOk(roomId)) return notFound("no room");
+      const root = webRoot();
+      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
+      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
+    }),
+  ),
+  // a room's board, the same document: it reads the room's short id from the url (services/BoardView)
+  HttpRouter.add("GET", "/board/:roomId", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      const { roomId } = yield* HttpRouter.params;
+      if (!shortIdOk(roomId)) return notFound("no room");
       const root = webRoot();
       if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
       return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));

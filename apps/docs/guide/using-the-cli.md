@@ -87,6 +87,11 @@ No files are written into your projects.
   There is nothing to approve here: your agent acts on your word, and this is the
   receipt. Neither this tab nor **messages** carries a count: both are logs that only
   grow, so their size is not something a person acts on.
+- **board tab** — the same tickets as a board: to do, in progress, done. A ticket is to
+  do until a step of it is handed to its owner, in progress from then, and done once
+  every step is answered or it is closed (dropped ones say so); an epic follows its
+  tickets. `←→` move between columns, `↑↓` within one, `enter` opens the ticket (`esc`
+  comes back to the board), `b` opens the same board in your browser.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.
@@ -100,7 +105,7 @@ what's natural there. Number keys work from anywhere.
 
 | Key | Action |
 | --- | --- |
-| `1` – `5` | Overview / projects / merges / messages / outbox tab |
+| `1` – `6` | Overview / projects / merges / messages / outbox / board tab |
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |

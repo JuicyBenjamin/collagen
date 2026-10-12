@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { BoardData, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -53,6 +53,10 @@ export class ReviewBackend extends Context.Service<
     readonly edit: (ticketId: string, id: string, body: string) => Effect.Effect<DraftsResult>;
     /** drop drafts or pending comments (by id; or, with null, all of a kind); how many went */
     readonly drop: (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending") => Effect.Effect<number>;
+    /** a room's board: its tickets in to do, in progress and done */
+    readonly board: (roomId: string) => Effect.Effect<BoardData | null>;
+    /** the board's state as a token, current first, then each time it moves */
+    readonly boardChanges: (roomId: string) => Stream.Stream<string>;
     /** a comment not said yet, confirmed where it sits at `commit` — the one the page shows now */
     readonly repin: (ticketId: string, id: string, commit: string) => Effect.Effect<DraftsResult>;
     /** what was merged into a room's projects, with the tickets each came from; null for a room not here */

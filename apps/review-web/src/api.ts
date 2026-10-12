@@ -1,5 +1,5 @@
 import { GET, live } from "@solidjs/web/server-functions";
-import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { BoardData, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -169,3 +169,18 @@ export const mergeHistory = GET(async (roomId: string, shown: MergesShown, fresh
   "use server";
   return run((backend) => backend.merges(roomId, shown, fresh));
 });
+
+/** A room's board: its tickets in to do, in progress and done. */
+export const boardData = GET(async (roomId: string): Promise<BoardData | null> => {
+  "use server";
+  return run((backend) => backend.board(roomId));
+});
+
+/** The board's state as a token, current first and again whenever it
+ *  moves: the page reads the board again when it differs. */
+export const boardChanges = live(
+  GET(async (roomId: string): Promise<AsyncIterable<string>> => {
+    "use server";
+    return stream((backend) => backend.boardChanges(roomId));
+  }),
+);
