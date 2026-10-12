@@ -72,12 +72,12 @@ export interface DrawnTab {
 }
 
 /** The tabs as a row of `width` columns, the open one always whole with its
- *  count: every tab named when they fit (a kind with nothing open by its
- *  glyph alone); else the others by glyph and count; else a window of them
+ *  count: every tab named when they fit, an empty kind too; else the others
+ *  by glyph and count; else a window of them
  *  around the open one, a ‹ or › where some are cut off. */
 export function fitTabs(tab: TicketTab, counts: ReadonlyMap<TicketTab, number>, width: number | undefined): { readonly tabs: ReadonlyArray<DrawnTab>; readonly gap: number; readonly before: boolean; readonly after: boolean } {
   const n = (t: TicketTab) => counts.get(t) ?? 0;
-  const full = TICKET_TABS.map((t): DrawnTab => ({ tab: t, open: t === tab, text: `${t === tab || n(t) > 0 || t === "all" ? tabLabel(t) : kindGlyph(t)} ${n(t)}` }));
+  const full = TICKET_TABS.map((t): DrawnTab => ({ tab: t, open: t === tab, text: `${tabLabel(t)} ${n(t)}` }));
   const short = TICKET_TABS.map((t): DrawnTab => ({ tab: t, open: t === tab, text: t === tab ? `${tabLabel(t)} ${n(t)}` : `${t === "all" ? "all" : kindGlyph(t)} ${n(t)}` }));
   const span = (row: ReadonlyArray<DrawnTab>, gap: number) => row.reduce((w, d, i) => w + cells(d.text) + (i > 0 ? gap : 0), 0);
   if (width === undefined || span(full, 3) <= width) return { tabs: full, gap: 3, before: false, after: false };

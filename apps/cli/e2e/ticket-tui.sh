@@ -81,8 +81,8 @@ HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
 [ -n "${PYTE_PATH:-}" ] && HAVE_PYTE=yes
 if [ "$HAVE_PYTE" = yes ]; then
   screen() { python3 "$E2E/render.py" "$PTY" "$MARKS" "${ROWS:-45}" 120 "$1"; }
-  expect "above the list, its tabs: every ticket, then a kind each with its glyph" "$(screen M0_tabs)" "all tickets 1 +♛ 0 +✦ 0 +≡ 0 +⚑ 0 +± 0 +☐ tasks 1"
-  expect "→: the epics tab, named while open, its list empty" "$(screen M0a_epics)" "♛ epics 0"
+  expect "above the list, its tabs: every ticket, then a kind each with its glyph" "$(screen M0_tabs)" "all tickets 1 +♛ epics 0 +✦ proposals 0 +≡ plans 0 +⚑ bugs 0 +± reviews 0 +☐ tasks 1"
+  expect "→: the epics tab, its list empty" "$(screen M0a_epics)" "♛ epics 0"
   expect "…and says so" "$(screen M0a_epics)" "│ +none +│"
   SHOT=$(screen M0b_tasks)
   expect "→ five more: the tasks tab, only tasks under it" "$SHOT" "☐ bob "
