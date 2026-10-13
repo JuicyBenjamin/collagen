@@ -20,6 +20,12 @@
   --chg-bg: #fdf6dc;
   --sign-chg: #9a6700;
   --moved-bg: #f2d98b;
+  /* a ticket's kind, as its mark: told apart by lightness too */
+  --kind-proposal: #8b5cf6;
+  --kind-plan: #2563eb;
+  --kind-task: #0e7490;
+  --kind-bug: #c2410c;
+  --kind-review: #15803d;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -38,6 +44,11 @@
     --chg-bg: #33301f;
     --sign-chg: #e0af68;
     --moved-bg: #6b5a1f;
+    --kind-proposal: #bb9af7;
+    --kind-plan: #7aa2f7;
+    --kind-task: #7dcfff;
+    --kind-bug: #ff9e64;
+    --kind-review: #9ece6a;
   }
 }
 * { box-sizing: border-box; }
@@ -490,24 +501,32 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .merge-title a:hover { color: var(--accent); text-decoration: underline; }
 .merge-info { color: var(--dim); font-size: 13px; overflow-wrap: anywhere; }
 .merge-info code { color: var(--fg); font-size: 12px; }
-.merge-tickets { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
-.merge-tickets li { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
-.merge-tickets li a { color: var(--fg); text-decoration: none; overflow-wrap: anywhere; flex: 1; min-width: 0; }
-.merge-tickets li a:hover { color: var(--accent); text-decoration: underline; }
-.merge-tickets li.closed a { color: var(--dim); }
-.merge-ticket-by { color: var(--dim); font-size: 13px; white-space: nowrap; }
-.merge-ticket-by.mine { color: var(--accent); }
-.merge-ticket-kind { color: var(--dim); font-size: 12px; min-width: 64px; }
-.merge-ticket-name { color: var(--fg); overflow-wrap: anywhere; flex: 1; min-width: 0; }
-.merge-tickets li.closed .merge-ticket-name { color: var(--dim); }
-.merge-why-of { margin: 10px 0 0; color: var(--dim); font-size: 13px; }
 .merges-more { color: var(--dim); margin: 0 0 0 24px; }
 .merge { scroll-margin-top: 24px; }
 .merge.target > .merge-title a { color: var(--accent); }
-.merge-why { margin-top: 8px; }
-.merge-why > summary { cursor: pointer; color: var(--dim); font-size: 13px; }
-.merge-decision { margin: 8px 0 0; padding: 8px 10px; border-left: 2px solid var(--line); }
-.merge-decision p { margin: 0 0 4px; overflow-wrap: anywhere; }
-.merge-decision-title { font-weight: 600; }
-.merge-decision blockquote { margin: 4px 0; padding: 0 10px; border-left: 3px solid var(--accent); color: var(--fg); }
-.merge-decision-agent { color: var(--dim); font-size: 14px; }
+/* what a merge grew from: a ticket a line, its kind's mark first, its why
+   folded under it — the line on the left joins them */
+.lineage { list-style: none; margin: 10px 0 0 6px; padding: 0 0 0 8px; border-left: 2px solid var(--line); display: grid; gap: 2px; }
+.lineage-row { display: flex; align-items: center; gap: 10px; padding: 3px 10px; font-size: 14px; }
+.kind-icon { flex: none; }
+.lineage-item.proposal .kind-icon { color: var(--kind-proposal); }
+.lineage-item.plan .kind-icon { color: var(--kind-plan); }
+.lineage-item.task .kind-icon { color: var(--kind-task); }
+.lineage-item.bug .kind-icon { color: var(--kind-bug); }
+.lineage-item.review .kind-icon { color: var(--kind-review); }
+.lineage-item.epic .kind-icon { color: var(--dim); }
+.lineage-name { flex: 1; min-width: 0; color: var(--fg); overflow-wrap: anywhere; text-decoration: none; }
+a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
+.lineage-item.review .lineage-name { font-weight: 600; }
+.lineage-item.closed:not(.review) .lineage-name { color: var(--dim); }
+.lineage-by { color: var(--dim); font-size: 13px; white-space: nowrap; }
+.lineage-why { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--dim); cursor: pointer; white-space: nowrap; }
+.lineage-why:hover { color: var(--accent); }
+.lineage-why svg { transition: transform 0.15s; }
+.lineage-why[aria-expanded="true"] svg { transform: rotate(90deg); }
+.lineage-item.review .lineage-why { color: var(--kind-review); }
+.lineage-decisions { display: grid; gap: 12px; padding: 4px 10px 10px 35px; }
+.lineage-decision p { margin: 0; overflow-wrap: anywhere; font-size: 14px; color: var(--dim); }
+.lineage-decision .lineage-decision-title { color: var(--fg); font-weight: 600; margin-bottom: 2px; }
+.lineage-decision blockquote { margin: 6px 0 0; padding: 0 0 0 10px; border-left: 2px solid var(--accent); color: var(--fg); font-size: 14px; font-style: italic; }
+.lineage-decision .lineage-decision-agent { margin-top: 4px; }
