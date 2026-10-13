@@ -3,7 +3,7 @@ import { isClosed, ticketName, type Project, type ReviewComment, type ReviewCont
 import type { MergeHistory as MergeHistoryData, MergesShown } from "@collagen/review-web/data";
 import { defaultBranchOf, repoWebUrl } from "../lib/gitInfo";
 import { latestMerges, type MergesPage } from "../lib/github";
-import { reviewedCode, ticketsOfMerges } from "../lib/mergeTickets";
+import { lineage, reviewedCode, ticketsOfMerges, whyOpen } from "../lib/mergeTickets";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostCliMissing, type HostMerge, type HostRefused, type RepoHost } from "./RepoHost";
 import { Rooms } from "./Rooms";
@@ -43,7 +43,7 @@ export type ProjectTimeline = { readonly project: string } & (
 );
 
 /** Each merge read, with the room's tickets it came from that `me` may see
- *  (lib/mergeTickets), in the order they were filed. */
+ *  (lib/mergeTickets) and those they grew from, what each grew from first. */
 export const timelineOf = (
   read: ReadonlyArray<ProjectMerges>,
   tickets: ReadonlyMap<string, Ticket>,
@@ -59,7 +59,7 @@ export const timelineOf = (
       project: p.project,
       base: p.base,
       more: p.more,
-      merges: ticketsOfMerges(p.merges, code).map(({ merge, tickets: ids }) => ({ merge, tickets: ids.flatMap((id) => tickets.get(id) ?? []) })),
+      merges: ticketsOfMerges(p.merges, code).map(({ merge, tickets: ids }) => ({ merge, tickets: lineage(ids, tickets, me) })),
     };
   });
 
@@ -189,7 +189,8 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
                         author: nameFor(t.createdBy),
                         mine: t.createdBy === me,
                         closed: isClosed(t),
-                        decisions: (why.get(t.id)?.decisions ?? []).map((d) => ({
+                        kind: t.kind,
+                        decisions: (whyOpen(t, me) ? (why.get(t.id)?.decisions ?? []) : []).map((d) => ({
                           title: d.title ?? d.what,
                           what: d.what,
                           ...(d.userWhy ? { userWhy: d.userWhy } : {}),
