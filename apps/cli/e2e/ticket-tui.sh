@@ -13,7 +13,7 @@ PTY="$OUT/ticket-tui.out"; MARKS="$OUT/ticket-tui.marks"; LOG="$OUT/ticket-tui.l
 rm -f "$PTY" "$MARKS" "$OUT/ticket-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/ticket-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
-  printf '\033'; sleep 1; printf '\033[B'; sleep 1; mark M0_tabs
+  printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M0_tabs   # past the people lines
   printf '\033[C'; sleep 1; mark M0a_epics
   for i in 1 2 3 4; do printf '\033[C'; sleep 0.4; done; sleep 1; mark M0b_tasks
   printf '\033[B'; sleep 1; printf 'h'; sleep 1; mark M0c_closed; printf 'h'; sleep 0.5
@@ -75,7 +75,7 @@ EPICJ="{\"action\":\"create\",\"title\":\"Averages\",\"goal\":\"averages that ho
 call $A "$SA" epic "$EPICJ" > /dev/null; touch "$OUT/epic.ready"
 await_mark M10d_down; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
-expect "↓ from the tab bar reached the list's tabs" "$KEYS" "ticket-tabs"
+expect "↓ from the tab bar reached the people, ↓ again the list's tabs" "$KEYS" "people .*ticket-tabs"
 expect "…and ↓ again its tickets" "$KEYS" "ticket-tabs room tickets|ticket-tabs tickets"
 HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
 [ -n "${PYTE_PATH:-}" ] && HAVE_PYTE=yes
