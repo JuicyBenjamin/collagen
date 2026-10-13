@@ -119,8 +119,8 @@ export function MergesPage() {
         flexShrink={1}
         onKey={(key) => {
           if (key.name === "r") return refresh(), true;
-          // o is always one of collagen's own pages: a ticket's review page, else this history at the merge
-          if (key.name === "o") return current?.kind === "ticket" ? openReviewPage({ ticketId: current.ticket.id }) : openPage(current ? { at: { project: current.project, number: current.merge.number } } : {}), true;
+          // o is always one of collagen's own pages: a review's page, else this history at the merge
+          if (key.name === "o") return current?.kind === "ticket" && current.ticket.kind === "review" ? openReviewPage({ ticketId: current.ticket.id }) : openPage(current ? { at: { project: current.project, number: current.merge.number } } : {}), true;
           if (stops.length === 0) return false;
           if (key.name === "up" && sel > 0) return at(sel - 1);
           if (key.name === "down" && sel < last) return at(sel + 1);

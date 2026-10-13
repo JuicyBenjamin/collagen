@@ -421,8 +421,8 @@ export type Verdict = "comment" | "approve" | "request-changes";
  *  its refusal in words. */
 export type HostWrite = { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
 
-/** A ticket a merge came from, as the merge history names it — one the
- *  reader may see. */
+/** A ticket a merge came from, or one that grew into it, as the merge
+ *  history names it — one the reader may see. */
 export interface MergeTicket {
   readonly id: string;
   readonly name: string;
@@ -430,7 +430,9 @@ export interface MergeTicket {
   readonly author: string;
   readonly mine: boolean;
   readonly closed: boolean;
-  /** what was decided on it, and why */
+  readonly kind: "task" | "review" | "plan" | "proposal" | "bug" | "epic";
+  /** what was decided on it, and why — on someone else's plan, proposal or
+   *  bug, not before the reader's own take */
   readonly decisions: ReadonlyArray<MergeDecision>;
 }
 

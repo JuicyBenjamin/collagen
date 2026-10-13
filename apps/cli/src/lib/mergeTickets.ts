@@ -1,4 +1,4 @@
-import { visibleTo, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { isJudged, isTake, visibleTo, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
 import type { HostMerge, RepoHost } from "../services/RepoHost";
 import { projectKey } from "./projects";
 
@@ -103,3 +103,26 @@ export const reviewedCode = (
     ];
   });
 };
+
+/** The tickets `ids` came from, and theirs, with them: a review from a
+ *  task, from a plan, from a proposal — each once, what it grew from before
+ *  it; only those `me` may see. */
+export const lineage = (ids: ReadonlyArray<string>, all: ReadonlyMap<string, Ticket>, me: string): ReadonlyArray<Ticket> => {
+  const seen = new Set<string>();
+  const out: Array<Ticket> = [];
+  const visit = (id: string): void => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const t = all.get(id);
+    if (!t) return;
+    (t.from ?? []).forEach(visit);
+    if (visibleTo(t, all, me)) out.push(t);
+  };
+  ids.forEach(visit);
+  return out;
+};
+
+/** Whether `me` reads a ticket's why: on someone else's plan, proposal or
+ *  bug, not until they have posted their own take — the blind first take. */
+export const whyOpen = (t: Ticket, me: string): boolean =>
+  !isJudged(t.kind) || t.kind === "review" || t.createdBy === me || t.steps.some((s) => isTake(s) && s.owner === me && (s.status === "settled" || s.status === "failed"));

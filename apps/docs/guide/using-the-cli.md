@@ -71,8 +71,9 @@ No files are written into your projects.
   removes one of yours.
 - **merges tab** — what was merged into each of your projects' default branch, the
   latest first, each by its pull request's title with its number, branch and age.
-  Under a merge, a line per review ticket it came from (by the pull request its link
-  names, else its branch, else a commit it was read at); none when it came from none.
+  Under a merge, the review tickets it came from (by the pull request its link names,
+  else its branch, else a commit it was read at), and what each grew from above it: a
+  proposal, its plan, a task — the whole chain; none when it came from none.
   More are read as you scroll down. `enter` on a ticket's line opens it (`esc` comes
   back here). `o` opens collagen's own page in your browser: on the tab, the whole
   history as a web page; on a merge, that page at the merge, with what was decided on it
