@@ -34,17 +34,25 @@ const [a, b] = args;
 // who is signed in: bob, unless a test writes another login to $FAKE_GH_DIR/login
 const login = existsSync(join(dir, "login")) ? readFileSync(join(dir, "login"), "utf8").trim() : "bob";
 if (a === "api" && b === "user") out({ login, name: login === "bob" ? "Bob Reviewer" : login, avatar_url: `http://127.0.0.1:9/${login}.png` });
-// what was merged into main: #6 squashed, #5 by a merge commit — one page
+// what was merged into main: #6 squashed, #5 by a merge commit, and 120
+// older ones squashed — a hundred to a page, as GitHub pages them
 if (a === "api" && b === "graphql" && (fields("-f").query ?? "").includes("states: MERGED")) {
   const merged = (number, title, headRefName, mergedAt, oid, parents, last) => ({
     number, title, headRefName, mergedAt, updatedAt: mergedAt, url: `https://github.com/acme/sandbox/pull/${number}`,
     mergeCommit: { oid, messageHeadline: title, authoredDate: mergedAt, parents: { totalCount: parents } },
     commits: { totalCount: 2, nodes: [{ commit: { oid: last, messageHeadline: "wip", authoredDate: "2026-10-01T09:00:00Z" } }] },
   });
-  const nodes = fields("-f").base === "main"
-    ? [merged(6, "Rows a page", "feat/paging", "2026-10-11T10:00:00Z", "a".repeat(40), 1, "b".repeat(40)), merged(5, "Fix the header", "fix/header", "2026-10-09T10:00:00Z", "c".repeat(40), 2, "d".repeat(40))]
+  const older = Array.from({ length: 120 }, (_, i) => {
+    const at = new Date(Date.parse("2026-09-01T00:00:00Z") - i * 3_600_000).toISOString();
+    return merged(1000 + i, `Older change ${i + 1}`, `chore/older-${i + 1}`, at, i.toString(16).padStart(40, "e"), 1, i.toString(16).padStart(40, "f"));
+  });
+  const all = fields("-f").base === "main"
+    ? [merged(6, "Rows a page", "feat/paging", "2026-10-11T10:00:00Z", "a".repeat(40), 1, "b".repeat(40)), merged(5, "Fix the header", "fix/header", "2026-10-09T10:00:00Z", "c".repeat(40), 2, "d".repeat(40)), ...older]
     : [];
-  out({ data: { repository: { pullRequests: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } } } });
+  const from = Number(fields("-f").after ?? 0);
+  const nodes = all.slice(from, from + 100);
+  const next = from + 100 < all.length ? String(from + 100) : null;
+  out({ data: { repository: { pullRequests: { pageInfo: { hasNextPage: next !== null, endCursor: next }, nodes } } } });
 }
 if (a === "pr" && b === "view") {
   const p = PULLS.find((x) => String(x.number) === args[2]);
