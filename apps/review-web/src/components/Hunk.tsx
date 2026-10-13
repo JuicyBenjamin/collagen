@@ -469,10 +469,25 @@ function Lines(props: {
                   </Show>
                   <span class="sign">{row.was ? "~" : line.kind === " " ? " " : line.kind}</span>
                   <Show when={row.was} fallback={<CodeLine spans={spans()[row.index] ?? []} />}>
-                    {(was) => <ChangedLine segments={was().segments} old={{ text: was().line.text, spans: spans()[was().index] ?? [] }} now={{ text: line.text, spans: spans()[row.index] ?? [] }} />}
+                    {(was) => <ChangedLine segments={was().segments} map={was().map} old={{ text: was().line.text, spans: spans()[was().index] ?? [] }} now={{ text: line.text, spans: spans()[row.index] ?? [] }} />}
                   </Show>
                 </td>
               </tr>
+              {/* a line that only changed order says so beneath it */}
+              <Show when={row.was?.reorder}>
+                {(r) => (
+                  <tr class="reorder-note">
+                    <td class="n" />
+                    <td class="n" />
+                    <td class="t">
+                      <span class="reorder-chip">order only</span>
+                      <span class="reorder-count">
+                        {r().moved} moved · nothing added or removed
+                      </span>
+                    </td>
+                  </tr>
+                )}
+              </Show>
               {/* the removed line's comments too: it is drawn in this row */}
               <Show when={threadOf(row.was?.line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} codeOf={codeOf} />}</Show>
               <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} codeOf={codeOf} />}</Show>

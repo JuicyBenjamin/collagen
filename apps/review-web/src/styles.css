@@ -17,8 +17,7 @@
   /* a line changed in place, and the words that came and went in it */
   --chg-bg: #fdf6dc;
   --sign-chg: #9a6700;
-  --came-bg: #aceebb;
-  --went-bg: #ffcecb;
+  --moved-bg: #f2d98b;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -36,8 +35,7 @@
     --sign-del: #f7768e;
     --chg-bg: #33301f;
     --sign-chg: #e0af68;
-    --came-bg: #2f5a37;
-    --went-bg: #6b2a38;
+    --moved-bg: #6b5a1f;
   }
 }
 * { box-sizing: border-box; }
@@ -215,9 +213,21 @@ tr.add .sign { color: var(--sign-add); }
 tr.del .sign { color: var(--sign-del); }
 tr.changed td.t, tr.changed td.n { background: var(--chg-bg); }
 tr.changed .sign { color: var(--sign-chg); }
-.came { background: var(--came-bg); border-radius: 3px; }
-/* what went is struck through, and left out of a copy: the line copies as the branch has it */
-.went { background: var(--went-bg); border-radius: 3px; text-decoration: line-through; text-decoration-color: var(--sign-del); user-select: none; }
+/* what came: its own code colour, a thin green rule under it; what went:
+   red, faded, struck through — told apart at a glance without boxes or a
+   second green beside the strings (what went is not copied) */
+.came { text-decoration: underline solid color-mix(in srgb, var(--sign-add) 80%, transparent); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+tr.changed td.t .went, tr.changed td.t .went * { color: var(--sign-del); }
+.went { opacity: 0.6; text-decoration: line-through; text-decoration-thickness: 1px; user-select: none; }
+/* words that only moved: underlined where they are now; pointing at the line shows where they were */
+.moved { text-decoration: underline dotted var(--sign-chg); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+/* the line as it was, over the lines above it, pushing nothing aside */
+.before { position: fixed; z-index: 20; box-sizing: border-box; padding: 6px 10px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28); pointer-events: none; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dim); white-space: pre-wrap; overflow-wrap: anywhere; }
+.before-label { display: block; font: 11px -apple-system, sans-serif; color: var(--faint); margin-bottom: 2px; }
+.before mark { background: var(--moved-bg); color: var(--fg); border-radius: 3px; padding: 0 1px; }
+/* beneath a line that only changed order */
+tr.reorder-note td.t { padding-top: 4px; padding-bottom: 6px; font: 12px -apple-system, sans-serif; color: var(--dim); }
+.reorder-chip { display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: 999px; background: var(--moved-bg); color: var(--fg); font-size: 11.5px; }
 
 section.unexplained h2 { color: var(--warn); }
 
