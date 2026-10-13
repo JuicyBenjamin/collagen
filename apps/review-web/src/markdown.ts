@@ -4,13 +4,15 @@ import { Lexer, type Token, type Tokens } from "marked";
 // A comment's words as GitHub-flavoured markdown, read into a small tree of
 // the page's own: the page renders each node as an element of its own and
 // never sets HTML, so what a stranger wrote cannot run. Raw HTML in a comment
-// stays text, an image is a link, and a link goes only to http(s) or mail.
+// stays text, an image shows only from https (else its words), and a link
+// goes only to http(s) or mail.
 
 export type Inline =
   | { readonly kind: "text"; readonly text: string }
   | { readonly kind: "strong" | "em" | "del"; readonly children: ReadonlyArray<Inline> }
   | { readonly kind: "code"; readonly text: string }
   | { readonly kind: "link"; readonly href: string; readonly children: ReadonlyArray<Inline> }
+  | { readonly kind: "image"; readonly src: string; readonly alt: string }
   | { readonly kind: "br" };
 
 export interface Item {
@@ -31,6 +33,8 @@ export type Block =
 export const emojify = (text: string): string => text.replace(/:([a-z0-9_+-]+):/g, (whole, name: string) => nameToEmoji[name] ?? whole);
 
 const safeHref = (href: string): string | undefined => (/^(https?:|mailto:)/i.test(href.trim()) ? href.trim() : undefined);
+/** An image is fetched by the page itself: https only, never data: or a plain http one. */
+const safeSrc = (src: string): string | undefined => (/^https:/i.test(src.trim()) ? src.trim() : undefined);
 
 const text = (t: string): Inline => ({ kind: "text", text: t });
 
@@ -69,9 +73,8 @@ const inline = (tokens: ReadonlyArray<Token> | undefined, raw = ""): ReadonlyArr
       }
       case "image": {
         const i = t as Tokens.Image;
-        const href = safeHref(i.href);
-        const alt = [words(i.text || i.href)];
-        return href ? [{ kind: "link", href, children: alt }] : alt;
+        const src = safeSrc(i.href);
+        return src ? [{ kind: "image", src, alt: emojify(decode(i.text)) }] : [words(i.text || i.href)];
       }
       case "escape":
         return [text((t as Tokens.Escape).text)];

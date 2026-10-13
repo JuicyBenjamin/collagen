@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch } from "solid-js";
+import { createSignal, For, Match, Show, Switch } from "solid-js";
 import { highlightCode } from "../highlight";
 import { type Block, type Inline, parseMarkdown } from "../markdown";
 import { CodeLine } from "./Code";
@@ -20,12 +20,27 @@ function Inlines(props: { of: ReadonlyArray<Inline> }) {
               </a>
             )}
           </Match>
+          <Match when={n.kind === "image" && n}>{(i) => <Picture src={i().src} alt={i().alt} />}</Match>
           <Match when={n.kind === "br"}>
             <br />
           </Match>
         </Switch>
       )}
     </For>
+  );
+}
+
+/** A comment's image, shown; a click opens it whole. One the browser cannot
+ *  load (a private repository's, read while signed out of the host) falls
+ *  back to a link to it, under its words. */
+function Picture(props: { src: string; alt: string }) {
+  const [broken, setBroken] = createSignal(false);
+  return (
+    <a href={props.src} target="_blank" rel="noreferrer noopener">
+      <Show when={!broken()} fallback={props.alt || "image"}>
+        <img class="md-img" src={props.src} alt={props.alt} loading="lazy" referrerpolicy="no-referrer" onError={() => setBroken(true)} />
+      </Show>
+    </a>
   );
 }
 
