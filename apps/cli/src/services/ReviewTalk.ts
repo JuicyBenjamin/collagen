@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Effect, Semaphore, SubscriptionRef } from "effect";
+import { Effect, Option, Result, Semaphore, SubscriptionRef } from "effect";
+import type { ChildProcessSpawner } from "effect/process";
 import type { DraftComment, ReviewComment } from "@collagen/p2p";
 import type { DraftsResult, DraftView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "@collagen/review-web/data";
 import { placeComment, type Spot } from "../lib/comments";
@@ -164,21 +165,23 @@ type Target = { readonly roomOnly: string } | { readonly refused: string } | { r
  *  the room only. On the reader's own pull request (the one signed in to
  *  the host opened it) nothing goes to the host: there they would be the
  *  only one to read it, and collagen holds it already. */
-const hostFor = (found: Found, shownAs: string | null): Effect.Effect<Target> =>
+const hostFor = (found: Found, shownAs: string | null): Effect.Effect<Target, never, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
     const link = hostLink(found.review, found.project);
     const host = link ? hostOf(link) : undefined;
     if (!link || !host) return { roomOnly: "the review names no pull request" };
-    const named = yield* host.pull(link, found.review.branch);
-    if ("none" in named) return { roomOnly: named.none };
-    if (named.pull.state !== "open") return { roomOnly: `pull request #${named.pull.number} is ${named.pull.state}` };
+    const named = yield* Effect.result(host.pull(link, found.review.branch));
+    if (Result.isFailure(named)) return { roomOnly: named.failure.message };
+    const pull = named.success;
+    if (pull.state !== "open") return { roomOnly: `pull request #${pull.number} is ${pull.state}` };
     // a write goes out under whoever gh is signed in as now — asked again,
     // never remembered; if the page showed someone else, it says so first
-    const viewer = yield* host.viewerNow;
-    if (!("user" in viewer)) return { refused: viewer.signIn };
-    if (shownAs !== null && viewer.user.login !== shownAs) return { refused: `${host.name} has ${viewer.user.login} signed in now, not ${shownAs} as the page showed — reload the page to see whose name this goes out under.` };
-    if (viewer.user.login === named.pull.author) return { roomOnly: "it is your own pull request, where you would be its only reader" };
-    return { host, link, number: named.pull.number, author: named.pull.author };
+    const signedIn = yield* Effect.result(host.viewerNow);
+    if (Result.isFailure(signedIn)) return { refused: signedIn.failure.message };
+    const viewer = signedIn.success;
+    if (shownAs !== null && viewer.login !== shownAs) return { refused: `${host.name} has ${viewer.login} signed in now, not ${shownAs} as the page showed — reload the page to see whose name this goes out under.` };
+    if (viewer.login === pull.author) return { roomOnly: "it is your own pull request, where you would be its only reader" };
+    return { host, link, number: pull.number, author: pull.author };
   });
 
 /** The room takes nothing from a member not admitted to its log yet — asked
@@ -236,11 +239,11 @@ const sayOnce = Effect.fn("ReviewTalk.say")(function* (ticketId: string, spot: S
   let host: { readonly id: number; readonly url: string } | undefined;
   let shown: LineComment | undefined;
   if ("host" in to) {
-    const posted = yield* to.host.comment(to.link, to.number, { file: spot.file, line: spot.line, side: spot.side, commit, ...(spot.startLine !== undefined ? { start: { line: spot.startLine, side: spot.startSide ?? spot.side } } : {}) }, text);
-    if ("error" in posted) return posted satisfies HostWrite;
-    if (posted.comment) {
-      shown = posted.comment;
-      host = { id: Number(posted.comment.id), url: posted.comment.url };
+    const posted = yield* to.host.comment(to.link, to.number, { file: spot.file, line: spot.line, side: spot.side, commit, ...(spot.startLine !== undefined ? { start: { line: spot.startLine, side: spot.startSide ?? spot.side } } : {}) }, text).pipe(Effect.result);
+    if (Result.isFailure(posted)) return { error: posted.failure.message } satisfies HostWrite;
+    if (Option.isSome(posted.success)) {
+      shown = posted.success.value;
+      host = { id: Number(shown.id), url: shown.url };
     }
   }
   const r = yield* logComments(found, [{ spot, commit, body: text, drafted: false, ...(host ? { host } : {}) }]);
@@ -351,10 +354,10 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     body: text,
     commit: at,
     comments: pending.map((d) => ({ file: d.file, line: d.line, side: d.side, body: d.body, ...(d.startLine !== undefined ? { start: { line: d.startLine, side: d.startSide ?? d.side } } : {}) })),
-  });
-  if ("error" in sent) return sent satisfies SubmitResult;
+  }).pipe(Effect.result);
+  if (Result.isFailure(sent)) return { error: sent.failure.message } satisfies SubmitResult;
   // each pending comment with its copy on the host, matched by where it sits and what it says
-  const unclaimed = [...sent.comments];
+  const unclaimed = [...sent.success.comments];
   const posted = pending.map((d): DraftComment => {
     const i = unclaimed.findIndex((c) => c.file === d.file && c.line === d.line && c.side === d.side && c.body === d.body);
     const copy = i === -1 ? undefined : unclaimed.splice(i, 1)[0];
@@ -366,7 +369,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   const r = yield* sayAll(posted);
   if ("error" in r) return { error: `${r.error} — the review is on the pull request with its words and verdict; finishing again with none tells the room without posting it twice`, onHost: true as const } satisfies SubmitResult;
   yield* done(posted.map((d) => d.id));
-  return { ok: true as const, said: recovered + pending.length, ...(sent.url ? { url: sent.url } : {}) } satisfies SubmitResult;
+  return { ok: true as const, said: recovered + pending.length, ...Option.match(sent.success.url, { onNone: () => ({}), onSome: (url) => ({ url }) }) } satisfies SubmitResult;
 });
 
 /** Confirm where a comment not said yet sits, at the commit the page shows

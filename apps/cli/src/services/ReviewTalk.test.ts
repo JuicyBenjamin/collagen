@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { NodeServices } from "@effect/platform-node";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { NotWritable, type DraftComment, type LocalState, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { IdentityService } from "./Identity";
@@ -72,7 +73,7 @@ const make = (open: { taking: boolean }) => {
       return { identity: { pubkey: "me" }, nameRef: yield* SubscriptionRef.make("alice") } as unknown as IdentityService["Service"];
     }),
   );
-  const layer = Layer.mergeAll(rooms, store, identity);
+  const layer = Layer.mergeAll(rooms, store, identity, NodeServices.layer);
   const drafts = StateStore.use((s) => s.get).pipe(Effect.map((s) => s.drafts?.[TICKET] ?? []));
   return { said, layer, drafts };
 };

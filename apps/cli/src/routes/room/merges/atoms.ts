@@ -1,4 +1,5 @@
 import { Effect, Stream } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import { Atom } from "effect/reactivity";
 import type { Project } from "@collagen/p2p";
 import { defaultBranchOf, repoWebUrl } from "../../../lib/gitInfo";
@@ -15,7 +16,7 @@ export type ProjectMerges = { readonly project: string } & (
   | { readonly none: string }
 );
 
-const mergesOf = (p: Project): Effect.Effect<ProjectMerges> =>
+const mergesOf = (p: Project): Effect.Effect<ProjectMerges, never, ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
     const repo = repoWebUrl(p.path);
     if (!repo) return { project: p.name, none: "no remote" };
@@ -25,10 +26,7 @@ const mergesOf = (p: Project): Effect.Effect<ProjectMerges> =>
     if (!base) return { project: p.name, none: "no default branch" };
     return yield* host.merges(repo, base).pipe(
       Effect.map((merges): ProjectMerges => ({ project: p.name, repo, base, merges })),
-      Effect.catchTags({
-        HostCliMissing: () => Effect.succeed({ project: p.name, none: "install gh and run gh auth login" }),
-        HostRefused: (e) => Effect.succeed({ project: p.name, none: e.reason }),
-      }),
+      Effect.catch((e) => Effect.succeed({ project: p.name, none: e.message })),
     );
   });
 
@@ -41,6 +39,7 @@ export const mergesAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     const rooms = yield* Rooms;
     const store = yield* StateStore;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     return rooms.watch((h) =>
       Stream.concat(
         Stream.succeed(null),
@@ -48,7 +47,7 @@ export const mergesAtom = runtimeAtom.atom(
           Effect.gen(function* () {
             const projects = [...((yield* store.get).rooms[h.id] ?? [])].sort((a, b) => a.name.localeCompare(b.name));
             return yield* Effect.forEach(projects, mergesOf, { concurrency: 4 });
-          }),
+          }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)),
         ),
       ),
     );

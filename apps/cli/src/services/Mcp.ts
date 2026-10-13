@@ -1,7 +1,8 @@
 import { statSync } from "node:fs";
 import { createServer } from "node:http";
 import { basename, resolve } from "node:path";
-import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
+import { Clock, Effect, Layer, Option, Schema, SubscriptionRef } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
 import { NodeHttpServer } from "@effect/platform-node";
@@ -749,8 +750,10 @@ const makeHandlers = Effect.gen(function* () {
     const outbox = yield* Outbox;
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
-    // what the review's comments run on (drafts here, the room's log, who is saying them)
-    const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore>();
+    // what the review's comments run on (drafts here, the room's log, who is
+    // saying them, the code's host's CLI)
+    const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore | ChildProcessSpawner.ChildProcessSpawner>();
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
     // Every tool is scoped to the room the user is looking at — resolved per
     // call, so switching rooms retargets all of them without a reconnect.
@@ -1367,7 +1370,7 @@ const makeHandlers = Effect.gen(function* () {
           if (theirs.length === 0) {
             return `failed: nobody can tell who wrote this code — ${review.branch ? `the branch ${review.branch} is not in your clone yet (fetch it)` : "the review names no branch"}${host ? "" : " and no host to ask"}. Only its author can take it over, so nobody can until that is known.`;
           }
-          const mine = yield* ownIdentities(clone?.path, host);
+          const mine = yield* ownIdentities(clone?.path, host).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           if (!mine.some((m) => theirs.includes(m))) {
             return `failed: this review is about ${review.assumed.author}'s code — written by ${theirs.map(describeIdentity).join(", ")} — and here you are ${mine.length > 0 ? mine.map(describeIdentity).join(", ") : `nobody yet: sign in to ${host?.name ?? "the code's host"}, or set git's user.email in your clone`}. Only its author can take it over.`;
           }
@@ -1435,11 +1438,12 @@ const makeHandlers = Effect.gen(function* () {
         let base = input.base;
         const host = input.link ? hostOf(input.link) : undefined;
         if (host && input.link && (!author || !branch || !base)) {
-          const got = yield* host.pull(input.link, input.branch);
-          if ("pull" in got) {
-            author ??= got.pull.author || undefined;
-            branch ??= got.pull.fork ? `pr/${got.pull.number}` : got.pull.branch;
-            base ??= got.pull.base;
+          const got = yield* host.pull(input.link, input.branch).pipe(Effect.option, Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+          if (Option.isSome(got)) {
+            const pull = got.value;
+            author ??= pull.author || undefined;
+            branch ??= pull.fork ? `pr/${pull.number}` : pull.branch;
+            base ??= pull.base;
           }
         }
         const { id: roomId, room } = yield* focusedRoom;
