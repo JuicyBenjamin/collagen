@@ -46,9 +46,9 @@ describe("highlightHunk", () => {
 });
 
 describe("highlightCode / toolOf", () => {
-  it("colours a snippet by file name or language", () => {
-    expect(highlightCode("function f() {}", "typescript")[0]![0]).toEqual({ className: "keyword", value: "function" });
-    expect(highlightCode("const a = 1", "x/y.tsx")[0]![0]).toEqual({ className: "keyword", value: "const" });
+  it("colours a snippet in the language it is given", () => {
+    expect(highlightCode("function f() {}", "ts")[0]![0]).toEqual({ className: "keyword", value: "function" });
+    expect(highlightCode("const a = 1", languageOf("x/y.tsx"))[0]![0]).toEqual({ className: "keyword", value: "const" });
   });
   it("asks a language server only about files one reads", () => {
     expect(["a.ts", "a.tsx", "a.mjs", "a.cts"].map(toolOf)).toEqual(["typescript", "typescript", "typescript", "typescript"]);
