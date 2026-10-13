@@ -38,8 +38,8 @@ No files are written into your projects.
   ╭────╮ ╭─ room · dev room ──────────────────────────────────────────╮
   │ WO │ │ › [1] overview   [2] projects   …   [5] outbox  ·  2 online  │
   ╰────╯ │                                                            │
- ▌╭────╮ │ ● alice (you) codex · 1 project                            │
- ▌│ DR │ │ ● bob claude-code · 2 projects                             │
+ ▌╭────╮ │   ● you, bob                                               │
+ ▌│ DR │ │   ○ carol                                                  │
  ▌╰──2─╯ │                                                            │
   ╭────╮ │   tickets                                                  │
   │ +  │ │   ⧉ explain average() · sandbox · 1/2 ✓ ⟳                  │
@@ -54,10 +54,13 @@ No files are written into your projects.
 
 - **rooms rail** (left) — one avatar per room. Pill = the room you're in, dot = messages
   waiting for you elsewhere, corner number = people online there. `+` joins or creates.
-- **overview tab** — who's here (with their AI and its auth badge; `○ (away)` for peers
-  looking at another room), every ticket in the room its author has not closed — whoever
-  made it and whoever it is for; a closed one has left the list and stays on the log. Each
-  person's line ends with how many projects they share here. A ticket row says whose
+- **overview tab** — who's in the room, in two lines that never grow: `●` who is here now,
+  `○` the rest (away in another room, or offline), each ending in `…` when it is full; a
+  name in the warning colour has a problem (its AI's CLI, its sign-in, another collagen
+  version). `enter` there opens **people**: tabs `all` / `online` / `offline` over one row
+  per person with their AI, `away`, the problem and how many projects they share here.
+  Then every ticket in the room its author has not closed — whoever
+  made it and whoever it is for; a closed one has left the list and stays on the log. A ticket row says whose
   it is by the colour of its kind (bright for yours, dim for somebody else's) and lists
   the *other* people on it with what each did: `✓` asked for no changes, `↻` asked for
   changes, `✕` a step failed, `…` said something, a bare name means nothing from them
