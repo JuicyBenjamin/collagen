@@ -120,7 +120,7 @@ export function wholeRun(run: ReadonlyArray<HunkData>) {
   const [asked, setAsked] = createSignal<string | null>(null);
   const shown = createMemo((): HunkData | null => {
     const w = read();
-    return open() && w && w !== "loading" && "lines" in w ? wholeHunk(first, w.lines, diffNow.addedIn(first.file)) : null;
+    return open() && w && w !== "loading" && "lines" in w ? wholeHunk(first, w.lines, diffNow.addedIn(first.file), diffNow.removedIn(first.file)) : null;
   });
   return {
     count: run.length,
@@ -277,7 +277,7 @@ export function Hunk(props: {
             </button>
           </Show>
           <Show when={canWhole()}>
-            <button type="button" class="whole-toggle" onClick={toggleWhole} title="The whole file as the branch has it, this diff's added lines marked">
+            <button type="button" class="whole-toggle" onClick={toggleWhole} title="The whole file as the branch has it, with this diff's added and removed lines">
               {props.whole.loading() ? "Reading…" : props.whole.shown() !== null ? (props.whole.count > 1 ? "Just the changes" : "Just the change") : "Whole file"}
             </button>
           </Show>
