@@ -23,7 +23,10 @@ import type { Hunk } from "./data";
 
 const highlighter = createHighlighter({ languages: [css, go, html, js, json, jsx, markdown, php, python, shell, sql, toml, ts, tsx, yaml] });
 
-const BY_EXT: Record<string, string> = {
+/** The languages the page colours; anything else reads as plain text. */
+export type Language = "css" | "go" | "html" | "js" | "json" | "jsx" | "markdown" | "php" | "python" | "shell" | "sql" | "toml" | "ts" | "tsx" | "yaml" | "plaintext";
+
+const BY_EXT: Readonly<Record<string, Language>> = {
   ts: "ts", mts: "ts", cts: "ts", tsx: "tsx",
   js: "js", mjs: "js", cjs: "js", jsx: "jsx",
   json: "json", css: "css", html: "html", htm: "html",
@@ -34,7 +37,13 @@ const BY_EXT: Record<string, string> = {
 };
 
 /** The language a file is highlighted as, from its extension. */
-export const languageOf = (file: string): string => BY_EXT[file.split(".").pop()?.toLowerCase() ?? ""] ?? "plaintext";
+export const languageOf = (file: string): Language => BY_EXT[file.split(".").pop() ?? ""] ?? "plaintext";
+
+/** A code fence's language as someone else wrote it — a comment on the pull
+ *  request, a language server's hover — read once, where it comes in: by the
+ *  names and extensions people put after the backticks. */
+const BY_FENCE: Readonly<Record<string, Language>> = { ...BY_EXT, typescript: "ts", javascript: "js", golang: "go" };
+export const fenceLanguage = (name: string): Language => BY_FENCE[name] ?? "plaintext";
 
 export interface Span {
   readonly className?: HighlightTokenClass;
@@ -72,11 +81,8 @@ export function highlightHunk(hunk: Pick<Hunk, "file" | "lines">): Array<Array<S
 }
 
 /** Any code as lines of spans — a peeked declaration, a hover's signature, a
- *  comment's code fence. `lang` is a file name, an extension (py, yml…) or a
- *  language name (typescript, ts, tsx…). */
-export function highlightCode(code: string, lang: string): Array<Array<Span>> {
-  const l = lang.toLowerCase();
-  const asFile = l.includes(".") ? languageOf(l) : l === "typescript" ? "ts" : l === "javascript" ? "js" : (BY_EXT[l] ?? l);
-  return splitLines(highlighter.tokenize(code, { lang: asFile }).tokens);
+ *  comment's code fence. */
+export function highlightCode(code: string, lang: Language): Array<Array<Span>> {
+  return splitLines(highlighter.tokenize(code, { lang }).tokens);
 }
 

@@ -1,9 +1,11 @@
-export type Block = { readonly code: string; readonly lang: string } | { readonly text: string } | { readonly label: string };
+import { fenceLanguage, type Language } from "./highlight";
+
+export type Block = { readonly code: string; readonly lang: Language } | { readonly text: string } | { readonly label: string };
 
 /** A code fence as the page shows it: PHP's servers open theirs with
  *  `<?php` and give a declaration an empty `{ }` body — neither says
  *  anything the signature does not. */
-const tidy = (code: string, lang: string): string =>
+const tidy = (code: string, lang: Language): string =>
   lang === "php" ? code.replace(/^<\?php\s*\n/, "").replace(/\s*\{\s*\}[ \t]*$/gm, "") : code;
 
 /** A hover's markdown, as blocks: the code fences the language server sends
@@ -27,7 +29,9 @@ export function blocks(markdown: string): Array<Block> {
   let at = 0;
   for (let m = re.exec(markdown); m; m = re.exec(markdown)) {
     prose(markdown.slice(at, m.index));
-    const lang = m[1]!.trim().split(/\s+/)[0] || "typescript";
+    // a fence with no language is the TypeScript server's
+    const name = m[1]!.trim().split(/\s+/)[0];
+    const lang = name ? fenceLanguage(name) : "ts";
     out.push({ code: tidy(m[2]!.replace(/\n$/, ""), lang), lang });
     at = m.index + m[0].length;
   }
@@ -61,7 +65,7 @@ export function inline(text: string): Array<Inline> {
 export function brief(markdown: string): { readonly blocks: ReadonlyArray<Block>; readonly more: boolean; readonly overloads: number } {
   const all = blocks(markdown);
   const label = all.find((b) => "label" in b);
-  const fence = all.find((b) => "code" in b) as { code: string; lang: string } | undefined;
+  const fence = all.find((b) => "code" in b) as { code: string; lang: Language } | undefined;
   // an overloaded function's signatures arrive in one fence; the first says enough
   const sigs = fence ? signatures(fence.code) : [];
   const code = fence ? { ...fence, code: sigs[0] ?? fence.code } : undefined;
