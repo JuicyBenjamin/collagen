@@ -4,6 +4,7 @@ import { diffNow } from "../diffNow";
 import { ticketId } from "../ticket";
 import { wholeFile } from "../api";
 import { hasNewSide, wholeHunk } from "../whole";
+import { foldAway } from "../fold";
 import { highlightHunk } from "../highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
 import { ChangedLine, CodeLine } from "./Code";
@@ -39,8 +40,9 @@ const STUCK_AT = 24;
 
 /** A file's header is stuck while it sits where it sticks with its card
  *  running above it: the band above it is covered then, so code scrolling
- *  past does not show through. Checked on every frame the page scrolls in,
- *  for every header on it — a jump lands on the right answer too. */
+ *  past does not show through. Checked on every frame the page scrolls or
+ *  changes height in, for every header on it — a jump or a fold above lands
+ *  on the right answer too. */
 const headers = new Set<HTMLElement>();
 let pending = false;
 const markStuck = () => {
@@ -60,6 +62,9 @@ if (typeof window !== "undefined") {
   };
   window.addEventListener("scroll", soon, { passive: true });
   window.addEventListener("resize", soon, { passive: true });
+  // the page moving under a still window — a file folding or opening above,
+  // a why closing — changes what is stuck without a scroll
+  new ResizeObserver(soon).observe(document.body);
 }
 const watchStuck = (el: HTMLElement) => {
   headers.add(el);
@@ -107,7 +112,8 @@ const keepPlace = (card: Element, at: Place) =>
       const d = Math.abs(Number(tr.dataset.new) - at.n);
       if (d < off) [best, off] = [tr, d];
     }
-    if (best) window.scrollBy(0, best.getBoundingClientRect().top - at.y);
+    // at once: the page's smooth scrolling is for the reader's jumps, not for holding a place
+    if (best) window.scrollBy({ top: best.getBoundingClientRect().top - at.y, behavior: "instant" });
   });
 
 /** A file's changes in one unit, read whole on the reader's word: one view
@@ -259,7 +265,11 @@ export function Hunk(props: {
           fallback={
             <Show when={state() === "viewed"} fallback={<span class="head path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>}>
               {/* viewed: the chevron opens it again to read, the mark stays */}
-              <button type="button" class="head reread-toggle" onClick={() => reading.toggle(props.hunk.file)} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
+              <button type="button" class="head reread-toggle" onClick={async () => {
+                  // folding it again closes smoothly; opening it is at once
+                  if (!folded()) await foldAway(card());
+                  reading.toggle(props.hunk.file);
+                }} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
                 <span class="chevron">{folded() ? "▸" : "▾"}</span><span class="path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>
               </button>
             </Show>
@@ -287,7 +297,9 @@ export function Hunk(props: {
             <input
               type="checkbox"
               checked={state() === "viewed"}
-              onChange={() => {
+              onChange={async () => {
+                // marking it folds it: closed smoothly first, then marked
+                if (state() !== "viewed" && !reading.folded(props.hunk.file)) await foldAway(card());
                 viewed.toggle(props.hunk.file, diffNow.commit());
                 reading.marked(props.hunk.file);
               }}
@@ -298,6 +310,7 @@ export function Hunk(props: {
         </span>
       </div>
       <Show when={!folded()}>
+        <div class="hunk-body">
         <Show when={gapFailed()}>{(why) => <p class="whole-failed">Could not read the lines between: {why()}</p>}</Show>
         <Show when={gapShown()}>
           {(g) => (
@@ -335,6 +348,7 @@ export function Hunk(props: {
             </For>
           </Show>
         </Show>
+        </div>
       </Show>
     </div>
     </Show>
