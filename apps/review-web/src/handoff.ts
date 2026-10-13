@@ -23,7 +23,7 @@ const taking = new URLSearchParams(location.search).has(TAKE);
 function scrollWhenThere(y: number) {
   const until = Date.now() + 3_000;
   const step = () => {
-    if (document.documentElement.scrollHeight >= y + innerHeight || Date.now() > until) scrollTo(0, y);
+    if (document.documentElement.scrollHeight >= y + innerHeight || Date.now() > until) scrollTo({ top: y, behavior: "instant" });
     else requestAnimationFrame(step);
   };
   step();
@@ -39,7 +39,7 @@ function linksInPlace() {
     if (!id) return;
     e.preventDefault();
     history.replaceState(history.state, "", `#${id}`);
-    document.getElementById(decodeURIComponent(id))?.scrollIntoView();
+    document.getElementById(decodeURIComponent(id))?.scrollIntoView({ behavior: "instant" });
   });
 }
 
