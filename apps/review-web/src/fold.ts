@@ -21,3 +21,31 @@ export async function foldAway(card: Element | null): Promise<void> {
     }),
   );
 }
+
+/** An animation's end — or, where no frames come to run it (a tab out of
+ *  sight), soon after it should have ended, so nothing is left half open. */
+const ended = (run: PromiseLike<unknown>, seconds: number): Promise<unknown> =>
+  Promise.race([run, new Promise((done) => setTimeout(done, seconds * 1000 + 100))]);
+
+/** Something opening, as it comes in: from nothing to its own height, fading
+ *  in. Call it on the element as it is placed (a ref); it starts closed. */
+export function enter(el: HTMLElement): void {
+  if (still.matches) return;
+  el.style.overflow = "hidden";
+  el.style.height = "0px";
+  el.style.opacity = "0";
+  // placed by the time the code that made it is done; measured then
+  queueMicrotask(() => {
+    void ended(animate(el, { height: [0, el.scrollHeight], opacity: [0, 1] }, { duration: 0.22, ease: EASE }).finished, 0.22).then(() => {
+      for (const p of ["height", "opacity", "overflow"]) el.style.removeProperty(p);
+    });
+  });
+}
+
+/** Something closing: to nothing, fading out — resolves once it is gone, for
+ *  the caller to take it away then. */
+export async function leave(el: HTMLElement | undefined): Promise<void> {
+  if (!el || still.matches) return;
+  el.style.overflow = "hidden";
+  await ended(animate(el, { height: [el.offsetHeight, 0], opacity: [1, 0] }, { duration: 0.2, ease: EASE }).finished, 0.2);
+}

@@ -454,6 +454,8 @@ export interface MergeEntry {
   readonly branch: string;
   /** when it was merged, ISO */
   readonly at: string;
+  /** the epics the tickets it grew from are in */
+  readonly epics: ReadonlyArray<{ readonly id: string; readonly name: string }>;
   readonly tickets: ReadonlyArray<MergeTicket>;
 }
 
