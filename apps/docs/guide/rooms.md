@@ -49,7 +49,9 @@ Everyone in a room broadcasts a small profile:
 | projects | The projects they share into *this* room |
 | away | They're connected but looking at another room |
 
-The roster updates live: joins, leaves, AI changes, project changes, room switches.
+The roster updates live: joins, leaves, AI changes, project changes, room switches. The
+overview shows it as two lines (`●` here, `○` away or offline); `enter` on them opens the
+people page with everyone the room's log remembers, one row each.
 
 ```mermaid
 flowchart TD
