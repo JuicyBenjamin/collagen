@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { MergeHistory } from "./MergeHistory";
 import { Swarm, SwarmConfig } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
 import { AiStatus } from "./AiStatus";
@@ -64,12 +65,14 @@ const SwarmLive = Swarm.layer.pipe(
 export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
   Layer.provideMerge(ReviewTypes.layer),
   Layer.provideMerge(ReviewPages.layer),
+  Layer.provideMerge(MergeHistory.layer),
   Layer.provideMerge(Updates.layer),
   Layer.provideMerge(Attachments.layer),
   Layer.provideMerge(Transcripts.layer),
   Layer.provideMerge(Outbox.layer),
   Layer.provideMerge(Dispatch.layer),
   Layer.provideMerge(Scripting.layer),
+).pipe(
   Layer.provideMerge(Rooms.layer),
   Layer.provideMerge(SwarmLive),
   Layer.provideMerge(AgentRunner.layer),

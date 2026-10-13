@@ -73,9 +73,10 @@ No files are written into your projects.
   latest first, each by its pull request's title with its number, branch and age.
   Under a merge, a line per review ticket it came from (by the pull request its link
   names, else its branch, else a commit it was read at); none when it came from none.
-  `enter` on a ticket's line opens it (`esc` comes back here), `o` opens the pull
-  request in your browser, `w` opens the same history as a web page (each merge
-  linked to its pull request, each ticket to its review page), `r` reads the merges again.
+  More are read as you scroll down. `enter` on a ticket's line opens it (`esc` comes
+  back here). `o` opens collagen's own page in your browser: on the tab, the whole
+  history as a web page; on a merge, that page at the merge, with what was decided on it
+  and why; on a ticket, its review page. `p` opens the merge's pull request, `r` refreshes.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
 - **outbox tab** — everything of yours that has gone out, in one list, newest first,
