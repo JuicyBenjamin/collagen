@@ -54,6 +54,12 @@ describe("a line changed in place", () => {
     expect(d.reorder).toEqual({ moved: 3, words: 7 });
   });
 
+  it("does not mark a line that was only indented deeper", () => {
+    const d = wordDiff('    <Show when={x}>', '      <Show when={x}>')!;
+    expect(d.segments.filter((s) => s.kind !== "same")).toEqual([]);
+    expect(d.segments.map((s) => s.text).join("")).toBe('      <Show when={x}>');
+  });
+
   it("still marks a plain edit as removed and added", () => {
     const d = wordDiff("const limit = 10;", "const limit = 25;");
     expect(d!.segments.map((s) => `${s.kind}:${s.text}`)).toEqual(["same:const limit = ", "removed:10", "added:25", "same:;"]);

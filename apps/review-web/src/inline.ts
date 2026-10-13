@@ -135,8 +135,10 @@ export function wordDiff(old: string, now: string): Diff | null {
     if (r.kind === "same") segments.push({ kind: "same", text: r.b, at: ob });
     else if (r.kind === "moved") segments.push({ kind: "moved", text: r.b, at: ob });
     else if (r.kind === "change") {
-      if (r.a) segments.push({ kind: "removed", text: r.a, at: oa });
-      if (r.b) segments.push({ kind: "added", text: r.b, at: ob });
+      // spacing alone (a line indented deeper, say) is not marked: an
+      // underline under blanks reads as stray spaces; the ~ says it changed
+      if (r.a && !blank(r.a)) segments.push({ kind: "removed", text: r.a, at: oa });
+      if (r.b) segments.push({ kind: blank(r.b) ? "same" : "added", text: r.b, at: ob });
     }
     oa += r.a.length;
     ob += r.b.length;
