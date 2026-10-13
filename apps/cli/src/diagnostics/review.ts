@@ -1,6 +1,7 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, isTake, visibleTo } from "@collagen/p2p";
+import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, visibleTo } from "@collagen/p2p";
+import { whyOpen } from "../lib/mergeTickets";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
 
@@ -62,16 +63,13 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       // the goal alone until that reader has posted their own take. The log
       // is shared, so this hides nothing from anyone — it is a courtesy the
       // reader's agent keeps, and says when the person asked it not to
-      if (ticket && isJudged(ticket.kind) && ticket.kind !== "review" && ticket.createdBy !== me && !anyway) {
-        const taken = ticket.steps.some((s) => isTake(s) && s.owner === me && (s.status === "settled" || s.status === "failed"));
-        if (!taken) {
-          // on a bug the fact is shown and the reading is not: the symptom, then
-          // your person's own diagnosis, then the reporter's cause and suggestion
-          if (ticket.kind === "bug" && review.bug) {
-            return `bug: "${ticket.goal}"\nsymptom: ${review.bug.symptom}\n\nThis is the blind first take. ${review.authorName}'s reading of it (cause, importance, suggestion, remedy) is on this ticket, but your user has not given theirs yet. Ask them what THEY make of the symptom — what is happening, how bad, what would fix it — and post it with post-review (failed: true asks the reporter for changes) — then call review-context again and the reporter's reading opens. If they would rather read everything first, call review-context with anyway: true and tell them you skipped the blind take.`;
-          }
-          return `${ticket.kind}: "${ticket.goal}"\n\nThis is the blind first take. ${review.authorName}'s thoughts (${review.decisions.length} decision(s), ${review.forks.length} fork(s)) are on this ticket, but your user has not taken a position yet. Ask them what THEY think of "${ticket.goal}" and post it with post-review (failed: true asks for changes) — then call review-context again and the thoughts open. If they would rather read everything first, call review-context with anyway: true and tell them you skipped the blind take.`;
+      if (ticket && !anyway && !whyOpen(ticket, me)) {
+        // on a bug the fact is shown and the reading is not: the symptom, then
+        // your person's own diagnosis, then the reporter's cause and suggestion
+        if (ticket.kind === "bug" && review.bug) {
+          return `bug: "${ticket.goal}"\nsymptom: ${review.bug.symptom}\n\nThis is the blind first take. ${review.authorName}'s reading of it (cause, importance, suggestion, remedy) is on this ticket, but your user has not given theirs yet. Ask them what THEY make of the symptom — what is happening, how bad, what would fix it — and post it with post-review (failed: true asks the reporter for changes) — then call review-context again and the reporter's reading opens. If they would rather read everything first, call review-context with anyway: true and tell them you skipped the blind take.`;
         }
+        return `${ticket.kind}: "${ticket.goal}"\n\nThis is the blind first take. ${review.authorName}'s thoughts (${review.decisions.length} decision(s), ${review.forks.length} fork(s)) are on this ticket, but your user has not taken a position yet. Ask them what THEY think of "${ticket.goal}" and post it with post-review (failed: true asks for changes) — then call review-context again and the thoughts open. If they would rather read everything first, call review-context with anyway: true and tell them you skipped the blind take.`;
       }
       // a reader starting on a review gets its page, the diff read by intent,
       // in their browser (their openReviewPage setting; once a run)
