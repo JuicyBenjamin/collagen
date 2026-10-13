@@ -38,7 +38,15 @@ describe("what a review must carry", () => {
     const gap = reviewGaps({ ...full, decisions: [{ title: "A logo worth a look", what: "pure frame functions", where: [] }] }, false);
     expect(gap).toMatch(/decision 1 \("pure frame functions"\) has no why/);
     // one of the two whys is enough
-    expect(reviewGaps({ ...full, decisions: [{ title: "x", what: "x", agentWhy: "mine", where: [] }] }, false)).toBe(null);
+    expect(reviewGaps({ ...full, decisions: [{ title: "x", what: "x", agentWhy: "mine", where: ["a.ts"] }] }, false)).toBe(null);
+  });
+
+  it("a review's decision points at the code it shaped, or is refused", () => {
+    expect(reviewGaps({ ...full, decisions: [{ title: "Links, not open()", what: "triggers render as links", agentWhy: "cmd-click works", where: [] }] }, false)).toMatch(/decision 1 \("triggers render as links"\) has no 'where'/);
+    // a revision of a decision keeps its pointers when it names none
+    expect(reviewGaps({ decisions: [{ id: "d1", title: "x", what: "x", agentWhy: "mine" }] }, true)).toBe(null);
+    // a plan's thoughts may come before any code
+    expect(reviewGaps({ ...full, decisions: [{ title: "x", what: "x", agentWhy: "mine", where: [] }] }, false, "plan")).toBe(null);
   });
 
   it("a review's summary is a headline: a sentence or two, not the build", () => {
