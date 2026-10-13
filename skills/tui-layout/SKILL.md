@@ -25,7 +25,10 @@ description: Use when laying out, sizing, aligning or scrolling anything in coll
 6. **Glyphs must be one cell everywhere.** Prefer ones narrow in every
    terminal (Unicode 16 made `☰` two wide); ambiguous-width box drawing is
    fine in Western terminals.
-7. **Verify on a real screen.** Capture with the pyte harness at a small and
+7. **A fixed section keeps its height.** A box above or beside a scrolling
+   list gets `flexShrink={0}`: squeezed, OpenTUI draws its rows over each
+   other on one line, and it reads as garbage, not as a cut.
+8. **Verify on a real screen.** Capture with the pyte harness at a small and
    a normal size, step through the interaction, and check positions frame by
    frame — a passing build proves nothing about a layout.
 
@@ -36,10 +39,12 @@ description: Use when laying out, sizing, aligning or scrolling anything in coll
 - The ticket list scrolled before the cursor reached the bottom; the outbox
   re-centred on every keypress.
 - An unfolded message taller than the list flipped between top and bottom.
+- With a long ticket list, the people above it shrank to one row and two
+  names were drawn on top of each other.
 
 ## Checklist
 
 - [ ] Widths via `cells`, bounded by the measured pane.
-- [ ] Shrinkable boxes use `flexBasis`.
+- [ ] Shrinkable boxes use `flexBasis`; fixed ones say `flexShrink={0}`.
 - [ ] Scrolling via `FollowScroll`; rows carry ids.
 - [ ] Captured and stepped through at two sizes.
