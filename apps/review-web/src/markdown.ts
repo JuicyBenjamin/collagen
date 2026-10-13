@@ -1,5 +1,6 @@
 import { nameToEmoji } from "gemoji";
 import { Lexer, type Token, type Tokens } from "marked";
+import { fenceLanguage, type Language } from "./highlight";
 
 // A comment's words as GitHub-flavoured markdown, read into a small tree of
 // the page's own: the page renders each node as an element of its own and
@@ -23,7 +24,7 @@ export interface Item {
 export type Block =
   | { readonly kind: "p"; readonly children: ReadonlyArray<Inline> }
   | { readonly kind: "heading"; readonly depth: number; readonly children: ReadonlyArray<Inline> }
-  | { readonly kind: "code"; readonly lang: string; readonly text: string }
+  | { readonly kind: "code"; readonly lang: Language; readonly text: string }
   | { readonly kind: "quote"; readonly blocks: ReadonlyArray<Block> }
   | { readonly kind: "list"; readonly start: number | undefined; readonly items: ReadonlyArray<Item> }
   | { readonly kind: "table"; readonly head: ReadonlyArray<ReadonlyArray<Inline>>; readonly rows: ReadonlyArray<ReadonlyArray<ReadonlyArray<Inline>>> }
@@ -101,7 +102,7 @@ const blocks = (tokens: ReadonlyArray<Token>): ReadonlyArray<Block> =>
       case "heading":
         return [{ kind: "heading", depth: (t as Tokens.Heading).depth, children: inline((t as Tokens.Heading).tokens) }];
       case "code":
-        return [{ kind: "code", lang: ((t as Tokens.Code).lang ?? "").trim().split(/\s+/)[0] ?? "", text: (t as Tokens.Code).text }];
+        return [{ kind: "code", lang: fenceLanguage((t as Tokens.Code).lang?.trim().split(/\s+/)[0] ?? ""), text: (t as Tokens.Code).text }];
       case "blockquote":
         return [{ kind: "quote", blocks: blocks((t as Tokens.Blockquote).tokens) }];
       case "list": {
