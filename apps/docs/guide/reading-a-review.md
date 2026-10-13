@@ -72,6 +72,10 @@ hold part of a file (one route of a big routes file) and another unit the rest.
   away. When a decision also points at code the diff does not change, a quiet note says the
   why may be older than the branch.
 
+A line changed in place is one yellow line: the words that went struck through in red, the
+words that came in green. Lines pair when at least half their code is shared; less alike, they
+stay a red line and a green one.
+
 Forks that fall in no change of the diff close the page. With no diff to read, the page
 lists the decisions and where they point.
 
