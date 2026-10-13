@@ -497,6 +497,10 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .merge-tickets li.closed a { color: var(--dim); }
 .merge-ticket-by { color: var(--dim); font-size: 13px; white-space: nowrap; }
 .merge-ticket-by.mine { color: var(--accent); }
+.merge-ticket-kind { color: var(--dim); font-size: 12px; min-width: 64px; }
+.merge-ticket-name { color: var(--fg); overflow-wrap: anywhere; flex: 1; min-width: 0; }
+.merge-tickets li.closed .merge-ticket-name { color: var(--dim); }
+.merge-why-of { margin: 10px 0 0; color: var(--dim); font-size: 13px; }
 .merges-more { color: var(--dim); margin: 0 0 0 24px; }
 .merge { scroll-margin-top: 24px; }
 .merge.target > .merge-title a { color: var(--accent); }
