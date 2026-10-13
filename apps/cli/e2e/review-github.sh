@@ -249,7 +249,7 @@ expect "…its branch read from the pull request" "$DATA" '"branch":"feat/stream
 expect "…and the diff read from the clone, by unit" "$DATA" '"source":\{"kind":"clone"'
 expect "…and who wrote it, as identities no host owns: the login on the pull request, the email on its commits" "$DATA" '"identities":\["github:alice-gh","git:e2e@collagen.test"\]'
 # built here, not inside "$( )": bash 3.2 mangles \" nested there
-TOLD="{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"x\",\"what\":\"y\",\"agentWhy\":\"z\"}],\"forks\":[]}"
+TOLD="{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"x\",\"what\":\"y\",\"agentWhy\":\"z\",\"where\":[\"src/export.ts\"]}],\"forks\":[]}"
 expect "a told why is never added to a guessed one" "$(call $A "$SA" ask-review "$TOLD")" "built from assumptions .{1,3} amend it with assume-review"
 MORE="{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"Pages of a hundred\",\"what\":\"a page holds 100 rows\",\"why\":\"memory\",\"basis\":\"a constant in the code\",\"confidence\":\"medium\",\"where\":[\"src/page.ts:2\"]}]}"
 ADDED=$(call $A "$SA" assume-review "$MORE")
@@ -262,7 +262,7 @@ SB=$(mcp $B); wait_for_peer $B "$SB" alice; admitted bob
 wait_until "bob's collagen sees the code is his, and tells his agent once — it arrived before he joined" "alice guessed why your user wrote their code" cat "$OUT/bob.log"
 expect "…once" "$(grep -c "${AT:0:8}: alice guessed why your user wrote their code" "$OUT/bob.log")" "^1$"
 wait_until "bob's agent reads the guesses, and how to answer them if he wrote the code" "IF YOUR USER WROTE THIS CODE .alice-gh's pull request.: they can take this review over" call $B "$SB" review-context "$QAT"
-CLAIM="{\"ticketId\":\"$AT\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"},{\"id\":\"d2\",\"verdict\":\"corrected\",\"title\":\"Pages of fifty\",\"what\":\"a page holds 50 rows\",\"userWhy\":\"the phone app runs out of memory\"},{\"id\":\"f1\",\"verdict\":\"wrong\",\"userWhy\":\"paging was never considered\"}],\"decisions\":[{\"title\":\"Sessions untouched\",\"what\":\"exports keep the session they run in\",\"userWhy\":\"auth is out of scope\"}]}"
+CLAIM="{\"ticketId\":\"$AT\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"},{\"id\":\"d2\",\"verdict\":\"corrected\",\"title\":\"Pages of fifty\",\"what\":\"a page holds 50 rows\",\"userWhy\":\"the phone app runs out of memory\"},{\"id\":\"f1\",\"verdict\":\"wrong\",\"userWhy\":\"paging was never considered\"}],\"decisions\":[{\"title\":\"Sessions untouched\",\"what\":\"exports keep the session they run in\",\"userWhy\":\"auth is out of scope\",\"where\":[\"src/export.ts\"]}]}"
 git -C "$R" config user.email someone@example.com
 expect "its guesser cannot answer its own guesses — not being the code's author" "$(call $A "$SA" claim-review "$CLAIM")" "here you are someone@example.com in git, bob on GitHub. Only its author can take it over"
 git -C "$R" config user.email e2e@collagen.test
@@ -279,7 +279,7 @@ expect "…the corrected one, beside what was guessed" "$CTX" "d2,Pages of fifty
 expect "…and bob's own decision, told" "$CTX" "Sessions untouched,exports keep the session they run in,told,auth is out of scope"
 expect "…the fork marked wrong, with why" "$CTX" "a stream,paging,paging was never considered,wrong"
 expect "its guesser cannot guess on it any more: it is bob's" "$(call $A "$SA" assume-review "$MORE")" "that review's why is bob's to write"
-expect "bob adds to it as to any review of his" "$(call $B "$SB" ask-review "{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"CSV next\",\"what\":\"a CSV export follows\",\"userWhy\":\"finance asked\"}],\"forks\":[]}")" "review ticket updated"
+expect "bob adds to it as to any review of his" "$(call $B "$SB" ask-review "{\"ticketId\":\"$AT\",\"decisions\":[{\"title\":\"CSV next\",\"what\":\"a CSV export follows\",\"userWhy\":\"finance asked\",\"where\":[\"src/export.ts\"]}],\"forks\":[]}")" "review ticket updated"
 DATA=$(sfn reviewData "[\"$AT\"]")
 expect "the page has it taken over, each guess's verdict" "$DATA" '"claimed":\{"guessedBy":"[0-9a-f]+","guessedByName":"alice"'
 expect "…the correction keeps the guess" "$DATA" '"verdict":"corrected","guess":\{"what":"a page holds 100 rows","why":"memory","basis":"a constant in the code"\}'
@@ -290,7 +290,7 @@ NOHOST='{"project":"sandbox","title":"Exports, unhosted","summary":"The same cha
 NH=$(call $A "$SA" assume-review "$NOHOST" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "bob has it" "Exports, unhosted" call $B "$SB" get-tickets '{}'
 QNH="{\"ticketId\":\"$NH\"}"
-ADDNH="{\"ticketId\":\"$NH\",\"decisions\":[{\"title\":\"Rows as strings\",\"what\":\"rows map to strings\",\"why\":\"it says so\",\"basis\":\"the code\",\"confidence\":\"low\"}]}"
+ADDNH="{\"ticketId\":\"$NH\",\"decisions\":[{\"title\":\"Rows as strings\",\"what\":\"rows map to strings\",\"why\":\"it says so\",\"basis\":\"the code\",\"confidence\":\"low\",\"where\":[\"src/export.ts\"]}]}"
 call $A "$SA" assume-review "$ADDNH" > /dev/null
 RETIRE="{\"ticketId\":\"$NH\",\"retire\":[\"d2\"]}"
 NOSUCH="{\"ticketId\":\"$NH\",\"retire\":[\"d9\"]}"
@@ -308,7 +308,7 @@ NHMORE="{\"ticketId\":\"$NH\",\"answers\":[{\"id\":\"d3\",\"verdict\":\"wrong\",
 git -C "$R" config user.email carol@example.com
 expect "once his, bob answers the rest — authorship was proven when he took it over" "$(call $B "$SB" claim-review "$NHMORE")" "taken over .Exports, unhosted.*1 wrong"
 git -C "$R" config user.email e2e@collagen.test
-UNKNOWN='{"project":"sandbox","title":"Exports, unknown","summary":"Nobody can tell whose","branch":"feat/not-here","base":"main","author":"someone","sources":["a rumour"],"decisions":[{"title":"Guess","what":"a guess","why":"why not","basis":"nothing much","confidence":"low"}]}'
+UNKNOWN='{"project":"sandbox","title":"Exports, unknown","summary":"Nobody can tell whose","branch":"feat/not-here","base":"main","author":"someone","sources":["a rumour"],"decisions":[{"title":"Guess","what":"a guess","why":"why not","basis":"nothing much","confidence":"low","where":["src/export.ts"]}]}'
 UK=$(call $A "$SA" assume-review "$UNKNOWN" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 wait_until "bob has it" "Exports, unknown" call $B "$SB" get-tickets '{}'
 UKCLAIM="{\"ticketId\":\"$UK\",\"answers\":[{\"id\":\"d1\",\"verdict\":\"confirmed\"}]}"
