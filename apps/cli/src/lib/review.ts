@@ -148,6 +148,11 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
     if (blank(d.userWhy) && blank(d.agentWhy)) {
       return `failed: ${at} ("${d.what.slice(0, 40)}") has no why. 'userWhy' is how your user steered it — what they asked for or ruled out, in their words where you have them; 'agentWhy' is your own reason. One of them at least, or the reviewer is guessing again.`;
     }
+    // a review's why sits beside the code it explains: one pointing nowhere is
+    // read beside nothing (a revised one keeps its pointers when it names none)
+    if (kind === "review" && (d.where ?? []).every(blank) && (d.where !== undefined || d.id === undefined)) {
+      return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'where'. Point at the code it shaped — a file, or file:line — every place, when it is a rule applied across the change (each hunk it decided). A decision to leave code alone points at that code: the page shows it as kept.`;
+    }
   }
   for (const [i, f] of forks.entries()) {
     const at = f.id ?? `fork ${i + 1}`;

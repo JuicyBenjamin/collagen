@@ -15,7 +15,7 @@ python3 -c 'import json,sys; json.dump({"preferredAi":None,"rooms":{"st-test3":[
 start alice; start bob
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; SB=$(mcp $B); admitted bob
 ID_RE='[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-D='{"title":"The change","what":"the change","userWhy":"she asked for it"}'
+D='{"title":"The change","what":"the change","userWhy":"she asked for it","where":["README.md"]}'
 
 echo "## two stacked reviews: the second waits on the first"
 J="{\"title\":\"review the first\",\"peers\":[\"bob\"],\"project\":\"sandbox\",\"goal\":\"review the first\",\"branch\":\"feat/first\",\"base\":\"main\",\"summary\":\"the base of the stack\",\"decisions\":[$D],\"forks\":[]}"
