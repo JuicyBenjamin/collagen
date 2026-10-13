@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { hostById, type RepoHost } from "./RepoHost";
 import { firstRef, run } from "../lib/gitRun";
 
@@ -40,8 +40,8 @@ export const ownIdentities = (path: string | undefined, host: RepoHost | undefin
       if (email) out.push(identityOf("git", email));
     }
     if (host) {
-      const viewer = yield* host.viewerNow;
-      if ("user" in viewer) out.push(identityOf(host.id, viewer.user.login));
+      const viewer = yield* Effect.option(host.viewerNow);
+      if (Option.isSome(viewer)) out.push(identityOf(host.id, viewer.value.login));
     }
     return out as ReadonlyArray<string>;
   });

@@ -25,7 +25,7 @@ const PULLS = [
   { number: 6, title: "Rows a page", headRefName: "feat/paging", baseRefName: "main", author: { login: "bob" } },
   { number: 7, title: "Stream the export", headRefName: "feat/stream-export", baseRefName: "feat/paging", author: { login: "alice-gh" } },
   { number: 8, title: "Export to CSV", headRefName: "feat/csv", baseRefName: "feat/stream-export", author: { login: "alice-gh" } },
-].map((p) => ({ ...p, url: `https://github.com/acme/sandbox/pull/${p.number}`, state: "OPEN", isDraft: false, headRefOid: "f".repeat(40), reviewDecision: "REVIEW_REQUIRED" }));
+].map((p) => ({ ...p, url: `https://github.com/acme/sandbox/pull/${p.number}`, state: "OPEN", isDraft: false, headRefOid: "f".repeat(40), reviewDecision: "REVIEW_REQUIRED", isCrossRepository: false, mergeCommit: null }));
 const commentsFile = join(dir, "comments.json");
 const comments = () => (existsSync(commentsFile) ? JSON.parse(readFileSync(commentsFile, "utf8")) : []);
 const commentJson = (c) => ({ ...c, user: { login: "bob", avatar_url: "http://127.0.0.1:9/bob.png" }, html_url: `https://github.com/acme/sandbox/pull/7#discussion_r${c.id}`, created_at: "2026-10-03T10:00:00Z" });

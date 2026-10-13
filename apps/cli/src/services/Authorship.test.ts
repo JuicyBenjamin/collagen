@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
 
@@ -32,7 +33,7 @@ describe("who wrote some code, said in a way no host owns", () => {
       git("commit", "-qam", who);
     }
     expect(await Effect.runPromise(gitAuthors(dir, "main", "feat"))).toEqual(["git:bo@example.com", "git:ann@example.com"]);
-    expect(await Effect.runPromise(ownIdentities(dir, undefined))).toEqual(["git:bo@example.com"]);
+    expect(await Effect.runPromise(ownIdentities(dir, undefined).pipe(Effect.provide(NodeServices.layer)))).toEqual(["git:bo@example.com"]);
     expect(await Effect.runPromise(gitAuthors(dir, "main", "nope"))).toEqual([]);
   });
 });

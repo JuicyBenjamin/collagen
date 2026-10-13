@@ -1,16 +1,10 @@
 import type { HostNote, HostReview, HostUser, LineComment, PullRequest } from "@collagen/review-web/data";
 import { Schema } from "effect";
-import type { HostMerge } from "../services/RepoHost";
+import type { HostMerge, HostPull } from "../services/RepoHost";
 
-// What `gh` answers, read into the review page's shapes. Pure: the calls
-// are services/RepoHost's. Anything gh says that is not the shape asked for
-// reads as nothing — a host is a network and a login away, and the page
-// reads the diff without it.
-
-type Json = Record<string, unknown>;
-const obj = (v: unknown): Json | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Json) : null);
-const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined);
-const int = (v: unknown): number | undefined => (Number.isInteger(v) ? (v as number) : undefined);
+// What `gh` answers: its JSON as schemas, decoded once where it comes in
+// (services/RepoHost), and read into the review page's shapes by the small
+// pure functions here.
 
 /** The repository a GitHub link is in. */
 export const githubRepo = (link: string): { readonly owner: string; readonly repo: string } | null => {
@@ -24,59 +18,63 @@ export const pullNumberIn = (link: string): number | null => {
   return m ? Number(m[1]) : null;
 };
 
-/** JSON from gh, or null. */
-export const parse = (text: string | null): unknown => {
-  if (text === null) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
+/** What `gh api --paginate --slurp` prints: a page of items per request. */
+export const Pages = <S extends Schema.Top>(item: S) => Schema.Array(Schema.Array(item));
 
-/** `gh api user`. */
-export const readUser = (v: unknown): HostUser | null => {
-  const o = obj(v);
-  const login = str(o?.login);
-  if (!o || !login) return null;
-  return { login, ...(str(o.name) ? { name: str(o.name)! } : {}), ...(str(o.avatar_url) ? { avatarUrl: str(o.avatar_url)! } : {}) };
-};
+const Side = Schema.Literals(["LEFT", "RIGHT"]);
+
+/** Someone on GitHub: `gh api user`, or who wrote a comment. */
+export const User = Schema.Struct({
+  login: Schema.String,
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+  avatar_url: Schema.optional(Schema.String),
+});
+export type User = typeof User.Type;
+
+export const toUser = (u: User): HostUser => ({ login: u.login, ...(u.name ? { name: u.name } : {}), ...(u.avatar_url ? { avatarUrl: u.avatar_url } : {}) });
 
 /** The fields asked of `gh pr view` / `gh pr list`. */
 export const PULL_FIELDS = "number,url,title,state,isDraft,author,headRefOid,headRefName,baseRefName,reviewDecision,isCrossRepository,mergeCommit";
 
-const DECISION: Readonly<Record<string, string>> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" };
+/** One pull request as `gh pr view --json PULL_FIELDS` has it. */
+export const Pull = Schema.Struct({
+  number: Schema.Int,
+  url: Schema.String,
+  title: Schema.String,
+  state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
+  isDraft: Schema.Boolean,
+  author: Schema.Struct({ login: Schema.String }),
+  headRefOid: Schema.String,
+  headRefName: Schema.String,
+  baseRefName: Schema.String,
+  /** "" when the repository asks for no review */
+  reviewDecision: Schema.Literals(["", "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"]),
+  isCrossRepository: Schema.Boolean,
+  mergeCommit: Schema.NullOr(Schema.Struct({ oid: Schema.String })),
+});
+export type Pull = typeof Pull.Type;
 
-/** One pull request as `gh pr view --json PULL_FIELDS` has it, with the head
- *  and base branches it joins (for a stack). `viewer`: the login signed in. */
-export const readPull = (v: unknown, viewer: string | undefined): (PullRequest & { readonly branch: string; readonly base: string; readonly fork?: true; readonly merged?: string }) | null => {
-  const o = obj(v);
-  const number = int(o?.number);
-  const url = str(o?.url);
-  const head = str(o?.headRefOid);
-  const branch = str(o?.headRefName);
-  const base = str(o?.baseRefName);
-  if (!o || number === undefined || !url || !head || !branch || !base) return null;
-  const state = String(o.state).toLowerCase();
-  const author = str(obj(o.author)?.login) ?? "";
-  const decision = DECISION[String(o.reviewDecision)];
-  const merged = state === "merged" ? str(obj(o.mergeCommit)?.oid) : undefined;
+const STATE: Readonly<Record<Pull["state"], PullRequest["state"]>> = { OPEN: "open", CLOSED: "closed", MERGED: "merged" };
+const DECISION: Readonly<Record<Pull["reviewDecision"], string | undefined>> = { "": undefined, APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" };
+
+/** A pull request, with the head and base branches it joins (for a stack). */
+export const toPull = (p: Pull): HostPull => {
+  const decision = DECISION[p.reviewDecision];
   return {
-    number,
-    url,
-    title: str(o.title) ?? "",
-    state: state === "merged" || state === "closed" ? state : "open",
-    draft: o.isDraft === true,
-    author,
-    head,
+    number: p.number,
+    url: p.url,
+    title: p.title,
+    state: STATE[p.state],
+    draft: p.isDraft,
+    author: p.author.login,
+    head: p.headRefOid,
     ...(decision ? { decision } : {}),
-    mine: viewer !== undefined && author === viewer,
-    branch,
-    base,
+    branch: p.headRefName,
+    base: p.baseRefName,
     // its head on a fork: the branch is not on this repository's origin
-    ...(o.isCrossRepository === true ? { fork: true as const } : {}),
+    ...(p.isCrossRepository ? { fork: true as const } : {}),
     // the commit it went into its base as: a merge, a squash, the last of a rebase
-    ...(merged ? { merged } : {}),
+    ...(p.state === "MERGED" && p.mergeCommit ? { merged: p.mergeCommit.oid } : {}),
   };
 };
 
@@ -118,19 +116,18 @@ const MergedPull = Schema.Struct({
 });
 export type MergedPull = typeof MergedPull.Type;
 
-/** One page of MERGES_QUERY's answer, as gh prints it. */
-export const MergesAnswer = Schema.fromJsonString(
-  Schema.Struct({
-    data: Schema.Struct({
-      repository: Schema.Struct({
-        pullRequests: Schema.Struct({
-          pageInfo: Schema.Struct({ hasNextPage: Schema.Boolean, endCursor: Schema.NullOr(Schema.String) }),
-          nodes: Schema.Array(MergedPull),
-        }),
+/** One page of MERGES_QUERY's answer. */
+export const MergesAnswer = Schema.Struct({
+  data: Schema.Struct({
+    repository: Schema.Struct({
+      pullRequests: Schema.Struct({
+        pageInfo: Schema.Struct({ hasNextPage: Schema.Boolean, endCursor: Schema.NullOr(Schema.String) }),
+        nodes: Schema.Array(MergedPull),
       }),
     }),
   }),
-);
+});
+export type MergesAnswer = typeof MergesAnswer.Type;
 
 /** How a pull request landed, read from the commit it landed as; null when
  *  that commit is gone. */
@@ -157,7 +154,7 @@ export interface MergesPage {
   readonly next: string | null;
 }
 
-export const mergesPage = (answer: typeof MergesAnswer.Type): MergesPage => {
+export const mergesPage = (answer: MergesAnswer): MergesPage => {
   const { pageInfo, nodes } = answer.data.repository.pullRequests;
   return {
     merges: nodes.flatMap((p) => landedAs(p) ?? []),
@@ -182,80 +179,89 @@ export const latestMerges = (pages: ReadonlyArray<MergesPage>, limit: number): {
   return { merges, done };
 };
 
-/** Pages from `gh api --paginate --slurp`, flattened. */
-const pages = (v: unknown): ReadonlyArray<unknown> => (Array.isArray(v) ? v.flatMap((page) => (Array.isArray(page) ? page : [page])) : []);
+/** A line comment on a pull request, as GitHub's REST API has it. */
+export const PullComment = Schema.Struct({
+  id: Schema.Int,
+  user: User,
+  body: Schema.String,
+  path: Schema.String,
+  /** null once the code under it changed: GitHub no longer places it on a line */
+  line: Schema.NullOr(Schema.Int),
+  original_line: Schema.optional(Schema.NullOr(Schema.Int)),
+  side: Schema.optional(Side),
+  /** where a block of lines starts; one line names none */
+  start_line: Schema.optional(Schema.NullOr(Schema.Int)),
+  start_side: Schema.optional(Schema.NullOr(Side)),
+  in_reply_to_id: Schema.optional(Schema.Int),
+  html_url: Schema.String,
+  created_at: Schema.String,
+});
+export type PullComment = typeof PullComment.Type;
 
-/** `gh api --paginate --slurp repos/…/pulls/N/comments`: pages of comments,
- *  flattened. Comments GitHub no longer places on a line (outdated, the
- *  code under them moved) have no line to sit under — readOutdated reads those. */
-export const readComments = (v: unknown): ReadonlyArray<LineComment> =>
-  pages(v).flatMap((c): ReadonlyArray<LineComment> => {
-    const comment = readComment(c);
-    return comment ? [comment] : [];
-  });
+/** A comment on the line it sits on now; null for one on code changed since. */
+export const toLineComment = (c: PullComment): LineComment | null =>
+  c.line === null
+    ? null
+    : {
+        id: String(c.id),
+        author: toUser(c.user),
+        body: c.body,
+        file: c.path,
+        line: c.line,
+        side: c.side ?? "RIGHT",
+        ...(c.start_line != null && c.start_line !== c.line ? { startLine: c.start_line, startSide: c.start_side ?? "RIGHT" } : {}),
+        url: c.html_url,
+        at: c.created_at,
+        ...(c.in_reply_to_id !== undefined ? { replyTo: String(c.in_reply_to_id) } : {}),
+      };
 
-/** The line comments on code that has changed since they were written: no
- *  line now, so a note saying where they were. */
-export const readOutdated = (v: unknown): ReadonlyArray<HostNote> =>
-  pages(v).flatMap((c): ReadonlyArray<HostNote> => {
-    const o = obj(c);
-    const author = readUser(o?.user);
-    const id = int(o?.id);
-    if (!o || !author || id === undefined || o.line !== null) return [];
-    const was = int(o.original_line);
-    return [{ id: String(id), author, body: typeof o.body === "string" ? o.body : "", at: str(o.created_at) ?? "", url: str(o.html_url) ?? "", outdated: `${str(o.path) ?? "a file"}${was !== undefined ? `, line ${was}` : ""}` }];
-  });
+/** A pull request's line comments: those on a line now, and those on code
+ *  changed since — no line to sit under, so a note saying where they were. */
+export const splitComments = (cs: ReadonlyArray<PullComment>): { readonly inline: ReadonlyArray<LineComment>; readonly outdated: ReadonlyArray<HostNote> } => ({
+  inline: cs.flatMap((c) => toLineComment(c) ?? []),
+  outdated: cs.flatMap((c): ReadonlyArray<HostNote> =>
+    c.line === null ? [{ id: String(c.id), author: toUser(c.user), body: c.body, at: c.created_at, url: c.html_url, outdated: `${c.path}${c.original_line != null ? `, line ${c.original_line}` : ""}` }] : [],
+  ),
+});
 
-const VERDICT: Readonly<Record<string, HostReview["verdict"]>> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", COMMENTED: "commented", DISMISSED: "dismissed" };
+/** A review on a pull request; `submitted_at` only once it is submitted. */
+export const Review = Schema.Struct({
+  id: Schema.Int,
+  user: Schema.NullOr(User),
+  body: Schema.String,
+  state: Schema.Literals(["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"]),
+  submitted_at: Schema.optional(Schema.String),
+  html_url: Schema.String,
+});
+export type Review = typeof Review.Type;
 
-/** `gh api --paginate --slurp repos/…/pulls/N/reviews`: each submitted review —
- *  a pending one is its author's alone, and a comment-only review that says
- *  nothing on the whole is just its line comments, shown under their lines. */
-export const readReviews = (v: unknown): ReadonlyArray<HostReview> =>
-  pages(v).flatMap((r): ReadonlyArray<HostReview> => {
-    const o = obj(r);
-    const author = readUser(o?.user);
-    const id = int(o?.id);
-    const verdict = VERDICT[String(o?.state)];
-    if (!o || !author || id === undefined || !verdict) return [];
-    const body = typeof o.body === "string" ? o.body.trim() : "";
-    if (verdict === "commented" && body.length === 0) return [];
-    return [{ id: String(id), author, verdict, body, at: str(o.submitted_at) ?? "", url: str(o.html_url) ?? "" }];
-  });
+const VERDICT: Readonly<Record<Review["state"], HostReview["verdict"] | null>> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", COMMENTED: "commented", DISMISSED: "dismissed", PENDING: null };
 
-/** `gh api --paginate --slurp repos/…/issues/N/comments`: the conversation. */
-export const readConversation = (v: unknown): ReadonlyArray<HostNote> =>
-  pages(v).flatMap((c): ReadonlyArray<HostNote> => {
-    const o = obj(c);
-    const author = readUser(o?.user);
-    const id = int(o?.id);
-    if (!o || !author || id === undefined) return [];
-    return [{ id: String(id), author, body: typeof o.body === "string" ? o.body : "", at: str(o.created_at) ?? "", url: str(o.html_url) ?? "" }];
-  });
-
-/** One line comment, as GitHub's REST API has it. */
-export const readComment = (v: unknown): LineComment | null => {
-  const o = obj(v);
-  const id = int(o?.id);
-  const file = str(o?.path);
-  const line = int(o?.line);
-  const author = readUser(o?.user);
-  if (!o || id === undefined || !file || line === undefined || !author) return null;
-  // a block of lines names where it starts; one line names none (null)
-  const startLine = int(o.start_line);
-  return {
-    id: String(id),
-    author,
-    body: typeof o.body === "string" ? o.body : "",
-    file,
-    line,
-    side: o.side === "LEFT" ? "LEFT" : "RIGHT",
-    ...(startLine !== undefined && startLine !== line ? { startLine, startSide: o.start_side === "LEFT" ? ("LEFT" as const) : ("RIGHT" as const) } : {}),
-    url: str(o.html_url) ?? "",
-    at: str(o.created_at) ?? "",
-    ...(int(o.in_reply_to_id) !== undefined ? { replyTo: String(o.in_reply_to_id) } : {}),
-  };
+/** A submitted review — a pending one is its author's alone, and a
+ *  comment-only review that says nothing on the whole is just its line
+ *  comments, shown under their lines: both null. */
+export const toReview = (r: Review): HostReview | null => {
+  const verdict = VERDICT[r.state];
+  const body = r.body.trim();
+  if (verdict === null || r.user === null || (verdict === "commented" && body.length === 0)) return null;
+  return { id: String(r.id), author: toUser(r.user), verdict, body, at: r.submitted_at ?? "", url: r.html_url };
 };
+
+/** What `POST …/reviews` answers. */
+export const CreatedReview = Schema.Struct({ id: Schema.Int, html_url: Schema.String });
+
+/** A comment in a pull request's conversation (`…/issues/N/comments`). */
+export const IssueComment = Schema.Struct({
+  id: Schema.Int,
+  user: Schema.NullOr(User),
+  body: Schema.optional(Schema.String),
+  created_at: Schema.String,
+  html_url: Schema.String,
+});
+export type IssueComment = typeof IssueComment.Type;
+
+/** The conversation, comment by comment; one by a deleted account, none. */
+export const toNote = (c: IssueComment): HostNote | null => (c.user === null ? null : { id: String(c.id), author: toUser(c.user), body: c.body ?? "", at: c.created_at, url: c.html_url });
 
 /** What gh said when it refused, in a line: its own words, without the
  *  "gh: " and HTTP noise around them. */

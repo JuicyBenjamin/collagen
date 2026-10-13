@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { beforeAll, describe, expect, it } from "vitest";
-import { github, type HostPull, type RepoHost } from "./RepoHost";
+import { github, HostRefused, type HostPull, type RepoHost } from "./RepoHost";
 import { readDiff } from "./ReviewView";
 
 // A merged pull request is still reviewed: its branch merged into the base
@@ -18,8 +19,10 @@ let clone = "";
 let mergedPull: HostPull;
 let squashedPull: HostPull;
 
-const pullOf = (number: number, head: string, merged: string): HostPull => ({ number, url: `https://example.test/pull/${number}`, title: "", state: "merged", draft: false, author: "bob", head, mine: false, branch: "", base: "main", merged });
-const hostWith = (pull: HostPull, pullDiff: string | null = null): RepoHost => ({ ...github, name: "TheHost", pull: () => Effect.succeed({ pull }), pullDiff: () => Effect.succeed(pullDiff) });
+const pullOf = (number: number, head: string, merged: string): HostPull => ({ number, url: `https://example.test/pull/${number}`, title: "", state: "merged", draft: false, author: "bob", head, branch: "", base: "main", merged });
+const gone = Effect.fail(new HostRefused({ message: "Not Found" }));
+const hostWith = (pull: HostPull, pullDiff: string | null = null): RepoHost => ({ ...github, name: "TheHost", compare: () => gone, pull: () => Effect.succeed(pull), pullDiff: () => (pullDiff === null ? gone : Effect.succeed(pullDiff)) });
+const read = (...args: Parameters<typeof readDiff>) => Effect.runPromise(readDiff(...args).pipe(Effect.provide(NodeServices.layer)));
 
 beforeAll(() => {
   const tmp = mkdtempSync(join(tmpdir(), "collagen-merged-"));
@@ -59,7 +62,7 @@ const files = (diff: string) => [...diff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((m)
 
 describe("a merged pull request's diff", () => {
   it("merged with a merge commit: read against the base just before the merge", async () => {
-    const got = await Effect.runPromise(readDiff({ base: "main", branch: "feat/kept", link: "x" }, { path: clone }, false, hostWith(mergedPull)));
+    const got = await read({ base: "main", branch: "feat/kept", link: "x" }, { path: clone }, false, hostWith(mergedPull));
     expect(got.kind).toBe("clone");
     if (got.kind !== "clone") return;
     expect(files(got.diff)).toEqual(["a.txt"]);
@@ -67,7 +70,7 @@ describe("a merged pull request's diff", () => {
   });
 
   it("its branch deleted: its head fetched from the host's ref", async () => {
-    const got = await Effect.runPromise(readDiff({ base: "main", branch: "feat/gone", link: "x" }, { path: clone }, true, hostWith(squashedPull)));
+    const got = await read({ base: "main", branch: "feat/gone", link: "x" }, { path: clone }, true, hostWith(squashedPull));
     expect(got.kind).toBe("clone");
     if (got.kind !== "clone") return;
     expect(files(got.diff)).toEqual(["b.txt"]);
@@ -75,13 +78,13 @@ describe("a merged pull request's diff", () => {
   });
 
   it("no host to ask: no diff, and the reason says there is no change", async () => {
-    const got = await Effect.runPromise(readDiff({ base: "main", branch: "feat/kept" }, { path: clone }, false));
+    const got = await read({ base: "main", branch: "feat/kept" }, { path: clone }, false);
     expect(got).toEqual({ kind: "none", why: "feat/kept has no changes against main" });
   });
 
   it("nothing left to read: the reason names the branch and the commit missing", async () => {
     const lost = { ...squashedPull, number: 3, head: "f".repeat(40) };
-    const got = await Effect.runPromise(readDiff({ base: "main", branch: "feat/never", link: "x" }, { path: clone }, false, hostWith(lost)));
+    const got = await read({ base: "main", branch: "feat/never", link: "x" }, { path: clone }, false, hostWith(lost));
     expect(got.kind).toBe("none");
     expect(got.why).toContain("feat/never is not in your clone");
     expect(got.why).toContain("#3's last commit fffffff is not in your clone, nor on TheHost");
@@ -89,7 +92,7 @@ describe("a merged pull request's diff", () => {
 
   it("the host's own diff of it, when the clone cannot", async () => {
     const lost = { ...squashedPull, number: 3, head: "f".repeat(40) };
-    const got = await Effect.runPromise(readDiff({ base: "main", branch: "feat/never", link: "x" }, { path: clone }, false, hostWith(lost, "diff --git a/c b/c\n")));
+    const got = await read({ base: "main", branch: "feat/never", link: "x" }, { path: clone }, false, hostWith(lost, "diff --git a/c b/c\n"));
     expect(got.kind).toBe("host");
   });
 });

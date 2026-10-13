@@ -1,4 +1,5 @@
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
@@ -48,6 +49,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     const { profile } = yield* CliArgs;
     const { identity, room: initial, knownRooms, nameRef } = yield* IdentityService;
     const store = yield* StateStore;
+    // what asking a code's host who is signed in runs on: its CLI
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const aiStatus = yield* AiStatus;
     const inbox = yield* Inbox;
     const runner = yield* AgentRunner;
@@ -253,7 +256,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 const ticket = tickets.get(r.ticketId);
                 if (!ticket) continue;
                 const clone = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
-                const mine = yield* ownIdentities(clone?.path, r.link ? hostOf(r.link) : undefined);
+                const mine = yield* ownIdentities(clone?.path, r.link ? hostOf(r.link) : undefined).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
                 const shared = mine.find((m) => r.assumed!.identities!.includes(m));
                 if (!shared) {
                   notMine.add(asked);
