@@ -452,6 +452,7 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .md > :last-child { margin-bottom: 0; }
 .md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table { margin: 0 0 8px; }
 .md .md-h { font-weight: 600; }
+.md .md-img { display: block; max-width: 100%; max-height: 420px; margin: 4px 0; border: 1px solid var(--line); border-radius: 6px; }
 .md .md-h1 { font-size: 1.2em; }
 .md .md-h2 { font-size: 1.1em; }
 .md ul, .md ol { padding-left: 22px; }
