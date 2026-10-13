@@ -26,6 +26,7 @@ skill into an agent's folder — edit it here.
 | [tui-layout](tui-layout/SKILL.md) | laying out, sizing or scrolling anything in the OpenTUI app |
 | [repo-hosts](repo-hosts/SKILL.md) | anything touching where code is hosted: pull requests, sign-in, links, refs, who wrote it |
 | [say-less](say-less/SKILL.md) | writing any text a person sees: say the fact, not the explanation |
+| [types-not-checks](types-not-checks/SKILL.md) | a value from a known set (a language, a kind, a mode): a union type, passed as is; outside text read once where it comes in |
 | [review](review/SKILL.md) | reviewing a diff, branch or pull request: leaky abstractions, and more as reviews find it |
 
 When a review finds something none of these cover, and it could come back,
