@@ -21,11 +21,12 @@
   --sign-chg: #9a6700;
   --moved-bg: #f2d98b;
   /* a ticket's kind, as its mark: told apart by lightness too */
-  --kind-proposal: #8b5cf6;
+  --kind-proposal: #a16207;
   --kind-plan: #2563eb;
   --kind-task: #0e7490;
   --kind-bug: #c2410c;
   --kind-review: #15803d;
+  --kind-epic: #8b5cf6;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -44,11 +45,12 @@
     --chg-bg: #33301f;
     --sign-chg: #e0af68;
     --moved-bg: #6b5a1f;
-    --kind-proposal: #bb9af7;
+    --kind-proposal: #e0af68;
     --kind-plan: #7aa2f7;
     --kind-task: #7dcfff;
     --kind-bug: #ff9e64;
     --kind-review: #9ece6a;
+    --kind-epic: #bb9af7;
   }
 }
 * { box-sizing: border-box; }
@@ -514,7 +516,9 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .lineage-item.task .kind-icon { color: var(--kind-task); }
 .lineage-item.bug .kind-icon { color: var(--kind-bug); }
 .lineage-item.review .kind-icon { color: var(--kind-review); }
-.lineage-item.epic .kind-icon { color: var(--dim); }
+.lineage-item.epic .kind-icon { color: var(--kind-epic); }
+.merge-epics { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--dim); font-size: 13px; }
+.merge-epics .kind-icon { color: var(--kind-epic); }
 .lineage-name { flex: 1; min-width: 0; color: var(--fg); overflow-wrap: anywhere; text-decoration: none; }
 a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .lineage-item.review .lineage-name { font-weight: 600; }
