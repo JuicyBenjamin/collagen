@@ -3,11 +3,11 @@
 # latest first, named by its pull request — her review of pull request #6
 # drawn under it, #5 (from no ticket) with nothing under it. The host is a
 # stand-in (fake-gh.mjs). In the pty: `3` opens the tab, enter drops into the
-# list, `o` hands #6's url to the browser opener (a stand-in on PATH), ↓
-# reaches the ticket under it, enter opens its page, esc comes back to the
-# merges with the cursor where it was, and `w` opens the same history as a
-# web page (review-web, /merges/<roomId>), whose data is read here as the
-# page reads it.
+# list, `p` hands #6's pull request to the browser opener (a stand-in on
+# PATH), ↓ reaches the ticket under it, enter opens its page, esc comes back
+# to the merges with the cursor where it was, `o` there opens the ticket's
+# review page, and `o` on a merge the same history as a web page (review-web,
+# /merges/<roomId>), whose data is read here as the page reads it.
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 # the web page is a Solid app served from its build; build it if this checkout has not
@@ -25,11 +25,13 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/merges-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '3'; sleep 3; mark M0_tab
   printf '\r'; sleep 1; mark M1_list
-  printf 'o'; sleep 2
+  printf 'p'; sleep 2
   printf '\033[B'; sleep 1; mark M2_ticket_row
   printf '\r'; sleep 2; mark M3_ticket
   printf '\033'; sleep 2; mark M4_back; sleep 1
-  printf 'w'; sleep 2; mark M5_web
+  printf 'o'; sleep 2
+  printf '\033[A'; sleep 1; printf 'o'; sleep 2; mark M5_web
+  printf '\033[F'; sleep 3; printf '\033[F'; sleep 3; printf '\033[F'; sleep 3; mark M6_end
   for i in $(seq 1 30); do [ -f "$OUT/merges-tui.done" ] && break; sleep 1; done; printf 'q' ) | \
   PATH="$OUT/bin:$PATH" COLLAGEN_GH="$E2E/fake-gh.mjs" FAKE_GH_DIR="$GH" HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$LOG" script -F -q "$PTY" bash -c "stty rows ${ROWS:-30} cols ${COLS:-100}; $TUI" > /dev/null 2>&1 &
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; admitted bob
@@ -41,7 +43,7 @@ ASKED=$(call $A "$SA" ask-review "$ASK")
 expect "the review ticket is on the log" "$ASKED" "review ticket filed"
 touch "$OUT/merges-tui.go"
 await_mark() { local i; for i in $(seq 1 40); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
-await_mark M5_web; sleep 1
+await_mark M6_end; sleep 1
 KEYS=$(cut -d' ' -f2 "$LOG.keys" 2>/dev/null | tr '\n' ' ')
 TEXT=$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY")
 
@@ -49,19 +51,25 @@ echo "## the merges, the latest first, each with the tickets it came from"
 expect "the host was asked what was merged into main" "$(grep -c '"base=main"' "$GH/calls.log")" "^[1-9]"
 expect "the cursor reached the list" "$KEYS" "merges"
 expect "enter on the ticket's line opened its page" "$KEYS" "ticket-steps"
-expect "o handed the pull request to the browser" "$(cat "$OUT/opened" 2>/dev/null)" "^https://github.com/acme/sandbox/pull/6$"
+expect "p handed the pull request to the browser" "$(head -1 "$OUT/opened" 2>/dev/null)" "^https://github.com/acme/sandbox/pull/6$"
+expect "o on the ticket's line handed its review page to the browser" "$(cat "$OUT/opened" 2>/dev/null)" "/review/"
 echo "## the same history as a web page"
 WEB=$(grep -oE 'http://[^ ]+/merges/[^ ]+' "$OUT/opened" 2>/dev/null | head -1)
-expect "w handed the merges page to the browser" "$WEB" "^${A%/mcp}/merges/[0-9A-Za-z-]+$"
-ROOM=${WEB##*/}
-expect "the page is served" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$WEB")" "^200 text/html"
+expect "o on a merge handed the merges page to the browser, at that merge" "$WEB" "^${A%/mcp}/merges/[0-9A-Za-z-]+#sandbox/6$"
+PAGE=${WEB%%#*}; ROOM=${PAGE##*/}
+expect "the page is served" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$PAGE")" "^200 text/html"
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 SFN=$(grep -oE 'registerServerReference\("mergeHistory-[0-9a-f]+"' "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')
-HISTORY=$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "[\"$ROOM\"]")")
-expect "its data: into main, the latest first" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["projects"][0]; print(d["base"], *[m["number"] for m in d["merges"]])')" "^main 6 5$"
+HISTORY=$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "[\"$ROOM\",{},false]")")
+expect "its data: into main, the latest first" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["projects"][0]; print(d["base"], *[m["number"] for m in d["merges"]])')" "^main 6 5 1000 "
 expect "…#6 linked to its pull request, her ticket under it as hers" "$(echo "$HISTORY" | python3 -c 'import json,sys; m=json.load(sys.stdin)["projects"][0]["merges"][0]; t=m["tickets"][0]; print(m["url"], t["name"], t["author"], t["mine"])')" "^https://github.com/acme/sandbox/pull/6 Paging the rows you True$"
+expect "…and what was decided on it, and why" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["projects"][0]["merges"][0]["tickets"][0]["decisions"][0]; print(d["title"], "/", d["userWhy"])')" "^Rows a page / long lists were slow$"
+expect "…a page of them, and more past it" "$(echo "$HISTORY" | python3 -c 'import json,sys; p=json.load(sys.stdin)["projects"][0]; print(len(p["merges"]), p["more"])')" "^50 True$"
+MORE=$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "[\"$ROOM\",{\"sandbox\":150},false]")")
+expect "scrolled on: the host's next page read, and nothing past the last" "$(echo "$MORE" | python3 -c 'import json,sys; p=json.load(sys.stdin)["projects"][0]; print(len(p["merges"]), p["more"], p["merges"][-1]["number"])')" "^122 False 1119$"
+expect "…the next page asked from where the first ended" "$(grep -c '"after=100"' "$GH/calls.log")" "^[1-9]"
 expect "…#5 from no ticket" "$(echo "$HISTORY" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["projects"][0]["merges"][1]["tickets"]))')" "^0$"
-expect "a room not here has no history" "$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=%5B%22not-a-room%22%5D")" "^null$"
+expect "a room not here has no history" "$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=%5B%22not-a-room%22%2C%7B%7D%2Cfalse%5D")" "^null$"
 touch "$OUT/merges-tui.done"
 
 HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
@@ -77,6 +85,7 @@ if [ "$HAVE_PYTE" = yes ]; then
   expect "a merge from no ticket has nothing under it" "$(echo "$SCREEN" | grep -A1 'Fix the header' | tail -1 | grep -c '└')" "^0$"
   expect "↓ put the cursor on the ticket" "$(render M2_ticket_row)" "› └ ± you +Paging the rows"
   expect "esc came back to the merges, the cursor where it was" "$(render M4_back)" "› └ ± you +Paging the rows"
+  expect "at the end of a page, the next is read: end reaches the very last" "$(render M6_end)" "› +Older change 120 "
 else
   echo "  skip  screen-level checks (no pyte: pip install pyte, or set PYTE_PATH)"
 fi
