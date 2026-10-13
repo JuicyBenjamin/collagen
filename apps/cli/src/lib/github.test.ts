@@ -95,10 +95,11 @@ describe("what gh answers, read for the review page", () => {
     const merge = (number: number, at: string) => ({ number, url: `u${number}`, title: "", branch: `b${number}`, kind: "squash" as const, commit: `c${number}`, commits: 1, at });
     // an old pull request commented on today comes first; a newer merge, untouched since, on the next page
     const first = { merges: [merge(1, "2026-01-01"), merge(2, "2026-10-01")], oldestUpdate: "2026-10-05", next: "p2" };
-    expect(latestMerges([first], 2)).toEqual({ merges: [merge(2, "2026-10-01"), merge(1, "2026-01-01")], done: false });
+    expect(latestMerges([first], 2)).toEqual({ merges: [merge(2, "2026-10-01"), merge(1, "2026-01-01")], done: false, more: true });
     const second = { merges: [merge(3, "2026-09-01"), merge(2, "2026-10-01")], oldestUpdate: "2026-09-01", next: "p3" };
-    expect(latestMerges([first, second], 2)).toEqual({ merges: [merge(2, "2026-10-01"), merge(3, "2026-09-01")], done: true });
-    expect(latestMerges([{ ...first, next: null }], 5).done).toBe(true);
+    expect(latestMerges([first, second], 2)).toEqual({ merges: [merge(2, "2026-10-01"), merge(3, "2026-09-01")], done: true, more: true });
+    // the last page read, and every merge on it shown: nothing past them
+    expect(latestMerges([{ ...first, next: null }], 5)).toMatchObject({ done: true, more: false });
   });
 
   it("gh's refusal, in its own words", () => {
