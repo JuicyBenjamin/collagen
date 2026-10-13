@@ -14,6 +14,11 @@
   --del-bg: #fbe9eb;
   --sign-add: #1a7f37;
   --sign-del: #cf222e;
+  /* a line changed in place, and the words that came and went in it */
+  --chg-bg: #fdf6dc;
+  --sign-chg: #9a6700;
+  --came-bg: #aceebb;
+  --went-bg: #ffcecb;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -29,6 +34,10 @@
     --del-bg: #3d1f29;
     --sign-add: #9ece6a;
     --sign-del: #f7768e;
+    --chg-bg: #33301f;
+    --sign-chg: #e0af68;
+    --came-bg: #2f5a37;
+    --went-bg: #6b2a38;
   }
 }
 * { box-sizing: border-box; }
@@ -204,6 +213,11 @@ tr.add td.t, tr.add td.n { background: var(--add-bg); }
 tr.del td.t, tr.del td.n { background: var(--del-bg); }
 tr.add .sign { color: var(--sign-add); }
 tr.del .sign { color: var(--sign-del); }
+tr.changed td.t, tr.changed td.n { background: var(--chg-bg); }
+tr.changed .sign { color: var(--sign-chg); }
+.came { background: var(--came-bg); border-radius: 3px; }
+/* what went is struck through, and left out of a copy: the line copies as the branch has it */
+.went { background: var(--went-bg); border-radius: 3px; text-decoration: line-through; text-decoration-color: var(--sign-del); user-select: none; }
 
 section.unexplained h2 { color: var(--warn); }
 
