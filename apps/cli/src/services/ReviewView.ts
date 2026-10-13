@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Effect, Layer, SubscriptionRef } from "effect";
+import { Effect, Layer, Option, Result, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { gitDir, repoWebUrl } from "../lib/gitInfo";
@@ -99,26 +99,30 @@ export const readDiff = (
     } else why = clone.noClone;
     if (!host || !review.link) return { kind: "none", why } satisfies ReadDiff;
     const link = review.link;
+    // whatever the host refuses, the reason so far says what is missing
     const compare = (note: string) =>
-      host.compare(link, base, branch).pipe(Effect.map((hosted) => (hosted ? ({ kind: "host", diff: hosted, why: `${base}...${branch} from ${host.name} (${note})` } satisfies ReadDiff) : null)));
+      host.compare(link, base, branch).pipe(
+        Effect.map((hosted) => (hosted ? ({ kind: "host", diff: hosted, why: `${base}...${branch} from ${host.name} (${note})` } satisfies ReadDiff) : null)),
+        Effect.orElseSucceed(() => null),
+      );
     if (!("path" in clone)) {
       const hosted = yield* compare(`no clone: ${why}`);
       if (hosted) return hosted;
     }
-    const named = yield* host.pull(link, branch);
-    if ("pull" in named && "path" in clone) {
+    const pull = Option.getOrNull(yield* Effect.option(host.pull(link, branch)));
+    if (pull && "path" in clone) {
       // in the clone first: a commit there is what a comment can be drafted on
-      const got = yield* fromPull(clone.path, named.pull, host, fetch);
+      const got = yield* fromPull(clone.path, pull, host, fetch);
       if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: got.commit } satisfies ReadDiff;
-      why = `${why}; ${got.diff === null ? got.why : `#${named.pull.number} has no changes`}`;
+      why = `${why}; ${got.diff === null ? got.why : `#${pull.number} has no changes`}`;
     }
     if (unread && "path" in clone) {
       const hosted = yield* compare(why);
       if (hosted) return hosted;
     }
-    if ("pull" in named) {
-      const hosted = yield* host.pullDiff(link, named.pull.number);
-      if (hosted) return { kind: "host", diff: hosted, why: `#${named.pull.number} from ${host.name} (${why})` } satisfies ReadDiff;
+    if (pull) {
+      const hosted = yield* host.pullDiff(link, pull.number).pipe(Effect.orElseSucceed(() => ""));
+      if (hosted) return { kind: "host", diff: hosted, why: `#${pull.number} from ${host.name} (${why})` } satisfies ReadDiff;
     }
     return { kind: "none", why } satisfies ReadDiff;
   });
@@ -312,20 +316,24 @@ export const hostView = Effect.fn("ReviewView.host")(function* (ticketId: string
   if (!link) return { none: "This review names no link to where its code is hosted.", stack: stack([]) } satisfies HostView;
   const host = hostOf(link);
   if (!host) return { none: `collagen has no integration for ${link} yet.`, stack: stack([]) } satisfies HostView;
-  const [viewer, named, open] = yield* Effect.all([host.viewer, host.pull(link, branch), host.openPulls(link)], { concurrency: "unbounded" });
-  const login = "user" in viewer ? viewer.user.login : undefined;
-  const pull = "pull" in named ? named.pull : null;
+  // what the host will not say reads as nothing, or as why, in its words
+  const [viewer, named, open] = yield* Effect.all([Effect.result(host.viewer), Effect.result(host.pull(link, branch)), host.openPulls(link).pipe(Effect.orElseSucceed(() => []))], { concurrency: "unbounded" });
+  const user = Result.getOrNull(viewer);
+  const pull = Result.getOrNull(named);
   // what was said on it: line comments, reviews, the conversation — at once
   const [comments, reviews, conversation] = pull
-    ? yield* Effect.all([host.comments(link, pull.number), host.reviews(link, pull.number), host.conversation(link, pull.number)], { concurrency: "unbounded" })
+    ? yield* Effect.all(
+        [host.comments(link, pull.number).pipe(Effect.orElseSucceed(() => ({ inline: [], outdated: [] }))), host.reviews(link, pull.number).pipe(Effect.orElseSucceed(() => [])), host.conversation(link, pull.number).pipe(Effect.orElseSucceed(() => []))],
+        { concurrency: "unbounded" },
+      )
     : [{ inline: [], outdated: [] }, [], []];
   const byTime = <T extends { readonly at: string }>(xs: ReadonlyArray<T>) => [...xs].sort((a, b) => a.at.localeCompare(b.at));
   return {
     host: host.name,
-    viewer: "user" in viewer ? viewer.user : null,
-    ...("signIn" in viewer ? { signIn: viewer.signIn } : {}),
-    pull: pull ? shown(pull, login) : null,
-    ...("none" in named ? { noPull: named.none } : {}),
+    viewer: user,
+    ...(Result.isFailure(viewer) ? { signIn: viewer.failure.message } : {}),
+    pull: pull ? shown(pull, user?.login) : null,
+    ...(Result.isFailure(named) ? { noPull: named.failure.message } : {}),
     comments: comments.inline,
     reviews: byTime(reviews),
     conversation: byTime([...conversation, ...comments.outdated]),

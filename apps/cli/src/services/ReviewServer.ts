@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Effect, Layer, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import type { ChildProcessSpawner } from "effect/process";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
@@ -63,9 +64,9 @@ const finishOk = (f: unknown): f is { readonly id: string; readonly pending: Rea
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
-  const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>();
+  const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | ChildProcessSpawner.ChildProcessSpawner>();
   const types = yield* ReviewTypes;
-  const on = <A, E>(e: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>) => e.pipe(Effect.provideContext(ctx), Effect.orDie);
+  const on = <A, E>(e: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | ChildProcessSpawner.ChildProcessSpawner>) => e.pipe(Effect.provideContext(ctx), Effect.orDie);
   return {
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),
     changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(ctx)) : Stream.empty),
