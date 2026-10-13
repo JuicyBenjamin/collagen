@@ -72,9 +72,12 @@ hold part of a file (one route of a big routes file) and another unit the rest.
   away. When a decision also points at code the diff does not change, a quiet note says the
   why may be older than the branch.
 
-A line changed in place is one yellow line: the words that went struck through in red, the
-words that came in green. Lines pair when at least half their code is shared; less alike, they
-stay a red line and a green one.
+A line changed in place is one yellow line: the words that came with a green underline;
+the words that went in faded red, struck through. On a line that was mostly reordered (a list put in a new order),
+words that only moved are underlined where they are now. Point at the line and the line as it
+was appears above it, the word under the pointer lit where it stood. A line where only the
+order changed says so beneath it: `order only · 2 moved · nothing added or removed`. Lines pair when at least half their code is shared; less alike, they stay
+a red line and a green one.
 
 Forks that fall in no change of the diff close the page. With no diff to read, the page
 lists the decisions and where they point.
