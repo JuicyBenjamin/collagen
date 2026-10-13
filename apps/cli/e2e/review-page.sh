@@ -132,11 +132,11 @@ curl -s -N -m 40 "$(sfn_url reviewChanges "[\"$TICKET\"]" live)" > "$EV" &
 CURL=$!; disown
 # each value of the live function is an event: the review's state, current first
 wait_until "the stream is open, the review's state first" "^1$" grep -c "^id:" "$EV"
-D3='{"title":"The export streams in","what":"the export streams in pages","userWhy":"she asked for it"}'
+D3='{"title":"The export streams in","what":"the export streams in pages","userWhy":"she asked for it","where":["docs/streaming.md"]}'
 AMEND="{\"ticketId\":\"$TICKET\",\"decisions\":[$D3]}"
 call $A "$SA" ask-review "$AMEND" > /dev/null
 wait_until "revising the why moves it" "^2$" grep -c "^id:" "$EV"
-expect "a decision pointing at no code is not lost: it shows outside the units" "$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print("outside", " ".join(json.load(sys.stdin)["grouped"]["outside"]))')" "^outside .*d3"
+expect "a decision on code no unit covers is not lost: it shows outside the units" "$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print("outside", " ".join(json.load(sys.stdin)["grouped"]["outside"]))')" "^outside .*d3"
 BEFORE=$(grep -c "^id:" "$EV")
 # the commit a reader would have viewed src/use.ts at, before the next push
 VIEWED_AT=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
