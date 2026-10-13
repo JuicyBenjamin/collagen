@@ -60,7 +60,7 @@ function Blocks(props: { of: ReadonlyArray<Block> }) {
           <Match when={b.kind === "code" && b}>
             {(c) => (
               <pre class="md-code">
-                <For each={highlightCode(c().text, c().lang || "plaintext")}>
+                <For each={highlightCode(c().text, c().lang)}>
                   {(spans, i) => (
                     <>
                       <Show when={i() > 0}>{"\n"}</Show>
