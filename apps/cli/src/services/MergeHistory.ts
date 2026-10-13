@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
-import { isClosed, ticketName, type Project, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { epicOf, isClosed, ticketName, visibleTo, type Project, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
 import type { MergeHistory as MergeHistoryData, MergesShown } from "@collagen/review-web/data";
 import { defaultBranchOf, repoWebUrl } from "../lib/gitInfo";
 import { latestMerges, type MergesPage } from "../lib/github";
@@ -183,6 +183,10 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
                       title: merge.title,
                       branch: merge.branch,
                       at: merge.at,
+                      epics: [...new Set(from.flatMap((t) => epicOf(t) ?? []))].flatMap((id) => {
+                        const epic = tickets.get(id);
+                        return epic && visibleTo(epic, tickets, me) ? [{ id, name: ticketName(epic) }] : [];
+                      }),
                       tickets: from.map((t) => ({
                         id: t.id,
                         name: ticketName(t),
