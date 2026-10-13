@@ -39,6 +39,8 @@
   }
 }
 * { box-sizing: border-box; }
+/* a jump to a section glides there; the page holding a place does not (behavior: "instant") */
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 a { color: var(--accent); }
 p { margin: 0; }
@@ -191,7 +193,8 @@ nav .nav-unexplained .nav-what { color: var(--warn); }
 .mark-viewed { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
 .mark-viewed input { margin: 0; accent-color: var(--accent); cursor: pointer; }
 .mark-viewed.changed { color: var(--warn); }
-.hunk.viewed > * { opacity: 0.6; }
+/* dimmed by its words, not its box: a see-through header let the code it sticks over show through */
+.hunk.viewed .file > * { opacity: 0.6; }
 .hunk.viewed .file::before { inset: 0; border-radius: 10px; }
 .hunk.viewed .file { margin-bottom: -1px; }
 .nav-viewed { font-size: 12.5px; color: var(--dim); margin: -4px 0 10px; }
