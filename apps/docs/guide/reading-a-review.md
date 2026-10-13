@@ -77,7 +77,8 @@ lists the decisions and where they point.
 
 **Whole file**, on a file's header or on the band above any of its later changes, opens the
 file as the branch has it — read from your clone, never its working tree — every line
-numbered, this diff's added lines marked. It opens in place of that file's changes, not
+numbered, this diff's added lines marked and its removed lines put back where they stood, so
+a changed line never reads as new. It opens in place of that file's changes, not
 beside them, with the line you were reading where it was on screen; types and peeks work on
 it as on the hunk. "Just the changes" folds it back, again keeping your place. It is offered
 when the diff came from your clone, and not on a deleted file.
