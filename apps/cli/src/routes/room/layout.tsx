@@ -57,7 +57,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
             ? [...trailOf(r.back), "attach"]
             : r.name === "room/review"
               ? [...trailOf(r.back), "why"]
-              : [...trailOf(r.back), r.file];
+              : r.name === "room/people"
+                ? [...trailOf(r.back), "people"]
+                : [...trailOf(r.back), r.file];
   const crumb =
     page === null
       ? null
@@ -70,7 +72,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
             ? { trail: trailOf(page.back), label: "attach", back: page.back, focus: "ticket-diagnostics" }
             : page.name === "room/review"
               ? { trail: trailOf(page.back), label: "why", back: page.back, focus: "ticket-review" }
-              : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
+              : page.name === "room/people"
+                ? { trail: trailOf(page.back), label: "people", back: page.back, focus: "people" }
+                : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
   const goBack = () => {
     if (!crumb) return;
     navigate(crumb.back);
@@ -130,7 +134,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
       <StatusLine />
       <box flexDirection="row" marginTop={1} flexGrow={1} flexShrink={1}>
         <Sidebar />
-        <Panel title={crumb ? `${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : page?.name === "room/review" ? "why" : "transcript"}` : roomName} grow>
+        <Panel title={crumb ? `${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : page?.name === "room/review" ? "why" : page?.name === "room/people" ? "people" : "transcript"}` : roomName} grow>
           {crumb ? <Crumb trail={crumb.trail} label={crumb.label} onBack={goBack} /> : <TabBar />}
           {children}
           <Keys />

@@ -27,6 +27,11 @@ export interface ReviewRoute {
   /** Where esc / ← go — the ticket. */
   readonly back: Route;
 }
+export interface PeopleRoute {
+  readonly name: "room/people";
+  /** Where esc / ← go — the overview it was opened from. */
+  readonly back: Route;
+}
 export interface TranscriptRoute {
   readonly name: "room/transcript";
   readonly path: string;
@@ -38,7 +43,7 @@ export interface TranscriptRoute {
 /** Where the configured app can be. Plain routes are strings; a route with
  *  parameters is an object. `room/*` routes render inside the room layout
  *  (see routes/index.tsx for the table that maps each to its page). */
-export type Route = "settings" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute;
+export type Route = "settings" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
 
 export type RouteName = Route extends infer R ? (R extends string ? R : R extends { readonly name: infer N } ? N : never) : never;
 
@@ -51,6 +56,7 @@ export const to = {
   transcript: (path: string, file: string, back: Route): Route => ({ name: "room/transcript", path, file, back }),
   attach: (ticketId: string, back: Route): Route => ({ name: "room/attach", ticketId, back }),
   review: (ticketId: string, back: Route): Route => ({ name: "room/review", ticketId, back }),
+  people: (back: Route): Route => ({ name: "room/people", back }),
 } as const;
 
 interface Router {
