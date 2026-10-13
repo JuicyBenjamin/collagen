@@ -25,6 +25,10 @@ describe("a comment as markdown", () => {
   it("never lets a comment's HTML or a script link through", () => {
     const [html] = parseMarkdown("<img src=x onerror=alert(1)>");
     expect(JSON.stringify(html)).not.toMatch(/"kind":"(link|image)"/);
+    // an image shows from https only; anything else stays its words
+    expect(parseMarkdown("![shot](https://github.com/u/a.png) ![bad](javascript:x) ![old](http://x/a.png)")).toEqual([
+      { kind: "p", children: [{ kind: "image", src: "https://github.com/u/a.png", alt: "shot" }, { kind: "text", text: " " }, { kind: "text", text: "bad" }, { kind: "text", text: " " }, { kind: "text", text: "old" }] },
+    ]);
     const [p] = parseMarkdown("[hi](javascript:alert(1)) [ok](https://example.com)");
     expect(p).toMatchObject({ kind: "p", children: [{ kind: "text", text: "hi" }, { kind: "text", text: " " }, { kind: "link", href: "https://example.com" }] });
   });
