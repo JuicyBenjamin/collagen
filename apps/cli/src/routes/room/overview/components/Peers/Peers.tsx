@@ -17,7 +17,8 @@ export function Peers() {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
 
   return (
-    <box flexDirection="column">
+    // never squeezed by the list below it: a shrunk box draws its lines over each other
+    <box flexDirection="column" flexShrink={0}>
       <PeerLine name={`${myName} (you)`} ai={myAi} aiStatus={myStatus} projects={myProjects} />
       {peers.map((p) => (
         <PeerLine key={p.key} name={p.name} ai={p.ai} aiStatus={p.aiStatus} away={p.away} protocol={p.protocol} projects={p.projects.length} />
