@@ -34,6 +34,31 @@ describe("a line changed in place", () => {
     expect(shape([del("gone entirely", 1), del("let n = 1;", 2), add("let n = 10;", 1), add("brand new line", 2)])).toEqual(["-1", "~2/1", "+2"]);
   });
 
+  it("reads a reordered list as moves, not as removed and added words", () => {
+    const d = wordDiff('expect(kinds).toEqual(["proposal", "plan", "bug", "review", "task"]);', 'expect(kinds).toEqual(["proposal", "bug", "plan", "task", "review"]);');
+    expect(d!.segments.filter((s) => s.kind === "removed" || s.kind === "added")).toEqual([]);
+    expect(d!.segments.filter((s) => s.kind === "moved").map((s) => s.text.replace(/[^a-z]/g, ""))).not.toEqual([]);
+    expect(d!.segments.map((s) => s.text).join("")).toBe('expect(kinds).toEqual(["proposal", "bug", "plan", "task", "review"]);');
+  });
+
+  it("knows where each moved word stood, for the line as it was", () => {
+    const old = "const order = [alpha, beta, gamma, delta, eps];";
+    const now = "const order = [eps, gamma, alpha, delta, beta];";
+    const d = wordDiff(old, now)!;
+    const wasOf = (word: string) => {
+      const at = now.indexOf(word);
+      const m = d.map.find((w) => at >= w.now && at < w.now + w.len)!;
+      return old.slice(m.was + (at - m.now), m.was + (at - m.now) + word.length);
+    };
+    for (const w of ["alpha", "beta", "gamma", "delta", "eps"]) expect(wasOf(w)).toBe(w);
+    expect(d.reorder).toEqual({ moved: 3, words: 7 });
+  });
+
+  it("still marks a plain edit as removed and added", () => {
+    const d = wordDiff("const limit = 10;", "const limit = 25;");
+    expect(d!.segments.map((s) => `${s.kind}:${s.text}`)).toEqual(["same:const limit = ", "removed:10", "added:25", "same:;"]);
+  });
+
   it("gives up on lines too long to weigh, and leaves them apart", () => {
     const a = Array.from({ length: 400 }, (_, i) => `w${i}`).join(" ");
     const b = Array.from({ length: 400 }, (_, i) => `v${i}`).join(" ");
