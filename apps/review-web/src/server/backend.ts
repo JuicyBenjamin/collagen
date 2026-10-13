@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -54,7 +54,7 @@ export class ReviewBackend extends Context.Service<
     /** a comment not said yet, confirmed where it sits at `commit` — the one the page shows now */
     readonly repin: (ticketId: string, id: string, commit: string) => Effect.Effect<DraftsResult>;
     /** what was merged into a room's projects, with the tickets each came from; null for a room not here */
-    readonly merges: (roomId: string) => Effect.Effect<MergeHistory | null>;
+    readonly merges: (roomId: string, shown: MergesShown, fresh: boolean) => Effect.Effect<MergeHistory | null>;
   }
 >()("review-web/ReviewBackend") {}
 

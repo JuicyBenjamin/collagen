@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { repoWebUrl } from "../lib/gitInfo";
-import { Data, Effect, Option, Schema, Stream } from "effect";
+import { Data, Effect, Schema } from "effect";
 import type { HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
-import { githubRepo, latestMerges, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, readComments, readConversation, readOutdated, readPull, readReviews, readUser, refusal } from "../lib/github";
+import { githubRepo, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, readComments, readConversation, readOutdated, readPull, readReviews, readUser, refusal } from "../lib/github";
 
 // Where a project's code is hosted, as something collagen can act on: read
 // a compare diff when there is no clone, link back to it, and — for the
@@ -98,9 +98,9 @@ export interface RepoHost {
   readonly conversation: (link: string, pull: number) => Effect.Effect<ReadonlyArray<HostNote>>;
   /** the repository's open pull requests, for the stack a branch sits in */
   readonly openPulls: (link: string) => Effect.Effect<ReadonlyArray<HostPull>>;
-  /** the pull requests merged into `base`, the latest first, at most
-   *  `limit` — whatever kind of merge each was */
-  readonly merges: (link: string, base: string, limit?: number) => Effect.Effect<ReadonlyArray<HostMerge>, HostCliMissing | HostRefused>;
+  /** one page of the pull requests merged into `base`, whatever kind of
+   *  merge each was: the first, or the one after `after` */
+  readonly mergesPage: (link: string, base: string, after: string | null) => Effect.Effect<MergesPage, HostCliMissing | HostRefused>;
   /** a whole review, at once: its verdict, its words, and every comment
    *  held in it — GitHub's "Finish your review" */
   readonly submit: (link: string, pull: number, review: SubmittedReview) => Effect.Effect<{ readonly ok: true; readonly url: string; readonly comments: ReadonlyArray<LineComment> } | { readonly error: string }>;
@@ -136,9 +136,6 @@ const gh = (args: ReadonlyArray<string>, timeoutMs = 20_000, input?: string): Ef
     child.stdin?.end(input ?? "");
     return Effect.sync(() => child.kill());
   });
-
-/** At most this many pages (of 100 pull requests) are read for `merges`. */
-const MERGES_MAX_PAGES = 10;
 
 const NO_GH = "Install the GitHub CLI (gh) and run gh auth login to act on the pull request from here.";
 
@@ -237,33 +234,17 @@ export const github: RepoHost = {
       const list = ran.ok ? parse(ran.out) : null;
       return (Array.isArray(list) ? list : []).flatMap((p) => readPull(p, undefined) ?? []);
     }),
-  merges: (link, base, limit = 50) => {
+  mergesPage: (link, base, after) => {
     const r = githubRepo(link)!;
-    const page = (after: string | null): Effect.Effect<MergesPage, HostCliMissing | HostRefused> =>
-      gh(["api", "graphql", "-f", `owner=${r.owner}`, "-f", `repo=${r.repo}`, "-f", `base=${base}`, ...(after ? ["-f", `after=${after}`] : []), "-f", `query=${MERGES_QUERY}`]).pipe(
-        Effect.flatMap((ran): Effect.Effect<typeof MergesAnswer.Type, HostCliMissing | HostRefused> =>
-          ran.missing
-            ? Effect.fail(new HostCliMissing())
-            : !ran.ok
-              ? Effect.fail(new HostRefused({ reason: refusal(ran.err) }))
-              : Schema.decodeUnknownEffect(MergesAnswer)(ran.out).pipe(Effect.mapError(() => new HostRefused({ reason: "gh answered something else than asked" }))),
-        ),
-        Effect.map(mergesPage),
-      );
-    // GitHub orders pull requests by when they last changed, not when they
-    // merged: pages are read until no later one can hold a later merge
-    return Stream.paginate(null as string | null, (after) => Effect.map(page(after), (p) => [[p], Option.fromNullishOr(p.next)] as const)).pipe(
-      Stream.take(MERGES_MAX_PAGES),
-      Stream.mapAccum(
-        (): ReadonlyArray<MergesPage> => [],
-        (read, p) => {
-          const pages = [...read, p];
-          return [pages, [latestMerges(pages, limit)]] as const;
-        },
+    return gh(["api", "graphql", "-f", `owner=${r.owner}`, "-f", `repo=${r.repo}`, "-f", `base=${base}`, ...(after ? ["-f", `after=${after}`] : []), "-f", `query=${MERGES_QUERY}`]).pipe(
+      Effect.flatMap((ran): Effect.Effect<typeof MergesAnswer.Type, HostCliMissing | HostRefused> =>
+        ran.missing
+          ? Effect.fail(new HostCliMissing())
+          : !ran.ok
+            ? Effect.fail(new HostRefused({ reason: refusal(ran.err) }))
+            : Schema.decodeUnknownEffect(MergesAnswer)(ran.out).pipe(Effect.mapError(() => new HostRefused({ reason: "gh answered something else than asked" }))),
       ),
-      Stream.takeUntil((latest) => latest.done),
-      Stream.runLast,
-      Effect.map(Option.match({ onNone: () => [], onSome: (latest) => latest.merges })),
+      Effect.map(mergesPage),
     );
   },
   submit: (link, pull, review) =>

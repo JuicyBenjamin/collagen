@@ -166,20 +166,22 @@ export const mergesPage = (answer: typeof MergesAnswer.Type): MergesPage => {
   };
 };
 
-/** The latest `limit` merges of the pages read so far, the latest first —
- *  and whether they are surely the latest of all. Pages come in the order
- *  pull requests last changed, and a pull request changes no earlier than
- *  it merged: once the last page read changed before the `limit`th merge,
- *  no page after it holds a later one. */
-export const latestMerges = (pages: ReadonlyArray<MergesPage>, limit: number): { readonly merges: ReadonlyArray<HostMerge>; readonly done: boolean } => {
+/** The latest `limit` merges of the pages read so far, the latest first;
+ *  whether they are surely the latest of all; and whether there are more
+ *  past them. Pages come in the order pull requests last changed, and a
+ *  pull request changes no earlier than it merged: once the last page read
+ *  changed before the `limit`th merge, no page after it holds a later one. */
+export const latestMerges = (
+  pages: ReadonlyArray<MergesPage>,
+  limit: number,
+): { readonly merges: ReadonlyArray<HostMerge>; readonly done: boolean; readonly more: boolean } => {
   // a pull request changed while the pages were read can be on two of them
-  const merges = [...new Map(pages.flatMap((p) => p.merges).map((m) => [m.number, m] as const)).values()]
-    .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
-    .slice(0, limit);
+  const all = [...new Map(pages.flatMap((p) => p.merges).map((m) => [m.number, m] as const)).values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  const merges = all.slice(0, limit);
   const last = pages.at(-1);
   const cutoff = merges[limit - 1]?.at;
   const done = !last || last.next === null || (cutoff !== undefined && last.oldestUpdate !== null && last.oldestUpdate <= cutoff);
-  return { merges, done };
+  return { merges, done, more: all.length > limit || (last !== undefined && last.next !== null) };
 };
 
 /** Pages from `gh api --paginate --slurp`, flattened. */

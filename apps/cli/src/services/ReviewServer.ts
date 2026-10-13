@@ -9,7 +9,7 @@ import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, reviewData, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
-import { mergeHistory } from "./MergeHistory";
+import { MergeHistory } from "./MergeHistory";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -62,10 +62,15 @@ const finishOk = (f: unknown): f is { readonly id: string; readonly pending: Rea
   return typeof id === "string" && /^[0-9a-f-]{8,64}$/.test(id) && Array.isArray(pending) && idsOk(pending);
 };
 
+/** How many merges the page shows of each project: a few names, each a whole count. */
+const shownCountsOk = (s: unknown): s is Readonly<Record<string, number>> =>
+  typeof s === "object" && s !== null && !Array.isArray(s) && Object.keys(s).length <= 64 && Object.values(s).every((n) => Number.isInteger(n) && n >= 0 && n <= 100_000);
+
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
   const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>();
   const types = yield* ReviewTypes;
+  const history = yield* MergeHistory;
   const on = <A, E>(e: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>) => e.pipe(Effect.provideContext(ctx), Effect.orDie);
   return {
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),
@@ -90,7 +95,7 @@ const backend = Effect.gen(function* () {
     accept: (ticketId, ids, edits) => (ticketIdOk(ticketId) && idsOk(ids) && editsOk(edits) ? on(acceptDrafts(ticketId, ids, edits)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     edit: (ticketId, id, body) => (ticketIdOk(ticketId) && idsOk([id]) && bodyOk(body) ? on(editDraft(ticketId, id, body)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     repin: (ticketId, id, commit) => (ticketIdOk(ticketId) && idsOk([id]) && commitOk(commit) ? on(repinDraft(ticketId, id, commit)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
-    merges: (roomId) => (ticketIdOk(roomId) ? on(mergeHistory(roomId)) : Effect.succeed(null)),
+    merges: (roomId, shown, fresh) => (ticketIdOk(roomId) && shownCountsOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, shown, fresh)) : Effect.succeed(null)),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });

@@ -497,3 +497,13 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .merge-tickets li.closed a { color: var(--dim); }
 .merge-ticket-by { color: var(--dim); font-size: 13px; white-space: nowrap; }
 .merge-ticket-by.mine { color: var(--accent); }
+.merges-more { color: var(--dim); margin: 0 0 0 24px; }
+.merge { scroll-margin-top: 24px; }
+.merge.target > .merge-title a { color: var(--accent); }
+.merge-why { margin-top: 8px; }
+.merge-why > summary { cursor: pointer; color: var(--dim); font-size: 13px; }
+.merge-decision { margin: 8px 0 0; padding: 8px 10px; border-left: 2px solid var(--line); }
+.merge-decision p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.merge-decision-title { font-weight: 600; }
+.merge-decision blockquote { margin: 4px 0; padding: 0 10px; border-left: 3px solid var(--accent); color: var(--fg); }
+.merge-decision-agent { color: var(--dim); font-size: 14px; }

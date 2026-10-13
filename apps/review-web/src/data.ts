@@ -430,6 +430,18 @@ export interface MergeTicket {
   readonly author: string;
   readonly mine: boolean;
   readonly closed: boolean;
+  /** what was decided on it, and why */
+  readonly decisions: ReadonlyArray<MergeDecision>;
+}
+
+/** A decision on a ticket a merge came from: what, and the why behind it. */
+export interface MergeDecision {
+  readonly title: string;
+  readonly what: string;
+  /** what the person asked for, in their words */
+  readonly userWhy?: string;
+  /** the agent's reason for the shape it took */
+  readonly agentWhy?: string;
 }
 
 /** One merge into a project's default branch, with the tickets it came from — none, often. */
@@ -444,9 +456,15 @@ export interface MergeEntry {
 }
 
 /** A project's merges, the latest first — or why they cannot be read. */
-export type ProjectHistory = { readonly project: string } & ({ readonly base: string; readonly merges: ReadonlyArray<MergeEntry> } | { readonly none: string });
+export type ProjectHistory = { readonly project: string } & (
+  | { readonly base: string; readonly merges: ReadonlyArray<MergeEntry>; /** more past these */ readonly more: boolean }
+  | { readonly none: string }
+);
 
-/** mergeHistory(roomId) — what was merged into each of a room's projects
+/** How many merges to show of each project, by its name; a page of one not named. */
+export type MergesShown = Readonly<Record<string, number>>;
+
+/** mergeHistory(roomId, shown, fresh) — what was merged into each of a room's projects
  *  here, as the TUI's merges tab has it: the host's merges and the room's
  *  tickets, read together. */
 export interface MergeHistory {

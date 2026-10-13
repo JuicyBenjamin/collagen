@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { useAtomRefresh, useAtomSet, useAtomValue } from "@effect/atom-react";
+import { useEffect, useRef, useState } from "react";
+import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { isClosed, ticketName, type Ticket } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
@@ -15,25 +15,33 @@ import type { HostMerge } from "../../../services/RepoHost";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { commentsAtom, identityAtom, membersAtom, reviewsAtom, rosterAtom } from "../atoms";
 import { timelineOf, type ProjectMerges } from "../../../services/MergeHistory";
-import { mergesAtom, mergesCursorAtom, openLinkAtom, openMergesPageAtom } from "./atoms";
+import { openReviewPageAtom } from "../review/atoms";
+import { mergesAtom, mergesCursorAtom, moreMergesAtom, openLinkAtom, openMergesPageAtom, refreshMergesAtom } from "./atoms";
 
-/** One line of the list: a project's header (not a stop), a merge, or a
- *  ticket it came from, drawn under it. */
+/** One line of the list: a project's header (not a stop), a merge, a
+ *  ticket it came from, drawn under it, or, past a project's last merge
+ *  shown, the more being read (not a stop). */
 type Line =
   | { readonly kind: "project"; readonly key: string; readonly text: string; readonly note?: string }
-  | { readonly kind: "merge"; readonly key: string; readonly merge: HostMerge }
-  | { readonly kind: "ticket"; readonly key: string; readonly merge: HostMerge; readonly ticket: Ticket; readonly last: boolean };
+  | { readonly kind: "merge"; readonly key: string; readonly project: string; readonly merge: HostMerge }
+  | { readonly kind: "ticket"; readonly key: string; readonly project: string; readonly merge: HostMerge; readonly ticket: Ticket; readonly last: boolean }
+  | { readonly kind: "more"; readonly key: string };
+
+/** More merges are read once the cursor is this many rows from a project's last. */
+const AHEAD = 10;
 
 /** The merges tab: what was merged into each of your projects' default
  *  branch, the latest first, named by its pull request — and under each, a
  *  line per collagen ticket it came from (lib/mergeTickets), as the
  *  overview draws an epic's tickets; none when it came from none. Read from
- *  the host when the tab opens; `r` reads again. enter opens a ticket's page,
- *  `o` the pull request in the browser, `w` the same history as a web page. The cursor holds its row when a read
- *  brings new merges in above it. */
+ *  the host when the tab opens; `r` refreshes. enter opens a ticket's page,
+ *  `o` collagen's own page in the browser (a ticket's review page, else this
+ *  history as a web page), `p` the pull request. The cursor holds its row
+ *  when a read brings new merges in above it. */
 export function MergesPage() {
   const result = useAtomValue(mergesAtom);
-  const refresh = useAtomRefresh(mergesAtom);
+  const refresh = useAtomSet(refreshMergesAtom);
+  const more = useAtomSet(moreMergesAtom);
   const read = AsyncResult.getOrElse(result, () => null as ReadonlyArray<ProjectMerges> | null);
   const projects = read ?? [];
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
@@ -44,6 +52,7 @@ export function MergesPage() {
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const openLink = useAtomSet(openLinkAtom);
   const openPage = useAtomSet(openMergesPageAtom);
+  const openReviewPage = useAtomSet(openReviewPageAtom);
   const { navigate } = useRouter();
   // the selected row by what it is, not where: a re-read must not move it
   const selKey = useAtomValue(mergesCursorAtom);
@@ -62,11 +71,12 @@ export function MergesPage() {
     if (projects.length > 1 || "none" in p) lines.push({ kind: "project", key: `p-${p.project}`, text: p.project, ...("none" in p ? { note: p.none } : { note: `into ${p.base}${p.merges.length === 0 ? " · none" : ""}` }) });
     if ("none" in p) continue;
     for (const { merge, tickets: shown } of p.merges) {
-      lines.push({ kind: "merge", key: `m-${p.project}-${merge.number}`, merge });
-      shown.forEach((ticket, i) => lines.push({ kind: "ticket", key: `t-${p.project}-${merge.number}-${ticket.id}`, merge, ticket, last: i === shown.length - 1 }));
+      lines.push({ kind: "merge", key: `m-${p.project}-${merge.number}`, project: p.project, merge });
+      shown.forEach((ticket, i) => lines.push({ kind: "ticket", key: `t-${p.project}-${merge.number}-${ticket.id}`, project: p.project, merge, ticket, last: i === shown.length - 1 }));
     }
+    if (p.more) lines.push({ kind: "more", key: `more-${p.project}` });
   }
-  const stops = lines.filter((l) => l.kind !== "project");
+  const stops = lines.filter((l) => l.kind === "merge" || l.kind === "ticket");
   const last = Math.max(0, stops.length - 1);
   const found = selKey === null ? -1 : stops.findIndex((l) => l.key === selKey);
   const sel = found < 0 ? 0 : found;
@@ -77,6 +87,15 @@ export function MergesPage() {
     return true;
   };
   const page = () => Math.max(1, list.current?.view().height ?? 10);
+
+  // near a project's last merge shown, its next ones are read: as long as
+  // the reader scrolls on, there are more
+  const near = current ? projects.find((p) => p.project === current.project) : undefined;
+  const nearMore = near && !("none" in near) && near.more ? near : undefined;
+  const lastOfNear = nearMore ? stops.findLastIndex((l) => l.project === nearMore.project) : -1;
+  useEffect(() => {
+    if (nearMore && sel >= lastOfNear - AHEAD) more({ project: nearMore.project, count: nearMore.merges.length });
+  }, [nearMore, sel, lastOfNear, more]);
 
   // the title column as wide as the longest title, the info after it; both
   // bounded by the pane (lib/columns)
@@ -94,13 +113,14 @@ export function MergesPage() {
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
       <Focusable
         id="merges"
-        hint={`↑↓ select${current?.kind === "ticket" ? " · enter open" : ""}${current ? " · o in browser" : ""} · w web page · r read again`}
+        hint={`↑↓ select${current?.kind === "ticket" ? " · enter open" : ""} · o in browser${current ? " · p pull request" : ""} · r refresh`}
         flexDirection="column"
         flexGrow={1}
         flexShrink={1}
         onKey={(key) => {
           if (key.name === "r") return refresh(), true;
-          if (key.name === "w") return openPage(), true;
+          // o is always one of collagen's own pages: a ticket's review page, else this history at the merge
+          if (key.name === "o") return current?.kind === "ticket" ? openReviewPage({ ticketId: current.ticket.id }) : openPage(current ? { at: { project: current.project, number: current.merge.number } } : {}), true;
           if (stops.length === 0) return false;
           if (key.name === "up" && sel > 0) return at(sel - 1);
           if (key.name === "down" && sel < last) return at(sel + 1);
@@ -109,7 +129,7 @@ export function MergesPage() {
           if (key.name === "home") return at(0);
           if (key.name === "end") return at(last);
           if (isEnter(key) && current?.kind === "ticket") return navigate(to.ticket(current.ticket.id, "room/merges")), true;
-          if (key.name === "o" && current) return openLink({ url: current.merge.url }), true;
+          if (key.name === "p" && current) return openLink({ url: current.merge.url }), true;
           return false;
         }}
       >
@@ -129,7 +149,7 @@ export function MergesPage() {
                 {"  "}none
               </text>
             ) : (
-              <FollowScroll ref={list} follow={current ? (sel === 0 ? "start" : { id: current.key }) : null} onWidth={setPane} flexGrow={1}>
+              <FollowScroll ref={list} follow={current ? (sel === 0 ? "start" : { id: nearMore && sel === lastOfNear ? `more-${nearMore.project}` : current.key }) : null} onWidth={setPane} flexGrow={1}>
                 {lines.map((l) =>
                   l.kind === "project" ? (
                     <text key={l.key} truncate wrapMode="none" flexShrink={0}>
@@ -138,6 +158,10 @@ export function MergesPage() {
                     </text>
                   ) : l.kind === "merge" ? (
                     <MergeRow key={l.key} id={l.key} merge={l.merge} info={infoOf(l.merge)} selected={focused && l.key === current?.key} lead={lead} infoWidth={info} />
+                  ) : l.kind === "more" ? (
+                    <text key={l.key} id={l.key} fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
+                      {"    "}loading…
+                    </text>
                   ) : (
                     <TicketLine key={l.key} id={l.key} ticket={l.ticket} last={l.last} author={nameFor(l.ticket.createdBy)} mine={l.ticket.createdBy === me} selected={focused && l.key === current?.key} />
                   ),
