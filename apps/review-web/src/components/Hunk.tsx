@@ -6,7 +6,8 @@ import { wholeFile } from "../api";
 import { hasNewSide, wholeHunk } from "../whole";
 import { highlightHunk } from "../highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
-import { CodeLine } from "./Code";
+import { ChangedLine, CodeLine } from "./Code";
+import { rowsOf } from "../inline";
 import { Peek } from "./Peek";
 import { LineComposer, LineThread } from "./LineThread";
 import { hostNow } from "../hostNow";
@@ -345,7 +346,8 @@ export function Hunk(props: {
  *  language server reads (once it is installed), a word on an added or
  *  unchanged line answers to the pointer: rest on it for its type, click it
  *  to peek where it is declared (removed lines are not the branch's, not
- *  asked). */
+ *  asked). A line changed in place is one row, its removed and added words
+ *  marked (inline.ts). */
 function Lines(props: {
   hunk: HunkData;
   /** the pull request's line comments to show under their lines: all, the
@@ -356,6 +358,8 @@ function Lines(props: {
   talk?: boolean;
 }) {
   const spans = createMemo(() => highlightHunk(props.hunk));
+  // the rows drawn; a pick and a peek are by row, never by line
+  const rows = createMemo(() => rowsOf(props.hunk.lines));
   const asks = () => readyFor(props.hunk.file);
 
   /** The word under the pointer on this line, as a spot in the branch, and
@@ -377,8 +381,8 @@ function Lines(props: {
    *  side by its old number, any other on the new side by its new one. */
   const sideOf = (line: DiffLine): { readonly side: "LEFT" | "RIGHT"; readonly n: number } | null =>
     line.kind === "-" ? (line.old !== undefined ? { side: "LEFT", n: line.old } : null) : line.new !== undefined ? { side: "RIGHT", n: line.new } : null;
-  const threadOf = (line: DiffLine) => {
-    const at = sideOf(line);
+  const threadOf = (line: DiffLine | undefined) => {
+    const at = line && sideOf(line);
     const which = props.threads ?? "none";
     return at && (which === "all" || (which === "new" && at.side === "RIGHT")) ? at : null;
   };
@@ -396,10 +400,11 @@ function Lines(props: {
   const composerAt = (i: number) => {
     const p = picked();
     if (!p || p.last !== i || hostNow.dragging()) return null;
-    const from = sideOf(props.hunk.lines[p.first]!);
-    const to = sideOf(props.hunk.lines[p.last]!);
+    const from = sideOf(rows()[p.first]!.line);
+    const to = sideOf(rows()[p.last]!.line);
     if (!from || !to) return null;
-    const lines = props.hunk.lines.slice(p.first, p.last + 1);
+    // a changed row stands for its added line
+    const lines = rows().slice(p.first, p.last + 1).map((r) => r.line);
     return { from: { side: from.side, line: from.n }, to: { side: to.side, line: to.n }, suggestable: lines.every((l) => l.kind !== "-") ? lines.map((l) => l.text) : null };
   };
   /** The new file's lines from `from` to `to`, as this hunk shows them — what a suggestion replaces. */
@@ -411,11 +416,13 @@ function Lines(props: {
   return (
     <table>
       <tbody>
-        <For each={props.hunk.lines}>
-          {(line, i) => (
+        <For each={rows()}>
+          {(row, i) => {
+            const line = row.line;
+            return (
             <>
-              <tr class={{ add: line.kind === "+", del: line.kind === "-", picked: inPick(i()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, i())}>
-                <td class="n">{line.old ?? ""}</td>
+              <tr class={{ add: line.kind === "+" && !row.was, del: line.kind === "-", changed: row.was !== undefined, picked: inPick(i()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, i())}>
+                <td class="n">{row.was?.line.old ?? line.old ?? ""}</td>
                 <td class="n">{line.new ?? ""}</td>
                 <td
                   class={["t", { asks: asks() && line.new !== undefined }]}
@@ -460,10 +467,14 @@ function Lines(props: {
                       +
                     </button>
                   </Show>
-                  <span class="sign">{line.kind === " " ? " " : line.kind}</span>
-                  <CodeLine spans={spans()[i()] ?? []} />
+                  <span class="sign">{row.was ? "~" : line.kind === " " ? " " : line.kind}</span>
+                  <Show when={row.was} fallback={<CodeLine spans={spans()[row.index] ?? []} />}>
+                    {(was) => <ChangedLine segments={was().segments} old={{ text: was().line.text, spans: spans()[was().index] ?? [] }} now={{ text: line.text, spans: spans()[row.index] ?? [] }} />}
+                  </Show>
                 </td>
               </tr>
+              {/* the removed line's comments too: it is drawn in this row */}
+              <Show when={threadOf(row.was?.line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} codeOf={codeOf} />}</Show>
               <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} codeOf={codeOf} />}</Show>
               <Show when={composerAt(i())}>{(c) => <LineComposer file={props.hunk.file} from={c().from} to={c().to} suggestable={c().suggestable} />}</Show>
               <Show when={peek()?.hunk === props.hunk.id && peek()?.index === i() ? peek() : null}>
@@ -476,7 +487,8 @@ function Lines(props: {
                 )}
               </Show>
             </>
-          )}
+            );
+          }}
         </For>
       </tbody>
     </table>
