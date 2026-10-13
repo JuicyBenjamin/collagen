@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import { stillReading, type DefinitionResult, type Peek as PeekData } from "../data";
-import { highlightCode } from "../highlight";
+import { highlightCode, languageOf } from "../highlight";
 import { closePeek, retryPeek } from "../intel";
 import { CodeLine } from "./Code";
 
@@ -14,7 +14,7 @@ const summary = (doc: string): string => doc.split(/\n\s*\n|\n@/)[0]!.replace(/\
 function Declaration(props: { peek: PeekData }) {
   const [docOpen, setDocOpen] = createSignal(false);
   const [allLines, setAllLines] = createSignal(false);
-  const lines = () => (props.peek.code ? highlightCode(props.peek.code, props.peek.file) : []);
+  const lines = () => (props.peek.code ? highlightCode(props.peek.code, languageOf(props.peek.file)) : []);
   const shown = () => (allLines() ? lines() : lines().slice(0, FOLD));
   const hidden = () => lines().length - shown().length;
   return (
