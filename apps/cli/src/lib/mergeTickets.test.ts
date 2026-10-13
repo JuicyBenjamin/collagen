@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReviewComment, ReviewContext, Ticket } from "@collagen/p2p";
 import { github, type HostMerge } from "../services/RepoHost";
-import { reviewedCode, ticketsOfMerges, type ReviewedCode } from "./mergeTickets";
+import { lineage, reviewedCode, ticketsOfMerges, type ReviewedCode } from "./mergeTickets";
 
 const merge = (number: number, branch: string, at: string, kind: HostMerge["kind"] = "squash", commit = `m${number}`): HostMerge => ({
   number,
@@ -86,5 +86,34 @@ describe("a project's review tickets, as where their code was", () => {
     expect(reviewedCode("shop", all, [], [], "alice", github).map((c) => c.ticketId)).toEqual(["r", "gated"]);
     // a project is one project however this machine cases its name
     expect(reviewedCode("Shop", all, [], [], "bob", github).map((c) => c.ticketId)).toEqual(["r"]);
+  });
+});
+
+describe("what a merge grew from", () => {
+  const ticket = (id: string, kind: Ticket["kind"], from: ReadonlyArray<string> = [], over: Partial<Ticket> = {}): Ticket => ({ id, project: "shop", goal: id, createdBy: "alice", kind, steps: [], structureAt: 1, updatedAt: 1, from, ...over });
+
+  it("the whole chain, each once, what it grew from first: proposal, plan, task, review", () => {
+    const all = new Map(
+      [
+        ticket("idea", "proposal"),
+        ticket("plan", "plan", ["idea"]),
+        ticket("do", "task", ["plan"]),
+        ticket("other-task", "task", ["plan"]),
+        ticket("r1", "review", ["do"]),
+        ticket("r2", "review", ["other-task", "idea"]),
+      ].map((t) => [t.id, t] as const),
+    );
+    expect(lineage(["r1"], all, "bob").map((t) => t.id)).toEqual(["idea", "plan", "do", "r1"]);
+    // a stack reviewed in parts: the shared roots once, before both
+    expect(lineage(["r1", "r2"], all, "bob").map((t) => t.id)).toEqual(["idea", "plan", "do", "r1", "other-task", "r2"]);
+  });
+
+  it("a ticket the reader may not see is left out, and the chain past it kept", () => {
+    const all = new Map(
+      [ticket("idea", "proposal"), ticket("gate", "plan", [], { steps: [{ id: "s", owner: "bob", intent: "take", description: "", needs: [], status: "pending", updatedAt: 1 }] }), ticket("plan", "plan", ["idea"], { after: ["gate"] }), ticket("r", "review", ["plan"])].map(
+        (t) => [t.id, t] as const,
+      ),
+    );
+    expect(lineage(["r"], all, "carol").map((t) => t.id)).toEqual(["idea", "r"]);
   });
 });

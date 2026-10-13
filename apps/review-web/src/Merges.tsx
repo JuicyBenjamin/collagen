@@ -48,6 +48,9 @@ const [now, setNow] = createSignal(Date.now());
 setInterval(() => setNow(Date.now()), 30_000);
 
 export function MergesApp(props: { roomId: string }) {
+  // where it opens is the page's to say (a merge, else the latest), not
+  // where it was last scrolled to
+  history.scrollRestoration = "manual";
   const [shown, setShown] = createSignal<MergesShown>({});
   const [refreshes, setRefreshes] = createSignal(0);
   const [refreshing, setRefreshing] = createSignal(false);
@@ -196,6 +199,7 @@ function Project(props: { project: ProjectHistory; named: boolean; more: (projec
 function Merge(props: { merge: MergeEntry; project: string }) {
   const m = () => props.merge;
   const decisions = () => m().tickets.flatMap((t) => t.decisions);
+  const why = () => m().tickets.filter((t) => t.decisions.length > 0);
   const opened = target !== null && target.project === props.project && target.number === props.merge.number;
   return (
     <li class={{ merge: true, target: opened }} id={mergeId(props.project, props.merge.number)}>
@@ -212,7 +216,10 @@ function Merge(props: { merge: MergeEntry; project: string }) {
           <For each={m().tickets}>
             {(t) => (
               <li class={{ closed: t.closed }}>
-                <a href={`/review/${encodeURIComponent(t.id)}`}>{t.name}</a>
+                <span class="merge-ticket-kind">{t.kind}</span>
+                <Show when={t.kind === "review"} fallback={<span class="merge-ticket-name">{t.name}</span>}>
+                  <a href={`/review/${encodeURIComponent(t.id)}`}>{t.name}</a>
+                </Show>
                 <span class={["merge-ticket-by", { mine: t.mine }]}>{t.author}</span>
               </li>
             )}
@@ -222,16 +229,25 @@ function Merge(props: { merge: MergeEntry; project: string }) {
       <Show when={decisions().length > 0}>
         <details class="merge-why" open={opened}>
           <summary>Why</summary>
-          <For each={decisions()}>
-            {(d) => (
-              <div class="merge-decision">
-                <p class="merge-decision-title">{d.title}</p>
-                <Show when={d.title !== d.what}>
-                  <p>{d.what}</p>
-                </Show>
-                <Show when={d.userWhy}>{(w) => <blockquote>{w()}</blockquote>}</Show>
-                <Show when={d.agentWhy}>{(w) => <p class="merge-decision-agent">{w()}</p>}</Show>
-              </div>
+          <For each={why()}>
+            {(t) => (
+              <>
+                <p class="merge-why-of">
+                  {t.kind} · {t.name}
+                </p>
+                <For each={t.decisions}>
+                  {(d) => (
+                    <div class="merge-decision">
+                      <p class="merge-decision-title">{d.title}</p>
+                      <Show when={d.title !== d.what}>
+                        <p>{d.what}</p>
+                      </Show>
+                      <Show when={d.userWhy}>{(w) => <blockquote>{w()}</blockquote>}</Show>
+                      <Show when={d.agentWhy}>{(w) => <p class="merge-decision-agent">{w()}</p>}</Show>
+                    </div>
+                  )}
+                </For>
+              </>
             )}
           </For>
         </details>
