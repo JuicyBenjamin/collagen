@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, Errored, For, isPending, Loading, onCleanup, Show } from "solid-js";
 import { ago } from "./ago";
 import { mergeHistory } from "./api";
-import type { MergeEntry, MergeHistory, MergesShown, ProjectHistory } from "./data";
+import type { MergeEntry, MergeHistory, MergesShown, MergeTicket, ProjectHistory } from "./data";
 
 // The merge history page: what was merged into each of a room's projects,
 // the latest first, as the TUI's merges tab has it — each merge linked to
@@ -198,8 +198,6 @@ function Project(props: { project: ProjectHistory; named: boolean; more: (projec
  *  number, branch and when — then the tickets it came from. */
 function Merge(props: { merge: MergeEntry; project: string }) {
   const m = () => props.merge;
-  const decisions = () => m().tickets.flatMap((t) => t.decisions);
-  const why = () => m().tickets.filter((t) => t.decisions.length > 0);
   const opened = target !== null && target.project === props.project && target.number === props.merge.number;
   return (
     <li class={{ merge: true, target: opened }} id={mergeId(props.project, props.merge.number)}>
@@ -212,46 +210,87 @@ function Merge(props: { merge: MergeEntry; project: string }) {
         #{m().number} · <code>{m().branch}</code> · <time datetime={m().at}>{ago(Date.parse(m().at), now())}</time>
       </p>
       <Show when={m().tickets.length > 0}>
-        <ul class="merge-tickets">
-          <For each={m().tickets}>
-            {(t) => (
-              <li class={{ closed: t.closed }}>
-                <span class="merge-ticket-kind">{t.kind}</span>
-                <Show when={t.kind === "review"} fallback={<span class="merge-ticket-name">{t.name}</span>}>
-                  <a href={`/review/${encodeURIComponent(t.id)}`}>{t.name}</a>
-                </Show>
-                <span class={["merge-ticket-by", { mine: t.mine }]}>{t.author}</span>
-              </li>
-            )}
-          </For>
+        <ul class="lineage">
+          <For each={m().tickets}>{(t) => <Lineage ticket={t} open={opened && t.kind === "review"} />}</For>
         </ul>
       </Show>
-      <Show when={decisions().length > 0}>
-        <details class="merge-why" open={opened}>
-          <summary>Why</summary>
-          <For each={why()}>
-            {(t) => (
-              <>
-                <p class="merge-why-of">
-                  {t.kind} · {t.name}
-                </p>
-                <For each={t.decisions}>
-                  {(d) => (
-                    <div class="merge-decision">
-                      <p class="merge-decision-title">{d.title}</p>
-                      <Show when={d.title !== d.what}>
-                        <p>{d.what}</p>
-                      </Show>
-                      <Show when={d.userWhy}>{(w) => <blockquote>{w()}</blockquote>}</Show>
-                      <Show when={d.agentWhy}>{(w) => <p class="merge-decision-agent">{w()}</p>}</Show>
-                    </div>
-                  )}
-                </For>
-              </>
+    </li>
+  );
+}
+
+/** One ticket of what a merge grew from: its kind's mark, its name (a
+ *  review links to its page), whose it is when not the reader's, and its
+ *  why, folded under it. */
+function Lineage(props: { ticket: MergeTicket; open: boolean }) {
+  const t = () => props.ticket;
+  const [open, setOpen] = createSignal(props.open);
+  const count = () => t().decisions.length;
+  return (
+    <li class={["lineage-item", t().kind, { closed: t().closed, open: open() }]}>
+      <div class="lineage-row">
+        <KindIcon kind={t().kind} />
+        <Show when={t().kind === "review"} fallback={<span class="lineage-name">{t().name}</span>}>
+          <a class="lineage-name" href={`/review/${encodeURIComponent(t().id)}`}>
+            {t().name}
+          </a>
+        </Show>
+        <Show when={!t().mine}>
+          <span class="lineage-by">{t().author}</span>
+        </Show>
+        <Show when={count() > 0}>
+          <button type="button" class="lineage-why" aria-expanded={open() ? "true" : "false"} onClick={() => void setOpen((o) => !o)}>
+            {count() === 1 ? "why" : `${count()} decisions`}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+        </Show>
+      </div>
+      <Show when={open() && count() > 0}>
+        <div class="lineage-decisions">
+          <For each={t().decisions}>
+            {(d) => (
+              <div class="lineage-decision">
+                <p class="lineage-decision-title">{d.title}</p>
+                <Show when={d.title !== d.what}>
+                  <p>{d.what}</p>
+                </Show>
+                <Show when={d.userWhy}>{(w) => <blockquote>{w()}</blockquote>}</Show>
+                <Show when={d.agentWhy}>{(w) => <p class="lineage-decision-agent">{w()}</p>}</Show>
+              </div>
             )}
           </For>
-        </details>
+        </div>
       </Show>
     </li>
+  );
+}
+
+/** A ticket's kind as a mark, coloured by kind. */
+function KindIcon(props: { kind: MergeTicket["kind"] }) {
+  return (
+    <svg class="kind-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label={props.kind}>
+      {(() => {
+        switch (props.kind) {
+          case "proposal":
+            return <path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z" />;
+          case "plan":
+            return <path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15" />;
+          case "task":
+            return <path d="M4 4h16v16H4zM8 12l3 3 5-6" />;
+          case "bug":
+            return <path d="M4 21V4h12l-2 4 2 4H4" />;
+          case "review":
+            return (
+              <>
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+                <circle cx="12" cy="12" r="3" />
+              </>
+            );
+          case "epic":
+            return <path d="M3 7h6l2 2h10v10H3z" />;
+        }
+      })()}
+    </svg>
   );
 }
