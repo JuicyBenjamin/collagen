@@ -1,11 +1,11 @@
 import { createSignal, For, Show } from "solid-js";
-import { ago } from "../ago";
-import type { HostNote, HostReview, HostUser } from "../data";
-import { enter, leave } from "../fold";
-import { hostNow } from "../hostNow";
-import { arrive } from "../wipe";
-import { bodyParts } from "../suggest";
-import { Markdown } from "./Markdown";
+import { ago } from "~/ago";
+import type { HostNote, HostReview, HostUser } from "~/data";
+import { enter, leave } from "~/fold";
+import { hostNow } from "~/hostNow";
+import { Appear } from "~/components/Appear";
+import { bodyParts } from "~/suggest";
+import { Markdown } from "~/components/Markdown";
 
 type Item = ({ readonly kind: "review" } & HostReview) | ({ readonly kind: "note" } & HostNote);
 
@@ -64,17 +64,11 @@ export function HostActivity() {
     const commentCount = activity.conversation.length;
     return [reviewCount > 0 ? `${reviewCount} ${reviewCount === 1 ? "review" : "reviews"}` : "", commentCount > 0 ? `${commentCount} ${commentCount === 1 ? "comment" : "comments"}` : ""].filter(Boolean).join(" · ");
   };
+  // it comes with the host's answer, after the page: it opens into place
   return (
-    <Show when={host()?.pull}>
+    <Appear when={host()?.pull}>
       {(pull) => (
-        <section
-          // it comes with the host's answer, after the page: it opens into place
-          ref={(element) => {
-            enter(element);
-            arrive(element);
-          }}
-          class="host-activity"
-          aria-label={`On ${hostNow.hostName()}`}>
+        <section class="host-activity" aria-label={`On ${hostNow.hostName()}`}>
           <div class="host-head">
             <h2>On {hostNow.hostName()}</h2>
             <Show when={items().length === 0}>
@@ -154,6 +148,6 @@ export function HostActivity() {
           </Show>
         </section>
       )}
-    </Show>
+    </Appear>
   );
 }

@@ -1,8 +1,8 @@
 import { createSignal, For, Show } from "solid-js";
-import { readSoFar, stillReading, type DefinitionResult, type Peek as PeekData } from "../data";
-import { highlightCode, languageOf } from "../highlight";
-import { closePeek, retryPeek } from "../intel";
-import { CodeLine } from "./Code";
+import { readSoFar, stillReading, type DefinitionResult, type Peek as PeekData } from "~/data";
+import { highlightCode, languageOf } from "~/highlight";
+import { closePeek, retryPeek } from "~/intel";
+import { CodeLine } from "~/components/Code";
 
 /** Code longer than this opens folded, the rest one click away. */
 const FOLD = 18;

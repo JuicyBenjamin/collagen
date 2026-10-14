@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
-import type { StackStep } from "../data";
-import { hostNow } from "../hostNow";
+import type { StackStep } from "~/data";
+import { Appear } from "~/components/Appear";
+import { hostNow } from "~/hostNow";
 
 /** One step of the stack: a pull request (by number, its title on hover), a
  *  review in the room, or the trunk — each opens where it is read. */
@@ -23,7 +24,7 @@ function Step(props: { step: StackStep }) {
  *  when the branch stands alone on the trunk. */
 export function StackRow() {
   return (
-    <Show when={hostNow.stack()}>
+    <Appear when={hostNow.stack()}>
       {(stack) => (
         <div class="stack-row" role="navigation" aria-label="The stack this branch sits in">
           <span class="who">Stack</span>
@@ -61,6 +62,6 @@ export function StackRow() {
           </Show>
         </div>
       )}
-    </Show>
+    </Appear>
   );
 }

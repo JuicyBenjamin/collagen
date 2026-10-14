@@ -552,12 +552,11 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .host-initial { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; box-sizing: border-box; font-size: 10px; font-weight: 600; }
 .host-more { margin-left: 5px; font-size: 12px; color: var(--faint); }
 
-/* the page's shape while it waits (components/Skeleton): bars where the
-   words and the code will be, breathing slowly; still when the reader asks
-   their system for less motion */
-/* a placeholder: the real markup, its words masked — each a bar the words'
-   size; no borders, only blocks: the words one shade, the box they belong
-   to a fainter one (borders go clear, not away, so nothing changes size) */
+/* a part's placeholder while it waits (each part's .Skeleton): its own
+   markup with its words masked, so it is the size of what replaces it, and
+   breathing slowly; still when the reader asks their system for less motion.
+   No borders, only blocks: the words one shade, the box they belong to a
+   fainter one (borders go clear, not away, so nothing changes size) */
 .sk, .sk * { border-color: transparent !important; box-shadow: none !important; }
 /* the real parts draw some of their boxes and marks with ::before and ::after
    (a file header's card, a chip's arrow): none of them in a placeholder */
@@ -566,7 +565,12 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .sk-avatar { display: inline-block; width: 22px; height: 22px; box-sizing: border-box; }
 /* nobody signed in: the face's place kept, empty */
 .avatar.empty { display: inline-block; width: 22px; height: 22px; box-sizing: border-box; background: var(--line); }
-.sk .sk-w { color: transparent; background: var(--sk-word); border-radius: 6px; -webkit-box-decoration-break: clone; box-decoration-break: clone; animation: sk-breathe 1.6s ease-in-out infinite; }
+/* masked words: a band as tall as the letters, not the line, so it weighs
+   what the words will */
+.sk .sk-w {
+  color: transparent; background: linear-gradient(var(--sk-word), var(--sk-word)) 0 55% / 100% 0.78em no-repeat; border-radius: 4px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; animation: sk-breathe 1.6s ease-in-out infinite;
+}
 .sk .hunk-group { background: var(--sk-block); }
 /* a pill or a button: its shape alone says something is there, its words
    are not drawn */
@@ -576,29 +580,22 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .sk a { pointer-events: none; }
 @keyframes sk-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .sk .sk-w, .sk .bar, .sk .sk-avatar, .sk .chip, .sk .pull-chip, .sk .whole-toggle { animation: none; } }
-/* a part arriving: its placeholder lies over it and is swept away, top left
-   to bottom right (wipe.ts) */
+/* a part arriving (components/Arrives): its placeholder lies over it and is
+   swept away, top left to bottom right — over the part's own box, no
+   taller than the screen, so the sweep is seen on a long part too */
 @property --wipe { syntax: "<percentage>"; inherits: false; initial-value: 125%; }
-.swap { position: relative; }
-/* the placeholder reaches the screen's bottom, so what lies below its shape
-   is swept in with it rather than shown at once; held to the part's height */
-.swap:has(> .swap-ghost) { overflow: clip; }
-.swap > .swap-ghost {
+.arrives { position: relative; }
+.arrives.inline { display: inline-flex; align-items: center; }
+.arrives-ghost {
   /* above the part's sticky file headers */
-  position: absolute; top: 0; left: 0; right: 0; z-index: 4; min-height: 100vh; pointer-events: none; background: var(--bg);
+  position: absolute; top: 0; left: 0; right: 0; height: 100%; max-height: 100vh; overflow: hidden; z-index: 4; pointer-events: none; background: var(--bg);
   animation: wipe-away 0.6s cubic-bezier(0.65, 0, 0.35, 1) both;
   -webkit-mask-image: linear-gradient(135deg, transparent calc(var(--wipe) - 14%), #000 var(--wipe));
   mask-image: linear-gradient(135deg, transparent calc(var(--wipe) - 14%), #000 var(--wipe));
 }
+.arrives.inline > .arrives-ghost { display: inline-flex; align-items: center; }
+/* in flow, the part's first margin folds through to the page; laid over it,
+   the placeholder's would not, and it would stand that much lower */
+.arrives-ghost > *, .arrives-ghost > * > :first-child, .arrives-ghost > * > :first-child > :first-child { margin-top: 0; }
 @keyframes wipe-away { from { --wipe: -20%; } to { --wipe: 125%; } }
-/* in flow, the part's first margin folds into the page; laid over it, the
-   placeholder's would not, and it would stand that much lower */
-.swap-ghost > .sk > :first-child { margin-top: 0; }
-/* something arriving with no placeholder of its own: swept in the same way,
-   from nothing (wipe.ts: arrive) */
-.arriving {
-  animation: wipe-in 0.6s cubic-bezier(0.65, 0, 0.35, 1) both;
-  -webkit-mask-image: linear-gradient(135deg, #000 calc(var(--wipe) - 14%), transparent var(--wipe));
-  mask-image: linear-gradient(135deg, #000 calc(var(--wipe) - 14%), transparent var(--wipe));
-}
-@keyframes wipe-in { from { --wipe: -20%; } to { --wipe: 125%; } }
+@media (prefers-reduced-motion: reduce) { .arrives-ghost { display: none; } }
