@@ -43,9 +43,9 @@ export function VerdictMark(props: { verdict?: "confirmed" | "corrected" | "wron
   const by = () => assumedNow.claimedBy() ?? "its author";
   return (
     <Show when={props.verdict}>
-      {(v) => (
-        <p class={["verdict-mark", v()]}>
-          {v() === "confirmed" ? `Guessed, confirmed by ${by()}` : v() === "corrected" ? `Guessed wrong, corrected by ${by()}` : `Guessed wrong, says ${by()}`}
+      {(verdict) => (
+        <p class={["verdict-mark", verdict()]}>
+          {verdict() === "confirmed" ? `Guessed, confirmed by ${by()}` : verdict() === "corrected" ? `Guessed wrong, corrected by ${by()}` : `Guessed wrong, says ${by()}`}
         </p>
       )}
     </Show>

@@ -9,7 +9,7 @@ export class LogBuffer extends Context.Service<LogBuffer>()("cli/LogBuffer", {
     // running with the surrounding services captured here.
     const services = yield* Effect.context<never>();
     const appendSync = (line: string) =>
-      Effect.runSyncWith(services)(SubscriptionRef.update(lines, (l) => [...l.slice(-49), line]));
+      Effect.runSyncWith(services)(SubscriptionRef.update(lines, (buffered) => [...buffered.slice(-49), line]));
     return { lines, appendSync } as const;
   }),
 }) {
@@ -30,10 +30,10 @@ export const LoggerLive = Layer.unwrap(
       const line = `${date.toISOString()} [${logLevel.toUpperCase()}] ${text}${failure}`;
       // File first: it must never depend on the UI buffer succeeding. Sync on
       // purpose — loggers must not suspend, and async appends would reorder.
-      const toFile = (s: string) => {
+      const toFile = (entry: string) => {
         if (!file) return;
         try {
-          appendFileSync(file, s + "\n");
+          appendFileSync(file, entry + "\n");
         } catch {
           // best-effort
         }
@@ -41,8 +41,8 @@ export const LoggerLive = Layer.unwrap(
       toFile(line);
       try {
         buffer.appendSync(line);
-      } catch (e) {
-        toFile(`${date.toISOString()} [LOGGER] ui buffer append failed: ${String(e).slice(0, 200)}`);
+      } catch (error) {
+        toFile(`${date.toISOString()} [LOGGER] ui buffer append failed: ${String(error).slice(0, 200)}`);
       }
     });
     return Logger.layer([logger]);

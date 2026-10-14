@@ -47,9 +47,9 @@ export function Footer() {
     <>
       <box marginTop={1} flexDirection="column" flexShrink={0}>
         <text fg={theme.dim}>activity</text>
-        {[0, 1, 2].map((i) => (
-          <text key={i} fg={theme.dim} truncate wrapMode="none">
-            {logs.slice(-3)[i] ?? " "}
+        {[0, 1, 2].map((index) => (
+          <text key={index} fg={theme.dim} truncate wrapMode="none">
+            {logs.slice(-3)[index] ?? " "}
           </text>
         ))}
       </box>

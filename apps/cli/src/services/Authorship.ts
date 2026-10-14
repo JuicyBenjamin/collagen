@@ -23,11 +23,11 @@ export const describeIdentity = (identity: string): string => {
  *  base..branch in the clone at `path` (local refs first, then origin's). */
 export const gitAuthors = (path: string, base: string, branch: string) =>
   Effect.gen(function* () {
-    const b = yield* firstRef(path, [branch, `origin/${branch}`]);
-    const a = yield* firstRef(path, [base, `origin/${base}`]);
-    if (!a || !b) return [] as ReadonlyArray<string>;
-    const out = yield* run("git", ["log", "--format=%ae", `${a}..${b}`], path, 10_000);
-    return [...new Set((out ?? "").split("\n").map((e) => e.trim()).filter((e) => e.length > 0).map((e) => identityOf("git", e)))];
+    const branchRef = yield* firstRef(path, [branch, `origin/${branch}`]);
+    const baseRef = yield* firstRef(path, [base, `origin/${base}`]);
+    if (!baseRef || !branchRef) return [] as ReadonlyArray<string>;
+    const out = yield* run("git", ["log", "--format=%ae", `${baseRef}..${branchRef}`], path, 10_000);
+    return [...new Set((out ?? "").split("\n").map((email) => email.trim()).filter((email) => email.length > 0).map((email) => identityOf("git", email)))];
   });
 
 /** Who the person here is: the email their clone commits as, and their

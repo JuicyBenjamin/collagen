@@ -14,9 +14,9 @@ export class AiStatus extends Context.Service<AiStatus>()("cli/AiStatus", {
     const current = yield* SubscriptionRef.make<Status>("unknown");
 
     const probe = Effect.fn("AiStatus.probe")(
-      function* (ai: string | null) {
-        if (ai === null) return "unknown" as const;
-        const adapter = adapters[ai];
+      function* (aiName: string | null) {
+        if (aiName === null) return "unknown" as const;
+        const adapter = adapters[aiName];
         if (!adapter) return "missing" as const;
         const handle = yield* ChildProcess.make(adapter.cmd, adapter.auth.args, { stdin: "ignore" });
         const out = yield* handle.stdout.pipe(Stream.decodeText(), Stream.mkString);
@@ -33,10 +33,10 @@ export class AiStatus extends Context.Service<AiStatus>()("cli/AiStatus", {
     );
 
     /** Probe and publish — the profile broadcaster reads `current`. */
-    const refresh = Effect.fn("AiStatus.refresh")(function* (ai: string | null) {
-      const status = yield* probe(ai);
+    const refresh = Effect.fn("AiStatus.refresh")(function* (aiName: string | null) {
+      const status = yield* probe(aiName);
       yield* SubscriptionRef.set(current, status);
-      yield* Effect.log(`ai status: ${ai ?? "none"} → ${status}`);
+      yield* Effect.log(`ai status: ${aiName ?? "none"} → ${status}`);
       return status;
     });
 

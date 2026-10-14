@@ -14,7 +14,7 @@ const stateWith = (sent?: LocalState["sent"]) =>
       return {
         state,
         get: SubscriptionRef.get(state),
-        update: (f: (s: LocalState) => LocalState) => SubscriptionRef.update(state, f),
+        update: (change: (s: LocalState) => LocalState) => SubscriptionRef.update(state, change),
       } as const;
     }),
   );
@@ -34,12 +34,12 @@ const run = <A>(
   kept?: LocalState["sent"],
   answer?: (out: Outgoing) => Done,
 ) => {
-  const d = recording(answer);
+  const dispatch = recording(answer);
   return Effect.runPromise(
     Effect.gen(function* () {
       return yield* body(yield* Outbox);
-    }).pipe(Effect.provide(Outbox.layer.pipe(Layer.provide(stateWith(kept)), Layer.provide(d.layer)))),
-  ).then((value) => ({ value, wrote: d.wrote }));
+    }).pipe(Effect.provide(Outbox.layer.pipe(Layer.provide(stateWith(kept)), Layer.provide(dispatch.layer)))),
+  ).then((value) => ({ value, wrote: dispatch.wrote }));
 };
 
 const message = {
@@ -51,10 +51,10 @@ const message = {
 
 describe("the outbox — what went out", () => {
   it("sends at once and tells the agent what happened, not what might", async () => {
-    const { value, wrote } = await run((o) =>
+    const { value, wrote } = await run((outbox) =>
       Effect.gen(function* () {
-        const outcome = yield* o.send(message);
-        return { outcome, kept: yield* o.all };
+        const outcome = yield* outbox.send(message);
+        return { outcome, kept: yield* outbox.all };
       }),
     );
     // no gate: the agent asked because its person asked
@@ -66,18 +66,18 @@ describe("the outbox — what went out", () => {
 
   it("keeps a record of each one, newest first, across a restart", async () => {
     const before = [{ ...message, id: "p-old", ts: 1 }];
-    const { value } = await run((o) =>
+    const { value } = await run((outbox) =>
       Effect.gen(function* () {
-        yield* o.send({ ...message, title: "sandbox · ask2" });
-        return yield* o.all;
+        yield* outbox.send({ ...message, title: "sandbox · ask2" });
+        return yield* outbox.all;
       }), before);
-    expect(value.map((p) => p.title)).toEqual(["sandbox · ask2", "sandbox · ask"]);
+    expect(value.map((proposal) => proposal.title)).toEqual(["sandbox · ask2", "sandbox · ask"]);
   });
 
   it("a row says what it was, which project, who for, and what about", async () => {
-    const { value } = await run((o) =>
+    const { value } = await run((outbox) =>
       Effect.gen(function* () {
-        yield* o.send({
+        yield* outbox.send({
           roomId: "r1",
           to: "the room",
           title: "collagen · review · review opening",
@@ -87,8 +87,8 @@ describe("the outbox — what went out", () => {
             review: { ticketId: "t1", author: "me", authorName: "benjamin", summary: "the opening animation", decisions: [], forks: [], ts: 1 },
           },
         });
-        const [p] = yield* o.all;
-        return { summary: outgoingSummary(p!), text: proposalText(p!) };
+        const [proposal] = yield* outbox.all;
+        return { summary: outgoingSummary(proposal!), text: proposalText(proposal!) };
       }),
     );
     // "the room" is not a person: a row shows no target for it
@@ -98,10 +98,10 @@ describe("the outbox — what went out", () => {
 
   it("a refused write leaves no row: the outbox is what LEFT, not what was tried", async () => {
     const { value, wrote } = await run(
-      (o) =>
+      (outbox) =>
         Effect.gen(function* () {
-          const outcome = yield* o.send(message);
-          return { outcome, kept: yield* o.all };
+          const outcome = yield* outbox.send(message);
+          return { outcome, kept: yield* outbox.all };
         }),
       undefined,
       () => refused("failed: you are not admitted to this room's log yet"),
@@ -115,19 +115,19 @@ describe("the outbox — what went out", () => {
   });
 
   it("tell() hands a relaying caller the text alone", async () => {
-    const { value } = await run((o) => o.tell(message));
+    const { value } = await run((outbox) => outbox.tell(message));
     expect(value).toBe("wrote message");
   });
 
   it("an epic's row and its text name it by its title, an old record by its goal", async () => {
     const shown = (outgoing: Outgoing) =>
-      run((o) =>
+      run((outbox) =>
         Effect.gen(function* () {
-          yield* o.send({ roomId: "r1", to: "the room", title: "epic", outgoing });
-          const [p] = yield* o.all;
-          return { summary: outgoingSummary(p!).subject, text: proposalText(p!) };
+          yield* outbox.send({ roomId: "r1", to: "the room", title: "epic", outgoing });
+          const [proposal] = yield* outbox.all;
+          return { summary: outgoingSummary(proposal!).subject, text: proposalText(proposal!) };
         }),
-      ).then((r) => r.value);
+      ).then((result) => result.value);
     const move = await shown({ kind: "epic-move", ticketIds: ["t1"], epic: "e1", goal: "Old goal", name: "New title" });
     expect(move).toEqual({ summary: '1 into "New title"', text: 'put into the epic "New title": t1' });
     const order = await shown({ kind: "epic-order", epicId: "e1", goal: "Old goal", name: "New title", ticketIds: ["t1"] });
@@ -137,11 +137,11 @@ describe("the outbox — what went out", () => {
   });
 
   it("a message row names the peer it went to", async () => {
-    const { value } = await run((o) =>
+    const { value } = await run((outbox) =>
       Effect.gen(function* () {
-        yield* o.send(message);
-        const [p] = yield* o.all;
-        return outgoingSummary(p!);
+        yield* outbox.send(message);
+        const [proposal] = yield* outbox.all;
+        return outgoingSummary(proposal!);
       }),
     );
     expect(value).toEqual({ kind: "message", project: "sandbox", target: "alice", subject: "ask" });

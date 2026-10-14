@@ -6,7 +6,7 @@ const ALICE = "a".repeat(64);
 const BOB = "b".repeat(64);
 const CAROL = "c".repeat(64);
 const names: Record<string, string> = { [ALICE]: "you", [BOB]: "bob", [CAROL]: "carol" };
-const nameFor = (k: string) => names[k] ?? k.slice(0, 8);
+const nameFor = (key: string) => names[key] ?? key.slice(0, 8);
 
 const ticket = (steps: Ticket["steps"], updatedAt = 1000): Ticket => ({ id: "t1", project: "sandbox", goal: "fix NaN", createdBy: ALICE, kind: "task", structureAt: updatedAt, updatedAt, steps });
 const step = (id: string, owner: string, status: Ticket["steps"][number]["status"], needs: string[] = []): Ticket["steps"][number] => ({
@@ -18,7 +18,7 @@ const step = (id: string, owner: string, status: Ticket["steps"][number]["status
   status,
   updatedAt: 1,
 });
-const msg = (from: string, extra: Partial<RoomMessage> = {}): RoomMessage => ({
+const messageFrom = (from: string, extra: Partial<RoomMessage> = {}): RoomMessage => ({
   id: Math.random().toString(36),
   threadId: "zzzz",
   from,
@@ -33,10 +33,10 @@ const msg = (from: string, extra: Partial<RoomMessage> = {}): RoomMessage => ({
 
 describe("summarize", () => {
   it("needs you when a step you own is up; waiting on the other owner otherwise", () => {
-    const t = ticket([step("s1", BOB, "pending"), step("s2", ALICE, "pending", ["s1"])]);
-    const s = summarize(t, [], ALICE);
-    expect(s.state).toBe("waiting");
-    expect(s.waitingOn).toEqual([BOB]);
+    const subject = ticket([step("s1", BOB, "pending"), step("s2", ALICE, "pending", ["s1"])]);
+    const summary = summarize(subject, [], ALICE);
+    expect(summary.state).toBe("waiting");
+    expect(summary.waitingOn).toEqual([BOB]);
     const later = summarize(ticket([step("s1", BOB, "settled"), step("s2", ALICE, "pending", ["s1"])]), [], ALICE);
     expect(later.state).toBe("needs-you");
   });
@@ -48,26 +48,26 @@ describe("summarize", () => {
   });
 
   it("who weighed in: tagged messages from anyone, untagged ones on the ticket's threads, settlers", () => {
-    const t = ticket([step("s1", BOB, "settled"), step("s2", ALICE, "pending", ["s1"])]);
-    const onThread = msg(BOB, { threadId: stepThreadId(t, t.steps[0]!) });
-    const tagged = msg(CAROL, { ticketId: "t1" });
-    const unrelated = msg(CAROL, { threadId: "other" });
-    const s = summarize(t, [onThread, tagged, tagged, unrelated], ALICE);
-    expect([...s.weighedIn.entries()]).toEqual([
+    const subject = ticket([step("s1", BOB, "settled"), step("s2", ALICE, "pending", ["s1"])]);
+    const onThread = messageFrom(BOB, { threadId: stepThreadId(subject, subject.steps[0]!) });
+    const tagged = messageFrom(CAROL, { ticketId: "t1" });
+    const unrelated = messageFrom(CAROL, { threadId: "other" });
+    const summary = summarize(subject, [onThread, tagged, tagged, unrelated], ALICE);
+    expect([...summary.weighedIn.entries()]).toEqual([
       [BOB, 1],
       [CAROL, 2],
     ]);
-    expect(s.settledBy).toEqual(new Set([BOB]));
-    expect(s.asked).toEqual([BOB, ALICE]);
-    expect(s.lastActivity).toBe(2000);
+    expect(summary.settledBy).toEqual(new Set([BOB]));
+    expect(summary.asked).toEqual([BOB, ALICE]);
+    expect(summary.lastActivity).toBe(2000);
   });
 
   it("marksLabel: what was said, not by whom — one glyph per kind of answer", () => {
-    const t = ticket([step("s1", BOB, "pending"), step("s2", ALICE, "pending", ["s1"])]);
+    const subject = ticket([step("s1", BOB, "pending"), step("s2", ALICE, "pending", ["s1"])]);
     // nobody has answered; carol spoke without being asked
-    expect(marksLabel(summarize(t, [msg(CAROL, { ticketId: "t1" })], ALICE))).toBe("…");
+    expect(marksLabel(summarize(subject, [messageFrom(CAROL, { ticketId: "t1" })], ALICE))).toBe("…");
     expect(marksLabel(summarize(ticket([step("s1", BOB, "settled")]), [], ALICE))).toBe("✓");
-    expect(marksLabel(summarize(t, [], ALICE))).toBe("");
+    expect(marksLabel(summarize(subject, [], ALICE))).toBe("");
   });
 
   it("two approvals and one change request read as ↻ ✓ — the count is not the point", () => {
@@ -80,7 +80,7 @@ describe("summarize", () => {
       ]),
       kind: "review" as const,
     };
-    const withIntents = { ...review, steps: review.steps.map((s) => (s.id.startsWith("review-") ? { ...s, intent: "review" } : s)) };
+    const withIntents = { ...review, steps: review.steps.map((ticketStep) => (ticketStep.id.startsWith("review-") ? { ...ticketStep, intent: "review" } : ticketStep)) };
     expect(marksLabel(summarize(withIntents, [], ALICE))).toBe("↻ ✓");
   });
 
@@ -152,7 +152,7 @@ describe("summarize", () => {
     // seen from bob's side the words are the same: it is about the author, not the viewer
     expect(marksLabel(summarize(own, [], BOB))).toBe("↻ self ✓");
     // alone, a self-approval is only that
-    const solo = { ...own, steps: own.steps.filter((s) => s.owner === ALICE) };
+    const solo = { ...own, steps: own.steps.filter((ticketStep) => ticketStep.owner === ALICE) };
     expect(marksLabel(summarize(solo, [], ALICE))).toBe("self ✓");
   });
 
@@ -162,11 +162,11 @@ describe("summarize", () => {
   });
 
   it("orders needs-you, waiting, failed, done; newest activity first within a state", () => {
-    const a = summarize(ticket([step("s1", ALICE, "pending")], 10), [], ALICE);
-    const b = summarize(ticket([step("s1", BOB, "pending")], 50), [], ALICE);
-    const c = summarize(ticket([step("s1", BOB, "pending")], 90), [], ALICE);
-    const d = summarize(ticket([step("s1", BOB, "settled")], 99), [], BOB); // finished, and not bob's to close: done
-    expect([d, b, a, c].sort(compareSummaries).map((s) => s.lastActivity)).toEqual([10, 90, 50, 99]);
+    const mineToAct = summarize(ticket([step("s1", ALICE, "pending")], 10), [], ALICE);
+    const waitingEarly = summarize(ticket([step("s1", BOB, "pending")], 50), [], ALICE);
+    const waitingLate = summarize(ticket([step("s1", BOB, "pending")], 90), [], ALICE);
+    const finished = summarize(ticket([step("s1", BOB, "settled")], 99), [], BOB); // finished, and not bob's to close: done
+    expect([finished, waitingEarly, mineToAct, waitingLate].sort(compareSummaries).map((summary) => summary.lastActivity)).toEqual([10, 90, 50, 99]);
   });
 
   it("age is compact", () => {
@@ -182,9 +182,9 @@ describe("a review nobody was asked for", () => {
   it("is the author's to shepherd, and reads waiting for everyone else", () => {
     // no placeholder step: the author's own step is all there is until a
     // reader posts theirs
-    const t: Ticket = { ...ticket([step("address", ALICE, "pending")]), kind: "review" };
-    expect(summarize(t, [], ALICE).state).toBe("needs-you");
-    expect(summarize(t, [], BOB).state).toBe("waiting");
+    const reviewTicket: Ticket = { ...ticket([step("address", ALICE, "pending")]), kind: "review" };
+    expect(summarize(reviewTicket, [], ALICE).state).toBe("needs-you");
+    expect(summarize(reviewTicket, [], BOB).state).toBe("waiting");
   });
 
   it("a reader's posted review does not finish it — the author's step does", () => {

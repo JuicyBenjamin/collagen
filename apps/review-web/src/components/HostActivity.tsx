@@ -27,22 +27,22 @@ function Words(props: { body: string }) {
 const LATEST = 3;
 
 export function HostActivity() {
-  const h = hostNow.host;
+  const host = hostNow.host;
   const [all, setAll] = createSignal(false);
   const items = (): ReadonlyArray<Item> => {
-    const v = h();
-    if (!v) return [];
-    return [...v.reviews.map((r): Item => ({ kind: "review", ...r })), ...v.conversation.map((n): Item => ({ kind: "note", ...n }))].sort((a, b) => a.at.localeCompare(b.at));
+    const activity = host();
+    if (!activity) return [];
+    return [...activity.reviews.map((review): Item => ({ kind: "review", ...review })), ...activity.conversation.map((note): Item => ({ kind: "note", ...note }))].sort((a, b) => a.at.localeCompare(b.at));
   };
   const counts = () => {
-    const v = h();
-    if (!v) return "";
-    const r = v.reviews.length;
-    const c = v.conversation.length;
-    return [r > 0 ? `${r} ${r === 1 ? "review" : "reviews"}` : "", c > 0 ? `${c} ${c === 1 ? "comment" : "comments"}` : ""].filter(Boolean).join(" · ");
+    const activity = host();
+    if (!activity) return "";
+    const reviewCount = activity.reviews.length;
+    const commentCount = activity.conversation.length;
+    return [reviewCount > 0 ? `${reviewCount} ${reviewCount === 1 ? "review" : "reviews"}` : "", commentCount > 0 ? `${commentCount} ${commentCount === 1 ? "comment" : "comments"}` : ""].filter(Boolean).join(" · ");
   };
   return (
-    <Show when={h()?.pull}>
+    <Show when={host()?.pull}>
       {(pull) => (
         <section class="host-activity" aria-label={`On ${hostNow.hostName()}`}>
           <div class="host-head">
@@ -66,7 +66,7 @@ export function HostActivity() {
                 {(it) => (
                   <li class="host-item">
                     <div class="line-comment-head">
-                      <Show when={it.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(e) => (e.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
+                      <Show when={it.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
                       <strong>{it.author.login}</strong>
                       <Show when={it.kind === "review"}>
                         <span class={["verdict", (it as HostReview).verdict.replace(" ", "-")]}>{(it as HostReview).verdict}</span>

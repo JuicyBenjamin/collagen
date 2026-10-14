@@ -4,9 +4,9 @@ import { aboutTicket, ticketThreads } from "./ticketSummary";
 /** Everyone a ticket concerns: its creator, its step owners, and anyone who
  *  weighed in on it. They all hear about its updates. */
 export function isParticipant(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string): boolean {
-  if (ticket.createdBy === me || ticket.steps.some((s) => s.owner === me)) return true;
+  if (ticket.createdBy === me || ticket.steps.some((step) => step.owner === me)) return true;
   const threads = ticketThreads(ticket);
-  return messages.some((m) => m.from === me && aboutTicket(ticket, threads, m));
+  return messages.some((message) => message.from === me && aboutTicket(ticket, threads, message));
 }
 
 /** The thread a participant's agent knows this ticket by — the one their own
@@ -15,12 +15,12 @@ export function isParticipant(ticket: Ticket, messages: ReadonlyArray<RoomMessag
  *  that already holds the context is the one resumed. */
 export function myThreadFor(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, me: string, actor: string): string {
   const threads = ticketThreads(ticket);
-  const mine = messages.filter((m) => m.from === me && aboutTicket(ticket, threads, m));
+  const mine = messages.filter((message) => message.from === me && aboutTicket(ticket, threads, message));
   const latest = mine.at(-1);
   if (latest) return latest.threadId;
-  const step = ticket.steps.find((s) => s.owner === me);
+  const step = ticket.steps.find((candidate) => candidate.owner === me);
   if (step) return stepThreadId(ticket, step);
-  const actorsStep = ticket.steps.find((s) => s.owner === actor);
+  const actorsStep = ticket.steps.find((candidate) => candidate.owner === actor);
   if (actorsStep && ticket.createdBy === me) return stepThreadId(ticket, actorsStep);
   return deriveThreadId(me, actor, ticket.project);
 }
@@ -38,7 +38,7 @@ export function stepChanges(prev: ReadonlyMap<string, Ticket>, next: ReadonlyMap
   for (const ticket of next.values()) {
     const before = prev.get(ticket.id);
     for (const step of ticket.steps) {
-      const from = before?.steps.find((s) => s.id === step.id)?.status;
+      const from = before?.steps.find((candidate) => candidate.id === step.id)?.status;
       if ((step.status === "settled" || step.status === "failed") && from !== step.status) out.push({ ticket, step, from, to: step.status });
     }
   }
@@ -55,40 +55,40 @@ export function reviewChanges(
   next: ReadonlyArray<ReviewContext>,
 ): ReadonlyArray<ReviewContext> {
   if (prev === null) return []; // what the log already held is history, not news
-  return next.filter((r) => {
-    const before = prev.get(r.ticketId);
-    return before === undefined || r.ts > before;
+  return next.filter((review) => {
+    const before = prev.get(review.ticketId);
+    return before === undefined || review.ts > before;
   });
 }
 
 /** What a participant is told when the why behind a review is revised. */
-export const reviewUpdateText = (ticket: Ticket, r: ReviewContext, fresh: boolean): string =>
+export const reviewUpdateText = (ticket: Ticket, review: ReviewContext, fresh: boolean): string =>
   [
-    `${r.authorName} ${fresh ? "put the why behind" : "revised the why behind"} the ticket "${ticketName(ticket)}" (${ticket.id})`,
-    r.branch ? `now ${r.base ? `${r.branch} → ${r.base}` : r.branch}` : "",
-    r.link ?? "",
-    `${r.decisions.length} decision(s), ${r.forks.length} fork(s)`,
-    `${firstLine(r.summary)} — read it with review-context {ticketId} if your person asks what changed; what you read before may be out of date.`,
+    `${review.authorName} ${fresh ? "put the why behind" : "revised the why behind"} the ticket "${ticketName(ticket)}" (${ticket.id})`,
+    review.branch ? `now ${review.base ? `${review.branch} → ${review.base}` : review.branch}` : "",
+    review.link ?? "",
+    `${review.decisions.length} decision(s), ${review.forks.length} fork(s)`,
+    `${firstLine(review.summary)} — read it with review-context {ticketId} if your person asks what changed; what you read before may be out of date.`,
   ]
-    .filter((x) => x.length > 0)
+    .filter((line) => line.length > 0)
     .join(" · ");
 
-const firstLine = (s: string) => s.split("\n")[0] ?? "";
+const firstLine = (text: string) => text.split("\n")[0] ?? "";
 
 /** What happened, in the words that state actually has. On a review ticket
  *  "failed" is how a reader says they want changes, so calling it a failure —
  *  in the message, its intent, or the activity line — describes the most
  *  complete kind of review there is as a breakdown. */
-export const stepUpdateWhat = (c: StepChange): string =>
-  isJudged(c.ticket.kind) && isTake(c.step) && c.to === "failed" ? "asked for changes" : c.to;
+export const stepUpdateWhat = (change: StepChange): string =>
+  isJudged(change.ticket.kind) && isTake(change.step) && change.to === "failed" ? "asked for changes" : change.to;
 
 /** What a participant is told about a step that settled or failed. */
-export const stepUpdateText = (c: StepChange, actorName: string): string => {
-  const what = stepUpdateWhat(c);
-  const did = what === c.to ? `${what} step` : `${what} on`;
-  return `${actorName} ${did} ${c.step.id} (${c.step.intent}) on the ticket "${ticketName(c.ticket)}" (${c.ticket.id}): ${firstLine(c.step.result ?? "")}`;
+export const stepUpdateText = (change: StepChange, actorName: string): string => {
+  const what = stepUpdateWhat(change);
+  const did = what === change.to ? `${what} step` : `${what} on`;
+  return `${actorName} ${did} ${change.step.id} (${change.step.intent}) on the ticket "${ticketName(change.ticket)}" (${change.ticket.id}): ${firstLine(change.step.result ?? "")}`;
 };
 
 /** What a participant is told when someone weighs in. */
-export const weighInText = (ticket: Ticket, m: RoomMessage, toName: string): string =>
-  `${m.fromName} weighed in on the ticket "${ticketName(ticket)}" (${ticket.id}), to ${toName}: ${firstLine(m.findings)}`;
+export const weighInText = (ticket: Ticket, message: RoomMessage, toName: string): string =>
+  `${message.fromName} weighed in on the ticket "${ticketName(ticket)}" (${ticket.id}), to ${toName}: ${firstLine(message.findings)}`;

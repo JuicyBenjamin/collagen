@@ -6,22 +6,22 @@ import { CodeLine } from "./Code";
 function Inlines(props: { of: ReadonlyArray<Inline> }) {
   return (
     <For each={props.of}>
-      {(n) => (
+      {(node) => (
         <Switch>
-          <Match when={n.kind === "text" && n}>{(t) => <>{t().text}</>}</Match>
-          <Match when={n.kind === "strong" && n}>{(t) => <strong><Inlines of={t().children} /></strong>}</Match>
-          <Match when={n.kind === "em" && n}>{(t) => <em><Inlines of={t().children} /></em>}</Match>
-          <Match when={n.kind === "del" && n}>{(t) => <del><Inlines of={t().children} /></del>}</Match>
-          <Match when={n.kind === "code" && n}>{(t) => <code>{t().text}</code>}</Match>
-          <Match when={n.kind === "link" && n}>
-            {(t) => (
-              <a href={t().href} target="_blank" rel="noreferrer noopener">
-                <Inlines of={t().children} />
+          <Match when={node.kind === "text" && node}>{(inline) => <>{inline().text}</>}</Match>
+          <Match when={node.kind === "strong" && node}>{(inline) => <strong><Inlines of={inline().children} /></strong>}</Match>
+          <Match when={node.kind === "em" && node}>{(inline) => <em><Inlines of={inline().children} /></em>}</Match>
+          <Match when={node.kind === "del" && node}>{(inline) => <del><Inlines of={inline().children} /></del>}</Match>
+          <Match when={node.kind === "code" && node}>{(inline) => <code>{inline().text}</code>}</Match>
+          <Match when={node.kind === "link" && node}>
+            {(inline) => (
+              <a href={inline().href} target="_blank" rel="noreferrer noopener">
+                <Inlines of={inline().children} />
               </a>
             )}
           </Match>
-          <Match when={n.kind === "image" && n}>{(i) => <Picture src={i().src} alt={i().alt} />}</Match>
-          <Match when={n.kind === "br"}>
+          <Match when={node.kind === "image" && node}>{(image) => <Picture src={image().src} alt={image().alt} />}</Match>
+          <Match when={node.kind === "br"}>
             <br />
           </Match>
         </Switch>
@@ -47,23 +47,23 @@ function Picture(props: { src: string; alt: string }) {
 function Blocks(props: { of: ReadonlyArray<Block> }) {
   return (
     <For each={props.of}>
-      {(b) => (
+      {(block) => (
         <Switch>
-          <Match when={b.kind === "p" && b}>{(p) => <p><Inlines of={p().children} /></p>}</Match>
-          <Match when={b.kind === "heading" && b}>
-            {(h) => (
-              <p class={`md-h md-h${Math.min(h().depth, 3)}`}>
-                <Inlines of={h().children} />
+          <Match when={block.kind === "p" && block}>{(paragraph) => <p><Inlines of={paragraph().children} /></p>}</Match>
+          <Match when={block.kind === "heading" && block}>
+            {(heading) => (
+              <p class={`md-h md-h${Math.min(heading().depth, 3)}`}>
+                <Inlines of={heading().children} />
               </p>
             )}
           </Match>
-          <Match when={b.kind === "code" && b}>
-            {(c) => (
+          <Match when={block.kind === "code" && block}>
+            {(code) => (
               <pre class="md-code">
-                <For each={highlightCode(c().text, c().lang)}>
-                  {(spans, i) => (
+                <For each={highlightCode(code().text, code().lang)}>
+                  {(spans, index) => (
                     <>
-                      <Show when={i() > 0}>{"\n"}</Show>
+                      <Show when={index() > 0}>{"\n"}</Show>
                       <CodeLine spans={spans} />
                     </>
                   )}
@@ -71,40 +71,40 @@ function Blocks(props: { of: ReadonlyArray<Block> }) {
               </pre>
             )}
           </Match>
-          <Match when={b.kind === "quote" && b}>{(q) => <blockquote><Blocks of={q().blocks} /></blockquote>}</Match>
-          <Match when={b.kind === "list" && b}>
-            {(l) => (
+          <Match when={block.kind === "quote" && block}>{(quote) => <blockquote><Blocks of={quote().blocks} /></blockquote>}</Match>
+          <Match when={block.kind === "list" && block}>
+            {(list) => (
               <Show
-                when={l().start !== undefined}
+                when={list().start !== undefined}
                 fallback={
                   <ul>
-                    <Items of={l().items} />
+                    <Items of={list().items} />
                   </ul>
                 }
               >
-                <ol start={l().start}>
-                  <Items of={l().items} />
+                <ol start={list().start}>
+                  <Items of={list().items} />
                 </ol>
               </Show>
             )}
           </Match>
-          <Match when={b.kind === "table" && b}>
-            {(t) => (
+          <Match when={block.kind === "table" && block}>
+            {(table) => (
               <div class="md-table">
                 <table>
                   <thead>
                     <tr>
-                      <For each={t().head}>{(c) => <th><Inlines of={c} /></th>}</For>
+                      <For each={table().head}>{(cell) => <th><Inlines of={cell} /></th>}</For>
                     </tr>
                   </thead>
                   <tbody>
-                    <For each={t().rows}>{(r) => <tr><For each={r}>{(c) => <td><Inlines of={c} /></td>}</For></tr>}</For>
+                    <For each={table().rows}>{(row) => <tr><For each={row}>{(cell) => <td><Inlines of={cell} /></td>}</For></tr>}</For>
                   </tbody>
                 </table>
               </div>
             )}
           </Match>
-          <Match when={b.kind === "hr"}>
+          <Match when={block.kind === "hr"}>
             <hr />
           </Match>
         </Switch>
@@ -116,12 +116,12 @@ function Blocks(props: { of: ReadonlyArray<Block> }) {
 function Items(props: { of: ReadonlyArray<{ readonly checked?: boolean; readonly blocks: ReadonlyArray<Block> }> }) {
   return (
     <For each={props.of}>
-      {(i) => (
-        <li class={i.checked !== undefined ? "md-task" : undefined}>
-          <Show when={i.checked !== undefined}>
-            <input type="checkbox" checked={i.checked} disabled aria-label={i.checked ? "done" : "not done"} />
+      {(item) => (
+        <li class={item.checked !== undefined ? "md-task" : undefined}>
+          <Show when={item.checked !== undefined}>
+            <input type="checkbox" checked={item.checked} disabled aria-label={item.checked ? "done" : "not done"} />
           </Show>
-          <Blocks of={i.blocks} />
+          <Blocks of={item.blocks} />
         </li>
       )}
     </For>

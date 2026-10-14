@@ -17,9 +17,9 @@ import type { LocalState, Steering } from "@collagen/p2p";
 
 export const STEERING_ORDER: ReadonlyArray<Steering> = ["ask", "act", "auto"];
 
-export const steeringOf = (s: Pick<LocalState, "steering">): Steering => s.steering ?? "ask";
+export const steeringOf = (state: Pick<LocalState, "steering">): Steering => state.steering ?? "ask";
 
-export const nextSteering = (s: Steering): Steering => STEERING_ORDER[(STEERING_ORDER.indexOf(s) + 1) % STEERING_ORDER.length]!;
+export const nextSteering = (steering: Steering): Steering => STEERING_ORDER[(STEERING_ORDER.indexOf(steering) + 1) % STEERING_ORDER.length]!;
 
 /** For the person: the status line, the settings page, the ? panel. */
 export const STEERING_LABEL: Record<Steering, string> = {

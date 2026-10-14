@@ -25,12 +25,12 @@ export function TypesBanner(props: { tool: ToolId }) {
   const [dismissed, setDismissed] = createSignal(remembered(props.tool));
   // notices are acknowledged one by one: a new one after "Got it" still shows
   const [seen, setSeen] = createSignal<ReadonlySet<string>>(new Set());
-  const unseen = () => (toolState(props.tool)?.notices ?? []).filter((n) => !seen().has(n));
+  const unseen = () => (toolState(props.tool)?.notices ?? []).filter((notice) => !seen().has(notice));
   // the tool's state, live from the instance while the banner is on the
   // page: the offer, an install seen through, the server's notices
   const live = createMemo(() => lasting(() => toolStates(props.tool)));
-  createEffect(live, (t) => {
-    keepTool(t);
+  createEffect(live, (tool) => {
+    keepTool(tool);
   });
   // installed: its server starts now, at the commit the page shows, and
   // reads the project while the reader reads the diff
@@ -49,21 +49,21 @@ export function TypesBanner(props: { tool: ToolId }) {
   return (
     <>
       <Show when={!dismissed() && toolState(props.tool) && toolState(props.tool)!.state !== "ready" ? toolState(props.tool) : null}>
-        {(t) => (
+        {(tool) => (
           <div class="banner" role="status">
             <Show
-              when={t().state === "installing"}
+              when={tool().state === "installing"}
               fallback={
                 <>
                   <span>
-                    {t().error ? `Couldn't install ${t().name}: ${t().error}` : `${t().language} type hints for this review? Installs ${t().name} ${t().version} (${t().size}), once.`}
-                    <Show when={t().licence}>
-                      {(l) => (
+                    {tool().error ? `Couldn't install ${tool().name}: ${tool().error}` : `${tool().language} type hints for this review? Installs ${tool().name} ${tool().version} (${tool().size}), once.`}
+                    <Show when={tool().licence}>
+                      {(licence) => (
                         <>
                           {" "}
                           Not open source:{" "}
-                          <a href={l().url} target="_blank" rel="noreferrer">
-                            {l().name}
+                          <a href={licence().url} target="_blank" rel="noreferrer">
+                            {licence().name}
                           </a>
                           .
                         </>
@@ -71,7 +71,7 @@ export function TypesBanner(props: { tool: ToolId }) {
                     </Show>
                   </span>
                   <button type="button" class="banner-go" onClick={() => void installTool(props.tool)}>
-                    {t().error ? "Try again" : "Install"}
+                    {tool().error ? "Try again" : "Install"}
                   </button>
                   <button type="button" class="banner-close" aria-label="Not now" onClick={dismiss}>
                     ×
@@ -80,19 +80,19 @@ export function TypesBanner(props: { tool: ToolId }) {
               }
             >
               <span>
-                Installing {t().name} {t().version}…
+                Installing {tool().name} {tool().version}…
               </span>
             </Show>
           </div>
         )}
       </Show>
       <Show when={unseen().length > 0 ? toolState(props.tool) : null}>
-        {(t) => (
+        {(tool) => (
           <div class="banner" role="status">
             <span>
-              <For each={unseen()}>{(n) => <span class="banner-notice">{t().name}: {n}</span>}</For>
+              <For each={unseen()}>{(notice) => <span class="banner-notice">{tool().name}: {notice}</span>}</For>
             </span>
-            <button type="button" class="banner-close" aria-label="Got it" onClick={() => setSeen((s) => new Set([...s, ...unseen()]))}>
+            <button type="button" class="banner-close" aria-label="Got it" onClick={() => setSeen((acknowledged) => new Set([...acknowledged, ...unseen()]))}>
               ×
             </button>
           </div>

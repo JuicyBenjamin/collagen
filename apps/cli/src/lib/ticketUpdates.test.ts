@@ -7,7 +7,7 @@ const BOB = "b".repeat(64);
 const CAROL = "c".repeat(64);
 const DAVE = "d".repeat(64);
 
-const t: Ticket = {
+const ticket: Ticket = {
   id: "t1",
   project: "sandbox",
   goal: "fix NaN",
@@ -20,7 +20,7 @@ const t: Ticket = {
     { id: "s2", owner: ALICE, intent: "review", description: "…", needs: ["s1"], status: "pending", updatedAt: 1 },
   ],
 };
-const msg = (from: string, extra: Partial<RoomMessage> = {}): RoomMessage => ({
+const messageFrom = (from: string, extra: Partial<RoomMessage> = {}): RoomMessage => ({
   id: Math.random().toString(36),
   threadId: deriveThreadId(from, ALICE, "sandbox"),
   from,
@@ -35,43 +35,43 @@ const msg = (from: string, extra: Partial<RoomMessage> = {}): RoomMessage => ({
 
 describe("participants", () => {
   it("creator, owners, and whoever weighed in — nobody else", () => {
-    expect(isParticipant(t, [], ALICE)).toBe(true);
-    expect(isParticipant(t, [], BOB)).toBe(true);
-    expect(isParticipant(t, [], CAROL)).toBe(false);
-    expect(isParticipant(t, [msg(CAROL, { ticketId: "t1" })], CAROL)).toBe(true);
-    expect(isParticipant(t, [msg(CAROL)], CAROL)).toBe(false); // about the project, not the ticket
-    expect(isParticipant(t, [msg(CAROL, { ticketId: "t1" })], DAVE)).toBe(false);
+    expect(isParticipant(ticket, [], ALICE)).toBe(true);
+    expect(isParticipant(ticket, [], BOB)).toBe(true);
+    expect(isParticipant(ticket, [], CAROL)).toBe(false);
+    expect(isParticipant(ticket, [messageFrom(CAROL, { ticketId: "t1" })], CAROL)).toBe(true);
+    expect(isParticipant(ticket, [messageFrom(CAROL)], CAROL)).toBe(false); // about the project, not the ticket
+    expect(isParticipant(ticket, [messageFrom(CAROL, { ticketId: "t1" })], DAVE)).toBe(false);
   });
 });
 
 describe("myThreadFor — where the update lands", () => {
   it("someone who weighed in: the thread their own message went on", () => {
-    const m = msg(CAROL, { ticketId: "t1", threadId: "carol-alice-thread" });
-    expect(myThreadFor(t, [m], CAROL, BOB)).toBe("carol-alice-thread");
+    const message = messageFrom(CAROL, { ticketId: "t1", threadId: "carol-alice-thread" });
+    expect(myThreadFor(ticket, [message], CAROL, BOB)).toBe("carol-alice-thread");
   });
   it("an owner: their step's thread", () => {
-    expect(myThreadFor(t, [], BOB, ALICE)).toBe(stepThreadId(t, t.steps[0]!));
+    expect(myThreadFor(ticket, [], BOB, ALICE)).toBe(stepThreadId(ticket, ticket.steps[0]!));
   });
   it("the creator: the thread with whoever acted (their step), else the pair thread", () => {
-    expect(myThreadFor(t, [], ALICE, BOB)).toBe(stepThreadId(t, t.steps[0]!));
+    expect(myThreadFor(ticket, [], ALICE, BOB)).toBe(stepThreadId(ticket, ticket.steps[0]!));
     // alice owns s2 herself, so her own step wins before the actor's — for a creator with no step:
-    const t2: Ticket = { ...t, steps: [t.steps[0]!] };
-    expect(myThreadFor(t2, [], ALICE, BOB)).toBe(stepThreadId(t2, t2.steps[0]!));
-    expect(myThreadFor(t2, [], ALICE, CAROL)).toBe(deriveThreadId(ALICE, CAROL, "sandbox"));
+    const oneStepTicket: Ticket = { ...ticket, steps: [ticket.steps[0]!] };
+    expect(myThreadFor(oneStepTicket, [], ALICE, BOB)).toBe(stepThreadId(oneStepTicket, oneStepTicket.steps[0]!));
+    expect(myThreadFor(oneStepTicket, [], ALICE, CAROL)).toBe(deriveThreadId(ALICE, CAROL, "sandbox"));
   });
 });
 
 describe("stepChanges", () => {
   it("reports steps that reached settled or failed, once", () => {
-    const before = new Map([["t1", t]]);
-    const after = new Map([["t1", { ...t, steps: [{ ...t.steps[0]!, status: "settled" as const, result: "loop bound" }, t.steps[1]!] }]]);
+    const before = new Map([["t1", ticket]]);
+    const after = new Map([["t1", { ...ticket, steps: [{ ...ticket.steps[0]!, status: "settled" as const, result: "loop bound" }, ticket.steps[1]!] }]]);
     const changes = stepChanges(before, after);
-    expect(changes.map((c) => [c.step.id, c.from, c.to])).toEqual([["s1", "pending", "settled"]]);
+    expect(changes.map((change) => [change.step.id, change.from, change.to])).toEqual([["s1", "pending", "settled"]]);
     expect(stepUpdateText(changes[0]!, "bob")).toBe('bob settled step s1 (investigate) on the ticket "fix NaN" (t1): loop bound');
     expect(stepChanges(after, after)).toEqual([]);
   });
   it("a ticket seen for the first time with settled steps counts (the view caught up)", () => {
-    const settled = { ...t, steps: [{ ...t.steps[0]!, status: "failed" as const, result: "no repo" }, t.steps[1]!] };
-    expect(stepChanges(new Map(), new Map([["t1", settled]])).map((c) => c.to)).toEqual(["failed"]);
+    const settled = { ...ticket, steps: [{ ...ticket.steps[0]!, status: "failed" as const, result: "no repo" }, ticket.steps[1]!] };
+    expect(stepChanges(new Map(), new Map([["t1", settled]])).map((change) => change.to)).toEqual(["failed"]);
   });
 });

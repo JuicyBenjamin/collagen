@@ -17,8 +17,8 @@ const epic = ticket({ id: "e1", kind: "epic", project: "", goal: "more languages
 const step = (status: "pending" | "settled") => [{ id: "s", owner: "alice", intent: "do", description: "d", needs: [], status, updatedAt: 1 }] as const;
 const done = (id: string, project = "collagen"): Ticket => ticket({ id, project, steps: [...step("settled")] });
 const open = (id: string, project = "collagen"): Ticket => ticket({ id, project, steps: [...step("pending")] });
-const room = (...ts: ReadonlyArray<Ticket>) => new Map(ts.map((t) => [t.id, t]));
-const into = (t: Ticket, at: number, by = "bob") => moveToEpic(t, "e1", by, at);
+const room = (...tickets: ReadonlyArray<Ticket>) => new Map(tickets.map((roomTicket) => [roomTicket.id, roomTicket]));
+const into = (child: Ticket, at: number, by = "bob") => moveToEpic(child, "e1", by, at);
 
 describe("an epic is a folder, not a judged ticket", () => {
   it("asks nothing of its own and is never 'finished' by steps", () => {
@@ -41,23 +41,23 @@ describe("membership is explicit", () => {
     const plan = ticket({ id: "plan", from: ["php"] });
     const all = room(epic, into(open("php"), 1), plan);
     expect(epicOf(plan)).toBeNull();
-    expect(epicParts(epic, all).parts.map((t) => t.id)).toEqual(["php"]);
+    expect(epicParts(epic, all).parts.map((part) => part.id)).toEqual(["php"]);
   });
 
   it("two people moving the same ticket at once end in the same place on every peer", () => {
     const base = open("php");
     const bobs = moveToEpic(base, "e1", "bob", 10);
     const carols = moveToEpic(base, "e2", "carol", 11);
-    const a = mergeTicket(bobs, carols);
-    expect(epicOf(a)).toBe("e2");
-    expect(a.partOf).toEqual(mergeTicket(carols, bobs).partOf);
-    expect(mergeTicket(a, base).partOf).toEqual(a.partOf);
+    const merged = mergeTicket(bobs, carols);
+    expect(epicOf(merged)).toBe("e2");
+    expect(merged.partOf).toEqual(mergeTicket(carols, bobs).partOf);
+    expect(mergeTicket(merged, base).partOf).toEqual(merged.partOf);
   });
 });
 
 describe("progress is a ticket count", () => {
   it("done against all; a close says how it ended; excluded or dropped work leaves the count, 4 of 5 → 4 of 4", () => {
-    const four = ["a", "b", "c", "d"].map((id, i) => into(done(id), i));
+    const four = ["a", "b", "c", "d"].map((id, index) => into(done(id), index));
     const fifth = into(open("e"), 9);
     expect(epicParts(epic, room(epic, ...four, fifth))).toMatchObject({ counted: 5, done: 4 });
     // closed as done with its own step never settled: done
@@ -79,7 +79,7 @@ describe("progress is a ticket count", () => {
     const php = into(open("php"), 1);
     const rust = into(open("rust"), 2);
     const ordered = orderEpic(epic, ["rust", "php"], "carol", 5);
-    expect(epicParts(ordered, room(ordered, php, rust)).parts.map((t) => t.id)).toEqual(["rust", "php"]);
+    expect(epicParts(ordered, room(ordered, php, rust)).parts.map((part) => part.id)).toEqual(["rust", "php"]);
     expect(rust.after).toBeUndefined();
   });
 });
@@ -89,11 +89,11 @@ describe("closing and reopening an epic", () => {
     const left = room(epic, into(done("php"), 1), into(open("rust"), 2));
     const refused = turnEpic(epic, true, undefined, "bob", left, 5);
     expect(refused.outcome).toBe("unresolved");
-    expect(refused.unresolved.map((t) => t.id)).toEqual(["rust"]);
+    expect(refused.unresolved.map((unresolved) => unresolved.id)).toEqual(["rust"]);
     const all = room(epic, into(done("php"), 1), moveToEpic(open("rust"), "e1", "bob", 3, true));
     const closed = turnEpic(epic, true, undefined, "bob", all, 5);
     expect(closed.outcome).toBe("turned");
-    expect(epicClosed(closed.ticket, room(closed.ticket, ...[...all.values()].filter((t) => t.id !== "e1")))).toBe(true);
+    expect(epicClosed(closed.ticket, room(closed.ticket, ...[...all.values()].filter((roomTicket) => roomTicket.id !== "e1")))).toBe(true);
     expect(closed.ticket.turns?.at(-1)).toMatchObject({ closed: true, reason: PARTS_DONE, by: "bob" });
   });
 
@@ -129,19 +129,19 @@ describe("turns made at once, offline from each other", () => {
   });
 
   it("close against a reopen it had not seen: open, with both kept; a later close stands for good", () => {
-    const c1 = turnEpic(epic, true, undefined, "alice", room(epic, php), 10).ticket;
-    // bob reopens what he saw closed; carol, who also saw c1 and not bob's reopen, … cannot close a closed
+    const firstClose = turnEpic(epic, true, undefined, "alice", room(epic, php), 10).ticket;
+    // bob reopens what he saw closed; carol, who also saw the first close and not bob's reopen, … cannot close a closed
     // epic — so the race is a close written on a copy that had not seen an earlier reopen:
-    const r1 = turnEpic(c1, false, "Go next", "bob", room(c1, php), 20).ticket;
-    const beforeR1 = { ...c1, turns: [...(c1.turns ?? []), { id: "carol:30:close", closed: true, reason: "done", by: "carol", at: 30, knows: [c1.turns![0]!.id], members: [php.partOf![0]!.id] }] };
-    const merged = mergeTicket(r1, beforeR1);
+    const reopen = turnEpic(firstClose, false, "Go next", "bob", room(firstClose, php), 20).ticket;
+    const beforeReopen = { ...firstClose, turns: [...(firstClose.turns ?? []), { id: "carol:30:close", closed: true, reason: "done", by: "carol", at: 30, knows: [firstClose.turns![0]!.id], members: [php.partOf![0]!.id] }] };
+    const merged = mergeTicket(reopen, beforeReopen);
     expect(merged.turns).toHaveLength(3);
     expect(epicClosed(merged, room(merged, php))).toBe(false);
-    expect(epicClosed(mergeTicket(beforeR1, r1), room(php))).toBe(false);
+    expect(epicClosed(mergeTicket(beforeReopen, reopen), room(php))).toBe(false);
     // a close that has seen both stands — the old reopen does not reopen it again
-    const c3 = turnEpic(merged, true, "Go done too", "alice", room(merged, php), 40).ticket;
-    expect(epicClosed(c3, room(c3, php))).toBe(true);
-    expect(epicClosed(mergeTicket(c3, r1), room(php))).toBe(true);
+    const finalClose = turnEpic(merged, true, "Go done too", "alice", room(merged, php), 40).ticket;
+    expect(epicClosed(finalClose, room(finalClose, php))).toBe(true);
+    expect(epicClosed(mergeTicket(finalClose, reopen), room(php))).toBe(true);
   });
 });
 
@@ -152,26 +152,26 @@ describe("from the review of the epics branch", () => {
     const gate = ticket({ id: "gate", steps: [...step("pending")] });
     const secret = { ...into(ticket({ id: "secret", goal: "Secret gated work", after: ["gate"], steps: [...step("pending")] }), 11, "alice") };
     const all = room(closed, php, gate, secret);
-    const st = epicStatus(closed, all);
-    expect(st).toMatchObject({ closed: false, cause: { kind: "unseen-add", ticket: "secret" } });
-    expect(epicBecause(st, all, "alice")).toMatch(/"Secret gated work" was put in/);
-    expect(epicBecause(st, all, "bob")).toMatch(/^a ticket you are not shown yet was put in/);
-    expect(epicBecause(st, all, "bob")).not.toMatch(/Secret/);
+    const state = epicStatus(closed, all);
+    expect(state).toMatchObject({ closed: false, cause: { kind: "unseen-add", ticket: "secret" } });
+    expect(epicBecause(state, all, "alice")).toMatch(/"Secret gated work" was put in/);
+    expect(epicBecause(state, all, "bob")).toMatch(/^a ticket you are not shown yet was put in/);
+    expect(epicBecause(state, all, "bob")).not.toMatch(/Secret/);
   });
 
   it("every move has its own id: two by one person in one millisecond merge the same in either order", () => {
     const base = open("php");
-    const a = moveToEpic(base, "e1", "bob", 10);
-    const b = moveToEpic(base, "e2", "bob", 10);
-    expect(a.partOf![0]!.id).not.toBe(b.partOf![0]!.id);
-    expect(epicOf(mergeTicket(a, b))).toBe(epicOf(mergeTicket(b, a)));
-    expect(mergeTicket(a, b).partOf).toHaveLength(2);
+    const movedToFirst = moveToEpic(base, "e1", "bob", 10);
+    const movedToSecond = moveToEpic(base, "e2", "bob", 10);
+    expect(movedToFirst.partOf![0]!.id).not.toBe(movedToSecond.partOf![0]!.id);
+    expect(epicOf(mergeTicket(movedToFirst, movedToSecond))).toBe(epicOf(mergeTicket(movedToSecond, movedToFirst)));
+    expect(mergeTicket(movedToFirst, movedToSecond).partOf).toHaveLength(2);
     // and across tickets: a close that saw one of two same-millisecond moves did not see the other
-    const x = into(done("x"), 20);
-    const y = into(done("y"), 20);
-    expect(x.partOf![0]!.id).not.toBe(y.partOf![0]!.id);
-    const sawX = turnEpic(epic, true, undefined, "alice", room(epic, x), 21).ticket;
-    expect(epicClosed(sawX, room(sawX, x, y))).toBe(false);
+    const firstMove = into(done("x"), 20);
+    const secondMove = into(done("y"), 20);
+    expect(firstMove.partOf![0]!.id).not.toBe(secondMove.partOf![0]!.id);
+    const sawX = turnEpic(epic, true, undefined, "alice", room(epic, firstMove), 21).ticket;
+    expect(epicClosed(sawX, room(sawX, firstMove, secondMove))).toBe(false);
   });
 
   it("an after gate on an epic uses the same rule: an unseen open ticket keeps it holding", () => {
@@ -191,9 +191,9 @@ describe("from the review of the epics branch", () => {
     expect(epicStatus(reopened, room(reopened, php))).toMatchObject({ closed: false, cause: { kind: "reopen", reason: "Go next", by: "bob" } });
     // a close that missed an addition: open, because of that ticket — and a reopen can still be recorded
     const rust = { ...into(open("rust"), 101), goal: "Rust on the review page" };
-    const st = epicStatus(closed, room(closed, php, rust));
-    expect(st.closed).toBe(false);
-    expect(epicBecause(st, room(closed, php, rust), "alice")).toMatch(/"Rust on the review page" was put in without the close seeing it/);
+    const state = epicStatus(closed, room(closed, php, rust));
+    expect(state.closed).toBe(false);
+    expect(epicBecause(state, room(closed, php, rust), "alice")).toMatch(/"Rust on the review page" was put in without the close seeing it/);
     const said = turnEpic(closed, false, "Rust belongs here", "carol", room(closed, php, rust), 102);
     expect(said.outcome).toBe("turned");
     expect(epicBecause(epicStatus(said.ticket, room(said.ticket, php, rust)), room(said.ticket, php, rust), "carol")).toBe("Rust belongs here");
@@ -202,32 +202,32 @@ describe("from the review of the epics branch", () => {
 
 describe("a ticket's title", () => {
   it("is the author's structure: the newer revision wins, either way round, and a peer's stale copy cannot drop it", () => {
-    const v1 = ticket({ id: "t1", title: "Streamed export", goal: "stream the export, do not buffer it", structureAt: 1 });
-    const v2 = { ...v1, title: "Paged export", structureAt: 2 };
-    expect(mergeTicket(v1, v2).title).toBe("Paged export");
-    expect(mergeTicket(v2, v1).title).toBe("Paged export");
-    const stale = { ...v2, title: undefined, updatedAt: 9 };
-    expect(mergeTicket(v2, { ...stale, structureAt: 2 }).title).toBe("Paged export");
-    expect(ticketName(v2)).toBe("Paged export");
+    const streamed = ticket({ id: "t1", title: "Streamed export", goal: "stream the export, do not buffer it", structureAt: 1 });
+    const paged = { ...streamed, title: "Paged export", structureAt: 2 };
+    expect(mergeTicket(streamed, paged).title).toBe("Paged export");
+    expect(mergeTicket(paged, streamed).title).toBe("Paged export");
+    const stale = { ...paged, title: undefined, updatedAt: 9 };
+    expect(mergeTicket(paged, { ...stale, structureAt: 2 }).title).toBe("Paged export");
+    expect(ticketName(paged)).toBe("Paged export");
     expect(ticketName({ goal: "an old one" })).toBe("an old one");
   });
 
   it("merges the same however copies are grouped, on a tie of the author's clock too", () => {
-    const a = ticket({ id: "t1", goal: "a", title: "A", structureAt: 1 });
-    const b = ticket({ id: "t1", goal: "b", structureAt: 1 });
-    const c = ticket({ id: "t1", goal: "a", title: "B", structureAt: 1 });
-    const d = ticket({ id: "t1", goal: "c", title: "C", structureAt: 2 });
-    const head = (t: ReturnType<typeof ticket>) => [t.goal, t.title ?? null];
-    for (const set of [[a, b, c], [a, b, d], [b, c, d]]) {
-      const [x, y, z] = set as [typeof a, typeof a, typeof a];
-      const want = head(mergeTicket(mergeTicket(x, y), z));
-      for (const [p, q, r] of [[x, y, z], [x, z, y], [y, x, z], [y, z, x], [z, x, y], [z, y, x]] as const) {
-        expect(head(mergeTicket(mergeTicket(p, q), r))).toEqual(want);
-        expect(head(mergeTicket(p, mergeTicket(q, r)))).toEqual(want);
+    const copyA = ticket({ id: "t1", goal: "a", title: "A", structureAt: 1 });
+    const copyB = ticket({ id: "t1", goal: "b", structureAt: 1 });
+    const copyC = ticket({ id: "t1", goal: "a", title: "B", structureAt: 1 });
+    const copyD = ticket({ id: "t1", goal: "c", title: "C", structureAt: 2 });
+    const head = (copy: ReturnType<typeof ticket>) => [copy.goal, copy.title ?? null];
+    for (const set of [[copyA, copyB, copyC], [copyA, copyB, copyD], [copyB, copyC, copyD]]) {
+      const [left, middle, right] = set as [typeof copyA, typeof copyA, typeof copyA];
+      const want = head(mergeTicket(mergeTicket(left, middle), right));
+      for (const [first, second, third] of [[left, middle, right], [left, right, middle], [middle, left, right], [middle, right, left], [right, left, middle], [right, middle, left]] as const) {
+        expect(head(mergeTicket(mergeTicket(first, second), third))).toEqual(want);
+        expect(head(mergeTicket(first, mergeTicket(second, third)))).toEqual(want);
       }
     }
     // a titled revision is never lost to an untitled one of the same clock
-    expect(mergeTicket(b, a).title).toBe("A");
+    expect(mergeTicket(copyB, copyA).title).toBe("A");
   });
 });
 

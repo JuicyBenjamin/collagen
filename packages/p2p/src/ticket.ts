@@ -200,10 +200,10 @@ export type Ticket = typeof Ticket.Type;
 export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
   if (local.id !== incoming.id) return local;
   const steps = new Map<string, TicketStep>();
-  for (const s of local.steps) steps.set(s.id, s);
-  for (const s of incoming.steps) {
-    const mine = steps.get(s.id);
-    steps.set(s.id, mine ? mergeStep(mine, s) : s);
+  for (const step of local.steps) steps.set(step.id, step);
+  for (const step of incoming.steps) {
+    const mine = steps.get(step.id);
+    steps.set(step.id, mine ? mergeStep(mine, step) : step);
   }
   // on an exact tie of the author's clock, a titled revision before an
   // untitled one (a copy without a title never takes it away), then the
@@ -220,9 +220,9 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
   const { from: _lf, after: _la, whenClosed: _lw, partOf: _lp, turns: _lt, order: _lo, ...rest } = local;
-  const partOf = union(local.partOf, incoming.partOf, (m) => m.id);
-  const turns = union(local.turns, incoming.turns, (t) => t.id);
-  const order = union(local.order, incoming.order, (o) => `${o.at}|${o.by}|${o.ids.join(",")}`);
+  const partOf = union(local.partOf, incoming.partOf, (partMove) => partMove.id);
+  const turns = union(local.turns, incoming.turns, (turn) => turn.id);
+  const order = union(local.order, incoming.order, (ordering) => `${ordering.at}|${ordering.by}|${ordering.ids.join(",")}`);
   const { title: _ltitle, filedAt: _lfiled, ...unchanged } = rest;
   // the author's title — and on an exact tie of their clock, whichever copy
   // has one: a copy without a title never takes it away
@@ -252,19 +252,19 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
 
 /** Two grow-only sets of acts, as one, in the order they happened (ties by
  *  key, so every peer lists them alike). Absent on both sides stays absent. */
-function union<A extends { readonly at: number }>(a: ReadonlyArray<A> | undefined, b: ReadonlyArray<A> | undefined, key: (x: A) => string): Array<A> | undefined {
-  if (a === undefined && b === undefined) return undefined;
+function union<A extends { readonly at: number }>(ours: ReadonlyArray<A> | undefined, theirs: ReadonlyArray<A> | undefined, key: (x: A) => string): Array<A> | undefined {
+  if (ours === undefined && theirs === undefined) return undefined;
   const all = new Map<string, A>();
-  for (const x of [...(a ?? []), ...(b ?? [])]) all.set(key(x), x);
-  return [...all.entries()].sort(([ka, xa], [kb, xb]) => xa.at - xb.at || (ka < kb ? -1 : ka > kb ? 1 : 0)).map(([, x]) => x);
+  for (const act of [...(ours ?? []), ...(theirs ?? [])]) all.set(key(act), act);
+  return [...all.entries()].sort(([firstKey, firstAct], [secondKey, secondAct]) => firstAct.at - secondAct.at || (firstKey < secondKey ? -1 : firstKey > secondKey ? 1 : 0)).map(([, act]) => act);
 }
 
 /** The latest of a set of acts (the order `union` keeps). */
-const latest = <A>(xs: ReadonlyArray<A> | undefined): A | undefined => (xs && xs.length > 0 ? xs[xs.length - 1] : undefined);
+const latest = <A>(acts: ReadonlyArray<A> | undefined): A | undefined => (acts && acts.length > 0 ? acts[acts.length - 1] : undefined);
 
 /** What a ticket is called where there is room for one line: its title,
  *  or — on an old ticket filed before titles — its goal. */
-export const ticketName = (t: Pick<Ticket, "title" | "goal">): string => t.title ?? t.goal;
+export const ticketName = (ticket: Pick<Ticket, "title" | "goal">): string => ticket.title ?? ticket.goal;
 
 /** A move's or a turn's own name: unique, whoever writes it and however
  *  fast — two by the same person in one millisecond are two. */
@@ -287,14 +287,14 @@ export function moveToEpic(ticket: Ticket, epic: string | null, by: string, now:
 }
 
 /** Done, as its epic counts it: every step answered, or closed as done. */
-export const doneInEpic = (t: Ticket): boolean => finished(t) || closedAs(t) === "done";
+export const doneInEpic = (ticket: Ticket): boolean => finished(ticket) || closedAs(ticket) === "done";
 
 /** Out of its epic's progress: excluded, or closed as dropped (4 of 5 becomes 4 of 4). */
-export const outOfProgress = (t: Ticket): boolean => excludedFromEpic(t) || closedAs(t) === "dropped";
+export const outOfProgress = (ticket: Ticket): boolean => excludedFromEpic(ticket) || closedAs(ticket) === "dropped";
 
 /** Is a ticket in an epic resolved — so the epic may close? Done (every step
  *  answered), closed, or excluded from progress. */
-const resolved = (t: Ticket): boolean => finished(t) || (t.kind !== "epic" && t.closed !== undefined) || excludedFromEpic(t);
+const resolved = (ticket: Ticket): boolean => finished(ticket) || (ticket.kind !== "epic" && ticket.closed !== undefined) || excludedFromEpic(ticket);
 
 /** The tickets in an epic now, in its reading order (the latest one set,
  *  then the rest), and its progress: the ones done — every step answered,
@@ -306,22 +306,22 @@ export function epicParts(epic: Ticket, all: ReadonlyMap<string, Ticket>): {
   readonly done: number;
   readonly unresolved: ReadonlyArray<Ticket>;
 } {
-  const inside = [...all.values()].filter((t) => t.kind !== "epic" && epicOf(t) === epic.id);
+  const inside = [...all.values()].filter((ticket) => ticket.kind !== "epic" && epicOf(ticket) === epic.id);
   const order = latest(epic.order)?.ids ?? [];
-  const rank = (t: Ticket) => {
-    const i = order.indexOf(t.id);
-    return i === -1 ? order.length : i;
+  const rank = (ticket: Ticket) => {
+    const position = order.indexOf(ticket.id);
+    return position === -1 ? order.length : position;
   };
   const parts = [...inside].sort((a, b) => rank(a) - rank(b));
-  const counted = parts.filter((t) => !outOfProgress(t));
-  return { parts, counted: counted.length, done: counted.filter(doneInEpic).length, unresolved: parts.filter((t) => !resolved(t)) };
+  const counted = parts.filter((ticket) => !outOfProgress(ticket));
+  return { parts, counted: counted.length, done: counted.filter(doneInEpic).length, unresolved: parts.filter((ticket) => !resolved(ticket)) };
 }
 
 /** The turns no other turn has seen: what the room's latest word on the
  *  epic is, everyone's, however their clocks ran. */
 const heads = (turns: ReadonlyArray<EpicTurn>): ReadonlyArray<EpicTurn> => {
-  const seen = new Set(turns.flatMap((t) => t.knows));
-  return turns.filter((t) => !seen.has(t.id));
+  const seen = new Set(turns.flatMap((turn) => turn.knows));
+  return turns.filter((turn) => !seen.has(turn.id));
 };
 
 /** Where an epic stands, and what decided it — the cause is always the one
@@ -346,19 +346,19 @@ export interface EpicStatus {
   readonly cause?: EpicCause;
 }
 
-const newest = <A extends { readonly at: number; readonly id: string }>(xs: ReadonlyArray<A>): A | undefined =>
-  [...xs].sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).at(-1);
+const newest = <A extends { readonly at: number; readonly id: string }>(acts: ReadonlyArray<A>): A | undefined =>
+  [...acts].sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)).at(-1);
 
 export function epicStatus(epic: Ticket, all: ReadonlyMap<string, Ticket>): EpicStatus {
   const top = heads(epic.turns ?? []);
   if (top.length === 0) return { closed: false };
-  const reopen = newest(top.filter((t) => !t.closed));
+  const reopen = newest(top.filter((turn) => !turn.closed));
   if (reopen) return { closed: false, cause: { kind: "reopen", reason: reopen.reason, by: reopen.by, at: reopen.at } };
   // every latest word is a close: did each see everything put in?
-  for (const t of all.values()) {
-    for (const m of t.partOf ?? []) {
-      if (m.epic === epic.id && top.some((c) => !(c.members ?? []).includes(m.id))) {
-        return { closed: false, cause: { kind: "unseen-add", ticket: t.id, by: m.by, at: m.at } };
+  for (const ticket of all.values()) {
+    for (const partMove of ticket.partOf ?? []) {
+      if (partMove.epic === epic.id && top.some((turn) => !(turn.members ?? []).includes(partMove.id))) {
+        return { closed: false, cause: { kind: "unseen-add", ticket: ticket.id, by: partMove.by, at: partMove.at } };
       }
     }
   }
@@ -372,12 +372,12 @@ export function epicStatus(epic: Ticket, all: ReadonlyMap<string, Ticket>): Epic
  *  be shown is named; one waiting unseen (its author's alone) is not —
  *  the explanation never reveals what the lists hide. */
 export function epicBecause(status: EpicStatus, all: ReadonlyMap<string, Ticket>, me: string): string | undefined {
-  const c = status.cause;
-  if (!c) return undefined;
-  if (c.kind === "reopen" || c.kind === "close") return c.reason;
-  const t = all.get(c.ticket);
-  const named = t && visibleTo(t, all, me) ? `"${t.goal}"` : "a ticket you are not shown yet";
-  return c.kind === "unseen-add" ? `${named} was put in without the close seeing it — close it again once that is resolved or moved out` : `${named} in it is not resolved`;
+  const cause = status.cause;
+  if (!cause) return undefined;
+  if (cause.kind === "reopen" || cause.kind === "close") return cause.reason;
+  const ticket = all.get(cause.ticket);
+  const named = ticket && visibleTo(ticket, all, me) ? `"${ticket.goal}"` : "a ticket you are not shown yet";
+  return cause.kind === "unseen-add" ? `${named} was put in without the close seeing it — close it again once that is resolved or moved out` : `${named} in it is not resolved`;
 }
 
 /** Is the epic closed? `epicStatus`, its yes or no. */
@@ -385,7 +385,7 @@ export const epicClosed = (epic: Ticket, all: ReadonlyMap<string, Ticket>): bool
 
 /** Every move ever made into an epic, by id — what a close records as seen. */
 const movesInto = (epic: Ticket, all: ReadonlyMap<string, Ticket>): ReadonlyArray<string> =>
-  [...all.values()].flatMap((t) => (t.partOf ?? []).filter((m) => m.epic === epic.id).map((m) => m.id));
+  [...all.values()].flatMap((ticket) => (ticket.partOf ?? []).filter((partMove) => partMove.epic === epic.id).map((partMove) => partMove.id));
 
 /** Is the ticket closed? An epic by its turns and what is in it (pass the
  *  room's tickets; without them, by its turns alone), everything else by its
@@ -394,7 +394,7 @@ export const isClosed = (ticket: Ticket, all?: ReadonlyMap<string, Ticket>): boo
   if (ticket.kind !== "epic") return ticket.closed !== undefined;
   if (all) return epicClosed(ticket, all);
   const top = heads(ticket.turns ?? []);
-  return top.length > 0 && top.every((t) => t.closed);
+  return top.length > 0 && top.every((turn) => turn.closed);
 };
 
 /** Set the order an epic's tickets are read in. Anyone's to do. */
@@ -433,7 +433,7 @@ export function turnEpic(
   // closing what is closed, or reopening what already has a reopen as its
   // latest word, is nothing; reopening an epic kept open only by a conflict
   // (a close that missed an addition) is a reopen worth recording
-  const reopened = heads(epic.turns ?? []).some((t) => !t.closed) || (epic.turns ?? []).length === 0;
+  const reopened = heads(epic.turns ?? []).some((epicTurn) => !epicTurn.closed) || (epic.turns ?? []).length === 0;
   if (closed ? epicClosed(epic, all) : reopened) return { ticket: epic, outcome: "already", unresolved: [] };
   const { unresolved } = epicParts(epic, all);
   if (closed && unresolved.length > 0) return { ticket: epic, outcome: "unresolved", unresolved };
@@ -445,18 +445,18 @@ export function turnEpic(
     reason: why,
     by,
     at: now,
-    knows: (epic.turns ?? []).map((t) => t.id),
+    knows: (epic.turns ?? []).map((epicTurn) => epicTurn.id),
     ...(closed ? { members: [...movesInto(epic, all)] } : {}),
   };
   return { ticket: { ...epic, turns: [...(epic.turns ?? []), turn], updatedAt: now }, outcome: "turned", unresolved: [] };
 }
 
 /** The author-controlled structure, as one comparable string. */
-const structureKey = (t: Ticket): string => JSON.stringify([t.goal, t.kind, t.from ?? null, t.whenClosed ?? null, t.after ?? null, t.title ?? null]);
+const structureKey = (ticket: Ticket): string => JSON.stringify([ticket.goal, ticket.kind, ticket.from ?? null, ticket.whenClosed ?? null, ticket.after ?? null, ticket.title ?? null]);
 
 /** Two author revisions in the same millisecond: pick one the same way on
  *  every peer, whichever side it arrived from, so the merge still commutes. */
-const structureTiebreak = (a: Ticket, b: Ticket): Ticket => (structureKey(a) >= structureKey(b) ? a : b);
+const structureTiebreak = (first: Ticket, second: Ticket): Ticket => (structureKey(first) >= structureKey(second) ? first : second);
 
 /** Would merging `mine` into `row` change the row? Steps are compared by id
  *  and content, structure and close by value — a ticket as data, order aside.
@@ -465,10 +465,10 @@ const structureTiebreak = (a: Ticket, b: Ticket): Ticket => (structureKey(a) >= 
  *  nothing is left alone, one that adds a step or a state is re-appended. */
 export const contributes = (row: Ticket, mine: Ticket): boolean => canonical(mergeTicket(row, mine)) !== canonical(row);
 
-const canonical = (t: Ticket): string =>
+const canonical = (ticket: Ticket): string =>
   JSON.stringify({
-    ...t,
-    steps: [...t.steps].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    ...ticket,
+    steps: [...ticket.steps].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
   });
 
 export type CloseOutcome =
@@ -493,13 +493,13 @@ export function closeTicket(ticket: Ticket, by: string, reason: string | undefin
   };
 }
 
-function mergeStep(a: TicketStep, b: TicketStep): TicketStep {
-  const ra = STATUS_RANK[a.status];
-  const rb = STATUS_RANK[b.status];
-  if (ra !== rb) return ra > rb ? a : b;
-  if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? a : b;
+function mergeStep(first: TicketStep, second: TicketStep): TicketStep {
+  const firstRank = STATUS_RANK[first.status];
+  const secondRank = STATUS_RANK[second.status];
+  if (firstRank !== secondRank) return firstRank > secondRank ? first : second;
+  if (first.updatedAt !== second.updatedAt) return first.updatedAt > second.updatedAt ? first : second;
   // deterministic final tiebreak so all peers converge on the same copy
-  return (a.result ?? "") >= (b.result ?? "") ? a : b;
+  return (first.result ?? "") >= (second.result ?? "") ? first : second;
 }
 
 /** The conversation a step belongs to. A ticket has no thread of its own:
@@ -515,7 +515,7 @@ export function stepThreadId(ticket: Ticket, step: TicketStep): string {
   const named = (owner: string | undefined): owner is string => owner !== undefined && owner !== creator;
   const counterpart = named(step.owner)
     ? step.owner
-    : (step.needs.map((id) => ticket.steps.find((s) => s.id === id)?.owner).find(named) ?? creator);
+    : (step.needs.map((id) => ticket.steps.find((ticketStep) => ticketStep.id === id)?.owner).find(named) ?? creator);
   return deriveThreadId(creator, counterpart, ticket.project);
 }
 
@@ -555,7 +555,7 @@ export function settleStep(
   failed: boolean,
   now: number,
 ): Settlement | null {
-  const step = ticket.steps.find((s) => s.id === stepId);
+  const step = ticket.steps.find((ticketStep) => ticketStep.id === stepId);
   if (!step) return null;
   if (step.owner !== by) return { ticket, outcome: "not-yours" };
   const status = failed ? ("failed" as const) : ("settled" as const);
@@ -563,7 +563,7 @@ export function settleStep(
     ticket: {
       ...ticket,
       updatedAt: now,
-      steps: ticket.steps.map((s) => (s.id === stepId ? { ...s, status, result, updatedAt: now } : s)),
+      steps: ticket.steps.map((ticketStep) => (ticketStep.id === stepId ? { ...ticketStep, status, result, updatedAt: now } : ticketStep)),
     },
     outcome: "settled",
   };
@@ -582,8 +582,8 @@ export function postReview(
   failed: boolean,
   now: number,
 ): { readonly ticket: Ticket; readonly stepId: string } {
-  const id = reviewStepId(by.name, by.key, new Map(ticket.steps.map((s) => [s.id, s.owner])));
-  const existing = ticket.steps.find((s) => s.id === id);
+  const id = reviewStepId(by.name, by.key, new Map(ticket.steps.map((ticketStep) => [ticketStep.id, ticketStep.owner])));
+  const existing = ticket.steps.find((ticketStep) => ticketStep.id === id);
   const step: TicketStep = {
     id,
     owner: by.key,
@@ -595,7 +595,7 @@ export function postReview(
     updatedAt: now,
   };
   return {
-    ticket: { ...ticket, updatedAt: now, steps: [...ticket.steps.filter((s) => s.id !== id), step] },
+    ticket: { ...ticket, updatedAt: now, steps: [...ticket.steps.filter((ticketStep) => ticketStep.id !== id), step] },
     stepId: id,
   };
 }
@@ -607,8 +607,8 @@ export function postReview(
  *  written, and that is the most complete a review gets. Treating it as
  *  incomplete left the author waiting forever for a reviewer who had already
  *  answered — which is the opposite of what a change request means. */
-const answered = (ticket: Ticket, s: TicketStep): boolean =>
-  s.status === "settled" || s.status === "retired" || (ticket.kind === "review" && isTake(s) && s.status === "failed");
+const answered = (ticket: Ticket, step: TicketStep): boolean =>
+  step.status === "settled" || step.status === "retired" || (ticket.kind === "review" && isTake(step) && step.status === "failed");
 // …and only on a REVIEW. On a plan or a proposal a reader's ↻ means "revise
 // this", so the ticket is not answered until they come back with a ✓ — and a
 // proposal's work steps, which wait on that ✓, do not start.
@@ -620,7 +620,7 @@ const answered = (ticket: Ticket, s: TicketStep): boolean =>
  *  closure are two different facts, and a ticket can be closed unfinished
  *  (a reviewer who never answered, work abandoned) or finished and still
  *  open (the author has not said so yet). */
-export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && ticket.steps.every((s) => answered(ticket, s));
+export const finished = (ticket: Ticket): boolean => ticket.steps.length > 0 && ticket.steps.every((step) => answered(ticket, step));
 
 export type RetireOutcome =
   | { readonly ticket: Ticket; readonly retired: ReadonlyArray<string>; readonly kept: ReadonlyArray<string>; readonly outcome: "retired" }
@@ -635,14 +635,14 @@ export function retireSteps(ticket: Ticket, ids: ReadonlyArray<string>, by: stri
   const want = new Set(ids);
   const retired: Array<string> = [];
   const kept: Array<string> = [];
-  const steps = ticket.steps.map((s) => {
-    if (!want.has(s.id)) return s;
-    if (s.status === "pending" || s.status === "suspended") {
-      retired.push(s.id);
-      return { ...s, status: "retired" as const, updatedAt: now };
+  const steps = ticket.steps.map((step) => {
+    if (!want.has(step.id)) return step;
+    if (step.status === "pending" || step.status === "suspended") {
+      retired.push(step.id);
+      return { ...step, status: "retired" as const, updatedAt: now };
     }
-    kept.push(s.id);
-    return s;
+    kept.push(step.id);
+    return step;
   });
   return { ticket: retired.length > 0 ? { ...ticket, steps, updatedAt: now } : ticket, retired, kept, outcome: "retired" };
 }
@@ -661,26 +661,26 @@ export function retireSteps(ticket: Ticket, ids: ReadonlyArray<string>, by: stri
  *  Every reader of "is this up?" goes through here — the agent nudges and the
  *  lists both — because two implementations of one rule drift, and did. */
 export function readySteps(ticket: Ticket): TicketStep[] {
-  const done = new Set(ticket.steps.filter((s) => answered(ticket, s)).map((s) => s.id));
-  const reviewed = ticket.steps.some((s) => isTake(s) && (s.status === "settled" || s.status === "failed"));
+  const done = new Set(ticket.steps.filter((step) => answered(ticket, step)).map((step) => step.id));
+  const reviewed = ticket.steps.some((step) => isTake(step) && (step.status === "settled" || step.status === "failed"));
   return ticket.steps.filter(
-    (s) =>
-      (s.status === "pending" || s.status === "suspended") &&
-      s.needs.every((n) => done.has(n)) &&
-      !(isJudged(ticket.kind) && s.intent === "address" && s.needs.length === 0 && !reviewed),
+    (step) =>
+      (step.status === "pending" || step.status === "suspended") &&
+      step.needs.every((need) => done.has(need)) &&
+      !(isJudged(ticket.kind) && step.intent === "address" && step.needs.length === 0 && !reviewed),
   );
 }
 
 /** Steps a given peer should act on now: `readySteps`, theirs. */
 export function actionableSteps(ticket: Ticket, pubkey: string): TicketStep[] {
-  return readySteps(ticket).filter((s) => s.owner === pubkey);
+  return readySteps(ticket).filter((step) => step.owner === pubkey);
 }
 
 /** Is this ticket's turn over, for whoever waits on it? Finished (every step
  *  answered — on a review that includes the author's own address step, so
  *  one reader's take does not open the next review), or closed: a ticket its
  *  author closed unfinished must not hold the next one back forever. */
-const released = (t: Ticket, all: ReadonlyMap<string, Ticket>): boolean => isClosed(t, all) || finished(t);
+const released = (ticket: Ticket, all: ReadonlyMap<string, Ticket>): boolean => isClosed(ticket, all) || finished(ticket);
 
 /** The tickets in `after` still holding this one back. A predecessor this
  *  peer does not hold is no gate: `afterProblem` refused unknown ids when
@@ -688,8 +688,8 @@ const released = (t: Ticket, all: ReadonlyMap<string, Ticket>): boolean => isClo
  *  hide the ticket for good. */
 export function heldBy(ticket: Ticket, all: ReadonlyMap<string, Ticket>): ReadonlyArray<string> {
   return (ticket.after ?? []).filter((id) => {
-    const p = all.get(id);
-    return p !== undefined && !released(p, all);
+    const predecessor = all.get(id);
+    return predecessor !== undefined && !released(predecessor, all);
   });
 }
 
@@ -715,10 +715,10 @@ export function afterProblem(
   all: ReadonlyMap<string, Ticket>,
   me: string,
 ): string | null {
-  for (const a of after) {
-    if (a === id) return "a ticket cannot wait on itself";
-    const t = all.get(a);
-    if (!t || !visibleTo(t, all, me)) return `no ticket ${a} — 'after' takes ids from get-tickets`;
+  for (const afterId of after) {
+    if (afterId === id) return "a ticket cannot wait on itself";
+    const ticket = all.get(afterId);
+    if (!ticket || !visibleTo(ticket, all, me)) return `no ticket ${afterId} — 'after' takes ids from get-tickets`;
   }
   if (id === undefined) return null;
   // would any ticket we wait on, followed through its own `after`, lead back here?

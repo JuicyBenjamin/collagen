@@ -16,7 +16,7 @@ export interface LogView {
   readonly name: { readonly name: string; readonly ts: number } | null;
   readonly members: ReadonlyArray<Member>;
   /** Every message in the room, in log order, with its position. */
-  readonly messages: ReadonlyArray<{ readonly seq: number; readonly msg: RoomMessage }>;
+  readonly messages: ReadonlyArray<{ readonly seq: number; readonly message: RoomMessage }>;
   /** Transcripts attached to tickets — references; the files stay with their holders. */
   readonly attachments: ReadonlyArray<Attachment>;
   /** comments on reviews' code, in the order their keys sort (ticket, then id) */
@@ -67,8 +67,8 @@ const decodeOp = Schema.decodeUnknownOption(LogOp);
 /** The protocol an entry says it was written under, when it says. */
 const wireProtocol = (value: unknown): number | null => {
   if (typeof value !== "object" || value === null) return null;
-  const p = (value as Record<string, unknown>).protocol;
-  return typeof p === "string" && /^\d+$/.test(p) ? Number(p) : null;
+  const protocol = (value as Record<string, unknown>).protocol;
+  return typeof protocol === "string" && /^\d+$/.test(protocol) ? Number(protocol) : null;
 };
 /** The protocol this build reads. A test lowers it to play an older build,
  *  then raises it to play the update — nothing in the app touches it. */
@@ -80,15 +80,15 @@ const UNSEEN = "unseen/";
  *  never retire a different entry that happened to land at the same local
  *  position. Arrival order is kept in the row (`n`) and restored on read. */
 /** Key-sorted JSON, so two encodings of one entry hash the same. */
-const canonical = (v: unknown): string =>
-  Array.isArray(v)
-    ? `[${v.map(canonical).join(",")}]`
-    : typeof v === "object" && v !== null
-      ? `{${Object.keys(v as Record<string, unknown>)
+const canonical = (value: unknown): string =>
+  Array.isArray(value)
+    ? `[${value.map(canonical).join(",")}]`
+    : typeof value === "object" && value !== null
+      ? `{${Object.keys(value as Record<string, unknown>)
           .sort()
-          .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+          .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
           .join(",")}}`
-      : JSON.stringify(v);
+      : JSON.stringify(value);
 /** The entry's identity: its content, protocol included, without the one
  *  field a replay adds (`replays`) — so the raw entry a peer kept and the
  *  replay of it hash alike (a replay keeps the entry's own protocol), while
@@ -112,27 +112,27 @@ const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
  *  the record is gone rather than stale. */
 const claimedKey = (value: unknown): string | null => {
   if (typeof value !== "object" || value === null) return null;
-  const v = value as Record<string, unknown>;
-  const field = (x: unknown, k: string): string | null => {
-    const got = typeof x === "object" && x !== null ? (x as Record<string, unknown>)[k] : undefined;
+  const record = value as Record<string, unknown>;
+  const field = (nested: unknown, property: string): string | null => {
+    const got = typeof nested === "object" && nested !== null ? (nested as Record<string, unknown>)[property] : undefined;
     return typeof got === "string" ? got : null;
   };
-  if (v.op === "ticket") {
-    const id = field(v.ticket, "id");
+  if (record.op === "ticket") {
+    const id = field(record.ticket, "id");
     return id ? `ticket/${id}` : null;
   }
-  if (v.op === "review") {
-    const id = field(v.review, "ticketId");
+  if (record.op === "review") {
+    const id = field(record.review, "ticketId");
     return id ? `review/${id}` : null;
   }
-  if (v.op === "attachment") {
-    const ticketId = field(v.attachment, "ticketId");
-    const id = field(v.attachment, "id");
+  if (record.op === "attachment") {
+    const ticketId = field(record.attachment, "ticketId");
+    const id = field(record.attachment, "id");
     return ticketId && id ? `attachment/${ticketId}/${id}` : null;
   }
-  if (v.op === "comment") {
-    const ticketId = field(v.comment, "ticketId");
-    const id = field(v.comment, "id");
+  if (record.op === "comment") {
+    const ticketId = field(record.comment, "ticketId");
+    const id = field(record.comment, "id");
     return ticketId && id ? `comment/${ticketId}/${id}` : null;
   }
   return null;
@@ -149,79 +149,79 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
     // count it, so the room loses nothing while this side has not updated
     const wire = wireProtocol(node.value);
     if (wire !== null && wire > protocolForTests.ours) {
-      const n = ((await view.get("state/unseen"))?.value ?? 0) as number;
-      await view.put("state/unseen", n + 1);
+      const count = ((await view.get("state/unseen"))?.value ?? 0) as number;
+      await view.put("state/unseen", count + 1);
       // the same entry seen twice (two writers replaying it) is one row
       const key = unseenKey(claimedKey(node.value), node.value);
-      if (!(await view.get(key))) await view.put(key, { protocol: wire, raw: node.value, n });
+      if (!(await view.get(key))) await view.put(key, { protocol: wire, raw: node.value, n: count });
       continue;
     }
     // an entry from an older protocol is rewritten into the current shape when
     // we know the old one (migrate.ts); only what nobody can read is ejected
-    const op = Option.getOrUndefined(decodeOp(node.value)) ?? migrateOp(node.value) ?? undefined;
-    if (!op) {
+    const logOp = Option.getOrUndefined(decodeOp(node.value)) ?? migrateOp(node.value) ?? undefined;
+    if (!logOp) {
       // unreadable here: eject the row it claims instead of leaving a stale one
       const key = claimedKey(node.value);
       if (key) await view.del(key);
       continue;
     }
-    switch (op.op) {
+    switch (logOp.op) {
       case "add-writer":
-        await host.addWriter(b4a.from(op.key, "hex"), { indexer: true });
+        await host.addWriter(b4a.from(logOp.key, "hex"), { indexer: true });
         break;
       case "member": {
-        const cur = await view.get(`member/${op.key}`);
-        if (!cur || op.ts >= cur.value.ts) await view.put(`member/${op.key}`, { key: op.key, name: op.name, ts: op.ts });
+        const current = await view.get(`member/${logOp.key}`);
+        if (!current || logOp.ts >= current.value.ts) await view.put(`member/${logOp.key}`, { key: logOp.key, name: logOp.name, ts: logOp.ts });
         break;
       }
       case "ticket": {
         // the row we merge into may itself be an older shape: migrate it first
-        const cur = await view.get(`ticket/${op.ticket.id}`);
-        const local = cur ? readTicket(cur.value)?.value : undefined;
-        await view.put(`ticket/${op.ticket.id}`, local ? mergeTicket(local, op.ticket) : op.ticket);
+        const current = await view.get(`ticket/${logOp.ticket.id}`);
+        const local = current ? readTicket(current.value)?.value : undefined;
+        await view.put(`ticket/${logOp.ticket.id}`, local ? mergeTicket(local, logOp.ticket) : logOp.ticket);
         break;
       }
       case "rename": {
-        const cur = await view.get("meta/name");
-        if (!cur || op.ts > cur.value.ts) await view.put("meta/name", { name: op.name, ts: op.ts });
+        const current = await view.get("meta/name");
+        if (!current || logOp.ts > current.value.ts) await view.put("meta/name", { name: logOp.name, ts: logOp.ts });
         break;
       }
       case "msg": {
         // one copy per id: a message replayed after an update, or re-appended
         // by two peers replaying the same entry, lands once
-        if (await view.get(`msgid/${op.msg.id}`)) break;
+        if (await view.get(`msgid/${logOp.msg.id}`)) break;
         const count = (await view.get("state/msgs"))?.value ?? 0;
-        await view.put(MSG_KEY(count), op.msg);
+        await view.put(MSG_KEY(count), logOp.msg);
         await view.put("state/msgs", count + 1);
-        await view.put(`msgid/${op.msg.id}`, count);
+        await view.put(`msgid/${logOp.msg.id}`, count);
         break;
       }
       case "comment": {
         // written once by its author: the first write of an id stands
-        const key = `comment/${op.comment.ticketId}/${op.comment.id}`;
-        if (!(await view.get(key))) await view.put(key, op.comment);
+        const key = `comment/${logOp.comment.ticketId}/${logOp.comment.id}`;
+        if (!(await view.get(key))) await view.put(key, logOp.comment);
         break;
       }
       case "attachment": {
         // first write wins: an attachment is a fact about a file someone holds
-        const cur = await view.get(`attachment/${op.attachment.ticketId}/${op.attachment.id}`);
-        if (!cur) await view.put(`attachment/${op.attachment.ticketId}/${op.attachment.id}`, op.attachment);
+        const current = await view.get(`attachment/${logOp.attachment.ticketId}/${logOp.attachment.id}`);
+        if (!current) await view.put(`attachment/${logOp.attachment.ticketId}/${logOp.attachment.id}`, logOp.attachment);
         break;
       }
       case "review": {
         // one review per ticket, written by its author alone: later ts wins
-        const cur = await view.get(`review/${op.review.ticketId}`);
-        if (!cur || supersedes(op.review, cur.value as ReviewContext)) await view.put(`review/${op.review.ticketId}`, op.review);
+        const current = await view.get(`review/${logOp.review.ticketId}`);
+        if (!current || supersedes(logOp.review, current.value as ReviewContext)) await view.put(`review/${logOp.review.ticketId}`, logOp.review);
         break;
       }
       case "evict":
         // the migration, replayed on every member: drop what it names
-        for (const key of op.keys) if (EVICTABLE.test(key)) await view.del(key);
+        for (const key of logOp.keys) if (EVICTABLE.test(key)) await view.del(key);
         break;
       default: {
         // a LogOp with no case here is a COMPILE error: an entry every member
         // silently ignores is the worst kind of nothing
-        const unhandled: never = op;
+        const unhandled: never = logOp;
         void unhandled;
         break;
       }
@@ -264,8 +264,8 @@ export const openRoomLog = (
   Effect.gen(function* () {
     const base = yield* Effect.acquireRelease(
       Effect.promise(async () => {
-        const ns = await namespaceFor(store, roomName, bootstrap);
-        const b = new Autobase(ns, bootstrap ? b4a.from(bootstrap, "hex") : null, {
+        const namespace = await namespaceFor(store, roomName, bootstrap);
+        const autobase = new Autobase(namespace, bootstrap ? b4a.from(bootstrap, "hex") : null, {
           valueEncoding: "json",
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           open: (viewStore: any) =>
@@ -274,10 +274,10 @@ export const openRoomLog = (
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           close: (view: any) => view.close(),
         });
-        await b.ready();
-        return b;
+        await autobase.ready();
+        return autobase;
       }),
-      (b) => Effect.promise(() => b.close() as Promise<void>).pipe(Effect.ignore),
+      (autobase) => Effect.promise(() => autobase.close() as Promise<void>).pipe(Effect.ignore),
     );
 
     const readRange = (prefix: string) =>
@@ -300,27 +300,27 @@ export const openRoomLog = (
       const rows = <A, E>(prefix: string, schema: Schema.Codec<A, E>) =>
         readRange(prefix).pipe(
           Effect.map((entries) =>
-            entries.flatMap((e) => {
-              const decoded = Schema.decodeUnknownOption(schema)(e.value);
-              if (Option.isSome(decoded)) return [{ key: e.key, value: decoded.value }];
+            entries.flatMap((entry) => {
+              const decoded = Schema.decodeUnknownOption(schema)(entry.value);
+              if (Option.isSome(decoded)) return [{ key: entry.key, value: decoded.value }];
               // an older shape we know: read it migrated, and queue the rewrite
               // that makes the row current for everyone
-              const m = migrateRow(prefix, e.value);
-              if (m) {
-                if (prefix === "ticket") migrated.push({ op: "ticket", ticket: m.value as Ticket });
-                return [{ key: e.key, value: m.value as A }];
+              const migratedRow = migrateRow(prefix, entry.value);
+              if (migratedRow) {
+                if (prefix === "ticket") migrated.push({ op: "ticket", ticket: migratedRow.value as Ticket });
+                return [{ key: entry.key, value: migratedRow.value as A }];
               }
-              if (EVICTABLE.test(e.key)) bad.push(e.key);
+              if (EVICTABLE.test(entry.key)) bad.push(entry.key);
               return [];
             }),
           ),
         );
-      const tickets = (yield* rows("ticket", Ticket)).map((e) => e.value);
-      const members = (yield* rows("member", Member)).map((e) => e.value);
-      const messages = (yield* rows("msg", RoomMessage)).map((e) => ({ seq: Number(e.key.slice("msg/".length)), msg: e.value }));
-      const attachments = (yield* rows("attachment", Attachment)).map((e) => e.value);
-      const comments = (yield* rows("comment", ReviewComment)).map((e) => e.value);
-      const reviews = (yield* rows("review", ReviewContext)).map((e) => e.value);
+      const tickets = (yield* rows("ticket", Ticket)).map((row) => row.value);
+      const members = (yield* rows("member", Member)).map((row) => row.value);
+      const messages = (yield* rows("msg", RoomMessage)).map((row) => ({ seq: Number(row.key.slice("msg/".length)), message: row.value }));
+      const attachments = (yield* rows("attachment", Attachment)).map((row) => row.value);
+      const comments = (yield* rows("comment", ReviewComment)).map((row) => row.value);
+      const reviews = (yield* rows("review", ReviewContext)).map((row) => row.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
       // entries a build behind kept raw: list them, and queue for replay the
       // ones this build can read — once appended they apply like any entry
@@ -329,15 +329,17 @@ export const openRoomLog = (
       // merge, a review's later ts wins, a message lands once by id, a writer
       // is admitted once); list the rest once per claimed key
       const unseenRows = [...(yield* readRange("unseen"))].sort(
+        // oxlint-disable-next-line naming/no-shorthand-names -- stored on disk as `n`
         (a, b) => ((a.value as { n?: number }).n ?? 0) - ((b.value as { n?: number }).n ?? 0),
       );
       const stillUnseen = new Map<string, number>();
       for (const row of unseenRows) {
-        const v = row.value as { protocol?: number; raw?: unknown; n?: number };
-        const op = v.protocol !== undefined && v.protocol <= protocolForTests.ours ? Option.getOrUndefined(decodeOp(v.raw)) : undefined;
+        // oxlint-disable-next-line naming/no-shorthand-names -- stored on disk as `n`
+        const stored = row.value as { protocol?: number; raw?: unknown; n?: number };
+        const logOp = stored.protocol !== undefined && stored.protocol <= protocolForTests.ours ? Option.getOrUndefined(decodeOp(stored.raw)) : undefined;
         // the replay carries its row's key, so apply can retire exactly that row
-        if (op) migrated.push({ ...op, replays: row.key });
-        else stillUnseen.set(unseenClaim(row.key), Math.max(stillUnseen.get(unseenClaim(row.key)) ?? 0, v.protocol ?? 0));
+        if (logOp) migrated.push({ ...logOp, replays: row.key });
+        else stillUnseen.set(unseenClaim(row.key), Math.max(stillUnseen.get(unseenClaim(row.key)) ?? 0, stored.protocol ?? 0));
       }
       const unseen: Unseen[] = [...stillUnseen].map(([key, protocol]) => ({ key, protocol }));
       stale = bad;
@@ -363,10 +365,10 @@ export const openRoomLog = (
     const evictStale = Effect.gen(function* () {
       const keys = stale;
       if (keys.length === 0 || !base.writable) return 0;
-      const ts = yield* Clock.currentTimeMillis;
-      const ok = yield* append({ op: "evict", keys, protocol: PROTOCOL_VERSION, reason: `unreadable by protocol ${PROTOCOL_VERSION}`, ts }).pipe(
+      const now = yield* Clock.currentTimeMillis;
+      const ok = yield* append({ op: "evict", keys, protocol: PROTOCOL_VERSION, reason: `unreadable by protocol ${PROTOCOL_VERSION}`, ts: now }).pipe(
         Effect.as(true),
-        Effect.catch((e) => Effect.logWarning(`eviction failed: ${e.message}`).pipe(Effect.as(false))),
+        Effect.catch((row) => Effect.logWarning(`eviction failed: ${row.message}`).pipe(Effect.as(false))),
       );
       if (!ok) return 0;
       stale = [];
@@ -381,17 +383,17 @@ export const openRoomLog = (
     const rewriteMigrated = Effect.gen(function* () {
       const ops = rewrites;
       if (ops.length === 0 || !base.writable) return 0;
-      let n = 0;
-      for (const op of ops) {
-        const ok = yield* append(op).pipe(
+      let rewritten = 0;
+      for (const logOp of ops) {
+        const ok = yield* append(logOp).pipe(
           Effect.as(true),
-          Effect.catch((e) => Effect.logWarning(`migration rewrite failed: ${e.message}`).pipe(Effect.as(false))),
+          Effect.catch((row) => Effect.logWarning(`migration rewrite failed: ${row.message}`).pipe(Effect.as(false))),
         );
-        if (ok) n++;
+        if (ok) rewritten++;
       }
       rewrites = [];
-      if (n > 0) yield* Effect.log(`brought ${n} record(s) into protocol ${PROTOCOL_VERSION}: migrated from an older build, or replayed from a newer one this build can read now`);
-      return n;
+      if (rewritten > 0) yield* Effect.log(`brought ${rewritten} record(s) into protocol ${PROTOCOL_VERSION}: migrated from an older build, or replayed from a newer one this build can read now`);
+      return rewritten;
     });
 
     /** Bring back what this machine wrote and the room no longer shows: walk
@@ -409,63 +411,63 @@ export const openRoomLog = (
         // our own whys too: the newest we wrote for each ticket
         const whys = new Map<string, ReviewContext>();
         const core = base.local;
-        for (let i = 0; i < core.length; i++) {
+        for (let index = 0; index < core.length; index++) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const msg: any = await core.get(i).catch(() => null);
-          const buf: Uint8Array | null | undefined = msg?.node?.value;
-          if (!buf) continue;
+          const block: any = await core.get(index).catch(() => null);
+          const buffer: Uint8Array | null | undefined = block?.node?.value;
+          if (!buffer) continue;
           let raw: unknown;
           try {
-            raw = JSON.parse(b4a.toString(buf, "utf8"));
+            raw = JSON.parse(b4a.toString(buffer, "utf8"));
           } catch {
             continue;
           }
-          const op = migrateOp(raw) ?? Option.getOrUndefined(decodeOp(raw));
-          if (op?.op === "review") {
-            const had = whys.get(op.review.ticketId);
-            if (!had || supersedes(op.review, had)) whys.set(op.review.ticketId, op.review);
+          const logOp = migrateOp(raw) ?? Option.getOrUndefined(decodeOp(raw));
+          if (logOp?.op === "review") {
+            const had = whys.get(logOp.review.ticketId);
+            if (!had || supersedes(logOp.review, had)) whys.set(logOp.review.ticketId, logOp.review);
           }
-          if (!op || op.op !== "ticket") continue;
-          const have = out.get(op.ticket.id);
-          out.set(op.ticket.id, have ? mergeTicket(have, op.ticket) : op.ticket);
+          if (!logOp || logOp.op !== "ticket") continue;
+          const have = out.get(logOp.ticket.id);
+          out.set(logOp.ticket.id, have ? mergeTicket(have, logOp.ticket) : logOp.ticket);
         }
         // a row that exists may still lack what WE wrote — another peer
         // restored first from their own history, without our take or our
         // settle — so the test is not "is there a row" but "would our copy
         // change it"; re-appending is a merge, never a replacement
         const missing: Ticket[] = [];
-        for (const [id, t] of out) {
+        for (const [id, ticket] of out) {
           const row = await base.view.get(`ticket/${id}`);
           const current = row ? readTicket(row.value)?.value : undefined;
-          if (!current || contributes(current, t)) missing.push(t);
+          if (!current || contributes(current, ticket)) missing.push(ticket);
         }
         // a why is whole, later ts wins: ours goes back when the room has none
         // (evicted by a build that could not read it) or an older one
         const lostWhys: ReviewContext[] = [];
-        for (const [id, r] of whys) {
+        for (const [id, why] of whys) {
           const row = await base.view.get(`review/${id}`);
-          if (!row || strictlySupersedes(r, row.value as ReviewContext)) lostWhys.push(r);
+          if (!row || strictlySupersedes(why, row.value as ReviewContext)) lostWhys.push(why);
         }
         return { missing, lostWhys };
       });
-      let n = 0;
-      for (const r of folded.lostWhys) {
-        const ok = yield* append({ op: "review", review: r, protocol: PROTOCOL_VERSION }).pipe(
+      let restored = 0;
+      for (const why of folded.lostWhys) {
+        const ok = yield* append({ op: "review", review: why, protocol: PROTOCOL_VERSION }).pipe(
           Effect.as(true),
-          Effect.catch((e) => Effect.logWarning(`restore failed for the why of ticket ${r.ticketId}: ${e.message}`).pipe(Effect.as(false))),
+          Effect.catch((error) => Effect.logWarning(`restore failed for the why of ticket ${why.ticketId}: ${error.message}`).pipe(Effect.as(false))),
         );
-        if (ok) n++;
+        if (ok) restored++;
       }
-      if (folded.lostWhys.length > 0) yield* Effect.log(`restored this machine's own why on ${folded.lostWhys.length} ticket(s): ${folded.lostWhys.map((r) => r.ticketId.slice(0, 8)).join(", ")}`);
-      for (const t of folded.missing) {
-        const ok = yield* append({ op: "ticket", ticket: t }).pipe(
+      if (folded.lostWhys.length > 0) yield* Effect.log(`restored this machine's own why on ${folded.lostWhys.length} ticket(s): ${folded.lostWhys.map((why) => why.ticketId.slice(0, 8)).join(", ")}`);
+      for (const ticket of folded.missing) {
+        const ok = yield* append({ op: "ticket", ticket }).pipe(
           Effect.as(true),
-          Effect.catch((e) => Effect.logWarning(`restore failed for ticket ${t.id}: ${e.message}`).pipe(Effect.as(false))),
+          Effect.catch((error) => Effect.logWarning(`restore failed for ticket ${ticket.id}: ${error.message}`).pipe(Effect.as(false))),
         );
-        if (ok) n++;
+        if (ok) restored++;
       }
-      if (folded.missing.length > 0) yield* Effect.log(`restored this machine's own contribution to ${folded.missing.length} ticket(s): ${folded.missing.map((t) => t.id.slice(0, 8)).join(", ")}`);
-      return n;
+      if (folded.missing.length > 0) yield* Effect.log(`restored this machine's own contribution to ${folded.missing.length} ticket(s): ${folded.missing.map((ticket) => ticket.id.slice(0, 8)).join(", ")}`);
+      return restored;
     });
 
     const changes = Stream.callback<void>((queue) =>
@@ -494,9 +496,9 @@ export const openRoomLog = (
     // every entry says which build wrote it, so an older reader can tell
     // "newer than me" from "broken" (see LogOp). No caller in the app sets
     // it; a test does, to play a peer from the future.
-    const append = (op: LogOp) =>
+    const append = (logOp: LogOp) =>
       Effect.tryPromise({
-        try: () => base.append({ ...op, protocol: op.protocol ?? PROTOCOL_VERSION }) as Promise<void>,
+        try: () => base.append({ ...logOp, protocol: logOp.protocol ?? PROTOCOL_VERSION }) as Promise<void>,
         catch: (cause) => new LogAppendFailed({ cause }),
       }).pipe(
         Effect.andThen(
@@ -507,7 +509,7 @@ export const openRoomLog = (
             Effect.timeoutOption(UPDATE_PATIENCE),
             Effect.flatMap((done) =>
               Option.isNone(done)
-                ? Effect.logWarning(`the room's log is still catching up (${op.op} is written, the view will follow)`)
+                ? Effect.logWarning(`the room's log is still catching up (${logOp.op} is written, the view will follow)`)
                 : Effect.void,
             ),
           ),

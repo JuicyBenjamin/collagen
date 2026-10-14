@@ -35,14 +35,14 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   ...(review
     ? { review: `${reviewHeadline(review)} — call review-context {ticketId} when your user asks why something is the way it is` }
     : {}),
-  steps: ticket.steps.map((s) => ({
-    id: s.id,
-    owner: nameFor(s.owner),
-    intent: s.intent,
-    status: s.status,
-    needs: s.needs.join("+"),
-    description: s.description,
-    result: s.result ?? "",
+  steps: ticket.steps.map((step) => ({
+    id: step.id,
+    owner: nameFor(step.owner),
+    intent: step.intent,
+    status: step.status,
+    needs: step.needs.join("+"),
+    description: step.description,
+    result: step.result ?? "",
   })),
 });
 
@@ -61,17 +61,17 @@ function epicLine(ticket: Ticket, all: ReadonlyMap<string, Ticket>): { epic?: st
  *  another is its author's alone). */
 function partsLine(epic: Ticket, all: ReadonlyMap<string, Ticket>, me: string): { parts: string; unresolved?: string } {
   const { parts, counted, done, unresolved } = epicParts(epic, all);
-  const shown = (t: Ticket) => visibleTo(t, all, me);
+  const shown = (ticket: Ticket) => visibleTo(ticket, all, me);
   return {
-    parts: parts.length === 0 ? "none yet" : `${done} of ${counted} done: ${parts.filter(shown).map((p) => p.id).join(" ")}`,
-    ...(unresolved.length > 0 ? { unresolved: unresolved.filter(shown).map((t) => t.id).join(" ") || `${unresolved.length} not shown to you yet` } : {}),
+    parts: parts.length === 0 ? "none yet" : `${done} of ${counted} done: ${parts.filter(shown).map((part) => part.id).join(" ")}`,
+    ...(unresolved.length > 0 ? { unresolved: unresolved.filter(shown).map((ticket) => ticket.id).join(" ") || `${unresolved.length} not shown to you yet` } : {}),
   };
 }
 
 /** Why an epic is as it is — the cause behind its state, as epicStatus
  *  decides it, said for this reader (a ticket they may not see is unnamed). */
 function becauseLine(epic: Ticket, all: ReadonlyMap<string, Ticket>, me: string): { closedBecause?: string; openBecause?: string } {
-  const st = epicStatus(epic, all);
-  const why = epicBecause(st, all, me);
-  return why ? (st.closed ? { closedBecause: why } : { openBecause: why }) : {};
+  const status = epicStatus(epic, all);
+  const why = epicBecause(status, all, me);
+  return why ? (status.closed ? { closedBecause: why } : { openBecause: why }) : {};
 }

@@ -15,5 +15,5 @@ export const assumedNow = {
   claimedBy,
   setClaimedBy,
   /** still a guess: on an assumed review, not answered by the code's author */
-  isGuess: (x: Decision | Fork): boolean => assumed() !== undefined && x.verdict === undefined && x.basis !== undefined,
+  isGuess: (item: Decision | Fork): boolean => assumed() !== undefined && item.verdict === undefined && item.basis !== undefined,
 };

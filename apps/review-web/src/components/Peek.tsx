@@ -42,9 +42,9 @@ function Declaration(props: { peek: PeekData }) {
       <Show when={props.peek.code}>
         <pre class="peek-code">
           <For each={shown()}>
-            {(line, i) => (
+            {(line, index) => (
               <div>
-                <span class="peek-n">{props.peek.line + i()}</span>
+                <span class="peek-n">{props.peek.line + index()}</span>
                 <CodeLine spans={line} />
               </div>
             )}
@@ -68,8 +68,8 @@ const Retry = () => (
 );
 
 /** "reading the project · 40%" */
-const reading = (r: DefinitionResult): string => {
-  const at = readSoFar(r);
+const reading = (result: DefinitionResult): string => {
+  const at = readSoFar(result);
   return `reading the project${at === null ? "…" : ` · ${at}%`}`;
 };
 
@@ -81,31 +81,31 @@ export function Peek(props: { result: DefinitionResult | null }) {
   const [rest, setRest] = createSignal(false);
   const peeks = () => (props.result && "peeks" in props.result ? props.result.peeks : []);
   const others = () => peeks().slice(1);
-  const overloads = () => others().every((p) => p.file === peeks()[0]?.file);
+  const overloads = () => others().every((other) => other.file === peeks()[0]?.file);
   return (
     <div class="peek">
       <button class="peek-close" type="button" aria-label="Close" onClick={() => closePeek()}>
         ×
       </button>
       <Show when={props.result} fallback={<p class="peek-note">Finding the definition…</p>}>
-        {(r) => (
+        {(result) => (
           <Show
-            when={!("error" in r())}
+            when={!("error" in result())}
             fallback={
               <p class="peek-note">
-                {(r() as { error: string }).error} <Retry />
+                {(result() as { error: string }).error} <Retry />
               </p>
             }
           >
             {/* an answer from a server still reading may be missing things: said, and asked again by the page */}
-            <Show when={stillReading(r()) && peeks().length > 0}>
-              <p class="peek-note">May be incomplete — {reading(r())}</p>
+            <Show when={stillReading(result()) && peeks().length > 0}>
+              <p class="peek-note">May be incomplete — {reading(result())}</p>
             </Show>
             <Show
               when={peeks().length > 0}
               fallback={
                 <p class="peek-note">
-                  {stillReading(r()) ? `Nothing found yet — ${reading(r())}` : "No definition found."}
+                  {stillReading(result()) ? `Nothing found yet — ${reading(result())}` : "No definition found."}
                 </p>
               }
             >
@@ -119,7 +119,7 @@ export function Peek(props: { result: DefinitionResult | null }) {
                     </button>
                   }
                 >
-                  <For each={others()}>{(p) => <Declaration peek={p} />}</For>
+                  <For each={others()}>{(other) => <Declaration peek={other} />}</For>
                 </Show>
               </Show>
             </Show>

@@ -12,10 +12,10 @@ export type { Diagnostic, DiagnosticContext, DiagnosticDeps } from "./registry";
 export const diagnostics: ReadonlyArray<Diagnostic<any>> = [requestTranscripts, shareTranscripts, listTranscripts, attachFiles, fetchAttachments, reviewContext];
 
 /** The agent-facing tool for a diagnostic. All of them say what they are. */
-const toTool = (d: Diagnostic<any>) =>
-  Tool.make(d.id, {
-    description: `DIAGNOSTIC, only when the user asks for it: ${d.summary}`,
-    ...(d.params ? { parameters: d.params } : {}),
+const toTool = (definition: Diagnostic<any>) =>
+  Tool.make(definition.id, {
+    description: `DIAGNOSTIC, only when the user asks for it: ${definition.summary}`,
+    ...(definition.params ? { parameters: definition.params } : {}),
     success: Schema.String,
   });
 

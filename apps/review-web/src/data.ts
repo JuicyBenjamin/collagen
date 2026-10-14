@@ -191,14 +191,14 @@ export type DefinitionResult = ({ readonly peeks: ReadonlyArray<Peek> } & Readin
 /** The server was still reading the project when it answered: what it said
  *  may be incomplete. Said on the page, never shown as if it were the whole
  *  answer, and asked again by the page until it is. */
-export const stillReading = (r: HoverResult | DefinitionResult): boolean => "partial" in r && r.partial === true;
+export const stillReading = (answer: HoverResult | DefinitionResult): boolean => "partial" in answer && answer.partial === true;
 
 /** How far it had read, when it said — for "reading the project · 40%". */
-export const readSoFar = (r: HoverResult | DefinitionResult): number | null => ("progress" in r && typeof r.progress === "number" ? r.progress : null);
+export const readSoFar = (answer: HoverResult | DefinitionResult): number | null => ("progress" in answer && typeof answer.progress === "number" ? answer.progress : null);
 
 /** An answer that may change if asked again — partial, or a failure — is
  *  not one to keep. */
-export const final = (r: HoverResult | DefinitionResult): boolean => !("error" in r) && !("missing" in r) && !stillReading(r);
+export const final = (answer: HoverResult | DefinitionResult): boolean => !("error" in answer) && !("missing" in answer) && !stillReading(answer);
 
 /** The languages the review page can ask a language server about, each
  *  answered by a tool collagen installs on the reader's click. */

@@ -18,12 +18,12 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
   // a review ticket shows a review section of its own, and enter there opens
   // the page — nothing to add to the diagnostics row
   fromContext: () => null,
-  run: ({ ticketId, about, anyway }, ctx, { rooms, me, reviewStarted }) =>
+  run: ({ ticketId, about, anyway }, context, { rooms, me, reviewStarted }) =>
     Effect.gen(function* () {
-      const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === ctx.roomId);
-      if (!h) return "failed: that room is gone";
-      const review = (yield* SubscriptionRef.get(h.room.reviews)).find((r) => r.ticketId === ticketId);
-      const all = yield* SubscriptionRef.get(h.room.tickets);
+      const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === context.roomId);
+      if (!handle) return "failed: that room is gone";
+      const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((existing) => existing.ticketId === ticketId);
+      const all = yield* SubscriptionRef.get(handle.room.tickets);
       const ticket = all.get(ticketId);
       // a ticket still waiting on another (after) is its author's alone: its
       // readers take it in order, so to them it is not there yet
@@ -42,13 +42,13 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
             ...(closed ? {} : { toClose: unresolved.length === 0 ? "everything in it is resolved: it can close" : `${unresolved.length} still to resolve, exclude or move out first` }),
           },
           tickets: parts
-            .filter((t) => visibleTo(t, all, me))
-            .map((t) => ({
-              id: t.id,
-              kind: t.kind,
-              project: t.project,
-              goal: t.goal,
-              state: excludedFromEpic(t) ? "excluded" : closedAs(t) === "dropped" ? "dropped" : closedAs(t) === "done" ? "closed as done" : finished(t) ? "done" : isClosed(t) ? "closed" : "open",
+            .filter((part) => visibleTo(part, all, me))
+            .map((part) => ({
+              id: part.id,
+              kind: part.kind,
+              project: part.project,
+              goal: part.goal,
+              state: excludedFromEpic(part) ? "excluded" : closedAs(part) === "dropped" ? "dropped" : closedAs(part) === "done" ? "closed as done" : finished(part) ? "done" : isClosed(part) ? "closed" : "open",
             })),
         });
       }
@@ -83,15 +83,15 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
         return `nothing in the why mentions "${about}" — call review-context without 'about' for all ${review.decisions.length} decision(s) and ${review.forks.length} fork(s), or ask ${review.authorName} through their person (send-to-peer, with this ticketId)${opened}`;
       }
       // what readers said on the code, line by line — the review page's comments, in the room
-      const said = (yield* SubscriptionRef.get(h.room.comments)).filter((c) => c.ticketId === ticketId && (!about || `${c.file} ${c.body}`.toLowerCase().includes(about.toLowerCase())));
+      const said = (yield* SubscriptionRef.get(handle.room.comments)).filter((comment) => comment.ticketId === ticketId && (!about || `${comment.file} ${comment.body}`.toLowerCase().includes(about.toLowerCase())));
       const comments =
         said.length > 0
           ? {
-              comments: said.map((c) => ({
-                by: c.authorName,
-                at: `${c.file}:${c.startLine !== undefined ? `${c.startLine}-` : ""}${c.line}${c.side === "LEFT" ? " (old)" : ""}`,
-                body: c.body,
-                ...(c.host ? { onHost: c.host.url } : {}),
+              comments: said.map((comment) => ({
+                by: comment.authorName,
+                at: `${comment.file}:${comment.startLine !== undefined ? `${comment.startLine}-` : ""}${comment.line}${comment.side === "LEFT" ? " (old)" : ""}`,
+                body: comment.body,
+                ...(comment.host ? { onHost: comment.host.url } : {}),
               })),
             }
           : {};

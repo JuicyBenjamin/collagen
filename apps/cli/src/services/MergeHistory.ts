@@ -51,15 +51,15 @@ export const timelineOf = (
   comments: ReadonlyArray<ReviewComment>,
   me: string,
 ): ReadonlyArray<ProjectTimeline> =>
-  read.map((p) => {
-    if ("none" in p) return p;
-    const host = hostOf(p.repo);
-    const code = host ? reviewedCode(p.project, tickets, reviews, comments, me, host) : [];
+  read.map((project) => {
+    if ("none" in project) return project;
+    const host = hostOf(project.repo);
+    const code = host ? reviewedCode(project.project, tickets, reviews, comments, me, host) : [];
     return {
-      project: p.project,
-      base: p.base,
-      more: p.more,
-      merges: ticketsOfMerges(p.merges, code).map(({ merge, tickets: ids }) => ({ merge, tickets: lineage(ids, tickets, me) })),
+      project: project.project,
+      base: project.base,
+      more: project.more,
+      merges: ticketsOfMerges(project.merges, code).map(({ merge, tickets: ids }) => ({ merge, tickets: lineage(ids, tickets, me) })),
     };
   });
 
@@ -83,19 +83,19 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
         );
       });
 
-    const projectMerges = (p: Project, want: number): Effect.Effect<ProjectMerges> =>
+    const projectMerges = (project: Project, want: number): Effect.Effect<ProjectMerges> =>
       Effect.gen(function* () {
-        const repo = repoWebUrl(p.path);
-        if (!repo) return { project: p.name, none: "no remote" };
+        const repo = repoWebUrl(project.path);
+        if (!repo) return { project: project.name, none: "no remote" };
         const host = hostOf(repo);
-        if (!host) return { project: p.name, none: "host not supported" };
-        const base = defaultBranchOf(p.path);
-        if (!base) return { project: p.name, none: "no default branch" };
+        if (!host) return { project: project.name, none: "host not supported" };
+        const base = defaultBranchOf(project.path);
+        if (!base) return { project: project.name, none: "no default branch" };
         return yield* readTo(`${repo} ${base}`, host, repo, base, want).pipe(
-          Effect.map((read): ProjectMerges => ({ project: p.name, repo, base, ...latestMerges(read, want) })),
+          Effect.map((read): ProjectMerges => ({ project: project.name, repo, base, ...latestMerges(read, want) })),
           Effect.catchTags({
-            HostCliMissing: () => Effect.succeed({ project: p.name, none: "install gh and run gh auth login" }),
-            HostRefused: (e) => Effect.succeed({ project: p.name, none: e.reason }),
+            HostCliMissing: () => Effect.succeed({ project: project.name, none: "install gh and run gh auth login" }),
+            HostRefused: (error) => Effect.succeed({ project: project.name, none: error.reason }),
           }),
         );
       });
@@ -104,7 +104,7 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
     const roomMerges = (roomId: string, shown: Shown) =>
       Effect.gen(function* () {
         const projects = [...((yield* store.get).rooms[roomId] ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-        return yield* Effect.forEach(projects, (p) => projectMerges(p, shown[p.name] ?? MERGES_PAGE), { concurrency: 4 });
+        return yield* Effect.forEach(projects, (project) => projectMerges(project, shown[project.name] ?? MERGES_PAGE), { concurrency: 4 });
       });
 
     const viewOf = (roomId: string) =>
@@ -122,11 +122,11 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
           Effect.map(viewOf(roomId), (ref) =>
             SubscriptionRef.changes(ref).pipe(
               Stream.zipWithPrevious,
-              Stream.switchMap(([before, v]) => {
-                const read = Stream.fromEffect(roomMerges(roomId, v.shown));
+              Stream.switchMap(([before, current]) => {
+                const read = Stream.fromEffect(roomMerges(roomId, current.shown));
                 // the tab opened: what was merged since is read too
                 if (Option.isNone(before)) return Stream.concat(Stream.succeed(null), Stream.fromEffect(Effect.sync(() => pages.clear())).pipe(Stream.drain, Stream.concat(read)));
-                return before.value.refreshed !== v.refreshed ? Stream.concat(Stream.succeed(null), read) : read;
+                return before.value.refreshed !== current.refreshed ? Stream.concat(Stream.succeed(null), read) : read;
               }),
             ),
           ),
@@ -134,8 +134,8 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
       /** The reader nears the end of a project's `count` merges: show more. */
       more: (roomId: string, project: string, count: number) =>
         Effect.flatMap(viewOf(roomId), (ref) =>
-          SubscriptionRef.updateSome(ref, (v) =>
-            (v.shown[project] ?? MERGES_PAGE) < count + MERGES_PAGE ? Option.some({ ...v, shown: { ...v.shown, [project]: count + MERGES_PAGE } }) : Option.none(),
+          SubscriptionRef.updateSome(ref, (current) =>
+            (current.shown[project] ?? MERGES_PAGE) < count + MERGES_PAGE ? Option.some({ ...current, shown: { ...current.shown, [project]: count + MERGES_PAGE } }) : Option.none(),
           ),
         ),
       /** Forget what was read, and start the room over from its first page. */
@@ -143,7 +143,7 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
         Effect.flatMap(viewOf(roomId), (ref) =>
           Effect.andThen(
             Effect.sync(() => pages.clear()),
-            SubscriptionRef.update(ref, (v) => ({ shown: {}, refreshed: v.refreshed + 1 })),
+            SubscriptionRef.update(ref, (current) => ({ shown: {}, refreshed: current.refreshed + 1 })),
           ),
         ),
       /** The merge history page's data: a room's timeline, `shown` merges of
@@ -152,7 +152,7 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
        *  names are of one moment. Null for a room not open here. */
       page: (roomId: string, shown: Shown, fresh: boolean) =>
         Effect.gen(function* () {
-          const handle = (yield* SubscriptionRef.get(rooms.handles)).find((h) => h.id === roomId);
+          const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === roomId);
           if (!handle) return null;
           if (fresh) pages.clear();
           const read = yield* roomMerges(roomId, shown);
@@ -160,45 +160,45 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
           const me = identity.pubkey;
           const tickets = yield* SubscriptionRef.get(room.tickets);
           const reviews = yield* SubscriptionRef.get(room.reviews);
-          const why = new Map(reviews.map((r) => [r.ticketId, r] as const));
+          const why = new Map(reviews.map((review) => [review.ticketId, review] as const));
           const comments = yield* SubscriptionRef.get(room.comments);
           const peers = yield* SubscriptionRef.get(room.roster);
           const members = yield* SubscriptionRef.get(room.members);
           const name = (yield* SubscriptionRef.get(room.meta)).name;
           const nameFor = (key: string): string =>
-            key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
+            key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
           return {
             room: name,
             readAt: new Date().toISOString(),
-            projects: timelineOf(read, tickets, reviews, comments, me).map((p) =>
-              "none" in p
-                ? p
+            projects: timelineOf(read, tickets, reviews, comments, me).map((project) =>
+              "none" in project
+                ? project
                 : {
-                    project: p.project,
-                    base: p.base,
-                    more: p.more,
-                    merges: p.merges.map(({ merge, tickets: from }) => ({
+                    project: project.project,
+                    base: project.base,
+                    more: project.more,
+                    merges: project.merges.map(({ merge, tickets: from }) => ({
                       number: merge.number,
                       url: merge.url,
                       title: merge.title,
                       branch: merge.branch,
                       at: merge.at,
-                      epics: [...new Set(from.flatMap((t) => epicOf(t) ?? []))].flatMap((id) => {
+                      epics: [...new Set(from.flatMap((ticket) => epicOf(ticket) ?? []))].flatMap((id) => {
                         const epic = tickets.get(id);
                         return epic && visibleTo(epic, tickets, me) ? [{ id, name: ticketName(epic) }] : [];
                       }),
-                      tickets: from.map((t) => ({
-                        id: t.id,
-                        name: ticketName(t),
-                        author: nameFor(t.createdBy),
-                        mine: t.createdBy === me,
-                        closed: isClosed(t),
-                        kind: t.kind,
-                        decisions: (whyOpen(t, me) ? (why.get(t.id)?.decisions ?? []) : []).map((d) => ({
-                          title: d.title ?? d.what,
-                          what: d.what,
-                          ...(d.userWhy ? { userWhy: d.userWhy } : {}),
-                          ...(d.agentWhy ? { agentWhy: d.agentWhy } : {}),
+                      tickets: from.map((ticket) => ({
+                        id: ticket.id,
+                        name: ticketName(ticket),
+                        author: nameFor(ticket.createdBy),
+                        mine: ticket.createdBy === me,
+                        closed: isClosed(ticket),
+                        kind: ticket.kind,
+                        decisions: (whyOpen(ticket, me) ? (why.get(ticket.id)?.decisions ?? []) : []).map((decision) => ({
+                          title: decision.title ?? decision.what,
+                          what: decision.what,
+                          ...(decision.userWhy ? { userWhy: decision.userWhy } : {}),
+                          ...(decision.agentWhy ? { agentWhy: decision.agentWhy } : {}),
                         })),
                       })),
                     })),

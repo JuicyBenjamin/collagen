@@ -36,8 +36,8 @@ export const readTicket = (raw: unknown): Read<Ticket> | null => {
   if (Option.isSome(now)) return { value: now.value, migrated: false };
   const old = legacy(raw);
   if (Option.isNone(old)) return null;
-  const t = old.value;
-  return { value: { ...t, structureAt: t.structureAt ?? t.updatedAt }, migrated: true };
+  const ticket = old.value;
+  return { value: { ...ticket, structureAt: ticket.structureAt ?? ticket.updatedAt }, migrated: true };
 };
 
 /** The kinds of view row a migration exists for, by key prefix. */
@@ -47,8 +47,8 @@ export const migrateRow = (prefix: string, raw: unknown): Read<unknown> | null =
  *  an older shape we know. */
 export const migrateOp = (raw: unknown): { readonly op: "ticket"; readonly ticket: Ticket } | null => {
   if (typeof raw !== "object" || raw === null) return null;
-  const v = raw as Record<string, unknown>;
-  if (v.op !== "ticket") return null;
-  const t = readTicket(v.ticket);
-  return t ? { op: "ticket", ticket: t.value } : null;
+  const record = raw as Record<string, unknown>;
+  if (record.op !== "ticket") return null;
+  const read = readTicket(record.ticket);
+  return read ? { op: "ticket", ticket: read.value } : null;
 };

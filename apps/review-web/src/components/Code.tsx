@@ -8,18 +8,18 @@ import { spansIn, type Segment, type Was } from "../inline";
  *  be turned back into a character. */
 export function CodeLine(props: { spans: ReadonlyArray<Span> }) {
   const starts = () => {
-    let o = 0;
-    return props.spans.map((s) => {
-      const at = o;
-      o += s.value.length;
+    let offset = 0;
+    return props.spans.map((span) => {
+      const at = offset;
+      offset += span.value.length;
       return at;
     });
   };
   return (
     <For each={props.spans}>
-      {(s, i) => (
-        <span class={s.className ? `th-${s.className}` : undefined} data-o={starts()[i()]}>
-          {s.value}
+      {(span, index) => (
+        <span class={span.className ? `th-${span.className}` : undefined} data-o={starts()[index()]}>
+          {span.value}
         </span>
       )}
     </For>
@@ -27,21 +27,21 @@ export function CodeLine(props: { spans: ReadonlyArray<Span> }) {
 }
 
 /** The character under a pointer in a drawn line: its span's start (data-o) plus the offset in it. */
-const colAt = (x: number, y: number): number | null => {
-  const pos = document.caretPositionFromPoint?.(x, y);
-  const node = pos?.offsetNode ?? document.caretRangeFromPoint?.(x, y)?.startContainer;
-  const offset = pos?.offset ?? document.caretRangeFromPoint?.(x, y)?.startOffset ?? 0;
+const colAt = (pointerX: number, pointerY: number): number | null => {
+  const pos = document.caretPositionFromPoint?.(pointerX, pointerY);
+  const node = pos?.offsetNode ?? document.caretRangeFromPoint?.(pointerX, pointerY)?.startContainer;
+  const offset = pos?.offset ?? document.caretRangeFromPoint?.(pointerX, pointerY)?.startOffset ?? 0;
   const span = node?.parentElement?.closest("[data-o]");
   return node && span ? Number(span.getAttribute("data-o")) + offset : null;
 };
 
 /** The word of the old line that the new line's character `col` stood in, as [from, to). */
 const wasWordAt = (map: ReadonlyArray<Was>, old: string, col: number): readonly [number, number] | null => {
-  const m = map.find((w) => col >= w.now && col < w.now + w.len);
-  if (!m) return null;
-  const at = m.was + (col - m.now);
-  const isWord = (c: string | undefined) => c !== undefined && /[\p{L}\p{N}_$]/u.test(c);
-  if (!isWord(old[at])) return [m.was, m.was + m.len];
+  const match = map.find((word) => col >= word.now && col < word.now + word.length);
+  if (!match) return null;
+  const at = match.was + (col - match.now);
+  const isWord = (character: string | undefined) => character !== undefined && /[\p{L}\p{N}_$]/u.test(character);
+  if (!isWord(old[at])) return [match.was, match.was + match.length];
   let from = at;
   let to = at;
   while (from > 0 && isWord(old[from - 1])) from--;
@@ -63,10 +63,10 @@ export function ChangedLine(props: {
 }) {
   const [before, setBefore] = createSignal<{ readonly left: number; readonly bottom: number; readonly width: number; readonly lit: readonly [number, number] | null } | null>(null);
   let line: HTMLSpanElement | undefined;
-  const point = (e: MouseEvent) => {
+  const point = (event: MouseEvent) => {
     const cell = line?.closest("td")?.getBoundingClientRect();
     if (!cell) return;
-    const col = colAt(e.clientX, e.clientY);
+    const col = colAt(event.clientX, event.clientY);
     setBefore({ left: cell.left, bottom: innerHeight - cell.top + 4, width: cell.width, lit: col === null ? null : wasWordAt(props.map, props.old.text, col) });
   };
   return (
@@ -77,9 +77,9 @@ export function ChangedLine(props: {
           const parts = () => spansIn(from.spans, from.text, seg.at, seg.at + seg.text.length);
           const body = (
             <For each={parts()}>
-              {(p) => (
-                <span class={p.span.className ? `th-${p.span.className}` : undefined} data-o={seg.kind === "removed" ? undefined : p.at}>
-                  {p.span.value}
+              {(part) => (
+                <span class={part.span.className ? `th-${part.span.className}` : undefined} data-o={seg.kind === "removed" ? undefined : part.at}>
+                  {part.span.value}
                 </span>
               )}
             </For>
@@ -90,12 +90,12 @@ export function ChangedLine(props: {
         }}
       </For>
       <Show when={before()}>
-        {(b) => (
+        {(preview) => (
           <Portal>
-            <div class="before" style={{ left: `${b().left}px`, bottom: `${b().bottom}px`, "max-width": `${b().width}px` }}>
+            <div class="before" style={{ left: `${preview().left}px`, bottom: `${preview().bottom}px`, "max-width": `${preview().width}px` }}>
               <span class="before-label">before</span>
               <code>
-                <Show when={b().lit} fallback={props.old.text}>
+                <Show when={preview().lit} fallback={props.old.text}>
                   {(lit) => (
                     <>
                       {props.old.text.slice(0, lit()[0])}

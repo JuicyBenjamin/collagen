@@ -44,4 +44,4 @@ export interface Diagnostic<P = unknown> {
   readonly open?: (ctx: DiagnosticContext, back: Route) => Route;
 }
 
-export const diagnostic = <P>(d: Diagnostic<P>): Diagnostic<P> => d;
+export const diagnostic = <P>(definition: Diagnostic<P>): Diagnostic<P> => definition;

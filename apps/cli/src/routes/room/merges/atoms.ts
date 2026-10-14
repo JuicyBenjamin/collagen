@@ -16,7 +16,7 @@ export const mergesAtom = runtimeAtom.atom(
     Effect.gen(function* () {
       const rooms = yield* Rooms;
       const history = yield* MergeHistory;
-      return rooms.watch((h) => history.view(h.id));
+      return rooms.watch((handle) => history.view(handle.id));
     }),
   ),
 );

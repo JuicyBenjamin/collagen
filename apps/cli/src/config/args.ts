@@ -23,6 +23,6 @@ export const roomOption = Flag.String("room").pipe(
  *  reaches us as [..., "--", "--profile", "x"]), and @effect/cli rejects the bare
  *  `--`. Drop the first one so both `pnpm dev -- --flag` and `pnpm dev --flag` work. */
 export function stripArgSeparator(argv: ReadonlyArray<string>): string[] {
-  const i = argv.indexOf("--");
-  return i === -1 ? [...argv] : [...argv.slice(0, i), ...argv.slice(i + 1)];
+  const index = argv.indexOf("--");
+  return index === -1 ? [...argv] : [...argv.slice(0, index), ...argv.slice(index + 1)];
 }

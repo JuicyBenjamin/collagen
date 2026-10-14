@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { toolIds, toolOf } from "@collagen/review-web/data";
 import { composerVendorDir, installArgs, installed, packageDir, toolRoot, TOOLS } from "./languageTools";
 
-const ts = TOOLS.typescript;
+const typescriptTool = TOOLS.typescript;
 
 describe("the pinned language tools", () => {
   it("every language the page knows has a tool, and every file finds its own", () => {
@@ -36,26 +36,26 @@ describe("the pinned language tools", () => {
   });
 
   it("lives under collagen's own folder, by package and version", () => {
-    expect(toolRoot("/cfg", ts)).toBe(`/cfg/tools/typescript-${ts.version}`);
-    expect(packageDir("/cfg", ts, {})).toBe(`/cfg/tools/typescript-${ts.version}/node_modules/typescript`);
-    expect(packageDir("/cfg", ts, { COLLAGEN_TYPESCRIPT: "/elsewhere/typescript" })).toBe("/elsewhere/typescript");
+    expect(toolRoot("/cfg", typescriptTool)).toBe(`/cfg/tools/typescript-${typescriptTool.version}`);
+    expect(packageDir("/cfg", typescriptTool, {})).toBe(`/cfg/tools/typescript-${typescriptTool.version}/node_modules/typescript`);
+    expect(packageDir("/cfg", typescriptTool, { COLLAGEN_TYPESCRIPT: "/elsewhere/typescript" })).toBe("/elsewhere/typescript");
   });
 
   it("installs exactly the pinned version, without running install scripts", () => {
-    const args = installArgs("/r", ts);
-    expect(args).toContain(`typescript@${ts.version}`);
+    const args = installArgs("/r", typescriptTool);
+    expect(args).toContain(`typescript@${typescriptTool.version}`);
     expect(args).toContain("--ignore-scripts");
     expect(args.slice(0, 3)).toEqual(["install", "--prefix", "/r"]);
   });
 
   it("is installed only when the pinned version is there", () => {
     const dir = mkdtempSync(join(tmpdir(), "lang-tool-"));
-    expect(installed(dir, ts, {})).toBe(false);
-    mkdirSync(dirname(join(dir, ts.bin)), { recursive: true });
-    writeFileSync(join(dir, ts.bin), "");
+    expect(installed(dir, typescriptTool, {})).toBe(false);
+    mkdirSync(dirname(join(dir, typescriptTool.bin)), { recursive: true });
+    writeFileSync(join(dir, typescriptTool.bin), "");
     writeFileSync(join(dir, "package.json"), JSON.stringify({ version: "6.0.0" }));
-    expect(installed(dir, ts, {})).toBe(false);
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ version: ts.version }));
-    expect(installed(dir, ts, {})).toBe(true);
+    expect(installed(dir, typescriptTool, {})).toBe(false);
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ version: typescriptTool.version }));
+    expect(installed(dir, typescriptTool, {})).toBe(true);
   });
 });

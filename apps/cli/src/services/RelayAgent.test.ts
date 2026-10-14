@@ -29,7 +29,7 @@ const bobsMessage: RoomMessage = {
   findings: "average([2,4]) returns NaN on main; I suspect the loop bound (i <= length). Can you confirm before Friday's release?",
   ts: 1,
 };
-const nudge = nudgePrompt({ cwd: "/", mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice", msg: bobsMessage, sessionId: Option.some("s1") });
+const nudge = nudgePrompt({ cwd: "/", mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice", message: bobsMessage, sessionId: Option.some("s1") });
 
 /** The same tool definitions the MCP server exposes — descriptions included. */
 const RelayToolkit = Toolkit.make(PendingThreads, GetMessages, SendToPeer);
@@ -39,7 +39,7 @@ const stateWith = (preferredAi: string | null) =>
     StateStore,
     Effect.gen(function* () {
       const state = yield* SubscriptionRef.make<LocalState>({ preferredAi, rooms: {} });
-      return { state, get: SubscriptionRef.get(state), update: (f: (s: LocalState) => LocalState) => SubscriptionRef.update(state, f) } as const;
+      return { state, get: SubscriptionRef.get(state), update: (change: (s: LocalState) => LocalState) => SubscriptionRef.update(state, change) } as const;
     }),
   );
 
@@ -81,29 +81,29 @@ const system = (text: string): Prompt.MessageEncoded => ({ role: "system", conte
 const converse = (turns: ReadonlyArray<Turn>, userTurns: ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const model = yield* scriptedModel(turns);
-    const d = recording();
+    const recorded = recording();
     const program = Effect.gen(function* () {
       const inbox = yield* Inbox;
       const outbox = yield* Outbox;
       yield* inbox.push(ROOM, bobsMessage);
       const responses = [];
       for (const text of userTurns) {
-        const r = yield* LanguageModel.generateText({ prompt: [system(nudge), user(text)], toolkit: RelayToolkit });
+        const response = yield* LanguageModel.generateText({ prompt: [system(nudge), user(text)], toolkit: RelayToolkit });
         responses.push({
-          text: r.text,
-          calls: r.toolCalls.map((c) => ({ name: c.name, params: c.params as Record<string, unknown> })),
-          results: r.toolResults.map((x) => String(x.result)),
+          text: response.text,
+          calls: response.toolCalls.map((call) => ({ name: call.name, params: call.params as Record<string, unknown> })),
+          results: response.toolResults.map((toolResult) => String(toolResult.result)),
           pending: (yield* inbox.pending(ROOM)).length,
           outbox: yield* outbox.all,
         });
       }
-      return { responses, seen: yield* model.seen, sent: d.sent };
+      return { responses, seen: yield* model.seen, sent: recorded.sent };
     });
     return yield* program.pipe(
       Effect.provide(
         Layer.mergeAll(model.layer, handlers).pipe(
           Layer.provideMerge(Layer.mergeAll(Inbox.layer, Outbox.layer)),
-          Layer.provideMerge(d.layer),
+          Layer.provideMerge(recorded.layer),
           Layer.provideMerge(stateWith("codex")),
         ),
       ),
@@ -131,7 +131,7 @@ describe("what we tell the receiving agent", () => {
 
   it("the tool descriptions the agent sees carry the same rules", async () => {
     const { seen } = await Effect.runPromise(converse([{ text: "…" }], ["Continue."]));
-    const byName = Object.fromEntries(seen[0]!.tools.map((t) => [t.name, t.description]));
+    const byName = Object.fromEntries(seen[0]!.tools.map((tool) => [tool.name, tool.description]));
     expect(byName["get-messages"]).toContain("never fill gaps from your own head");
     expect(byName["get-messages"]).toContain("the person on this side decides");
     expect(byName["send-to-peer"]).toContain("send only what your user asked you to send");
@@ -185,6 +185,6 @@ describe("the tools, under an agent that follows the rules", () => {
     expect(responses[3]!.outbox).toHaveLength(2);
     // newest first: the question is the record on top
     expect(responses[3]!.outbox[0]!.outgoing).toMatchObject({ kind: "message", intent: "ask", findings: "Which branch are you seeing this on?" });
-    expect(sent.map((x) => (x.kind === "message" ? x.intent : x.kind))).toEqual(["reply", "ask"]);
+    expect(sent.map((outgoing) => (outgoing.kind === "message" ? outgoing.intent : outgoing.kind))).toEqual(["reply", "ask"]);
   });
 });

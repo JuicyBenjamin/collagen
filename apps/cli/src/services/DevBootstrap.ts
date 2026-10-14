@@ -32,18 +32,18 @@ const processAlive = (pid: number): boolean => {
  *  machine on a dead local DHT — silently, looking exactly like "no peers".
  *  None on any failure — absence of the file is the normal production case. */
 export const loadDevBootstrap = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const raw = yield* fs.readFileString(bootstrapFile).pipe(Effect.option);
+  const fileSystem = yield* FileSystem.FileSystem;
+  const raw = yield* fileSystem.readFileString(bootstrapFile).pipe(Effect.option);
   if (Option.isNone(raw)) return Option.none<typeof Bootstrap.Type>();
   const parsed = yield* decode(raw.value).pipe(Effect.option);
   if (Option.isNone(parsed)) {
     yield* Effect.logWarning(`ignoring unreadable dev testnet file ${bootstrapFile} — using the public DHT`);
-    yield* fs.remove(bootstrapFile).pipe(Effect.ignore);
+    yield* fileSystem.remove(bootstrapFile).pipe(Effect.ignore);
     return Option.none<typeof Bootstrap.Type>();
   }
   if (!processAlive(parsed.value.pid)) {
     yield* Effect.logWarning(`stale dev testnet file (pid ${parsed.value.pid} is gone) — removing it, using the public DHT`);
-    yield* fs.remove(bootstrapFile).pipe(Effect.ignore);
+    yield* fileSystem.remove(bootstrapFile).pipe(Effect.ignore);
     return Option.none<typeof Bootstrap.Type>();
   }
   yield* Effect.log(`dev testnet detected (pid ${parsed.value.pid}) — joining the local DHT`);

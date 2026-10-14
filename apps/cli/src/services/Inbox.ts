@@ -8,7 +8,7 @@ import { StateStore } from "./StateStore";
  *  position on the room's log; step deliveries are local and have none. */
 export interface Received {
   readonly roomId: string;
-  readonly msg: RoomMessage;
+  readonly message: RoomMessage;
   readonly seq?: number;
 }
 
@@ -26,7 +26,7 @@ export interface PendingThread {
  *  someone else settled, took, weighed in, revised — is context for their
  *  agent (it resumes an adopted thread with it) and asks nothing of them.
  *  The rail's dot counts only the first kind: a mark means you must act. */
-export const wantsPerson = (msg: RoomMessage): boolean => !msg.intent.startsWith("ticket-update:");
+export const wantsPerson = (message: RoomMessage): boolean => !message.intent.startsWith("ticket-update:");
 
 /** What is waiting for this reader. Messages themselves live on each room's
  *  log; "waiting" is local: a message is pending until it is pulled with
@@ -39,14 +39,14 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
     const buffer = yield* SubscriptionRef.make<ReadonlyArray<Received>>([]);
 
     const cursor = (roomId: string, threadId: string) =>
-      store.get.pipe(Effect.map((s) => s.consumed?.[roomId]?.[threadId] ?? -1));
+      store.get.pipe(Effect.map((state) => state.consumed?.[roomId]?.[threadId] ?? -1));
 
     /** Offer a message; already-pulled (by cursor) or already-buffered ones are dropped. */
-    const push = (roomId: string, msg: RoomMessage, seq?: number) =>
+    const push = (roomId: string, message: RoomMessage, seq?: number) =>
       Effect.gen(function* () {
-        if (seq !== undefined && seq <= (yield* cursor(roomId, msg.threadId))) return;
-        yield* SubscriptionRef.update(buffer, (b) =>
-          b.some((e) => e.msg.id === msg.id) ? b : [...b, { roomId, msg, seq }],
+        if (seq !== undefined && seq <= (yield* cursor(roomId, message.threadId))) return;
+        yield* SubscriptionRef.update(buffer, (waiting) =>
+          waiting.some((received) => received.message.id === message.id) ? waiting : [...waiting, { roomId, message, seq }],
         );
       });
 
@@ -54,43 +54,43 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
      *  and remember how far each thread was read. */
     const take = (roomId: string, threadId?: string) =>
       Effect.gen(function* () {
-        const mine = (e: Received) => e.roomId === roomId && (threadId === undefined || e.msg.threadId === threadId);
-        const taken = yield* SubscriptionRef.modify(buffer, (b) => [b.filter(mine), b.filter((e) => !mine(e))] as const);
+        const mine = (received: Received) => received.roomId === roomId && (threadId === undefined || received.message.threadId === threadId);
+        const taken = yield* SubscriptionRef.modify(buffer, (waiting) => [waiting.filter(mine), waiting.filter((received) => !mine(received))] as const);
         const advanced = new Map<string, number>();
-        for (const e of taken) {
-          if (e.seq === undefined) continue;
-          advanced.set(e.msg.threadId, Math.max(advanced.get(e.msg.threadId) ?? -1, e.seq));
+        for (const received of taken) {
+          if (received.seq === undefined) continue;
+          advanced.set(received.message.threadId, Math.max(advanced.get(received.message.threadId) ?? -1, received.seq));
         }
         if (advanced.size > 0) {
-          yield* store.update((s) => ({
-            ...s,
+          yield* store.update((state) => ({
+            ...state,
             consumed: {
-              ...(s.consumed ?? {}),
-              [roomId]: { ...(s.consumed?.[roomId] ?? {}), ...Object.fromEntries(advanced) },
+              ...(state.consumed ?? {}),
+              [roomId]: { ...(state.consumed?.[roomId] ?? {}), ...Object.fromEntries(advanced) },
             },
           }));
         }
-        return taken.map((e) => e.msg);
+        return taken.map((received) => received.message);
       });
 
     /** Non-destructive read of one thread's queued messages. */
     const peekThread = (threadId: string) =>
-      SubscriptionRef.get(buffer).pipe(Effect.map((b) => b.filter((e) => e.msg.threadId === threadId)));
+      SubscriptionRef.get(buffer).pipe(Effect.map((waiting) => waiting.filter((received) => received.message.threadId === threadId)));
 
     /** One row per waiting thread in a room (newest-first), without draining. */
     const pending = (roomId: string) =>
       SubscriptionRef.get(buffer).pipe(
-        Effect.map((b) => {
+        Effect.map((waiting) => {
           const byThread = new Map<string, PendingThread>();
-          for (const { msg } of b.filter((e) => e.roomId === roomId)) {
-            const cur = byThread.get(msg.threadId);
-            byThread.set(msg.threadId, {
-              threadId: msg.threadId,
-              from: msg.fromName,
-              project: msg.project,
-              count: (cur?.count ?? 0) + 1,
-              lastIntent: msg.intent,
-              lastTs: msg.ts,
+          for (const { message } of waiting.filter((received) => received.roomId === roomId)) {
+            const existing = byThread.get(message.threadId);
+            byThread.set(message.threadId, {
+              threadId: message.threadId,
+              from: message.fromName,
+              project: message.project,
+              count: (existing?.count ?? 0) + 1,
+              lastIntent: message.intent,
+              lastTs: message.ts,
             });
           }
           return [...byThread.values()].sort((a, b) => b.lastTs - a.lastTs);
@@ -101,11 +101,11 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
      *  (`unread`), and the part of it that asks the person to act
      *  (`needsYou`, the rail's dot). */
     const unread = SubscriptionRef.get(buffer).pipe(
-      Effect.map((b) => {
+      Effect.map((waiting) => {
         const counts = new Map<string, { unread: number; needsYou: number }>();
-        for (const e of b) {
-          const c = counts.get(e.roomId) ?? { unread: 0, needsYou: 0 };
-          counts.set(e.roomId, { unread: c.unread + 1, needsYou: c.needsYou + (wantsPerson(e.msg) ? 1 : 0) });
+        for (const received of waiting) {
+          const tally = counts.get(received.roomId) ?? { unread: 0, needsYou: 0 };
+          counts.set(received.roomId, { unread: tally.unread + 1, needsYou: tally.needsYou + (wantsPerson(received.message) ? 1 : 0) });
         }
         return counts as ReadonlyMap<string, { readonly unread: number; readonly needsYou: number }>;
       }),

@@ -208,11 +208,11 @@ const headline = (symptom: string): string => {
 
 /** A work item's stable id: the one the agent gave, else its intent. Two items
  *  that would share one is a refusal, not a silent overwrite. */
-const workId = (w: { readonly id?: string; readonly intent: string }): string => (w.id ?? w.intent).trim().replace(/\s+/g, "-");
+const workId = (item: { readonly id?: string; readonly intent: string }): string => (item.id ?? item.intent).trim().replace(/\s+/g, "-");
 const duplicateWorkId = (work: ReadonlyArray<{ readonly id?: string; readonly intent: string }>): string | null => {
   const seen = new Set<string>();
-  for (const w of work) {
-    const id = workId(w);
+  for (const item of work) {
+    const id = workId(item);
     if (seen.has(id)) return id;
     seen.add(id);
   }
@@ -755,9 +755,9 @@ const makeHandlers = Effect.gen(function* () {
     // Every tool is scoped to the room the user is looking at — resolved per
     // call, so switching rooms retargets all of them without a reconnect.
     const focusedRoom = Effect.gen(function* () {
-      const h = yield* rooms.current;
-      const meta = yield* SubscriptionRef.get(h.room.meta);
-      return { id: h.id, name: meta.name, room: h.room };
+      const handle = yield* rooms.current;
+      const meta = yield* SubscriptionRef.get(handle.room.meta);
+      return { id: handle.id, name: meta.name, room: handle.room };
     });
 
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
@@ -768,10 +768,10 @@ const makeHandlers = Effect.gen(function* () {
       const lookup = (key: string) =>
         key === identity.pubkey
           ? myName
-          : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 12));
+          : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 12));
       const reviews = yield* SubscriptionRef.get(room.reviews);
       const all = yield* SubscriptionRef.get(room.tickets);
-      return ticketView(ticket, lookup, reviews.find((r) => r.ticketId === ticket.id), heldBy(ticket, all), all, identity.pubkey);
+      return ticketView(ticket, lookup, reviews.find((review) => review.ticketId === ticket.id), heldBy(ticket, all), all, identity.pubkey);
     });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
@@ -807,14 +807,14 @@ const makeHandlers = Effect.gen(function* () {
 
     const roomLines = Effect.gen(function* () {
       const all = yield* rooms.summaries;
-      const f = readProfileFile(profile);
-      return all.map((r) => ({
-        shortId: r.shortId,
-        name: r.name,
-        online: r.online,
-        unread: r.unread,
-        lookingAt: r.focused,
-        inviteId: formatInvite(f.rooms?.find((x) => x.id === r.id)?.id ?? r.id, NET),
+      const profileFile = readProfileFile(profile);
+      return all.map((summary) => ({
+        shortId: summary.shortId,
+        name: summary.name,
+        online: summary.online,
+        unread: summary.unread,
+        lookingAt: summary.focused,
+        inviteId: formatInvite(profileFile.rooms?.find((roomEntry) => roomEntry.id === summary.id)?.id ?? summary.id, NET),
       }));
     });
 
@@ -862,9 +862,9 @@ const makeHandlers = Effect.gen(function* () {
         // a proposal's work is an outline on the why, whoever is or is not asked
         const outline =
           kind === "proposal" && input.work && input.work.length > 0
-            ? input.work.map((w) => ({ id: workId(w), intent: w.intent, description: w.description, ...(w.owner?.trim() ? { owner: w.owner.trim() } : {}) }))
+            ? input.work.map((item) => ({ id: workId(item), intent: item.intent, description: item.description, ...(item.owner?.trim() ? { owner: item.owner.trim() } : {}) }))
             : undefined;
-        const retireOutline = kind === "proposal" && input.retireWork && input.retireWork.length > 0 ? input.retireWork.map((w) => w.trim().replace(/\s+/g, "-")) : undefined;
+        const retireOutline = kind === "proposal" && input.retireWork && input.retireWork.length > 0 ? input.retireWork.map((id) => id.trim().replace(/\s+/g, "-")) : undefined;
         // a bug's report: only the fields given travel, so an amendment that
         // says "the cause is X" leaves the symptom and the score as they were
         const bug =
@@ -880,12 +880,12 @@ const makeHandlers = Effect.gen(function* () {
         const retireBug = kind === "bug" && input.retire && input.retire.length > 0 ? input.retire : undefined;
         const bugMoves = (bug !== undefined && Object.keys(bug).length > 0) || retireBug !== undefined;
         // a review's units: how its code reads, one thing at a time
-        const units = kind === "review" && input.units && input.units.length > 0 ? input.units.map((u) => ({ ...(u.id ? { id: u.id } : {}), title: u.title.trim(), what: (u.what ?? "").trim(), where: u.where.map((w) => w.trim()).filter((w) => w.length > 0) })) : undefined;
+        const units = kind === "review" && input.units && input.units.length > 0 ? input.units.map((unit) => ({ ...(unit.id ? { id: unit.id } : {}), title: unit.title.trim(), what: (unit.what ?? "").trim(), where: unit.where.map((location) => location.trim()).filter((location) => location.length > 0) })) : undefined;
         const retireUnits = kind === "review" && input.retireUnits && input.retireUnits.length > 0 ? input.retireUnits : undefined;
-        for (const u of units ?? []) {
-          const gap = unitTitleGap(u.title, u.what);
+        for (const unit of units ?? []) {
+          const gap = unitTitleGap(unit.title, unit.what);
           if (gap) return gap;
-          if (u.where.length === 0) return `failed: unit "${u.title}" points at no code — give its 'where': files, or file:line for one part of a file`;
+          if (unit.where.length === 0) return `failed: unit "${unit.title}" points at no code — give its 'where': files, or file:line for one part of a file`;
         }
         const unitsMove = units !== undefined || retireUnits !== undefined;
         const delta = {
@@ -904,7 +904,7 @@ const makeHandlers = Effect.gen(function* () {
             ? {
                 assumed: {
                   author: input.assumed.author.trim(),
-                  sources: input.assumed.sources.map((x) => x.trim()).filter((x) => x.length > 0),
+                  sources: input.assumed.sources.map((source) => source.trim()).filter((source) => source.length > 0),
                   ...(input.assumed.identities && input.assumed.identities.length > 0 ? { identities: input.assumed.identities } : {}),
                 },
               }
@@ -920,7 +920,7 @@ const makeHandlers = Effect.gen(function* () {
           if (ticket.kind !== kind) {
             return `failed: ticket ${input.ticketId} is a ${ticket.kind}, not a ${kind} — "${ticket.goal}". Leave ticketId out to file a new ${kind}, or pass the right ticket's id.`;
           }
-          const existing = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId);
+          const existing = (yield* SubscriptionRef.get(room.reviews)).find((candidate) => candidate.ticketId === input.ticketId);
           if (existing && existing.author !== identity.pubkey) {
             return `failed: that review's why is ${existing.authorName}'s to write — your user's own reading of the code goes to them with send-to-peer (pass ticketId so it lands on the ticket)`;
           }
@@ -951,7 +951,7 @@ const makeHandlers = Effect.gen(function* () {
           }, now);
           const present = yield* SubscriptionRef.get(room.roster);
           const known = yield* SubscriptionRef.get(room.members);
-          const nameOf = (o: string) => present.find((p) => p.key === o)?.name ?? known.find((m) => m.key === o)?.name;
+          const nameOf = (key: string) => present.find((peer) => peer.key === key)?.name ?? known.find((member) => member.key === key)?.name;
 
           // "revise the same ticket" has to mean the TICKET too, not only the
           // why behind it: a recipient who asked for changes to a proposal's
@@ -971,21 +971,21 @@ const makeHandlers = Effect.gen(function* () {
           }
           if (input.whenClosed !== undefined) revised = { ...revised, whenClosed: input.whenClosed };
           const newReaders: Array<Person> = [];
-          for (const n of (input.peers ?? []).map((n) => n.trim()).filter((n) => n.length > 0)) {
-            const who = personNamed(n, { peers: present, members: known, me: identity.pubkey });
+          for (const name of (input.peers ?? []).map((name) => name.trim()).filter((name) => name.length > 0)) {
+            const who = personNamed(name, { peers: present, members: known, me: identity.pubkey });
             if (who._tag === "refused") return who.text;
             newReaders.push(who.person);
           }
-          const takenNow = new Map(revised.steps.map((s) => [s.id, s.owner]));
-          for (const r of newReaders) {
-            if (r.key === identity.pubkey || revised.steps.some((s) => isTake(s) && s.owner === r.key)) continue;
-            const id = reviewStepId(r.name, r.key, takenNow);
-            takenNow.set(id, r.key);
+          const takenNow = new Map(revised.steps.map((step) => [step.id, step.owner]));
+          for (const reader of newReaders) {
+            if (reader.key === identity.pubkey || revised.steps.some((step) => isTake(step) && step.owner === reader.key)) continue;
+            const id = reviewStepId(reader.name, reader.key, takenNow);
+            takenNow.set(id, reader.key);
             revised = {
               ...revised,
               steps: [
-                ...revised.steps.map((s) => (s.id === "address" ? { ...s, needs: [...s.needs, id], updatedAt: now } : s)),
-                { id, owner: r.key, intent: takeIntent(kind), description: `${r.name}'s ${kind === "review" ? "review" : "take"} on ${revised.goal}`, needs: [], status: "pending" as const, updatedAt: now },
+                ...revised.steps.map((step) => (step.id === "address" ? { ...step, needs: [...step.needs, id], updatedAt: now } : step)),
+                { id, owner: reader.key, intent: takeIntent(kind), description: `${reader.name}'s ${kind === "review" ? "review" : "take"} on ${revised.goal}`, needs: [], status: "pending" as const, updatedAt: now },
               ],
             };
           }
@@ -997,15 +997,15 @@ const makeHandlers = Effect.gen(function* () {
             if (dup) return `failed: two work items would share the id "${dup}" — give each its own 'id' (they default to the intent)`;
           }
           if (kind === "proposal" && retireOutline && retireOutline.length > 0) {
-            const missing = retireOutline.filter((id) => !(existing?.outline ?? []).some((o) => o.id === id));
+            const missing = retireOutline.filter((id) => !(existing?.outline ?? []).some((item) => item.id === id));
             if (missing.length > 0) return `failed: none of ${missing.join(", ")} is on this proposal's outline — see review-context for what is`;
           }
           const changed = revised !== ticket;
           // the author's clock only ever moves forward, even inside one millisecond
           if (changed) revised = { ...revised, structureAt: Math.max(now, ticket.structureAt + 1), updatedAt: now };
 
-          const owners = [...new Set(revised.steps.map((s) => s.owner).filter((o) => o !== identity.pubkey))];
-          const named = owners.map(nameOf).filter((n): n is string => n !== undefined);
+          const owners = [...new Set(revised.steps.map((step) => step.owner).filter((owner) => owner !== identity.pubkey))];
+          const named = owners.map(nameOf).filter((name): name is string => name !== undefined);
           const to = named.length > 0 ? named.join(", ") : "the room";
           const told = yield* outbox.tell({
             roomId,
@@ -1013,7 +1013,7 @@ const makeHandlers = Effect.gen(function* () {
             title: `${revised.goal} · ${changed ? "revised" : "more why"}`,
             outgoing: { kind: "review", ...(changed ? { ticket: revised } : {}), review },
           });
-          const clone = unitsMove && !told.startsWith("failed") ? roomProjects(yield* store.get, roomId).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase()) : undefined;
+          const clone = unitsMove && !told.startsWith("failed") ? roomProjects(yield* store.get, roomId).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase()) : undefined;
           return clone ? told + (yield* unitCoverageNote(clone.path, review)) : told;
         }
 
@@ -1023,14 +1023,14 @@ const makeHandlers = Effect.gen(function* () {
         const members = yield* SubscriptionRef.get(room.members);
         // each name as the room spells it, once however often or however cased it was said
         const reviewers: Array<Person> = [];
-        for (const n of (input.peers ?? []).map((n) => n.trim()).filter((n) => n.length > 0)) {
-          const who = personNamed(n, { peers, members, me: identity.pubkey });
+        for (const name of (input.peers ?? []).map((name) => name.trim()).filter((name) => name.length > 0)) {
+          const who = personNamed(name, { peers, members, me: identity.pubkey });
           if (who._tag === "refused") return `${who.text} (or leave 'peers' out to open the ${kind} to whoever picks it up)`;
-          if (!reviewers.some((r) => r.key === who.person.key)) reviewers.push(who.person);
+          if (!reviewers.some((reviewer) => reviewer.key === who.person.key)) reviewers.push(who.person);
         }
-        const asked = reviewers.map((r) => r.name);
-        if (input.assumed && reviewers.some((r) => r.key === identity.pubkey)) return "failed: your user reads it anyway — a review built from assumptions is theirs to read; 'peers' names others";
-        if (reviewers.some((r) => r.key === identity.pubkey)) {
+        const asked = reviewers.map((reviewer) => reviewer.name);
+        if (input.assumed && reviewers.some((reviewer) => reviewer.key === identity.pubkey)) return "failed: your user reads it anyway — a review built from assumptions is theirs to read; 'peers' names others";
+        if (reviewers.some((reviewer) => reviewer.key === identity.pubkey)) {
           return `failed: a ${kind} goes to someone other than your user — leave 'peers' out to open it to whoever picks it up, including their own second agent${kind === "proposal" ? "; their own take goes on it with post-review" : ""}`;
         }
         const dupWork = duplicateWorkId(input.work ?? []);
@@ -1038,7 +1038,7 @@ const makeHandlers = Effect.gen(function* () {
         if (kind !== "review" && kind !== "bug" && !input.goal) return `failed: pass 'goal' — the line beneath the title: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
         const project = resolveName(input.project, [roomProjects(yield* store.get, roomId)]);
         if (project._tag !== "found") {
-          const mine = roomProjects(yield* store.get, roomId).map((p) => p.name).join(", ");
+          const mine = roomProjects(yield* store.get, roomId).map((candidate) => candidate.name).join(", ");
           return `failed: "${input.project}" is not a project your user shares in this room (theirs: ${mine || "none"}) — add-project shares one`;
         }
         const { path: projectPath, name: projectName } = project.value;
@@ -1059,7 +1059,7 @@ const makeHandlers = Effect.gen(function* () {
         const link = kind === "review" ? (input.link ?? (branch ? (branchLink(projectPath, branch) ?? undefined) : undefined)) : input.link;
         const ticketId = crypto.randomUUID();
         const goal = input.goal ?? (kind === "bug" && bug?.symptom ? headline(bug.symptom) : `review ${branch ?? projectName}`);
-        const where = [branch ? `branch ${branch}${input.base ? ` off ${input.base}` : ""}` : "", link ?? ""].filter((x) => x.length > 0).join(" · ");
+        const where = [branch ? `branch ${branch}${input.base ? ` off ${input.base}` : ""}` : "", link ?? ""].filter((part) => part.length > 0).join(" · ");
         // A step per person asked — and only people: a review nobody was asked
         // for has no placeholder step, it is simply a ticket with the why on
         // it, and each reader's review appears as their own step when they
@@ -1078,12 +1078,12 @@ const makeHandlers = Effect.gen(function* () {
                 ? `symptom: ${bug?.symptom ?? goal}\nThe reporter's reading of it (cause, importance, suggestion, remedy) is on this ticket. Ask your person for THEIR OWN diagnosis FIRST — what is happening, how bad, what would fix it — and post it with post-review (failed: true asks the reporter for changes); only then read the reporter's reading with review-context {ticketId}. A second independent diagnosis is the point. Never take a position on your own.`
                 : `${delta.decisions.length} thought(s) and ${delta.forks.length} fork(s) are on this ticket. Ask your person for THEIR OWN take FIRST — post it with post-review (failed: true asks for changes) — and only then read the author's thoughts with review-context {ticketId}. The blind first take is the point: their view before the author's has coloured it. Never take a position on your own.`,
           ]
-            .filter((x) => x.length > 0)
+            .filter((part) => part.length > 0)
             .join("\n");
-        const reviewSteps = reviewers.map((r) => {
-          const id = reviewStepId(r.name, r.key, taken);
-          taken.set(id, r.key);
-          return { id, owner: r.key, intent: takeIntent(kind), description: describe(), needs: [], status: "pending" as const, updatedAt: now };
+        const reviewSteps = reviewers.map((reviewer) => {
+          const id = reviewStepId(reviewer.name, reviewer.key, taken);
+          taken.set(id, reviewer.key);
+          return { id, owner: reviewer.key, intent: takeIntent(kind), description: describe(), needs: [], status: "pending" as const, updatedAt: now };
         });
         // a proposal's work is an outline on its why (the delta), never a step:
         // a peer says whether they would do it in their take, and the plan
@@ -1129,7 +1129,7 @@ const makeHandlers = Effect.gen(function* () {
                 asked.length > 0
                   ? `act on ${asked.join(" and ")}'s ${kind === "review" ? "review" : "take"} on ${goal}`
                   : `nobody was asked: this is open to the room. Act on the ${kind === "review" ? "reviews" : "takes"} as they are posted, and settle this step when your user has what they need.`,
-              needs: reviewSteps.map((s) => s.id),
+              needs: reviewSteps.map((step) => step.id),
               status: "pending" as const,
               updatedAt: now,
             },
@@ -1153,7 +1153,7 @@ const makeHandlers = Effect.gen(function* () {
         const under =
           kind === "review" && !after && input.base
             ? [...tickets.values()].filter(
-                (t) => t.kind === "review" && t.id !== ticketId && !isClosed(t) && !finished(t) && visibleTo(t, tickets, identity.pubkey) && reviews.find((r) => r.ticketId === t.id)?.branch === input.base,
+                (other) => other.kind === "review" && other.id !== ticketId && !isClosed(other) && !finished(other) && visibleTo(other, tickets, identity.pubkey) && reviews.find((candidate) => candidate.ticketId === other.id)?.branch === input.base,
               )
             : [];
         const coverage = units && !filed.startsWith("failed") ? yield* unitCoverageNote(projectPath, review) : "";
@@ -1168,28 +1168,28 @@ const makeHandlers = Effect.gen(function* () {
           const { id, name, room } = yield* focusedRoom;
           const peers = yield* SubscriptionRef.get(room.roster);
           const members = yield* SubscriptionRef.get(room.members);
-          const others = (yield* rooms.summaries).filter((r) => r.id !== id);
+          const others = (yield* rooms.summaries).filter((summary) => summary.id !== id);
           // members the log remembers who aren't here right now: you can still
           // message them — they read the log when they are next online
-          const offline = members.filter((m) => m.key !== identity.pubkey && !peers.some((p) => p.key === m.key));
+          const offline = members.filter((member) => member.key !== identity.pubkey && !peers.some((peer) => peer.key === member.key));
           return toToon({
             room: { shortId: shortRoomId(id), name },
-            otherRooms: others.map((r) => ({ shortId: r.shortId, name: r.name, online: r.online, unread: r.unread })),
-            peers: peers.map((p) => ({
-              name: p.name,
-              ai: p.ai,
-              aiStatus: p.aiStatus,
-              away: p.away ?? false,
-              projects: p.projects.map((x) => x.name),
-              ...(p.protocol === PROTOCOL_VERSION ? {} : { protocol: `${p.protocol} (yours: ${PROTOCOL_VERSION} — one side must update)` }),
+            otherRooms: others.map((summary) => ({ shortId: summary.shortId, name: summary.name, online: summary.online, unread: summary.unread })),
+            peers: peers.map((peer) => ({
+              name: peer.name,
+              ai: peer.ai,
+              aiStatus: peer.aiStatus,
+              away: peer.away ?? false,
+              projects: peer.projects.map((project) => project.name),
+              ...(peer.protocol === PROTOCOL_VERSION ? {} : { protocol: `${peer.protocol} (yours: ${PROTOCOL_VERSION} — one side must update)` }),
             })),
-            offlineMembers: offline.map((m) => m.name),
+            offlineMembers: offline.map((member) => member.name),
           });
         }).pipe(Effect.withSpan("Mcp.listRoom")),
       "send-to-peer": sendToPeer,
       "pending-threads": () =>
         rooms.current.pipe(
-          Effect.flatMap((h) => inbox.pending(h.id)),
+          Effect.flatMap((handle) => inbox.pending(handle.id)),
           Effect.map((threads) => toToon({ threads })),
           Effect.withSpan("Mcp.pendingThreads"),
         ),
@@ -1253,14 +1253,14 @@ const makeHandlers = Effect.gen(function* () {
           if (sessionId.trim().length === 0) return "failed: sessionId is empty — pass your harness's session/thread id";
           // `since`: a transcript handed over later starts here, never earlier
           const since = yield* Clock.currentTimeMillis;
-          yield* store.update((s) => ({ ...s, threads: { ...(s.threads ?? {}), [threadId]: { ai: agent, sessionId, since } } }));
+          yield* store.update((state) => ({ ...state, threads: { ...(state.threads ?? {}), [threadId]: { ai: agent, sessionId, since } } }));
           yield* Effect.log(`thread ${threadId} adopted → ${agent} ${sessionId.slice(0, 8)}…`);
           return `adopted: new messages on thread ${threadId} will resume your ${agent} conversation (${sessionId})`;
         }).pipe(Effect.withSpan("Mcp.adoptThread")),
       "get-messages": ({ threadId }: { threadId: string }) =>
         Effect.gen(function* () {
-          const h = yield* rooms.current;
-          const messages = yield* inbox.take(h.id, threadId);
+          const handle = yield* rooms.current;
+          const messages = yield* inbox.take(handle.id, threadId);
           // the person's steering rides what the agent is about to act on
           const steering = steeringLine(steeringOf(yield* store.get));
           return toToon(messages.length > 0 ? { steering, messages } : { messages });
@@ -1298,8 +1298,8 @@ const makeHandlers = Effect.gen(function* () {
         const myName = yield* SubscriptionRef.get(nameRef);
         // yourself, present peers, then anyone the log remembers — an owner may be offline
         const owners: Array<Person> = [];
-        for (const s of input.steps) {
-          const who = personNamed(s.owner, { peers, members, me: identity.pubkey, self: { key: identity.pubkey, name: myName } });
+        for (const step of input.steps) {
+          const who = personNamed(step.owner, { peers, members, me: identity.pubkey, self: { key: identity.pubkey, name: myName } });
           if (who._tag === "refused") return `${who.text} — every step's owner is a person in the room, or your user`;
           owners.push(who.person);
         }
@@ -1326,17 +1326,17 @@ const makeHandlers = Effect.gen(function* () {
           ...(input.whenClosed ? { whenClosed: input.whenClosed } : {}),
           structureAt: now,
           updatedAt: now,
-          steps: input.steps.map((s, i) => ({
-            id: s.id ?? `s${i + 1}`,
-            owner: owners[i]!.key,
-            intent: s.intent,
-            description: s.description,
-            needs: s.needs ?? [],
+          steps: input.steps.map((step, index) => ({
+            id: step.id ?? `s${index + 1}`,
+            owner: owners[index]!.key,
+            intent: step.intent,
+            description: step.description,
+            needs: step.needs ?? [],
             status: "pending" as const,
             updatedAt: now,
           })),
         };
-        const to = [...new Set(owners.map((o) => o.name))].join(", ");
+        const to = [...new Set(owners.map((owner) => owner.name))].join(", ");
         return yield* outbox.tell({ roomId, to, title: `${project} · ${input.title.trim()}`, outgoing: { kind: "ticket", ticket } });
       }),
       "ask-review": (input: Parameters<typeof fileJudged>[1]) => fileJudged("review", input),
@@ -1351,7 +1351,7 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId, room } = yield* focusedRoom;
         const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
         if (!ticket) return `failed: no ticket ${input.ticketId} — check get-tickets`;
-        const review = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId);
+        const review = (yield* SubscriptionRef.get(room.reviews)).find((candidate) => candidate.ticketId === input.ticketId);
         if (!review?.assumed) return `failed: "${ticketName(ticket)}" was not built from assumptions — there is nothing to take over; your user's own review goes through ask-review`;
         if (review.claimed && review.author !== identity.pubkey) return `failed: ${review.authorName} took this review over already — it is theirs`;
         // only the code's author: someone here shares an identity with them —
@@ -1359,7 +1359,7 @@ const makeHandlers = Effect.gen(function* () {
         const host = review.link ? hostOf(review.link) : undefined;
         // whoever already took it over amends it as theirs; a first takeover proves authorship
         if (!(review.claimed && review.author === identity.pubkey)) {
-          const clone = roomProjects(yield* store.get, roomId).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+          const clone = roomProjects(yield* store.get, roomId).find((project) => project.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
           // who wrote it: as recorded when filed, else read from the code now — the host's
           // author of the pull request, the emails on its commits in this clone
           let theirs = review.assumed.identities ?? (host && review.assumed.author ? [identityOf(host.id, review.assumed.author)] : []);
@@ -1368,26 +1368,26 @@ const makeHandlers = Effect.gen(function* () {
             return `failed: nobody can tell who wrote this code — ${review.branch ? `the branch ${review.branch} is not in your clone yet (fetch it)` : "the review names no branch"}${host ? "" : " and no host to ask"}. Only its author can take it over, so nobody can until that is known.`;
           }
           const mine = yield* ownIdentities(clone?.path, host);
-          if (!mine.some((m) => theirs.includes(m))) {
+          if (!mine.some((ownIdentity) => theirs.includes(ownIdentity))) {
             return `failed: this review is about ${review.assumed.author}'s code — written by ${theirs.map(describeIdentity).join(", ")} — and here you are ${mine.length > 0 ? mine.map(describeIdentity).join(", ") : `nobody yet: sign in to ${host?.name ?? "the code's host"}, or set git's user.email in your clone`}. Only its author can take it over.`;
           }
         }
         const answers = input.answers ?? [];
-        for (const a of answers) {
-          const d = review.decisions.find((x) => x.id === a.id);
-          const f = review.forks.find((x) => x.id === a.id);
-          if (!d && !f) return `failed: no guess "${a.id}" on this review — see review-context for their ids`;
-          if (a.verdict === "corrected") {
-            if (d && !a.what?.trim() && !a.title?.trim()) return `failed: correcting ${a.id} needs the real decision — 'title' and 'what'`;
-            if (f && (!a.chose?.trim() || !a.instead?.trim())) return `failed: correcting ${a.id} needs the real turn — 'chose' and 'instead'`;
-            if (!a.userWhy?.trim() && !a.agentWhy?.trim()) return `failed: correcting ${a.id} needs the real reason — 'userWhy' in your user's words, or 'agentWhy'`;
+        for (const answer of answers) {
+          const decision = review.decisions.find((candidate) => candidate.id === answer.id);
+          const fork = review.forks.find((candidate) => candidate.id === answer.id);
+          if (!decision && !fork) return `failed: no guess "${answer.id}" on this review — see review-context for their ids`;
+          if (answer.verdict === "corrected") {
+            if (decision && !answer.what?.trim() && !answer.title?.trim()) return `failed: correcting ${answer.id} needs the real decision — 'title' and 'what'`;
+            if (fork && (!answer.chose?.trim() || !answer.instead?.trim())) return `failed: correcting ${answer.id} needs the real turn — 'chose' and 'instead'`;
+            if (!answer.userWhy?.trim() && !answer.agentWhy?.trim()) return `failed: correcting ${answer.id} needs the real reason — 'userWhy' in your user's words, or 'agentWhy'`;
           }
         }
         const delta = {
           ...(input.summary ? { summary: input.summary } : {}),
           decisions: input.decisions ?? [],
           forks: input.forks ?? [],
-          ...(input.units ? { units: input.units.map((u) => ({ ...(u.id ? { id: u.id } : {}), title: u.title.trim(), what: u.what.trim(), where: u.where })) } : {}),
+          ...(input.units ? { units: input.units.map((unit) => ({ ...(unit.id ? { id: unit.id } : {}), title: unit.title.trim(), what: unit.what.trim(), where: unit.where })) } : {}),
         };
         if (answers.length === 0 && delta.decisions.length === 0 && delta.forks.length === 0 && !input.summary && !input.units) return "failed: nothing to take over with — pass your user's answers to the guesses, or their own decisions";
         const gap = reviewGaps(delta, true, "review");
@@ -1396,8 +1396,8 @@ const makeHandlers = Effect.gen(function* () {
         const myName = yield* SubscriptionRef.get(nameRef);
         const told = claimReview(review, { key: identity.pubkey, name: myName }, answers, delta, now);
         // theirs to act on now: the reviews of their change
-        const takes = ticket.steps.filter((s) => isTake(s)).map((s) => s.id);
-        const revised: Ticket = ticket.steps.some((s) => s.id === "address")
+        const takes = ticket.steps.filter((step) => isTake(step)).map((step) => step.id);
+        const revised: Ticket = ticket.steps.some((step) => step.id === "address")
           ? ticket
           : { ...ticket, updatedAt: now, steps: [...ticket.steps, { id: "address", owner: identity.pubkey, intent: "address", description: `act on the reviews of your change, ${ticket.goal}`, needs: takes, status: "pending" as const, updatedAt: now }] };
         const sent = yield* outbox.tell({
@@ -1407,8 +1407,8 @@ const makeHandlers = Effect.gen(function* () {
           outgoing: { kind: "review", ...(revised !== ticket ? { ticket: revised } : {}), review: told },
         });
         if (sent.startsWith("failed")) return sent;
-        const count = (v: string) => told.decisions.filter((d) => d.verdict === v).length + told.forks.filter((f) => f.verdict === v).length;
-        const open = told.decisions.filter((d) => d.basis !== undefined && d.verdict === undefined).length + told.forks.filter((f) => f.basis !== undefined && f.verdict === undefined).length;
+        const count = (verdict: string) => told.decisions.filter((decision) => decision.verdict === verdict).length + told.forks.filter((fork) => fork.verdict === verdict).length;
+        const open = told.decisions.filter((decision) => decision.basis !== undefined && decision.verdict === undefined).length + told.forks.filter((fork) => fork.basis !== undefined && fork.verdict === undefined).length;
         return `taken over "${ticketName(ticket)}" [ticket ${ticket.id}] from ${review.authorName}'s AI's guesses: ${count("confirmed")} confirmed, ${count("corrected")} corrected, ${count("wrong")} wrong${open > 0 ? `, ${open} still a guess — answer them with claim-review again` : ""}. It is your user's review now: amend it with ask-review. TELL YOUR USER ONLY THIS: "the review is yours now, with your answers on it".`;
       }),
       "assume-review": Effect.fn("Mcp.assumeReview")(function* (input: {
@@ -1443,20 +1443,20 @@ const makeHandlers = Effect.gen(function* () {
           }
         }
         const { id: roomId, room } = yield* focusedRoom;
-        const existing = input.ticketId ? (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === input.ticketId) : undefined;
+        const existing = input.ticketId ? (yield* SubscriptionRef.get(room.reviews)).find((candidate) => candidate.ticketId === input.ticketId) : undefined;
         // who wrote it, as identities no host owns: their login on the host,
         // and the emails git has on the change's commits in this clone
         const projectName = input.project ?? (input.ticketId ? (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId)?.project : undefined);
-        const clone = projectName ? roomProjects(yield* store.get, roomId).find((p) => p.name.trim().toLowerCase() === projectName.trim().toLowerCase()) : undefined;
+        const clone = projectName ? roomProjects(yield* store.get, roomId).find((project) => project.name.trim().toLowerCase() === projectName.trim().toLowerCase()) : undefined;
         const fromGit = clone && branch ? yield* gitAuthors(clone.path, base ?? existing?.base ?? "main", branch) : [];
         const identities = [...new Set([...(existing?.assumed?.identities ?? []), ...(host && author ? [identityOf(host.id, author)] : []), ...fromGit])];
         const assumed = {
           author: author ?? existing?.assumed?.author ?? "",
-          sources: [...(existing?.assumed?.sources ?? []), ...(input.sources ?? []).filter((x) => !(existing?.assumed?.sources ?? []).includes(x))],
+          sources: [...(existing?.assumed?.sources ?? []), ...(input.sources ?? []).filter((source) => !(existing?.assumed?.sources ?? []).includes(source))],
           ...(identities.length > 0 ? { identities } : {}),
         };
-        const decisions: ReadonlyArray<DecisionInput> = (input.decisions ?? []).map((d) => ({ ...(d.id ? { id: d.id } : {}), title: d.title, what: d.what, agentWhy: d.why, basis: d.basis, confidence: d.confidence, ...(d.where ? { where: d.where } : {}) }));
-        const forks: ReadonlyArray<ForkInput> = (input.forks ?? []).map((f) => ({ ...(f.id ? { id: f.id } : {}), at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis, confidence: f.confidence }));
+        const decisions: ReadonlyArray<DecisionInput> = (input.decisions ?? []).map((decision) => ({ ...(decision.id ? { id: decision.id } : {}), title: decision.title, what: decision.what, agentWhy: decision.why, basis: decision.basis, confidence: decision.confidence, ...(decision.where ? { where: decision.where } : {}) }));
+        const forks: ReadonlyArray<ForkInput> = (input.forks ?? []).map((fork) => ({ ...(fork.id ? { id: fork.id } : {}), at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, basis: fork.basis, confidence: fork.confidence }));
         const gap = assumedGaps({ decisions, forks, assumed }, input.ticketId !== undefined);
         if (gap) return gap;
         // withdrawing guesses: on a review of yours, guesses still unanswered
@@ -1464,7 +1464,7 @@ const makeHandlers = Effect.gen(function* () {
         if (retire.length > 0) {
           if (!existing) return "failed: 'retire' withdraws guesses from a review you filed — pass its ticketId";
           for (const id of retire) {
-            const guess = existing.decisions.find((d) => d.id === id) ?? existing.forks.find((f) => f.id === id);
+            const guess = existing.decisions.find((decision) => decision.id === id) ?? existing.forks.find((fork) => fork.id === id);
             if (!guess) return `failed: no guess "${id}" on this review — see review-context for their ids`;
             if (guess.verdict) return `failed: "${id}" was answered by the code's author — it is theirs now`;
           }
@@ -1506,7 +1506,7 @@ const makeHandlers = Effect.gen(function* () {
         const author =
           ticket.createdBy === identity.pubkey
             ? "the room"
-            : (peers.find((p) => p.key === ticket.createdBy)?.name ?? members.find((m) => m.key === ticket.createdBy)?.name ?? "the room");
+            : (peers.find((peer) => peer.key === ticket.createdBy)?.name ?? members.find((member) => member.key === ticket.createdBy)?.name ?? "the room");
         return yield* outbox.tell({
           roomId,
           to: author,
@@ -1528,8 +1528,8 @@ const makeHandlers = Effect.gen(function* () {
             outgoing: { kind: "epic-move", ticketIds: [...ids], epic: epic?.id ?? null, goal: epic?.goal ?? "", ...(epic ? { name: epic.name } : {}), ...(excluded !== undefined ? { excluded } : {}) },
           });
         const theEpic = () => {
-          const e = input.epicId ? all.get(input.epicId) : undefined;
-          return e && e.kind === "epic" ? e : null;
+          const epic = input.epicId ? all.get(input.epicId) : undefined;
+          return epic && epic.kind === "epic" ? epic : null;
         };
         const noEpic = `failed: no epic ${input.epicId ?? "(pass epicId)"} — check get-tickets (kind: epic)`;
         switch (input.action) {
@@ -1597,7 +1597,7 @@ const makeHandlers = Effect.gen(function* () {
             // only repeated the old title would now say something else
             const goal = input.goal?.trim() || (epic.goal === epic.title ? title : epic.goal);
             const renamed: Ticket = { ...epic, title, goal, structureAt: Math.max(now, epic.structureAt + 1), updatedAt: now };
-            const existing = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === epic.id);
+            const existing = (yield* SubscriptionRef.get(room.reviews)).find((candidate) => candidate.ticketId === epic.id);
             const myName = yield* SubscriptionRef.get(nameRef);
             const review = mergeReview(existing ?? emptyReview(epic.id, identity.pubkey, myName), input.summary?.trim() ? { summary: input.summary.trim() } : {}, now);
             return yield* outbox.tell({ roomId, to: "the room", title: `epic · ${ticketName(epic)} → ${title}`, outgoing: { kind: "review", ticket: renamed, review } });
@@ -1620,7 +1620,7 @@ const makeHandlers = Effect.gen(function* () {
         const all = yield* SubscriptionRef.get(room.tickets);
         const ticket = all.get(input.ticketId);
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
-        if (!ticket.steps.some((s) => s.id === input.stepId)) {
+        if (!ticket.steps.some((step) => step.id === input.stepId)) {
           return yield* Effect.die(`no step ${input.stepId} on ticket ${input.ticketId}`);
         }
         const peers = yield* SubscriptionRef.get(room.roster);
@@ -1628,7 +1628,7 @@ const makeHandlers = Effect.gen(function* () {
         const creator =
           ticket.createdBy === identity.pubkey
             ? "the room"
-            : (peers.find((p) => p.key === ticket.createdBy)?.name ?? members.find((m) => m.key === ticket.createdBy)?.name ?? "the room");
+            : (peers.find((peer) => peer.key === ticket.createdBy)?.name ?? members.find((member) => member.key === ticket.createdBy)?.name ?? "the room");
         return yield* outbox.tell({
           roomId,
           to: creator,
@@ -1639,7 +1639,7 @@ const makeHandlers = Effect.gen(function* () {
       "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: { peer: string; action: DriveAction }) {
         const { room } = yield* focusedRoom;
         const peers = yield* SubscriptionRef.get(room.roster);
-        const found = resolveName(input.peer, [peers], (p) => p.key);
+        const found = resolveName(input.peer, [peers], (peer) => peer.key);
         if (found._tag !== "found") return noPeerNamed(input.peer, found, roomRollCall(peers, [], identity.pubkey));
         const target = found.value;
         if (!(target.ai ?? "").startsWith("mock")) {
@@ -1671,18 +1671,18 @@ const makeHandlers = Effect.gen(function* () {
           const label = (name ?? basename(abs)).trim();
           if (label.length === 0) return "failed: empty project name";
           let outcome = "";
-          yield* store.update((s) => {
-            const here = s.rooms[roomId] ?? [];
-            if (here.some((p) => p.path === abs)) {
+          yield* store.update((state) => {
+            const here = state.rooms[roomId] ?? [];
+            if (here.some((project) => project.path === abs)) {
               outcome = `already sharing ${abs}`;
-              return s;
+              return state;
             }
-            if (here.some((p) => sameName(p.name, label))) {
+            if (here.some((project) => sameName(project.name, label))) {
               outcome = `failed: a project named "${label}" is already shared in this room — pass a different name`;
-              return s;
+              return state;
             }
             outcome = `sharing "${label}" (${abs}) in room ${roomName} — peers see it now`;
-            return { ...s, rooms: { ...s.rooms, [roomId]: [...here, newProject(label, abs)] } };
+            return { ...state, rooms: { ...state.rooms, [roomId]: [...here, newProject(label, abs)] } };
           });
           if (!outcome.startsWith("sharing")) return outcome;
           return shared
@@ -1695,34 +1695,34 @@ const makeHandlers = Effect.gen(function* () {
           const before = roomProjects(yield* store.get, roomId);
           const hit = resolveName(name, [before]);
           if (hit._tag !== "found") {
-            return `failed: no project named "${name}" in this room (yours: ${before.map((p) => p.name).join(", ") || "none"})`;
+            return `failed: no project named "${name}" in this room (yours: ${before.map((project) => project.name).join(", ") || "none"})`;
           }
-          yield* store.update((s) => ({
-            ...s,
-            rooms: { ...s.rooms, [roomId]: (s.rooms[roomId] ?? []).filter((p) => p.id !== hit.value.id) },
+          yield* store.update((state) => ({
+            ...state,
+            rooms: { ...state.rooms, [roomId]: (state.rooms[roomId] ?? []).filter((project) => project.id !== hit.value.id) },
           }));
           return `stopped sharing "${hit.value.name}"`;
         }).pipe(Effect.withSpan("Mcp.removeProject")),
-      "set-ai": ({ ai }: { ai: string }) =>
+      "set-ai": ({ ai: agent }: { ai: string }) =>
         store
-          .update((s) => ({ ...s, preferredAi: ai === "none" ? null : ai }))
+          .update((state) => ({ ...state, preferredAi: agent === "none" ? null : agent }))
           .pipe(
             Effect.map(() =>
-              ai === "none"
+              agent === "none"
                 ? "ai set to none — inbox mode: nothing auto-runs, messages wait to be pulled"
-                : `ai set to ${ai} — its auth status is probed now and broadcast to the room`,
+                : `ai set to ${agent} — its auth status is probed now and broadcast to the room`,
             ),
             Effect.withSpan("Mcp.setAi"),
           ),
       "set-steering": ({ steering }: { steering: "ask" | "act" | "auto" }) =>
-        store.update((s) => ({ ...s, steering })).pipe(
+        store.update((state) => ({ ...state, steering })).pipe(
           Effect.map(() => `steering set to ${steering} — ${STEERING_LABEL[steering]}; every delivery now says so. Room-facing actions (messages, takes, settles, closes) remain your user's word.`),
           Effect.withSpan("Mcp.setSteering"),
         ),
       "set-settings": (input: { openReviewPage?: boolean }) =>
         Effect.gen(function* () {
-          const changes = SETTINGS.filter((x) => input[x.key] !== undefined);
-          if (changes.length > 0) yield* store.update((st) => changes.reduce((acc, x) => withSetting(acc, x.key, input[x.key]!), st));
+          const changes = SETTINGS.filter((setting) => input[setting.key] !== undefined);
+          if (changes.length > 0) yield* store.update((state) => changes.reduce((current, setting) => withSetting(current, setting.key, input[setting.key]!), state));
           const now = describeSettings(yield* store.get);
           return changes.length > 0 ? `set — applies now. Your user's switches:\n${now}` : now;
         }).pipe(Effect.withSpan("Mcp.setSettings")),
@@ -1747,76 +1747,76 @@ const makeHandlers = Effect.gen(function* () {
         const ticket = all.get(input.ticketId);
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}: comments go on a review's code`;
-        const where = (c: { readonly file: string; readonly line: number; readonly startLine?: number; readonly side: string }) =>
-          `${c.file}:${c.startLine !== undefined ? `${c.startLine}-` : ""}${c.line}${c.side === "LEFT" ? " (old)" : ""}`;
+        const where = (comment: { readonly file: string; readonly line: number; readonly startLine?: number; readonly side: string }) =>
+          `${comment.file}:${comment.startLine !== undefined ? `${comment.startLine}-` : ""}${comment.line}${comment.side === "LEFT" ? " (old)" : ""}`;
         if (input.action === "draft") {
-          const items = (input.comments ?? []).filter((c) => Number.isInteger(c.line) && c.line > 0 && (c.startLine === undefined || Number.isInteger(c.startLine)));
+          const items = (input.comments ?? []).filter((comment) => Number.isInteger(comment.line) && comment.line > 0 && (comment.startLine === undefined || Number.isInteger(comment.startLine)));
           if (items.length === 0) return "failed: pass 'comments' — each with file, line (a whole number of the branch's code) and body";
-          const r = yield* draftComments(input.ticketId, items.map((c) => ({ file: c.file, line: c.line, ...(c.startLine !== undefined ? { startLine: c.startLine } : {}), side: c.side === "old" ? ("LEFT" as const) : ("RIGHT" as const), body: c.body })));
-          if ("error" in r) return `failed: ${r.error}`;
-          if (r.drafted.length > 0) yield* pages.started(input.ticketId);
-          const refused = r.refused.length > 0 ? `\nREFUSED (not drafted — fix and draft them again):\n${r.refused.map((x) => `- ${x.at}: ${x.why}`).join("\n")}` : "";
-          if (r.drafted.length === 0) return `failed: no comment could be placed on the diff.${refused}`;
-          return `${r.drafted.length} draft comment(s) on the review page, under the lines they are about: ${r.drafted.map((d) => `${d.id} ${where(d)}`).join(", ")}.${refused}\nTELL YOUR USER, in a line or two: what you found, and that your comments are drafts on the review page beside the code — they accept, edit or decline each there and finish their review, or tell you to post them. Do not repeat the comments in the chat.`;
+          const result = yield* draftComments(input.ticketId, items.map((comment) => ({ file: comment.file, line: comment.line, ...(comment.startLine !== undefined ? { startLine: comment.startLine } : {}), side: comment.side === "old" ? ("LEFT" as const) : ("RIGHT" as const), body: comment.body })));
+          if ("error" in result) return `failed: ${result.error}`;
+          if (result.drafted.length > 0) yield* pages.started(input.ticketId);
+          const refused = result.refused.length > 0 ? `\nREFUSED (not drafted — fix and draft them again):\n${result.refused.map((refusal) => `- ${refusal.at}: ${refusal.why}`).join("\n")}` : "";
+          if (result.drafted.length === 0) return `failed: no comment could be placed on the diff.${refused}`;
+          return `${result.drafted.length} draft comment(s) on the review page, under the lines they are about: ${result.drafted.map((draft) => `${draft.id} ${where(draft)}`).join(", ")}.${refused}\nTELL YOUR USER, in a line or two: what you found, and that your comments are drafts on the review page beside the code — they accept, edit or decline each there and finish their review, or tell you to post them. Do not repeat the comments in the chat.`;
         }
         const ids = input.ids && input.ids.length > 0 ? input.ids : null;
-        const failures = (failed: ReadonlyArray<{ readonly id: string; readonly error: string }>) => (failed.length > 0 ? `\nNOT DONE:\n${failed.map((f) => `- ${f.id}: ${f.error}`).join("\n")}` : "");
+        const failures = (failed: ReadonlyArray<{ readonly id: string; readonly error: string }>) => (failed.length > 0 ? `\nNOT DONE:\n${failed.map((failure) => `- ${failure.id}: ${failure.error}`).join("\n")}` : "");
         if (input.action === "accept") {
-          const r = yield* acceptDrafts(input.ticketId, ids);
-          if (r.done === 0 && r.failed.length === 0) return "nothing to accept: no drafts are waiting on this review";
-          const pending = (yield* draftsOf(input.ticketId)).filter((d) => d.status === "pending").length;
-          return `${r.done} draft(s) put into your user's review — ${pending} comment(s) pending in it, said when the review is finished (submit).${failures(r.failed)}`;
+          const result = yield* acceptDrafts(input.ticketId, ids);
+          if (result.done === 0 && result.failed.length === 0) return "nothing to accept: no drafts are waiting on this review";
+          const pending = (yield* draftsOf(input.ticketId)).filter((draft) => draft.status === "pending").length;
+          return `${result.done} draft(s) put into your user's review — ${pending} comment(s) pending in it, said when the review is finished (submit).${failures(result.failed)}`;
         }
         if (input.action === "submit") {
-          const r = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null);
-          if ("error" in r) return `failed: ${r.error} — the review stays pending`;
-          return `review finished: ${r.said} comment(s) said in the room as your user's${r.roomOnly ? ` — not on the pull request: ${r.roomOnly}` : `, and the review is on the pull request${"url" in r && r.url ? `: ${r.url}` : ""}`}.`;
+          const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null);
+          if ("error" in result) return `failed: ${result.error} — the review stays pending`;
+          return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
         }
         if (input.action === "decline") {
-          const n = yield* dropDrafts(input.ticketId, ids, "ai");
-          return n === 0 ? "nothing declined: no such drafts waiting" : `${n} draft(s) declined — said nowhere`;
+          const dropped = yield* dropDrafts(input.ticketId, ids, "ai");
+          return dropped === 0 ? "nothing declined: no such drafts waiting" : `${dropped} draft(s) declined — said nowhere`;
         }
         const mine = yield* draftsOf(input.ticketId);
-        const said = (yield* SubscriptionRef.get(room.comments)).filter((c) => c.ticketId === input.ticketId);
+        const said = (yield* SubscriptionRef.get(room.comments)).filter((comment) => comment.ticketId === input.ticketId);
         return toToon({
-          drafts: mine.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, at: where(d), body: d.body })),
-          pending: mine.filter((d) => d.status === "pending").map((d) => ({ id: d.id, at: where(d), body: d.body })),
-          said: said.map((c) => ({ by: c.authorName, at: where(c), body: c.body, ...(c.host ? { onHost: c.host.url } : {}), ...(c.drafted ? { drafted: true } : {}) })),
+          drafts: mine.filter((draft) => draft.status !== "pending").map((draft) => ({ id: draft.id, at: where(draft), body: draft.body })),
+          pending: mine.filter((draft) => draft.status === "pending").map((draft) => ({ id: draft.id, at: where(draft), body: draft.body })),
+          said: said.map((comment) => ({ by: comment.authorName, at: where(comment), body: comment.body, ...(comment.host ? { onHost: comment.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) })),
         });
       }, Effect.provideContext(talkContext)),
       "set-name": ({ name }: { name: string }) =>
         Effect.gen(function* () {
-          const n = name.trim();
-          if (n.length === 0) return "failed: empty name";
-          yield* Effect.sync(() => writeProfileFile(profile, { name: n }));
-          yield* setName(n);
-          return `display name is now "${n}" — peers see it on the next profile broadcast`;
+          const displayName = name.trim();
+          if (displayName.length === 0) return "failed: empty name";
+          yield* Effect.sync(() => writeProfileFile(profile, { name: displayName }));
+          yield* setName(displayName);
+          return `display name is now "${displayName}" — peers see it on the next profile broadcast`;
         }).pipe(Effect.withSpan("Mcp.setName")),
       "rename-room": ({ name }: { name: string }) =>
         Effect.gen(function* () {
-          const n = name.trim();
-          if (n.length === 0) return "failed: empty room name";
+          const roomName = name.trim();
+          if (roomName.length === 0) return "failed: empty room name";
           const { room } = yield* focusedRoom;
-          return yield* room.rename(n).pipe(
-            Effect.map(() => `room renamed to "${n}" for everyone in it`),
+          return yield* room.rename(roomName).pipe(
+            Effect.map(() => `room renamed to "${roomName}" for everyone in it`),
             Effect.catchTag("NotWritable", () => Effect.succeed("failed: you are not admitted to this room's log yet — a member has to be online once to admit you")),
           );
         }).pipe(Effect.withSpan("Mcp.renameRoom")),
       "list-rooms": () =>
         Effect.gen(function* () {
           const rows = yield* roomLines;
-          const u = yield* SubscriptionRef.get(updates.state);
+          const version = yield* SubscriptionRef.get(updates.state);
           // the agent can mention an available update; installing stays the user's key (u)
-          const collagen = u.latest ? `${u.current} — update ${u.latest} available (the user presses u in collagen)` : u.current;
+          const collagen = version.latest ? `${version.current} — update ${version.latest} available (the user presses u in collagen)` : version.current;
           return toToon({ collagen, rooms: rows });
         }).pipe(Effect.withSpan("Mcp.listRooms")),
       "create-room": ({ name }: { name: string }) =>
         Effect.gen(function* () {
-          const n = name.trim();
-          if (n.length === 0) return "failed: empty room name";
-          const entry = newRoomEntry(n);
+          const roomName = name.trim();
+          if (roomName.length === 0) return "failed: empty room name";
+          const entry = newRoomEntry(roomName);
           yield* rooms.join(entry, true);
-          return `created room "${n}" [${shortRoomId(entry.id)}] — you are in it now. Invite id to share: ${formatInvite(entry.id, NET)}`;
+          return `created room "${roomName}" [${shortRoomId(entry.id)}] — you are in it now. Invite id to share: ${formatInvite(entry.id, NET)}`;
         }).pipe(Effect.withSpan("Mcp.createRoom")),
       "join-room": ({ inviteId, name }: { inviteId: string; name?: string }) =>
         Effect.gen(function* () {
@@ -1829,18 +1829,18 @@ const makeHandlers = Effect.gen(function* () {
         }).pipe(Effect.withSpan("Mcp.joinRoom")),
       "leave-room": ({ room: which }: { room: string }) =>
         Effect.gen(function* () {
-          const q = which.trim();
-          const hit = (yield* rooms.summaries).find((r) => r.id === q || r.shortId === q || sameName(r.name, q));
-          if (!hit) return `failed: no room matching "${q}" — see list-rooms`;
+          const query = which.trim();
+          const hit = (yield* rooms.summaries).find((summary) => summary.id === query || summary.shortId === query || sameName(summary.name, query));
+          if (!hit) return `failed: no room matching "${query}" — see list-rooms`;
           const outcome = yield* rooms.leave(hit.id);
           return outcome === "left" ? `left "${hit.name}" [${hit.shortId}]` : `failed: ${outcome}`;
         }).pipe(Effect.withSpan("Mcp.leaveRoom")),
       "switch-room": ({ room: which }: { room: string }) =>
         Effect.gen(function* () {
-          const q = which.trim();
+          const query = which.trim();
           const all = yield* rooms.summaries;
-          const hit = all.find((r) => r.id === q || r.shortId === q || sameName(r.name, q));
-          if (!hit) return `failed: no room matching "${q}" — see list-rooms`;
+          const hit = all.find((summary) => summary.id === query || summary.shortId === query || sameName(summary.name, query));
+          if (!hit) return `failed: no room matching "${query}" — see list-rooms`;
           if (hit.focused) return `already looking at "${hit.name}"`;
           yield* rooms.setFocus(hit.id);
           return `now in "${hit.name}" [${hit.shortId}] — ${hit.online} online, ${hit.unread} unread; all tools now refer to this room`;
@@ -1849,7 +1849,7 @@ const makeHandlers = Effect.gen(function* () {
         focusedRoom.pipe(
           Effect.flatMap(({ room }) => SubscriptionRef.get(room.tickets)),
           // a ticket waiting on another is its author's alone until it opens
-          Effect.flatMap((m) => Effect.forEach([...m.values()].filter((t) => visibleTo(t, m, identity.pubkey)), renderTicket)),
+          Effect.flatMap((tickets) => Effect.forEach([...tickets.values()].filter((ticket) => visibleTo(ticket, tickets, identity.pubkey)), renderTicket)),
           Effect.map((tickets) => toToon({ tickets })),
           Effect.withSpan("Mcp.getTickets"),
         ),
@@ -1870,11 +1870,11 @@ const makeDiagnosticHandlers = Effect.gen(function* () {
   const attachments = yield* Attachments;
   const pages = yield* ReviewPages;
   const handlers: Record<string, (params: unknown) => Effect.Effect<string>> = {};
-  for (const d of diagnostics) {
-    handlers[d.id] = (params) =>
+  for (const diagnostic of diagnostics) {
+    handlers[diagnostic.id] = (params) =>
       rooms.current.pipe(
-        Effect.flatMap((h) => d.run(params ?? {}, { roomId: h.id }, { rooms, transcripts, attachments, me: identity.pubkey, reviewStarted: pages.started })),
-        Effect.withSpan(`Mcp.${d.id}`),
+        Effect.flatMap((handle) => diagnostic.run(params ?? {}, { roomId: handle.id }, { rooms, transcripts, attachments, me: identity.pubkey, reviewStarted: pages.started })),
+        Effect.withSpan(`Mcp.${diagnostic.id}`),
       );
   }
   return handlers;
@@ -1892,16 +1892,16 @@ export const DiagnosticHandlers = DiagnosticToolkit.toLayer(makeDiagnosticHandle
  *  handshake: GET /inbox/pending lists waiting threads (one line each);
  *  GET /inbox/wait?seconds=N long-polls until something is waiting (204 on
  *  timeout). Read-only — messages are only consumed via get-messages. */
-const inboxLine = (t: { threadId: string; from: string; project: string; count: number; lastIntent: string }) =>
-  `${t.threadId} | ${t.from} | ${t.project} | ${t.count} msg | ${t.lastIntent}`;
+const inboxLine = (thread: { threadId: string; from: string; project: string; count: number; lastIntent: string }) =>
+  `${thread.threadId} | ${thread.from} | ${thread.project} | ${thread.count} msg | ${thread.lastIntent}`;
 
 const InboxRoutes = Layer.mergeAll(
   HttpRouter.add(
     "GET",
     "/inbox/pending",
     Effect.gen(function* () {
-      const h = yield* (yield* Rooms).current;
-      const threads = yield* (yield* Inbox).pending(h.id);
+      const handle = yield* (yield* Rooms).current;
+      const threads = yield* (yield* Inbox).pending(handle.id);
       return HttpServerResponse.text(threads.map(inboxLine).join("\n"));
     }),
   ),
@@ -1975,9 +1975,9 @@ export const McpLive = Layer.unwrap(
     // Say WHY we fell back — a silent ephemeral port makes every registered
     // client point at the wrong place with no trace.
     return serve(port).pipe(
-      Layer.catch((e) =>
+      Layer.catch((error) =>
         Layer.unwrap(
-          Effect.logWarning(`mcp port ${port} unavailable (${String(e).slice(0, 120)}) — using an ephemeral port`).pipe(
+          Effect.logWarning(`mcp port ${port} unavailable (${String(error).slice(0, 120)}) — using an ephemeral port`).pipe(
             Effect.as(serve(0)),
           ),
         ),

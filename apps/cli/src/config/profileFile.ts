@@ -43,19 +43,19 @@ export function invitedRoomEntry(inviteId: string): RoomEntry {
   return { id, name: id.slice(0, 8) };
 }
 
-export function storedRoom(f: ProfileFile): RoomEntry | undefined {
-  const rooms = f.rooms ?? [];
-  return rooms.find((r) => r.id === f.activeRoomId) ?? rooms[0];
+export function storedRoom(file: ProfileFile): RoomEntry | undefined {
+  const rooms = file.rooms ?? [];
+  return rooms.find((room) => room.id === file.activeRoomId) ?? rooms[0];
 }
 
 /** Add-or-relabel a room WITHOUT touching which room is active — for
  *  persisting broadcast state about the room we're in. */
 export function upsertRoom(profile: string, room: RoomEntry): void {
-  const f = readProfileFile(profile);
-  const rooms = f.rooms ?? [];
+  const file = readProfileFile(profile);
+  const rooms = file.rooms ?? [];
   // in place, not filter+append: the rail lists rooms in this order, and a
   // relabel must not make a room jump to the bottom
-  const next = rooms.some((r) => r.id === room.id) ? rooms.map((r) => (r.id === room.id ? room : r)) : [...rooms, room];
+  const next = rooms.some((existing) => existing.id === room.id) ? rooms.map((existing) => (existing.id === room.id ? room : existing)) : [...rooms, room];
   writeProfileFile(profile, { rooms: next });
 }
 

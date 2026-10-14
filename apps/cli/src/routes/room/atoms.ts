@@ -47,28 +47,28 @@ export const aiStatusAtom = runtimeAtom.atom(
 /** Peers present in the focused room (emits the current value on subscribe). */
 export const rosterAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.roster));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.roster));
   })),
 );
 
 /** Everyone the focused room's log remembers — names for offline peers. */
 export const membersAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.members));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.members));
   })),
 );
 
 /** Every message in the focused room, in log order — the a2a trace. */
 export const traceAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.trace));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.trace));
   })),
 );
 
 /** Whether we can write to the focused room's log yet (a member admits us). */
 export const admittedAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.writable));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.writable));
   })),
 );
 
@@ -82,14 +82,14 @@ export const outboxAtom = runtimeAtom.atom(
 /** The why behind the focused room's review tickets, as the log has it. */
 export const reviewsAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.reviews));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.reviews));
   })),
 );
 
 /** Comments on the focused room's reviews' code, each with the commit it was written at. */
 export const commentsAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.comments));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.comments));
   })),
 );
 
@@ -97,26 +97,26 @@ export const commentsAtom = runtimeAtom.atom(
  *  cannot read yet — a ticket among them is a row saying to update. */
 export const unseenAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.unseen));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.unseen));
   })),
 );
 
 /** Files attached to the focused room's tickets — references on the log. */
 export const attachmentsAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) => SubscriptionRef.changes(h.room.attachments));
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.attachments));
   })),
 );
 /** Attachments whose file is on this machine — fetched, or attached by us:
  *  id → path. Live: a file landing re-reads the folders. */
 export const heldAttachmentsAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    const a = yield* Attachments;
+    const attachments = yield* Attachments;
     const store = yield* StateStore;
     return Stream.merge(
-      SubscriptionRef.changes(a.saved).pipe(Stream.map(() => undefined)),
+      SubscriptionRef.changes(attachments.saved).pipe(Stream.map(() => undefined)),
       SubscriptionRef.changes(store.state).pipe(Stream.map(() => undefined)),
-    ).pipe(Stream.mapEffect(() => a.held));
+    ).pipe(Stream.mapEffect(() => attachments.held));
   })),
 );
 /** Ask the holder for an attachment's file (both online). */

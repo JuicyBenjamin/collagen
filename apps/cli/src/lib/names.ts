@@ -10,7 +10,7 @@
 /** The comparable form of a name. */
 export const nameKey = (name: string): string => name.trim().toLowerCase();
 
-export const sameName = (a: string, b: string): boolean => nameKey(a) === nameKey(b);
+export const sameName = (name: string, other: string): boolean => nameKey(name) === nameKey(other);
 
 export type Resolved<T> =
   | { readonly _tag: "found"; readonly value: T }
@@ -27,18 +27,18 @@ export type Resolved<T> =
 export function resolveName<T extends { readonly name: string }>(
   name: string,
   pools: ReadonlyArray<ReadonlyArray<T>>,
-  id: (t: T) => string = (t) => t.name,
+  id: (entry: T) => string = (entry) => entry.name,
 ): Resolved<T> {
   const typed = name.trim();
   for (const pool of pools) {
-    const exact = pool.find((t) => t.name === typed);
+    const exact = pool.find((entry) => entry.name === typed);
     if (exact) return { _tag: "found", value: exact };
   }
   const hits = new Map<string, T>();
-  for (const pool of pools) for (const t of pool) if (sameName(t.name, typed) && !hits.has(id(t))) hits.set(id(t), t);
+  for (const pool of pools) for (const entry of pool) if (sameName(entry.name, typed) && !hits.has(id(entry))) hits.set(id(entry), entry);
   const found = [...hits.values()];
   if (found.length === 1) return { _tag: "found", value: found[0]! };
-  if (found.length > 1) return { _tag: "ambiguous", names: found.map((t) => t.name) };
+  if (found.length > 1) return { _tag: "ambiguous", names: found.map((entry) => entry.name) };
   return { _tag: "missing" };
 }
 
@@ -50,8 +50,8 @@ export function roomRollCall(
   members: ReadonlyArray<{ readonly key: string; readonly name: string }>,
   me: string,
 ): string {
-  const present = peers.filter((p) => p.key !== me).map((p) => (p.away ? `${p.name} (away)` : p.name));
-  const offline = members.filter((m) => m.key !== me && !peers.some((p) => p.key === m.key)).map((m) => `${m.name} (offline)`);
+  const present = peers.filter((peer) => peer.key !== me).map((peer) => (peer.away ? `${peer.name} (away)` : peer.name));
+  const offline = members.filter((member) => member.key !== me && !peers.some((peer) => peer.key === member.key)).map((member) => `${member.name} (offline)`);
   const all = [...present, ...offline];
   return all.length > 0 ? `in the room: ${all.join(", ")}` : "nobody else is in this room yet";
 }
@@ -86,9 +86,9 @@ export function personNamed(
   },
 ): { readonly _tag: "found"; readonly person: Person } | { readonly _tag: "refused"; readonly text: string } {
   const pools: ReadonlyArray<ReadonlyArray<Person>> = [...(room.self ? [[room.self]] : []), room.peers, room.members];
-  const r = resolveName(name, pools, (p) => p.key);
-  if (r._tag === "found") return { _tag: "found", person: { key: r.value.key, name: r.value.name } };
-  return { _tag: "refused", text: noPeerNamed(name, r, roomRollCall(room.peers, room.members, room.me)) };
+  const resolved = resolveName(name, pools, (person) => person.key);
+  if (resolved._tag === "found") return { _tag: "found", person: { key: resolved.value.key, name: resolved.value.name } };
+  return { _tag: "refused", text: noPeerNamed(name, resolved, roomRollCall(room.peers, room.members, room.me)) };
 }
 
 /** A project as the room spells it: yours first, then the peers' shares.
@@ -100,6 +100,6 @@ export function projectSpelling(
   peers: ReadonlyArray<{ readonly projects: ReadonlyArray<{ readonly name: string }> }>,
   mine: ReadonlyArray<{ readonly name: string }>,
 ): string {
-  const r = resolveName(name, [mine, peers.flatMap((p) => p.projects)]);
-  return r._tag === "found" ? r.value.name : name.trim();
+  const resolved = resolveName(name, [mine, peers.flatMap((peer) => peer.projects)]);
+  return resolved._tag === "found" ? resolved.value.name : name.trim();
 }

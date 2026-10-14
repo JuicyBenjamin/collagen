@@ -4,11 +4,11 @@ import { mcpServerName, portForProfile } from "./mcpAddress";
 describe("portForProfile", () => {
   it("is deterministic, mainnet in 41000–44999, devnet in 45000–48999", () => {
     expect(portForProfile("alice", "mainnet")).toBe(portForProfile("alice", "mainnet"));
-    for (const p of ["default", "alice", "bob", "p1577"]) {
-      const main = portForProfile(p, "mainnet");
+    for (const profile of ["default", "alice", "bob", "p1577"]) {
+      const main = portForProfile(profile, "mainnet");
       expect(main).toBeGreaterThanOrEqual(41000);
       expect(main).toBeLessThan(45000);
-      const dev = portForProfile(p, "devnet");
+      const dev = portForProfile(profile, "devnet");
       expect(dev).toBeGreaterThanOrEqual(45000);
       expect(dev).toBeLessThan(49000);
     }

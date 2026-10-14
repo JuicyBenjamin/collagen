@@ -26,7 +26,7 @@ const nodeFlags = headless ? [] : ["--experimental-ffi", "--no-warnings=Experime
 
 let child;
 const run = () => {
-  child = spawn(process.execPath, [...nodeFlags, entry, ...args.filter((a) => a !== "--headless")], { stdio: "inherit" });
+  child = spawn(process.execPath, [...nodeFlags, entry, ...args.filter((argument) => argument !== "--headless")], { stdio: "inherit" });
   child.on("exit", (code, signal) => {
     if (code === RESTART) return run();
     if (signal) process.kill(process.pid, signal);

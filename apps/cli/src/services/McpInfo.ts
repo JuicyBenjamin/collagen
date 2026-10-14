@@ -10,7 +10,7 @@ export class McpInfo extends Context.Service<McpInfo>()("cli/McpInfo", {
     /** Resolves as soon as the URL is known (immediately if already set). */
     const awaitUrl = SubscriptionRef.changes(url).pipe(
       Stream.filter(Option.isSome),
-      Stream.map((o) => o.value),
+      Stream.map((address) => address.value),
       Stream.take(1),
       Stream.runHead,
       // changes emits the current value first and the stream never ends before
@@ -22,7 +22,7 @@ export class McpInfo extends Context.Service<McpInfo>()("cli/McpInfo", {
 
     return {
       url,
-      set: (u: string) => SubscriptionRef.set(url, Option.some(u)),
+      set: (address: string) => SubscriptionRef.set(url, Option.some(address)),
       awaitUrl,
     } as const;
   }),

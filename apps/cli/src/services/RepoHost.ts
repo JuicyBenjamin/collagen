@@ -115,7 +115,7 @@ export interface RepoHost {
 interface Ran {
   readonly ok: boolean;
   readonly out: string;
-  readonly err: string;
+  readonly error: string;
   /** the command is not installed */
   readonly missing: boolean;
 }
@@ -127,10 +127,10 @@ const ghCommand = (): string => process.env.COLLAGEN_GH ?? "gh";
 /** Run gh: what it printed, and whether it did what was asked. Never a
  *  failure — no gh, no network and no login all read as words on the page.
  *  `input` goes to its stdin (a request body for `gh api --input -`). */
-const gh = (args: ReadonlyArray<string>, timeoutMs = 20_000, input?: string): Effect.Effect<Ran> =>
+const runGh = (args: ReadonlyArray<string>, timeoutMs = 20_000, input?: string): Effect.Effect<Ran> =>
   Effect.callback<Ran>((resume) => {
-    const child = execFile(ghCommand(), [...args], { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "utf8", env: { ...process.env, GH_PROMPT_DISABLED: "1", NO_COLOR: "1" } }, (err, stdout, stderr) =>
-      resume(Effect.succeed({ ok: !err, out: stdout ?? "", err: stderr ?? (err ? String(err) : ""), missing: (err as NodeJS.ErrnoException | null)?.code === "ENOENT" })),
+    const child = execFile(ghCommand(), [...args], { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "utf8", env: { ...process.env, GH_PROMPT_DISABLED: "1", NO_COLOR: "1" } }, (error, stdout, stderr) =>
+      resume(Effect.succeed({ ok: !error, out: stdout ?? "", error: stderr ?? (error ? String(error) : ""), missing: (error as NodeJS.ErrnoException | null)?.code === "ENOENT" })),
     );
     child.stdin?.on("error", () => {});
     child.stdin?.end(input ?? "");
@@ -147,12 +147,12 @@ let viewerSeen: { readonly at: number; readonly user: HostUser } | null = null;
  *  and forgets what was). */
 type Viewer = { readonly user: HostUser } | { readonly signIn: string };
 const askViewer: Effect.Effect<Viewer> = Effect.gen(function* () {
-  const ran = yield* gh(["api", "user"], 10_000);
+  const ran = yield* runGh(["api", "user"], 10_000);
   if (ran.missing) return { signIn: NO_GH };
   const user = ran.ok ? readUser(parse(ran.out)) : null;
   if (!user) {
     viewerSeen = null;
-    return { signIn: `Not signed in to GitHub (${refusal(ran.err)}): run gh auth login.` };
+    return { signIn: `Not signed in to GitHub (${refusal(ran.error)}): run gh auth login.` };
   }
   viewerSeen = { at: Date.now(), user };
   return { user };
@@ -167,81 +167,81 @@ export const github: RepoHost = {
   matches: (link) => githubRepo(link) !== null,
   pullIn: pullNumberIn,
   compare: (link, base, branch) => {
-    const r = githubRepo(link);
-    if (!r) return Effect.succeed(null);
-    return gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${r.owner}/${r.repo}/compare/${base}...${branch}`]).pipe(Effect.map((ran) => (ran.ok ? ran.out : null)));
+    const repository = githubRepo(link);
+    if (!repository) return Effect.succeed(null);
+    return runGh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repository.owner}/${repository.repo}/compare/${base}...${branch}`]).pipe(Effect.map((ran) => (ran.ok ? ran.out : null)));
   },
   pullDiff: (link, pull) => {
-    const r = githubRepo(link);
-    if (!r) return Effect.succeed(null);
-    return gh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${r.owner}/${r.repo}/pulls/${pull}`]).pipe(Effect.map((ran) => (ran.ok ? ran.out : null)));
+    const repository = githubRepo(link);
+    if (!repository) return Effect.succeed(null);
+    return runGh(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repository.owner}/${repository.repo}/pulls/${pull}`]).pipe(Effect.map((ran) => (ran.ok ? ran.out : null)));
   },
   links: (link, base, branch) => {
-    const r = githubRepo(link);
-    if (!r) return [];
-    const pr = /\/pull\/\d+/.test(link);
+    const repository = githubRepo(link);
+    if (!repository) return [];
+    const isPull = /\/pull\/\d+/.test(link);
     return [
-      { label: pr ? "pull request" : "on GitHub", url: link },
-      ...(pr ? [{ label: "checks", url: `${link.replace(/\/(files|commits|checks)\/?$/, "")}/checks` }] : []),
-      ...(base && branch ? [{ label: "compare", url: `https://github.com/${r.owner}/${r.repo}/compare/${base}...${branch}` }] : []),
+      { label: isPull ? "pull request" : "on GitHub", url: link },
+      ...(isPull ? [{ label: "checks", url: `${link.replace(/\/(files|commits|checks)\/?$/, "")}/checks` }] : []),
+      ...(base && branch ? [{ label: "compare", url: `https://github.com/${repository.owner}/${repository.repo}/compare/${base}...${branch}` }] : []),
     ];
   },
   viewer: Effect.suspend((): Effect.Effect<Viewer> => (viewerSeen && Date.now() - viewerSeen.at < VIEWER_FOR_MS ? Effect.succeed({ user: viewerSeen.user }) : askViewer)),
   viewerNow: Effect.suspend(() => askViewer),
   pull: (link, branch) =>
     Effect.gen(function* () {
-      const r = githubRepo(link)!;
-      const repo = `${r.owner}/${r.repo}`;
+      const repository = githubRepo(link)!;
+      const repo = `${repository.owner}/${repository.repo}`;
       const named = pullNumberIn(link);
       if (named !== null) {
-        const ran = yield* gh(["pr", "view", String(named), "--repo", repo, "--json", PULL_FIELDS]);
+        const ran = yield* runGh(["pr", "view", String(named), "--repo", repo, "--json", PULL_FIELDS]);
         if (ran.missing) return { none: NO_GH };
         const pull = ran.ok ? readPull(parse(ran.out), undefined) : null;
-        return pull ? { pull } : { none: `Could not read pull request #${named}: ${refusal(ran.err)}` };
+        return pull ? { pull } : { none: `Could not read pull request #${named}: ${refusal(ran.error)}` };
       }
       if (!branch) return { none: "This review names no branch to find its pull request by." };
-      const ran = yield* gh(["pr", "list", "--repo", repo, "--head", branch, "--state", "all", "--json", PULL_FIELDS, "--limit", "10"]);
+      const ran = yield* runGh(["pr", "list", "--repo", repo, "--head", branch, "--state", "all", "--json", PULL_FIELDS, "--limit", "10"]);
       if (ran.missing) return { none: NO_GH };
-      if (!ran.ok) return { none: `Could not look for a pull request: ${refusal(ran.err)}` };
+      if (!ran.ok) return { none: `Could not look for a pull request: ${refusal(ran.error)}` };
       const list = parse(ran.out);
-      const pulls = (Array.isArray(list) ? list : []).flatMap((p) => readPull(p, undefined) ?? []);
+      const pulls = (Array.isArray(list) ? list : []).flatMap((item) => readPull(item, undefined) ?? []);
       const pull = pickPull(pulls);
       return pull ? { pull } : { none: `No pull request for ${branch} yet.` };
     }),
   comments: (link, pull) =>
     Effect.gen(function* () {
-      const r = githubRepo(link)!;
-      const ran = yield* gh(["api", "--paginate", "--slurp", `repos/${r.owner}/${r.repo}/pulls/${pull}/comments`]);
+      const repository = githubRepo(link)!;
+      const ran = yield* runGh(["api", "--paginate", "--slurp", `repos/${repository.owner}/${repository.repo}/pulls/${pull}/comments`]);
       const got = ran.ok ? parse(ran.out) : null;
       return { inline: readComments(got), outdated: readOutdated(got) };
     }),
   reviews: (link, pull) =>
     Effect.gen(function* () {
-      const r = githubRepo(link)!;
-      const ran = yield* gh(["api", "--paginate", "--slurp", `repos/${r.owner}/${r.repo}/pulls/${pull}/reviews`]);
+      const repository = githubRepo(link)!;
+      const ran = yield* runGh(["api", "--paginate", "--slurp", `repos/${repository.owner}/${repository.repo}/pulls/${pull}/reviews`]);
       return ran.ok ? readReviews(parse(ran.out)) : [];
     }),
   conversation: (link, pull) =>
     Effect.gen(function* () {
-      const r = githubRepo(link)!;
-      const ran = yield* gh(["api", "--paginate", "--slurp", `repos/${r.owner}/${r.repo}/issues/${pull}/comments`]);
+      const repository = githubRepo(link)!;
+      const ran = yield* runGh(["api", "--paginate", "--slurp", `repos/${repository.owner}/${repository.repo}/issues/${pull}/comments`]);
       return ran.ok ? readConversation(parse(ran.out)) : [];
     }),
   openPulls: (link) =>
     Effect.gen(function* () {
-      const r = githubRepo(link)!;
-      const ran = yield* gh(["pr", "list", "--repo", `${r.owner}/${r.repo}`, "--state", "open", "--json", PULL_FIELDS, "--limit", "200"]);
+      const repository = githubRepo(link)!;
+      const ran = yield* runGh(["pr", "list", "--repo", `${repository.owner}/${repository.repo}`, "--state", "open", "--json", PULL_FIELDS, "--limit", "200"]);
       const list = ran.ok ? parse(ran.out) : null;
-      return (Array.isArray(list) ? list : []).flatMap((p) => readPull(p, undefined) ?? []);
+      return (Array.isArray(list) ? list : []).flatMap((item) => readPull(item, undefined) ?? []);
     }),
   mergesPage: (link, base, after) => {
-    const r = githubRepo(link)!;
-    return gh(["api", "graphql", "-f", `owner=${r.owner}`, "-f", `repo=${r.repo}`, "-f", `base=${base}`, ...(after ? ["-f", `after=${after}`] : []), "-f", `query=${MERGES_QUERY}`]).pipe(
+    const repository = githubRepo(link)!;
+    return runGh(["api", "graphql", "-f", `owner=${repository.owner}`, "-f", `repo=${repository.repo}`, "-f", `base=${base}`, ...(after ? ["-f", `after=${after}`] : []), "-f", `query=${MERGES_QUERY}`]).pipe(
       Effect.flatMap((ran): Effect.Effect<typeof MergesAnswer.Type, HostCliMissing | HostRefused> =>
         ran.missing
           ? Effect.fail(new HostCliMissing())
           : !ran.ok
-            ? Effect.fail(new HostRefused({ reason: refusal(ran.err) }))
+            ? Effect.fail(new HostRefused({ reason: refusal(ran.error) }))
             : Schema.decodeUnknownEffect(MergesAnswer)(ran.out).pipe(Effect.mapError(() => new HostRefused({ reason: "gh answered something else than asked" }))),
       ),
       Effect.map(mergesPage),
@@ -249,32 +249,32 @@ export const github: RepoHost = {
   },
   submit: (link, pull, review) =>
     Effect.gen(function* () {
-      const r = githubRepo(link)!;
-      const repo = `repos/${r.owner}/${r.repo}/pulls/${pull}`;
+      const repository = githubRepo(link)!;
+      const repo = `repos/${repository.owner}/${repository.repo}/pulls/${pull}`;
       const event = review.verdict === "approve" ? "APPROVE" : review.verdict === "request-changes" ? "REQUEST_CHANGES" : "COMMENT";
       const payload = {
         commit_id: review.commit,
         event,
         ...(review.body.length > 0 ? { body: review.body } : {}),
-        comments: review.comments.map((c) => ({ path: c.file, line: c.line, side: c.side, body: c.body, ...(c.start ? { start_line: c.start.line, start_side: c.start.side } : {}) })),
+        comments: review.comments.map((comment) => ({ path: comment.file, line: comment.line, side: comment.side, body: comment.body, ...(comment.start ? { start_line: comment.start.line, start_side: comment.start.side } : {}) })),
       };
-      const ran = yield* gh(["api", "-X", "POST", `${repo}/reviews`, "--input", "-"], 30_000, JSON.stringify(payload));
+      const ran = yield* runGh(["api", "-X", "POST", `${repo}/reviews`, "--input", "-"], 30_000, JSON.stringify(payload));
       if (ran.missing) return { error: NO_GH };
-      if (!ran.ok) return { error: refusal(ran.err) };
+      if (!ran.ok) return { error: refusal(ran.error) };
       const made = parse(ran.out) as { id?: unknown; html_url?: unknown } | null;
       const id = typeof made?.id === "number" ? made.id : null;
       const url = typeof made?.html_url === "string" ? made.html_url : "";
       // its comments as GitHub placed them — their ids, to show each once
-      const listed = id !== null && review.comments.length > 0 ? yield* gh(["api", "--paginate", "--slurp", `${repo}/reviews/${id}/comments`]) : null;
+      const listed = id !== null && review.comments.length > 0 ? yield* runGh(["api", "--paginate", "--slurp", `${repo}/reviews/${id}/comments`]) : null;
       return { ok: true as const, url, comments: listed?.ok ? readComments(parse(listed.out)) : [] };
     }),
   comment: (link, pull, at, body) =>
     Effect.gen(function* () {
-      const r = githubRepo(link)!;
+      const repository = githubRepo(link)!;
       // -f sends each as a plain string (never read from a file, as -F's @ would); the line is a number
-      const ran = yield* gh(["api", "-X", "POST", `repos/${r.owner}/${r.repo}/pulls/${pull}/comments`, "-f", `body=${body}`, "-f", `commit_id=${at.commit}`, "-f", `path=${at.file}`, "-F", `line=${at.line}`, "-f", `side=${at.side}`, ...(at.start ? ["-F", `start_line=${at.start.line}`, "-f", `start_side=${at.start.side}`] : [])]);
+      const ran = yield* runGh(["api", "-X", "POST", `repos/${repository.owner}/${repository.repo}/pulls/${pull}/comments`, "-f", `body=${body}`, "-f", `commit_id=${at.commit}`, "-f", `path=${at.file}`, "-F", `line=${at.line}`, "-f", `side=${at.side}`, ...(at.start ? ["-F", `start_line=${at.start.line}`, "-f", `start_side=${at.start.side}`] : [])]);
       if (ran.missing) return { error: NO_GH };
-      if (!ran.ok) return { error: refusal(ran.err) };
+      if (!ran.ok) return { error: refusal(ran.error) };
       const comment = readComment(parse(ran.out));
       return comment ? { ok: true as const, comment } : { ok: true as const };
     }),
@@ -283,7 +283,7 @@ export const github: RepoHost = {
 export const HOSTS: ReadonlyArray<RepoHost> = [github];
 
 /** The host a link is on, if collagen has an integration for it. */
-export const hostOf = (link: string): RepoHost | undefined => HOSTS.find((h) => h.matches(link));
+export const hostOf = (link: string): RepoHost | undefined => HOSTS.find((host) => host.matches(link));
 /** A link the reviewer can open for a branch of the clone at `root` — the
  *  fallback when the agent has no pull request to give: the branch's page on
  *  its host, or, on a host collagen does not know, the repository itself. */
@@ -294,4 +294,4 @@ export const branchLink = (root: string, branch: string): string | null => {
 };
 
 /** A host by its id — what an identity names. */
-export const hostById = (id: string): RepoHost | undefined => HOSTS.find((h) => h.id === id);
+export const hostById = (id: string): RepoHost | undefined => HOSTS.find((host) => host.id === id);

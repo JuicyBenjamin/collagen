@@ -4,7 +4,7 @@ import { projectRows } from "../routes/room/projectRows";
 import { sharedProject } from "./projects";
 
 const peer = (name: string, ...projects: string[]): Peer =>
-  ({ key: name, name, protocol: "6", ai: null, aiStatus: "unknown", away: false, projects: projects.map((p) => ({ name: p, path: `/x/${p}` })) }) as Peer;
+  ({ key: name, name, protocol: "6", ai: null, aiStatus: "unknown", away: false, projects: projects.map((project) => ({ name: project, path: `/x/${project}` })) }) as Peer;
 
 describe("projects", () => {
   it("one project is one row, however its holders case it", () => {
