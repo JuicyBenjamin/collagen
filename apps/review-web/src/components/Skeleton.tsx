@@ -15,6 +15,7 @@ export function NavSkeleton() {
   return (
     <div class="sk" role="status" aria-busy="true" aria-label="Reading the review">
       <p class="nav-title">{words("Units")}</p>
+      <p class="nav-viewed">{words("0 of 10 files viewed")}</p>
       <ol>
         <For each={NAV_ROWS}>
           {(row) => (
@@ -31,15 +32,20 @@ export function NavSkeleton() {
   );
 }
 
-/** The title block: where it is on, the purpose, the line beneath. */
+/** The title block, the first time a review is opened (after that its
+ *  last header stands in, App.tsx): where it is on, the host's line, the
+ *  purpose, and the two lines beneath it most summaries take. */
 export function HeaderSkeleton() {
   return (
     <header class="sk" aria-hidden="true">
       <div class="header-top">
-        <p class="meta">{words("project · the branch → its base")}</p>
+        <p class="meta">{words("the branch into its base · by its author")}</p>
+        <div class="host-bar">
+          <div class="host-row">{words("0 / 10 files viewed")}</div>
+        </div>
       </div>
       <h1 class="purpose">{words("What this change is for, in a few words")}</h1>
-      <p class="summary">{words("What is different for whoever uses it once it lands.")}</p>
+      <p class="summary">{words("What is different for whoever uses it once it lands, in a sentence or two that most often runs onto a second line.")}</p>
     </header>
   );
 }
@@ -59,6 +65,11 @@ export function UnitsSkeleton(props: { count: number }) {
               <div class="decision-head">
                 <h2>{words(index % 2 ? "Where its code goes" : "What the change does first")}</h2>
                 <p class="decision-what">{words("the code that together achieves it")}</p>
+                <p class="unit-why">
+                  <span class="who">{words("Why")}</span>
+                  <span class="chip">{words("the decision behind it")}</span>
+                </p>
+                <p class="unit-size">{words("4 changes in 2 files")}</p>
               </div>
             </div>
             <div class="unit-body">
