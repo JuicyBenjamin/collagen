@@ -94,17 +94,24 @@ export function App() {
       return loaded;
     });
   });
-  // the header kept from the last visit stands in, once, until the diff is in
-  let standIn = lastHead;
-  const head = createMemo((): ReviewPageHead | Promise<ReviewPageHead> => {
-    if (read) return data();
-    state();
-    const fresh = loadHead().then((loaded) => (keepHead(loaded), loaded));
-    if (!standIn) return fresh;
-    const kept = standIn;
-    standIn = null;
-    return kept;
-  });
+  // the head read again whenever the review moves; the one kept from the
+  // last visit stands in until the first of them is in
+  const [freshHead, setFreshHead] = createSignal<ReviewPageHead | null>(null);
+  let reading: Promise<ReviewPageHead> | null = null;
+  const readHead = (): Promise<ReviewPageHead> =>
+    (reading ??= loadHead().then((loaded) => {
+      keepHead(loaded);
+      setFreshHead(loaded);
+      reading = null;
+      return loaded;
+    }));
+  createEffect(
+    () => state(),
+    () => {
+      void readHead();
+    },
+  );
+  const head = createMemo((): ReviewPageHead | Promise<ReviewPageHead> => (read ? data() : (freshHead() ?? lastHead ?? readHead())));
   return (
     <Errored fallback={(error) => <p class="failed">{String(error())}</p>}>
       <Loading
@@ -180,12 +187,12 @@ function Outline(props: { data: ReviewPageData }) {
   const wipe = wipeIn();
   return (
     <div class="swap">
-      <Show when={wipe.under()}>
-        <div class="swap-under" aria-hidden="true">
+      <Show when={wipe.ghost()}>
+        <div class="swap-ghost" aria-hidden="true" onAnimationEnd={() => wipe.end()}>
           <NavSkeleton />
         </div>
       </Show>
-    <div class="swap-over" ref={wipe.start}>
+    <div ref={wipe.start}>
       <p class="nav-title">{props.data.grouped ? "Units" : "Decisions"}</p>
       <Show when={viewed.count().files > 0}>
         <p class={["nav-viewed", { done: viewed.count().viewed === viewed.count().files }]}>
@@ -277,12 +284,12 @@ function Diff(props: { data: ReviewPageData }) {
   const wipe = wipeIn();
   return (
     <div class="swap">
-      <Show when={wipe.under()}>
-        <div class="swap-under" aria-hidden="true">
+      <Show when={wipe.ghost()}>
+        <div class="swap-ghost" aria-hidden="true" onAnimationEnd={() => wipe.end()}>
           <UnitsSkeleton count={Math.min(3, Math.max(1, props.data.review.decisions.length))} />
         </div>
       </Show>
-    <div class="swap-over" ref={wipe.start}>
+    <div ref={wipe.start}>
       {/* one offer per language the review's code is in */}
       <For each={[...new Set((props.data.grouped?.hunks ?? []).map((hunk) => toolOf(hunk.file)).filter((tool) => tool !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
       <Show
