@@ -49,3 +49,24 @@ export async function leave(element: HTMLElement | undefined): Promise<void> {
   element.style.overflow = "hidden";
   await ended(animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0] }, { duration: 0.2, ease: EASE }).finished, 0.2);
 }
+
+/** A `<details>` whose body opens and closes animated: its summary's click
+ *  is taken over, the one element after the summary grows in or shrinks
+ *  out, and only then does it close. */
+export function animateDetails(details: HTMLDetailsElement): void {
+  const summary = details.querySelector(":scope > summary");
+  summary?.addEventListener("click", (event) => {
+    const body = details.querySelector<HTMLElement>(":scope > summary + *");
+    if (!body) return;
+    event.preventDefault();
+    if (!details.open) {
+      details.open = true;
+      enter(body);
+      return;
+    }
+    void leave(body).then(() => {
+      details.open = false;
+      for (const property of ["height", "opacity", "overflow"]) body.style.removeProperty(property);
+    });
+  });
+}
