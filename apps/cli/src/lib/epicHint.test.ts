@@ -33,13 +33,11 @@ describe("what the agent is told about epics as a ticket is filed", () => {
     expect(relatedHint(makeTicket("z", { from: ["root"] }), room(root, ...kids, makeTicket("z", { from: ["root"] })), "me")).toBe("");
   });
 
-  it("a ticket grown out of one in an epic is offered that epic to judge, not put there; parents in two epics ask which", () => {
+  it("grown out of a ticket in one epic: no word (filed into it, or kept out by its filer); parents in two epics ask which", () => {
     const epic = makeTicket("e", { kind: "epic", project: "", title: "More languages", goal: "the review page reads more languages" });
     const php = moveToEpic(makeTicket("php"), "e", "me", 1);
     const plan = makeTicket("plan", { from: ["php"], structureAt: 5 * HOUR });
-    const hint = relatedHint(plan, room(epic, php, plan), "me");
-    expect(hint).toMatch(/grows out of a ticket in the epic "More languages" \[e\].*not put there on its own/);
-    expect(hint).toMatch(/otherwise say nothing/);
+    expect(relatedHint(plan, room(epic, php, plan), "me")).toBe("");
     const otherEpic = makeTicket("e2", { kind: "epic", project: "", goal: "Backoffice" });
     const lint = moveToEpic(makeTicket("lint"), "e2", "me", 2);
     const both = makeTicket("both", { from: ["php", "lint"], structureAt: 9 * HOUR });
