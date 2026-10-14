@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
-import type { Verdict } from "../data";
-import { hostNow } from "../hostNow";
+import type { Verdict } from "~/data";
+import { hostNow } from "~/hostNow";
 
 const VERDICTS: ReadonlyArray<{ readonly value: Verdict; readonly label: string; readonly hint: string }> = [
   { value: "comment", label: "Comment", hint: "Feedback without a verdict" },

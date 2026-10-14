@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
-import type { Decision } from "../data";
-import { assumedNow } from "../assumedNow";
+import type { Decision } from "~/data";
+import { assumedNow } from "~/assumedNow";
 
 const SURE = { high: "someone said why", medium: "the evidence points there", low: "a hunch from the code" } as const;
 

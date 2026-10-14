@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import solid from "@solidjs/vite-plugin";
+import { fileURLToPath } from "node:url";
 
 // The review page, built once into dist/ and served by the collagen instance
 // at /review/<ticketId> (apps/cli/src/services/ReviewView). Assets live under
@@ -12,6 +13,8 @@ export default defineConfig(({ isSsrBuild }) => ({
       serverFunctions: { endpoint: "/_server" },
     }),
   ],
+  // ~/ is src/ (tsconfig.json says the same)
+  resolve: { alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) } },
   base: "/review/",
   // the server bundle (vite build --ssr src/server/entry.ts) carries Solid
   // in it; effect stays out, so it runs on the instance's own copy

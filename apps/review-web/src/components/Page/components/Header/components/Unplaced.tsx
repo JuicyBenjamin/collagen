@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
-import type { DraftView } from "../data";
-import { hostNow } from "../hostNow";
+import type { DraftView } from "~/data";
+import { Appear } from "~/components/Appear";
+import { hostNow } from "~/hostNow";
 
 const where = (draft: DraftView) => `${draft.file}:${draft.startLine !== undefined ? `${draft.startLine}–` : ""}${draft.line}${draft.side === "LEFT" ? " (old)" : ""}`;
 
@@ -11,7 +12,8 @@ const where = (draft: DraftView) => `${draft.file}:${draft.startLine !== undefin
 export function Unplaced() {
   const lost = () => hostNow.unplaced();
   return (
-    <Show when={lost().length > 0}>
+    <Appear when={lost().length > 0}>
+      {() => (
       <section class="unplaced" id="unplaced" aria-label="Comments not on a line shown">
         <p class="unplaced-head">
           <strong>{lost().length === 1 ? "1 comment" : `${lost().length} comments`}</strong> not said yet sit on lines this diff no longer shows — the code moved under them.
@@ -33,6 +35,7 @@ export function Unplaced() {
           </For>
         </ul>
       </section>
-    </Show>
+      )}
+    </Appear>
   );
 }
