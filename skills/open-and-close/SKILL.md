@@ -1,6 +1,6 @@
 ---
 name: open-and-close
-description: Use when anything on the review page (review-web) opens, closes, expands, collapses, appears or goes away — a why folding open, a file folding to its header, a popover, a panel, a row added to or taken from a list. It comes in and goes out animated, never in one frame.
+description: Use when anything on the review page (review-web) opens, closes, expands, collapses, appears, arrives with data or goes away — a why folding open, a file folding to its header, a popover, a panel, a row added to or taken from a list, a part read from the server. It comes in and goes out animated, never in one frame.
 ---
 
 # Open and close, animated
@@ -11,6 +11,16 @@ place because they see where things went.
 
 ## The rule
 
+- **Every element, through two primitives.** What a condition shows or
+  hides goes in `Appear` (`components/Appear.tsx`): it enters as it is
+  placed and leaves before it is taken away. What waits on data goes in
+  `Arrives` (`components/Arrives.tsx`) with its own `.Skeleton`: the
+  placeholder stands until that part's data is in, then lies over the part
+  and is swept away, top left to bottom right. The placeholder never goes
+  first: a part never shows a blank frame between its placeholder and
+  itself.
+- **Each part when it is ready.** A part arrives on its own data, never
+  held for another's; nothing sweeps the page as a whole.
 - **Both ways.** Every expand has an enter and every collapse an exit. An
   exit that removes the element at once is the common miss: keep it placed
   until its exit has run, then take it away.
@@ -32,7 +42,8 @@ place because they see where things went.
 - **None when asked for less.** `prefers-reduced-motion: reduce` skips the
   animation (the helpers do); the open and close still happen.
 - **First paint is not an enter.** What is already open when the page loads
-  just shows; only what the reader opens animates.
+  just shows, and a part whose data is already in (kept from the last
+  visit) shows without a placeholder or a sweep.
 
 The TUI is exempt: a terminal redraws in steps.
 
@@ -41,9 +52,14 @@ The TUI is exempt: a terminal redraws in steps.
 - The merge history's why folded open and shut in one frame, and the rows
   under it jumped.
 - Opened in a tab with no frames, that why stayed at zero height.
+- A host bar placeholder was taken away and its part swept in from nothing:
+  it appeared, vanished, appeared.
+- One sweep over the whole screen waited for the slowest read, and parts
+  with no placeholder flashed in.
 
 ## Checklist
 
+- [ ] Is every toggled element in `Appear`, every loading part in `Arrives`?
 - [ ] Does what opens have an enter, and what closes an exit?
 - [ ] Is it still placed while its exit runs?
 - [ ] Reopening during the exit leaves it open?
