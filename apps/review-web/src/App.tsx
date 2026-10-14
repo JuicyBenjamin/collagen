@@ -20,7 +20,7 @@ import { assumedNow } from "./assumedNow";
 import { AssumedMark, AssumedWhy, VerdictMark } from "./components/Assumption";
 import { animateDetails } from "./fold";
 import { HeaderSkeleton, NavSkeleton, UnitsSkeleton } from "./components/Skeleton";
-import { entering } from "./enter";
+import { wipeIn } from "./wipe";
 
 // The review page: a review ticket's diff read by purpose. One section per
 // unit — what it achieves, a line on what it does, the decisions that shaped
@@ -33,8 +33,8 @@ import { entering } from "./enter";
 //
 // It builds as it loads: the review's own part (title, why) is read from the
 // room and stands at once; the outline and the code, which wait on the diff,
-// show their shape pending and fill in when it is read — each with a light
-// entrance (enter.ts), the first time only.
+// show their shape pending (the same markup, words masked) and each sweeps in
+// over it as soon as it is read, on its own (wipe.ts), the first time only.
 
 async function loadHead(): Promise<ReviewPageHead> {
   const head = await reviewHead(ticketId);
@@ -146,9 +146,15 @@ function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
 
 /** The outline, once the diff is read: its units, else the decisions alone. */
 function Outline(props: { data: ReviewPageData }) {
-  const enter = entering();
+  const wipe = wipeIn();
   return (
-    <div ref={(element) => enter(element)}>
+    <div class="swap">
+      <Show when={wipe.under()}>
+        <div class="swap-under" aria-hidden="true">
+          <NavSkeleton />
+        </div>
+      </Show>
+    <div class="swap-over" ref={wipe.start}>
       <p class="nav-title">{props.data.grouped ? "Units" : "Decisions"}</p>
       <Show when={viewed.count().files > 0}>
         <p class={["nav-viewed", { done: viewed.count().viewed === viewed.count().files }]}>
@@ -201,6 +207,7 @@ function Outline(props: { data: ReviewPageData }) {
         </Show>
       </ol>
     </div>
+    </div>
   );
 }
 
@@ -236,9 +243,15 @@ function Diff(props: { data: ReviewPageData }) {
       assumedNow.setClaimedBy(by);
     },
   );
-  const enter = entering();
+  const wipe = wipeIn();
   return (
-    <>
+    <div class="swap">
+      <Show when={wipe.under()}>
+        <div class="swap-under" aria-hidden="true">
+          <UnitsSkeleton count={Math.min(3, Math.max(1, props.data.review.decisions.length))} />
+        </div>
+      </Show>
+    <div class="swap-over" ref={wipe.start}>
       {/* one offer per language the review's code is in */}
       <For each={[...new Set((props.data.grouped?.hunks ?? []).map((hunk) => toolOf(hunk.file)).filter((tool) => tool !== null))]}>{(tool) => <TypesBanner tool={tool} />}</For>
       <Show
@@ -248,7 +261,7 @@ function Diff(props: { data: ReviewPageData }) {
             {/* by id: the data is read again whenever the review moves (a draft
                 accepted, a guess answered), and what was folded stays folded */}
             <For each={props.data.review.decisions} keyed={(decision) => decision.id}>
-              {(decision, index) => <BareDecision decision={decision()} why={props.data.source.detail} enter={(element) => enter(element, index())} />}
+              {(decision) => <BareDecision decision={decision()} why={props.data.source.detail} />}
             </For>
             <Show when={props.data.review.forks.length > 0}>
               <section class="decision">
@@ -271,7 +284,7 @@ function Diff(props: { data: ReviewPageData }) {
           <>
             {/* by id, so a unit's folded why stays folded when the data is read again */}
             <For each={grouped().units} keyed={(unit) => unit.id}>
-              {(unit, index) => <UnitSection unit={unit()} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={grouped().unmatched} enter={(element) => enter(element, index())} />}
+              {(unit) => <UnitSection unit={unit()} hunks={hunks()} decisions={decisions()} unitsOf={unitsOf()} unmatched={grouped().unmatched} />}
             </For>
             <Show when={grouped().outside.length > 0}>
               <section class="decision" id="outside">
@@ -324,7 +337,8 @@ function Diff(props: { data: ReviewPageData }) {
               : `No diff: ${props.data.source.detail}`}
         </p>
       </footer>
-    </>
+    </div>
+    </div>
   );
 }
 
@@ -335,9 +349,9 @@ function Header(props: { head: ReviewPageHead }) {
   const headline = () =>
     props.head.ticket.title ?? (props.head.ticket.kind === "review" && props.head.review.summary.trim().length > 0 ? props.head.review.summary : props.head.ticket.goal);
   const beneath = () => (headline() === props.head.review.summary ? "" : props.head.review.summary.trim());
-  const enter = entering();
+  // read from the room, it is in before anything waits on the diff: shown as it comes
   return (
-    <header ref={(element) => enter(element)}>
+    <header>
       <div class="header-top">
       <p class="meta">
         <Show when={props.head.review.branch}>
@@ -558,7 +572,6 @@ function UnitSection(props: {
   decisions: ReadonlyMap<string, Decision>;
   unitsOf: ReadonlyMap<string, ReadonlyArray<Unit>>;
   unmatched: Readonly<Record<string, ReadonlyArray<string>>>;
-  enter: (element: HTMLElement) => void;
 }) {
   const shaped = () => props.unit.decisions.map((id) => props.decisions.get(id)).filter((decision): decision is Decision => decision !== undefined);
   const files = () => new Set(props.unit.hunks.map((id) => props.hunks.get(id)?.file)).size;
@@ -629,7 +642,7 @@ function UnitSection(props: {
     },
   );
   return (
-    <section class={["decision", "unit", { unexplained: props.unit.by === "unexplained" }]} id={props.unit.id} ref={(element) => props.enter(element)}>
+    <section class={["decision", "unit", { unexplained: props.unit.by === "unexplained" }]} id={props.unit.id}>
       <div class="unit-head">
         <div class="decision-head">
           <h2>{props.unit.title}</h2>
@@ -702,9 +715,9 @@ function UnitSection(props: {
 
 /** A decision on a review read without a diff: its words, and in place of
  *  its code why there is none — never an empty block. */
-function BareDecision(props: { decision: Decision; why: string; enter: (element: HTMLElement) => void }) {
+function BareDecision(props: { decision: Decision; why: string }) {
   return (
-    <section class="decision" id={props.decision.id} ref={(element) => props.enter(element)}>
+    <section class="decision" id={props.decision.id}>
       <div class="decision-head">
         <h2 class={{ untitled: !props.decision.title }}>{props.decision.title ?? NO_TITLE}</h2>
         <p class="decision-what">{props.decision.what}</p>
