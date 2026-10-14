@@ -562,6 +562,10 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 /* the real parts draw some of their boxes and marks with ::before and ::after
    (a file header's card, a chip's arrow): none of them in a placeholder */
 .sk *::before, .sk *::after { content: none !important; }
+.sk .bar, .sk .sk-avatar { background: var(--sk-word); animation: sk-breathe 1.6s ease-in-out infinite; }
+.sk-avatar { display: inline-block; width: 22px; height: 22px; box-sizing: border-box; }
+/* nobody signed in: the face's place kept, empty */
+.avatar.empty { display: inline-block; width: 22px; height: 22px; box-sizing: border-box; background: var(--line); }
 .sk .sk-w { color: transparent; background: var(--sk-word); border-radius: 6px; -webkit-box-decoration-break: clone; box-decoration-break: clone; animation: sk-breathe 1.6s ease-in-out infinite; }
 .sk .hunk-group, .sk .chip { background: var(--sk-block); }
 .sk .hunk .file, .sk tr td { background: none; }
