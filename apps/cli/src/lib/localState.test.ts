@@ -28,7 +28,7 @@ describe("reading the user's state file", () => {
     expect(dropped).toEqual(["1 sent record"]);
     expect(state.rooms["st-test3"]?.[0]?.name).toBe("sandbox");
     expect(state.threads?.abc?.sessionId).toBe("s");
-    expect(state.sent?.map((p: { id: string }) => p.id)).toEqual(["p-1"]);
+    expect(state.sent?.map((proposal: { id: string }) => proposal.id)).toEqual(["p-1"]);
   });
 
   it("one broken project does not take the room's others with it", () => {
@@ -36,7 +36,7 @@ describe("reading the user's state file", () => {
       JSON.stringify({ preferredAi: null, rooms: { r1: [{ id: "p1", name: "sandbox", path: "/work" }, { name: "no id" }] } }),
     );
     expect(dropped).toEqual(["1 shared project"]);
-    expect(state.rooms["r1"]?.map((p) => p.name)).toEqual(["sandbox"]);
+    expect(state.rooms["r1"]?.map((project) => project.name)).toEqual(["sandbox"]);
   });
 
   it("unreadable switches go back to their defaults, the rest is kept", () => {

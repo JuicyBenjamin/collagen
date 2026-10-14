@@ -42,13 +42,13 @@ export function OutboxPage() {
   // read to its end, not capped
   type Row = { readonly kind: "head"; readonly at: number } | { readonly kind: "line"; readonly at: number; readonly text: string; readonly dim?: boolean };
   const rows: Array<Row> = [];
-  all.forEach((p, at) => {
+  all.forEach((proposal, at) => {
     rows.push({ kind: "head", at });
-    if (p.id !== expanded) return;
-    rows.push({ kind: "line", at, text: `sent ${new Date(p.ts).toLocaleString()}`, dim: true });
-    for (const text of wrap(proposalText(p), Math.max(20, boxWidth - 6))) rows.push({ kind: "line", at, text });
+    if (proposal.id !== expanded) return;
+    rows.push({ kind: "line", at, text: `sent ${new Date(proposal.ts).toLocaleString()}`, dim: true });
+    for (const text of wrap(proposalText(proposal), Math.max(20, boxWidth - 6))) rows.push({ kind: "line", at, text });
   });
-  const open = expanded === null ? -1 : all.findIndex((p) => p.id === expanded);
+  const open = expanded === null ? -1 : all.findIndex((proposal) => proposal.id === expanded);
   // folded: the selected record, moved only at the edges. Opened: its head at
   // the top until the reader scrolls (components/FollowScroll).
   const follow: FollowWhat = expanded !== null ? (scrolled || open < 0 ? null : { id: headId(open), how: "top" }) : sel === 0 ? "start" : { id: headId(sel) };
@@ -91,18 +91,18 @@ export function OutboxPage() {
             if (isEnter(key)) return fold(), true;
             return false;
           }
-          const at = (n: number) => (setCursor(clamp(n, 0, last)), true);
+          const at = (index: number) => (setCursor(clamp(index, 0, last)), true);
           if (key.name === "up" && sel > 0) return at(sel - 1);
           if (key.name === "down" && sel < last) return at(sel + 1);
           if (key.name === "pageup") return at(sel - page());
           if (key.name === "pagedown") return at(sel + page());
           if (key.name === "home") return at(0);
           if (key.name === "end") return at(last);
-          const p = all[sel];
-          if (!p) return false;
+          const proposal = all[sel];
+          if (!proposal) return false;
           // opening puts that record's head line at the top, so its text reads
           // downwards from where the eye already is
-          if (isEnter(key)) return setExpanded(p.id), setScrolled(false), true;
+          if (isEnter(key)) return setExpanded(proposal.id), setScrolled(false), true;
           return false;
         }}
       >
@@ -118,18 +118,18 @@ export function OutboxPage() {
               </text>
             ) : (
               <FollowScroll ref={list} follow={follow} onWidth={setBoxWidth} onView={setPos} flexGrow={1}>
-                {rows.map((r, i) =>
-                  r.kind === "head" ? (
-                    <box key={`h${r.at}`} id={headId(r.at)} flexShrink={0}>
+                {rows.map((row, index) =>
+                  row.kind === "head" ? (
+                    <box key={`h${row.at}`} id={headId(row.at)} flexShrink={0}>
                       <OutgoingRow
-                        proposal={all[r.at]!}
-                        selected={focused && r.at === sel}
-                        expanded={all[r.at]!.id === expanded}
-                        note={all[r.at]!.roomId === roomId ? undefined : `room ${shortRoomId(all[r.at]!.roomId)}`}
+                        proposal={all[row.at]!}
+                        selected={focused && row.at === sel}
+                        expanded={all[row.at]!.id === expanded}
+                        note={all[row.at]!.roomId === roomId ? undefined : `room ${shortRoomId(all[row.at]!.roomId)}`}
                       />
                     </box>
                   ) : (
-                    <OutgoingLine key={`l${i}`} text={r.text} dim={r.dim} />
+                    <OutgoingLine key={`l${index}`} text={row.text} dim={row.dim} />
                   ),
                 )}
               </FollowScroll>

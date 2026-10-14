@@ -27,7 +27,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
           ? Effect.fail(new NotWritable({ roomId: "testroom" }))
           : Effect.sync(() => {
               sent.push({ peerKey, intent: payload.intent, findings: payload.findings });
-              const msg: RoomMessage = {
+              const message: RoomMessage = {
                 id: `m-${sent.length}`,
                 threadId: deriveThreadId("me", peerKey, payload.project),
                 from: "me",
@@ -38,7 +38,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
                 findings: payload.findings,
                 ts: 1,
               };
-              return msg;
+              return message;
             });
       const tickets = yield* SubscriptionRef.make<ReadonlyMap<string, Ticket>>(new Map());
       const meta = yield* SubscriptionRef.make({ name: "test room", ts: 0 });
@@ -77,7 +77,7 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
         reviews,
         unseen: yield* SubscriptionRef.make<ReadonlyArray<Unseen>>([]),
         shareReview: () => Effect.succeed(undefined),
-        messages: Stream.fromPubSub(inbound).pipe(Stream.map((msg) => ({ seq: 0, msg }))),
+        messages: Stream.fromPubSub(inbound).pipe(Stream.map((message) => ({ seq: 0, message }))),
         sendTo,
         updateProfile: Effect.void,
       };
@@ -105,7 +105,7 @@ const stateStoreStub = Layer.effect(
     const state = yield* SubscriptionRef.make<LocalState>({ preferredAi: null, rooms: {} });
     return {
       state,
-      update: (f: (s: LocalState) => LocalState) => SubscriptionRef.update(state, f).pipe(Effect.asVoid),
+      update: (change: (s: LocalState) => LocalState) => SubscriptionRef.update(state, change).pipe(Effect.asVoid),
       get: SubscriptionRef.get(state),
     };
   }),
@@ -129,8 +129,8 @@ describe("Scripting", () => {
     const card = await run(
       layer,
       Effect.gen(function* () {
-        const s = yield* Scripting;
-        return s.describe();
+        const scripting = yield* Scripting;
+        return scripting.describe();
       }),
     );
     expect(card).toContain("collagen.listRoom");
@@ -143,9 +143,9 @@ describe("Scripting", () => {
     const result = await run(
       layer,
       Effect.gen(function* () {
-        const s = yield* Scripting;
+        const scripting = yield* Scripting;
         return yield* Effect.promise(() =>
-          s.execute(`
+          scripting.execute(`
             const room = await collagen.listRoom();
             const targets = room.peers.filter(p => p.projects.indexOf("sandbox") !== -1);
             const outcomes = await Promise.all(
@@ -162,7 +162,7 @@ describe("Scripting", () => {
     );
     expect(result.status).toBe("ok");
     expect((result as { output: { asked: number } }).output).toEqual({ asked: 2 });
-    expect(sent.map((s) => s.peerKey).sort()).toEqual(["k-bob", "k-carol"]);
+    expect(sent.map((delivery) => delivery.peerKey).sort()).toEqual(["k-bob", "k-carol"]);
   });
 
   it("rejects unbounded loops at validation, before anything runs", async () => {
@@ -170,9 +170,9 @@ describe("Scripting", () => {
     const result = await run(
       layer,
       Effect.gen(function* () {
-        const s = yield* Scripting;
+        const scripting = yield* Scripting;
         return yield* Effect.promise(() =>
-          s.execute(`
+          scripting.execute(`
             while (true) { await collagen.listRoom(); }
           `),
         );
@@ -187,9 +187,9 @@ describe("Scripting", () => {
     const result = await run(
       layer,
       Effect.gen(function* () {
-        const s = yield* Scripting;
+        const scripting = yield* Scripting;
         return yield* Effect.promise(() =>
-          s.execute(`
+          scripting.execute(`
             const r = await collagen.sendToPeer({ peer: "dave", project: "sandbox", intent: "ping", findings: "hi" });
             return r;
           `),

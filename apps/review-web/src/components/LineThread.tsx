@@ -6,21 +6,21 @@ import { Markdown } from "./Markdown";
 
 /** When a comment was written, as a reader says it. */
 const when = (iso: string): string => {
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "";
-  const mins = Math.round((Date.now() - t) / 60_000);
+  const time = Date.parse(iso);
+  if (Number.isNaN(time)) return "";
+  const mins = Math.round((Date.now() - time) / 60_000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins} min ago`;
   if (mins < 24 * 60) return `${Math.round(mins / 60)} h ago`;
-  return new Date(t).toLocaleDateString();
+  return new Date(time).toLocaleDateString();
 };
 
 /** A place on the diff as GitHub names it: +12 on the new side, −12 on the old. */
 const named = (side: "LEFT" | "RIGHT", line: number) => `${side === "LEFT" ? "−" : "+"}${line}`;
 
 /** Which lines a comment is on, in words: "line +12", "lines +12 to +15". */
-const linesOf = (c: { readonly line: number; readonly side: "LEFT" | "RIGHT"; readonly startLine?: number; readonly startSide?: "LEFT" | "RIGHT" }) =>
-  c.startLine !== undefined ? `lines ${named(c.startSide ?? c.side, c.startLine)} to ${named(c.side, c.line)}` : `line ${named(c.side, c.line)}`;
+const linesOf = (comment: { readonly line: number; readonly side: "LEFT" | "RIGHT"; readonly startLine?: number; readonly startSide?: "LEFT" | "RIGHT" }) =>
+  comment.startLine !== undefined ? `lines ${named(comment.startSide ?? comment.side, comment.startLine)} to ${named(comment.side, comment.line)}` : `line ${named(comment.side, comment.line)}`;
 
 /** The code a suggestion would replace: the new file's lines it is on, when
  *  the hunk shows them (a suggestion only ever replaces new-side lines). */
@@ -48,8 +48,8 @@ function Suggestion(props: { code: string; replaces: ReadonlyArray<string> | nul
         </button>
       </div>
       <pre class="suggestion-code">
-        <For each={props.replaces ?? []}>{(l) => <div class="sg-del">- {l}</div>}</For>
-        <For each={suggested()}>{(l) => <div class="sg-add">+ {l}</div>}</For>
+        <For each={props.replaces ?? []}>{(line) => <div class="sg-del">- {line}</div>}</For>
+        <For each={suggested()}>{(line) => <div class="sg-add">+ {line}</div>}</For>
         <Show when={suggested().length === 0}>
           <div class="sg-none">(remove these lines)</div>
         </Show>
@@ -63,13 +63,13 @@ function Suggestion(props: { code: string; replaces: ReadonlyArray<string> | nul
  *  way, is marked so. */
 function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
   const replaces = () => {
-    const c = props.comment;
-    return c.side === "RIGHT" && (c.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(c.startLine ?? c.line, c.line) : null;
+    const comment = props.comment;
+    return comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(comment.startLine ?? comment.line, comment.line) : null;
   };
   return (
     <div class={["line-comment", { pending: props.comment.pending, reply: props.comment.replyTo !== undefined }]}>
       <div class="line-comment-head">
-        <Show when={props.comment.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(e) => (e.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
+        <Show when={props.comment.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
         <strong>{props.comment.author.login}</strong>
         <Show when={props.comment.drafted}>
           <span class="drafted-mark" title="Drafted by their AI, accepted by them">with AI</span>
@@ -117,8 +117,8 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
   const [body, setBody] = createSignal(props.draft.body);
   const [busy, setBusy] = createSignal(false);
   const replaces = () => {
-    const d = props.draft;
-    return d.side === "RIGHT" && (d.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(d.startLine ?? d.line, d.line) : null;
+    const draft = props.draft;
+    return draft.side === "RIGHT" && (draft.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(draft.startLine ?? draft.line, draft.line) : null;
   };
   const accept = async () => {
     setBusy(true);
@@ -139,7 +139,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
         when={editing()}
         fallback={<For each={bodyParts(props.draft.body)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
-        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
+        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
       </Show>
       <Moved comment={props.draft} />
       <Show when={hostNow.refusal(props.draft.id)}>{(why) => <p class="host-error">Not posted: {why()}</p>}</Show>
@@ -164,8 +164,8 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
   const [editing, setEditing] = createSignal(false);
   const [body, setBody] = createSignal(props.comment.body);
   const replaces = () => {
-    const d = props.comment;
-    return d.side === "RIGHT" && (d.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(d.startLine ?? d.line, d.line) : null;
+    const comment = props.comment;
+    return comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(comment.startLine ?? comment.line, comment.line) : null;
   };
   const save = () => {
     const text = body().trim();
@@ -185,7 +185,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
         when={editing()}
         fallback={<For each={bodyParts(props.comment.body)}>{(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}</For>}
       >
-        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(e) => setBody(e.currentTarget.value)} />
+        <textarea class="draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
       </Show>
       <Show when={!props.comment.posted} fallback={<p class="moved-note">On the pull request already — finish the review again to say it in the room.</p>}>
         <Moved comment={props.comment} />
@@ -222,9 +222,9 @@ export function LineThread(props: { file: string; side: "LEFT" | "RIGHT"; line: 
       <tr class="thread-row">
         <td colspan={3}>
           <div class="thread">
-            <For each={here()}>{(c) => <Comment comment={c} codeOf={props.codeOf} />}</For>
-            <For each={inReview()}>{(d) => <Pending comment={d} codeOf={props.codeOf} />}</For>
-            <For each={drafted()}>{(d) => <Draft draft={d} codeOf={props.codeOf} />}</For>
+            <For each={here()}>{(comment) => <Comment comment={comment} codeOf={props.codeOf} />}</For>
+            <For each={inReview()}>{(pending) => <Pending comment={pending} codeOf={props.codeOf} />}</For>
+            <For each={drafted()}>{(draft) => <Draft draft={draft} codeOf={props.codeOf} />}</For>
           </div>
         </td>
       </tr>
@@ -269,12 +269,12 @@ export function LineComposer(props: {
     setSaid(null);
     try {
       const start = block() ? props.from : null;
-      const r = single ? await hostNow.comment(props.file, props.to.side, props.to.line, text, start) : await hostNow.addToReview(props.file, props.to.side, props.to.line, text, start);
-      if ("error" in r) return setSaid(r.error);
+      const result = single ? await hostNow.comment(props.file, props.to.side, props.to.line, text, start) : await hostNow.addToReview(props.file, props.to.side, props.to.line, text, start);
+      if ("error" in result) return setSaid(result.error);
       setBody("");
       close();
-    } catch (e) {
-      setSaid(String(e));
+    } catch (error) {
+      setSaid(String(error));
     } finally {
       setSending(false);
     }
@@ -285,8 +285,8 @@ export function LineComposer(props: {
         <div class="thread">
           <form
             class="line-composer"
-            onSubmit={(e) => {
-              e.preventDefault();
+            onSubmit={(event) => {
+              event.preventDefault();
               void send(false);
             }}
           >
@@ -299,17 +299,17 @@ export function LineComposer(props: {
               </Show>
             </div>
             <textarea
-              ref={(el) => {
-                box = el;
-                requestAnimationFrame(() => el.focus());
+              ref={(element) => {
+                box = element;
+                requestAnimationFrame(() => element.focus());
               }}
               rows={4}
               placeholder="Leave a comment"
               value={body()}
-              onInput={(e) => setBody(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send(false);
-                if (e.key === "Escape") close();
+              onInput={(event) => setBody(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void send(false);
+                if (event.key === "Escape") close();
               }}
             />
             <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>

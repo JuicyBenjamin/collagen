@@ -35,17 +35,17 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
     const { identity, nameRef } = yield* IdentityService;
 
     const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing) {
-      const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === roomId);
-      if (!h) return refused("failed: that room is gone");
-      const { room } = h;
+      const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === roomId);
+      if (!handle) return refused("failed: that room is gone");
+      const { room } = handle;
       const peers = yield* SubscriptionRef.get(room.roster);
       const members = yield* SubscriptionRef.get(room.members);
       const myName = yield* SubscriptionRef.get(nameRef);
       const nameFor = (key: string) =>
         key === identity.pubkey
           ? myName
-          : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 12));
-      const render = (t: Ticket) => toToon({ ticket: ticketView(t, nameFor) });
+          : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 12));
+      const render = (ticket: Ticket) => toToon({ ticket: ticketView(ticket, nameFor) });
 
       switch (out.kind) {
         case "message": {
@@ -53,7 +53,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const who = personNamed(out.peer, { peers, members, me: identity.pubkey });
           if (who._tag === "refused") return refused(who.text);
           const target = who.person;
-          const online = peers.some((p) => p.key === target.key);
+          const online = peers.some((peer) => peer.key === target.key);
           return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}) }).pipe(
             Effect.map(() => sent(online ? `sent to ${target.name}` : `sent to ${target.name} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),
@@ -102,11 +102,11 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const held = `(${decisions.length} decision(s), ${forks.length} fork(s) now on it — for your own bookkeeping, not for your user)`;
           if (!out.ticket || known) return sent(`${kind} ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
           // asked of others — a reading step of the filer's own (an assumed review) is not asking anyone
-          const readers = out.ticket.steps.filter((s) => isTake(s) && s.owner !== identity.pubkey);
+          const readers = out.ticket.steps.filter((step) => isTake(step) && step.owner !== identity.pubkey);
           const who =
             readers.length === 0
               ? "in the room, nobody asked in particular"
-              : `asked of ${readers.map((s) => nameFor(s.owner)).join(", ")}`;
+              : `asked of ${readers.map((reader) => nameFor(reader.owner)).join(", ")}`;
           // filed in order behind another: said to the agent, so nobody is
           // surprised that the readers have not seen it yet
           const waits =
@@ -119,7 +119,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
           if (!ticket) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
-          const step = ticket.steps.find((s) => s.id === out.stepId);
+          const step = ticket.steps.find((candidate) => candidate.id === out.stepId);
           if (!step) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
           const now = yield* Clock.currentTimeMillis;
           // one rule, shared with the drive path (see p2p settleStep)
@@ -155,29 +155,29 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const now = yield* Clock.currentTimeMillis;
           const moved: Array<string> = [];
           const skipped: Array<string> = [];
-          for (const [i, id] of out.ticketIds.entries()) {
-            const t = all.get(id);
-            if (!t || !visibleTo(t, all, identity.pubkey)) {
+          for (const [index, id] of out.ticketIds.entries()) {
+            const ticket = all.get(id);
+            if (!ticket || !visibleTo(ticket, all, identity.pubkey)) {
               skipped.push(`${id} (no such ticket)`);
               continue;
             }
-            if (t.kind === "epic") {
-              skipped.push(`"${ticketName(t)}" (an epic is never part of another)`);
+            if (ticket.kind === "epic") {
+              skipped.push(`"${ticketName(ticket)}" (an epic is never part of another)`);
               continue;
             }
-            if (excluding !== undefined && epicOf(t) !== out.epic) {
-              skipped.push(`"${ticketName(t)}" (not in that epic)`);
+            if (excluding !== undefined && epicOf(ticket) !== out.epic) {
+              skipped.push(`"${ticketName(ticket)}" (not in that epic)`);
               continue;
             }
-            const already = excluding !== undefined ? excludedFromEpic(t) === excluding : epicOf(t) === out.epic && (t.partOf?.length ?? 0) > 0;
+            const already = excluding !== undefined ? excludedFromEpic(ticket) === excluding : epicOf(ticket) === out.epic && (ticket.partOf?.length ?? 0) > 0;
             if (already) {
-              skipped.push(`"${ticketName(t)}" (already ${excluding === true ? "excluded" : excluding === false ? "counted" : out.epic ? "in it" : "in none"})`);
+              skipped.push(`"${ticketName(ticket)}" (already ${excluding === true ? "excluded" : excluding === false ? "counted" : out.epic ? "in it" : "in none"})`);
               continue;
             }
             // one millisecond apart, so moves made together keep their order
-            const merged = yield* room.shareTicket(moveToEpic(t, out.epic, identity.pubkey, now + i, excluding === true)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+            const merged = yield* room.shareTicket(moveToEpic(ticket, out.epic, identity.pubkey, now + index, excluding === true)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
             if (!merged) return NOT_ADMITTED;
-            moved.push(`"${ticketName(t)}"`);
+            moved.push(`"${ticketName(ticket)}"`);
           }
           if (moved.length === 0) return refused(`failed: nothing moved — ${skipped.join("; ")}`);
           const progress = target ? epicParts(target, yield* SubscriptionRef.get(room.tickets)) : null;
@@ -190,7 +190,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const all = yield* SubscriptionRef.get(room.tickets);
           const epic = all.get(out.epicId);
           if (!epic || epic.kind !== "epic") return refused(`failed: no epic ${out.epicId} — check get-tickets (kind: epic)`);
-          const inIt = new Set(epicParts(epic, all).parts.map((t) => t.id));
+          const inIt = new Set(epicParts(epic, all).parts.map((part) => part.id));
           const strangers = out.ticketIds.filter((id) => !inIt.has(id));
           if (strangers.length > 0) return refused(`failed: not in "${ticketName(epic)}": ${strangers.join(", ")} — order only what is in it (add them first)`);
           const now = yield* Clock.currentTimeMillis;
@@ -207,7 +207,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (turned.outcome === "already") return refused(`failed: "${ticketName(epic)}" is already ${out.closed ? "closed" : "open"}`);
           if (turned.outcome === "unresolved") {
             return refused(
-              `failed: "${ticketName(epic)}" still holds ${turned.unresolved.length} unresolved ticket(s): ${turned.unresolved.map((t) => `"${ticketName(t)}" [${t.id}]`).join(", ")}. An epic closes only once everything in it is done, closed, or excluded — ask your user whether to resolve them, exclude them from its progress (epic, action exclude) or move them out (action remove).`,
+              `failed: "${ticketName(epic)}" still holds ${turned.unresolved.length} unresolved ticket(s): ${turned.unresolved.map((unresolved) => `"${ticketName(unresolved)}" [${unresolved.id}]`).join(", ")}. An epic closes only once everything in it is done, closed, or excluded — ask your user whether to resolve them, exclude them from its progress (epic, action exclude) or move them out (action remove).`,
             );
           }
           if (turned.outcome === "needs-reason") return refused(`failed: reopening "${ticketName(epic)}" needs a reason from your user — what more there is to do in it`);
@@ -227,7 +227,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (done.outcome === "already") return refused(`failed: "${ticket.goal}" was already closed by ${nameFor(ticket.closed!.by)}`);
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
-          const open = merged.steps.filter((s) => s.status === "pending" || s.status === "suspended").length;
+          const open = merged.steps.filter((step) => step.status === "pending" || step.status === "suspended").length;
           // the author's own instruction for this moment, written when the
           // ticket was filed — handed over now, and not a settle earlier. One
           // instruction to the agent, not two: what to report, then what to do
@@ -246,7 +246,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now);
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
-          const others = merged.steps.filter((s) => isTake(s) && s.owner !== identity.pubkey).length;
+          const others = merged.steps.filter((step) => isTake(step) && step.owner !== identity.pubkey).length;
           const word = ticket.kind === "review" ? "review" : "take";
           return sent(`your ${word} is on "${ticket.goal}" as step ${stepId}${others > 0 ? ` (beside ${others} other reader(s))` : ""} — anyone else in the room can still post theirs\n${render(merged)}`);
         }
@@ -280,7 +280,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             }
           }
           if (attached === 0) return NOT_ADMITTED;
-          yield* store.update((st) => ({ ...st, attachedFiles: { ...(st.attachedFiles ?? {}), ...files } }));
+          yield* store.update((state) => ({ ...state, attachedFiles: { ...(state.attachedFiles ?? {}), ...files } }));
           return sent(`attached ${attached} file(s) to "${out.goal}" — the references are on the ticket for everyone; the files go to whoever fetches them while you are online`);
         }
         case "transcript": {

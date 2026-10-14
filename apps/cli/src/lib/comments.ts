@@ -16,23 +16,23 @@ export interface Spot {
 
 /** The row of a hunk a line is, on a side — or -1. */
 const rowOf = (hunk: Hunk, side: "LEFT" | "RIGHT", line: number): number =>
-  hunk.lines.findIndex((l) => (side === "RIGHT" ? l.kind !== "-" && l.new === line : l.kind === "-" && l.old === line));
+  hunk.lines.findIndex((row) => (side === "RIGHT" ? row.kind !== "-" && row.new === line : row.kind === "-" && row.old === line));
 
 /** The lines a file's hunks show, in words: "+1–12, +40–48". */
 const shown = (hunks: ReadonlyArray<Hunk>): string =>
   hunks
-    .map((h) => {
-      const news = h.lines.flatMap((l) => (l.kind !== "-" && l.new !== undefined ? [l.new] : []));
+    .map((hunk) => {
+      const news = hunk.lines.flatMap((line) => (line.kind !== "-" && line.new !== undefined ? [line.new] : []));
       return news.length === 0 ? "only removed lines" : `+${news[0]}–${news[news.length - 1]}`;
     })
     .join(", ");
 
 /** Why a comment cannot sit there, or null when it can. */
 export const placeComment = (hunks: ReadonlyArray<Hunk>, spot: Spot): string | null => {
-  const mine = hunks.filter((h) => h.file === spot.file);
+  const mine = hunks.filter((hunk) => hunk.file === spot.file);
   if (mine.length === 0) return `${spot.file} is not changed in this review's diff`;
   const sign = spot.side === "LEFT" ? "−" : "+";
-  const end = mine.find((h) => rowOf(h, spot.side, spot.line) !== -1);
+  const end = mine.find((hunk) => rowOf(hunk, spot.side, spot.line) !== -1);
   if (!end) return `${spot.file} line ${sign}${spot.line} is not in the diff — it shows ${shown(mine)}${spot.side === "LEFT" ? " (side 'old' is for a removed line)" : ""}`;
   if (spot.startLine === undefined) return null;
   const startSide = spot.startSide ?? spot.side;

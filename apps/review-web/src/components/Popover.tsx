@@ -10,52 +10,52 @@ import { CodeLine } from "./Code";
 function Prose(props: { text: string }) {
   return (
     <p class="hint-text">
-      <For each={inline(props.text)}>{(p) => ("code" in p ? <code>{p.code}</code> : "strong" in p ? <strong>{p.strong}</strong> : p.text)}</For>
+      <For each={inline(props.text)}>{(part) => ("code" in part ? <code>{part.code}</code> : "strong" in part ? <strong>{part.strong}</strong> : part.text)}</For>
     </p>
   );
 }
 
 /** "Intelephense is reading the project · 40%" — why an answer may be
  *  missing things; the page asks again by itself until it is whole. */
-const reading = (name: string, r: HoverResult): string => {
-  const at = readSoFar(r);
+const reading = (name: string, result: HoverResult): string => {
+  const at = readSoFar(result);
   return `${name} is reading the project${at === null ? "…" : ` · ${at}%`}`;
 };
 
 /** The type of what the pointer rests on, beside the pointer. */
 export function Popover() {
   const style = createMemo(() => {
-    const p = popover();
-    if (!p) return {};
+    const hovered = popover();
+    if (!hovered) return {};
     // beside the pointer, kept on screen
-    const left = Math.min(p.x + 14, innerWidth - 520);
-    const below = p.y + 18;
-    return below > innerHeight - 160 ? { left: `${Math.max(8, left)}px`, bottom: `${innerHeight - p.y + 10}px` } : { left: `${Math.max(8, left)}px`, top: `${below}px` };
+    const left = Math.min(hovered.x + 14, innerWidth - 520);
+    const below = hovered.y + 18;
+    return below > innerHeight - 160 ? { left: `${Math.max(8, left)}px`, bottom: `${innerHeight - hovered.y + 10}px` } : { left: `${Math.max(8, left)}px`, top: `${below}px` };
   });
   return (
     <Show when={popover()}>
-      {(p) => (
+      {(hovered) => (
         <div class="hint" style={style()} role="tooltip">
-          <Show when={p().state === "ready" && p().result} fallback={<p class="hint-text">Starting {toolNameFor(p().file)}…</p>}>
-            {(r) => (
-              <Show when={"markdown" in r() ? (r() as { markdown: string }).markdown : null} fallback={
+          <Show when={hovered().state === "ready" && hovered().result} fallback={<p class="hint-text">Starting {toolNameFor(hovered().file)}…</p>}>
+            {(result) => (
+              <Show when={"markdown" in result() ? (result() as { markdown: string }).markdown : null} fallback={
                   <p class="hint-text muted">
-                    {"none" in r()
-                      ? reading(toolNameFor(p().file), r())
-                      : "error" in r()
-                        ? (r() as { error: string }).error
+                    {"none" in result()
+                      ? reading(toolNameFor(hovered().file), result())
+                      : "error" in result()
+                        ? (result() as { error: string }).error
                         : ""}
                   </p>
                 }>
-                {(md) => (
+                {(markdown) => (
                   <>
-                  <For each={brief(md()).blocks}>
-                    {(b) =>
-                      "label" in b ? (
-                        <p class="hint-label">{b.label}</p>
-                      ) : "code" in b ? (
+                  <For each={brief(markdown()).blocks}>
+                    {(block) =>
+                      "label" in block ? (
+                        <p class="hint-label">{block.label}</p>
+                      ) : "code" in block ? (
                         <pre class="hint-code">
-                          <For each={highlightCode(b.code, b.lang)}>
+                          <For each={highlightCode(block.code, block.lang)}>
                             {(line) => (
                               <div>
                                 <CodeLine spans={line} />
@@ -64,15 +64,15 @@ export function Popover() {
                           </For>
                         </pre>
                       ) : (
-                        <Prose text={b.text} />
+                        <Prose text={block.text} />
                       )
                     }
                   </For>
-                  <Show when={stillReading(r())}>
-                    <p class="hint-text muted">May be incomplete — {reading(toolNameFor(p().file), r())}</p>
+                  <Show when={stillReading(result())}>
+                    <p class="hint-text muted">May be incomplete — {reading(toolNameFor(hovered().file), result())}</p>
                   </Show>
-                  <Show when={brief(md()).overloads > 0}>
-                    <p class="hint-text muted">+{brief(md()).overloads} {brief(md()).overloads === 1 ? "overload" : "overloads"}</p>
+                  <Show when={brief(markdown()).overloads > 0}>
+                    <p class="hint-text muted">+{brief(markdown()).overloads} {brief(markdown()).overloads === 1 ? "overload" : "overloads"}</p>
                   </Show>
                   </>
                 )}

@@ -18,6 +18,6 @@ export const myNameAtom = runtimeAtom.atom(
 export const roomAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
     const rooms = yield* Rooms;
-    return rooms.watch((h) => SubscriptionRef.changes(h.room.meta).pipe(Stream.map((m) => ({ id: h.id, name: m.name }))));
+    return rooms.watch((handle) => SubscriptionRef.changes(handle.room.meta).pipe(Stream.map((meta) => ({ id: handle.id, name: meta.name }))));
   })),
 );

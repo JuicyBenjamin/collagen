@@ -7,7 +7,7 @@
 
 export interface LogoPalette {
   readonly accent: string;
-  readonly fg: string;
+  readonly foreground: string;
   readonly dim: string;
 }
 
@@ -35,77 +35,77 @@ export const LOGO = {
   settle: 550,
 } as const;
 
-const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
-const easeOut = (x: number) => 1 - (1 - x) * (1 - x) * (1 - x);
+const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
+const easeOut = (progress: number) => 1 - (1 - progress) * (1 - progress) * (1 - progress);
 
 /** Linear blend of two `#rrggbb` colours. */
-export const mix = (a: string, b: string, t: number): string => {
-  const k = clamp01(t);
-  const ch = (i: number) => {
-    const x = parseInt(a.slice(i, i + 2), 16);
-    const y = parseInt(b.slice(i, i + 2), 16);
-    return Math.round(x + (y - x) * k)
+export const mix = (from: string, to: string, amount: number): string => {
+  const weight = clamp01(amount);
+  const channel = (offset: number) => {
+    const fromValue = parseInt(from.slice(offset, offset + 2), 16);
+    const toValue = parseInt(to.slice(offset, offset + 2), 16);
+    return Math.round(fromValue + (toValue - fromValue) * weight)
       .toString(16)
       .padStart(2, "0");
   };
-  return `#${ch(1)}${ch(3)}${ch(5)}`;
+  return `#${channel(1)}${channel(3)}${channel(5)}`;
 };
 
 /**
- * @param t          ms since the logo appeared
+ * @param elapsed    ms since the logo appeared
  * @param readyAt    ms (same clock) when the app came up, or null while booting
  * @param letters    column count of each letter, in order (letterspace excluded)
  * @param tagline    the full tagline
  */
 export const logoFrame = (
-  t: number,
+  elapsed: number,
   readyAt: number | null,
   letters: ReadonlyArray<number>,
   tagline: string,
-  p: LogoPalette,
+  palette: LogoPalette,
 ): LogoFrame => {
-  const base = mix(p.dim, p.accent, 0.6);
-  const total = letters.reduce((n, w) => n + w, 0) + Math.max(0, letters.length - 1);
+  const base = mix(palette.dim, palette.accent, 0.6);
+  const total = letters.reduce((sum, width) => sum + width, 0) + Math.max(0, letters.length - 1);
   const revealDone = LOGO.letterEvery * (letters.length - 1) + LOGO.letterFlash;
-  const settleT = readyAt === null ? 0 : clamp01((t - readyAt) / LOGO.settle);
+  const settleT = readyAt === null ? 0 : clamp01((elapsed - readyAt) / LOGO.settle);
   const settled = readyAt !== null && settleT >= 1;
 
   // the sheen: a soft band sweeping left to right, over and over, until ready
-  const phase = ((t - revealDone) % LOGO.sheenPeriod) / LOGO.sheenPeriod;
+  const phase = ((elapsed - revealDone) % LOGO.sheenPeriod) / LOGO.sheenPeriod;
   const center = -LOGO.sheenWidth * 2 + (total + LOGO.sheenWidth * 4) * phase;
-  const sheenOn = readyAt === null && t >= revealDone;
+  const sheenOn = readyAt === null && elapsed >= revealDone;
 
   const columns: Array<string | null> = [];
-  letters.forEach((width, i) => {
-    const shownAt = LOGO.letterEvery * i;
-    const hidden = t < shownAt && readyAt === null;
-    if (i > 0) columns.push(hidden ? null : base); // the letterspace arrives with its letter
-    for (let c = 0; c < width; c++) {
+  letters.forEach((width, index) => {
+    const shownAt = LOGO.letterEvery * index;
+    const hidden = elapsed < shownAt && readyAt === null;
+    if (index > 0) columns.push(hidden ? null : base); // the letterspace arrives with its letter
+    for (let cell = 0; cell < width; cell++) {
       if (hidden) {
         columns.push(null);
         continue;
       }
       // a letter arrives white-hot and cools to the base
-      const flash = clamp01(1 - (t - shownAt) / LOGO.letterFlash);
-      let color = mix(base, p.fg, easeOut(flash));
+      const flash = clamp01(1 - (elapsed - shownAt) / LOGO.letterFlash);
+      let color = mix(base, palette.foreground, easeOut(flash));
       if (sheenOn) {
         const col = columns.length;
-        const d = (col - center) / LOGO.sheenWidth;
-        const glow = Math.exp(-d * d);
+        const distance = (col - center) / LOGO.sheenWidth;
+        const glow = Math.exp(-distance * distance);
         color = mix(color, "#ffffff", 0.65 * glow);
       }
       if (readyAt !== null) {
         // ready: one flash, then ease into the brand colour and stay there
-        const flashIn = clamp01((t - readyAt) / 90);
-        color = settleT < 0.16 ? mix(color, p.fg, flashIn) : mix(p.fg, p.accent, easeOut((settleT - 0.16) / 0.84));
+        const flashIn = clamp01((elapsed - readyAt) / 90);
+        color = settleT < 0.16 ? mix(color, palette.foreground, flashIn) : mix(palette.foreground, palette.accent, easeOut((settleT - 0.16) / 0.84));
       }
       columns.push(color);
     }
   });
 
-  const typed = readyAt !== null ? tagline.length : Math.max(0, Math.min(tagline.length, Math.floor((t - LOGO.taglineFrom) / LOGO.taglineEvery)));
-  const cursor = settled || readyAt !== null ? "" : Math.floor(t / LOGO.cursorBlink) % 2 === 0 ? "▌" : " ";
-  const taglineColor = readyAt === null ? mix(p.dim, p.fg, 0.35) : mix(mix(p.dim, p.fg, 0.35), p.dim, settleT);
+  const typed = readyAt !== null ? tagline.length : Math.max(0, Math.min(tagline.length, Math.floor((elapsed - LOGO.taglineFrom) / LOGO.taglineEvery)));
+  const cursor = settled || readyAt !== null ? "" : Math.floor(elapsed / LOGO.cursorBlink) % 2 === 0 ? "▌" : " ";
+  const taglineColor = readyAt === null ? mix(palette.dim, palette.foreground, 0.35) : mix(mix(palette.dim, palette.foreground, 0.35), palette.dim, settleT);
 
   return { columns, tagline: tagline.slice(0, typed), taglineColor, cursor, done: settled };
 };

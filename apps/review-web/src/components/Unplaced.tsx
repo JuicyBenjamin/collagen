@@ -2,7 +2,7 @@ import { For, Show } from "solid-js";
 import type { DraftView } from "../data";
 import { hostNow } from "../hostNow";
 
-const where = (d: DraftView) => `${d.file}:${d.startLine !== undefined ? `${d.startLine}–` : ""}${d.line}${d.side === "LEFT" ? " (old)" : ""}`;
+const where = (draft: DraftView) => `${draft.file}:${draft.startLine !== undefined ? `${draft.startLine}–` : ""}${draft.line}${draft.side === "LEFT" ? " (old)" : ""}`;
 
 /** Comments not said yet whose line this diff no longer shows — the file
  *  gone, renamed, or its change moved: listed here, each to delete, since
@@ -18,14 +18,14 @@ export function Unplaced() {
         </p>
         <ul>
           <For each={lost()}>
-            {(d) => (
+            {(draft) => (
               <li>
-                <span class={hostNow.isDraft(d) ? "draft-badge" : "pending-badge"}>{hostNow.isDraft(d) ? "Draft from your AI" : d.posted ? `On ${hostNow.hostName()}` : "Pending"}</span>
-                <code>{where(d)}</code>
-                <span class="unplaced-body">{d.body}</span>
-                <Show when={!d.posted}>
-                  <button type="button" class="quiet small" onClick={() => void (hostNow.isDraft(d) ? hostNow.decline([d.id]) : hostNow.unpend([d.id]))}>
-                    {hostNow.isDraft(d) ? "Decline" : "Delete"}
+                <span class={hostNow.isDraft(draft) ? "draft-badge" : "pending-badge"}>{hostNow.isDraft(draft) ? "Draft from your AI" : draft.posted ? `On ${hostNow.hostName()}` : "Pending"}</span>
+                <code>{where(draft)}</code>
+                <span class="unplaced-body">{draft.body}</span>
+                <Show when={!draft.posted}>
+                  <button type="button" class="quiet small" onClick={() => void (hostNow.isDraft(draft) ? hostNow.decline([draft.id]) : hostNow.unpend([draft.id]))}>
+                    {hostNow.isDraft(draft) ? "Decline" : "Delete"}
                   </button>
                 </Show>
               </li>

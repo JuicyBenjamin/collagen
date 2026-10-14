@@ -37,16 +37,16 @@ export const mimeOf = (name: string): string => MIME[extname(name).toLowerCase()
 /** A transcript's meta file (`<file>.meta.json`), when the file is one. */
 const transcriptInfo = (path: string): TranscriptInfo | undefined => {
   try {
-    const m = JSON.parse(readFileSync(`${path}.meta.json`, "utf8")) as Record<string, unknown>;
-    if (typeof m.from !== "string" || typeof m.ai !== "string" || typeof m.threadId !== "string") return undefined;
+    const meta = JSON.parse(readFileSync(`${path}.meta.json`, "utf8")) as Record<string, unknown>;
+    if (typeof meta.from !== "string" || typeof meta.ai !== "string" || typeof meta.threadId !== "string") return undefined;
     return {
-      from: m.from,
-      ai: m.ai,
-      threadId: m.threadId,
-      sessionId: typeof m.sessionId === "string" ? m.sessionId : "",
-      entries: typeof m.entries === "number" ? m.entries : 0,
-      since: typeof m.since === "number" ? m.since : 0,
-      origin: typeof m.origin === "string" ? m.origin : typeof m.subject === "string" ? m.subject : "",
+      from: meta.from,
+      ai: meta.ai,
+      threadId: meta.threadId,
+      sessionId: typeof meta.sessionId === "string" ? meta.sessionId : "",
+      entries: typeof meta.entries === "number" ? meta.entries : 0,
+      since: typeof meta.since === "number" ? meta.since : 0,
+      origin: typeof meta.origin === "string" ? meta.origin : typeof meta.subject === "string" ? meta.subject : "",
     };
   } catch {
     return undefined;
@@ -58,9 +58,9 @@ const transcriptInfo = (path: string): TranscriptInfo | undefined => {
 export const describeFile = (path: string): AttachItem | null => {
   let bytes: number;
   try {
-    const st = statSync(path);
-    if (!st.isFile()) return null;
-    bytes = st.size;
+    const stats = statSync(path);
+    if (!stats.isFile()) return null;
+    bytes = stats.size;
   } catch {
     return null;
   }
@@ -71,4 +71,4 @@ export const describeFile = (path: string): AttachItem | null => {
 
 /** Where a fetched attachment is filed: a name safe for any filesystem,
  *  prefixed by the attachment's id so two "shot.png" never collide. */
-export const safeName = (s: string): string => s.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 100);
+export const safeName = (name: string): string => name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 100);

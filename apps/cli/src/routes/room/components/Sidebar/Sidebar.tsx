@@ -29,7 +29,7 @@ export function Sidebar() {
 
   // the last row is always +, so joining is arrows + enter
   const last = rooms.length;
-  const sel = clamp(cursor ?? Math.max(0, rooms.findIndex((r) => r.focused)), 0, last);
+  const sel = clamp(cursor ?? Math.max(0, rooms.findIndex((room) => room.focused)), 0, last);
 
   return (
     <Focusable
@@ -60,13 +60,13 @@ export function Sidebar() {
     >
       {(hovered) => (
         <>
-          {rooms.map((room, i) => (
+          {rooms.map((room, index) => (
             <Avatar
               key={room.id}
               text={initials(room.name)}
               label={room.name}
               current={room.focused}
-              selected={hovered && i === sel}
+              selected={hovered && index === sel}
               expanded={hovered}
               online={room.online}
               needsYou={room.needsYou > 0}
@@ -102,7 +102,7 @@ function Avatar({
   needsYou?: boolean;
 }) {
   const border = selected ? theme.fg : current ? theme.accent : theme.dim;
-  const fg = selected || current ? theme.fg : theme.dim;
+  const color = selected || current ? theme.fg : theme.dim;
   const pill = current ? "▌" : " ";
   const count = online > 9 ? "9+" : online > 0 ? String(online) : "";
   const bottom = count.length === 0 ? "────" : count.length === 1 ? "──" : "─";
@@ -116,7 +116,7 @@ function Avatar({
         <text fg={border} wrapMode="none">
           <span fg={needsYou && !current ? theme.warn : theme.accent}>{needsYou && !current ? "●" : pill}</span>
           {"│ "}
-          <span fg={fg}>{text}</span>
+          <span fg={color}>{text}</span>
           {" │"}
         </text>
         <text fg={border} wrapMode="none">
@@ -128,7 +128,7 @@ function Avatar({
       </box>
       {expanded ? (
         <box width={16} marginLeft={1}>
-          <text fg={fg} truncate wrapMode="none">
+          <text fg={color} truncate wrapMode="none">
             {label}
           </text>
         </box>

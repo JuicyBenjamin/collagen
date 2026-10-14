@@ -11,7 +11,7 @@ import { roomAtom } from "../../atoms";
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../atoms";
 import { Arrow } from "../components/Arrow/Arrow";
 
-type Row = { readonly kind: "msg"; readonly id: string; readonly msg: RoomMessage };
+type Row = { readonly kind: "msg"; readonly id: string; readonly message: RoomMessage };
 
 /** Messages tab: the room's agent-to-agent trace as its log has it — every
  *  message between members, in log order. ↑↓ scroll (follows the newest row
@@ -32,7 +32,7 @@ export function MessagesPage() {
   // them they stay where the reader put them
   const [reading, setReading] = useState(false);
 
-  const rows: ReadonlyArray<Row> = trace.map((msg): Row => ({ kind: "msg", id: msg.id, msg }));
+  const rows: ReadonlyArray<Row> = trace.map((message): Row => ({ kind: "msg", id: message.id, message }));
   const last = Math.max(0, rows.length - 1);
   const sel = cursor === null ? last : clamp(cursor, 0, last);
   const current = rows[sel];
@@ -40,7 +40,7 @@ export function MessagesPage() {
   const nameFor = (key: string): string =>
     key === identity?.pubkey
       ? "you"
-      : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
+      : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
 
 
   return (
@@ -64,7 +64,7 @@ export function MessagesPage() {
         // scrolling back to the newest row resumes following
         if (key.name === "down") return setReading(false), setCursor(sel >= last ? null : sel + 1), true;
         if (isEnter(key)) {
-          if (current) setExpanded((e) => (e === current.id ? null : current.id));
+          if (current) setExpanded((previous) => (previous === current.id ? null : current.id));
           // opened details hold the cursor on their message: one that arrives
           // while they are read does not take it — following the newest
           // resumes only by moving past the last row
@@ -86,15 +86,15 @@ export function MessagesPage() {
             // the newest row followed until the user scrolls; then the cursor's,
             // moved only at the edges (components/FollowScroll)
             <FollowScroll ref={list} follow={cursor === null && expanded === null ? "end" : current ? { id: msgRowId(current.id), how: expanded === current.id && !reading ? "top" : "edge" } : null} flexGrow={1}>
-              {rows.map((row, i) => (
+              {rows.map((row, index) => (
                 <MessageRow
                   key={row.id}
                   id={msgRowId(row.id)}
-                  msg={row.msg}
-                  mine={row.msg.from === identity?.pubkey}
-                  from={nameFor(row.msg.from)}
-                  to={nameFor(row.msg.to)}
-                  selected={focused && i === sel}
+                  message={row.message}
+                  mine={row.message.from === identity?.pubkey}
+                  from={nameFor(row.message.from)}
+                  to={nameFor(row.message.to)}
+                  selected={focused && index === sel}
                   expanded={expanded === row.id}
                 />
               ))}
@@ -111,7 +111,7 @@ const msgRowId = (id: string): string => `msg-${id}`;
 
 function MessageRow({
   id,
-  msg,
+  message,
   mine,
   from,
   to,
@@ -119,7 +119,7 @@ function MessageRow({
   expanded,
 }: {
   id: string;
-  msg: RoomMessage;
+  message: RoomMessage;
   mine: boolean;
   from: string;
   to: string;
@@ -132,16 +132,16 @@ function MessageRow({
         {selected ? (expanded ? "▾ " : "› ") : "  "}
         <Arrow from={from} to={to} mine={mine} />
         <span fg={theme.dim}>
-          {" "}[{msg.project}/{msg.intent}]{" "}
+          {" "}[{message.project}/{message.intent}]{" "}
         </span>
-        {msg.findings.split("\n")[0]}
+        {message.findings.split("\n")[0]}
       </text>
       {expanded ? (
         <box flexDirection="column" paddingLeft={4} marginBottom={1}>
           <text fg={theme.dim} truncate wrapMode="none">
-            thread {msg.threadId} · {new Date(msg.ts).toLocaleString()}
+            thread {message.threadId} · {new Date(message.ts).toLocaleString()}
           </text>
-          <text fg={theme.fg}>{msg.findings}</text>
+          <text fg={theme.fg}>{message.findings}</text>
         </box>
       ) : null}
     </box>

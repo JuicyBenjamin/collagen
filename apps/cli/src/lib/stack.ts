@@ -17,11 +17,11 @@ export interface Edge extends StackStep {
  *  on the top of that chain, each of them — the climb stops there. */
 export const stackOf = (branch: string, base: string | undefined, edges: ReadonlyArray<Edge>): Stack | null => {
   const byHead = new Map<string, Edge>();
-  for (const e of edges) {
-    const had = byHead.get(e.branch);
-    if (!had || (had.kind !== "pull" && e.kind === "pull")) byHead.set(e.branch, e);
+  for (const edge of edges) {
+    const had = byHead.get(edge.branch);
+    if (!had || (had.kind !== "pull" && edge.kind === "pull")) byHead.set(edge.branch, edge);
   }
-  const step = ({ base: _base, ...s }: Edge): StackStep => s;
+  const step = ({ base: _base, ...rest }: Edge): StackStep => rest;
   const self = byHead.get(branch);
   const seen = new Set([branch]);
 
@@ -35,19 +35,19 @@ export const stackOf = (branch: string, base: string | undefined, edges: Readonl
       break;
     }
     seen.add(down);
-    const e = byHead.get(down);
-    if (!e) break;
-    below.unshift(step(e));
-    down = e.base;
+    const edge = byHead.get(down);
+    if (!edge) break;
+    below.unshift(step(edge));
+    down = edge.base;
   }
 
   const above: Array<StackStep> = [];
   let split: ReadonlyArray<StackStep> = [];
   let up = branch;
   for (;;) {
-    const on = [...byHead.values()].filter((e) => e.base === up && !seen.has(e.branch));
+    const on = [...byHead.values()].filter((edge) => edge.base === up && !seen.has(edge.branch));
     if (on.length === 0) break;
-    for (const e of on) seen.add(e.branch);
+    for (const edge of on) seen.add(edge.branch);
     if (on.length > 1) {
       split = on.map(step);
       break;

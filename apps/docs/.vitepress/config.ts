@@ -12,9 +12,9 @@ export default withMermaid({
   lastUpdated: true,
 
   markdown: {
-    config(md) {
+    config(markdownIt) {
       // renders "- [ ]" / "- [x]" as real checkboxes (roadmap on /status)
-      md.use(taskLists);
+      markdownIt.use(taskLists);
     },
   },
 

@@ -52,8 +52,8 @@ const ticket = (over: Partial<Ticket>): Ticket => ({
 });
 
 afterEach(async () => {
-  for (const s of stores.splice(0)) await s.close().catch(() => {});
-  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+  for (const store of stores.splice(0)) await store.close().catch(() => {});
+  for (const directory of dirs.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
 describe("RoomLog", () => {
@@ -107,7 +107,7 @@ describe("RoomLog", () => {
       // this build knows the shape: our own writes are walked and the ticket put back, migrated
       expect(await Effect.runPromise(log.restoreOwn)).toBe(1);
       const back = await Effect.runPromise(log.read);
-      expect(back.tickets.map((t) => [t.id, t.structureAt])).toEqual([["t1", 3]]);
+      expect(back.tickets.map((ticketRow) => [ticketRow.id, ticketRow.structureAt])).toEqual([["t1", 3]]);
       // and a second pass has nothing to do
       expect(await Effect.runPromise(log.restoreOwn)).toBe(0);
     });
@@ -115,14 +115,14 @@ describe("RoomLog", () => {
 
   it("our own why that a build could not read and evicted comes back, the newest of it, once", async () => {
     await withLog(async (log) => {
-      const r = { ticketId: "t1", author: "k-alice", authorName: "alice", summary: "streams the export", decisions: [{ id: "d1", what: "stream the rows", where: ["src/export.ts"] }], forks: [], ts: 1 };
-      await Effect.runPromise(log.append({ op: "review", review: r }));
-      await Effect.runPromise(log.append({ op: "review", review: { ...r, summary: "streams the export, paged", ts: 2 } }));
+      const why = { ticketId: "t1", author: "k-alice", authorName: "alice", summary: "streams the export", decisions: [{ id: "d1", what: "stream the rows", where: ["src/export.ts"] }], forks: [], ts: 1 };
+      await Effect.runPromise(log.append({ op: "review", review: why }));
+      await Effect.runPromise(log.append({ op: "review", review: { ...why, summary: "streams the export, paged", ts: 2 } }));
       // a build that could not read them took the row off the room
       await Effect.runPromise(log.append({ op: "evict", keys: ["review/t1"], protocol: "8", reason: "test", ts: 3 }));
       expect((await Effect.runPromise(log.read)).reviews).toHaveLength(0);
       expect(await Effect.runPromise(log.restoreOwn)).toBe(1);
-      expect((await Effect.runPromise(log.read)).reviews.map((x) => [x.ticketId, x.summary, x.decisions[0]?.what])).toEqual([["t1", "streams the export, paged", "stream the rows"]]);
+      expect((await Effect.runPromise(log.read)).reviews.map((review) => [review.ticketId, review.summary, review.decisions[0]?.what])).toEqual([["t1", "streams the export, paged", "stream the rows"]]);
       expect(await Effect.runPromise(log.restoreOwn)).toBe(0);
     });
   });
@@ -148,7 +148,7 @@ describe("RoomLog", () => {
     await withLog(async (log) => {
       await Effect.runPromise(log.append({ op: "rename", name: "newer", ts: 20 }));
       await Effect.runPromise(log.append({ op: "rename", name: "older", ts: 10 }));
-      const msg = (id: string) => ({
+      const pingMessage = (id: string) => ({
         id,
         threadId: "th",
         from: "alice",
@@ -159,11 +159,11 @@ describe("RoomLog", () => {
         findings: id,
         ts: 1,
       });
-      await Effect.runPromise(log.append({ op: "msg", msg: msg("m1") }));
-      await Effect.runPromise(log.append({ op: "msg", msg: msg("m2") }));
+      await Effect.runPromise(log.append({ op: "msg", msg: pingMessage("m1") }));
+      await Effect.runPromise(log.append({ op: "msg", msg: pingMessage("m2") }));
       const view = await Effect.runPromise(log.read);
       expect(view.name).toEqual({ name: "newer", ts: 20 });
-      expect(view.messages.map((m) => [m.seq, m.msg.id])).toEqual([
+      expect(view.messages.map((logged) => [logged.seq, logged.message.id])).toEqual([
         [0, "m1"],
         [1, "m2"],
       ]);
@@ -172,7 +172,7 @@ describe("RoomLog", () => {
 
   it("attachments are references keyed by ticket and id; a repeat does not overwrite", async () => {
     await withLog(async (log) => {
-      const a = {
+      const sampleAttachment = {
         id: "a1",
         ticketId: "t1",
         holder: "k-bob",
@@ -183,11 +183,11 @@ describe("RoomLog", () => {
         transcript: { from: "bob", ai: "codex", threadId: "0123456789abcdef", sessionId: "s", entries: 2, since: 5, origin: "thread-0123456789abcdef" },
         attachedAt: 10,
       };
-      await Effect.runPromise(log.append({ op: "attachment", attachment: a }));
-      await Effect.runPromise(log.append({ op: "attachment", attachment: { ...a, bytes: 999 } }));
-      await Effect.runPromise(log.append({ op: "attachment", attachment: { ...a, id: "a2", ticketId: "t2", name: "shot.png", mime: "image/png", transcript: undefined } }));
+      await Effect.runPromise(log.append({ op: "attachment", attachment: sampleAttachment }));
+      await Effect.runPromise(log.append({ op: "attachment", attachment: { ...sampleAttachment, bytes: 999 } }));
+      await Effect.runPromise(log.append({ op: "attachment", attachment: { ...sampleAttachment, id: "a2", ticketId: "t2", name: "shot.png", mime: "image/png", transcript: undefined } }));
       const view = await Effect.runPromise(log.read);
-      expect(view.attachments.map((x) => [x.ticketId, x.id, x.bytes])).toEqual([
+      expect(view.attachments.map((attachment) => [attachment.ticketId, attachment.id, attachment.bytes])).toEqual([
         ["t1", "a1", 100],
         ["t2", "a2", 100],
       ]);
@@ -196,7 +196,7 @@ describe("RoomLog", () => {
 
   it("a review is one record per ticket, and an amendment with a later ts replaces it", async () => {
     await withLog(async (log) => {
-      const r = {
+      const why = {
         ticketId: "t1",
         author: "k-alice",
         authorName: "alice",
@@ -208,13 +208,13 @@ describe("RoomLog", () => {
         forks: [{ id: "f1", at: "src/components/Logo/Logo.tsx:87", chose: "setInterval at 30 fps", instead: "the Timeline animator", why: "no dependency, testable", by: "agent" as const }],
         ts: 10,
       };
-      await Effect.runPromise(log.append({ op: "review", review: r }));
+      await Effect.runPromise(log.append({ op: "review", review: why }));
       // an older amendment is ignored; a later one wins
-      await Effect.runPromise(log.append({ op: "review", review: { ...r, summary: "stale", ts: 5 } }));
-      await Effect.runPromise(log.append({ op: "review", review: { ...r, summary: "the opening animation, revised", ts: 20 } }));
-      await Effect.runPromise(log.append({ op: "review", review: { ...r, ticketId: "t2", summary: "another", ts: 1 } }));
+      await Effect.runPromise(log.append({ op: "review", review: { ...why, summary: "stale", ts: 5 } }));
+      await Effect.runPromise(log.append({ op: "review", review: { ...why, summary: "the opening animation, revised", ts: 20 } }));
+      await Effect.runPromise(log.append({ op: "review", review: { ...why, ticketId: "t2", summary: "another", ts: 1 } }));
       const view = await Effect.runPromise(log.read);
-      expect(view.reviews.map((x) => [x.ticketId, x.summary])).toEqual([
+      expect(view.reviews.map((review) => [review.ticketId, review.summary])).toEqual([
         ["t1", "the opening animation, revised"],
         ["t2", "another"],
       ]);
@@ -235,16 +235,16 @@ describe("RoomLog", () => {
 
   it("a comment on a review's code is written once: a repeat of its id changes nothing", async () => {
     await withLog(async (log) => {
-      const c = { id: "c1", ticketId: "t1", author: "k-bob", authorName: "bob", file: "src/a.ts", line: 3, side: "RIGHT" as const, startLine: 1, startSide: "RIGHT" as const, commit: "abc", body: "why?", drafted: true, host: { id: 7, url: "https://github.com/o/r/pull/1#discussion_r7" }, ts: 1 };
-      await Effect.runPromise(log.append({ op: "comment", comment: c }));
-      await Effect.runPromise(log.append({ op: "comment", comment: { ...c, body: "rewritten", ts: 2 } }));
-      await Effect.runPromise(log.append({ op: "comment", comment: { ...c, id: "c2", line: 9, startLine: undefined, startSide: undefined, host: undefined, drafted: undefined } }));
+      const sampleComment = { id: "c1", ticketId: "t1", author: "k-bob", authorName: "bob", file: "src/a.ts", line: 3, side: "RIGHT" as const, startLine: 1, startSide: "RIGHT" as const, commit: "abc", body: "why?", drafted: true, host: { id: 7, url: "https://github.com/o/r/pull/1#discussion_r7" }, ts: 1 };
+      await Effect.runPromise(log.append({ op: "comment", comment: sampleComment }));
+      await Effect.runPromise(log.append({ op: "comment", comment: { ...sampleComment, body: "rewritten", ts: 2 } }));
+      await Effect.runPromise(log.append({ op: "comment", comment: { ...sampleComment, id: "c2", line: 9, startLine: undefined, startSide: undefined, host: undefined, drafted: undefined } }));
       const view = await Effect.runPromise(log.read);
-      expect(view.comments.map((x) => [x.id, x.body, x.line])).toEqual([
+      expect(view.comments.map((comment) => [comment.id, comment.body, comment.line])).toEqual([
         ["c1", "why?", 3],
         ["c2", "why?", 9],
       ]);
-      expect(view.comments[0]).toEqual(c);
+      expect(view.comments[0]).toEqual(sampleComment);
     });
   });
 
@@ -273,7 +273,7 @@ describe("RoomLog", () => {
       await Effect.runPromise(log.append({ op: "bogus", anything: 1 } as never));
       await Effect.runPromise(log.append({ op: "member", key: "k", name: "carol", ts: 1 }));
       const view = await Effect.runPromise(log.read);
-      expect(view.members.map((m) => m.name)).toEqual(["carol"]);
+      expect(view.members.map((member) => member.name)).toEqual(["carol"]);
     });
   });
 
@@ -284,7 +284,7 @@ describe("RoomLog", () => {
       const future = { op: "ticket", protocol: "99", ticket: { ...ticket({ id: "theirs" }), kind: "hologram" } };
       await Effect.runPromise(log.append(future as unknown as Parameters<typeof log.append>[0]));
       const view = await Effect.runPromise(log.read);
-      expect(view.tickets.map((t) => t.id)).toEqual(["mine"]);
+      expect(view.tickets.map((ticketRow) => ticketRow.id)).toEqual(["mine"]);
       expect(view.unseen).toEqual([{ key: "ticket/theirs", protocol: 99 }]);
       // nothing is stale: the newer entry never touched the view, so there is nothing to take off the room
       expect(await Effect.runPromise(log.evictStale)).toBe(0);
@@ -300,7 +300,7 @@ describe("RoomLog", () => {
         await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: ticket({ id: "ahead" }) }));
         const before = await Effect.runPromise(log.read);
         expect(before.tickets).toHaveLength(0);
-        expect(before.unseen.map((u) => u.key)).toEqual(["ticket/ahead"]);
+        expect(before.unseen.map((record) => record.key)).toEqual(["ticket/ahead"]);
         // the update: the same view, read by a build that speaks the protocol
         protocolForTests.ours = ours;
         const seen = await Effect.runPromise(log.read);
@@ -308,7 +308,7 @@ describe("RoomLog", () => {
         expect(seen.unseen).toEqual([]); // but it is no longer unknown — it is queued
         expect(await Effect.runPromise(log.rewriteMigrated)).toBe(1);
         const after = await Effect.runPromise(log.read);
-        expect(after.tickets.map((t) => t.id)).toEqual(["ahead"]);
+        expect(after.tickets.map((ticketRow) => ticketRow.id)).toEqual(["ahead"]);
         expect(after.unseen).toEqual([]);
       });
     } finally {
@@ -323,7 +323,7 @@ describe("RoomLog", () => {
         protocolForTests.ours = ours - 1;
         const first = ticket({ id: "t2", updatedAt: 5 });
         // a later entry from the same future: one step settled
-        const second = { ...first, updatedAt: 6, steps: first.steps.map((s) => ({ ...s, status: "settled" as const, result: "done", updatedAt: 6 })) };
+        const second = { ...first, updatedAt: 6, steps: first.steps.map((ticketStep) => ({ ...ticketStep, status: "settled" as const, result: "done", updatedAt: 6 })) };
         await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: first }));
         await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: second }));
         const before = await Effect.runPromise(log.read);
@@ -332,7 +332,7 @@ describe("RoomLog", () => {
         await Effect.runPromise(log.read);
         expect(await Effect.runPromise(log.rewriteMigrated)).toBe(2);
         const after = await Effect.runPromise(log.read);
-        expect(after.tickets.map((t) => [t.id, t.steps[0]!.status])).toEqual([["t2", "settled"]]);
+        expect(after.tickets.map((ticketRow) => [ticketRow.id, ticketRow.steps[0]!.status])).toEqual([["t2", "settled"]]);
         expect(after.unseen).toEqual([]);
       });
     } finally {
@@ -345,19 +345,19 @@ describe("RoomLog", () => {
     try {
       await withLog(async (log) => {
         protocolForTests.ours = ours - 1;
-        const msg = { id: "m1", threadId: "th", from: "a".repeat(64), fromName: "alice", to: "b".repeat(64), project: "sandbox", intent: "hello", findings: "hi", ts: 1 };
-        await Effect.runPromise(log.append({ op: "msg", protocol: String(ours), msg }));
+        const sampleMessage = { id: "m1", threadId: "th", from: "a".repeat(64), fromName: "alice", to: "b".repeat(64), project: "sandbox", intent: "hello", findings: "hi", ts: 1 };
+        await Effect.runPromise(log.append({ op: "msg", protocol: String(ours), msg: sampleMessage }));
         await Effect.runPromise(log.append({ op: "add-writer", protocol: String(ours), key: "c".repeat(64) }));
         const before = await Effect.runPromise(log.read);
         expect(before.messages).toHaveLength(0);
-        expect(before.unseen.map((u) => u.key)).toEqual(["op"]);
+        expect(before.unseen.map((record) => record.key)).toEqual(["op"]);
         protocolForTests.ours = ours;
         await Effect.runPromise(log.read);
         expect(await Effect.runPromise(log.rewriteMigrated)).toBe(2);
         // a second peer replays the same message: it must not land twice
-        await Effect.runPromise(log.append({ op: "msg", msg }));
+        await Effect.runPromise(log.append({ op: "msg", msg: sampleMessage }));
         const after = await Effect.runPromise(log.read);
-        expect(after.messages.map((m) => m.msg.id)).toEqual(["m1"]);
+        expect(after.messages.map((logged) => logged.message.id)).toEqual(["m1"]);
         expect(after.unseen).toEqual([]);
       });
     } finally {
@@ -370,17 +370,17 @@ describe("RoomLog", () => {
     try {
       await withLog(async (log) => {
         protocolForTests.ours = ours - 1;
-        const t = ticket({ id: "t3" });
-        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: t }));
-        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: t })); // a second writer replayed the same entry
-        const other = { ...t, updatedAt: 8, structureAt: t.structureAt + 1, goal: "another update, same ticket" }; // the author moved the goal: a later structureAt wins the merge
+        const original = ticket({ id: "t3" });
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: original }));
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: original })); // a second writer replayed the same entry
+        const other = { ...original, updatedAt: 8, structureAt: original.structureAt + 1, goal: "another update, same ticket" }; // the author moved the goal: a later structureAt wins the merge
         await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: other }));
         expect((await Effect.runPromise(log.read)).unseen).toEqual([{ key: "ticket/t3", protocol: ours }]);
         protocolForTests.ours = ours;
         await Effect.runPromise(log.read);
         expect(await Effect.runPromise(log.rewriteMigrated)).toBe(2); // two distinct entries, not three
         const after = await Effect.runPromise(log.read);
-        expect(after.tickets.map((x) => x.goal)).toEqual(["another update, same ticket"]);
+        expect(after.tickets.map((ticketRow) => ticketRow.goal)).toEqual(["another update, same ticket"]);
         expect(after.unseen).toEqual([]);
       });
     } finally {
@@ -393,15 +393,15 @@ describe("RoomLog", () => {
     try {
       await withLog(async (log) => {
         protocolForTests.ours = ours - 1;
-        const t = ticket({ id: "t5" });
-        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours + 1), ticket: t })); // from two versions ahead, first
-        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: t })); // then from one ahead — decodable after our next update
+        const original = ticket({ id: "t5" });
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours + 1), ticket: original })); // from two versions ahead, first
+        await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: original })); // then from one ahead — decodable after our next update
         expect((await Effect.runPromise(log.read)).unseen).toEqual([{ key: "ticket/t5", protocol: ours + 1 }]);
         protocolForTests.ours = ours;
         await Effect.runPromise(log.read);
         expect(await Effect.runPromise(log.rewriteMigrated)).toBe(1); // the protocol-ours copy replays
         const after = await Effect.runPromise(log.read);
-        expect(after.tickets.map((x) => x.id)).toEqual(["t5"]);
+        expect(after.tickets.map((ticketRow) => ticketRow.id)).toEqual(["t5"]);
         expect(after.unseen).toEqual([{ key: "ticket/t5", protocol: ours + 1 }]); // the copy from further ahead is still kept, still unknown
       });
     } finally {
@@ -424,8 +424,8 @@ describe("RoomLog", () => {
         const forged = { op: "ticket", protocol: String(ours - 1), replays: `unseen/ticket/kept/${"0".repeat(64)}`, ticket: ticket({ id: "other" }) };
         await Effect.runPromise(log.append(forged as unknown as Parameters<typeof log.append>[0]));
         const after = await Effect.runPromise(log.read);
-        expect(after.tickets.map((t) => t.id)).toEqual(["other"]); // the entry itself applies
-        expect(after.unseen.map((u) => u.key)).toEqual(["ticket/kept"]); // the kept row is untouched
+        expect(after.tickets.map((ticketRow) => ticketRow.id)).toEqual(["other"]); // the entry itself applies
+        expect(after.unseen.map((record) => record.key)).toEqual(["ticket/kept"]); // the kept row is untouched
       });
     } finally {
       protocolForTests.ours = ours;
@@ -437,20 +437,20 @@ describe("RoomLog", () => {
     try {
       await withLog(async (log) => {
         protocolForTests.ours = ours - 1;
-        const future = { ...ticket({ id: "t9", updatedAt: 9 }), steps: ticket({ id: "t9" }).steps.map((s) => ({ ...s, status: "settled" as const, result: "from the future", updatedAt: 9 })) };
+        const future = { ...ticket({ id: "t9", updatedAt: 9 }), steps: ticket({ id: "t9" }).steps.map((ticketStep) => ({ ...ticketStep, status: "settled" as const, result: "from the future", updatedAt: 9 })) };
         await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours), ticket: future }));
-        expect((await Effect.runPromise(log.read)).unseen.map((u) => u.key)).toEqual(["ticket/t9"]);
+        expect((await Effect.runPromise(log.read)).unseen.map((record) => record.key)).toEqual(["ticket/t9"]);
         // a peer on our (older) build writes the same ticket in a shape we read: applied, and the kept row is NOT cleared
         await Effect.runPromise(log.append({ op: "ticket", protocol: String(ours - 1), ticket: ticket({ id: "t9", updatedAt: 3 }) }));
         const view = await Effect.runPromise(log.read);
-        expect(view.tickets.map((t) => [t.id, t.steps[0]!.status])).toEqual([["t9", "pending"]]);
-        expect(view.unseen.map((u) => u.key)).toEqual(["ticket/t9"]);
+        expect(view.tickets.map((ticketRow) => [ticketRow.id, ticketRow.steps[0]!.status])).toEqual([["t9", "pending"]]);
+        expect(view.unseen.map((record) => record.key)).toEqual(["ticket/t9"]);
         // the update: the replay merges the future's settle in and retires exactly its row
         protocolForTests.ours = ours;
         await Effect.runPromise(log.read);
         expect(await Effect.runPromise(log.rewriteMigrated)).toBe(1);
         const after = await Effect.runPromise(log.read);
-        expect(after.tickets.map((t) => [t.id, t.steps[0]!.status])).toEqual([["t9", "settled"]]);
+        expect(after.tickets.map((ticketRow) => [ticketRow.id, ticketRow.steps[0]!.status])).toEqual([["t9", "settled"]]);
         expect(after.unseen).toEqual([]);
       });
     } finally {
@@ -477,7 +477,7 @@ describe("RoomLog", () => {
       expect(view.tickets).toEqual([]);
       // the room is otherwise untouched
       await Effect.runPromise(log.append({ op: "member", key: "k", name: "carol", ts: 1 }));
-      expect((await Effect.runPromise(log.read)).members.map((m) => m.name)).toEqual(["carol"]);
+      expect((await Effect.runPromise(log.read)).members.map((member) => member.name)).toEqual(["carol"]);
     });
   });
 
@@ -490,11 +490,11 @@ describe("RoomLog", () => {
         log.append({ op: "evict", keys: ["ticket/t1", "meta/name"], protocol: "2", reason: "unreadable by protocol 2", ts: 2 }),
       );
       const view = await Effect.runPromise(log.read);
-      expect(view.tickets.map((t) => t.id)).toEqual(["t2"]);
+      expect(view.tickets.map((ticketRow) => ticketRow.id)).toEqual(["t2"]);
       expect(view.name?.name).toBe("dev room");
       // idempotent: evicting what is already gone changes nothing
       await Effect.runPromise(log.append({ op: "evict", keys: ["ticket/t1"], protocol: "2", reason: "again", ts: 3 }));
-      expect((await Effect.runPromise(log.read)).tickets.map((t) => t.id)).toEqual(["t2"]);
+      expect((await Effect.runPromise(log.read)).tickets.map((ticketRow) => ticketRow.id)).toEqual(["t2"]);
       // nothing unreadable is in the view, so there is nothing to migrate
       expect(await Effect.runPromise(log.evictStale)).toBe(0);
     });
@@ -538,12 +538,12 @@ describe("RoomLog", () => {
     try {
       const view = await Effect.runPromise(now.read);
       // the unreadable ticket never reaches the app; the readable one is fine
-      expect(view.tickets.map((t) => t.id)).toEqual(["t1"]);
+      expect(view.tickets.map((ticketRow) => ticketRow.id)).toEqual(["t1"]);
       // the migration takes it off the room
       expect(await Effect.runPromise(now.evictStale)).toBe(1);
       // …and the next read finds the view clean: nothing left to migrate
       const after = await Effect.runPromise(now.read);
-      expect(after.tickets.map((t) => t.id)).toEqual(["t1"]);
+      expect(after.tickets.map((ticketRow) => ticketRow.id)).toEqual(["t1"]);
       expect(await Effect.runPromise(now.evictStale)).toBe(0);
     } finally {
       await Effect.runPromise(Scope.close(scope2, Exit.void));

@@ -40,37 +40,37 @@ export interface MergeTickets {
   readonly tickets: ReadonlyArray<string>;
 }
 
-const mergedAt = (m: HostMerge): number => Date.parse(m.at);
+const mergedAt = (merge: HostMerge): number => Date.parse(merge.at);
 
 /** Of the merges of one branch, the one a ticket filed at `filedAt` was
  *  about: the first after it; of an old ticket, filed when nobody noted
  *  it, the latest. */
 const forFiling = (merges: ReadonlyArray<HostMerge>, filedAt: number | undefined): HostMerge | undefined => {
   const byTime = [...merges].sort((a, b) => mergedAt(a) - mergedAt(b));
-  return filedAt === undefined ? byTime.at(-1) : byTime.find((m) => mergedAt(m) >= filedAt);
+  return filedAt === undefined ? byTime.at(-1) : byTime.find((merge) => mergedAt(merge) >= filedAt);
 };
 
 /** The merge a ticket came to, if any. */
 const mergeOf = (code: ReviewedCode, merges: ReadonlyArray<HostMerge>): HostMerge | undefined => {
-  if (code.pull !== undefined) return merges.find((m) => m.number === code.pull);
-  const byBranch = code.branch ? forFiling(merges.filter((m) => m.branch === code.branch), code.filedAt) : undefined;
+  if (code.pull !== undefined) return merges.find((merge) => merge.number === code.pull);
+  const byBranch = code.branch ? forFiling(merges.filter((merge) => merge.branch === code.branch), code.filedAt) : undefined;
   if (byBranch) return byBranch;
   const commits = new Set(code.commits ?? []);
-  return commits.size > 0 ? merges.find((m) => m.kind !== "squash" && m.kind !== "merge" && commits.has(m.commit)) : undefined;
+  return commits.size > 0 ? merges.find((merge) => merge.kind !== "squash" && merge.kind !== "merge" && commits.has(merge.commit)) : undefined;
 };
 
 /** Every merge, in the order given, with the tickets it came from. */
 export const ticketsOfMerges = (merges: ReadonlyArray<HostMerge>, reviewed: ReadonlyArray<ReviewedCode>): ReadonlyArray<MergeTickets> => {
   const found = new Map<number, Array<ReviewedCode>>();
   for (const code of reviewed) {
-    const m = mergeOf(code, merges);
-    if (m) found.set(m.number, [...(found.get(m.number) ?? []), code]);
+    const merge = mergeOf(code, merges);
+    if (merge) found.set(merge.number, [...(found.get(merge.number) ?? []), code]);
   }
   return merges.map((merge) => ({
     merge,
     tickets: (found.get(merge.number) ?? [])
       .sort((a, b) => (a.filedAt ?? 0) - (b.filedAt ?? 0) || (a.ticketId < b.ticketId ? -1 : a.ticketId > b.ticketId ? 1 : 0))
-      .map((c) => c.ticketId),
+      .map((code) => code.ticketId),
   }));
 };
 
@@ -85,19 +85,19 @@ export const reviewedCode = (
   me: string,
   host: Pick<RepoHost, "pullIn">,
 ): ReadonlyArray<ReviewedCode> => {
-  const why = new Map(reviews.map((r) => [r.ticketId, r] as const));
+  const why = new Map(reviews.map((context) => [context.ticketId, context] as const));
   const key = projectKey(project);
-  return [...all.values()].flatMap((t): ReadonlyArray<ReviewedCode> => {
-    if (t.kind !== "review" || projectKey(t.project) !== key || !visibleTo(t, all, me)) return [];
-    const r = why.get(t.id);
-    const pull = r?.link ? host.pullIn(r.link) : null;
-    const commits = [...new Set(comments.filter((c) => c.ticketId === t.id).map((c) => c.commit))];
+  return [...all.values()].flatMap((ticket): ReadonlyArray<ReviewedCode> => {
+    if (ticket.kind !== "review" || projectKey(ticket.project) !== key || !visibleTo(ticket, all, me)) return [];
+    const context = why.get(ticket.id);
+    const pull = context?.link ? host.pullIn(context.link) : null;
+    const commits = [...new Set(comments.filter((comment) => comment.ticketId === ticket.id).map((comment) => comment.commit))];
     return [
       {
-        ticketId: t.id,
-        ...(t.filedAt !== undefined ? { filedAt: t.filedAt } : {}),
+        ticketId: ticket.id,
+        ...(ticket.filedAt !== undefined ? { filedAt: ticket.filedAt } : {}),
         ...(pull !== null ? { pull } : {}),
-        ...(r?.branch ? { branch: r.branch } : {}),
+        ...(context?.branch ? { branch: context.branch } : {}),
         ...(commits.length > 0 ? { commits } : {}),
       },
     ];
@@ -113,10 +113,10 @@ export const lineage = (ids: ReadonlyArray<string>, all: ReadonlyMap<string, Tic
   const visit = (id: string): void => {
     if (seen.has(id)) return;
     seen.add(id);
-    const t = all.get(id);
-    if (!t) return;
-    (t.from ?? []).forEach(visit);
-    if (visibleTo(t, all, me)) out.push(t);
+    const ticket = all.get(id);
+    if (!ticket) return;
+    (ticket.from ?? []).forEach(visit);
+    if (visibleTo(ticket, all, me)) out.push(ticket);
   };
   ids.forEach(visit);
   return out;
@@ -124,5 +124,5 @@ export const lineage = (ids: ReadonlyArray<string>, all: ReadonlyMap<string, Tic
 
 /** Whether `me` reads a ticket's why: on someone else's plan, proposal or
  *  bug, not until they have posted their own take — the blind first take. */
-export const whyOpen = (t: Ticket, me: string): boolean =>
-  !isJudged(t.kind) || t.kind === "review" || t.createdBy === me || t.steps.some((s) => isTake(s) && s.owner === me && (s.status === "settled" || s.status === "failed"));
+export const whyOpen = (ticket: Ticket, me: string): boolean =>
+  !isJudged(ticket.kind) || ticket.kind === "review" || ticket.createdBy === me || ticket.steps.some((step) => isTake(step) && step.owner === me && (step.status === "settled" || step.status === "failed"));

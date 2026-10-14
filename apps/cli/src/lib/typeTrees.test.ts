@@ -10,11 +10,11 @@ afterAll(() => rmSync(base, { recursive: true, force: true }));
 
 const git = (cwd: string, ...args: Array<string>) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
 const commit = (repo: string, files: Record<string, string | null>): string => {
-  for (const [f, text] of Object.entries(files)) {
-    if (text === null) rmSync(join(repo, f));
+  for (const [path, text] of Object.entries(files)) {
+    if (text === null) rmSync(join(repo, path));
     else {
-      mkdirSync(join(repo, f, ".."), { recursive: true });
-      writeFileSync(join(repo, f), text);
+      mkdirSync(join(repo, path, ".."), { recursive: true });
+      writeFileSync(join(repo, path), text);
     }
   }
   git(repo, "add", "-A");
@@ -27,17 +27,17 @@ describe("treeAt", () => {
     const repo = join(base, "repo");
     mkdirSync(repo);
     git(repo, "init", "-q");
-    const a = commit(repo, { "src/Same.php": "<?php // same", "src/Edit.php": "<?php // one", "src/Gone.php": "<?php" });
-    const b = commit(repo, { "src/Edit.php": "<?php // two", "src/Gone.php": null, "src/New.php": "<?php // new" });
+    const first = commit(repo, { "src/Same.php": "<?php // same", "src/Edit.php": "<?php // one", "src/Gone.php": "<?php" });
+    const second = commit(repo, { "src/Edit.php": "<?php // two", "src/Gone.php": null, "src/New.php": "<?php // new" });
     const tree = join(base, "tree");
     const stamp = join(base, "stamp");
-    await treeAt(repo, a, tree, stamp);
-    expect(readFileSync(stamp, "utf8")).toBe(a);
+    await treeAt(repo, first, tree, stamp);
+    expect(readFileSync(stamp, "utf8")).toBe(first);
     // what the server last read: an hour ago
     const then = new Date(Math.floor(Date.now() / 1000) * 1000 - 3_600_000);
-    for (const f of ["src/Same.php", "src/Edit.php"]) utimesSync(join(tree, f), then, then);
-    await treeAt(repo, b, tree, stamp);
-    expect(readFileSync(stamp, "utf8")).toBe(b);
+    for (const path of ["src/Same.php", "src/Edit.php"]) utimesSync(join(tree, path), then, then);
+    await treeAt(repo, second, tree, stamp);
+    expect(readFileSync(stamp, "utf8")).toBe(second);
     expect(Math.round(statSync(join(tree, "src/Same.php")).mtimeMs)).toBe(then.getTime());
     expect(readFileSync(join(tree, "src/Edit.php"), "utf8")).toBe("<?php // two");
     expect(statSync(join(tree, "src/Edit.php")).mtimeMs).toBeGreaterThan(then.getTime());
@@ -49,18 +49,18 @@ describe("treeAt", () => {
     const repo = join(base, "repo2");
     mkdirSync(repo);
     git(repo, "init", "-q");
-    const a = commit(repo, { "composer.json": "{}", "vendor/acme/A.php": "<?php // committed" });
-    const b = commit(repo, { "vendor/acme/A.php": null });
+    const first = commit(repo, { "composer.json": "{}", "vendor/acme/A.php": "<?php // committed" });
+    const second = commit(repo, { "vendor/acme/A.php": null });
     // the clone's own vendor/, as a Composer install leaves it
     const theirs = join(base, "theirs");
     mkdirSync(join(theirs, "acme"), { recursive: true });
     writeFileSync(join(theirs, "acme/A.php"), "<?php // installed");
     const tree = join(base, "tree2");
     const stamp = join(base, "stamp2");
-    await treeAt(repo, a, tree, stamp);
+    await treeAt(repo, first, tree, stamp);
     rmSync(join(tree, "vendor"), { recursive: true });
     symlinkSync(theirs, join(tree, "vendor"), "dir");
-    await treeAt(repo, b, tree, stamp);
+    await treeAt(repo, second, tree, stamp);
     expect(readFileSync(join(theirs, "acme/A.php"), "utf8")).toBe("<?php // installed");
   });
 

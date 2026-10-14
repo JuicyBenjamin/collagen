@@ -54,9 +54,9 @@ export interface AskFilter {
   readonly threadId?: string;
 }
 
-const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
-const fileFor = (subject: string, from: string, threadId: string, ai: string) =>
-  join(transcriptsDir, safe(subject), `${safe(from)}-${threadId}.${safe(ai)}.jsonl`);
+const safe = (segment: string) => segment.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 80);
+const fileFor = (subject: string, from: string, threadId: string, aiName: string) =>
+  join(transcriptsDir, safe(subject), `${safe(from)}-${threadId}.${safe(aiName)}.jsonl`);
 
 /** Diagnostics, human in the loop: "show me how the agents behaved on this
  *  ticket". A request goes to everyone present in the room; on each machine it
@@ -73,11 +73,11 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
     const { identity, nameRef } = yield* IdentityService;
     const saved = yield* SubscriptionRef.make<ReadonlyArray<SavedTranscript>>([]);
 
-    const nameOf = (h: RoomHandle, key: string) =>
+    const nameOf = (handle: RoomHandle, key: string) =>
       Effect.gen(function* () {
-        const peers = yield* SubscriptionRef.get(h.room.roster);
-        const members = yield* SubscriptionRef.get(h.room.members);
-        return peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8);
+        const peers = yield* SubscriptionRef.get(handle.room.roster);
+        const members = yield* SubscriptionRef.get(handle.room.members);
+        return peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8);
       });
 
     const file = (entry: SavedTranscript, text: string, meta: TranscriptMeta) =>
@@ -85,35 +85,35 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
         mkdirSync(dirname(entry.path), { recursive: true });
         writeFileSync(entry.path, text);
         writeFileSync(`${entry.path}.meta.json`, JSON.stringify(meta, null, 2));
-        yield* SubscriptionRef.update(saved, (s) => [...s.filter((x) => x.path !== entry.path), entry]);
+        yield* SubscriptionRef.update(saved, (filed) => [...filed.filter((transcript) => transcript.path !== entry.path), entry]);
       });
 
     /** The threads a ticket's steps travel on (creator ↔ each owner). */
-    const threadsOfTicket = (ticket: Ticket): ReadonlyArray<string> => [...new Set(ticket.steps.map((s) => stepThreadId(ticket, s)))];
+    const threadsOfTicket = (ticket: Ticket): ReadonlyArray<string> => [...new Set(ticket.steps.map((step) => stepThreadId(ticket, step)))];
 
     /** Ask the room. Our own adopted conversations on these threads are filed
      *  first, then everyone present is asked; each answer is their call. */
     const request = Effect.fn("Transcripts.request")(function* (roomId: string, subject: string, threadIds: ReadonlyArray<string>) {
-      const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === roomId);
-      if (!h) return { asked: 0, own: 0, dir: join(transcriptsDir, safe(subject)) };
+      const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === roomId);
+      if (!handle) return { asked: 0, own: 0, dir: join(transcriptsDir, safe(subject)) };
       const state = yield* store.get;
       const me = yield* SubscriptionRef.get(nameRef);
       let own = 0;
       for (const threadId of threadIds) {
-        const a = state.threads?.[threadId];
-        if (!a) continue;
-        const path = sessionFile(a.ai, a.sessionId, sessionDirs());
+        const adopted = state.threads?.[threadId];
+        if (!adopted) continue;
+        const path = sessionFile(adopted.ai, adopted.sessionId, sessionDirs());
         if (!path) continue;
-        const { lines, entries } = sliceSince(readFileSync(path, "utf8"), a.since ?? 0);
+        const { lines, entries } = sliceSince(readFileSync(path, "utf8"), adopted.since ?? 0);
         const now = yield* Clock.currentTimeMillis;
         yield* file(
-          { subject, from: me, threadId, ai: a.ai, entries, path: fileFor(subject, me, threadId, a.ai) },
+          { subject, from: me, threadId, ai: adopted.ai, entries, path: fileFor(subject, me, threadId, adopted.ai) },
           lines.join("\n") + "\n",
-          { subject, from: me, fromKey: identity.pubkey, ai: a.ai, threadId, sessionId: a.sessionId, since: a.since ?? 0, entries, receivedAt: now, requestId: "own" },
+          { subject, from: me, fromKey: identity.pubkey, ai: adopted.ai, threadId, sessionId: adopted.sessionId, since: adopted.since ?? 0, entries, receivedAt: now, requestId: "own" },
         );
         own++;
       }
-      const asked = yield* h.room.requestTranscripts({ requestId: crypto.randomUUID(), subject, threadIds });
+      const asked = yield* handle.room.requestTranscripts({ requestId: crypto.randomUUID(), subject, threadIds });
       yield* Effect.log(`transcripts: asked ${asked} peer(s) about ${subject} (${threadIds.length} thread(s)); ${own} of our own filed`);
       return { asked, own, dir: join(transcriptsDir, safe(subject)) };
     });
@@ -124,18 +124,18 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       return state.transcriptAsks ?? [];
     });
 
-    const matches = (a: TranscriptAsk, f: AskFilter) =>
-      (!f.subject || a.subject === f.subject) &&
-      (!f.requester || a.requesterName.toLowerCase() === f.requester.toLowerCase()) &&
-      (!f.threadId || a.threadId === f.threadId);
+    const matches = (ask: TranscriptAsk, filter: AskFilter) =>
+      (!filter.subject || ask.subject === filter.subject) &&
+      (!filter.requester || ask.requesterName.toLowerCase() === filter.requester.toLowerCase()) &&
+      (!filter.threadId || ask.threadId === filter.threadId);
 
-    const drop = (f: AskFilter) => store.update((s) => ({ ...s, transcriptAsks: (s.transcriptAsks ?? []).filter((a) => !matches(a, f)) }));
+    const drop = (filter: AskFilter) => store.update((state) => ({ ...state, transcriptAsks: (state.transcriptAsks ?? []).filter((ask) => !matches(ask, filter)) }));
 
     /** Take these exact asks off the list — the ones that were answered. */
     const forget = (gone: ReadonlyArray<TranscriptAsk>) =>
-      store.update((s) => ({
-        ...s,
-        transcriptAsks: (s.transcriptAsks ?? []).filter((a) => !gone.some((g) => g.requestId === a.requestId && g.threadId === a.threadId)),
+      store.update((state) => ({
+        ...state,
+        transcriptAsks: (state.transcriptAsks ?? []).filter((ask) => !gone.some((answered) => answered.requestId === ask.requestId && answered.threadId === ask.threadId)),
       }));
 
     /** Hand over the conversations a peer asked for. Nothing here happens on
@@ -143,35 +143,35 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
      *  did NOT get there — the peer went offline, the slice is too big — is
      *  KEPT: the person authorised handing it over, so they should be able to
      *  say "again" rather than ask the peer to request it a second time. */
-    const share = Effect.fn("Transcripts.share")(function* (f: AskFilter) {
-      const waiting = (yield* asks).filter((a) => matches(a, f));
+    const share = Effect.fn("Transcripts.share")(function* (filter: AskFilter) {
+      const waiting = (yield* asks).filter((ask) => matches(ask, filter));
       if (waiting.length === 0) return "no transcript requests are waiting";
       const lines: Array<string> = [];
       const done: Array<TranscriptAsk> = [];
       const kept: Array<TranscriptAsk> = [];
-      for (const a of waiting) {
-        if (!sessionFile(a.ai, a.sessionId, sessionDirs())) {
-          lines.push(`${a.requesterName} · thread ${a.threadId}: that ${a.ai} session file is gone — nothing to hand over`);
-          done.push(a);
+      for (const ask of waiting) {
+        if (!sessionFile(ask.ai, ask.sessionId, sessionDirs())) {
+          lines.push(`${ask.requesterName} · thread ${ask.threadId}: that ${ask.ai} session file is gone — nothing to hand over`);
+          done.push(ask);
           continue;
         }
         const outcome = yield* outbox.send({
-          roomId: a.roomId,
-          to: a.requesterName,
-          title: `${a.subject} · thread ${a.threadId} · your ${a.ai} conversation`,
+          roomId: ask.roomId,
+          to: ask.requesterName,
+          title: `${ask.subject} · thread ${ask.threadId} · your ${ask.ai} conversation`,
           outgoing: {
             kind: "transcript",
-            requestId: a.requestId,
-            subject: a.subject,
-            requester: a.requester,
-            threadId: a.threadId,
-            ai: a.ai,
-            sessionId: a.sessionId,
-            since: a.since,
+            requestId: ask.requestId,
+            subject: ask.subject,
+            requester: ask.requester,
+            threadId: ask.threadId,
+            ai: ask.ai,
+            sessionId: ask.sessionId,
+            since: ask.since,
           },
         });
-        lines.push(`${a.requesterName} · thread ${a.threadId}: ${outcome.text}`);
-        (outcome._tag === "sent" ? done : kept).push(a);
+        lines.push(`${ask.requesterName} · thread ${ask.threadId}: ${outcome.text}`);
+        (outcome._tag === "sent" ? done : kept).push(ask);
       }
       if (done.length > 0) yield* forget(done);
       if (kept.length > 0) {
@@ -183,67 +183,67 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
     });
 
     /** They asked, the person said no: forget it, and tell them nothing. */
-    const decline = Effect.fn("Transcripts.decline")(function* (f: AskFilter) {
-      const waiting = (yield* asks).filter((a) => matches(a, f));
+    const decline = Effect.fn("Transcripts.decline")(function* (filter: AskFilter) {
+      const waiting = (yield* asks).filter((ask) => matches(ask, filter));
       if (waiting.length === 0) return "no transcript requests are waiting";
-      yield* drop(f);
+      yield* drop(filter);
       return `dropped ${waiting.length} transcript request(s) — the peer is not told; tell them yourself if you want to`;
     });
 
     /** One room: asks are kept for the person, answers become files. */
-    const attach = (h: RoomHandle) =>
+    const attach = (handle: RoomHandle) =>
       Effect.gen(function* () {
-        yield* h.room.transcriptRequests.pipe(
-          Stream.tap(({ from, request: req }) =>
+        yield* handle.room.transcriptRequests.pipe(
+          Stream.tap(({ from, request: transcriptRequest }) =>
             Effect.gen(function* () {
               const state = yield* store.get;
-              const requester = yield* nameOf(h, from);
+              const requester = yield* nameOf(handle, from);
               const now = yield* Clock.currentTimeMillis;
-              for (const threadId of req.threadIds) {
-                const a = state.threads?.[threadId];
-                if (!a || !sessionFile(a.ai, a.sessionId, sessionDirs())) continue;
+              for (const threadId of transcriptRequest.threadIds) {
+                const adopted = state.threads?.[threadId];
+                if (!adopted || !sessionFile(adopted.ai, adopted.sessionId, sessionDirs())) continue;
                 const ask: TranscriptAsk = {
-                  roomId: h.id,
-                  requestId: req.requestId,
-                  subject: req.subject,
+                  roomId: handle.id,
+                  requestId: transcriptRequest.requestId,
+                  subject: transcriptRequest.subject,
                   requester: from,
                   requesterName: requester,
                   threadId,
-                  ai: a.ai,
-                  sessionId: a.sessionId,
-                  since: a.since ?? 0,
+                  ai: adopted.ai,
+                  sessionId: adopted.sessionId,
+                  since: adopted.since ?? 0,
                   ts: now,
                 };
-                yield* store.update((s) => {
-                  const kept = (s.transcriptAsks ?? []).filter((x) => !(x.requestId === ask.requestId && x.threadId === ask.threadId));
-                  return { ...s, transcriptAsks: [...kept, ask] };
+                yield* store.update((current) => {
+                  const kept = (current.transcriptAsks ?? []).filter((existing) => !(existing.requestId === ask.requestId && existing.threadId === ask.threadId));
+                  return { ...current, transcriptAsks: [...kept, ask] };
                 });
-                yield* Effect.log(`${requester} asks for your ${a.ai} conversation on thread ${threadId} (${req.subject}) — nothing has left; say the word (share-transcripts)`);
+                yield* Effect.log(`${requester} asks for your ${adopted.ai} conversation on thread ${threadId} (${transcriptRequest.subject}) — nothing has left; say the word (share-transcripts)`);
               }
             }),
           ),
           Stream.runDrain,
           Effect.forkScoped,
         );
-        yield* h.room.transcripts.pipe(
-          Stream.tap(({ from, transcript: t }) =>
+        yield* handle.room.transcripts.pipe(
+          Stream.tap(({ from, transcript }) =>
             Effect.gen(function* () {
-              const name = yield* nameOf(h, from);
+              const name = yield* nameOf(handle, from);
               const now = yield* Clock.currentTimeMillis;
-              const entry: SavedTranscript = { subject: t.subject, from: name, threadId: t.threadId, ai: t.ai, entries: t.entries, path: fileFor(t.subject, name, t.threadId, t.ai) };
-              yield* file(entry, unpack(t.data), {
-                subject: t.subject,
+              const entry: SavedTranscript = { subject: transcript.subject, from: name, threadId: transcript.threadId, ai: transcript.ai, entries: transcript.entries, path: fileFor(transcript.subject, name, transcript.threadId, transcript.ai) };
+              yield* file(entry, unpack(transcript.data), {
+                subject: transcript.subject,
                 from: name,
                 fromKey: from,
-                ai: t.ai,
-                threadId: t.threadId,
-                sessionId: t.sessionId,
-                since: t.since,
-                entries: t.entries,
+                ai: transcript.ai,
+                threadId: transcript.threadId,
+                sessionId: transcript.sessionId,
+                since: transcript.since,
+                entries: transcript.entries,
                 receivedAt: now,
-                requestId: t.requestId,
+                requestId: transcript.requestId,
               });
-              yield* Effect.log(`transcript from ${name}: ${t.entries} entries → ${entry.path}`);
+              yield* Effect.log(`transcript from ${name}: ${transcript.entries} entries → ${entry.path}`);
             }),
           ),
           Stream.runDrain,
@@ -263,12 +263,12 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
     // every room, as it appears (a room that leaves ends its own streams)
     const attached = new Set<string>();
     yield* SubscriptionRef.changes(rooms.handles).pipe(
-      Stream.tap((hs) =>
+      Stream.tap((handles) =>
         Effect.forEach(
-          hs.filter((h) => !attached.has(h.id)),
-          (h) => {
-            attached.add(h.id);
-            return attach(h);
+          handles.filter((handle) => !attached.has(handle.id)),
+          (handle) => {
+            attached.add(handle.id);
+            return attach(handle);
           },
           { discard: true },
         ),
@@ -296,9 +296,9 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       for (const subject of subjects) {
         const dir = join(transcriptsDir, subject);
         try {
-          for (const f of readdirSync(dir)) {
-            if (f.endsWith(".meta.json")) continue;
-            const file = join(dir, f);
+          for (const fileName of readdirSync(dir)) {
+            if (fileName.endsWith(".meta.json")) continue;
+            const file = join(dir, fileName);
             out.push({ subject, file, bytes: statSync(file).size, meta: readMeta(file) });
           }
         } catch {

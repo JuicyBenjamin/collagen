@@ -72,7 +72,7 @@ export function RouterProvider({ initial, children }: { initial: Route; children
 }
 
 export function useRouter(): Router {
-  const ctx = useContext(RouterContext);
-  if (!ctx) throw new Error("useRouter outside <RouterProvider>");
-  return ctx;
+  const context = useContext(RouterContext);
+  if (!context) throw new Error("useRouter outside <RouterProvider>");
+  return context;
 }

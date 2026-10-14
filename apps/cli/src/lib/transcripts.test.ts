@@ -23,7 +23,7 @@ describe("readLine — a session line, readable", () => {
   });
 });
 
-const tmp = () => mkdtempSync(join(tmpdir(), "collagen-transcripts-"));
+const makeDir = () => mkdtempSync(join(tmpdir(), "collagen-transcripts-"));
 
 describe("sessionDirs", () => {
   it("honours the CLIs' own overrides, else the home defaults", () => {
@@ -34,7 +34,7 @@ describe("sessionDirs", () => {
 
 describe("sessionFile", () => {
   it("finds a Claude Code session in any project dir", () => {
-    const claude = tmp();
+    const claude = makeDir();
     mkdirSync(join(claude, "projects", "-Users-me-proj"), { recursive: true });
     writeFileSync(join(claude, "projects", "-Users-me-proj", "11111111-2222-3333-4444-555555555555.jsonl"), "{}\n");
     const dirs = { claude, codex: "/nowhere" };
@@ -43,13 +43,13 @@ describe("sessionFile", () => {
   });
 
   it("finds a Codex rollout by thread id under the dated tree", () => {
-    const codex = tmp();
+    const codex = makeDir();
     const day = join(codex, "sessions", "2026", "09", "09");
     mkdirSync(day, { recursive: true });
-    const f = join(day, "rollout-2026-09-09T10-00-00-019c0000-0000-7000-8000-000000000abc.jsonl");
-    writeFileSync(f, "{}\n");
+    const file = join(day, "rollout-2026-09-09T10-00-00-019c0000-0000-7000-8000-000000000abc.jsonl");
+    writeFileSync(file, "{}\n");
     const dirs = { claude: "/nowhere", codex };
-    expect(sessionFile("codex", "019c0000-0000-7000-8000-000000000abc", dirs)).toBe(f);
+    expect(sessionFile("codex", "019c0000-0000-7000-8000-000000000abc", dirs)).toBe(file);
     expect(sessionFile("codex", "019c0000-0000-7000-8000-000000000def", dirs)).toBeNull();
   });
 
@@ -74,7 +74,7 @@ describe("sliceSince", () => {
   it("keeps meta and un-stamped lines, drops what predates the adoption, counts the rest", () => {
     const { lines, entries } = sliceSince(jsonl, Date.parse("2026-09-01T11:00:00.000Z"));
     expect(entries).toBe(2);
-    expect(lines.map((l) => (JSON.parse(l) as { type?: string; text?: string }).text ?? "meta")).toEqual([
+    expect(lines.map((line) => (JSON.parse(line) as { type?: string; text?: string }).text ?? "meta")).toEqual([
       "meta",
       "keep me, I belong to my neighbours",
       "collagen nudge arrives",

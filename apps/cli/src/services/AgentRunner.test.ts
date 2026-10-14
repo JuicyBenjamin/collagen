@@ -31,15 +31,15 @@ const mockSpawner = (respond: (call: SpawnCall) => { stdout: string; exitCode?: 
         const std = command as ChildProcess.StandardCommand;
         const call: SpawnCall = { cmd: std.command, args: std.args, cwd: std.options.cwd };
         calls.push(call);
-        const res = respond(call);
+        const response = respond(call);
         return ChildProcessSpawner.makeHandle({
           pid: ChildProcessSpawner.ProcessId(1),
-          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(res.exitCode ?? 0)),
+          exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(response.exitCode ?? 0)),
           isRunning: Effect.succeed(false),
           kill: () => Effect.void,
           stderr: Stream.empty,
           stdin: Sink.drain,
-          stdout: Stream.make(new TextEncoder().encode(res.stdout)),
+          stdout: Stream.make(new TextEncoder().encode(response.stdout)),
           all: Stream.empty,
           getInputFd: () => Sink.drain,
           getOutputFd: () => Stream.empty,
@@ -59,8 +59,8 @@ const stateStoreStub = (initial: LocalState) =>
       const state = yield* SubscriptionRef.make(initial);
       return {
         state,
-        update: (f: (s: LocalState) => LocalState) =>
-          SubscriptionRef.update(state, f).pipe(Effect.asVoid),
+        update: (change: (s: LocalState) => LocalState) =>
+          SubscriptionRef.update(state, change).pipe(Effect.asVoid),
         get: SubscriptionRef.get(state),
       };
     }),
@@ -71,11 +71,11 @@ const stateStoreStub = (initial: LocalState) =>
 const fakeAdapter: Adapter = {
   cmd: "fake-agent",
   auth: { args: ["status"], loggedIn: () => true },
-  args: (o) => [
-    Option.match(o.sessionId, { onNone: () => "fresh", onSome: (id) => `resume:${id}` }),
-    o.msg.threadId,
-    o.mcpUrl,
-    o.serverName,
+  args: (spawnContext) => [
+    Option.match(spawnContext.sessionId, { onNone: () => "fresh", onSome: (id) => `resume:${id}` }),
+    spawnContext.message.threadId,
+    spawnContext.mcpUrl,
+    spawnContext.serverName,
   ],
   parse: (out) => {
     try {
@@ -124,15 +124,15 @@ const identityStub = Layer.effect(
 );
 
 /** Wire AgentRunner with in-memory everything. */
-const testLayer = (opts: {
+const testLayer = (options: {
   state?: LocalState;
   respond?: (call: SpawnCall) => { stdout: string; exitCode?: number };
 }) => {
-  const exec = mockSpawner(opts.respond ?? (() => ({ stdout: "{}" })));
+  const exec = mockSpawner(options.respond ?? (() => ({ stdout: "{}" })));
   const layer = AgentRunner.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(Inbox.layer, McpInfo.layer)),
     Layer.provideMerge(Layer.succeed(Adapters, { "mock:fake-ai": fakeAdapter, "fake-ai": fakeAdapter })),
-    Layer.provideMerge(stateStoreStub(opts.state ?? baseState)),
+    Layer.provideMerge(stateStoreStub(options.state ?? baseState)),
     Layer.provideMerge(identityStub),
     Layer.provideMerge(exec.layer),
     Layer.provideMerge(cliArgsLayer({ profile: "testprof", name: Option.none(), room: Option.none() })),
@@ -188,12 +188,12 @@ describe("AgentRunner", () => {
         yield* runner.runThread("thread-1");
       }),
     );
-    expect(calls.map((c) => c.args[0])).toEqual(["fresh", "resume:sess-7"]);
+    expect(calls.map((call) => call.args[0])).toEqual(["fresh", "resume:sess-7"]);
   });
 
   it("keeps sessions per thread", async () => {
     const { layer, calls } = testLayer({
-      respond: (c) => ({ stdout: JSON.stringify({ sessionId: `sess-for-${c.args[1]}` }) }),
+      respond: (call) => ({ stdout: JSON.stringify({ sessionId: `sess-for-${call.args[1]}` }) }),
     });
     await run(
       layer,
@@ -207,7 +207,7 @@ describe("AgentRunner", () => {
         yield* runner.runThread("t-a");
       }),
     );
-    expect(calls.map((c) => c.args.slice(0, 2))).toEqual([
+    expect(calls.map((call) => call.args.slice(0, 2))).toEqual([
       ["fresh", "t-a"],
       ["fresh", "t-b"],
       ["resume:sess-for-t-a", "t-a"],
@@ -276,7 +276,7 @@ describe("AgentRunner", () => {
         yield* runner.runThread("thread-1");
       }),
     );
-    expect(calls.map((c) => c.cmd)).not.toContain("codex");
+    expect(calls.map((call) => call.cmd)).not.toContain("codex");
     expect(calls).toHaveLength(1);
     expect(calls[0]!.cmd).toBe(fakeAdapter.cmd);
   });

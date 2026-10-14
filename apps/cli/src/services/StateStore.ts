@@ -12,26 +12,26 @@ const StateFile = Schema.fromJsonString(LocalState);
 export class StateStore extends Context.Service<StateStore>()("cli/StateStore", {
   make: Effect.gen(function* () {
     const { profile } = yield* CliArgs;
-    const fs = yield* FileSystem.FileSystem;
+    const fileSystem = yield* FileSystem.FileSystem;
     const file = join(configDir, `state-${profile}.json`);
 
     // The file is salvaged, never thrown away: whatever still reads is kept,
     // what an older build left behind is dropped, named, and written back —
     // losing a stale proposal must never cost the user their rooms.
-    const salvaged = yield* fs.readFileString(file).pipe(
+    const salvaged = yield* fileSystem.readFileString(file).pipe(
       Effect.map(salvageState),
       Effect.orElseSucceed(() => ({ state: emptyState, dropped: [] as ReadonlyArray<string> })),
     );
     const state = yield* SubscriptionRef.make<LocalState>(salvaged.state);
 
-    const persist = (s: LocalState) =>
-      Schema.encodeEffect(StateFile)(s).pipe(
-        Effect.flatMap((json) => fs.writeFileString(file, json)),
-        Effect.catch((e) => Effect.logWarning(`state persist failed: ${String(e)}`)),
+    const persist = (state: LocalState) =>
+      Schema.encodeEffect(StateFile)(state).pipe(
+        Effect.flatMap((json) => fileSystem.writeFileString(file, json)),
+        Effect.catch((error) => Effect.logWarning(`state persist failed: ${String(error)}`)),
       );
 
-    const update = (f: (s: LocalState) => LocalState) =>
-      SubscriptionRef.updateAndGet(state, f).pipe(Effect.flatMap(persist));
+    const update = (change: (s: LocalState) => LocalState) =>
+      SubscriptionRef.updateAndGet(state, change).pipe(Effect.flatMap(persist));
 
     if (salvaged.dropped.length > 0) {
       yield* Effect.logWarning(`state file: dropped ${salvaged.dropped.join(", ")} written by an older build — the rest is intact`);

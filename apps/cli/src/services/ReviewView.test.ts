@@ -22,8 +22,8 @@ const pullOf = (number: number, head: string, merged: string): HostPull => ({ nu
 const hostWith = (pull: HostPull, pullDiff: string | null = null): RepoHost => ({ ...github, name: "TheHost", pull: () => Effect.succeed({ pull }), pullDiff: () => Effect.succeed(pullDiff) });
 
 beforeAll(() => {
-  const tmp = mkdtempSync(join(tmpdir(), "collagen-merged-"));
-  origin = join(tmp, "origin");
+  const directory = mkdtempSync(join(tmpdir(), "collagen-merged-"));
+  origin = join(directory, "origin");
   execFileSync("git", ["init", "-q", "-b", "main", origin]);
   git(origin, "config", "user.email", "t@collagen.test");
   git(origin, "config", "user.name", "t");
@@ -51,11 +51,11 @@ beforeAll(() => {
   git(origin, "commit", "-qm", "squash gone");
   git(origin, "branch", "-qD", "feat/gone");
   squashedPull = { ...pullOf(2, goneHead, git(origin, "rev-parse", "HEAD")), branch: "feat/gone" };
-  clone = join(tmp, "clone");
+  clone = join(directory, "clone");
   execFileSync("git", ["clone", "-q", origin, clone]);
 });
 
-const files = (diff: string) => [...diff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((m) => m[1]);
+const files = (diff: string) => [...diff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => match[1]);
 
 describe("a merged pull request's diff", () => {
   it("merged with a merge commit: read against the base just before the merge", async () => {
@@ -102,8 +102,8 @@ describe("a rebased branch's diff", () => {
   let parentPull: HostPull;
 
   beforeAll(() => {
-    const tmp = mkdtempSync(join(tmpdir(), "collagen-rebased-"));
-    repo = join(tmp, "origin");
+    const directory = mkdtempSync(join(tmpdir(), "collagen-rebased-"));
+    repo = join(directory, "origin");
     execFileSync("git", ["init", "-q", "-b", "main", repo]);
     git(repo, "config", "user.email", "t@collagen.test");
     git(repo, "config", "user.name", "t");
@@ -123,9 +123,9 @@ describe("a rebased branch's diff", () => {
     const childCommit = git(repo, "rev-parse", "HEAD");
     git(repo, "checkout", "-q", "main");
     // the reader's clone, with its own branches of the stack and of release, as GitButler keeps them
-    mine = join(tmp, "mine");
+    mine = join(directory, "mine");
     execFileSync("git", ["clone", "-q", repo, mine]);
-    for (const b of ["release", "parent", "child"]) git(mine, "branch", "-q", b, `origin/${b}`);
+    for (const branch of ["release", "parent", "child"]) git(mine, "branch", "-q", branch, `origin/${branch}`);
     // then on origin: other work lands in release, the parent is squashed in and deleted
     git(repo, "checkout", "-q", "release");
     writeFileSync(join(repo, "x.txt"), "someone else\n");

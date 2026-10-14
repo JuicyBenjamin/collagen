@@ -52,9 +52,9 @@ export interface TopicHooks {
  *  — no schema, no shapes, nothing to maintain across versions. */
 export const protocolOf = (json: string): string | null => {
   try {
-    const v = JSON.parse(json) as { frame?: { profile?: { protocol?: unknown } } };
-    const p = v.frame?.profile?.protocol;
-    return typeof p === "string" ? p : null;
+    const decoded = JSON.parse(json) as { frame?: { profile?: { protocol?: unknown } } };
+    const protocol = decoded.frame?.profile?.protocol;
+    return typeof protocol === "string" ? protocol : null;
   } catch {
     return null;
   }
@@ -91,8 +91,8 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let swarm: any = null;
 
-    const forEachHook = (f: (topicHex: string, hooks: TopicHooks) => Effect.Effect<void>) =>
-      Effect.forEach([...hooksByTopic.entries()], ([t, h]) => f(t, h), { discard: true });
+    const forEachHook = (run: (topicHex: string, hooks: TopicHooks) => Effect.Effect<void>) =>
+      Effect.forEach([...hooksByTopic.entries()], ([topicHex, hooks]) => run(topicHex, hooks), { discard: true });
 
     /** Rooms the peer was discovered on that we are in → greet there. The
      *  hooks make greeting idempotent, so this can run on every sweep. */
@@ -117,14 +117,14 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
           const hooks = hooksByTopic.get(topic);
           return hooks ? hooks.onFrame(key, frame) : Effect.logDebug(`frame for a room we're not in (${topic.slice(0, 8)}) from ${key.slice(0, 8)}`);
         }),
-        Effect.catchTag("SchemaError", (e) =>
+        Effect.catchTag("SchemaError", (error) =>
           // A frame we cannot read is dropped — one protocol version at a
           // time, no shims. But it must not look like a peer that simply
           // never showed up: if it names a version, say so, once per peer.
           Effect.suspend(() => {
             const theirs = protocolOf(json);
             if (theirs === null || theirs === PROTOCOL_VERSION || mismatched.has(key)) {
-              return Effect.logWarning(`dropped invalid frame from ${key.slice(0, 8)}: ${String(e.issue).slice(0, 120)}`);
+              return Effect.logWarning(`dropped invalid frame from ${key.slice(0, 8)}: ${String(error.issue).slice(0, 120)}`);
             }
             mismatched.add(key);
             return Effect.logWarning(
@@ -156,8 +156,8 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       const link = { send: (json: string) => void envelopes.send(json) };
       connByKey.set(key, link);
       let lastError: Error | null = null;
-      conn.on("error", (e) => {
-        lastError = e;
+      conn.on("error", (error) => {
+        lastError = error;
       });
       conn.on("close", () => {
         // the close reason answers "why didn't they connect?" after the fact
@@ -171,7 +171,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
         // closing connection is still the current one.
         if (connByKey.get(key) === link) {
           connByKey.delete(key);
-          runFork(forEachHook((_, h) => h.onPeerGone(key)));
+          runFork(forEachHook((_, hooks) => hooks.onPeerGone(key)));
         }
       });
       // Introduce ourselves in the rooms we were both found in. Nothing is
@@ -190,17 +190,17 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       // (the client dials the LAN address directly while the server waits for
       // a holepunch that never comes). On the public DHT, detection stays on.
       const dht = config.bootstrap ? new DHT({ bootstrap: config.bootstrap, firewalled: false }) : undefined;
-      const s = new Hyperswarm({ keyPair: config.identity.keyPair, bootstrap: config.bootstrap, dht });
-      s.on("connection", onConnection);
+      const hyperswarm = new Hyperswarm({ keyPair: config.identity.keyPair, bootstrap: config.bootstrap, dht });
+      hyperswarm.on("connection", onConnection);
       // peers get their topics as discovery finds them, often after the
       // connection already exists — sweep so late topics still get a greet
-      s.on("update", () => runFork(Effect.forEach([...connByKey.keys()], greetKnownTopics, { discard: true })));
-      swarm = s;
+      hyperswarm.on("update", () => runFork(Effect.forEach([...connByKey.keys()], greetKnownTopics, { discard: true })));
+      swarm = hyperswarm;
       runFork(
-        Effect.promise(() => s.dht.ready() as Promise<void>).pipe(
+        Effect.promise(() => hyperswarm.dht.ready() as Promise<void>).pipe(
           Effect.andThen(() =>
             Effect.log(
-              `dht: local ${JSON.stringify(s.dht.localAddress())} · remote ${JSON.stringify(s.dht.remoteAddress())} · firewalled=${String(s.dht.firewalled)}`,
+              `dht: local ${JSON.stringify(hyperswarm.dht.localAddress())} · remote ${JSON.stringify(hyperswarm.dht.remoteAddress())} · firewalled=${String(hyperswarm.dht.firewalled)}`,
             ),
           ),
           Effect.ignore,
@@ -218,10 +218,10 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
 
     // hyperswarm only tears down a DHT it created itself
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const destroySwarm = (s: any) =>
+    const destroySwarm = (hyperswarm: any) =>
       Effect.promise(async () => {
-        await s.destroy();
-        if (!s.dht.destroyed) await s.dht.destroy();
+        await hyperswarm.destroy();
+        if (!hyperswarm.dht.destroyed) await hyperswarm.dht.destroy();
       });
 
     yield* Effect.acquireRelease(Effect.sync(startSwarm), () => destroySwarm(swarm).pipe(Effect.orDie));
@@ -237,7 +237,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       yield* Effect.sleep(Duration.millis(Math.random() * 10_000));
       yield* Effect.forEach(
         [...discoveries.values()],
-        (d) => Effect.promise(() => d.refresh({ client: true, server: true }) as Promise<void>).pipe(Effect.ignore),
+        (discovery) => Effect.promise(() => discovery.refresh({ client: true, server: true }) as Promise<void>).pipe(Effect.ignore),
         { discard: true },
       );
       yield* Effect.forEach([...connByKey.keys()], greetKnownTopics, { discard: true });
@@ -249,14 +249,14 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
     const healthLine = (): { line: string; known: number; open: number } => {
       const known = [...(swarm.peers as Map<string, PeerInfo>).values()];
       const open = (swarm.connections as Set<unknown>).size;
-      const c = swarm.stats.connects as {
+      const connects = swarm.stats.connects as {
         client: { attempted: number; opened: number; closed: number };
         server: { opened: number; closed: number };
       };
       const peersText = known
-        .map((p) => `${b4a.toString(p.publicKey, "hex").slice(0, 8)}:a${p.attempts}${p.proven ? "✓" : ""}${p.banned ? "!" : ""}`)
+        .map((peer) => `${b4a.toString(peer.publicKey, "hex").slice(0, 8)}:a${peer.attempts}${peer.proven ? "✓" : ""}${peer.banned ? "!" : ""}`)
         .join(" ");
-      const line = `swarm: ${open} open · ${swarm.connecting} connecting · ${hooksByTopic.size} topic(s) · known [${peersText || "none"}] · client ${c.client.attempted}/${c.client.opened}/${c.client.closed} · server ${c.server.opened}/${c.server.closed}`;
+      const line = `swarm: ${open} open · ${swarm.connecting} connecting · ${hooksByTopic.size} topic(s) · known [${peersText || "none"}] · client ${connects.client.attempted}/${connects.client.opened}/${connects.client.closed} · server ${connects.server.opened}/${connects.server.closed}`;
       return { line, known: known.length, open };
     };
 
@@ -282,7 +282,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       const gone = [...connByKey.keys()];
       connByKey.clear();
       discoveries.clear();
-      yield* Effect.forEach(gone, (key) => forEachHook((_, h) => h.onPeerGone(key)), { discard: true });
+      yield* Effect.forEach(gone, (key) => forEachHook((_, hooks) => hooks.onPeerGone(key)), { discard: true });
       yield* Effect.sync(startSwarm);
     }).pipe(Effect.schedule(Schedule.spaced("60 seconds")), Effect.forkScoped);
 
@@ -298,9 +298,9 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
         () =>
           Effect.gen(function* () {
             hooksByTopic.delete(topicHex);
-            const d = discoveries.get(topicHex);
+            const discovery = discoveries.get(topicHex);
             discoveries.delete(topicHex);
-            if (d) yield* Effect.promise(() => d.destroy() as Promise<void>).pipe(Effect.timeout("5 seconds"), Effect.ignore);
+            if (discovery) yield* Effect.promise(() => discovery.destroy() as Promise<void>).pipe(Effect.timeout("5 seconds"), Effect.ignore);
           }),
       );
       // peers already connected through other rooms may be in this one too
@@ -319,7 +319,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
           Effect.flatMap((json) => Effect.sync(() => conn.send(json))),
           // warn, not debug: a silently dropped frame looks exactly like "peer
           // never answered" and has cost hours of misdiagnosis
-          Effect.catch((e) => Effect.logWarning(`frame write failed (${frame.kind}): ${String(e).slice(0, 160)}`)),
+          Effect.catch((error) => Effect.logWarning(`frame write failed (${frame.kind}): ${String(error).slice(0, 160)}`)),
         );
       });
 

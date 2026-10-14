@@ -17,8 +17,8 @@ describe("checkInvite", () => {
     if (!dev.ok) expect(dev.reason).toMatch(/mainnet room.*installed collagen/);
   });
   it("says what an invite looks like when the text is not one", () => {
-    const r = checkInvite("cat", "mainnet");
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toMatch(/uuid/);
+    const result = checkInvite("cat", "mainnet");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/uuid/);
   });
 });

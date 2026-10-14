@@ -14,7 +14,7 @@
 const FIRST_RETRY = 500;
 const LONGEST_WAIT = 5_000;
 
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 export const lasting = <T>(open: () => AsyncIterable<T>, wait: (ms: number) => Promise<void> = sleep): AsyncIterable<T> => ({
   [Symbol.asyncIterator](): AsyncIterator<T> {
@@ -28,11 +28,11 @@ export const lasting = <T>(open: () => AsyncIterable<T>, wait: (ms: number) => P
         while (!stopped) {
           const it = (current ??= open()[Symbol.asyncIterator]());
           try {
-            const r = await it.next();
+            const result = await it.next();
             if (stopped) break;
-            if (!r.done) {
+            if (!result.done) {
               delay = 0;
-              return r;
+              return result;
             }
           } catch {
             // broken: opened again below

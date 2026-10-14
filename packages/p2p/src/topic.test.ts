@@ -15,9 +15,9 @@ describe("isRoomId", () => {
 
 describe("shortRoomId", () => {
   it("is stable, 8 hex chars, and independent of the room's label", () => {
-    const a = shortRoomId("0198a111-2222-7333-8444-555566667777");
-    expect(a).toMatch(/^[0-9a-f]{8}$/);
-    expect(shortRoomId("0198a111-2222-7333-8444-555566667777")).toBe(a);
+    const shortId = shortRoomId("0198a111-2222-7333-8444-555566667777");
+    expect(shortId).toMatch(/^[0-9a-f]{8}$/);
+    expect(shortRoomId("0198a111-2222-7333-8444-555566667777")).toBe(shortId);
   });
 });
 

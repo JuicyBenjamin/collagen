@@ -23,9 +23,9 @@ export function shortRoomId(roomId: string): string {
 /** Conversation key — symmetric (sorted keys), so A→B and B→A about one
  *  project land in the same thread and replies continue the same AI session
  *  on both sides. */
-export function deriveThreadId(a: string, b: string, project: string): string {
-  const [lo, hi] = a < b ? [a, b] : [b, a];
-  return createHash("sha256").update(`${lo}|${hi}|${project}`).digest("hex").slice(0, 16);
+export function deriveThreadId(first: string, second: string, project: string): string {
+  const [lower, higher] = first < second ? [first, second] : [second, first];
+  return createHash("sha256").update(`${lower}|${higher}|${project}`).digest("hex").slice(0, 16);
 }
 
 /** An invite as people see and paste it: the room id, prefixed `devnet-` when
@@ -38,15 +38,15 @@ export function formatInvite(roomId: string, net: Net): string {
 export type ParsedInvite = { readonly id: string; readonly net: Net };
 
 /** The inverse of formatInvite; null when the text is not an invite at all. */
-export function parseInvite(s: string): ParsedInvite | null {
-  const t = s.trim();
-  const dev = t.startsWith("devnet-");
-  const id = dev ? t.slice(7) : t;
+export function parseInvite(text: string): ParsedInvite | null {
+  const trimmed = text.trim();
+  const dev = trimmed.startsWith("devnet-");
+  const id = dev ? trimmed.slice(7) : trimmed;
   return isRoomId(id) ? { id, net: dev ? "devnet" : "mainnet" } : null;
 }
 
 /** A room id (= the invite) is a uuid, v7 in practice. Anything else is
  *  rejected at the edges so a botched paste can't silently become a new room. */
-export function isRoomId(s: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+export function isRoomId(text: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
 }

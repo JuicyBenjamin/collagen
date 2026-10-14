@@ -29,9 +29,9 @@ let setPending: (f: (l: ReadonlyArray<DraftView>) => ReadonlyArray<DraftView>) =
 const ready = <T>(read: () => T, otherwise: T): T => {
   try {
     return read();
-  } catch (e) {
-    if (e instanceof NotReadyError) return otherwise;
-    throw e;
+  } catch (error) {
+    if (error instanceof NotReadyError) return otherwise;
+    throw error;
   }
 };
 
@@ -63,7 +63,7 @@ if (typeof window !== "undefined") {
     if (document.visibilityState !== "visible") return;
     setNow(Date.now());
     const at = hostNow.checkedAt();
-    if (at !== null && Date.now() - at > STALE_AFTER_MS) setAsked((n) => n + 1);
+    if (at !== null && Date.now() - at > STALE_AFTER_MS) setAsked((count) => count + 1);
   });
 }
 /** Why a draft could not be said, by its id — kept apart from the draft, so
@@ -77,33 +77,33 @@ let finishId = crypto.randomUUID();
 export const hostNow = {
   /** Made once by the page, read again each time `state` (the review's live token) moves. */
   start(state: Accessor<unknown>): void {
-    const v = createMemo(() => {
+    const hostMemo = createMemo(() => {
       state();
       asked();
       return hostView(ticketId);
     });
-    view = v;
-    const t = createMemo(() => {
+    view = hostMemo;
+    const talkMemo = createMemo(() => {
       state();
       return talkView(ticketId);
     });
-    talk = t;
+    talk = talkMemo;
     // the pull request's comments, then the room's that are not on it — one each
     const [list, set] = createOptimistic(() => {
-      const h = ready(v, null);
-      const said = ready(t, null)?.said ?? [];
+      const host = ready(hostMemo, null);
+      const said = ready(talkMemo, null)?.said ?? [];
       // the host's copy of one the reader's AI drafted says so too
-      const drafted = new Set(said.flatMap((c) => (c.drafted && c.hostId !== undefined ? [c.hostId] : [])));
-      const onHost = (h && "host" in h ? h.comments : []).map((c) => (drafted.has(c.id) ? { ...c, drafted: true as const } : c));
-      const ids = new Set(onHost.map((c) => c.id));
-      return [...onHost, ...said.filter((c) => c.hostId === undefined || !ids.has(c.hostId))];
+      const drafted = new Set(said.flatMap((comment) => (comment.drafted && comment.hostId !== undefined ? [comment.hostId] : [])));
+      const onHost = (host && "host" in host ? host.comments : []).map((comment) => (drafted.has(comment.id) ? { ...comment, drafted: true as const } : comment));
+      const ids = new Set(onHost.map((comment) => comment.id));
+      return [...onHost, ...said.filter((comment) => comment.hostId === undefined || !ids.has(comment.hostId))];
     });
     comments = list;
     setComments = set;
-    const [waiting, setWaiting] = createOptimistic(() => ready(t, null)?.drafts ?? []);
+    const [waiting, setWaiting] = createOptimistic(() => ready(talkMemo, null)?.drafts ?? []);
     drafts = waiting;
     setDrafts = setWaiting;
-    const [inReview, setInReview] = createOptimistic(() => ready(t, null)?.pending ?? []);
+    const [inReview, setInReview] = createOptimistic(() => ready(talkMemo, null)?.pending ?? []);
     pending = inReview;
     setPending = setInReview;
   },
@@ -113,8 +113,8 @@ export const hostNow = {
 
   /** The host's part when there is one (a pull request may still be missing). */
   host: (): Host | null => {
-    const v = hostNow.view();
-    return v && "host" in v ? v : null;
+    const current = hostNow.view();
+    return current && "host" in current ? current : null;
   },
 
   /** The host's name for people — "GitHub" — or a word for it before it is read. */
@@ -122,12 +122,12 @@ export const hostNow = {
 
   /** Ask the host again now — the reader's Refresh. */
   refresh: (): void => {
-    setAsked((n) => n + 1);
+    setAsked((count) => count + 1);
   },
   /** When the host was last asked (ms), or null before it has been. */
   checkedAt: (): number | null => {
-    const h = hostNow.host();
-    return h ? Date.parse(h.checkedAt) : null;
+    const host = hostNow.host();
+    return host ? Date.parse(host.checkedAt) : null;
   },
   /** Is it being asked right now (a refresh on its way). */
   checking: (): boolean => {
@@ -149,15 +149,15 @@ export const hostNow = {
   /** Can the reader act on the pull request from here: signed in, it is
    *  open, and it is someone else's. */
   canWrite: (): boolean => {
-    const h = hostNow.host();
+    const host = hostNow.host();
     // someone else's: on the reader's own, comments stay in collagen
-    return h !== null && h.viewer !== null && h.pull?.state === "open" && !h.pull.mine;
+    return host !== null && host.viewer !== null && host.pull?.state === "open" && !host.pull.mine;
   },
 
   /** The drafts the reader's AI left on one line (a block's on its last). */
   draftsAt: (file: string, side: "LEFT" | "RIGHT", line: number): ReadonlyArray<DraftView> => {
     const at = spot(file, side, line);
-    return ready(drafts, []).filter((d) => spot(d.file, d.side, d.line) === at);
+    return ready(drafts, []).filter((draft) => spot(draft.file, draft.side, draft.line) === at);
   },
   /** How many drafts are waiting, and their ids. */
   drafts: (): ReadonlyArray<DraftView> => ready(drafts, []),
@@ -165,19 +165,19 @@ export const hostNow = {
   /** Accept AI drafts — these, or all (null) — into the reader's review: they
    *  show as pending in it at once, with the words as edited. */
   accept: action(function* (ids: ReadonlyArray<string> | null, edits: Readonly<Record<string, string>> = {}) {
-    const chosen = ready(drafts, []).filter((d) => ids === null || ids.includes(d.id));
-    setDrafts((l) => l.filter((d) => !chosen.includes(d)));
-    setPending((l) => [...l, ...chosen.map((d) => ({ ...d, body: edits[d.id] ?? d.body, drafted: true as const }))]);
-    const r = (yield acceptDrafts(ticketId, ids, edits)) as DraftsResult;
-    note(chosen.map((d) => d.id), r.failed);
+    const chosen = ready(drafts, []).filter((draft) => ids === null || ids.includes(draft.id));
+    setDrafts((current) => current.filter((draft) => !chosen.includes(draft)));
+    setPending((current) => [...current, ...chosen.map((draft) => ({ ...draft, body: edits[draft.id] ?? draft.body, drafted: true as const }))]);
+    const result = (yield acceptDrafts(ticketId, ids, edits)) as DraftsResult;
+    note(chosen.map((draft) => draft.id), result.failed);
     if (talk) refresh(talk);
-    return r;
+    return result;
   }),
   /** Why a draft or a pending comment could not be taken the last time, if it could not. */
   refusal: (id: string): string | undefined => refusals()[id],
   /** Decline AI drafts — these, or all (null): gone at once, said nowhere. */
   decline: action(function* (ids: ReadonlyArray<string> | null) {
-    setDrafts((l) => l.filter((d) => ids !== null && !ids.includes(d.id)));
+    setDrafts((current) => current.filter((draft) => ids !== null && !ids.includes(draft.id)));
     yield dropDrafts(ticketId, ids, "ai");
     if (talk) refresh(talk);
   }),
@@ -186,50 +186,50 @@ export const hostNow = {
   pending: (): ReadonlyArray<DraftView> => ready(pending, []),
   pendingAt: (file: string, side: "LEFT" | "RIGHT", line: number): ReadonlyArray<DraftView> => {
     const at = spot(file, side, line);
-    return ready(pending, []).filter((d) => spot(d.file, d.side, d.line) === at);
+    return ready(pending, []).filter((draft) => spot(draft.file, draft.side, draft.line) === at);
   },
   /** A comment into the reader's review, pending until they finish it — shown at once. */
   addToReview: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string, start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null) {
     const commit = diffNow.commit();
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
-    setPending((l) => [...l, { id: `new-${Date.now()}`, commit, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), body }]);
-    const r = (yield addToReview(ticketId, file, line, side, body, commit, start)) as HostWrite;
+    setPending((current) => [...current, { id: `new-${Date.now()}`, commit, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), body }]);
+    const result = (yield addToReview(ticketId, file, line, side, body, commit, start)) as HostWrite;
     if (talk) refresh(talk);
-    return r;
+    return result;
   }),
   /** New words for a pending comment (or a draft), shown at once. */
   edit: action(function* (id: string, body: string) {
-    setPending((l) => l.map((d) => (d.id === id ? { ...d, body } : d)));
-    setDrafts((l) => l.map((d) => (d.id === id ? { ...d, body } : d)));
-    const r = (yield editDraft(ticketId, id, body)) as DraftsResult;
-    note([id], r.failed);
+    setPending((current) => current.map((draft) => (draft.id === id ? { ...draft, body } : draft)));
+    setDrafts((current) => current.map((draft) => (draft.id === id ? { ...draft, body } : draft)));
+    const result = (yield editDraft(ticketId, id, body)) as DraftsResult;
+    note([id], result.failed);
     if (talk) refresh(talk);
-    return r;
+    return result;
   }),
   /** Take comments out of the reader's review — these, or all (null). */
   unpend: action(function* (ids: ReadonlyArray<string> | null) {
-    setPending((l) => l.filter((d) => ids !== null && !ids.includes(d.id)));
+    setPending((current) => current.filter((draft) => ids !== null && !ids.includes(draft.id)));
     yield dropDrafts(ticketId, ids, "pending");
     if (talk) refresh(talk);
   }),
   /** The drafts and pending comments on no line the diff shows. */
-  unplaced: (): ReadonlyArray<DraftView> => (diffNow.commit() ? [...ready(pending, []), ...ready(drafts, [])].filter((d) => !shown(d)) : []),
+  unplaced: (): ReadonlyArray<DraftView> => (diffNow.commit() ? [...ready(pending, []), ...ready(drafts, [])].filter((draft) => !shown(draft)) : []),
   /** Whether it is one of the AI's drafts, not in the review yet. */
-  isDraft: (d: DraftView): boolean => ready(drafts, []).some((x) => x.id === d.id),
+  isDraft: (draft: DraftView): boolean => ready(drafts, []).some((other) => other.id === draft.id),
   /** Whether a comment not said yet was written at another commit than the
    *  one the page shows — its lines may have moved since. */
-  moved: (d: DraftView): boolean => {
+  moved: (draft: DraftView): boolean => {
     const at = diffNow.commit();
-    return at !== null && at !== undefined && d.commit !== at;
+    return at !== null && at !== undefined && draft.commit !== at;
   },
   /** Confirm a comment where it shows now, at the commit the page shows. */
   repin: action(function* (id: string) {
     const commit = diffNow.commit();
     if (!commit) return;
-    setPending((l) => l.map((d) => (d.id === id ? { ...d, commit } : d)));
-    setDrafts((l) => l.map((d) => (d.id === id ? { ...d, commit } : d)));
-    const r = (yield repinDraft(ticketId, id, commit)) as DraftsResult;
-    note([id], r.failed);
+    setPending((current) => current.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
+    setDrafts((current) => current.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
+    const result = (yield repinDraft(ticketId, id, commit)) as DraftsResult;
+    note([id], result.failed);
     if (talk) refresh(talk);
   }),
   /** Finish the review: a verdict, words, and every pending comment, said at
@@ -239,22 +239,22 @@ export const hostNow = {
     const me: HostUser | null | undefined = hostNow.host()?.viewer;
     const going = ready(pending, []);
     setPending(() => []);
-    setComments((l) => [...l, ...going.map((d): LineComment => ({ id: `sending-${d.id}`, author: me ?? { login: "you" }, body: d.body, file: d.file, line: d.line, side: d.side, ...(d.startLine !== undefined ? { startLine: d.startLine, startSide: d.startSide ?? d.side } : {}), url: "", at: new Date().toISOString(), pending: true, ...(d.drafted ? { drafted: true as const } : {}) }))]);
+    setComments((current) => [...current, ...going.map((draft): LineComment => ({ id: `sending-${draft.id}`, author: me ?? { login: "you" }, body: draft.body, file: draft.file, line: draft.line, side: draft.side, ...(draft.startLine !== undefined ? { startLine: draft.startLine, startSide: draft.startSide ?? draft.side } : {}), url: "", at: new Date().toISOString(), pending: true, ...(draft.drafted ? { drafted: true as const } : {}) }))]);
     // this finish, named — sent again it is not said twice — with the
     // review as the page showed it (a comment still on its way has no id yet)
-    const seen = { id: finishId, pending: going.map((d) => d.id).filter((id) => !id.startsWith("new-")) };
-    const r = (yield submitReview(ticketId, verdict, body, diffNow.commit() ?? null, me?.login ?? null, seen)) as SubmitResult;
+    const seen = { id: finishId, pending: going.map((draft) => draft.id).filter((id) => !id.startsWith("new-")) };
+    const result = (yield submitReview(ticketId, verdict, body, diffNow.commit() ?? null, me?.login ?? null, seen)) as SubmitResult;
     // done — or on the host already, its words with it: what comes next is a new finish
-    if ("ok" in r || r.onHost) finishId = crypto.randomUUID();
+    if ("ok" in result || result.onHost) finishId = crypto.randomUUID();
     if (talk) refresh(talk);
-    if ("ok" in r && view) refresh(view);
-    return r;
+    if ("ok" in result && view) refresh(view);
+    return result;
   }),
 
   /** The comments on one line, the reader's own on its way among them. */
   commentsAt: (file: string, side: "LEFT" | "RIGHT", line: number): ReadonlyArray<LineComment> => {
     const at = spot(file, side, line);
-    return ready(comments, []).filter((c) => spot(c.file, c.side, c.line) === at);
+    return ready(comments, []).filter((comment) => spot(comment.file, comment.side, comment.line) === at);
   },
 
   /** The lines picked for a comment, and whether the pointer is still dragging them out. */
@@ -264,15 +264,15 @@ export const hostNow = {
    *  held, the pick in this hunk stretched to it. Dragging goes on until the
    *  button comes up, anywhere. */
   startPick: (hunk: string, row: number, stretch: boolean): void => {
-    const p = pick();
-    setPick(stretch && p?.hunk === hunk ? { ...p, focus: row } : { hunk, anchor: row, focus: row });
+    const picked = pick();
+    setPick(stretch && picked?.hunk === hunk ? { ...picked, focus: row } : { hunk, anchor: row, focus: row });
     setDragging(true);
     window.addEventListener("mouseup", () => setDragging(false), { once: true });
   },
   /** The pointer passed over a line while dragging: the pick reaches it. */
   dragTo: (hunk: string, row: number): void => {
-    const p = pick();
-    if (dragging() && p?.hunk === hunk && p.focus !== row) setPick({ ...p, focus: row });
+    const picked = pick();
+    if (dragging() && picked?.hunk === hunk && picked.focus !== row) setPick({ ...picked, focus: row });
   },
   clearPick: (): void => {
     setPick(null);
@@ -288,7 +288,7 @@ export const hostNow = {
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
     const me: HostUser | null | undefined = hostNow.host()?.viewer;
     const mine: LineComment = { id: `pending-${Date.now()}`, author: me ?? { login: "you" }, body, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), url: "", at: new Date().toISOString(), pending: true };
-    setComments((l) => [...l, mine]);
+    setComments((current) => [...current, mine]);
     const said = (yield sendLineComment(ticketId, file, line, side, body, commit, start, me?.login ?? null)) as HostWrite;
     if ("ok" in said) {
       if (talk) refresh(talk);
@@ -301,11 +301,11 @@ export const hostNow = {
 
 /** Keep why each of `ids` could not be taken, and forget it for the rest. */
 function note(ids: ReadonlyArray<string>, failed: ReadonlyArray<{ readonly id: string; readonly error: string }>): void {
-  setRefusals((r) => ({ ...Object.fromEntries(Object.entries(r).filter(([id]) => !ids.includes(id))), ...Object.fromEntries(failed.map((f) => [f.id, f.error])) }));
+  setRefusals((previous) => ({ ...Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))), ...Object.fromEntries(failed.map((failure) => [failure.id, failure.error])) }));
 }
 
 /** Whether the diff shows a comment's line, where its thread sits: a removed
  *  line on the old side, any other on the new. */
-function shown(d: DraftView): boolean {
-  return diffNow.hunksOf(d.file).some((h) => h.lines.some((l) => (d.side === "LEFT" ? l.kind === "-" && l.old === d.line : l.kind !== "-" && l.new === d.line)));
+function shown(draft: DraftView): boolean {
+  return diffNow.hunksOf(draft.file).some((hunk) => hunk.lines.some((line) => (draft.side === "LEFT" ? line.kind === "-" && line.old === draft.line : line.kind !== "-" && line.new === draft.line)));
 }

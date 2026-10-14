@@ -13,7 +13,7 @@ export function SessionProvider({ session, children }: { session: Session; child
 }
 
 export function useSession(): Session {
-  const ctx = useContext(SessionContext);
-  if (!ctx) throw new Error("useSession outside a configured session (setup not finished?)");
-  return ctx;
+  const context = useContext(SessionContext);
+  if (!context) throw new Error("useSession outside a configured session (setup not finished?)");
+  return context;
 }

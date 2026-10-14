@@ -54,11 +54,11 @@ export interface Span {
  *  block comment) becomes one span per line, each keeping its class. */
 export function splitLines(tokens: ReadonlyArray<HighlightToken>): Array<Array<Span>> {
   const lines: Array<Array<Span>> = [[]];
-  for (const t of tokens) {
-    const parts = t.value.split("\n");
-    parts.forEach((part, i) => {
-      if (i > 0) lines.push([]);
-      if (part.length > 0) lines[lines.length - 1]!.push(t.className ? { className: t.className, value: part } : { value: part });
+  for (const token of tokens) {
+    const parts = token.value.split("\n");
+    parts.forEach((part, index) => {
+      if (index > 0) lines.push([]);
+      if (part.length > 0) lines[lines.length - 1]!.push(token.className ? { className: token.className, value: part } : { value: part });
     });
   }
   return lines;
@@ -70,14 +70,14 @@ export function splitLines(tokens: ReadonlyArray<HighlightToken>): Array<Array<S
  *  colours the next; each diff line then takes its spans from its side. */
 export function highlightHunk(hunk: Pick<Hunk, "file" | "lines">): Array<Array<Span>> {
   const lang = languageOf(hunk.file);
-  const side = (keep: (k: string) => boolean) => {
-    const picked = hunk.lines.map((l, i) => ({ l, i })).filter(({ l }) => keep(l.kind));
-    const spans = splitLines(highlighter.tokenize(picked.map(({ l }) => l.text).join("\n"), { lang }).tokens);
-    return new Map(picked.map(({ i }, n) => [i, spans[n] ?? []]));
+  const side = (keep: (kind: string) => boolean) => {
+    const picked = hunk.lines.map((line, index) => ({ line, index })).filter(({ line }) => keep(line.kind));
+    const spans = splitLines(highlighter.tokenize(picked.map(({ line }) => line.text).join("\n"), { lang }).tokens);
+    return new Map(picked.map(({ index }, position) => [index, spans[position] ?? []]));
   };
-  const before = side((k) => k !== "+");
-  const after = side((k) => k !== "-");
-  return hunk.lines.map((l, i) => (l.kind === "-" ? before.get(i) : after.get(i)) ?? [{ value: l.text }]);
+  const before = side((kind) => kind !== "+");
+  const after = side((kind) => kind !== "-");
+  return hunk.lines.map((line, index) => (line.kind === "-" ? before.get(index) : after.get(index)) ?? [{ value: line.text }]);
 }
 
 /** Any code as lines of spans — a peeked declaration, a hover's signature, a
