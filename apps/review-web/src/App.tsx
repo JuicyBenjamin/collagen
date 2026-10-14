@@ -18,6 +18,7 @@ import { diffNow } from "./diffNow";
 import { keepEdges, placeWhy, whyOpening } from "./whyPanel";
 import { assumedNow } from "./assumedNow";
 import { AssumedMark, AssumedWhy, VerdictMark } from "./components/Assumption";
+import { animateDetails } from "./fold";
 
 // The review page: a review ticket's diff read by purpose. One section per
 // unit — what it achieves, a line on what it does, the decisions that shaped
@@ -190,9 +191,11 @@ function Page(props: { data: ReviewPageData }) {
                     <h2>Forks in the road</h2>
                   </div>
                   <div class="decision-main" />
-                  <details class="why" open={wide()}>
+                  <details class="why" open={wide()} ref={animateDetails}>
                     <summary>Why</summary>
-                    <For each={props.data.review.forks}>{(fork) => <Fork fork={fork} />}</For>
+                    <div>
+                      <For each={props.data.review.forks}>{(fork) => <Fork fork={fork} />}</For>
+                    </div>
                   </details>
                 </section>
               </Show>
@@ -212,8 +215,9 @@ function Page(props: { data: ReviewPageData }) {
                     <p class="decision-what">Their code is in no change here — the why may be older than the branch, or points at nothing.</p>
                   </div>
                   <div class="decision-main" />
-                  <details class="why" open={wide()}>
+                  <details class="why" open={wide()} ref={animateDetails}>
                     <summary>Why</summary>
+                    <div>
                     <For each={grouped().outside.map((id) => decisions().get(id)).filter((decision): decision is Decision => decision !== undefined)}>
                       {(decision) => (
                         <div class="why-decision">
@@ -224,6 +228,7 @@ function Page(props: { data: ReviewPageData }) {
                         </div>
                       )}
                     </For>
+                    </div>
                   </details>
                 </section>
               </Show>
@@ -233,9 +238,11 @@ function Page(props: { data: ReviewPageData }) {
                     <h2>Forks outside the diff</h2>
                   </div>
                   <div class="decision-main" />
-                  <details class="why" open={wide()}>
+                  <details class="why" open={wide()} ref={animateDetails}>
                     <summary>Why</summary>
-                    <For each={grouped().looseForks}>{(fork) => <Fork fork={fork} />}</For>
+                    <div>
+                      <For each={grouped().looseForks}>{(fork) => <Fork fork={fork} />}</For>
+                    </div>
                   </details>
                 </section>
               </Show>
@@ -644,9 +651,11 @@ function BareDecision(props: { decision: Decision; why: string }) {
           </Show>
         </div>
       </div>
-      <details class="why" open={wide()}>
+      <details class="why" open={wide()} ref={animateDetails}>
         <summary>Why</summary>
-        <DecisionWhy decision={props.decision} />
+        <div>
+          <DecisionWhy decision={props.decision} />
+        </div>
       </details>
     </section>
   );
