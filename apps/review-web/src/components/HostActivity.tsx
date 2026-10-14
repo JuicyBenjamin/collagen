@@ -3,6 +3,7 @@ import { ago } from "../ago";
 import type { HostNote, HostReview, HostUser } from "../data";
 import { enter, leave } from "../fold";
 import { hostNow } from "../hostNow";
+import { arrive } from "../wipe";
 import { bodyParts } from "../suggest";
 import { Markdown } from "./Markdown";
 
@@ -66,7 +67,14 @@ export function HostActivity() {
   return (
     <Show when={host()?.pull}>
       {(pull) => (
-        <section class="host-activity" aria-label={`On ${hostNow.hostName()}`}>
+        <section
+          // it comes with the host's answer, after the page: it opens into place
+          ref={(element) => {
+            enter(element);
+            arrive(element);
+          }}
+          class="host-activity"
+          aria-label={`On ${hostNow.hostName()}`}>
           <div class="host-head">
             <h2>On {hostNow.hostName()}</h2>
             <Show when={items().length === 0}>

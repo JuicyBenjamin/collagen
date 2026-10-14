@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { hostNow } from "../hostNow";
 import { ticketId } from "../ticket";
 import { viewed } from "../viewedNow";
+import { arrive } from "../wipe";
 import { ReviewComposer } from "./ReviewComposer";
 
 /** Top right of the page: the review's pull request (its number, state and
@@ -44,7 +45,12 @@ export function HostBar() {
             the diff, the rest on the host (a block the size of each, no borders) */}
         <Show when={viewed.read()} fallback={<ProgressPlaceholder />}>
           <Show when={viewed.count().files > 0}>
-            <span ref={watch}>
+            <span
+              ref={(element) => {
+                watch(element);
+                arrive(element);
+              }}
+            >
               <Progress />
             </span>
           </Show>
@@ -56,9 +62,9 @@ export function HostBar() {
         </Show>
         <Show when={host()}>
           {(hostState) => (
-            <Show when={hostState().pull} fallback={<span class="host-note">{hostState().noPull ?? ""}</span>}>
+            <Show when={hostState().pull} fallback={<span class="host-note" ref={arrive}>{hostState().noPull ?? ""}</span>}>
               {(pull) => (
-                <a class={["pull-chip", pull().state]} href={pull().url} target="_blank" rel="noreferrer" title={pull().title}>
+                <a ref={arrive} class={["pull-chip", pull().state]} href={pull().url} target="_blank" rel="noreferrer" title={pull().title}>
                   {chipText(pull())}
                 </a>
               )}
@@ -87,7 +93,7 @@ export function HostBar() {
           {(hostState) => (
             <Show when={hostState().viewer} fallback={<Nobody label={`Not signed in to ${hostState().host}`} title={hostState().signIn} />}>
               {(me) => (
-                <span class="viewer" title={`Signed in to ${hostState().host} as ${me().login} — a review or comment sent from here goes out under this name`}>
+                <span ref={arrive} class="viewer" title={`Signed in to ${hostState().host} as ${me().login} — a review or comment sent from here goes out under this name`}>
                   <Show when={me().avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={22} height={22} />}</Show>
                   <span class="viewer-name">{me().name ?? me().login}</span>
                 </span>
@@ -155,7 +161,7 @@ function ProgressPlaceholder() {
  *  face, and why, quietly. */
 function Nobody(props: { label: string; title: string | undefined }) {
   return (
-    <span class="viewer nobody" title={props.title}>
+    <span ref={arrive} class="viewer nobody" title={props.title}>
       <span class="avatar empty" aria-hidden="true" />
       <span class="host-note">{props.label}</span>
     </span>

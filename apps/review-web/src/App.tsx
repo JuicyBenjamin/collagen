@@ -20,7 +20,7 @@ import { assumedNow } from "./assumedNow";
 import { AssumedMark, AssumedWhy, VerdictMark } from "./components/Assumption";
 import { animateDetails } from "./fold";
 import { HeaderSkeleton, NavSkeleton, UnitsSkeleton } from "./components/Skeleton";
-import { wipeIn } from "./wipe";
+import { arrive, wipeIn } from "./wipe";
 
 // The review page: a review ticket's diff read by purpose. One section per
 // unit — what it achieves, a line on what it does, the decisions that shaped
@@ -387,7 +387,8 @@ function Header(props: { head: ReviewPageHead }) {
   const beneath = () => (headline() === props.head.review.summary ? "" : props.head.review.summary.trim());
   // read from the room, it is in before anything waits on the diff: shown as it comes
   return (
-    <header>
+    // read for the first time, it replaces a placeholder: swept in like the rest
+    <header ref={lastHead ? undefined : arrive}>
       <div class="header-top">
       <p class="meta">
         <Show when={props.head.review.branch}>

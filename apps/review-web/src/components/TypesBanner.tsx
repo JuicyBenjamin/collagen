@@ -4,7 +4,9 @@ import { toolStates, warmTypes } from "../api";
 import { diffNow } from "../diffNow";
 import { lasting } from "../lasting";
 import { installTool, keepTool, toolState } from "../intel";
+import { enter } from "../fold";
 import { ticketId } from "../ticket";
+import { arrive } from "../wipe";
 
 const dismissedKey = (tool: ToolId) => `collagen.typesBanner.dismissed.${tool}`;
 const remembered = (tool: ToolId): boolean => {
@@ -50,7 +52,15 @@ export function TypesBanner(props: { tool: ToolId }) {
     <>
       <Show when={!dismissed() && toolState(props.tool) && toolState(props.tool)!.state !== "ready" ? toolState(props.tool) : null}>
         {(tool) => (
-          <div class="banner" role="status">
+          <div
+            // it comes with the tool's state, after the code: it opens into place
+            ref={(element) => {
+              enter(element);
+              arrive(element);
+            }}
+            class="banner"
+            role="status"
+          >
             <Show
               when={tool().state === "installing"}
               fallback={
