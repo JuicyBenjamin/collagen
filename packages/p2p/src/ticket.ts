@@ -286,6 +286,47 @@ export function moveToEpic(ticket: Ticket, epic: string | null, by: string, now:
   return { ...ticket, partOf: [...(ticket.partOf ?? []), move], updatedAt: now };
 }
 
+/** The epic a ticket being filed goes into: the one its filer named
+ *  (`chosen`: an epic's id, or null for none), else the one open epic the
+ *  tickets it grows out of are in — what grows out of a part of an epic is
+ *  part of it too. None when they are in several epics, or in none. Filing
+ *  puts it there with a move of its own; the lineage itself moves nothing. */
+export function epicForFiling(from: ReadonlyArray<string>, all: ReadonlyMap<string, Ticket>, chosen?: string | null): string | null {
+  if (chosen !== undefined) return chosen;
+  const epics = new Set(
+    from.flatMap((id) => {
+      const parent = all.get(id);
+      const epicId = parent ? epicOf(parent) : null;
+      const epic = epicId ? all.get(epicId) : undefined;
+      return epic && epic.kind === "epic" && !isClosed(epic, all) ? [epic.id] : [];
+    }),
+  );
+  return epics.size === 1 ? [...epics][0]! : null;
+}
+
+/** An epic's tickets as lines of work: those joined by what grew out of what
+ *  (through any ticket of the room) are one line — a proposal, its plan, the
+ *  task and the review are stages of one piece of work; separate pieces are
+ *  separate lines. Each line in the epic's reading order, placed where its
+ *  first ticket is. */
+export function epicLines(parts: ReadonlyArray<Ticket>, all: ReadonlyMap<string, Ticket>): ReadonlyArray<ReadonlyArray<Ticket>> {
+  const leader = new Map<string, string>();
+  const rootOf = (id: string): string => {
+    const up = leader.get(id);
+    if (up === undefined || up === id) return id;
+    const root = rootOf(up);
+    leader.set(id, root);
+    return root;
+  };
+  for (const ticket of all.values()) for (const parent of ticket.from ?? []) leader.set(rootOf(ticket.id), rootOf(parent));
+  const lines = new Map<string, Array<Ticket>>();
+  for (const part of parts) {
+    const root = rootOf(part.id);
+    lines.set(root, [...(lines.get(root) ?? []), part]);
+  }
+  return [...lines.values()];
+}
+
 /** Done, as its epic counts it: every step answered, or closed as done. */
 export const doneInEpic = (ticket: Ticket): boolean => finished(ticket) || closedAs(ticket) === "done";
 
@@ -297,11 +338,14 @@ export const outOfProgress = (ticket: Ticket): boolean => excludedFromEpic(ticke
 const resolved = (ticket: Ticket): boolean => finished(ticket) || (ticket.kind !== "epic" && ticket.closed !== undefined) || excludedFromEpic(ticket);
 
 /** The tickets in an epic now, in its reading order (the latest one set,
- *  then the rest), and its progress: the ones done — every step answered,
- *  or closed as done — against all but the excluded and those closed as
- *  dropped, so 4 of 5 becomes 4 of 4. */
+ *  then the rest), and its progress in lines of work (epicLines): a line is
+ *  done when every ticket of it is — every step answered, or closed as done —
+ *  and counted unless all of it is excluded or closed as dropped, so 4 of 5
+ *  becomes 4 of 4. */
 export function epicParts(epic: Ticket, all: ReadonlyMap<string, Ticket>): {
   readonly parts: ReadonlyArray<Ticket>;
+  /** the parts as lines of work (epicLines) — what progress counts */
+  readonly lines: ReadonlyArray<ReadonlyArray<Ticket>>;
   readonly counted: number;
   readonly done: number;
   readonly unresolved: ReadonlyArray<Ticket>;
@@ -313,8 +357,11 @@ export function epicParts(epic: Ticket, all: ReadonlyMap<string, Ticket>): {
     return position === -1 ? order.length : position;
   };
   const parts = [...inside].sort((a, b) => rank(a) - rank(b));
-  const counted = parts.filter((ticket) => !outOfProgress(ticket));
-  return { parts, counted: counted.length, done: counted.filter(doneInEpic).length, unresolved: parts.filter((ticket) => !resolved(ticket)) };
+  // progress counts lines of work, not tickets: filing the next stage of a
+  // piece of work adds no more to get through
+  const lines = epicLines(parts, all);
+  const counted = lines.map((line) => line.filter((ticket) => !outOfProgress(ticket))).filter((line) => line.length > 0);
+  return { parts, lines, counted: counted.length, done: counted.filter((line) => line.every(doneInEpic)).length, unresolved: parts.filter((ticket) => !resolved(ticket)) };
 }
 
 /** The turns no other turn has seen: what the room's latest word on the

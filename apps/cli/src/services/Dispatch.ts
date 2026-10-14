@@ -28,6 +28,14 @@ const NOT_ADMITTED = refused("failed: you are not admitted to this room's log ye
  *  reached from the Outbox alone, after the person's yes (or a mock's). Names
  *  are resolved here, at send time, so a proposal that waited across a
  *  restart still finds its peer. */
+/** Said back when a filed ticket went into an epic: which, and how to take
+ *  it out — it went in because what it grew out of is there. */
+const inEpicNote = (ticket: Ticket, all: ReadonlyMap<string, Ticket>): string => {
+  const epicId = epicOf(ticket);
+  const epic = epicId ? all.get(epicId) : undefined;
+  return epic ? ` It went into the epic "${ticketName(epic)}" [${epic.id}] with what it grew out of; if your user says it does not belong there, epic remove takes it out.` : "";
+};
+
 export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
   make: Effect.gen(function* () {
     const rooms = yield* Rooms;
@@ -61,7 +69,9 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
         }
         case "ticket": {
           const merged = yield* room.shareTicket(out.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
-          return merged ? sent(`${render(merged)}${relatedHint(merged, yield* SubscriptionRef.get(room.tickets), identity.pubkey)}`) : NOT_ADMITTED;
+          if (!merged) return NOT_ADMITTED;
+          const all = yield* SubscriptionRef.get(room.tickets);
+          return sent(`${render(merged)}${inEpicNote(merged, all)}${relatedHint(merged, all, identity.pubkey)}`);
         }
         case "review": {
           // the record and the why, one write: the ticket first (so the
@@ -113,8 +123,11 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             out.ticket.after && out.ticket.after.length > 0
               ? ` It waits on ${out.ticket.after.length} ticket(s) (after: ${out.ticket.after.join(", ")}): until they are answered nobody but your user is shown it or nudged about it; it opens to its readers by itself then.`
               : "";
-          const related = relatedHint(out.ticket, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
-          return sent(`${kind} ticket filed, ${who}: "${ticketName(out.ticket)}" [ticket ${out.ticket.id}] ${held}.${waits} ${say("filed")} ${keepCurrent}${related}`);
+          const all = yield* SubscriptionRef.get(room.tickets);
+          const epic = epicOf(out.ticket);
+          const epicName = epic ? all.get(epic) : undefined;
+          const related = relatedHint(out.ticket, all, identity.pubkey);
+          return sent(`${kind} ticket filed, ${who}: "${ticketName(out.ticket)}" [ticket ${out.ticket.id}] ${held}.${waits}${inEpicNote(out.ticket, all)} ${say(epicName ? `filed, in the epic "${ticketName(epicName)}"` : "filed")} ${keepCurrent}${related}`);
         }
         case "settle": {
           const ticket = (yield* SubscriptionRef.get(room.tickets)).get(out.ticketId);
@@ -183,7 +196,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const progress = target ? epicParts(target, yield* SubscriptionRef.get(room.tickets)) : null;
           const what = excluding === true ? `kept in "${ticketName(target!)}" but out of its progress` : excluding === false ? `counted in "${ticketName(target!)}" again` : target ? `put into the epic "${ticketName(target)}"` : "taken out of their epic";
           return sent(
-            `${what}: ${moved.join(", ")}${skipped.length > 0 ? ` — not moved: ${skipped.join("; ")}` : ""}.${progress ? ` It now holds ${progress.parts.length} ticket(s), ${progress.done} of ${progress.counted} done.` : ""} Anyone in the room sees it at once. TELL YOUR USER ONLY THIS: "${excluding === true ? "excluded from the epic's progress" : excluding === false ? "counted in the epic again" : target ? "added to the epic" : "taken out of the epic"}".`,
+            `${what}: ${moved.join(", ")}${skipped.length > 0 ? ` — not moved: ${skipped.join("; ")}` : ""}.${progress ? ` It now holds ${progress.parts.length} ticket(s) in ${progress.lines.length} piece(s) of work, ${progress.done} of ${progress.counted} done.` : ""} Anyone in the room sees it at once. TELL YOUR USER ONLY THIS: "${excluding === true ? "excluded from the epic's progress" : excluding === false ? "counted in the epic again" : target ? "added to the epic" : "taken out of the epic"}".`,
           );
         }
         case "epic-order": {

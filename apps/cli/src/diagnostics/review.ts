@@ -37,7 +37,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
           epic: {
             goal: ticket.goal,
             aim: review?.summary ?? "",
-            progress: counted === 0 ? "nothing counted yet" : `${done} of ${counted} done`,
+            progress: counted === 0 ? "nothing counted yet" : `${done} of ${counted} pieces of work done`,
             ...(epicBecause(status, all, me) ? { [closed ? "closedBecause" : "openBecause"]: epicBecause(status, all, me)! } : {}),
             ...(closed ? {} : { toClose: unresolved.length === 0 ? "everything in it is resolved: it can close" : `${unresolved.length} still to resolve, exclude or move out first` }),
           },

@@ -44,8 +44,12 @@ export function EpicPage({
 
   // what is in it — put there, in its reading order; the count is the
   // room's, the list only what this reader may be shown
-  const { parts, unresolved } = epicParts(epic, all);
-  const inside = parts.filter((ticket) => visibleTo(ticket, all, me));
+  const { parts, lines, unresolved } = epicParts(epic, all);
+  // by line of work: a piece of work's first ticket, then the stages that
+  // grew out of it under it — what the progress counts
+  const shownLines = lines.map((line) => line.filter((ticket) => visibleTo(ticket, all, me))).filter((line) => line.length > 0);
+  const inside = shownLines.flat();
+  const stageOf = new Map(shownLines.flatMap((line) => line.map((ticket, stage) => [ticket.id, { stage, last: stage === line.length - 1 }] as const)));
   const progress = epicProgress(epic, all);
   const status = epicStatus(epic, all);
   const closed = status.closed;
@@ -111,7 +115,7 @@ export function EpicPage({
           <>
             <text truncate wrapMode="none" marginTop={2} flexShrink={0}>
               <span fg={focused ? theme.accent : theme.fg}>in it</span>
-              <span fg={theme.dim}> · {inside.length === 0 ? "nothing yet" : `${inside.length} ticket${inside.length === 1 ? "" : "s"}`}</span>
+              <span fg={theme.dim}> · {inside.length === 0 ? "nothing yet" : `${shownLines.length} piece${shownLines.length === 1 ? "" : "s"} of work, ${inside.length} ticket${inside.length === 1 ? "" : "s"}`}</span>
             </text>
             {inside.map((ticket, index) => {
               const summary = summaries(ticket);
@@ -119,6 +123,7 @@ export function EpicPage({
               return (
                 <text key={ticket.id} fg={focused && index === selected ? theme.accent : summary.state === "closed" || summary.state === "done" ? theme.dim : theme.fg} truncate wrapMode="none">
                   {focused && index === selected ? "› " : "  "}
+                  <span fg={theme.dim}>{(stageOf.get(ticket.id)?.stage ?? 0) === 0 ? "" : stageOf.get(ticket.id)?.last ? "└ " : "├ "}</span>
                   <span fg={theme.dim}>{ticket.kind.padEnd(9)}</span>
                   <span fg={theme.dim}>{ticket.project} · </span>
                   {ticket.title ? ticket.title : <span fg={theme.dim}>{rowTitle(ticket)}</span>}

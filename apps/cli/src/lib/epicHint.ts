@@ -8,8 +8,10 @@ const EPICS_SHOWN = 6;
 /** What the agent is told about epics as a ticket is filed — candidates for
  *  it to JUDGE, never an instruction to ask: collagen has no model and
  *  cannot tell whether tickets share a topic, so the agent decides, and says
- *  nothing unless the topics plainly match. Three kinds, in this order:
- *    - it grows out of a ticket in an epic: that epic (or a choice of them);
+ *  nothing unless the topics plainly match. A ticket grown out of a part of
+ *  one epic is filed into it (epicForFiling), so it needs no word. Three
+ *  kinds, in this order:
+ *    - it grows out of tickets in several epics: a choice of them;
  *    - your own open tickets share its lineage (grown out of the same
  *      ticket, or out of it) and there are CLUSTER of them, none in an epic:
  *      a new epic for them;
@@ -25,10 +27,8 @@ export function relatedHint(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me
     const epic = all.get(id);
     return epic && epic.kind === "epic" && !isClosed(epic, all) ? [epic] : [];
   });
-  if (parentEpics.length === 1) {
-    const epic = parentEpics[0]!;
-    return ` EPIC: it grows out of a ticket in the epic "${ticketName(epic)}" [${epic.id}]. If it belongs there too, ask your user in one line whether to add it (epic, action add) — it is not put there on its own. ${judge}`;
-  }
+  // grown out of a part of one epic yet not in it: its filer kept it out
+  if (parentEpics.length === 1) return "";
   if (parentEpics.length > 1) {
     return ` EPIC: it grows out of tickets in ${parentEpics.length} epics (${parentEpics.map((epic) => `"${ticketName(epic)}" [${epic.id}]`).join(", ")}). If it plainly belongs to one, ask your user in one line which (epic, action add). ${judge}`;
   }
