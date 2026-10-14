@@ -122,7 +122,7 @@ export function App() {
             </nav>
             <main>
               <HeaderSkeleton />
-              <UnitsSkeleton count={2} />
+              <UnitsSkeleton />
             </main>
           </div>
         }
@@ -161,8 +161,6 @@ function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
     },
   );
 
-  // what is waiting on the diff gets its shape at once and fills in when it is read
-  const waiting = () => Math.min(3, Math.max(1, props.head.review.decisions.length));
   return (
     <div class="wrap">
       <nav aria-label="Outline">
@@ -174,7 +172,7 @@ function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
       <main>
         <Header head={props.head} />
         <HostActivity />
-        <Loading fallback={<UnitsSkeleton count={waiting()} />}>
+        <Loading fallback={<UnitsSkeleton />}>
           <Diff data={props.data} />
         </Loading>
       </main>
@@ -286,7 +284,7 @@ function Diff(props: { data: ReviewPageData }) {
     <div class="swap">
       <Show when={wipe.ghost()}>
         <div class="swap-ghost" aria-hidden="true" onAnimationEnd={() => wipe.end()}>
-          <UnitsSkeleton count={Math.min(3, Math.max(1, props.data.review.decisions.length))} />
+          <UnitsSkeleton />
         </div>
       </Show>
     <div ref={wipe.start}>
