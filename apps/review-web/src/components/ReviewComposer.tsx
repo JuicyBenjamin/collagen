@@ -30,19 +30,19 @@ export function ReviewComposer(props: { onDone: () => void }) {
     setSaid(null);
     try {
       // in the room alone there is nowhere for words on the whole, or a verdict
-      const r = await hostNow.submit(onHost() ? verdict() : "comment", onHost() ? body() : "");
-      if ("error" in r) {
+      const result = await hostNow.submit(onHost() ? verdict() : "comment", onHost() ? body() : "");
+      if ("error" in result) {
         // its words and verdict reached the pull request: only the room is left to tell
-        if (r.onHost) {
+        if (result.onHost) {
           setBody("");
           setVerdict("comment");
         }
-        return setSaid(r.error);
+        return setSaid(result.error);
       }
       setBody("");
       props.onDone();
-    } catch (e) {
-      setSaid(String(e));
+    } catch (error) {
+      setSaid(String(error));
     } finally {
       setSending(false);
     }
@@ -50,8 +50,8 @@ export function ReviewComposer(props: { onDone: () => void }) {
   return (
     <form
       class="review-composer"
-      onSubmit={(e) => {
-        e.preventDefault();
+      onSubmit={(event) => {
+        event.preventDefault();
         void send();
       }}
     >
@@ -63,17 +63,17 @@ export function ReviewComposer(props: { onDone: () => void }) {
       <textarea
         placeholder={verdict() === "approve" ? "Anything to add (optional)" : count() > 0 && verdict() === "comment" ? "Leave a comment on the whole (optional)" : "Leave a comment"}
         value={body()}
-        onInput={(e) => setBody(e.currentTarget.value)}
+        onInput={(event) => setBody(event.currentTarget.value)}
         rows={4}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send();
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void send();
         }}
       />
       <fieldset class="verdicts">
-        {VERDICTS.map((v) => (
-          <label title={v.hint}>
-            <input type="radio" name="verdict" value={v.value} checked={verdict() === v.value} onChange={() => setVerdict(v.value)} />
-            {v.label}
+        {VERDICTS.map((option) => (
+          <label title={option.hint}>
+            <input type="radio" name="verdict" value={option.value} checked={verdict() === option.value} onChange={() => setVerdict(option.value)} />
+            {option.label}
           </label>
         ))}
       </fieldset>
@@ -83,8 +83,8 @@ export function ReviewComposer(props: { onDone: () => void }) {
           {pull()?.mine ? `Your own pull request: your comments stay in collagen — on ${hostNow.hostName()} you would be their only reader.` : "Your comments are said in the room — there is no open pull request to put them on."} A word on the whole, or a verdict, goes through your agent.
         </p>
       </Show>
-      <Show when={hostNow.unplaced().filter((d) => !hostNow.isDraft(d)).length}>
-        {(n) => <p class="host-note left">{n() === 1 ? "1 pending comment sits" : `${n()} pending comments sit`} on lines this diff no longer shows — listed at the top of the page, to delete.</p>}
+      <Show when={hostNow.unplaced().filter((draft) => !hostNow.isDraft(draft)).length}>
+        {(stranded) => <p class="host-note left">{stranded() === 1 ? "1 pending comment sits" : `${stranded()} pending comments sit`} on lines this diff no longer shows — listed at the top of the page, to delete.</p>}
       </Show>
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">

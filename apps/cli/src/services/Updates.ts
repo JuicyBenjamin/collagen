@@ -17,11 +17,11 @@ export type InstallPlan =
 
 /** Pure: entry path of the running build + versions → plan. */
 export function installPlan(entryPath: string, current: string, latest: string): InstallPlan {
-  const p = entryPath.replaceAll("\\", "/");
+  const normalized = entryPath.replaceAll("\\", "/");
   if (current === "dev") return { kind: "source" };
-  if (p.includes("/_npx/")) return { kind: "npx" };
-  if (p.includes("/pnpm/global/")) return { kind: "global", cmd: "pnpm", args: ["add", "-g", `${PACKAGE}@${latest}`] };
-  if (/\/lib\/node_modules\/@collagen\/cli\//.test(p) || /\/npm\/node_modules\/@collagen\/cli\//.test(p)) {
+  if (normalized.includes("/_npx/")) return { kind: "npx" };
+  if (normalized.includes("/pnpm/global/")) return { kind: "global", cmd: "pnpm", args: ["add", "-g", `${PACKAGE}@${latest}`] };
+  if (/\/lib\/node_modules\/@collagen\/cli\//.test(normalized) || /\/npm\/node_modules\/@collagen\/cli\//.test(normalized)) {
     return { kind: "global", cmd: "npm", args: ["install", "-g", `${PACKAGE}@${latest}`] };
   }
   return { kind: "local", hint: `npm install ${PACKAGE}@${latest} in the project that installed it` };
@@ -54,22 +54,22 @@ export class Updates extends Context.Service<Updates>()("cli/Updates", {
         try: async () => {
           const registry = process.env.COLLAGEN_REGISTRY ?? "https://registry.npmjs.org";
           // registry form: scope kept, slash escaped (@collagen%2Fcli)
-          const res = await fetch(`${registry}/${PACKAGE.replace("/", "%2F")}/latest`, {
+          const response = await fetch(`${registry}/${PACKAGE.replace("/", "%2F")}/latest`, {
             signal: AbortSignal.timeout(5000),
             headers: { accept: "application/json" },
           });
-          if (!res.ok) throw new Error(`registry answered ${res.status}`);
-          const body = (await res.json()) as { version?: string };
+          if (!response.ok) throw new Error(`registry answered ${response.status}`);
+          const body = (await response.json()) as { version?: string };
           return body.version ?? "";
         },
         catch: (cause) => new RegistryUnreachable({ cause }),
       });
       if (isNewer(version, VERSION)) {
         const seen = (yield* SubscriptionRef.get(state)).latest;
-        yield* SubscriptionRef.update(state, (s) => ({ ...s, latest: version }));
+        yield* SubscriptionRef.update(state, (previous) => ({ ...previous, latest: version }));
         if (seen !== version) yield* Effect.log(`update available: collagen ${version} (you run ${VERSION}) — press u to install`);
       }
-    }).pipe(Effect.catch((e) => Effect.logDebug(`update check skipped: ${String(e.cause)}`)));
+    }).pipe(Effect.catch((error) => Effect.logDebug(`update check skipped: ${String(error.cause)}`)));
 
     if (enabled) {
       yield* check.pipe(
@@ -83,45 +83,45 @@ export class Updates extends Context.Service<Updates>()("cli/Updates", {
      *  installed and the app should restart; `false` when there was nothing
      *  to run (the note says what to do instead). */
     const install = Effect.gen(function* () {
-      const s = yield* SubscriptionRef.get(state);
-      if (!s.latest) {
-        yield* SubscriptionRef.update(state, (x) => ({ ...x, note: "you are on the latest version" }));
+      const current = yield* SubscriptionRef.get(state);
+      if (!current.latest) {
+        yield* SubscriptionRef.update(state, (previous) => ({ ...previous, note: "you are on the latest version" }));
         return false;
       }
-      const plan = installPlan(fileURLToPath(import.meta.url), VERSION, s.latest);
-      const say = (note: string) => SubscriptionRef.update(state, (x) => ({ ...x, note, installing: false }));
+      const plan = installPlan(fileURLToPath(import.meta.url), VERSION, current.latest);
+      const say = (note: string) => SubscriptionRef.update(state, (previous) => ({ ...previous, note, installing: false }));
       switch (plan.kind) {
         case "source":
           yield* say("running from source — git pull to update");
           return false;
         case "npx":
-          yield* say(`npx picks up ${s.latest} on the next start — quit and run it again`);
+          yield* say(`npx picks up ${current.latest} on the next start — quit and run it again`);
           return false;
         case "local":
           yield* say(plan.hint);
           return false;
         case "global": {
           const cmdline = `${plan.cmd} ${plan.args.join(" ")}`;
-          yield* SubscriptionRef.update(state, (x) => ({ ...x, installing: true, note: `installing ${s.latest}…` }));
+          yield* SubscriptionRef.update(state, (previous) => ({ ...previous, installing: true, note: `installing ${current.latest}…` }));
           yield* Effect.log(`update: ${cmdline}`);
           const run = Effect.tryPromise({
             try: () =>
               new Promise<string>((resolve, reject) => {
-                execFile(plan.cmd, [...plan.args], { timeout: 180_000, shell: process.platform === "win32" }, (err, stdout, stderr) =>
-                  err ? reject(new InstallFailed({ detail: `${err.message}\n${stderr}`.trim() })) : resolve(String(stdout)),
+                execFile(plan.cmd, [...plan.args], { timeout: 180_000, shell: process.platform === "win32" }, (error, stdout, stderr) =>
+                  error ? reject(new InstallFailed({ detail: `${error.message}\n${stderr}`.trim() })) : resolve(String(stdout)),
                 );
               }),
-            catch: (e) => (e instanceof InstallFailed ? e : new InstallFailed({ detail: String(e) })),
+            catch: (error) => (error instanceof InstallFailed ? error : new InstallFailed({ detail: String(error) })),
           });
           return yield* run.pipe(
             Effect.match({
-              onFailure: (e) => ({ ok: false, detail: e.detail }),
+              onFailure: (error) => ({ ok: false, detail: error.detail }),
               onSuccess: () => ({ ok: true, detail: "" }),
             }),
             Effect.flatMap(({ ok, detail }) =>
               ok
-                ? Effect.log(`update installed: collagen ${s.latest} — restarting`).pipe(
-                    Effect.andThen(say(`installed ${s.latest} — restarting…`)),
+                ? Effect.log(`update installed: collagen ${current.latest} — restarting`).pipe(
+                    Effect.andThen(say(`installed ${current.latest} — restarting…`)),
                     Effect.as(true),
                   )
                 : Effect.logWarning(`update failed: ${detail.split("\n")[0]}`).pipe(

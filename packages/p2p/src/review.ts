@@ -255,9 +255,9 @@ export interface ReviewDelta {
 }
 
 const nextId = (prefix: string, taken: ReadonlyArray<string>): string => {
-  let n = taken.filter((t) => t.startsWith(prefix)).length + 1;
-  while (taken.includes(`${prefix}${n}`)) n++;
-  return `${prefix}${n}`;
+  let count = taken.filter((id) => id.startsWith(prefix)).length + 1;
+  while (taken.includes(`${prefix}${count}`)) count++;
+  return `${prefix}${count}`;
 };
 
 /** A guess the code's author answered keeps its answer when its id is given
@@ -283,50 +283,50 @@ const keepAnswer = <T extends { readonly verdict?: Verdict; readonly guess?: Gue
  *  new (or missing) one appends with the next free number. The whole record
  *  then goes on the log, where the later `ts` wins: the author is the only
  *  writer of their own review, so there is nothing to reconcile. */
-export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number): ReviewContext => {
+export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: number): ReviewContext => {
   const decisions = [...base.decisions];
   // ids once given, withdrawn or not: a new one never repeats them
   const retired = [...(base.retired ?? []), ...(delta.retireGuesses ?? []).filter((id) => !(base.retired ?? []).includes(id))];
-  for (const d of delta.decisions ?? []) {
-    const id = d.id ?? nextId("d", [...decisions.map((x) => x.id), ...retired]);
-    const at = decisions.findIndex((x) => x.id === id);
-    const entry: ReviewDecision = { ...d, id, where: d.where ?? [] };
+  for (const given of delta.decisions ?? []) {
+    const id = given.id ?? nextId("d", [...decisions.map((decision) => decision.id), ...retired]);
+    const at = decisions.findIndex((decision) => decision.id === id);
+    const entry: ReviewDecision = { ...given, id, where: given.where ?? [] };
     if (at === -1) decisions.push(entry);
-    else decisions[at] = keepAnswer(decisions[at]!, entry, (x) => `${x.title ?? ""}|${x.what}`, (x) => ({ what: x.what, ...(x.agentWhy ? { why: x.agentWhy } : {}) }));
+    else decisions[at] = keepAnswer(decisions[at]!, entry, (decision) => `${decision.title ?? ""}|${decision.what}`, (decision) => ({ what: decision.what, ...(decision.agentWhy ? { why: decision.agentWhy } : {}) }));
   }
   const forks = [...base.forks];
-  for (const f of delta.forks ?? []) {
-    const id = f.id ?? nextId("f", [...forks.map((x) => x.id), ...retired]);
-    const at = forks.findIndex((x) => x.id === id);
-    const entry: ReviewFork = { ...f, id };
+  for (const given of delta.forks ?? []) {
+    const id = given.id ?? nextId("f", [...forks.map((fork) => fork.id), ...retired]);
+    const at = forks.findIndex((fork) => fork.id === id);
+    const entry: ReviewFork = { ...given, id };
     if (at === -1) forks.push(entry);
-    else forks[at] = keepAnswer(forks[at]!, entry, (x) => `${x.chose}|${x.instead}`, (x) => ({ what: `${x.chose} over ${x.instead}`, why: x.why }));
+    else forks[at] = keepAnswer(forks[at]!, entry, (fork) => `${fork.chose}|${fork.instead}`, (fork) => ({ what: `${fork.chose} over ${fork.instead}`, why: fork.why }));
   }
   // a withdrawn guess goes; its id is not given again, so it never comes back as another
   const withdrawn = new Set(delta.retireGuesses ?? []);
   if (withdrawn.size > 0) {
-    decisions.splice(0, decisions.length, ...decisions.filter((d) => !withdrawn.has(d.id)));
-    forks.splice(0, forks.length, ...forks.filter((f) => !withdrawn.has(f.id)));
+    decisions.splice(0, decisions.length, ...decisions.filter((decision) => !withdrawn.has(decision.id)));
+    forks.splice(0, forks.length, ...forks.filter((fork) => !withdrawn.has(fork.id)));
   }
   let units = base.units === undefined && delta.units === undefined ? undefined : [...(base.units ?? [])];
   if (units !== undefined) {
-    for (const u of delta.units ?? []) {
-      const id = u.id ?? nextId("u", units.map((x) => x.id));
-      const at = units.findIndex((x) => x.id === id);
-      const entry: ReviewUnit = { id, title: u.title, what: u.what, where: [...u.where] };
+    for (const given of delta.units ?? []) {
+      const id = given.id ?? nextId("u", units.map((unit) => unit.id));
+      const at = units.findIndex((unit) => unit.id === id);
+      const entry: ReviewUnit = { id, title: given.title, what: given.what, where: [...given.where] };
       if (at === -1) units.push(entry);
       else units[at] = entry;
     }
-    if (delta.retireUnits && delta.retireUnits.length > 0) units = units.filter((x) => !delta.retireUnits!.includes(x.id));
+    if (delta.retireUnits && delta.retireUnits.length > 0) units = units.filter((unit) => !delta.retireUnits!.includes(unit.id));
   }
   let outline = base.outline === undefined && delta.outline === undefined ? undefined : [...(base.outline ?? [])];
   if (outline !== undefined) {
-    for (const o of delta.outline ?? []) {
-      const at = outline.findIndex((x) => x.id === o.id);
-      if (at === -1) outline.push(o);
-      else outline[at] = o;
+    for (const given of delta.outline ?? []) {
+      const at = outline.findIndex((item) => item.id === given.id);
+      if (at === -1) outline.push(given);
+      else outline[at] = given;
     }
-    if (delta.retireOutline && delta.retireOutline.length > 0) outline = outline.filter((x) => !delta.retireOutline!.includes(x.id));
+    if (delta.retireOutline && delta.retireOutline.length > 0) outline = outline.filter((item) => !delta.retireOutline!.includes(item.id));
   }
   // a bug report merges field by field: the symptom is corrected by giving
   // it again, a cause arrives when it is known, importance when it is judged
@@ -358,7 +358,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, ts: number)
     ...(bug !== undefined ? { bug } : {}),
     ...(delta.assumed ?? base.assumed ? { assumed: delta.assumed ?? base.assumed! } : {}),
     ...(retired.length > 0 ? { retired } : {}),
-    ts,
+    ts: writtenAt,
   };
 };
 
@@ -435,9 +435,9 @@ export type DraftComment = typeof DraftComment.Type;
  *  the same moment, on a fast clock, must not undo the takeover. An order
  *  over (taken over, ts), so every peer keeps the same one in any order. */
 export const supersedes = (incoming: ReviewContext, current: ReviewContext): boolean => {
-  const a = incoming.assumed !== undefined && incoming.claimed === undefined ? 0 : 1;
-  const b = current.assumed !== undefined && current.claimed === undefined ? 0 : 1;
-  if (a !== b) return a > b;
+  const incomingRank = incoming.assumed !== undefined && incoming.claimed === undefined ? 0 : 1;
+  const currentRank = current.assumed !== undefined && current.claimed === undefined ? 0 : 1;
+  if (incomingRank !== currentRank) return incomingRank > currentRank;
   if (incoming.ts !== current.ts) return incoming.ts > current.ts;
   // the same moment from two writers (the author and a co-author, two
   // sessions): one order over the whole record, never "whichever came last"
@@ -448,15 +448,15 @@ export const supersedes = (incoming: ReviewContext, current: ReviewContext): boo
 export const strictlySupersedes = (incoming: ReviewContext, current: ReviewContext): boolean => supersedes(incoming, current) && !supersedes(current, incoming);
 
 /** A value as JSON with its keys in order — the same text for the same record on every peer. */
-const canonical = (v: unknown): string =>
-  Array.isArray(v)
-    ? `[${v.map(canonical).join(",")}]`
-    : v !== null && typeof v === "object"
-      ? `{${Object.keys(v as object)
+const canonical = (value: unknown): string =>
+  Array.isArray(value)
+    ? `[${value.map(canonical).join(",")}]`
+    : value !== null && typeof value === "object"
+      ? `{${Object.keys(value as object)
           .sort()
-          .map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`)
+          .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
           .join(",")}}`
-      : JSON.stringify(v);
+      : JSON.stringify(value);
 
 /** An answer the code's author gives one guess, by its id (d1, f2 …):
  *  right; wrong, with the real one in its place; or wrong, with why. */
@@ -478,36 +478,36 @@ export interface Answer {
  *  marked wrong — and what they add (decisions, forks, units) is told, not
  *  guessed. Guesses they leave unanswered stay guesses. */
 export const claimReview = (review: ReviewContext, by: { readonly key: string; readonly name: string }, answers: ReadonlyArray<Answer>, delta: ReviewDelta, now: number): ReviewContext => {
-  const answer = (id: string) => answers.find((a) => a.id === id);
-  const decisions = review.decisions.map((d): ReviewDecision => {
-    const a = answer(d.id);
-    if (!a) return d;
-    if (a.verdict === "confirmed") return { ...d, verdict: "confirmed", ...(a.userWhy ? { userWhy: a.userWhy } : {}) };
-    if (a.verdict === "wrong") return { ...d, verdict: "wrong", ...(a.userWhy ? { userWhy: a.userWhy } : {}) };
-    const { basis: _b, confidence: _c, agentWhy: _w, ...rest } = d;
+  const answer = (id: string) => answers.find((candidate) => candidate.id === id);
+  const decisions = review.decisions.map((decision): ReviewDecision => {
+    const response = answer(decision.id);
+    if (!response) return decision;
+    if (response.verdict === "confirmed") return { ...decision, verdict: "confirmed", ...(response.userWhy ? { userWhy: response.userWhy } : {}) };
+    if (response.verdict === "wrong") return { ...decision, verdict: "wrong", ...(response.userWhy ? { userWhy: response.userWhy } : {}) };
+    const { basis: _b, confidence: _c, agentWhy: _w, ...rest } = decision;
     return {
       ...rest,
-      ...(a.title ? { title: a.title } : {}),
-      what: a.what ?? d.what,
-      ...(a.userWhy ? { userWhy: a.userWhy } : {}),
-      ...(a.agentWhy ? { agentWhy: a.agentWhy } : {}),
+      ...(response.title ? { title: response.title } : {}),
+      what: response.what ?? decision.what,
+      ...(response.userWhy ? { userWhy: response.userWhy } : {}),
+      ...(response.agentWhy ? { agentWhy: response.agentWhy } : {}),
       verdict: "corrected",
-      guess: { what: d.what, ...(d.agentWhy ? { why: d.agentWhy } : {}), ...(d.basis ? { basis: d.basis } : {}) },
+      guess: { what: decision.what, ...(decision.agentWhy ? { why: decision.agentWhy } : {}), ...(decision.basis ? { basis: decision.basis } : {}) },
     };
   });
-  const forks = review.forks.map((f): ReviewFork => {
-    const a = answer(f.id);
-    if (!a) return f;
-    if (a.verdict !== "corrected") return { ...f, verdict: a.verdict, ...(a.userWhy ? { why: a.userWhy } : {}) };
-    const { basis: _b, confidence: _c, ...rest } = f;
+  const forks = review.forks.map((fork): ReviewFork => {
+    const response = answer(fork.id);
+    if (!response) return fork;
+    if (response.verdict !== "corrected") return { ...fork, verdict: response.verdict, ...(response.userWhy ? { why: response.userWhy } : {}) };
+    const { basis: _b, confidence: _c, ...rest } = fork;
     return {
       ...rest,
-      chose: a.chose ?? f.chose,
-      instead: a.instead ?? f.instead,
-      why: a.userWhy ?? a.agentWhy ?? f.why,
+      chose: response.chose ?? fork.chose,
+      instead: response.instead ?? fork.instead,
+      why: response.userWhy ?? response.agentWhy ?? fork.why,
       by: "user",
       verdict: "corrected",
-      guess: { what: `${f.chose} over ${f.instead}`, why: f.why, ...(f.basis ? { basis: f.basis } : {}) },
+      guess: { what: `${fork.chose} over ${fork.instead}`, why: fork.why, ...(fork.basis ? { basis: fork.basis } : {}) },
     };
   });
   return mergeReview(

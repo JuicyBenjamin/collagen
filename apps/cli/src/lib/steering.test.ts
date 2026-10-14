@@ -17,9 +17,9 @@ describe("steering", () => {
   });
 
   it("an unreadable level in the state file falls back to asking, and says so", () => {
-    const s = salvageState(JSON.stringify({ preferredAi: null, rooms: {}, steering: "yolo" }));
-    expect(steeringOf(s.state)).toBe("ask");
-    expect(s.dropped.join(" ")).toMatch(/steering/);
+    const salvaged = salvageState(JSON.stringify({ preferredAi: null, rooms: {}, steering: "yolo" }));
+    expect(steeringOf(salvaged.state)).toBe("ask");
+    expect(salvaged.dropped.join(" ")).toMatch(/steering/);
     expect(salvageState(JSON.stringify({ preferredAi: null, rooms: {}, steering: "auto" })).state.steering).toBe("auto");
   });
 });

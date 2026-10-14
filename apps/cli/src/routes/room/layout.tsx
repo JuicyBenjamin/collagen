@@ -26,8 +26,8 @@ function nextAi(current: string | null): string | null {
   // the mocks let a machine without an LLM CLI participate; the mock: prefix
   // is broadcast so peers see there's no real AI behind it.
   const cycle: (string | null)[] = [null, ...AI_OPTIONS, ...MOCK_AI_OPTIONS];
-  const i = cycle.indexOf(current);
-  return cycle[(i + 1) % cycle.length] ?? null;
+  const index = cycle.indexOf(current);
+  return cycle[(index + 1) % cycle.length] ?? null;
 }
 
 /** Room layout: status line · the rooms sidebar beside the room panel (tab
@@ -41,25 +41,25 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   const page = typeof route === "object" ? route : null;
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
   const goalOf = (ticketId: string) => {
-    const t = tickets.find((x) => x.id === ticketId);
-    return t ? ticketName(t) : `ticket ${ticketId.slice(0, 8)}`;
+    const ticket = tickets.find((candidate) => candidate.id === ticketId);
+    return ticket ? ticketName(ticket) : `ticket ${ticketId.slice(0, 8)}`;
   };
   // what the crumb says, and where esc / ← go from here
   // the trail of names above a route: overview › ticket › transcripts › …
-  const trailOf = (r: Route): ReadonlyArray<string> =>
-    typeof r === "string"
-      ? [r === "room/merges" ? "merges" : "overview"]
-      : r.name === "room/ticket"
-        ? [...trailOf(r.back ?? "room/overview"), goalOf(r.ticketId)]
-        : r.name === "room/transcripts"
-          ? [...trailOf(r.back), "transcripts"]
-          : r.name === "room/attach"
-            ? [...trailOf(r.back), "attach"]
-            : r.name === "room/review"
-              ? [...trailOf(r.back), "why"]
-              : r.name === "room/people"
-                ? [...trailOf(r.back), "people"]
-                : [...trailOf(r.back), r.file];
+  const trailOf = (destination: Route): ReadonlyArray<string> =>
+    typeof destination === "string"
+      ? [destination === "room/merges" ? "merges" : "overview"]
+      : destination.name === "room/ticket"
+        ? [...trailOf(destination.back ?? "room/overview"), goalOf(destination.ticketId)]
+        : destination.name === "room/transcripts"
+          ? [...trailOf(destination.back), "transcripts"]
+          : destination.name === "room/attach"
+            ? [...trailOf(destination.back), "attach"]
+            : destination.name === "room/review"
+              ? [...trailOf(destination.back), "why"]
+              : destination.name === "room/people"
+                ? [...trailOf(destination.back), "people"]
+                : [...trailOf(destination.back), destination.file];
   const crumb =
     page === null
       ? null
@@ -112,9 +112,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     keyDebug("room", key, captured ? "captured" : undefined);
     if (captured) return;
     if (key.name === "q") return onExit();
-    if (key.name === "a") return updateState({ update: (s) => ({ ...s, preferredAi: nextAi(s.preferredAi) }) });
+    if (key.name === "a") return updateState({ update: (state) => ({ ...state, preferredAi: nextAi(state.preferredAi) }) });
     // steering: ask first → act, then tell → just do it — the person's own dial
-    if (key.name === "g") return updateState({ update: (s) => ({ ...s, steering: nextSteering(steeringOf(s)) }) });
+    if (key.name === "g") return updateState({ update: (state) => ({ ...state, steering: nextSteering(steeringOf(state)) }) });
     if (key.name === "s") return navigate("settings");
     if (key.name === "u") return installUpdate({});
     if (key.name === "1") return jump("room/overview");

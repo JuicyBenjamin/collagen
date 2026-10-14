@@ -13,8 +13,8 @@ const review = (id: string, over: Partial<Ticket> = {}): Ticket => ({
   steps: [step({})],
   ...over,
 });
-const map = (...ts: Ticket[]) => new Map(ts.map((t) => [t.id, t]));
-const answered = (t: Ticket): Ticket => ({ ...t, steps: t.steps.map((s) => ({ ...s, status: "settled" as const })) });
+const map = (...tickets: Ticket[]) => new Map(tickets.map((ticket) => [ticket.id, ticket]));
+const answered = (ticket: Ticket): Ticket => ({ ...ticket, steps: ticket.steps.map((ticketStep) => ({ ...ticketStep, status: "settled" as const })) });
 
 describe("after: tickets in order", () => {
   it("a ticket waits while one it follows is unanswered", () => {
@@ -50,9 +50,9 @@ describe("after: tickets in order", () => {
   });
 
   it("after merges as the author's structure, and [] withdraws it", () => {
-    const t = review("second", { after: ["first"] });
-    expect(mergeTicket(t, { ...t, after: [], structureAt: 2 }).after).toEqual([]);
-    expect(mergeTicket(t, { ...t, structureAt: 0, updatedAt: 9 }).after).toEqual(["first"]);
+    const ticket = review("second", { after: ["first"] });
+    expect(mergeTicket(ticket, { ...ticket, after: [], structureAt: 2 }).after).toEqual([]);
+    expect(mergeTicket(ticket, { ...ticket, structureAt: 0, updatedAt: 9 }).after).toEqual(["first"]);
   });
 });
 

@@ -8,8 +8,8 @@ export function DraftsBar() {
   const waiting = () => hostNow.drafts();
   const first = () => {
     // the first under a line; with none, the list of those on no line shown
-    const d = waiting().find((x) => !hostNow.unplaced().includes(x));
-    document.getElementById(d ? `draft-${d.id}` : "unplaced")?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const draft = waiting().find((candidate) => !hostNow.unplaced().includes(candidate));
+    document.getElementById(draft ? `draft-${draft.id}` : "unplaced")?.scrollIntoView({ block: "center", behavior: "smooth" });
   };
   return (
     <Show when={waiting().length > 0}>

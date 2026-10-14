@@ -14,8 +14,8 @@ describe("kinds", () => {
   it("the tickets guide carries the same lines the TUI shows", () => {
     const guide = readFileSync(fileURLToPath(new URL("../../../apps/docs/guide/tickets.md", import.meta.url)), "utf8");
     for (const kind of KIND_ORDER) {
-      const k = KINDS[kind];
-      expect(guide).toContain(`| \`${kind}\` | ${k.what} | ${k.asks} | ${k.closes} |`);
+      const definition = KINDS[kind];
+      expect(guide).toContain(`| \`${kind}\` | ${definition.what} | ${definition.asks} | ${definition.closes} |`);
     }
   });
 });

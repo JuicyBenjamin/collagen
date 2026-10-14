@@ -22,40 +22,40 @@ interface Line {
 /** The why, as lines: the change in the author's words, then every decision
  *  with how their person steered it and what their agent reasoned, then every
  *  fork in the road with the file:line it produced. */
-const linesOf = (r: ReviewContext, by: string, width: number): ReadonlyArray<Line> => {
+const linesOf = (review: ReviewContext, by: string, width: number): ReadonlyArray<Line> => {
   const out: Line[] = [];
   const para = (text: string, color: string, indent: string) => {
     for (const line of wrap(text, Math.max(20, width - indent.length))) out.push({ text: `${indent}${line}`, color });
   };
-  const where = r.branch ? (r.base ? `${r.branch} → ${r.base}` : r.branch) : "";
+  const where = review.branch ? (review.base ? `${review.branch} → ${review.base}` : review.branch) : "";
   if (where.length > 0) out.push({ text: `  ${where}`, color: theme.fg });
-  if (r.link) out.push({ text: `  ${r.link}`, color: theme.accent });
-  out.push({ text: `  by ${by} · last revised ${new Date(r.ts).toISOString().slice(0, 16).replace("T", " ")}`, color: theme.dim });
+  if (review.link) out.push({ text: `  ${review.link}`, color: theme.accent });
+  out.push({ text: `  by ${by} · last revised ${new Date(review.ts).toISOString().slice(0, 16).replace("T", " ")}`, color: theme.dim });
   out.push({ text: "", color: theme.dim });
-  para(r.summary, theme.fg, "  ");
+  para(review.summary, theme.fg, "  ");
 
   out.push({ text: "", color: theme.dim });
-  out.push({ text: `  decisions · ${r.decisions.length}`, color: theme.fg });
-  if (r.decisions.length === 0) out.push({ text: "    none recorded", color: theme.dim });
-  for (const d of r.decisions) {
+  out.push({ text: `  decisions · ${review.decisions.length}`, color: theme.fg });
+  if (review.decisions.length === 0) out.push({ text: "    none recorded", color: theme.dim });
+  for (const decision of review.decisions) {
     out.push({ text: "", color: theme.dim });
     // the headline first, what was done beneath it
-    para(`${d.id} ${d.title ?? `(${NO_TITLE})`}`, d.title ? theme.fg : theme.dim, "  ");
-    para(d.what, theme.dim, "      ");
-    if (d.userWhy) para(`the user: ${d.userWhy}`, theme.accent, "      ");
-    if (d.agentWhy) para(`the agent: ${d.agentWhy}`, theme.dim, "      ");
-    if (d.where.length > 0) out.push({ text: `      ${d.where.join("  ")}`, color: theme.ok });
+    para(`${decision.id} ${decision.title ?? `(${NO_TITLE})`}`, decision.title ? theme.fg : theme.dim, "  ");
+    para(decision.what, theme.dim, "      ");
+    if (decision.userWhy) para(`the user: ${decision.userWhy}`, theme.accent, "      ");
+    if (decision.agentWhy) para(`the agent: ${decision.agentWhy}`, theme.dim, "      ");
+    if (decision.where.length > 0) out.push({ text: `      ${decision.where.join("  ")}`, color: theme.ok });
   }
 
   out.push({ text: "", color: theme.dim });
-  out.push({ text: `  forks in the road · ${r.forks.length}`, color: theme.fg });
-  if (r.forks.length === 0) out.push({ text: "    none — the work had no real alternatives", color: theme.dim });
-  for (const f of r.forks) {
+  out.push({ text: `  forks in the road · ${review.forks.length}`, color: theme.fg });
+  if (review.forks.length === 0) out.push({ text: "    none — the work had no real alternatives", color: theme.dim });
+  for (const fork of review.forks) {
     out.push({ text: "", color: theme.dim });
-    out.push({ text: `  ${f.id} ${f.at}`, color: theme.ok });
-    para(`chose ${f.chose}`, theme.fg, "      ");
-    para(`instead of ${f.instead}`, theme.dim, "      ");
-    para(`${f.why}${f.by ? ` · ${f.by === "user" ? "the user's" : "the agent's"} call` : ""}`, theme.warn, "      ");
+    out.push({ text: `  ${fork.id} ${fork.at}`, color: theme.ok });
+    para(`chose ${fork.chose}`, theme.fg, "      ");
+    para(`instead of ${fork.instead}`, theme.dim, "      ");
+    para(`${fork.why}${fork.by ? ` · ${fork.by === "user" ? "the user's" : "the agent's"} call` : ""}`, theme.warn, "      ");
   }
   return out;
 };
@@ -75,18 +75,18 @@ export function ReviewPage({ ticketId }: { ticketId: string }) {
   const listRef = useRef<BoxRenderable>(null);
   const [viewport, setViewport] = useState(8);
   useEffect(() => {
-    const h = listRef.current?.height;
-    if (h && h > 0 && h !== viewport) setViewport(h);
+    const height = listRef.current?.height;
+    if (height && height > 0 && height !== viewport) setViewport(height);
   });
   useEffect(() => {
     setFocus("ticket-review");
     setTop(0);
   }, [setFocus, ticketId]);
 
-  const review = reviews.find((r) => r.ticketId === ticketId);
-  const ticket = tickets.find((t) => t.id === ticketId);
+  const review = reviews.find((existing) => existing.ticketId === ticketId);
+  const ticket = tickets.find((candidate) => candidate.id === ticketId);
   const nameFor = (key: string): string =>
-    key === (identity?.pubkey ?? "") ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
+    key === (identity?.pubkey ?? "") ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
 
   if (!review) {
     return (
@@ -131,9 +131,9 @@ export function ReviewPage({ ticketId }: { ticketId: string }) {
               </span>
             </text>
             <box ref={listRef} flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
-              {lines.slice(at, at + viewport).map((l, i) => (
-                <text key={`${ticketId}:${at + i}`} fg={l.color} truncate wrapMode="none" flexShrink={0}>
-                  {l.text.length === 0 ? " " : l.text}
+              {lines.slice(at, at + viewport).map((line, index) => (
+                <text key={`${ticketId}:${at + index}`} fg={line.color} truncate wrapMode="none" flexShrink={0}>
+                  {line.text.length === 0 ? " " : line.text}
                 </text>
               ))}
             </box>

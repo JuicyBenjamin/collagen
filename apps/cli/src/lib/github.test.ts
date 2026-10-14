@@ -44,31 +44,31 @@ describe("what gh answers, read for the review page", () => {
   });
 
   it("line comments across pages; an outdated one, on no line now, left out", () => {
-    const c = (id: number, line: number | null, side = "RIGHT") => ({ id, body: "why?", path: "src/a.ts", line, side, user: { login: "bob", avatar_url: "u" }, html_url: `h${id}`, created_at: "2026-10-03T10:00:00Z" });
-    const read = readComments([[c(1, 4), c(2, null)], [c(3, 9, "LEFT")]]);
-    expect(read.map((x) => [x.id, x.line, x.side])).toEqual([
+    const makeComment = (id: number, line: number | null, side = "RIGHT") => ({ id, body: "why?", path: "src/a.ts", line, side, user: { login: "bob", avatar_url: "u" }, html_url: `h${id}`, created_at: "2026-10-03T10:00:00Z" });
+    const read = readComments([[makeComment(1, 4), makeComment(2, null)], [makeComment(3, 9, "LEFT")]]);
+    expect(read.map((comment) => [comment.id, comment.line, comment.side])).toEqual([
       ["1", 4, "RIGHT"],
       ["3", 9, "LEFT"],
     ]);
     expect(readComments({ message: "Not Found" })).toEqual([]);
     // a block of lines says where it starts; one line does not
-    const block = readComments([[{ ...c(4, 7), start_line: 5, start_side: "RIGHT" }, { ...c(5, 7), start_line: null, start_side: null }]]);
-    expect(block.map((x) => [x.startLine, x.startSide, x.line])).toEqual([
+    const block = readComments([[{ ...makeComment(4, 7), start_line: 5, start_side: "RIGHT" }, { ...makeComment(5, 7), start_line: null, start_side: null }]]);
+    expect(block.map((comment) => [comment.startLine, comment.startSide, comment.line])).toEqual([
       [5, "RIGHT", 7],
       [undefined, undefined, 7],
     ]);
   });
 
   it("a reply knows the comment it answers; a comment on changed code reads as where it was", () => {
-    const c = { id: 8, body: "agreed", path: "src/a.ts", line: 4, side: "RIGHT", in_reply_to_id: 7, user: { login: "bob" }, html_url: "h8", created_at: "t" };
-    expect(readComments([[c]])[0]?.replyTo).toBe("7");
-    const old = { ...c, id: 9, line: null, original_line: 12, in_reply_to_id: undefined };
-    expect(readOutdated([[c, old]])).toEqual([{ id: "9", author: { login: "bob" }, body: "agreed", at: "t", url: "h8", outdated: "src/a.ts, line 12" }]);
+    const comment = { id: 8, body: "agreed", path: "src/a.ts", line: 4, side: "RIGHT", in_reply_to_id: 7, user: { login: "bob" }, html_url: "h8", created_at: "t" };
+    expect(readComments([[comment]])[0]?.replyTo).toBe("7");
+    const old = { ...comment, id: 9, line: null, original_line: 12, in_reply_to_id: undefined };
+    expect(readOutdated([[comment, old]])).toEqual([{ id: "9", author: { login: "bob" }, body: "agreed", at: "t", url: "h8", outdated: "src/a.ts, line 12" }]);
   });
 
   it("the reviews: each verdict in words; a pending one, and a bare comment-only one, left out", () => {
-    const r = (id: number, state: string, body: string) => ({ id, state, body, user: { login: "carol" }, submitted_at: `2026-10-0${id}T00:00:00Z`, html_url: `r${id}` });
-    expect(readReviews([[r(1, "APPROVED", ""), r(2, "CHANGES_REQUESTED", "Rename it."), r(3, "COMMENTED", ""), r(4, "PENDING", "draft"), r(5, "COMMENTED", "Nice.")]]).map((x) => [x.id, x.verdict, x.body])).toEqual([
+    const makeReview = (id: number, state: string, body: string) => ({ id, state, body, user: { login: "carol" }, submitted_at: `2026-10-0${id}T00:00:00Z`, html_url: `r${id}` });
+    expect(readReviews([[makeReview(1, "APPROVED", ""), makeReview(2, "CHANGES_REQUESTED", "Rename it."), makeReview(3, "COMMENTED", ""), makeReview(4, "PENDING", "draft"), makeReview(5, "COMMENTED", "Nice.")]]).map((review) => [review.id, review.verdict, review.body])).toEqual([
       ["1", "approved", ""],
       ["2", "changes requested", "Rename it."],
       ["5", "commented", "Nice."],

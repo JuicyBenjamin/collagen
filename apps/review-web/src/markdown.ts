@@ -37,94 +37,94 @@ const safeHref = (href: string): string | undefined => (/^(https?:|mailto:)/i.te
 /** An image is fetched by the page itself: https only, never data: or a plain http one. */
 const safeSrc = (src: string): string | undefined => (/^https:/i.test(src.trim()) ? src.trim() : undefined);
 
-const text = (t: string): Inline => ({ kind: "text", text: t });
+const text = (content: string): Inline => ({ kind: "text", text: content });
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0" };
 
 /** `&amp;` as `&`, `&#128512;` as 😀 — as a browser would read them. */
-const decode = (s: string): string =>
-  s.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, e: string) => {
-    if (!e.startsWith("#")) return ENTITIES[e] ?? whole;
-    const n = /^#x/i.test(e) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-    return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : whole;
+const decode = (source: string): string =>
+  source.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, entity: string) => {
+    if (!entity.startsWith("#")) return ENTITIES[entity] ?? whole;
+    const codePoint = /^#x/i.test(entity) ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+    return codePoint > 0 && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : whole;
   });
 
 /** Words a person wrote: entities read, shortcodes as emoji. */
-const words = (s: string): Inline => text(emojify(decode(s)));
+const words = (source: string): Inline => text(emojify(decode(source)));
 
 /** An HTML comment: GitHub never shows one, and bots fill comments with them. */
-const hidden = (t: Token): boolean => t.type === "html" && t.raw.trim().startsWith("<!--");
+const hidden = (token: Token): boolean => token.type === "html" && token.raw.trim().startsWith("<!--");
 
 const inline = (tokens: ReadonlyArray<Token> | undefined, raw = ""): ReadonlyArray<Inline> => {
   if (!tokens) return raw ? [words(raw)] : [];
-  return tokens.flatMap((t): ReadonlyArray<Inline> => {
-    switch (t.type) {
+  return tokens.flatMap((token): ReadonlyArray<Inline> => {
+    switch (token.type) {
       case "strong":
       case "em":
       case "del":
-        return [{ kind: t.type, children: inline((t as Tokens.Strong).tokens) }];
+        return [{ kind: token.type, children: inline((token as Tokens.Strong).tokens) }];
       case "codespan":
-        return [{ kind: "code", text: (t as Tokens.Codespan).text }];
+        return [{ kind: "code", text: (token as Tokens.Codespan).text }];
       case "br":
         return [{ kind: "br" }];
       case "link": {
-        const l = t as Tokens.Link;
-        const href = safeHref(l.href);
-        return href ? [{ kind: "link", href, children: inline(l.tokens, l.text) }] : inline(l.tokens, l.text);
+        const link = token as Tokens.Link;
+        const href = safeHref(link.href);
+        return href ? [{ kind: "link", href, children: inline(link.tokens, link.text) }] : inline(link.tokens, link.text);
       }
       case "image": {
-        const i = t as Tokens.Image;
-        const src = safeSrc(i.href);
-        return src ? [{ kind: "image", src, alt: emojify(decode(i.text)) }] : [words(i.text || i.href)];
+        const image = token as Tokens.Image;
+        const src = safeSrc(image.href);
+        return src ? [{ kind: "image", src, alt: emojify(decode(image.text)) }] : [words(image.text || image.href)];
       }
       case "escape":
-        return [text((t as Tokens.Escape).text)];
+        return [text((token as Tokens.Escape).text)];
       case "html":
-        return hidden(t) ? [] : [text(t.raw)];
+        return hidden(token) ? [] : [text(token.raw)];
       default: {
-        const nested = (t as Tokens.Text).tokens;
-        return nested ? inline(nested) : [words(t.raw)];
+        const nested = (token as Tokens.Text).tokens;
+        return nested ? inline(nested) : [words(token.raw)];
       }
     }
   });
 };
 
 const blocks = (tokens: ReadonlyArray<Token>): ReadonlyArray<Block> =>
-  tokens.flatMap((t): ReadonlyArray<Block> => {
-    switch (t.type) {
+  tokens.flatMap((token): ReadonlyArray<Block> => {
+    switch (token.type) {
       case "space":
       case "def": // a link's target, already in the link
       case "checkbox": // a task item's [ ]: the item says it
         return [];
       case "paragraph":
       case "text":
-        return [{ kind: "p", children: inline((t as Tokens.Paragraph).tokens, t.raw.trim()) }];
+        return [{ kind: "p", children: inline((token as Tokens.Paragraph).tokens, token.raw.trim()) }];
       case "heading":
-        return [{ kind: "heading", depth: (t as Tokens.Heading).depth, children: inline((t as Tokens.Heading).tokens) }];
+        return [{ kind: "heading", depth: (token as Tokens.Heading).depth, children: inline((token as Tokens.Heading).tokens) }];
       case "code":
-        return [{ kind: "code", lang: fenceLanguage((t as Tokens.Code).lang?.trim().split(/\s+/)[0] ?? ""), text: (t as Tokens.Code).text }];
+        return [{ kind: "code", lang: fenceLanguage((token as Tokens.Code).lang?.trim().split(/\s+/)[0] ?? ""), text: (token as Tokens.Code).text }];
       case "blockquote":
-        return [{ kind: "quote", blocks: blocks((t as Tokens.Blockquote).tokens) }];
+        return [{ kind: "quote", blocks: blocks((token as Tokens.Blockquote).tokens) }];
       case "list": {
-        const l = t as Tokens.List;
+        const list = token as Tokens.List;
         return [
           {
             kind: "list",
-            start: l.ordered ? (l.start === "" ? 1 : l.start) : undefined,
-            items: l.items.map((i) => ({ ...(i.task ? { checked: !!i.checked } : {}), blocks: blocks(i.tokens) })),
+            start: list.ordered ? (list.start === "" ? 1 : list.start) : undefined,
+            items: list.items.map((item) => ({ ...(item.task ? { checked: !!item.checked } : {}), blocks: blocks(item.tokens) })),
           },
         ];
       }
       case "table": {
-        const tb = t as Tokens.Table;
-        return [{ kind: "table", head: tb.header.map((c) => inline(c.tokens)), rows: tb.rows.map((r) => r.map((c) => inline(c.tokens))) }];
+        const table = token as Tokens.Table;
+        return [{ kind: "table", head: table.header.map((cell) => inline(cell.tokens)), rows: table.rows.map((row) => row.map((cell) => inline(cell.tokens))) }];
       }
       case "hr":
         return [{ kind: "hr" }];
       default: {
         // raw HTML and anything unknown: the words as written, line by line, never as markup
-        const lines = hidden(t) ? [] : t.raw.trim().split("\n").filter((l) => l.trim());
-        return lines.length ? [{ kind: "p", children: lines.flatMap((l, i): ReadonlyArray<Inline> => (i ? [{ kind: "br" }, text(l)] : [text(l)])) }] : [];
+        const lines = hidden(token) ? [] : token.raw.trim().split("\n").filter((line) => line.trim());
+        return lines.length ? [{ kind: "p", children: lines.flatMap((line, index): ReadonlyArray<Inline> => (index ? [{ kind: "br" }, text(line)] : [text(line)])) }] : [];
       }
     }
   });

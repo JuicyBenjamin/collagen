@@ -19,7 +19,7 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
   const gap = (key: string) => out.push({ key, node: " " });
   head("h-kinds", "ticket kinds");
   for (const kind of KIND_ORDER) {
-    const k = KINDS[kind];
+    const kindInfo = KINDS[kind];
     out.push({
       key: `${kind}-what`,
       node: (
@@ -28,23 +28,23 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
           {/* the glyph an epic's tickets carry for their kind; the epic's is its crown */}
           <span fg={kind === "epic" ? theme.epic : theme.dim}>{kind === "epic" ? EPIC_MARK : KIND_GLYPH[kind]} </span>
           <span fg={theme.fg}>{kind.padEnd(COL)}</span>
-          <span fg={theme.fg}>{k.what}</span>
+          <span fg={theme.fg}>{kindInfo.what}</span>
         </>
       ),
     });
-    out.push({ key: `${kind}-asks`, node: <span fg={theme.dim}>{`    ${pad}asks: ${k.asks}`}</span> });
-    out.push({ key: `${kind}-closes`, node: <span fg={theme.dim}>{`    ${pad}closed by ${k.closes}`}</span> });
+    out.push({ key: `${kind}-asks`, node: <span fg={theme.dim}>{`    ${pad}asks: ${kindInfo.asks}`}</span> });
+    out.push({ key: `${kind}-closes`, node: <span fg={theme.dim}>{`    ${pad}closed by ${kindInfo.closes}`}</span> });
   }
   gap("g-marks");
   head("h-marks", "marks");
-  for (const m of MARK_ORDER) {
+  for (const mark of MARK_ORDER) {
     out.push({
-      key: `mark-${m}`,
+      key: `mark-${mark}`,
       node: (
         <>
           {"  "}
-          <span fg={m === "yours" ? theme.warn : theme.fg}>{GLYPH[m].padEnd(COL)}</span>
-          <span fg={theme.dim}>{MARK_HELP[m]}</span>
+          <span fg={mark === "yours" ? theme.warn : theme.fg}>{GLYPH[mark].padEnd(COL)}</span>
+          <span fg={theme.dim}>{MARK_HELP[mark]}</span>
         </>
       ),
     });
@@ -60,26 +60,26 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
     ),
   });
   out.push({ key: "mark-none", node: <span fg={theme.dim}>{`  ${pad}a name with no mark has said nothing yet`}</span> });
-  for (const k of ["follows", "waits"] as const) {
+  for (const stack of ["follows", "waits"] as const) {
     out.push({
-      key: `stack-${k}`,
+      key: `stack-${stack}`,
       node: (
         <>
           {"  "}
-          <span fg={theme.fg}>{STACK[k].padEnd(COL)}</span>
-          <span fg={theme.dim}>{STACK_HELP[k]}</span>
+          <span fg={theme.fg}>{STACK[stack].padEnd(COL)}</span>
+          <span fg={theme.dim}>{STACK_HELP[stack]}</span>
         </>
       ),
     });
   }
-  for (const k of ["done", "dropped"] as const) {
+  for (const ended of ["done", "dropped"] as const) {
     out.push({
-      key: `ended-${k}`,
+      key: `ended-${ended}`,
       node: (
         <>
           {"  "}
-          <span fg={theme.fg}>{ENDED[k].padEnd(COL)}</span>
-          <span fg={theme.dim}>{ENDED_HELP[k]}</span>
+          <span fg={theme.fg}>{ENDED[ended].padEnd(COL)}</span>
+          <span fg={theme.dim}>{ENDED_HELP[ended]}</span>
         </>
       ),
     });
@@ -97,14 +97,14 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
 
   gap("g-states");
   head("h-states", "states");
-  for (const s of STATE_ORDER) {
+  for (const state of STATE_ORDER) {
     out.push({
-      key: `state-${s}`,
+      key: `state-${state}`,
       node: (
         <>
           {"  "}
-          <span fg={s === "needs-you" ? theme.warn : theme.fg}>{STATE_LABEL[s].padEnd(COL)}</span>
-          <span fg={theme.dim}>{STATE_WORDS[s]}</span>
+          <span fg={state === "needs-you" ? theme.warn : theme.fg}>{STATE_LABEL[state].padEnd(COL)}</span>
+          <span fg={theme.dim}>{STATE_WORDS[state]}</span>
         </>
       ),
     });
@@ -155,8 +155,8 @@ export function Help() {
   const { height: terminalRows } = useTerminalDimensions();
   useEffect(() => {
     const timer = setTimeout(() => {
-      const h = ref.current?.height;
-      if (h && h > 0 && h !== height) setHeight(h);
+      const measured = ref.current?.height;
+      if (measured && measured > 0 && measured !== height) setHeight(measured);
     }, 16);
     return () => clearTimeout(timer);
   });
@@ -176,9 +176,9 @@ export function Help() {
 
   return (
     <box ref={ref} flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
-      {lines.slice(start, start + rows).map((l) => (
-        <text key={l.key} truncate wrapMode="none" flexShrink={0}>
-          {l.node}
+      {lines.slice(start, start + rows).map((line) => (
+        <text key={line.key} truncate wrapMode="none" flexShrink={0}>
+          {line.node}
         </text>
       ))}
       {more ? (

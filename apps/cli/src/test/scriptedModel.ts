@@ -15,10 +15,10 @@ export interface Seen {
 
 const promptText = (prompt: Prompt.Prompt): string =>
   prompt.content
-    .map((m) =>
-      typeof m.content === "string"
-        ? `${m.role}: ${m.content}`
-        : `${m.role}: ${m.content.map((p) => ("text" in p && typeof p.text === "string" ? p.text : `[${p.type}]`)).join(" ")}`,
+    .map((message) =>
+      typeof message.content === "string"
+        ? `${message.role}: ${message.content}`
+        : `${message.role}: ${message.content.map((part) => ("text" in part && typeof part.text === "string" ? part.text : `[${part.type}]`)).join(" ")}`,
     )
     .join("\n");
 
@@ -35,15 +35,15 @@ export const scriptedModel = (turns: ReadonlyArray<Turn>) =>
     const service = yield* LanguageModel.make({
       generateText: (options) =>
         Effect.gen(function* () {
-          const turn = yield* Ref.modify(remaining, (t) => [t[0], t.slice(1)] as const);
+          const turn = yield* Ref.modify(remaining, (queue) => [queue[0], queue.slice(1)] as const);
           if (!turn) return yield* Effect.die("scripted model: no turns left");
-          yield* Ref.update(seen, (s) => [
-            ...s,
-            { prompt: promptText(options.prompt), tools: options.tools.map((t) => ({ name: t.name, description: t.description ?? "" })) },
+          yield* Ref.update(seen, (previous) => [
+            ...previous,
+            { prompt: promptText(options.prompt), tools: options.tools.map((tool) => ({ name: tool.name, description: tool.description ?? "" })) },
           ]);
           const parts: Array<Response.PartEncoded> = [];
-          (turn.calls ?? []).forEach((c, i) => {
-            parts.push({ type: "tool-call", id: `call_${i}`, name: c.name, params: c.params, providerExecuted: false });
+          (turn.calls ?? []).forEach((call, index) => {
+            parts.push({ type: "tool-call", id: `call_${index}`, name: call.name, params: call.params, providerExecuted: false });
           });
           if (turn.text !== undefined) parts.push({ type: "text", text: turn.text });
           parts.push({

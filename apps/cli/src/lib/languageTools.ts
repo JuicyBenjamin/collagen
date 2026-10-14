@@ -139,10 +139,10 @@ export function install(root: string, tool: LanguageTool): Promise<string | null
   return new Promise((resolve) => {
     rmSync(root, { recursive: true, force: true });
     mkdirSync(root, { recursive: true });
-    let err = "";
+    let stderr = "";
     const npm = spawn(process.platform === "win32" ? "npm.cmd" : "npm", [...installArgs(root, tool)], { cwd: root, stdio: ["ignore", "ignore", "pipe"] });
-    npm.stderr.on("data", (c: Buffer) => (err = (err + c.toString("utf8")).slice(-2000)));
-    npm.on("error", (e) => resolve(`npm did not start: ${e.message}`));
-    npm.on("exit", (code) => resolve(code === 0 ? null : `npm install failed (exit ${code})${err.trim() ? `: ${err.trim().split("\n").slice(-3).join(" ")}` : ""}`));
+    npm.stderr.on("data", (chunk: Buffer) => (stderr = (stderr + chunk.toString("utf8")).slice(-2000)));
+    npm.on("error", (error) => resolve(`npm did not start: ${error.message}`));
+    npm.on("exit", (code) => resolve(code === 0 ? null : `npm install failed (exit ${code})${stderr.trim() ? `: ${stderr.trim().split("\n").slice(-3).join(" ")}` : ""}`));
   });
 }

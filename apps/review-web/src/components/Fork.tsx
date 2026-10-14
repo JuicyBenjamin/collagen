@@ -25,7 +25,7 @@ export function Fork(props: { fork: ForkData }) {
       <Show when={assumedNow.isGuess(props.fork) && props.fork.basis}>
         <p class="fork-basis">Rests on: {props.fork.basis}</p>
       </Show>
-      <Show when={props.fork.guess}>{(g) => <p class="fork-basis">The AI had guessed: {g().what}{g().why ? ` — ${g().why}` : ""}</p>}</Show>
+      <Show when={props.fork.guess}>{(guess) => <p class="fork-basis">The AI had guessed: {guess().what}{guess().why ? ` — ${guess().why}` : ""}</p>}</Show>
     </div>
   );
 }

@@ -18,11 +18,11 @@ export interface ProjectRow {
  *  wins for a project you hold; otherwise the first peer's. */
 export function projectRows(state: LocalState, roomId: string, peers: ReadonlyArray<Peer>): ProjectRow[] {
   const byName = new Map<string, ProjectRow>();
-  for (const p of state.rooms[roomId] ?? []) byName.set(projectKey(p.name), { name: p.name, mine: p, holders: ["you"] });
+  for (const project of state.rooms[roomId] ?? []) byName.set(projectKey(project.name), { name: project.name, mine: project, holders: ["you"] });
   for (const peer of peers) {
-    for (const pp of peer.projects) {
-      const key = projectKey(pp.name);
-      const row = byName.get(key) ?? { name: pp.name, mine: undefined, holders: [] };
+    for (const peerProject of peer.projects) {
+      const key = projectKey(peerProject.name);
+      const row = byName.get(key) ?? { name: peerProject.name, mine: undefined, holders: [] };
       if (!row.holders.includes(peer.name)) row.holders.push(peer.name);
       byName.set(key, row);
     }

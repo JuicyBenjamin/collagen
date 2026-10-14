@@ -62,47 +62,47 @@ export function MergesPage() {
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
-    key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
-  const byId = new Map(tickets.map((t) => [t.id, t] as const));
+    key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
+  const byId = new Map(tickets.map((ticket) => [ticket.id, ticket] as const));
   const now = Date.now();
 
   const lines: Array<Line> = [];
-  for (const p of timelineOf(projects, byId, reviews, comments, me)) {
-    if (projects.length > 1 || "none" in p) lines.push({ kind: "project", key: `p-${p.project}`, text: p.project, ...("none" in p ? { note: p.none } : { note: `into ${p.base}${p.merges.length === 0 ? " · none" : ""}` }) });
-    if ("none" in p) continue;
-    for (const { merge, tickets: shown } of p.merges) {
-      lines.push({ kind: "merge", key: `m-${p.project}-${merge.number}`, project: p.project, merge });
-      shown.forEach((ticket, i) => lines.push({ kind: "ticket", key: `t-${p.project}-${merge.number}-${ticket.id}`, project: p.project, merge, ticket, last: i === shown.length - 1 }));
+  for (const timeline of timelineOf(projects, byId, reviews, comments, me)) {
+    if (projects.length > 1 || "none" in timeline) lines.push({ kind: "project", key: `p-${timeline.project}`, text: timeline.project, ...("none" in timeline ? { note: timeline.none } : { note: `into ${timeline.base}${timeline.merges.length === 0 ? " · none" : ""}` }) });
+    if ("none" in timeline) continue;
+    for (const { merge, tickets: shown } of timeline.merges) {
+      lines.push({ kind: "merge", key: `m-${timeline.project}-${merge.number}`, project: timeline.project, merge });
+      shown.forEach((ticket, index) => lines.push({ kind: "ticket", key: `t-${timeline.project}-${merge.number}-${ticket.id}`, project: timeline.project, merge, ticket, last: index === shown.length - 1 }));
     }
-    if (p.more) lines.push({ kind: "more", key: `more-${p.project}` });
+    if (timeline.more) lines.push({ kind: "more", key: `more-${timeline.project}` });
   }
-  const stops = lines.filter((l) => l.kind === "merge" || l.kind === "ticket");
+  const stops = lines.filter((stop) => stop.kind === "merge" || stop.kind === "ticket");
   const last = Math.max(0, stops.length - 1);
-  const found = selKey === null ? -1 : stops.findIndex((l) => l.key === selKey);
+  const found = selKey === null ? -1 : stops.findIndex((stop) => stop.key === selKey);
   const sel = found < 0 ? 0 : found;
   const current = stops[sel];
-  const at = (n: number) => {
-    const l = stops[clamp(n, 0, last)];
-    if (l) setSelKey(l.key);
+  const at = (index: number) => {
+    const stop = stops[clamp(index, 0, last)];
+    if (stop) setSelKey(stop.key);
     return true;
   };
   const page = () => Math.max(1, list.current?.view().height ?? 10);
 
   // near a project's last merge shown, its next ones are read: as long as
   // the reader scrolls on, there are more
-  const near = current ? projects.find((p) => p.project === current.project) : undefined;
+  const near = current ? projects.find((project) => project.project === current.project) : undefined;
   const nearMore = near && !("none" in near) && near.more ? near : undefined;
-  const lastOfNear = nearMore ? stops.findLastIndex((l) => l.project === nearMore.project) : -1;
+  const lastOfNear = nearMore ? stops.findLastIndex((stop) => stop.project === nearMore.project) : -1;
   useEffect(() => {
     if (nearMore && sel >= lastOfNear - AHEAD) more({ project: nearMore.project, count: nearMore.merges.length });
   }, [nearMore, sel, lastOfNear, more]);
 
   // the title column as wide as the longest title, the info after it; both
   // bounded by the pane (lib/columns)
-  const infoOf = (m: HostMerge): string => `#${m.number} · ${m.branch} · ${age(Date.parse(m.at), now)}`;
-  const merges = stops.flatMap((l) => (l.kind === "merge" ? [l.merge] : []));
+  const infoOf = (merge: HostMerge): string => `#${merge.number} · ${merge.branch} · ${age(Date.parse(merge.at), now)}`;
+  const merges = stops.flatMap((stop) => (stop.kind === "merge" ? [stop.merge] : []));
   const { lead, info } = fitColumns(
-    { lead: Math.max(0, ...merges.map((m) => cells(m.title || m.branch))), info: Math.max(0, ...merges.map((m) => cells(infoOf(m)))) },
+    { lead: Math.max(0, ...merges.map((merge) => cells(merge.title || merge.branch))), info: Math.max(0, ...merges.map((merge) => cells(infoOf(merge)))) },
     pane === undefined ? undefined : pane - CURSOR - GAP,
   );
   // a room's merges not in yet, or asked for again (r)
@@ -150,20 +150,20 @@ export function MergesPage() {
               </text>
             ) : (
               <FollowScroll ref={list} follow={current ? (sel === 0 ? "start" : { id: nearMore && sel === lastOfNear ? `more-${nearMore.project}` : current.key }) : null} onWidth={setPane} flexGrow={1}>
-                {lines.map((l) =>
-                  l.kind === "project" ? (
-                    <text key={l.key} truncate wrapMode="none" flexShrink={0}>
-                      <span fg={theme.fg}>{"  "}{l.text}</span>
-                      {l.note ? <span fg={theme.dim}> · {l.note}</span> : null}
+                {lines.map((line) =>
+                  line.kind === "project" ? (
+                    <text key={line.key} truncate wrapMode="none" flexShrink={0}>
+                      <span fg={theme.fg}>{"  "}{line.text}</span>
+                      {line.note ? <span fg={theme.dim}> · {line.note}</span> : null}
                     </text>
-                  ) : l.kind === "merge" ? (
-                    <MergeRow key={l.key} id={l.key} merge={l.merge} info={infoOf(l.merge)} selected={focused && l.key === current?.key} lead={lead} infoWidth={info} />
-                  ) : l.kind === "more" ? (
-                    <text key={l.key} id={l.key} fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
+                  ) : line.kind === "merge" ? (
+                    <MergeRow key={line.key} id={line.key} merge={line.merge} info={infoOf(line.merge)} selected={focused && line.key === current?.key} lead={lead} infoWidth={info} />
+                  ) : line.kind === "more" ? (
+                    <text key={line.key} id={line.key} fg={theme.dim} truncate wrapMode="none" flexShrink={0}>
                       {"    "}loading…
                     </text>
                   ) : (
-                    <TicketLine key={l.key} id={l.key} ticket={l.ticket} last={l.last} author={nameFor(l.ticket.createdBy)} mine={l.ticket.createdBy === me} selected={focused && l.key === current?.key} />
+                    <TicketLine key={line.key} id={line.key} ticket={line.ticket} last={line.last} author={nameFor(line.ticket.createdBy)} mine={line.ticket.createdBy === me} selected={focused && line.key === current?.key} />
                   ),
                 )}
               </FollowScroll>
@@ -185,13 +185,13 @@ const NAME = 9;
 /** A merge: its pull request's title (its branch, when it has none), then
  *  its number, branch and how long ago, dim. */
 function MergeRow({ id, merge, info, selected, lead, infoWidth }: { id: string; merge: HostMerge; info: string; selected: boolean; lead: number; infoWidth: number }) {
-  const fg = selected ? theme.accent : theme.fg;
+  const color = selected ? theme.accent : theme.fg;
   return (
     <box id={id} flexDirection="row" flexShrink={0}>
-      <text fg={fg} wrapMode="none" flexShrink={0}>
+      <text fg={color} wrapMode="none" flexShrink={0}>
         {selected ? "  › " : "    "}
       </text>
-      <text fg={fg} truncate wrapMode="none" flexBasis={lead} flexShrink={1} minWidth={0}>
+      <text fg={color} truncate wrapMode="none" flexBasis={lead} flexShrink={1} minWidth={0}>
         {merge.title || merge.branch}
       </text>
       {infoWidth > 0 ? (
@@ -205,18 +205,18 @@ function MergeRow({ id, merge, info, selected, lead, infoWidth }: { id: string; 
 
 /** A ticket a merge came from, on the merge's tree: its kind, whose it is,
  *  its title — dim once closed. */
-function TicketLine({ id, ticket: t, last, author, mine, selected }: { id: string; ticket: Ticket; last: boolean; author: string; mine: boolean; selected: boolean }) {
-  const fg = selected ? theme.accent : isClosed(t) ? theme.dim : theme.fg;
+function TicketLine({ id, ticket, last, author, mine, selected }: { id: string; ticket: Ticket; last: boolean; author: string; mine: boolean; selected: boolean }) {
+  const color = selected ? theme.accent : isClosed(ticket) ? theme.dim : theme.fg;
   return (
     <box id={id} flexDirection="row" flexShrink={0}>
-      <text fg={fg} wrapMode="none" flexShrink={0}>
+      <text fg={color} wrapMode="none" flexShrink={0}>
         {selected ? "  › " : "    "}
         <span fg={theme.dim}>{last ? "└ " : "├ "}</span>
-        <span fg={theme.dim}>{t.kind === "epic" ? "  " : `${KIND_GLYPH[t.kind]} `}</span>
+        <span fg={theme.dim}>{ticket.kind === "epic" ? "  " : `${KIND_GLYPH[ticket.kind]} `}</span>
         <span fg={mine ? theme.accent : theme.dim}>{author.slice(0, NAME - 1).padEnd(NAME)}</span>
       </text>
-      <text fg={fg} truncate wrapMode="none" flexShrink={1} minWidth={0}>
-        {ticketName(t)}
+      <text fg={color} truncate wrapMode="none" flexShrink={1} minWidth={0}>
+        {ticketName(ticket)}
       </text>
     </box>
   );

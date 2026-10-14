@@ -37,31 +37,31 @@ export const configDir = join(homedir(), ".config", NET === "devnet" ? "collagen
 export class IdentityService extends Context.Service<IdentityService>()("cli/Identity", {
   make: Effect.gen(function* () {
     const { profile, name: nameFlag, room: roomFlag } = yield* CliArgs;
-    const fs = yield* FileSystem.FileSystem;
+    const fileSystem = yield* FileSystem.FileSystem;
     const file = join(configDir, `identity-${profile}.json`);
 
-    const stored = yield* fs.readFileString(file).pipe(
+    const stored = yield* fileSystem.readFileString(file).pipe(
       Effect.flatMap(Schema.decodeEffect(IdentityFile)),
       Effect.option,
     );
 
-    const seed = Option.flatMapNullishOr(stored, (s) => s.seed).pipe(
+    const seed = Option.flatMapNullishOr(stored, (saved) => saved.seed).pipe(
       Option.getOrElse(() => randomSeedHex()),
     );
-    const name = Option.orElse(nameFlag, () => Option.flatMapNullishOr(stored, (s) => s.name)).pipe(
+    const name = Option.orElse(nameFlag, () => Option.flatMapNullishOr(stored, (saved) => saved.name)).pipe(
       Option.getOrElse(() => "anon"),
     );
     // Room: flag (id) > stored active room. No default room — a peer must
     // create or join one (the TUI's setup form handles this; headless runs
     // need --room or a configured profile).
-    const knownRooms = Option.flatMapNullishOr(stored, (s) => s.rooms).pipe(Option.getOrElse(() => []));
-    const activeId = Option.flatMapNullishOr(stored, (s) => s.activeRoomId);
+    const knownRooms = Option.flatMapNullishOr(stored, (saved) => saved.rooms).pipe(Option.getOrElse(() => []));
+    const activeId = Option.flatMapNullishOr(stored, (saved) => saved.activeRoomId);
     const storedActive = Option.orElse(
-      Option.flatMapNullishOr(activeId, (id) => knownRooms.find((r) => r.id === id)),
+      Option.flatMapNullishOr(activeId, (id) => knownRooms.find((knownRoom) => knownRoom.id === id)),
       () => Option.fromNullishOr(knownRooms[0]),
     );
     const room = yield* roomFlag.pipe(
-      Option.map((id) => knownRooms.find((r) => r.id === id) ?? { id, name: id.slice(0, 8) }),
+      Option.map((id) => knownRooms.find((knownRoom) => knownRoom.id === id) ?? { id, name: id.slice(0, 8) }),
       Option.orElse(() => storedActive),
       Option.match({
         onNone: () =>
@@ -71,11 +71,11 @@ export class IdentityService extends Context.Service<IdentityService>()("cli/Ide
         onSome: Effect.succeed,
       }),
     );
-    const rooms = knownRooms.some((r) => r.id === room.id) ? knownRooms : [...knownRooms, room];
+    const rooms = knownRooms.some((knownRoom) => knownRoom.id === room.id) ? knownRooms : [...knownRooms, room];
 
-    yield* fs.makeDirectory(configDir, { recursive: true });
+    yield* fileSystem.makeDirectory(configDir, { recursive: true });
     yield* Schema.encodeEffect(IdentityFile)({ seed, name, rooms, activeRoomId: room.id }).pipe(
-      Effect.flatMap((json) => fs.writeFileString(file, json)),
+      Effect.flatMap((json) => fileSystem.writeFileString(file, json)),
     );
 
     const keyPair = keyPairFromSeed(seed);

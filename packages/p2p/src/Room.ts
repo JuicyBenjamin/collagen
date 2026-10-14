@@ -42,7 +42,7 @@ export interface RoomMeta {
 /** A message on the room's log, with its position (the inbox cursor unit). */
 export interface LoggedMessage {
   readonly seq: number;
-  readonly msg: RoomMessage;
+  readonly message: RoomMessage;
 }
 
 /**
@@ -74,17 +74,17 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const mine = yield* SubscriptionRef.make<ReadonlyArray<LoggedMessage>>([]);
     const driveRequests = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; action: DriveAction }>(),
-      (p) => PubSub.shutdown(p),
+      (pubsub) => PubSub.shutdown(pubsub),
     );
     // Transcript diagnostics: asks arrive here (the app puts them in the
     // person's outbox), answers arrive here (the app files them). Both direct.
     const transcriptRequests = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; request: TranscriptRequestFrame }>(),
-      (p) => PubSub.shutdown(p),
+      (pubsub) => PubSub.shutdown(pubsub),
     );
     const transcripts = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; transcript: TranscriptFrame }>(),
-      (p) => PubSub.shutdown(p),
+      (pubsub) => PubSub.shutdown(pubsub),
     );
     // Transcripts attached to tickets (from the log) and peers asking us for one.
     const attachments = yield* SubscriptionRef.make<ReadonlyArray<Attachment>>([]);
@@ -96,11 +96,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const unseen = yield* SubscriptionRef.make<ReadonlyArray<Unseen>>([]);
     const fetchRequests = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; attachmentId: string }>(),
-      (p) => PubSub.shutdown(p),
+      (pubsub) => PubSub.shutdown(pubsub),
     );
     const attachmentsIn = yield* Effect.acquireRelease(
       PubSub.unbounded<{ from: string; attachment: AttachmentFrame }>(),
-      (p) => PubSub.shutdown(p),
+      (pubsub) => PubSub.shutdown(pubsub),
     );
 
     // Peers present in THIS room (they greeted us here), whom we greeted, and
@@ -140,17 +140,17 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* Effect.logDebug(
         `log view: ${view.tickets.length} ticket(s) · ${view.messages.length} message(s) · ${view.members.length} member(s) · writable=${String(log.writable())}`,
       );
-      yield* SubscriptionRef.set(tickets, new Map(view.tickets.map((t) => [t.id, t])));
+      yield* SubscriptionRef.set(tickets, new Map(view.tickets.map((ticket) => [ticket.id, ticket])));
       yield* SubscriptionRef.set(members, view.members);
-      yield* SubscriptionRef.set(trace, view.messages.map((m) => m.msg));
+      yield* SubscriptionRef.set(trace, view.messages.map((logged) => logged.message));
       yield* SubscriptionRef.set(attachments, view.attachments);
       yield* SubscriptionRef.set(reviews, view.reviews);
       yield* SubscriptionRef.set(comments, view.comments);
       yield* SubscriptionRef.set(unseen, view.unseen);
       const name = view.name;
-      if (name) yield* SubscriptionRef.update(meta, (cur) => (name.ts > cur.ts ? name : cur));
+      if (name) yield* SubscriptionRef.update(meta, (current) => (name.ts > current.ts ? name : current));
       yield* SubscriptionRef.set(writable, log.writable());
-      yield* SubscriptionRef.set(mine, view.messages.filter((m) => m.msg.to === me));
+      yield* SubscriptionRef.set(mine, view.messages.filter((logged) => logged.message.to === me));
       // records from a build speaking another protocol version never reach
       // the app as they are. Those we know how to read are rewritten into the
       // current shape for everyone; our own that an earlier build evicted
@@ -167,15 +167,15 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     /** Admit everyone who asked while we couldn't. */
     const admitPending = Effect.gen(function* () {
-      const l = log;
-      if (!l || !l.writable()) return;
+      const roomLog = log;
+      if (!roomLog || !roomLog.writable()) return;
       for (const writer of [...pendingJoins]) {
         pendingJoins.delete(writer);
         if (admitted.has(writer)) continue;
         admitted.add(writer);
         yield* Effect.log(`admitting ${writer.slice(0, 8)} to the room log`);
-        yield* l.append({ op: "add-writer", key: writer }).pipe(
-          Effect.catch((e) => Effect.logWarning(`admit failed: ${e.message}`)),
+        yield* roomLog.append({ op: "add-writer", key: writer }).pipe(
+          Effect.catch((error) => Effect.logWarning(`admit failed: ${error.message}`)),
         );
       }
     });
@@ -186,8 +186,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const introduce = Effect.gen(function* () {
       if (!log || !log.writable()) return;
       const profile = yield* config.getProfile;
-      const ts = yield* Clock.currentTimeMillis;
-      yield* log.append({ op: "member", key: me, name: profile.name, ts }).pipe(Effect.ignore);
+      const now = yield* Clock.currentTimeMillis;
+      yield* log.append({ op: "member", key: me, name: profile.name, ts: now }).pipe(Effect.ignore);
       const view = yield* log.read;
       const label = config.roomLabel;
       if (config.log.creator && view.name === null && label.ts > 0) {
@@ -196,10 +196,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     });
 
     const logInfo = Effect.gen(function* () {
-      const l = log;
-      if (!l) return null;
+      const roomLog = log;
+      if (!roomLog) return null;
       const count = (yield* SubscriptionRef.get(members)).length;
-      const frame: Frame = { kind: "log-info", key: l.key, members: count };
+      const frame: Frame = { kind: "log-info", key: roomLog.key, members: count };
       return frame;
     });
 
@@ -343,7 +343,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
                 // from before logs existed). A log nobody else is on yields
                 // to a populated one; two lonely logs keep the lower key. A
                 // populated pair is a real split and stays (loudly).
-                const ourMembers = (yield* SubscriptionRef.get(members)).filter((m) => m.key !== me).length;
+                const ourMembers = (yield* SubscriptionRef.get(members)).filter((member) => member.key !== me).length;
                 const theirMembers = frame.members;
                 const lonely = ourMembers === 0;
                 const theyAreLonely = theirMembers <= 1;
@@ -397,9 +397,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       peerKey: string,
       payload: { project: string; intent: string; findings: string; ticketId?: string },
     ) {
-      const l = yield* requireLog;
-      const ts = yield* Clock.currentTimeMillis;
-      const msg: RoomMessage = {
+      const roomLog = yield* requireLog;
+      const now = yield* Clock.currentTimeMillis;
+      const message: RoomMessage = {
         id: yield* Effect.sync(() => randomUUID()),
         threadId: deriveThreadId(me, peerKey, payload.project),
         from: me,
@@ -409,11 +409,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         project: payload.project,
         intent: payload.intent,
         findings: payload.findings,
-        ts,
+        ts: now,
         ...(payload.ticketId ? { ticketId: payload.ticketId } : {}),
       };
-      yield* l.append({ op: "msg", msg }).pipe(Effect.orDie);
-      return msg;
+      yield* roomLog.append({ op: "msg", msg: message }).pipe(Effect.orDie);
+      return message;
     });
 
     /** Ask a peer to act as itself (testing; only mock peers obey). Ephemeral:
@@ -432,15 +432,15 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     /** Put an attachment reference on the log (the file stays with us). */
     const attach = Effect.fn("Room.attach")(function* (attachment: Attachment) {
-      const l = yield* requireLog;
-      yield* l.append({ op: "attachment", attachment }).pipe(Effect.orDie);
+      const roomLog = yield* requireLog;
+      yield* roomLog.append({ op: "attachment", attachment }).pipe(Effect.orDie);
       yield* refresh;
     });
 
     /** Say a comment on a review's code, on the log — once; it never changes. */
-    const comment = Effect.fn("Room.comment")(function* (c: ReviewComment) {
-      const l = yield* requireLog;
-      yield* l.append({ op: "comment", comment: c }).pipe(Effect.orDie);
+    const comment = Effect.fn("Room.comment")(function* (reviewComment: ReviewComment) {
+      const roomLog = yield* requireLog;
+      yield* roomLog.append({ op: "comment", comment: reviewComment }).pipe(Effect.orDie);
       yield* refresh;
     });
 
@@ -466,24 +466,24 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     /** Rename the room for everyone: stamp now, append; the view updates all. */
     const rename = Effect.fn("Room.rename")(function* (name: string) {
-      const l = yield* requireLog;
-      const ts = yield* Clock.currentTimeMillis;
-      yield* SubscriptionRef.set(meta, { name, ts });
-      yield* l.append({ op: "rename", name, ts }).pipe(Effect.orDie);
+      const roomLog = yield* requireLog;
+      const now = yield* Clock.currentTimeMillis;
+      yield* SubscriptionRef.set(meta, { name, ts: now });
+      yield* roomLog.append({ op: "rename", name, ts: now }).pipe(Effect.orDie);
     });
 
     /** Put the why behind a review ticket on the log (its author writes it;
      *  an amendment carries the whole record and the later ts wins). */
     const shareReview = Effect.fn("Room.shareReview")(function* (review: ReviewContext) {
-      const l = yield* requireLog;
-      yield* l.append({ op: "review", review }).pipe(Effect.orDie);
+      const roomLog = yield* requireLog;
+      yield* roomLog.append({ op: "review", review }).pipe(Effect.orDie);
       yield* refresh;
     });
 
     /** Put a ticket (new or changed) on the log; returns the merged record. */
     const shareTicket = Effect.fn("Room.shareTicket")(function* (ticket: Ticket) {
-      const l = yield* requireLog;
-      yield* l.append({ op: "ticket", ticket }).pipe(Effect.orDie);
+      const roomLog = yield* requireLog;
+      yield* roomLog.append({ op: "ticket", ticket }).pipe(Effect.orDie);
       yield* refresh;
       return (yield* SubscriptionRef.get(tickets)).get(ticket.id) ?? ticket;
     });
@@ -509,7 +509,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         Stream.mapAccum(
           () => -1,
           (last: number, all: ReadonlyArray<LoggedMessage>) => {
-            const fresh = all.filter((m) => m.seq > last);
+            const fresh = all.filter((message) => message.seq > last);
             return [fresh.length > 0 ? fresh[fresh.length - 1]!.seq : last, fresh] as const;
           },
         ),

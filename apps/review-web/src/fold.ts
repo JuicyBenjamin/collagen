@@ -15,9 +15,9 @@ export async function foldAway(card: Element | null): Promise<void> {
   // a change is display: contents (no box to shrink): its first one's body, and every part of the later ones
   const parts = [...card.querySelectorAll<HTMLElement>(":scope > .hunk.continued > *, :scope > .hunk:not(.continued) > .hunk-body")];
   await Promise.all(
-    parts.map((el) => {
-      el.style.overflow = "hidden";
-      return animate(el, { height: [el.offsetHeight, 0], opacity: [1, 0], marginTop: 0, marginBottom: 0 }, { duration: 0.24, ease: EASE });
+    parts.map((element) => {
+      element.style.overflow = "hidden";
+      return animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0], marginTop: 0, marginBottom: 0 }, { duration: 0.24, ease: EASE });
     }),
   );
 }
@@ -29,23 +29,23 @@ const ended = (run: PromiseLike<unknown>, seconds: number): Promise<unknown> =>
 
 /** Something opening, as it comes in: from nothing to its own height, fading
  *  in. Call it on the element as it is placed (a ref); it starts closed. */
-export function enter(el: HTMLElement): void {
+export function enter(element: HTMLElement): void {
   if (still.matches) return;
-  el.style.overflow = "hidden";
-  el.style.height = "0px";
-  el.style.opacity = "0";
+  element.style.overflow = "hidden";
+  element.style.height = "0px";
+  element.style.opacity = "0";
   // placed by the time the code that made it is done; measured then
   queueMicrotask(() => {
-    void ended(animate(el, { height: [0, el.scrollHeight], opacity: [0, 1] }, { duration: 0.22, ease: EASE }).finished, 0.22).then(() => {
-      for (const p of ["height", "opacity", "overflow"]) el.style.removeProperty(p);
+    void ended(animate(element, { height: [0, element.scrollHeight], opacity: [0, 1] }, { duration: 0.22, ease: EASE }).finished, 0.22).then(() => {
+      for (const property of ["height", "opacity", "overflow"]) element.style.removeProperty(property);
     });
   });
 }
 
 /** Something closing: to nothing, fading out — resolves once it is gone, for
  *  the caller to take it away then. */
-export async function leave(el: HTMLElement | undefined): Promise<void> {
-  if (!el || still.matches) return;
-  el.style.overflow = "hidden";
-  await ended(animate(el, { height: [el.offsetHeight, 0], opacity: [1, 0] }, { duration: 0.2, ease: EASE }).finished, 0.2);
+export async function leave(element: HTMLElement | undefined): Promise<void> {
+  if (!element || still.matches) return;
+  element.style.overflow = "hidden";
+  await ended(animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0] }, { duration: 0.2, ease: EASE }).finished, 0.2);
 }

@@ -19,12 +19,12 @@ const baseHeaders = {
 /** One JSON-RPC POST; unwraps SSE-framed responses. Returns {sid, json}. */
 async function rpc(body, session) {
   const headers = session ? { ...baseHeaders, "mcp-session-id": session } : baseHeaders;
-  const res = await fetch(mcpUrl, { method: "POST", headers, body: JSON.stringify(body) });
-  const sid = res.headers.get("mcp-session-id");
-  const text = await res.text();
+  const response = await fetch(mcpUrl, { method: "POST", headers, body: JSON.stringify(body) });
+  const sid = response.headers.get("mcp-session-id");
+  const text = await response.text();
   let json;
-  if ((res.headers.get("content-type") ?? "").includes("event-stream")) {
-    const data = text.split("\n").filter((l) => l.startsWith("data:")).pop();
+  if ((response.headers.get("content-type") ?? "").includes("event-stream")) {
+    const data = text.split("\n").filter((line) => line.startsWith("data:")).pop();
     json = data ? JSON.parse(data.slice(5)) : undefined;
   } else if (text.trim().length > 0) {
     json = JSON.parse(text);
@@ -34,8 +34,8 @@ async function rpc(body, session) {
 
 /** A tool's text result. String-returning tools arrive JSON-encoded
  *  ('"sent to alice"'), so decode that layer to get the actual text. */
-const toolText = (r) => {
-  const raw = r.json?.result?.content?.[0]?.text ?? "";
+const toolText = (response) => {
+  const raw = response.json?.result?.content?.[0]?.text ?? "";
   if (!raw.startsWith('"')) return raw;
   try {
     return JSON.parse(raw);
@@ -87,7 +87,7 @@ async function main() {
   const acked = session?.startsWith("mock#") ? Number(session.slice(5)) || 0 : 0;
   let replied = false;
   if (acked < MAX_ACKS && !intent.startsWith("mock")) {
-    const r = toolText(
+    const answer = toolText(
       await call(3, "send-to-peer", {
         peer: fromName,
         project,
@@ -96,7 +96,7 @@ async function main() {
       }),
     );
     // tool text arrives JSON-quoted ('"sent to alice"')
-    replied = r.includes("sent to");
+    replied = answer.includes("sent to");
   }
 
   console.log(
@@ -113,6 +113,6 @@ async function main() {
   );
 }
 
-main().catch((e) => {
-  console.log(JSON.stringify({ result: `mock agent error: ${String(e)}` }));
+main().catch((error) => {
+  console.log(JSON.stringify({ result: `mock agent error: ${String(error)}` }));
 });

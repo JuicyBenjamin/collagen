@@ -3,7 +3,7 @@ import { codePathOk, docAbove, splitLeadingDoc } from "./ReviewTypes";
 
 describe("docAbove", () => {
   it("takes a JSDoc block whole, however long, as text", () => {
-    const lines = ["/**", ...Array.from({ length: 40 }, (_, i) => ` * line ${i}`), " * @example", " */", "export function f() {}"];
+    const lines = ["/**", ...Array.from({ length: 40 }, (_, index) => ` * line ${index}`), " * @example", " */", "export function f() {}"];
     const doc = docAbove(lines, lines.length - 1)!;
     expect(doc.startsWith("line 0")).toBe(true);
     expect(doc).toContain("line 39\n@example");

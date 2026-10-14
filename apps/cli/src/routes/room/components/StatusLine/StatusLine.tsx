@@ -11,10 +11,10 @@ import { STEERING_LABEL, steeringOf } from "../../../../lib/steering";
 export function StatusLine() {
   const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => "…");
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null }) as { preferredAi: string | null; steering?: "ask" | "act" | "auto" });
-  const ai = state.preferredAi;
+  const preferredAi = state.preferredAi;
   const steering = steeringOf(state);
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
-  const bad = ai !== null && aiStatus !== "ok" && aiStatus !== "unknown";
+  const bad = preferredAi !== null && aiStatus !== "ok" && aiStatus !== "unknown";
   const update = AsyncResult.getOrElse(useAtomValue(appUpdateAtom), () => ({ latest: null, installing: false, note: null }));
 
   return (
@@ -23,7 +23,7 @@ export function StatusLine() {
     <text truncate wrapMode="none" marginTop={1} flexShrink={0}>
       <span fg={theme.fg}>{myName}</span>
       <span fg={theme.dim}> · ai </span>
-      <span fg={ai ? theme.warn : theme.dim}>{ai ?? "not set"}</span>
+      <span fg={preferredAi ? theme.warn : theme.dim}>{preferredAi ?? "not set"}</span>
       {bad ? <span fg={theme.warn}> ({aiStatus === "missing" ? "cli not found" : "unauthenticated"})</span> : null}
       {/* how much it may do on its own — beside the agent it steers; the
           asking end dim, autonomy in the warn colour so it is never missed */}

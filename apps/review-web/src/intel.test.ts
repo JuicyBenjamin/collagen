@@ -56,10 +56,10 @@ describe("a peek given while the server was still reading", () => {
 describe("a hover given while the server was still reading", () => {
   it("stays on screen while asked again; another word never shows the first one's answer", async () => {
     vi.useFakeTimers();
-    const later = (r: HoverResult, ms: number) => () => new Promise<HoverResult>((done) => setTimeout(() => done(r), ms));
+    const later = (result: HoverResult, delay: number) => () => new Promise<HoverResult>((done) => setTimeout(() => done(result), delay));
     hoverAnswers.push(later({ markdown: "A partial", partial: true, progress: 20 }, 0), later({ markdown: "A whole" }, 1_000), later({ markdown: "B" }, 1_000));
-    const a = { file: "src/A.php", line: 20, col: 1 };
-    intel.pointAt(a, 0, 0);
+    const firstSpot = { file: "src/A.php", line: 20, col: 1 };
+    intel.pointAt(firstSpot, 0, 0);
     await vi.advanceTimersByTimeAsync(230);
     expect(intel.popover()?.result).toEqual({ markdown: "A partial", partial: true, progress: 20 });
     // asked again, slowly: what it said so far stays, no "Starting…"
@@ -67,7 +67,7 @@ describe("a hover given while the server was still reading", () => {
     expect(intel.popover()?.result).toEqual({ markdown: "A partial", partial: true, progress: 20 });
     await vi.advanceTimersByTimeAsync(400);
     expect(intel.popover()?.result).toEqual({ markdown: "A whole" });
-    intel.pointAt({ ...a, col: 9 }, 0, 0);
+    intel.pointAt({ ...firstSpot, col: 9 }, 0, 0);
     await vi.advanceTimersByTimeAsync(220 + 400);
     expect(intel.popover()?.state).toBe("loading");
     await vi.advanceTimersByTimeAsync(1_000);

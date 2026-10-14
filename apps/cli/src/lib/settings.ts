@@ -29,7 +29,7 @@ export const SETTINGS: ReadonlyArray<Setting> = [
 
 /** A switch's value: what was set, or its default. */
 export const settingOf = (state: Pick<LocalState, "settings">, key: SettingKey): boolean =>
-  state.settings?.[key] ?? SETTINGS.find((s) => s.key === key)!.default;
+  state.settings?.[key] ?? SETTINGS.find((setting) => setting.key === key)!.default;
 
 /** The state with one switch set. */
 export const withSetting = <S extends Pick<LocalState, "settings">>(state: S, key: SettingKey, value: boolean): S => ({
@@ -39,7 +39,7 @@ export const withSetting = <S extends Pick<LocalState, "settings">>(state: S, ke
 
 /** Every switch and where it stands, a line each — for the agent. */
 export const describeSettings = (state: Pick<LocalState, "settings">): string =>
-  SETTINGS.map((s) => {
-    const v = settingOf(state, s.key);
-    return `${s.key}: ${v ? "on" : "off"}${v === s.default ? " (default)" : ""} — ${v ? s.on : s.off}`;
+  SETTINGS.map((setting) => {
+    const value = settingOf(state, setting.key);
+    return `${setting.key}: ${value ? "on" : "off"}${value === setting.default ? " (default)" : ""} — ${value ? setting.on : setting.off}`;
   }).join("\n");

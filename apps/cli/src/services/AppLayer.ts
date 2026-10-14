@@ -32,9 +32,9 @@ const Daemons = Layer.effectDiscard(
     const store = yield* StateStore;
     const aiStatus = yield* AiStatus;
     yield* SubscriptionRef.changes(store.state).pipe(
-      Stream.map((s) => s.preferredAi),
+      Stream.map((state) => state.preferredAi),
       Stream.changes,
-      Stream.tap((ai) => aiStatus.refresh(ai)),
+      Stream.tap((preferredAi) => aiStatus.refresh(preferredAi)),
       Stream.runDrain,
       Effect.forkScoped,
     );

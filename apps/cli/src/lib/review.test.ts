@@ -85,31 +85,31 @@ describe("reading a review back", () => {
 
   it("everything, by default", () => {
     const rows = reviewRows(record);
-    expect(rows.decisions.map((d) => d.id)).toEqual(["d1", "d2"]);
+    expect(rows.decisions.map((decision) => decision.id)).toEqual(["d1", "d2"]);
     expect(rows.decisions[0]?.userWhy).toBe("make it look cool");
     expect(rows.forks[0]?.at).toBe("src/components/Logo/Logo.tsx:87");
   });
 
   it("or only the part about something — a file, or a phrase the reader used", () => {
     const byFile = reviewRows(record, "opening.ts");
-    expect(byFile.decisions.map((d) => d.id)).toEqual(["d2"]);
+    expect(byFile.decisions.map((decision) => decision.id)).toEqual(["d2"]);
     expect(byFile.forks).toEqual([]);
     expect(byFile.review.matched).toBe("1 of 2 decisions, 0 of 1 forks");
-    expect(reviewRows(record, "Timeline").forks.map((f) => f.id)).toEqual(["f1"]);
-    expect(reviewRows(record, "look cool").decisions.map((d) => d.id)).toEqual(["d1"]);
+    expect(reviewRows(record, "Timeline").forks.map((fork) => fork.id)).toEqual(["f1"]);
+    expect(reviewRows(record, "look cool").decisions.map((decision) => decision.id)).toEqual(["d1"]);
   });
 
   it("names what guided a decision, and finds it by that name", () => {
     const guided = { ...record, decisions: [{ ...record.decisions[0]!, guidedBy: ["skill: frontend-design", "CLAUDE.md"] }, record.decisions[1]!] };
-    expect(reviewRows(guided).decisions.map((d) => d.guidedBy)).toEqual(["skill: frontend-design, CLAUDE.md", ""]);
-    expect(reviewRows(guided, "claude.md").decisions.map((d) => d.id)).toEqual(["d1"]);
+    expect(reviewRows(guided).decisions.map((decision) => decision.guidedBy)).toEqual(["skill: frontend-design, CLAUDE.md", ""]);
+    expect(reviewRows(guided, "claude.md").decisions.map((decision) => decision.id)).toEqual(["d1"]);
   });
 });
 
 describe("a unit's title", () => {
   it("says what the unit achieves, never a file or a path, with a line beneath", () => {
-    for (const t of ["Mcp.ts", "apps/cli/src", "export.ts · use.ts", "page.tsx, page.test.tsx"]) expect(unitTitleGap(t, "x")).toMatch(/titled by a file/);
-    for (const t of ["Big exports finish", "Node.js upgrade", "v1.2 release notes", "page.tsx tweaks"]) expect(unitTitleGap(t, "x")).toBeNull();
+    for (const title of ["Mcp.ts", "apps/cli/src", "export.ts · use.ts", "page.tsx, page.test.tsx"]) expect(unitTitleGap(title, "x")).toMatch(/titled by a file/);
+    for (const title of ["Big exports finish", "Node.js upgrade", "v1.2 release notes", "page.tsx tweaks"]) expect(unitTitleGap(title, "x")).toBeNull();
     expect(unitTitleGap("Big exports finish", " ")).toMatch(/no 'what'/);
   });
 });

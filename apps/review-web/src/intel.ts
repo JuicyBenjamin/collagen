@@ -24,7 +24,7 @@ export interface Spot {
  *  hunk that asks whether its words can be asked about. */
 const [tools, setTools] = createSignal<Readonly<Partial<Record<ToolId, ToolState>>>>({});
 export const toolState = (id: ToolId): ToolState | undefined => tools()[id];
-export const keepTool = (t: ToolState) => setTools((all) => ({ ...all, [t.tool]: t }));
+export const keepTool = (state: ToolState) => setTools((all) => ({ ...all, [state.tool]: state }));
 
 /** Can a word in this file be asked about right now? */
 export const readyFor = (file: string): boolean => {
@@ -41,25 +41,25 @@ export const toolNameFor = (file: string): string => {
 /** Install it — only ever on the person's click. Its progress comes back
  *  on the tool's live state. */
 export async function installTool(id: ToolId): Promise<void> {
-  const t = await install(id);
-  if (t) keepTool(t);
+  const state = await install(id);
+  if (state) keepTool(state);
 }
 
-const key = (s: Spot) => `${s.file}:${s.line}:${s.col}`;
-const ask = <A>(call: (ticketId: string, file: string, line: number, col: number, commit: string) => Promise<A>, s: Spot, cache: Map<string, Promise<A>>): Promise<A> => {
+const key = (spot: Spot) => `${spot.file}:${spot.line}:${spot.col}`;
+const ask = <A>(call: (ticketId: string, file: string, line: number, col: number, commit: string) => Promise<A>, spot: Spot, cache: Map<string, Promise<A>>): Promise<A> => {
   // asked of the code at the commit the page shows: a moved branch is a new key
   const commit = diffNow.commit();
   if (!commit) return Promise.resolve({ error: "the page does not know which commit its diff is" } as A);
-  const k = `${commit}:${key(s)}`;
-  let p = cache.get(k);
-  if (!p) {
-    p = call(ticketId, s.file, s.line, s.col, commit).catch((e: unknown) => ({ error: String(e) }) as A);
+  const cacheKey = `${commit}:${key(spot)}`;
+  let answer = cache.get(cacheKey);
+  if (!answer) {
+    answer = call(ticketId, spot.file, spot.line, spot.col, commit).catch((error: unknown) => ({ error: String(error) }) as A);
     // only a final answer is kept: one given mid-index, or a failure, is
     // asked again next time rather than standing until a reload
-    p.then((r) => !final(r as HoverResult | DefinitionResult) && cache.delete(k), () => cache.delete(k));
-    cache.set(k, p);
+    answer.then((answered) => !final(answered as HoverResult | DefinitionResult) && cache.delete(cacheKey), () => cache.delete(cacheKey));
+    cache.set(cacheKey, answer);
   }
-  return p;
+  return answer;
 };
 const hovers = new Map<string, Promise<HoverResult>>();
 /** How soon an answer given while the server was still reading the project
@@ -110,7 +110,7 @@ let pending: { spot: Spot; timer: ReturnType<typeof setTimeout> } | null = null;
 
 /** The pointer rests on a word: after a breath, ask what it is. Moving to
  *  another word asks again; leaving the code closes it. */
-export function pointAt(spot: Spot | null, x: number, y: number): void {
+export function pointAt(spot: Spot | null, pointerX: number, pointerY: number): void {
   if (spot && pending && key(pending.spot) === key(spot)) return;
   if (pending) clearTimeout(pending.timer);
   pending = null;
@@ -123,14 +123,14 @@ export function pointAt(spot: Spot | null, x: number, y: number): void {
   let answered = false;
   const asking = () => {
     // a slow first answer (the server starting) says so rather than nothing
-    const slow = setTimeout(() => pending?.spot === spot && !answered && setPopover({ x, y, file: spot.file, state: "loading" }), 400);
+    const slow = setTimeout(() => pending?.spot === spot && !answered && setPopover({ x: pointerX, y: pointerY, file: spot.file, state: "loading" }), 400);
     void ask(hoverAt, spot, hovers).then((result) => {
       clearTimeout(slow);
       if (pending?.spot !== spot) return;
       answered = true;
       // nothing to say is no popover — unless the server was still reading,
       // when "nothing yet" is worth saying rather than looking definitive
-      setPopover("none" in result && !stillReading(result) ? null : { x, y, file: spot.file, state: "ready", result });
+      setPopover("none" in result && !stillReading(result) ? null : { x: pointerX, y: pointerY, file: spot.file, state: "ready", result });
       // still reading: asked again while the pointer stays, until whole
       if (stillReading(result)) pending.timer = setTimeout(asking, REASK_MS);
     });
@@ -164,7 +164,7 @@ export function peekAt(hunk: string, index: number, spot: Spot): void {
 let peekTimer: ReturnType<typeof setTimeout> | undefined;
 const askPeek = (hunk: string, index: number, spot: Spot): void => {
   clearTimeout(peekTimer);
-  const open = (p: PeekAt | null) => p !== null && p.hunk === hunk && p.index === index && key(p.spot) === key(spot);
+  const open = (current: PeekAt | null) => current !== null && current.hunk === hunk && current.index === index && key(current.spot) === key(spot);
   void ask(definitionAt, spot, definitions).then((result) => {
     const still = peek();
     if (!open(still)) return;
@@ -185,8 +185,8 @@ export function closePeek(): void {
   setPeek(null);
 }
 
-addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
+addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
     closePeek();
     setPopover(null);
   }

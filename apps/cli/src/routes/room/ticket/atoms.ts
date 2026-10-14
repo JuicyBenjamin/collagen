@@ -8,13 +8,13 @@ import { runtimeAtom } from "../../../app/runtime";
 
 /** Run one diagnostic from the registry with the params the page derived. */
 export const runDiagnosticAtom = runtimeAtom.fn(
-  Effect.fnUntraced(function* ({ id, params, ctx }: { id: string; params: unknown; ctx: DiagnosticContext }) {
-    const d = diagnostics.find((x) => x.id === id);
-    if (!d) return `no diagnostic named ${id}`;
+  Effect.fnUntraced(function* ({ id, params, context }: { id: string; params: unknown; context: DiagnosticContext }) {
+    const diagnostic = diagnostics.find((candidate) => candidate.id === id);
+    if (!diagnostic) return `no diagnostic named ${id}`;
     const rooms = yield* Rooms;
     const transcripts = yield* Transcripts;
     const attachments = yield* Attachments;
     const { identity } = yield* IdentityService;
-    return yield* d.run(params, ctx, { rooms, transcripts, attachments, me: identity.pubkey });
+    return yield* diagnostic.run(params, context, { rooms, transcripts, attachments, me: identity.pubkey });
   }),
 );

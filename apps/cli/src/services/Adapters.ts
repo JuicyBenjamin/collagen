@@ -8,7 +8,7 @@ export interface SpawnCtx {
   cwd: string;
   mcpUrl: string;
   serverName: string;
-  msg: RoomMessage;
+  message: RoomMessage;
   sessionId: Option.Option<string>;
   /** the person's steering level (lib/steering); absent = ask */
   steering?: Steering;
@@ -26,26 +26,26 @@ export interface Adapter {
   };
 }
 
-export function nudgePrompt(o: SpawnCtx): string {
-  const verb = Option.isSome(o.sessionId)
+export function nudgePrompt(spawnContext: SpawnCtx): string {
+  const verb = Option.isSome(spawnContext.sessionId)
     ? "a new message arrived in this conversation"
     : "a new conversation was started";
   // Human in the loop. The nudge carries only the headline; the details stay
   // in collagen until the person asks. The agent relays, never decides: what
   // it can't find in the thread is either its own user's to answer (from this
   // repo, under direction) or the other peer's (then it drafts the question).
-  const ticketNote = o.msg.ticketId ? ` (about ticket ${o.msg.ticketId.slice(0, 8)}; get-tickets has it)` : "";
-  const headline = o.msg.intent.startsWith("ticket-update:")
-    ? `Collagen: ${o.msg.fromName} ${o.msg.intent.slice("ticket-update:".length)} on a ticket your user is part of, project "${o.msg.project}"${ticketNote}.`
-    : `Collagen: ${verb} — ${o.msg.fromName} asks your user to address "${o.msg.intent}" on project "${o.msg.project}"${ticketNote}.`;
-  const level = o.steering ?? "ask";
+  const ticketNote = spawnContext.message.ticketId ? ` (about ticket ${spawnContext.message.ticketId.slice(0, 8)}; get-tickets has it)` : "";
+  const headline = spawnContext.message.intent.startsWith("ticket-update:")
+    ? `Collagen: ${spawnContext.message.fromName} ${spawnContext.message.intent.slice("ticket-update:".length)} on a ticket your user is part of, project "${spawnContext.message.project}"${ticketNote}.`
+    : `Collagen: ${verb} — ${spawnContext.message.fromName} asks your user to address "${spawnContext.message.intent}" on project "${spawnContext.message.project}"${ticketNote}.`;
+  const level = spawnContext.steering ?? "ask";
   return [
     headline,
     level === "ask"
       ? `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`
       : `Tell your user exactly that, in one line. ${steeringLine(level)}`,
-    `If your user asks what it says or wants more, read it with the ${o.serverName} get-messages tool, threadId "${o.msg.threadId}" (a ticket's steps: get-tickets), and relay what is there — never fill gaps from your own head.`,
-    `If your user then asks something the thread does not answer, decide which it is: yours to answer from this repo under their direction, or ${o.msg.fromName}'s to answer — then draft that question for them with send-to-peer.`,
+    `If your user asks what it says or wants more, read it with the ${spawnContext.serverName} get-messages tool, threadId "${spawnContext.message.threadId}" (a ticket's steps: get-tickets), and relay what is there — never fill gaps from your own head.`,
+    `If your user then asks something the thread does not answer, decide which it is: yours to answer from this repo under their direction, or ${spawnContext.message.fromName}'s to answer — then draft that question for them with send-to-peer.`,
     `Anything you send is only what your user decided — it goes to the room as soon as you send it, and the collagen TUI's outbox shows them what went.`,
   ].join(" ");
 }
@@ -64,27 +64,27 @@ export const claudeAdapter: Adapter = {
       }
     },
   },
-  args: (o) => {
-    const mcp = JSON.stringify({ mcpServers: { [o.serverName]: { type: "http", url: o.mcpUrl } } });
+  args: (spawnContext) => {
+    const mcp = JSON.stringify({ mcpServers: { [spawnContext.serverName]: { type: "http", url: spawnContext.mcpUrl } } });
     const base = [
       "-p",
-      nudgePrompt(o),
+      nudgePrompt(spawnContext),
       "--mcp-config",
       mcp,
       "--strict-mcp-config",
       "--allowedTools",
-      `mcp__${o.serverName}__*,Read,Grep,Glob`,
+      `mcp__${spawnContext.serverName}__*,Read,Grep,Glob`,
       "--permission-mode",
       "dontAsk",
       "--output-format",
       "json",
     ];
-    return Option.isSome(o.sessionId) ? ["--resume", o.sessionId.value, ...base] : base;
+    return Option.isSome(spawnContext.sessionId) ? ["--resume", spawnContext.sessionId.value, ...base] : base;
   },
   parse: (out) => {
     try {
-      const j = JSON.parse(out) as { session_id?: string; result?: string };
-      return { sessionId: j.session_id, result: j.result };
+      const output = JSON.parse(out) as { session_id?: string; result?: string };
+      return { sessionId: output.session_id, result: output.result };
     } catch {
       return {};
     }
@@ -100,7 +100,7 @@ export const codexAdapter: Adapter = {
     args: ["login", "status"],
     loggedIn: (out, exitCode) => exitCode === 0 && !/not logged in/i.test(out),
   },
-  args: (o) => {
+  args: (spawnContext) => {
     const flags = [
       "--json",
       // -c form, not --sandbox: `exec resume` (codex ≥0.152) has no --sandbox
@@ -110,11 +110,11 @@ export const codexAdapter: Adapter = {
       "--skip-git-repo-check",
       // pre-trust our MCP tools — exec mode auto-cancels approval prompts
       "-c",
-      `mcp_servers.${o.serverName}.default_tools_approval_mode="approve"`,
+      `mcp_servers.${spawnContext.serverName}.default_tools_approval_mode="approve"`,
     ];
-    return Option.isSome(o.sessionId)
-      ? ["exec", "resume", o.sessionId.value, ...flags, nudgePrompt(o)]
-      : ["exec", ...flags, nudgePrompt(o)];
+    return Option.isSome(spawnContext.sessionId)
+      ? ["exec", "resume", spawnContext.sessionId.value, ...flags, nudgePrompt(spawnContext)]
+      : ["exec", ...flags, nudgePrompt(spawnContext)];
   },
   parse: (out) => {
     let sessionId: string | undefined;
@@ -122,14 +122,14 @@ export const codexAdapter: Adapter = {
     for (const line of out.split("\n")) {
       if (!line.trim()) continue;
       try {
-        const ev = JSON.parse(line) as {
+        const event = JSON.parse(line) as {
           type?: string;
           thread_id?: string;
           item?: { type?: string; text?: string };
         };
-        if (ev.type === "thread.started" && ev.thread_id) sessionId = ev.thread_id;
-        if (ev.type === "item.completed" && ev.item?.type === "agent_message" && ev.item.text) {
-          result = ev.item.text;
+        if (event.type === "thread.started" && event.thread_id) sessionId = event.thread_id;
+        if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item.text) {
+          result = event.item.text;
         }
       } catch {
         // non-JSON line
@@ -146,8 +146,8 @@ export const codexAdapter: Adapter = {
 // exercised for real.
 // Next to the built entry (dist/) or in src/dev when running from source.
 const mockAgentPath = [new URL("./mock-agent.mjs", import.meta.url), new URL("../dev/mock-agent.mjs", import.meta.url)]
-  .map((u) => fileURLToPath(u))
-  .find((p) => existsSync(p)) ?? fileURLToPath(new URL("../dev/mock-agent.mjs", import.meta.url));
+  .map((url) => fileURLToPath(url))
+  .find((candidate) => existsSync(candidate)) ?? fileURLToPath(new URL("../dev/mock-agent.mjs", import.meta.url));
 
 export const mockAdapter: Adapter = {
   cmd: process.execPath,
@@ -155,21 +155,21 @@ export const mockAdapter: Adapter = {
     args: ["--version"],
     loggedIn: (_out, exitCode) => exitCode === 0,
   },
-  args: (o) => [
+  args: (spawnContext) => [
     mockAgentPath,
-    o.mcpUrl,
-    o.msg.threadId,
-    o.msg.fromName,
-    o.msg.project,
-    o.msg.intent,
+    spawnContext.mcpUrl,
+    spawnContext.message.threadId,
+    spawnContext.message.fromName,
+    spawnContext.message.project,
+    spawnContext.message.intent,
     // the stored session id doubles as the mock's memory: it encodes how many
     // acks this thread got ("mock#N"), so the cap survives across spawns
-    Option.getOrElse(o.sessionId, () => "fresh"),
+    Option.getOrElse(spawnContext.sessionId, () => "fresh"),
   ],
   parse: (out) => {
     try {
-      const j = JSON.parse(out) as { session_id?: string; result?: string };
-      return { sessionId: j.session_id, result: j.result };
+      const output = JSON.parse(out) as { session_id?: string; result?: string };
+      return { sessionId: output.session_id, result: output.result };
     } catch {
       return {};
     }

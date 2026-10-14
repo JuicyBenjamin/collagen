@@ -26,23 +26,23 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
     const locks = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
 
     const lockFor = (threadId: string) =>
-      SynchronizedRef.modifyEffect(locks, (m) => {
-        const existing = m.get(threadId);
-        if (existing) return Effect.succeed([existing, m] as const);
+      SynchronizedRef.modifyEffect(locks, (semaphores) => {
+        const existing = semaphores.get(threadId);
+        if (existing) return Effect.succeed([existing, semaphores] as const);
         return Semaphore.make(1).pipe(
-          Effect.map((sem) => [sem, new Map(m).set(threadId, sem)] as const),
+          Effect.map((sem) => [sem, new Map(semaphores).set(threadId, sem)] as const),
         );
       });
 
     /** Spawn the agent process, stream stderr to the log, collect stdout, and
      *  record the resumable session id. Never fails — spawn errors are logged. */
     const spawn = Effect.fn("AgentRunner.spawn")(
-      function* (adapter: Adapter, ctx: SpawnCtx, threadId: string) {
+      function* (adapter: Adapter, spawnContext: SpawnCtx, threadId: string) {
         // stdin "ignore": headless agents must not wait on input. The
         // person's steering is read now, so the nudge says the current level
-        const steered: SpawnCtx = { ...ctx, steering: steeringOf(yield* store.get) };
+        const steered: SpawnCtx = { ...spawnContext, steering: steeringOf(yield* store.get) };
         const proc = yield* ChildProcess.make(adapter.cmd, adapter.args(steered), {
-          cwd: ctx.cwd,
+          cwd: spawnContext.cwd,
           stdin: "ignore",
         });
         const stderrDrain = proc.stderr.pipe(
@@ -57,13 +57,13 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         const parsed = adapter.parse(out);
         if (parsed.sessionId !== undefined) {
           const sid = parsed.sessionId;
-          yield* Ref.update(sessions, (m) => new Map(m).set(threadId, sid));
+          yield* Ref.update(sessions, (byThread) => new Map(byThread).set(threadId, sid));
           // an adopted thread's persisted pointer follows the newest resume
           // id, so adoption survives restarts without going stale
-          yield* store.update((s) =>
-            s.threads?.[threadId]
-              ? { ...s, threads: { ...s.threads, [threadId]: { ...s.threads[threadId]!, sessionId: sid } } }
-              : s,
+          yield* store.update((state) =>
+            state.threads?.[threadId]
+              ? { ...state, threads: { ...state.threads, [threadId]: { ...state.threads[threadId]!, sessionId: sid } } }
+              : state,
           );
         }
         yield* Effect.log(`agent done (exit ${exitCode}): ${(parsed.result ?? "").slice(0, 160)}`);
@@ -72,7 +72,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         effect.pipe(
           Effect.scoped,
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-          Effect.catch((e) => Effect.logWarning(`spawn failed: ${String(e)}`)),
+          Effect.catch((error) => Effect.logWarning(`spawn failed: ${String(error)}`)),
         ),
     );
 
@@ -80,10 +80,10 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
      *  the user's own thread — it surfaces at their next turn (live session)
      *  or next resume. Non-blocking, no fork, the user keeps chatting. */
     const queueNudge = Effect.fn("AgentRunner.queueNudge")(
-      function* (codexThread: string, ctx: SpawnCtx) {
+      function* (codexThread: string, spawnContext: SpawnCtx) {
         const proc = yield* ChildProcess.make(
           "codex",
-          ["queue", "--thread", codexThread, "--message", nudgePrompt({ ...ctx, steering: steeringOf(yield* store.get) })],
+          ["queue", "--thread", codexThread, "--message", nudgePrompt({ ...spawnContext, steering: steeringOf(yield* store.get) })],
           { stdin: "ignore" },
         );
         const exit = yield* proc.exitCode;
@@ -93,7 +93,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         effect.pipe(
           Effect.scoped,
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-          Effect.catch((e) => Effect.logWarning(`codex queue failed: ${String(e)}`)),
+          Effect.catch((error) => Effect.logWarning(`codex queue failed: ${String(error)}`)),
         ),
     );
 
@@ -103,7 +103,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       const queued = yield* inbox.peekThread(threadId);
       const first = queued[0];
       if (!first) return null;
-      const { roomId, msg: sample } = first;
+      const { roomId, message: sample } = first;
 
       const mcpUrl = yield* mcpInfo.awaitUrl;
       const state = yield* store.get;
@@ -113,7 +113,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       const adopted = state.threads?.[threadId];
       // A machine running a mock never runs a real CLI, whatever a thread was
       // adopted into: the mock is the whole agent here.
-      const ai = (state.preferredAi ?? "").startsWith("mock") ? state.preferredAi : (adopted?.ai ?? state.preferredAi);
+      const aiName = (state.preferredAi ?? "").startsWith("mock") ? state.preferredAi : (adopted?.ai ?? state.preferredAi);
       const sessionId = Option.fromNullishOr(
         (yield* Ref.get(sessions)).get(threadId) ?? adopted?.sessionId,
       );
@@ -125,14 +125,14 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       // started itself). Everything else queues in the inbox for the user's
       // own session to pull — and adopt. Mocks are test dummies and always
       // auto-respond.
-      const isMock = ai !== null && ai !== undefined && ai.startsWith("mock");
+      const isMock = aiName !== null && aiName !== undefined && aiName.startsWith("mock");
       // Every line below says WHERE the delivery went, in the person's terms:
       // "telling your agent" read as "it is in my window now", and none of
       // these paths can put anything in the window the person is looking at.
       const about = `${sample.fromName}/${sample.project}`;
-      if (ai === null || ai === undefined || (!isMock && Option.isNone(sessionId))) {
+      if (aiName === null || aiName === undefined || (!isMock && Option.isNone(sessionId))) {
         yield* Effect.log(
-          ai == null
+          aiName == null
             ? `→ inbox · ${about} — no ai set; it waits until your agent pulls it`
             : `→ inbox · ${about} — no conversation holds this thread; it waits until your agent pulls it (adopt-thread links one)`,
         );
@@ -141,40 +141,40 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       // codex-adopted threads get the message pushed INTO the user's session
       // instead of us spawning anything.
       if (!isMock && adopted?.ai === "codex") {
-        const ctx: SpawnCtx = {
+        const spawnContext: SpawnCtx = {
           cwd: homedir(),
           mcpUrl,
           serverName: mcpServerName(profile),
-          msg: sample,
+          message: sample,
           sessionId: Option.some(adopted.sessionId),
         };
         yield* Effect.log(`→ codex queue · ${about} — shows in codex thread ${adopted.sessionId.slice(0, 8)}… at its next turn`);
-        yield* queueNudge(adopted.sessionId, ctx);
-        return new Set(queued.map((e) => e.msg.id));
+        yield* queueNudge(adopted.sessionId, spawnContext);
+        return new Set(queued.map((received) => received.message.id));
       }
 
-      const adapter = adapters[ai];
+      const adapter = adapters[aiName];
       if (!adapter) {
-        yield* Effect.logWarning(`no spawn adapter for "${ai}" yet`);
+        yield* Effect.logWarning(`no spawn adapter for "${aiName}" yet`);
         return null;
       }
 
-      const proj = (state.rooms[roomId] ?? []).find((p) => sameName(p.name, sample.project));
-      const ctx: SpawnCtx = {
+      const proj = (state.rooms[roomId] ?? []).find((project) => sameName(project.name, sample.project));
+      const spawnContext: SpawnCtx = {
         cwd: proj?.path ?? homedir(),
         mcpUrl,
         serverName: mcpServerName(profile),
-        msg: sample,
+        message: sample,
         sessionId,
       };
       yield* Effect.log(
         isMock
-          ? `→ ${ai} · ${about} — the mock answers on its own`
-          : `→ background · ${about} — resuming your ${ai} conversation ${Option.getOrElse(sessionId, () => "").slice(0, 8)}… in a process of its own; an open window on it does not update`,
+          ? `→ ${aiName} · ${about} — the mock answers on its own`
+          : `→ background · ${about} — resuming your ${aiName} conversation ${Option.getOrElse(sessionId, () => "").slice(0, 8)}… in a process of its own; an open window on it does not update`,
       );
 
-      const before = new Set(queued.map((e) => e.msg.id));
-      yield* spawn(adapter, ctx, threadId);
+      const before = new Set(queued.map((received) => received.message.id));
+      yield* spawn(adapter, spawnContext, threadId);
       return before;
     });
 
@@ -188,7 +188,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
           let before = yield* runOnce(threadId);
           while (before !== null) {
             const queued = yield* inbox.peekThread(threadId);
-            if (!queued.some((e) => !before!.has(e.msg.id))) break;
+            if (!queued.some((received) => !before!.has(received.message.id))) break;
             before = yield* runOnce(threadId);
           }
         }),

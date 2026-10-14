@@ -12,7 +12,7 @@ import { useRoomPeople } from "../overview/components/Peers/Peers";
 const TABS = ["all", "online", "offline"] as const;
 type Tab = (typeof TABS)[number];
 
-const inTab = (tab: Tab) => (p: Person): boolean => tab === "all" || (tab === "online") === p.online;
+const inTab = (tab: Tab) => (person: Person): boolean => tab === "all" || (tab === "online") === person.online;
 
 /** The people page: everyone the room knows, one row each — here now, away
  *  in another room, or offline — with their AI, what stands in the way of
@@ -31,17 +31,17 @@ export function PeoplePage() {
 
   const rows = people.filter(inTab(tab));
   const last = Math.max(0, rows.length - 1);
-  const found = selKey === null ? -1 : rows.findIndex((p) => p.key === selKey);
+  const found = selKey === null ? -1 : rows.findIndex((person) => person.key === selKey);
   const sel = found < 0 ? 0 : found;
   const current = rows[sel];
-  const at = (n: number) => {
-    const p = rows[clamp(n, 0, last)];
-    if (p) setSelKey(p.key);
+  const at = (index: number) => {
+    const person = rows[clamp(index, 0, last)];
+    if (person) setSelKey(person.key);
     return true;
   };
   const page = () => Math.max(1, list.current?.view().height ?? 10);
   // the names as one column, as wide as the longest (capped), the rest after it
-  const nameWidth = Math.min(NAME_MAX, Math.max(0, ...rows.map((p) => cells(label(p)))));
+  const nameWidth = Math.min(NAME_MAX, Math.max(0, ...rows.map((person) => cells(label(person)))));
 
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
@@ -50,20 +50,20 @@ export function PeoplePage() {
         flexShrink={0}
         hint="←→ switch tab · ↓ into the list"
         onKey={(key) => {
-          const i = TABS.indexOf(tab);
-          if (key.name === "left" && i > 0) return setTab(TABS[i - 1]!), true;
-          if (key.name === "right" && i < TABS.length - 1) return setTab(TABS[i + 1]!), true;
+          const index = TABS.indexOf(tab);
+          if (key.name === "left" && index > 0) return setTab(TABS[index - 1]!), true;
+          if (key.name === "right" && index < TABS.length - 1) return setTab(TABS[index + 1]!), true;
           return false;
         }}
       >
         {(focused) => (
           <text wrapMode="none" truncate>
             <span fg={theme.accent}>{focused ? "› " : "  "}</span>
-            {TABS.map((t, i) => (
-              <span key={t}>
-                {i > 0 ? "   " : ""}
-                <span fg={t === tab ? (focused ? theme.accent : theme.fg) : theme.dim}>{t}</span>
-                <span fg={theme.dim}> {people.filter(inTab(t)).length}</span>
+            {TABS.map((tabName, index) => (
+              <span key={tabName}>
+                {index > 0 ? "   " : ""}
+                <span fg={tabName === tab ? (focused ? theme.accent : theme.fg) : theme.dim}>{tabName}</span>
+                <span fg={theme.dim}> {people.filter(inTab(tabName)).length}</span>
               </span>
             ))}
           </text>
@@ -94,8 +94,8 @@ export function PeoplePage() {
             </text>
           ) : (
             <FollowScroll ref={list} follow={current ? (sel === 0 ? "start" : { id: rowId(current.key) }) : null} flexGrow={1}>
-              {rows.map((p) => (
-                <PersonRow key={p.key} person={p} selected={focused && p.key === current?.key} nameWidth={nameWidth} />
+              {rows.map((person) => (
+                <PersonRow key={person.key} person={person} selected={focused && person.key === current?.key} nameWidth={nameWidth} />
               ))}
             </FollowScroll>
           )
@@ -108,30 +108,30 @@ export function PeoplePage() {
 /** The most a name takes before the rest of its row. */
 const NAME_MAX = 24;
 
-const label = (p: Person): string => (p.you ? `${p.name} (you)` : p.name);
+const label = (person: Person): string => (person.you ? `${person.name} (you)` : person.name);
 const rowId = (key: string): string => `person-${key}`;
 /** Pad to `width` terminal cells, wide characters counted as two. */
 const padCells = (text: string, width: number): string => text + " ".repeat(Math.max(0, width - cells(text)));
 
 /** One person: `●` here, `○` away or offline; their name; then quietly their
  *  AI, whether they are away, what stands in the way, their projects here. */
-function PersonRow({ person: p, selected, nameWidth }: { person: Person; selected: boolean; nameWidth: number }) {
-  const fg = selected ? theme.accent : p.online ? theme.fg : theme.dim;
+function PersonRow({ person, selected, nameWidth }: { person: Person; selected: boolean; nameWidth: number }) {
+  const color = selected ? theme.accent : person.online ? theme.fg : theme.dim;
   const notes = [
-    ...(p.ai ? [p.ai] : []),
-    ...(p.away ? ["away"] : []),
-    ...(p.projects ? [`${p.projects} ${p.projects === 1 ? "project" : "projects"}`] : []),
+    ...(person.ai ? [person.ai] : []),
+    ...(person.away ? ["away"] : []),
+    ...(person.projects ? [`${person.projects} ${person.projects === 1 ? "project" : "projects"}`] : []),
   ];
   return (
-    <box id={rowId(p.key)} flexDirection="row" flexShrink={0}>
-      <text fg={fg} wrapMode="none" flexShrink={0}>
+    <box id={rowId(person.key)} flexDirection="row" flexShrink={0}>
+      <text fg={color} wrapMode="none" flexShrink={0}>
         {selected ? "› " : "  "}
-        <span fg={p.online ? (p.problem ? theme.warn : theme.ok) : theme.dim}>{p.online ? "● " : "○ "}</span>
-        {padCells(clip(label(p), nameWidth), nameWidth)}
+        <span fg={person.online ? (person.problem ? theme.warn : theme.ok) : theme.dim}>{person.online ? "● " : "○ "}</span>
+        {padCells(clip(label(person), nameWidth), nameWidth)}
       </text>
       <text truncate wrapMode="none" flexShrink={1} minWidth={0} marginLeft={2}>
         <span fg={theme.dim}>{notes.join(" · ")}</span>
-        {p.problem ? <span fg={theme.warn}>{notes.length > 0 ? " · " : ""}{p.problem}</span> : null}
+        {person.problem ? <span fg={theme.warn}>{notes.length > 0 ? " · " : ""}{person.problem}</span> : null}
       </text>
     </box>
   );

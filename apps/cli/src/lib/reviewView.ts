@@ -17,7 +17,7 @@ export function parseDiff(text: string): ReadonlyArray<Hunk> {
   const out: Array<Hunk> = [];
   let file = "";
   let oldFile = "";
-  let n = 0;
+  let hunkIndex = 0;
   interface Open {
     file: string;
     header: string;
@@ -25,14 +25,14 @@ export function parseDiff(text: string): ReadonlyArray<Hunk> {
     newLines: number;
     lines: Array<DiffLine>;
     /** next old / new line number */
-    o: number;
-    w: number;
+    nextOld: number;
+    nextNew: number;
   }
-  let cur: Open | null = null;
+  let open: Open | null = null;
   const flush = () => {
-    if (!cur) return;
-    out.push({ id: `${cur.file}#${n++}`, file: cur.file, header: cur.header, newStart: cur.newStart, newLines: cur.newLines, lines: cur.lines });
-    cur = null;
+    if (!open) return;
+    out.push({ id: `${open.file}#${hunkIndex++}`, file: open.file, header: open.header, newStart: open.newStart, newLines: open.newLines, lines: open.lines });
+    open = null;
   };
   for (const raw of text.split("\n")) {
     if (raw.startsWith("diff --git ")) {
@@ -46,30 +46,30 @@ export function parseDiff(text: string): ReadonlyArray<Hunk> {
       continue;
     }
     if (raw.startsWith("+++ ")) {
-      const p = raw.slice(4);
-      file = p === "/dev/null" ? oldFile : p.replace(/^b\//, "");
+      const path = raw.slice(4);
+      file = path === "/dev/null" ? oldFile : path.replace(/^b\//, "");
       continue;
     }
-    const h = raw.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/);
-    if (h) {
+    const match = raw.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/);
+    if (match) {
       flush();
-      cur = { file, header: raw, newStart: Number(h[3]), newLines: h[4] === undefined ? 1 : Number(h[4]), lines: [], o: Number(h[1]), w: Number(h[3]) };
+      open = { file, header: raw, newStart: Number(match[3]), newLines: match[4] === undefined ? 1 : Number(match[4]), lines: [], nextOld: Number(match[1]), nextNew: Number(match[3]) };
       continue;
     }
-    if (!cur) continue;
-    const c: Open = cur;
-    if (raw.startsWith("+")) c.lines.push({ kind: "+", text: raw.slice(1), new: c.w++ });
-    else if (raw.startsWith("-")) c.lines.push({ kind: "-", text: raw.slice(1), old: c.o++ });
-    else if (raw.startsWith(" ") || raw === "") c.lines.push({ kind: " ", text: raw.slice(1), old: c.o++, new: c.w++ });
+    if (!open) continue;
+    const hunk: Open = open;
+    if (raw.startsWith("+")) hunk.lines.push({ kind: "+", text: raw.slice(1), new: hunk.nextNew++ });
+    else if (raw.startsWith("-")) hunk.lines.push({ kind: "-", text: raw.slice(1), old: hunk.nextOld++ });
+    else if (raw.startsWith(" ") || raw === "") hunk.lines.push({ kind: " ", text: raw.slice(1), old: hunk.nextOld++, new: hunk.nextNew++ });
     // "\ No newline at end of file" and anything else: not a line of code
   }
   flush();
   // the empty string after the diff's final "\n" is the split's, not a line
   // of code: drop it where it made a hunk longer than its header says
-  return out.map((h) => {
-    const last = h.lines[h.lines.length - 1];
-    const count = h.lines.filter((l) => l.kind !== "-").length;
-    return last && last.kind === " " && last.text === "" && count > h.newLines ? { ...h, lines: h.lines.slice(0, -1) } : h;
+  return out.map((hunk) => {
+    const last = hunk.lines[hunk.lines.length - 1];
+    const count = hunk.lines.filter((line) => line.kind !== "-").length;
+    return last && last.kind === " " && last.text === "" && count > hunk.newLines ? { ...hunk, lines: hunk.lines.slice(0, -1) } : hunk;
   });
 }
 
@@ -81,19 +81,19 @@ export interface Pointer {
 }
 
 /** "src/x.ts:12", "src/x.ts:12-20", "src/x.ts" — the forms an agent writes. */
-export function parsePointer(s: string): Pointer {
-  const m = s.trim().match(/^(.*?):(\d+)(?:-(\d+))?$/);
-  if (!m) return { file: s.trim() };
-  return { file: m[1]!, line: Number(m[2]), ...(m[3] ? { end: Number(m[3]) } : {}) };
+export function parsePointer(text: string): Pointer {
+  const match = text.trim().match(/^(.*?):(\d+)(?:-(\d+))?$/);
+  if (!match) return { file: text.trim() };
+  return { file: match[1]!, line: Number(match[2]), ...(match[3] ? { end: Number(match[3]) } : {}) };
 }
 
 /** Paths in a why are written however the agent saw them — from the repo
  *  root, from a package, with the project's own folder in front. Two paths
  *  are the same file when one ends with the other on a segment boundary. */
-export const sameFile = (a: string, b: string): boolean => {
-  const x = a.replace(/^\.\//, "");
-  const y = b.replace(/^\.\//, "");
-  return x === y || x.endsWith(`/${y}`) || y.endsWith(`/${x}`);
+export const sameFile = (path: string, other: string): boolean => {
+  const plain = path.replace(/^\.\//, "");
+  const plainOther = other.replace(/^\.\//, "");
+  return plain === plainOther || plain.endsWith(`/${plainOther}`) || plainOther.endsWith(`/${plain}`);
 };
 
 /** How far outside a hunk a pointed-at line may sit and still mean it: the
@@ -104,14 +104,14 @@ const NEAR = 10;
 /** The hunks a pointer claims: in its file, the one holding its line (or
  *  range), else the nearest within NEAR lines; every hunk of the file when
  *  it names a file alone. */
-export function claimed(p: Pointer, hunks: ReadonlyArray<Hunk>): ReadonlyArray<Hunk> {
-  const inFile = hunks.filter((h) => sameFile(h.file, p.file));
-  if (p.line === undefined) return inFile;
-  const lo = p.line;
-  const hi = p.end ?? p.line;
-  const hit = inFile.filter((h) => lo <= h.newStart + Math.max(h.newLines, 1) - 1 && hi >= h.newStart);
+export function claimed(pointer: Pointer, hunks: ReadonlyArray<Hunk>): ReadonlyArray<Hunk> {
+  const inFile = hunks.filter((hunk) => sameFile(hunk.file, pointer.file));
+  if (pointer.line === undefined) return inFile;
+  const firstLine = pointer.line;
+  const lastLine = pointer.end ?? pointer.line;
+  const hit = inFile.filter((hunk) => firstLine <= hunk.newStart + Math.max(hunk.newLines, 1) - 1 && lastLine >= hunk.newStart);
   if (hit.length > 0) return hit;
-  const dist = (h: Hunk) => Math.max(h.newStart - hi, lo - (h.newStart + Math.max(h.newLines, 1) - 1), 0);
-  const near = inFile.filter((h) => dist(h) <= NEAR).sort((a, b) => dist(a) - dist(b));
+  const dist = (hunk: Hunk) => Math.max(hunk.newStart - lastLine, firstLine - (hunk.newStart + Math.max(hunk.newLines, 1) - 1), 0);
+  const near = inFile.filter((hunk) => dist(hunk) <= NEAR).sort((a, b) => dist(a) - dist(b));
   return near.slice(0, 1);
 }

@@ -15,14 +15,14 @@ describe("which changed files import which", () => {
       "src/rows/index.ts": `export const rows = 1;`,
       "src/util.ts": `import { page } from "./page";`,
     };
-    const got = importsAmong(files, (f) => text[f] ?? null);
-    expect([...got.entries()].map(([f, to]) => `${f} -> ${[...to].join(",")}`)).toEqual(["src/page.ts -> src/rows/index.ts", "src/page.test.ts -> src/page.ts", "src/util.ts -> src/page.ts"]);
+    const got = importsAmong(files, (file) => text[file] ?? null);
+    expect([...got.entries()].map(([file, to]) => `${file} -> ${[...to].join(",")}`)).toEqual(["src/page.ts -> src/rows/index.ts", "src/page.test.ts -> src/page.ts", "src/util.ts -> src/page.ts"]);
   });
 
   it("links PHP files by the classes they use, as a PSR-4 autoloader would find them", () => {
     expect(phpUses("<?php\nnamespace App\\Http;\nuse App\\Models\\User;\nuse function App\\helpers\\cells;\nuse Acme\\Greeter as G;\n")).toEqual(["App/Models/User", "App/helpers/cells", "Acme/Greeter"]);
     const files = ["app/Http/Controller.php", "app/Models/User.php"];
-    const got = importsAmong(files, (f) => (f === "app/Http/Controller.php" ? "<?php\nuse App\\Models\\User;\n" : "<?php\n"));
+    const got = importsAmong(files, (file) => (file === "app/Http/Controller.php" ? "<?php\nuse App\\Models\\User;\n" : "<?php\n"));
     expect([...(got.get("app/Http/Controller.php") ?? [])]).toEqual(["app/Models/User.php"]);
   });
 });
