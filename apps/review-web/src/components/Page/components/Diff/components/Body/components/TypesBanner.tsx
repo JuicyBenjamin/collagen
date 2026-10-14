@@ -1,12 +1,11 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
-import type { ToolId } from "../data";
-import { toolStates, warmTypes } from "../api";
-import { diffNow } from "../diffNow";
-import { lasting } from "../lasting";
-import { installTool, keepTool, toolState } from "../intel";
-import { enter } from "../fold";
-import { ticketId } from "../ticket";
-import { arrive } from "../wipe";
+import type { ToolId } from "~/data";
+import { toolStates, warmTypes } from "~/api";
+import { diffNow } from "~/diffNow";
+import { lasting } from "~/lasting";
+import { installTool, keepTool, toolState } from "~/intel";
+import { ticketId } from "~/ticket";
+import { Appear } from "~/components/Appear";
 
 const dismissedKey = (tool: ToolId) => `collagen.typesBanner.dismissed.${tool}`;
 const remembered = (tool: ToolId): boolean => {
@@ -50,17 +49,10 @@ export function TypesBanner(props: { tool: ToolId }) {
   };
   return (
     <>
-      <Show when={!dismissed() && toolState(props.tool) && toolState(props.tool)!.state !== "ready" ? toolState(props.tool) : null}>
+      {/* each comes with the tool's state, after the code: it opens into place, and closes */}
+      <Appear when={!dismissed() && toolState(props.tool) && toolState(props.tool)!.state !== "ready" ? toolState(props.tool) : null}>
         {(tool) => (
-          <div
-            // it comes with the tool's state, after the code: it opens into place
-            ref={(element) => {
-              enter(element);
-              arrive(element);
-            }}
-            class="banner"
-            role="status"
-          >
+          <div class="banner" role="status">
             <Show
               when={tool().state === "installing"}
               fallback={
@@ -95,8 +87,8 @@ export function TypesBanner(props: { tool: ToolId }) {
             </Show>
           </div>
         )}
-      </Show>
-      <Show when={unseen().length > 0 ? toolState(props.tool) : null}>
+      </Appear>
+      <Appear when={unseen().length > 0 ? toolState(props.tool) : null}>
         {(tool) => (
           <div class="banner" role="status">
             <span>
@@ -107,7 +99,7 @@ export function TypesBanner(props: { tool: ToolId }) {
             </button>
           </div>
         )}
-      </Show>
+      </Appear>
     </>
   );
 }
