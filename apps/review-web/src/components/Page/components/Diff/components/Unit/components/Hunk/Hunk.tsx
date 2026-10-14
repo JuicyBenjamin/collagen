@@ -1,20 +1,20 @@
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
-import type { DiffLine, Hunk as HunkData, WholeFileResult } from "../data";
-import { diffNow } from "../diffNow";
-import { ticketId } from "../ticket";
-import { wholeFile } from "../api";
-import { hasNewSide, wholeHunk } from "../whole";
-import { foldAway } from "../fold";
-import { highlightHunk } from "../highlight";
-import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "../intel";
-import { ChangedLine, CodeLine } from "./Code";
-import { rowsOf } from "../inline";
-import { Peek } from "./Peek";
-import { LineComposer, LineThread } from "./LineThread";
-import { hostNow } from "../hostNow";
-import { reading, viewed } from "../viewedNow";
-import { sinceOf } from "../sinceNow";
-import { moved, placeSince } from "../since";
+import type { DiffLine, Hunk as HunkData, WholeFileResult } from "~/data";
+import { diffNow } from "~/diffNow";
+import { ticketId } from "~/ticket";
+import { wholeFile } from "~/api";
+import { hasNewSide, wholeHunk } from "~/whole";
+import { foldAway } from "~/fold";
+import { highlightHunk } from "~/highlight";
+import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "~/intel";
+import { ChangedLine, CodeLine } from "~/components/Code";
+import { rowsOf } from "~/inline";
+import { Peek } from "./components/Peek";
+import { LineComposer, LineThread } from "./components/LineThread";
+import { hostNow } from "~/hostNow";
+import { reading, viewed } from "~/viewedNow";
+import { sinceOf } from "~/sinceNow";
+import { moved, placeSince } from "~/since";
 
 /** The character a pointer is over, in a line drawn by CodeLine: the text
  *  under the pointer, and where its span starts (data-o). */
