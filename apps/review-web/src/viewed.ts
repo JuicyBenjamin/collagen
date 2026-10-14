@@ -87,5 +87,11 @@ export const viewedStore = (ticketId: string) => {
   };
   /** the commit a file was viewed at, when the page knew it */
   const viewedAt = (file: string): string | undefined => marks()[file]?.at;
-  return { state, toggle, count, viewedAt, setFiles: (hunks: ReadonlyArray<Hunk>) => setNow(fingerprints(hunks)) };
+  // the diff's files read at least once: before that a count of none means "not yet", not "none"
+  const [read, setRead] = createSignal(false);
+  const setFiles = (hunks: ReadonlyArray<Hunk>) => {
+    setNow(fingerprints(hunks));
+    setRead(true);
+  };
+  return { state, toggle, count, viewedAt, read, setFiles };
 };
