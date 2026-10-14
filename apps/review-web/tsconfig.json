@@ -6,7 +6,9 @@
     "jsxImportSource": "@solidjs/web",
     "moduleResolution": "bundler",
     "module": "preserve",
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    // ~/ is src/: a component deep in the tree names the page's modules plainly
+    "paths": { "~/*": ["./src/*"] }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "vitest.config.ts"]
 }

@@ -1,6 +1,6 @@
 import { Show } from "solid-js";
-import type { Fork as ForkData } from "../data";
-import { assumedNow } from "../assumedNow";
+import type { Fork as ForkData } from "~/data";
+import { assumedNow } from "~/assumedNow";
 
 /** A fork in the road: what was chosen over what, why, and whose call — or,
  *  on a review built from assumptions, a turn the AI thinks was taken, and
