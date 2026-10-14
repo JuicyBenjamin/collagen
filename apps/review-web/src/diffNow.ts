@@ -26,8 +26,8 @@ export const diffNow = {
     setRemoved(removedLines(hunks));
     setReadable(fromClone);
     setCommit(at);
-    const m = new Map<string, Array<Hunk>>();
-    for (const h of hunks) m.set(h.file, [...(m.get(h.file) ?? []), h]);
-    setByFile(m);
+    const hunksByFile = new Map<string, Array<Hunk>>();
+    for (const hunk of hunks) hunksByFile.set(hunk.file, [...(hunksByFile.get(hunk.file) ?? []), hunk]);
+    setByFile(hunksByFile);
   },
 };

@@ -46,7 +46,7 @@ export function RoomChooser({
 
   useKeyboard((key) => {
     if (step === "choice") {
-      if (["up", "down", "left", "right"].includes(key.name)) return setChoice((c) => (c === 0 ? 1 : 0));
+      if (["up", "down", "left", "right"].includes(key.name)) return setChoice((previous) => (previous === 0 ? 1 : 0));
       if (isEnter(key)) return setStep(choice === 0 ? "create" : "join");
       if (key.name === "escape") return onCancel();
       return;
@@ -89,9 +89,9 @@ export function RoomChooser({
             <input
               focused
               value={inviteId}
-              onInput={(v: string) => {
+              onInput={(value: string) => {
                 setError(null);
-                setInviteId(v);
+                setInviteId(value);
               }}
               onSubmit={submitJoin}
               placeholder="paste the invite id your friend copied with c"

@@ -107,7 +107,7 @@ const linkDeps = (deps: LanguageTool["deps"], projectPath: string, root: string,
   }
   let entries: Array<string> = [];
   try {
-    entries = readdirSync(here, { withFileTypes: true }).filter((d) => d.isDirectory() && !d.isSymbolicLink() && d.name !== deps.dir && !d.name.startsWith(".")).map((d) => d.name);
+    entries = readdirSync(here, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && entry.name !== deps.dir && !entry.name.startsWith(".")).map((entry) => entry.name);
   } catch {
     return linked;
   }
@@ -147,7 +147,7 @@ export function docAbove(lines: ReadonlyArray<string>, at: number): string | nul
   } else return null;
   const text = lines
     .slice(start, end + 1)
-    .map((l) => l.replace(/^\s*\/\*\*?\s?/, "").replace(/\s*\*\/\s*$/, "").replace(/^\s*\*\s?/, "").replace(/^\s*\/\/\s?/, ""))
+    .map((line) => line.replace(/^\s*\/\*\*?\s?/, "").replace(/\s*\*\/\s*$/, "").replace(/^\s*\*\s?/, "").replace(/^\s*\/\/\s?/, ""))
     .join("\n")
     .trim();
   return text.length > 0 ? text : null;
@@ -156,7 +156,7 @@ export function docAbove(lines: ReadonlyArray<string>, at: number): string | nul
 /** A hover's markdown, from the server's reply in any of its shapes. */
 const hoverText = (result: unknown): string => {
   const contents = (result as { contents?: unknown } | null)?.contents;
-  const one = (c: unknown): string => (typeof c === "string" ? c : c && typeof c === "object" && "value" in c ? String((c as { value: unknown }).value) : "");
+  const one = (part: unknown): string => (typeof part === "string" ? part : part && typeof part === "object" && "value" in part ? String((part as { value: unknown }).value) : "");
   return Array.isArray(contents) ? contents.map(one).filter(Boolean).join("\n\n") : one(contents);
 };
 
@@ -173,7 +173,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     // moves whenever any of those does — an install started, done or failed,
     // a server's notice — so an open page follows a tool's state live
     const moved = yield* SubscriptionRef.make(0);
-    const bump = () => Effect.runSync(SubscriptionRef.update(moved, (n) => n + 1));
+    const bump = () => Effect.runSync(SubscriptionRef.update(moved, (count) => count + 1));
     const toolState = (id: ToolId): ToolState => {
       const tool = TOOLS[id];
       const about = { tool: id, language: tool.language, name: tool.name, version: tool.version, size: tool.size, ...(tool.licence ? { licence: tool.licence } : {}) };
@@ -202,23 +202,23 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const watchTool = (id: ToolId): Stream.Stream<ToolState> =>
       SubscriptionRef.changes(moved).pipe(
         Stream.map(() => toolState(id)),
-        Stream.changesWith((a, b) => JSON.stringify(a) === JSON.stringify(b)),
+        Stream.changesWith((previous, next) => JSON.stringify(previous) === JSON.stringify(next)),
       );
 
     /** Stopped, its slot given back — tree and index kept for the next. */
     const stop = (key: string): Promise<void> => {
-      const s = sessions.get(key);
+      const starting = sessions.get(key);
       sessions.delete(key);
-      return (s ?? Promise.reject()).then(
-        async (x) => {
+      return (starting ?? Promise.reject()).then(
+        async (server) => {
           // asked to stop, so it leaves its index whole for the next server
           // in this slot; killed only if it does not go
-          const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
-          await Promise.race([x.lsp.request("shutdown", null, STOP_MS).catch(() => {}), wait(STOP_MS)]);
-          x.lsp.notify("exit", null);
-          await Promise.race([x.lsp.exited, wait(STOP_MS)]);
-          x.lsp.close();
-          releaseSlot(x.slot);
+          const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds).unref());
+          await Promise.race([server.lsp.request("shutdown", null, STOP_MS).catch(() => {}), wait(STOP_MS)]);
+          server.lsp.notify("exit", null);
+          await Promise.race([server.lsp.exited, wait(STOP_MS)]);
+          server.lsp.close();
+          releaseSlot(server.slot);
         },
         () => {},
       );
@@ -226,10 +226,10 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
 
     // a server nobody has asked anything for ten minutes is stopped
     const sweep = setInterval(() => {
-      for (const [key, s] of sessions)
-        void s.then(
-          (x) => {
-            if (Date.now() - x.lastUsed > IDLE_MS) void stop(key);
+      for (const [key, starting] of sessions)
+        void starting.then(
+          (server) => {
+            if (Date.now() - server.lastUsed > IDLE_MS) void stop(key);
           },
           () => sessions.delete(key),
         );
@@ -239,11 +239,11 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       Effect.sync(() => {
         clearInterval(sweep);
         // collagen is going: no time to ask, each is killed and its slot given back
-        for (const s of sessions.values())
-          void s.then(
-            (x) => {
-              x.lsp.close();
-              releaseSlot(x.slot);
+        for (const starting of sessions.values())
+          void starting.then(
+            (server) => {
+              server.lsp.close();
+              releaseSlot(server.slot);
             },
             () => {},
           );
@@ -255,9 +255,9 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       const slot = claimSlot(tmpdir(), projectPath, tool.id);
       try {
         return await startIn(slot, tool, projectPath, commit);
-      } catch (e) {
+      } catch (error) {
         releaseSlot(slot);
-        throw e;
+        throw error;
       }
     };
     const startIn = async (slot: Slot, tool: LanguageTool, projectPath: string, commit: string): Promise<Session> => {
@@ -320,12 +320,12 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       if (!sessions.has(key)) {
         // the review's server at another commit gives its slot back first,
         // so this one starts from its tree and index
-        const before = Promise.all([...sessions.keys()].filter((k) => k.startsWith(prefix)).map(stop));
+        const before = Promise.all([...sessions.keys()].filter((sessionKey) => sessionKey.startsWith(prefix)).map(stop));
         const started = before.then(() => start(tool, tree.projectPath, commit));
         started.catch(() => sessions.delete(key));
         sessions.set(key, started);
       }
-      return yield* Effect.tryPromise({ try: () => sessions.get(key)!, catch: (e) => (e instanceof Error ? e.message : String(e)) }).pipe(
+      return yield* Effect.tryPromise({ try: () => sessions.get(key)!, catch: (error) => (error instanceof Error ? error.message : String(error)) }).pipe(
         Effect.catch((why) => Effect.succeed(`the ${tool.name} server could not start: ${why}`)),
       );
     });
@@ -337,54 +337,54 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       if (id === null) return { _tag: "failed", error: `no language server reads ${extname(file) || file}` } as const;
       const tool = TOOLS[id];
       if (!installed(toolDir(tool), tool)) return { _tag: "missing" } as const;
-      const s = yield* session(ticketId, tool, commit);
-      if (typeof s === "string") return { _tag: "failed", error: s } as const;
-      s.lastUsed = Date.now();
-      const path = join(s.root, file);
+      const server = yield* session(ticketId, tool, commit);
+      if (typeof server === "string") return { _tag: "failed", error: server } as const;
+      server.lastUsed = Date.now();
+      const path = join(server.root, file);
       if (!existsSync(path)) return { _tag: "failed", error: `${file} is not on the branch under review` } as const;
       const uri = pathToFileURL(path).href;
       // a moment for an index nearly built; then what it has read so far,
       // said as partial — never "ask again": the page asks again itself
-      if (!s.indexed.done) yield* Effect.promise(() => Promise.race([s.ready, new Promise<void>((r) => setTimeout(r, WAIT_MS).unref())]));
+      if (!server.indexed.done) yield* Effect.promise(() => Promise.race([server.ready, new Promise<void>((resolve) => setTimeout(resolve, WAIT_MS).unref())]));
       // a server still saying how far it has read is still reading, however long it takes
-      if (!s.indexed.done && Date.now() - (s.progress.when ?? s.started) >= NEVER_SAYS_MS) s.indexed.done = true;
-      const partial = s.indexed.done ? null : { partial: true as const, ...(s.progress.at !== null ? { progress: s.progress.at } : {}) };
-      if (!s.opened.has(uri)) {
-        s.lsp.notify("textDocument/didOpen", { textDocument: { uri, languageId: tool.languageId(extname(file)), version: 1, text: readFileSync(path, "utf8") } });
-        s.opened.add(uri);
+      if (!server.indexed.done && Date.now() - (server.progress.when ?? server.started) >= NEVER_SAYS_MS) server.indexed.done = true;
+      const partial = server.indexed.done ? null : { partial: true as const, ...(server.progress.at !== null ? { progress: server.progress.at } : {}) };
+      if (!server.opened.has(uri)) {
+        server.lsp.notify("textDocument/didOpen", { textDocument: { uri, languageId: tool.languageId(extname(file)), version: 1, text: readFileSync(path, "utf8") } });
+        server.opened.add(uri);
       }
       // the page counts lines from 1 and characters from 0, as editors show them
       return yield* Effect.tryPromise({
-        try: () => s.lsp.request(method, { textDocument: { uri }, position: { line: line - 1, character: col } }),
-        catch: (e) => (e instanceof Error ? e.message : String(e)),
+        try: () => server.lsp.request(method, { textDocument: { uri }, position: { line: line - 1, character: col } }),
+        catch: (error) => (error instanceof Error ? error.message : String(error)),
       }).pipe(
-        Effect.map((result) => ({ _tag: "ok", result, session: s, partial }) as const),
+        Effect.map((result) => ({ _tag: "ok", result, session: server, partial }) as const),
         Effect.catch((error) => Effect.succeed({ _tag: "failed", error } as const)),
       );
     });
 
     const hover = Effect.fn("ReviewTypes.hover")(function* (ticketId: string, file: string, line: number, col: number, commit: string) {
-      const r = yield* ask(ticketId, file, line, col, commit, "textDocument/hover");
-      if (r._tag === "missing") return { missing: true } satisfies HoverResult;
-      if (r._tag === "failed") return { error: r.error } satisfies HoverResult;
-      const markdown = hoverText(r.result);
-      return (markdown ? { markdown, ...r.partial } : { none: true, ...r.partial }) satisfies HoverResult;
+      const answer = yield* ask(ticketId, file, line, col, commit, "textDocument/hover");
+      if (answer._tag === "missing") return { missing: true } satisfies HoverResult;
+      if (answer._tag === "failed") return { error: answer.error } satisfies HoverResult;
+      const markdown = hoverText(answer.result);
+      return (markdown ? { markdown, ...answer.partial } : { none: true, ...answer.partial }) satisfies HoverResult;
     });
 
     /** Where a symbol is declared, and the declaration itself: the target's
      *  whole range (a function with its body), capped, with where it lives —
      *  in the branch, in a dependency, or in the language itself. */
     const definition = Effect.fn("ReviewTypes.definition")(function* (ticketId: string, file: string, line: number, col: number, commit: string) {
-      const r = yield* ask(ticketId, file, line, col, commit, "textDocument/definition");
-      if (r._tag === "missing") return { missing: true } satisfies DefinitionResult;
-      if (r._tag === "failed") return { error: r.error } satisfies DefinitionResult;
-      const links = (Array.isArray(r.result) ? r.result : r.result ? [r.result] : []) as Array<{
+      const answer = yield* ask(ticketId, file, line, col, commit, "textDocument/definition");
+      if (answer._tag === "missing") return { missing: true } satisfies DefinitionResult;
+      if (answer._tag === "failed") return { error: answer.error } satisfies DefinitionResult;
+      const links = (Array.isArray(answer.result) ? answer.result : answer.result ? [answer.result] : []) as Array<{
         targetUri?: string;
         uri?: string;
         targetRange?: { start: { line: number }; end: { line: number } };
         range?: { start: { line: number }; end: { line: number } };
       }>;
-      const { root, projectPath, tool, deps } = r.session;
+      const { root, projectPath, tool, deps } = answer.session;
       const realRoot = realpathSync(root);
       const realTool = (() => {
         try {
@@ -393,9 +393,9 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
           return toolDir(tool);
         }
       })();
-      const peeks = links.slice(0, 8).flatMap((l): Array<Peek> => {
-        const target = l.targetUri ?? l.uri ?? "";
-        const range = l.targetRange ?? l.range;
+      const peeks = links.slice(0, 8).flatMap((link): Array<Peek> => {
+        const target = link.targetUri ?? link.uri ?? "";
+        const range = link.targetRange ?? link.range;
         if (!range) return [];
         // not a file at all: the language's library, bundled in its server
         if (!target.startsWith("file:")) return [{ file: target.replace(/^bundled:\/\/\/libs\//, "typescript/lib/"), where: "builtin", builtInto: tool.language, line: range.start.line + 1, doc: null, code: null, more: 0 }];
@@ -418,7 +418,7 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
         if (real.startsWith(realTool + sep)) return [{ file: relative(realTool, real).replace(/^lib\/stubs?\//, ""), where: "builtin", builtInto: tool.language, ...body }];
         // a dependency's file by the package, not by the folder it sits in:
         // one of the folders linked from the clone, wherever it is configured
-        const depRoot = deps.find((d) => real.startsWith(d + sep));
+        const depRoot = deps.find((dependency) => real.startsWith(dependency + sep));
         if (depRoot) return [{ file: relative(depRoot, real), where: "package", ...body }];
         const inTree = real.startsWith(realRoot + sep);
         const full = inTree ? relative(realRoot, real) : real.startsWith(projectPath + sep) ? relative(projectPath, real) : real;
@@ -428,8 +428,8 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
       });
       // a name that is both a value and a namespace of types (Effect.fn):
       // the value — what the code calls — first
-      const typesOnly = (p: Peek) => /^\s*(export\s+)?(declare\s+)?(namespace|module)\b/m.test((p.code ?? "").replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "").trimStart().split("\n")[0] ?? "");
-      return { peeks: [...peeks.filter((p) => !typesOnly(p)), ...peeks.filter(typesOnly)], ...r.partial } satisfies DefinitionResult;
+      const typesOnly = (peek: Peek) => /^\s*(export\s+)?(declare\s+)?(namespace|module)\b/m.test((peek.code ?? "").replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "").trimStart().split("\n")[0] ?? "");
+      return { peeks: [...peeks.filter((peek) => !typesOnly(peek)), ...peeks.filter(typesOnly)], ...answer.partial } satisfies DefinitionResult;
     });
 
     /** The review's server for a language, started as its page opens — so
@@ -438,8 +438,8 @@ export class ReviewTypes extends Context.Service<ReviewTypes>()("cli/ReviewTypes
     const warm = Effect.fn("ReviewTypes.warm")(function* (ticketId: string, id: ToolId, commit: string) {
       const tool = TOOLS[id];
       if (!installed(toolDir(tool), tool)) return;
-      const s = yield* session(ticketId, tool, commit);
-      if (typeof s !== "string") s.lastUsed = Date.now();
+      const server = yield* session(ticketId, tool, commit);
+      if (typeof server !== "string") server.lastUsed = Date.now();
     });
 
     return { hover, definition, warm, watchTool, startInstall: (id: ToolId) => Effect.sync(() => startInstall(id)) } as const;

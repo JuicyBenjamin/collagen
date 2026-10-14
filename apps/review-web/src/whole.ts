@@ -7,41 +7,41 @@ import type { DiffLine, Hunk } from "./data";
 
 /** Every line each file of the diff adds, by its number in the new file. */
 export const addedLines = (hunks: ReadonlyArray<Hunk>): ReadonlyMap<string, ReadonlySet<number>> => {
-  const m = new Map<string, Set<number>>();
-  for (const h of hunks)
-    for (const l of h.lines)
-      if (l.kind === "+" && l.new !== undefined) {
-        const s = m.get(h.file) ?? new Set<number>();
-        s.add(l.new);
-        m.set(h.file, s);
+  const fileLines = new Map<string, Set<number>>();
+  for (const hunk of hunks)
+    for (const line of hunk.lines)
+      if (line.kind === "+" && line.new !== undefined) {
+        const lineNumbers = fileLines.get(hunk.file) ?? new Set<number>();
+        lineNumbers.add(line.new);
+        fileLines.set(hunk.file, lineNumbers);
       }
-  return m;
+  return fileLines;
 };
 
 /** Every line each file of the diff removes, by the line of the new file it
  *  stood just before (one past the file's end when it was at the end). */
 export const removedLines = (hunks: ReadonlyArray<Hunk>): ReadonlyMap<string, ReadonlyMap<number, ReadonlyArray<DiffLine>>> => {
-  const m = new Map<string, Map<number, Array<DiffLine>>>();
-  for (const h of hunks) {
-    const file = m.get(h.file) ?? new Map<number, Array<DiffLine>>();
+  const removedByFile = new Map<string, Map<number, Array<DiffLine>>>();
+  for (const hunk of hunks) {
+    const file = removedByFile.get(hunk.file) ?? new Map<number, Array<DiffLine>>();
     let pending: Array<DiffLine> = [];
     // a hunk with no new lines starts after newStart; else after the last new line seen
-    let after = h.newStart;
+    let after = hunk.newStart;
     const flush = (before: number) => {
       if (pending.length > 0) file.set(before, [...(file.get(before) ?? []), ...pending]);
       pending = [];
     };
-    for (const l of h.lines) {
-      if (l.kind === "-") pending.push(l);
-      else if (l.new !== undefined) {
-        flush(l.new);
-        after = l.new;
+    for (const line of hunk.lines) {
+      if (line.kind === "-") pending.push(line);
+      else if (line.new !== undefined) {
+        flush(line.new);
+        after = line.new;
       }
     }
     flush(after + 1);
-    m.set(h.file, file);
+    removedByFile.set(hunk.file, file);
   }
-  return m;
+  return removedByFile;
 };
 
 /** The whole file as a hunk the page already knows how to draw — and to
@@ -54,10 +54,10 @@ export const wholeHunk = (hunk: Hunk, lines: ReadonlyArray<string>, added: Reado
   newStart: 1,
   newLines: lines.length,
   lines: [
-    ...lines.flatMap((text, i): ReadonlyArray<DiffLine> => [...(removed.get(i + 1) ?? []), { kind: added.has(i + 1) ? "+" : " ", text, new: i + 1 }]),
+    ...lines.flatMap((text, index): ReadonlyArray<DiffLine> => [...(removed.get(index + 1) ?? []), { kind: added.has(index + 1) ? "+" : " ", text, new: index + 1 }]),
     ...(removed.get(lines.length + 1) ?? []),
   ],
 });
 
 /** A hunk with something of the new file in it — a deleted file has none to read. */
-export const hasNewSide = (hunk: Hunk): boolean => hunk.lines.some((l) => l.new !== undefined);
+export const hasNewSide = (hunk: Hunk): boolean => hunk.lines.some((line) => line.new !== undefined);

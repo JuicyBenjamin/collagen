@@ -56,17 +56,17 @@ export function ProjectsPage() {
     // project already has is that project too, in the room's spelling
     const name = picking?.as ?? sharedProject(folder, peers)?.name ?? folder;
     updateState({
-      update: (s) => {
-        const here = s.rooms[roomId] ?? [];
-        if (here.some((p) => p.path === path || p.name === name)) return s;
-        return { ...s, rooms: { ...s.rooms, [roomId]: [...here, newProject(name, path)] } };
+      update: (previous) => {
+        const here = previous.rooms[roomId] ?? [];
+        if (here.some((project) => project.path === path || project.name === name)) return previous;
+        return { ...previous, rooms: { ...previous.rooms, [roomId]: [...here, newProject(name, path)] } };
       },
     });
     stopPicking();
   };
   const remove = (id: string) =>
     updateState({
-      update: (s) => ({ ...s, rooms: { ...s.rooms, [roomId]: (s.rooms[roomId] ?? []).filter((p) => p.id !== id) } }),
+      update: (previous) => ({ ...previous, rooms: { ...previous.rooms, [roomId]: (previous.rooms[roomId] ?? []).filter((project) => project.id !== id) } }),
     });
 
   return (
@@ -101,9 +101,9 @@ export function ProjectsPage() {
                 {"  "}none
               </text>
             ) : null}
-            {rows.map((row, i) => {
+            {rows.map((row, index) => {
               const shared = row.holders.length >= 2;
-              const selected = focused && i === sel;
+              const selected = focused && index === sel;
               // not on this machine: dim, and it says so — the needed action
               // is visible before anyone presses anything
               const missing = row.mine === undefined;

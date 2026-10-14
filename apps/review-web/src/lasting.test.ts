@@ -3,7 +3,7 @@ import { lasting } from "./lasting";
 
 /** A connection that sends `values`, then breaks (or ends). */
 async function* connection(values: ReadonlyArray<string>, breaks: boolean): AsyncGenerator<string> {
-  for (const v of values) yield v;
+  for (const value of values) yield value;
   if (breaks) throw new Error("ERR_INCOMPLETE_CHUNKED_ENCODING");
 }
 
@@ -28,10 +28,10 @@ describe("a live stream that outlives its connection", () => {
   it("opens again when it breaks or ends, and goes on with what the new one says", async () => {
     const opened: Array<ReadonlyArray<string>> = [["a", "b"], [], [], ["c"], ["d"]];
     const waits: Array<number> = [];
-    let n = 0;
+    let attempts = 0;
     const got: Array<string> = [];
-    for await (const v of lasting(() => connection(opened[n++] ?? [], n % 2 === 1), async (ms) => void waits.push(ms))) {
-      got.push(v);
+    for await (const value of lasting(() => connection(opened[attempts++] ?? [], attempts % 2 === 1), async (milliseconds) => void waits.push(milliseconds))) {
+      got.push(value);
       if (got.length === 4) break;
     }
     expect(got).toEqual(["a", "b", "c", "d"]);
@@ -42,11 +42,11 @@ describe("a live stream that outlives its connection", () => {
   it("waits at most a few seconds between tries while collagen is away", async () => {
     const waits: Array<number> = [];
     let eighth = () => {};
-    const reached = new Promise<void>((r) => (eighth = r));
+    const reached = new Promise<void>((resolve) => (eighth = resolve));
     const it = lasting<string>(
       () => connection([], true),
-      (ms) => {
-        waits.push(ms);
+      (milliseconds) => {
+        waits.push(milliseconds);
         if (waits.length < 8) return Promise.resolve();
         eighth();
         return new Promise(() => {});
@@ -75,7 +75,7 @@ describe("a live stream that outlives its connection", () => {
     let opens = 0;
     const it = lasting<string>(() => (opens++, connection([], true)), () => new Promise(() => {}))[Symbol.asyncIterator]();
     const pending = it.next();
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await it.return!();
     expect(await pending).toEqual({ value: undefined, done: true });
     expect(opens).toBe(1);

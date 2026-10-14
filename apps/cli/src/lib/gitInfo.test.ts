@@ -12,16 +12,16 @@ let worktree = "";
 let bare = "";
 
 beforeAll(() => {
-  const tmp = mkdtempSync(join(tmpdir(), "collagen-git-"));
+  const root = mkdtempSync(join(tmpdir(), "collagen-git-"));
 
   // an ordinary checkout
-  plain = join(tmp, "repo");
+  plain = join(root, "repo");
   mkdirSync(join(plain, ".git"), { recursive: true });
   writeFileSync(join(plain, ".git", "HEAD"), "ref: refs/heads/feature/review-tickets\n");
   writeFileSync(join(plain, ".git", "config"), CONFIG("git@github.com:JuicyBenjamin/collagen.git"));
 
   // a worktree: .git is a pointer, HEAD is its own, config is the repo's
-  worktree = join(tmp, "wt");
+  worktree = join(root, "wt");
   mkdirSync(worktree, { recursive: true });
   const wtDir = join(plain, ".git", "worktrees", "wt");
   mkdirSync(wtDir, { recursive: true });
@@ -30,7 +30,7 @@ beforeAll(() => {
   writeFileSync(join(wtDir, "commondir"), "../..\n");
 
   // no repo at all
-  bare = join(tmp, "notarepo");
+  bare = join(root, "notarepo");
   mkdirSync(bare, { recursive: true });
 });
 

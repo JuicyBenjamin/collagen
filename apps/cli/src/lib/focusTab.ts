@@ -70,7 +70,7 @@ end run`,
 };
 
 const osa = (args: ReadonlyArray<string>): Promise<string | null> =>
-  new Promise((resolve) => execFile("osascript", [...args], { timeout: 8_000 }, (err, out) => resolve(err ? null : String(out).trim())));
+  new Promise((resolve) => execFile("osascript", [...args], { timeout: 8_000 }, (error, out) => resolve(error ? null : String(out).trim())));
 
 /** Focus a tab whose url starts with `url` in a running browser; true when
  *  one was brought forward. */

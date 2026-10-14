@@ -29,7 +29,7 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
   const { navigate } = useRouter();
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
-  const ticket = tickets.find((t) => t.id === ticketId);
+  const ticket = tickets.find((candidate) => candidate.id === ticketId);
   const goal = ticket ? ticketName(ticket) : `ticket ${ticketId.slice(0, 8)}`;
   const setFocus = useAtomSet(focusAtom);
   const setCaptured = useAtomSet(captureAtom);
@@ -43,8 +43,8 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
   const transcripts = AsyncResult.getOrElse(filesResult, () => [] as const);
   // row 0 is the path field; the rest are collected transcripts
   const rowCount = 1 + transcripts.length;
-  const cur = clamp(sel, 0, rowCount - 1);
-  const extra = marked.filter((p) => !transcripts.some((f) => f.path === p));
+  const current = clamp(sel, 0, rowCount - 1);
+  const extra = marked.filter((path) => !transcripts.some((transcript) => transcript.path === path));
 
   useEffect(() => {
     setFocus("attach-files");
@@ -60,7 +60,7 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
     if (typing !== null && key.name === "escape") stopTyping();
   });
 
-  const toggle = (path: string) => setMarked((m) => (m.includes(path) ? m.filter((p) => p !== path) : [...m, path]));
+  const toggle = (path: string) => setMarked((previous) => (previous.includes(path) ? previous.filter((markedPath) => markedPath !== path) : [...previous, path]));
 
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
@@ -74,21 +74,21 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
         flexShrink={0}
         marginTop={1}
         onKey={(key) => {
-          if (key.name === "up" && cur > 0) return setSel(cur - 1), true;
-          if (key.name === "down" && cur < rowCount - 1) return setSel(cur + 1), true;
-          if (key.name === "space" && cur > 0) {
-            const f = transcripts[cur - 1];
-            if (f) toggle(f.path);
+          if (key.name === "up" && current > 0) return setSel(current - 1), true;
+          if (key.name === "down" && current < rowCount - 1) return setSel(current + 1), true;
+          if (key.name === "space" && current > 0) {
+            const transcript = transcripts[current - 1];
+            if (transcript) toggle(transcript.path);
             return true;
           }
           if (isEnter(key)) {
-            if (cur === 0) {
+            if (current === 0) {
               setTyping("");
               setCaptured(PATH_HINT);
               return true;
             }
-            const f = transcripts[cur - 1];
-            const chosen = marked.length > 0 ? marked : f ? [f.path] : [];
+            const transcript = transcripts[current - 1];
+            const chosen = marked.length > 0 ? marked : transcript ? [transcript.path] : [];
             if (chosen.length > 0) {
               attach({ roomId, ticketId, goal, paths: chosen });
               navigate(back);
@@ -107,8 +107,8 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
             </text>
             {/* the path row */}
             <box flexDirection="row" flexShrink={0}>
-              <text fg={focused && cur === 0 ? theme.accent : theme.fg} truncate wrapMode="none">
-                {focused && cur === 0 ? "› " : "  "}
+              <text fg={focused && current === 0 ? theme.accent : theme.fg} truncate wrapMode="none">
+                {focused && current === 0 ? "› " : "  "}
                 <span fg={theme.dim}>{typing !== null ? "path: " : "a path on this machine — enter to type it"}</span>
               </text>
               {typing !== null ? (
@@ -116,10 +116,10 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
                   <input
                     focused
                     value={typing}
-                    onInput={(t: string) => setTyping(t)}
+                    onInput={(text: string) => setTyping(text)}
                     onSubmit={() => {
-                      const p = typing.trim();
-                      if (p.length > 0 && !marked.includes(p)) setMarked((m) => [...m, p]);
+                      const path = typing.trim();
+                      if (path.length > 0 && !marked.includes(path)) setMarked((previous) => [...previous, path]);
                       stopTyping();
                     }}
                     placeholder="/Users/you/Desktop/shot.png"
@@ -127,12 +127,12 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
                 </box>
               ) : null}
             </box>
-            {extra.map((p) => (
-              <text key={p} fg={theme.fg} truncate wrapMode="none" flexShrink={0}>
+            {extra.map((path) => (
+              <text key={path} fg={theme.fg} truncate wrapMode="none" flexShrink={0}>
                 {"    "}
                 <span fg={theme.ok}>[x] </span>
-                {basename(p)}
-                <span fg={theme.dim}> · {p}</span>
+                {basename(path)}
+                <span fg={theme.dim}> · {path}</span>
               </text>
             ))}
             {/* collected transcripts */}
@@ -144,13 +144,13 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
                 {"  "}none yet — collect transcripts on a ticket first
               </text>
             ) : (
-              transcripts.map((f, i) => (
-                <text key={f.path} fg={focused && i + 1 === cur ? theme.accent : theme.fg} truncate wrapMode="none" flexShrink={0}>
-                  {focused && i + 1 === cur ? "› " : "  "}
-                  <span fg={marked.includes(f.path) ? theme.ok : theme.dim}>{marked.includes(f.path) ? "[x] " : "[ ] "}</span>
-                  {f.meta ? `from ${f.meta.from}` : f.name}
+              transcripts.map((transcript, index) => (
+                <text key={transcript.path} fg={focused && index + 1 === current ? theme.accent : theme.fg} truncate wrapMode="none" flexShrink={0}>
+                  {focused && index + 1 === current ? "› " : "  "}
+                  <span fg={marked.includes(transcript.path) ? theme.ok : theme.dim}>{marked.includes(transcript.path) ? "[x] " : "[ ] "}</span>
+                  {transcript.meta ? `from ${transcript.meta.from}` : transcript.name}
                   <span fg={theme.dim}>
-                    {f.meta ? ` · ${f.meta.ai} · ${f.meta.entries} entries · received ${age(f.meta.receivedAt, Date.now())} ago` : ""} · {f.subject} · {f.kb} kB
+                    {transcript.meta ? ` · ${transcript.meta.ai} · ${transcript.meta.entries} entries · received ${age(transcript.meta.receivedAt, Date.now())} ago` : ""} · {transcript.subject} · {transcript.kilobytes} kB
                   </span>
                 </text>
               ))

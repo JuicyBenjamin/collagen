@@ -10,7 +10,7 @@ export type BodyPart = { readonly kind: "text"; readonly text: string } | { read
  *  edits it into what they mean. A fence longer than any backtick run in the
  *  code, so code with ``` in it cannot close it early. */
 export const suggestionBlock = (lines: ReadonlyArray<string>): string => {
-  const longest = Math.max(2, ...lines.map((l) => Math.max(0, ...[...l.matchAll(/`+/g)].map((m) => m[0].length))));
+  const longest = Math.max(2, ...lines.map((line) => Math.max(0, ...[...line.matchAll(/`+/g)].map((match) => match[0].length))));
   const fence = "`".repeat(longest + 1);
   return `${fence}suggestion\n${lines.join("\n")}\n${fence}`;
 };
@@ -22,20 +22,20 @@ export const bodyParts = (body: string): ReadonlyArray<BodyPart> => {
   const lines = body.split("\n");
   let text: Array<string> = [];
   const flush = () => {
-    const t = text.join("\n").trim();
-    if (t.length > 0) parts.push({ kind: "text", text: t });
+    const trimmed = text.join("\n").trim();
+    if (trimmed.length > 0) parts.push({ kind: "text", text: trimmed });
     text = [];
   };
-  for (let i = 0; i < lines.length; i++) {
-    const open = lines[i]!.match(/^\s*(`{3,})\s*suggestion\s*$/);
-    const close = open ? lines.findIndex((l, j) => j > i && l.trim() === open[1]) : -1;
+  for (let index = 0; index < lines.length; index++) {
+    const open = lines[index]!.match(/^\s*(`{3,})\s*suggestion\s*$/);
+    const close = open ? lines.findIndex((line, lineIndex) => lineIndex > index && line.trim() === open[1]) : -1;
     if (!open || close === -1) {
-      text.push(lines[i]!);
+      text.push(lines[index]!);
       continue;
     }
     flush();
-    parts.push({ kind: "suggestion", code: lines.slice(i + 1, close).join("\n") });
-    i = close;
+    parts.push({ kind: "suggestion", code: lines.slice(index + 1, close).join("\n") });
+    index = close;
   }
   flush();
   return parts;

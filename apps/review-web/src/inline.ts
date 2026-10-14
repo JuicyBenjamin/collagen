@@ -20,7 +20,7 @@ export interface Segment {
 export interface Was {
   readonly now: number;
   readonly was: number;
-  readonly len: number;
+  readonly length: number;
 }
 
 /** A line that only changed order: how many of its words moved, of how many. */
@@ -53,9 +53,9 @@ const MAX_RUN_CELLS = 250_000;
 const BAND = 8;
 
 const TOKEN = /[\p{L}\p{N}_$]+|\s+|[^]/gu;
-const tokens = (s: string): Array<string> => s.match(TOKEN) ?? [];
-const blank = (t: string) => /^\s+$/.test(t);
-const weight = (t: string) => (blank(t) ? 0 : t.length);
+const tokens = (text: string): Array<string> => text.match(TOKEN) ?? [];
+const blank = (token: string) => /^\s+$/.test(token);
+const weight = (token: string) => (blank(token) ? 0 : token.length);
 
 interface Diff {
   /** shared code over the longer line's code */
@@ -68,108 +68,108 @@ interface Diff {
 /** Two lines diffed by word: identifiers and numbers, runs of whitespace,
  *  single punctuation. Null when they are too long to weigh. */
 export function wordDiff(old: string, now: string): Diff | null {
-  const a = tokens(old);
-  const b = tokens(now);
+  const oldTokens = tokens(old);
+  const newTokens = tokens(now);
   let head = 0;
-  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  while (head < oldTokens.length && head < newTokens.length && oldTokens[head] === newTokens[head]) head++;
   let tail = 0;
-  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
-  const n = a.length - head - tail;
-  const m = b.length - head - tail;
-  if (n * m > MAX_CELLS) return null;
+  while (tail < oldTokens.length - head && tail < newTokens.length - head && oldTokens[oldTokens.length - 1 - tail] === newTokens[newTokens.length - 1 - tail]) tail++;
+  const oldMiddle = oldTokens.length - head - tail;
+  const newMiddle = newTokens.length - head - tail;
+  if (oldMiddle * newMiddle > MAX_CELLS) return null;
 
   // longest common subsequence of the middles, by code weight
-  const w = m + 1;
-  const best = new Uint32Array((n + 1) * w);
-  for (let i = n - 1; i >= 0; i--)
-    for (let j = m - 1; j >= 0; j--)
-      best[i * w + j] = a[head + i] === b[head + j] ? best[(i + 1) * w + j + 1]! + 1 + weight(a[head + i]!) : Math.max(best[(i + 1) * w + j]!, best[i * w + j + 1]!);
+  const width = newMiddle + 1;
+  const best = new Uint32Array((oldMiddle + 1) * width);
+  for (let oldIndex = oldMiddle - 1; oldIndex >= 0; oldIndex--)
+    for (let newIndex = newMiddle - 1; newIndex >= 0; newIndex--)
+      best[oldIndex * width + newIndex] = oldTokens[head + oldIndex] === newTokens[head + newIndex] ? best[(oldIndex + 1) * width + newIndex + 1]! + 1 + weight(oldTokens[head + oldIndex]!) : Math.max(best[(oldIndex + 1) * width + newIndex]!, best[oldIndex * width + newIndex + 1]!);
 
   // each token of both lines, in order: kept by both, or only the old's or the new's
-  type Op = { kind: "same" | "change" | "moved" | "gone"; a: string; b: string; pairs?: ReadonlyArray<number> };
-  const ops: Array<Op> = a.slice(0, head).map((t) => ({ kind: "same", a: t, b: t }));
-  let i = 0;
-  let j = 0;
-  while (i < n || j < m) {
-    const ta = a[head + i];
-    const tb = b[head + j];
-    if (i < n && j < m && ta === tb && best[i * w + j] === best[(i + 1) * w + j + 1]! + 1 + weight(ta!)) {
-      ops.push({ kind: "same", a: ta!, b: tb! });
-      i++;
-      j++;
-    } else if (j >= m || (i < n && best[(i + 1) * w + j]! >= best[i * w + j + 1]!)) {
-      ops.push({ kind: "change", a: ta!, b: "" });
-      i++;
+  type Op = { kind: "same" | "change" | "moved" | "gone"; oldText: string; newText: string; pairs?: ReadonlyArray<number> };
+  const ops: Array<Op> = oldTokens.slice(0, head).map((token) => ({ kind: "same", oldText: token, newText: token }));
+  let oldIndex = 0;
+  let newIndex = 0;
+  while (oldIndex < oldMiddle || newIndex < newMiddle) {
+    const oldToken = oldTokens[head + oldIndex];
+    const newToken = newTokens[head + newIndex];
+    if (oldIndex < oldMiddle && newIndex < newMiddle && oldToken === newToken && best[oldIndex * width + newIndex] === best[(oldIndex + 1) * width + newIndex + 1]! + 1 + weight(oldToken!)) {
+      ops.push({ kind: "same", oldText: oldToken!, newText: newToken! });
+      oldIndex++;
+      newIndex++;
+    } else if (newIndex >= newMiddle || (oldIndex < oldMiddle && best[(oldIndex + 1) * width + newIndex]! >= best[oldIndex * width + newIndex + 1]!)) {
+      ops.push({ kind: "change", oldText: oldToken!, newText: "" });
+      oldIndex++;
     } else {
-      ops.push({ kind: "change", a: "", b: tb! });
-      j++;
+      ops.push({ kind: "change", oldText: "", newText: newToken! });
+      newIndex++;
     }
   }
-  ops.push(...a.slice(a.length - tail).map((t): Op => ({ kind: "same", a: t, b: t })));
+  ops.push(...oldTokens.slice(oldTokens.length - tail).map((token): Op => ({ kind: "same", oldText: token, newText: token })));
 
   // alike by what stayed in place: moves only change how a pair is drawn, so
   // a rewrite that happens to reuse words is not mistaken for a reorder
-  const code = (ts: ReadonlyArray<string>) => ts.reduce((s, t) => s + weight(t), 0);
-  const longer = Math.max(code(a), code(b));
-  const similarity = longer === 0 ? 0 : code(ops.filter((o) => o.kind === "same").map((o) => o.b)) / longer;
+  const code = (parts: ReadonlyArray<string>) => parts.reduce((total, token) => total + weight(token), 0);
+  const longer = Math.max(code(oldTokens), code(newTokens));
+  const similarity = longer === 0 ? 0 : code(ops.filter((operation) => operation.kind === "same").map((operation) => operation.newText)) / longer;
   moves(ops);
 
   // runs of one kind each; a kept run of only whitespace between two
   // changes joins them, so they read as one
   const runs: Array<Op> = [];
-  const join = (o: Op) => {
+  const join = (operation: Op) => {
     const last = runs[runs.length - 1];
-    if (last && last.kind === o.kind) runs[runs.length - 1] = { kind: o.kind, a: last.a + o.a, b: last.b + o.b, pairs: [...(last.pairs ?? []), ...(o.pairs ?? [])] };
-    else runs.push({ ...o });
+    if (last && last.kind === operation.kind) runs[runs.length - 1] = { kind: operation.kind, oldText: last.oldText + operation.oldText, newText: last.newText + operation.newText, pairs: [...(last.pairs ?? []), ...(operation.pairs ?? [])] };
+    else runs.push({ ...operation });
   };
   ops.forEach(join);
   const joined = runs.splice(0);
-  joined.forEach((r, k) => join(r.kind === "same" && joined[k - 1]?.kind === "change" && joined[k + 1]?.kind === "change" && blank(r.a) ? { ...r, kind: "change" } : r));
+  joined.forEach((run, position) => join(run.kind === "same" && joined[position - 1]?.kind === "change" && joined[position + 1]?.kind === "change" && blank(run.oldText) ? { ...run, kind: "change" } : run));
 
   // what the old line had there is removed, then what the new one has is
   // added; a move shows once, where it is now
   const segments: Array<Segment> = [];
-  let oa = 0;
-  let ob = 0;
-  for (const r of runs) {
-    if (r.kind === "same") segments.push({ kind: "same", text: r.b, at: ob });
-    else if (r.kind === "moved") segments.push({ kind: "moved", text: r.b, at: ob });
-    else if (r.kind === "change") {
+  let oldAt = 0;
+  let newAt = 0;
+  for (const run of runs) {
+    if (run.kind === "same") segments.push({ kind: "same", text: run.newText, at: newAt });
+    else if (run.kind === "moved") segments.push({ kind: "moved", text: run.newText, at: newAt });
+    else if (run.kind === "change") {
       // spacing alone (a line indented deeper, say) is not marked: an
       // underline under blanks reads as stray spaces; the ~ says it changed
-      if (r.a && !blank(r.a)) segments.push({ kind: "removed", text: r.a, at: oa });
-      if (r.b) segments.push({ kind: blank(r.b) ? "same" : "added", text: r.b, at: ob });
+      if (run.oldText && !blank(run.oldText)) segments.push({ kind: "removed", text: run.oldText, at: oldAt });
+      if (run.newText) segments.push({ kind: blank(run.newText) ? "same" : "added", text: run.newText, at: newAt });
     }
-    oa += r.a.length;
-    ob += r.b.length;
+    oldAt += run.oldText.length;
+    newAt += run.newText.length;
   }
 
   // where each kept or moved word of the new line stood in the old one
   const olds = new Map<number, number>();
-  let pa = 0;
-  for (const o of ops) {
-    if (o.kind === "gone") for (const p of o.pairs ?? []) olds.set(p, pa);
-    pa += o.a.length;
+  let oldPlace = 0;
+  for (const operation of ops) {
+    if (operation.kind === "gone") for (const pair of operation.pairs ?? []) olds.set(pair, oldPlace);
+    oldPlace += operation.oldText.length;
   }
   const map: Array<Was> = [];
-  pa = 0;
-  let pb = 0;
-  for (const o of ops) {
-    const from = o.kind === "same" && o.a === o.b ? pa : o.kind === "moved" ? olds.get(o.pairs?.[0] ?? -1) : undefined;
-    if (from !== undefined && o.b !== "") map.push({ now: pb, was: from, len: o.b.length });
-    pa += o.a.length;
-    pb += o.b.length;
+  oldPlace = 0;
+  let newPlace = 0;
+  for (const operation of ops) {
+    const from = operation.kind === "same" && operation.oldText === operation.newText ? oldPlace : operation.kind === "moved" ? olds.get(operation.pairs?.[0] ?? -1) : undefined;
+    if (from !== undefined && operation.newText !== "") map.push({ now: newPlace, was: from, length: operation.newText.length });
+    oldPlace += operation.oldText.length;
+    newPlace += operation.newText.length;
   }
 
   // nothing but order changed: how much moved
-  const movedWords = ops.filter((o) => o.kind === "moved" && word(o.b)).length;
-  const otherwise = ops.some((o) => o.kind === "change" && (word(o.a) || word(o.b)));
-  const reorder = movedWords > 0 && !otherwise ? { moved: movedWords, words: b.filter(word).length } : null;
+  const movedWords = ops.filter((operation) => operation.kind === "moved" && word(operation.newText)).length;
+  const otherwise = ops.some((operation) => operation.kind === "change" && (word(operation.oldText) || word(operation.newText)));
+  const reorder = movedWords > 0 && !otherwise ? { moved: movedWords, words: newTokens.filter(word).length } : null;
   return { similarity, segments, map, reorder };
 }
 
 /** A word that can move: two characters or more, so a stray "a" or "i" is never a move. */
-const word = (t: string) => t.length > 1 && /^[\p{L}\p{N}_$]/u.test(t);
+const word = (token: string) => token.length > 1 && /^[\p{L}\p{N}_$]/u.test(token);
 
 /** Words a line lost in one place and gained in another are a move: the
  *  gained one is marked moved, the lost one left out. Only where moving
@@ -178,30 +178,30 @@ const word = (t: string) => t.length > 1 && /^[\p{L}\p{N}_$]/u.test(t);
  *  Once anything moved, the punctuation and spacing the move shuffled (the
  *  commas and quotes of a reordered list) are matched the same way and read
  *  as kept. */
-function moves(ops: Array<{ kind: string; a: string; b: string; pairs?: ReadonlyArray<number> }>): void {
+function moves(ops: Array<{ kind: string; oldText: string; newText: string; pairs?: ReadonlyArray<number> }>): void {
   const match = (pred: (t: string) => boolean) => {
-    const left = ops.filter((o) => o.kind === "change" && o.a !== "" && pred(o.a));
+    const left = ops.filter((operation) => operation.kind === "change" && operation.oldText !== "" && pred(operation.oldText));
     const found: Array<[gone: (typeof ops)[number], came: (typeof ops)[number]]> = [];
-    for (const o of ops) {
-      if (o.kind !== "change" || o.b === "" || !pred(o.b)) continue;
-      const k = left.findIndex((g) => g.a === o.b);
-      if (k >= 0) found.push([left.splice(k, 1)[0]!, o]);
+    for (const operation of ops) {
+      if (operation.kind !== "change" || operation.newText === "" || !pred(operation.newText)) continue;
+      const lostIndex = left.findIndex((lost) => lost.oldText === operation.newText);
+      if (lostIndex >= 0) found.push([left.splice(lostIndex, 1)[0]!, operation]);
     }
     return found;
   };
   const words = match(word);
-  const moved = words.reduce((n, [, o]) => n + weight(o.b), 0);
+  const moved = words.reduce((total, [, came]) => total + weight(came.newText), 0);
   // words only: the commas and quotes a reorder shuffles are not other edits
-  const wordWeight = (t: string) => (word(t) ? weight(t) : 0);
-  const changed = ops.filter((o) => o.kind === "change").reduce((n, o) => n + wordWeight(o.a) + wordWeight(o.b), 0) - 2 * moved;
+  const wordWeight = (token: string) => (word(token) ? weight(token) : 0);
+  const changed = ops.filter((operation) => operation.kind === "change").reduce((total, operation) => total + wordWeight(operation.oldText) + wordWeight(operation.newText), 0) - 2 * moved;
   if (moved === 0 || moved < changed) return;
-  words.forEach(([gone, came], k) => {
+  words.forEach(([gone, came], pairIndex) => {
     gone.kind = "gone";
     came.kind = "moved";
-    gone.pairs = came.pairs = [k];
+    gone.pairs = came.pairs = [pairIndex];
   });
   // the shuffled punctuation is not numbered: it reads as kept
-  for (const [gone, came] of match((t) => !word(t))) {
+  for (const [gone, came] of match((token) => !word(token))) {
     gone.kind = "gone";
     came.kind = "same";
   }
@@ -213,89 +213,89 @@ function moves(ops: Array<{ kind: string; a: string; b: string; pairs?: Readonly
  *  rest stay removed and added lines, the removed above the added. */
 export function rowsOf(lines: ReadonlyArray<DiffLine>): ReadonlyArray<Row> {
   const rows: Array<Row> = [];
-  let k = 0;
-  while (k < lines.length) {
-    if (lines[k]!.kind !== "-") {
-      rows.push({ line: lines[k]!, index: k });
-      k++;
+  let index = 0;
+  while (index < lines.length) {
+    if (lines[index]!.kind !== "-") {
+      rows.push({ line: lines[index]!, index });
+      index++;
       continue;
     }
-    const r0 = k;
-    while (k < lines.length && lines[k]!.kind === "-") k++;
-    const a0 = k;
-    while (k < lines.length && lines[k]!.kind === "+") k++;
-    rows.push(...paired(lines, r0, a0, k));
+    const removedStart = index;
+    while (index < lines.length && lines[index]!.kind === "-") index++;
+    const addedStart = index;
+    while (index < lines.length && lines[index]!.kind === "+") index++;
+    rows.push(...paired(lines, removedStart, addedStart, index));
   }
   return rows;
 }
 
-/** One run of removed lines [r0, a0) and the added lines after it [a0, end). */
-function paired(lines: ReadonlyArray<DiffLine>, r0: number, a0: number, end: number): Array<Row> {
-  const n = a0 - r0;
-  const m = end - a0;
+/** One run of removed lines [removedStart, addedStart) and the added lines after it [addedStart, end). */
+function paired(lines: ReadonlyArray<DiffLine>, removedStart: number, addedStart: number, end: number): Array<Row> {
+  const removedCount = addedStart - removedStart;
+  const addedCount = end - addedStart;
   // a rewrite of thousands of lines is read as removed and added
-  if (n * m > MAX_RUN_CELLS) return lines.slice(r0, end).map((line, k) => ({ line, index: r0 + k }));
+  if (removedCount * addedCount > MAX_RUN_CELLS) return lines.slice(removedStart, end).map((line, offset) => ({ line, index: removedStart + offset }));
   const diffs = new Map<number, Diff>();
-  const at = (i: number, j: number) => i * (m + 1) + j;
-  // best[i,j]: the most similarity pairing removed i.. with added j.. can keep
-  const best = new Float64Array((n + 1) * (m + 1));
-  for (let i = n - 1; i >= 0; i--)
-    for (let j = m - 1; j >= 0; j--) {
+  const at = (removedIndex: number, addedIndex: number) => removedIndex * (addedCount + 1) + addedIndex;
+  // best[removedIndex,addedIndex]: the most similarity pairing the removed lines from removedIndex on with the added from addedIndex on can keep
+  const best = new Float64Array((removedCount + 1) * (addedCount + 1));
+  for (let removedIndex = removedCount - 1; removedIndex >= 0; removedIndex--)
+    for (let addedIndex = addedCount - 1; addedIndex >= 0; addedIndex--) {
       let pair = -1;
-      if (Math.abs(i - j) <= BAND) {
-        const d = alike(lines[r0 + i]!.text, lines[a0 + j]!.text);
-        if (d) {
-          diffs.set(at(i, j), d);
-          pair = best[at(i + 1, j + 1)]! + d.similarity;
+      if (Math.abs(removedIndex - addedIndex) <= BAND) {
+        const diff = alike(lines[removedStart + removedIndex]!.text, lines[addedStart + addedIndex]!.text);
+        if (diff) {
+          diffs.set(at(removedIndex, addedIndex), diff);
+          pair = best[at(removedIndex + 1, addedIndex + 1)]! + diff.similarity;
         }
       }
-      best[at(i, j)] = Math.max(pair, best[at(i + 1, j)]!, best[at(i, j + 1)]!);
+      best[at(removedIndex, addedIndex)] = Math.max(pair, best[at(removedIndex + 1, addedIndex)]!, best[at(removedIndex, addedIndex + 1)]!);
     }
   const rows: Array<Row> = [];
-  let i = 0;
-  let j = 0;
-  let ri = 0;
-  let aj = 0;
+  let removedIndex = 0;
+  let addedIndex = 0;
+  let restRemoved = 0;
+  let restAdded = 0;
   const rest = (toI: number, toJ: number) => {
-    for (; ri < toI; ri++) rows.push({ line: lines[r0 + ri]!, index: r0 + ri });
-    for (; aj < toJ; aj++) rows.push({ line: lines[a0 + aj]!, index: a0 + aj });
+    for (; restRemoved < toI; restRemoved++) rows.push({ line: lines[removedStart + restRemoved]!, index: removedStart + restRemoved });
+    for (; restAdded < toJ; restAdded++) rows.push({ line: lines[addedStart + restAdded]!, index: addedStart + restAdded });
   };
-  while (i < n && j < m) {
-    const d = diffs.get(at(i, j));
-    if (d && best[at(i, j)] === best[at(i + 1, j + 1)]! + d.similarity) {
-      rest(i, j);
-      rows.push({ line: lines[a0 + j]!, index: a0 + j, was: { line: lines[r0 + i]!, index: r0 + i, segments: d.segments, map: d.map, reorder: d.reorder } });
-      ri = ++i;
-      aj = ++j;
-    } else if (best[at(i + 1, j)] === best[at(i, j)]) i++;
-    else j++;
+  while (removedIndex < removedCount && addedIndex < addedCount) {
+    const diff = diffs.get(at(removedIndex, addedIndex));
+    if (diff && best[at(removedIndex, addedIndex)] === best[at(removedIndex + 1, addedIndex + 1)]! + diff.similarity) {
+      rest(removedIndex, addedIndex);
+      rows.push({ line: lines[addedStart + addedIndex]!, index: addedStart + addedIndex, was: { line: lines[removedStart + removedIndex]!, index: removedStart + removedIndex, segments: diff.segments, map: diff.map, reorder: diff.reorder } });
+      restRemoved = ++removedIndex;
+      restAdded = ++addedIndex;
+    } else if (best[at(removedIndex + 1, addedIndex)] === best[at(removedIndex, addedIndex)]) removedIndex++;
+    else addedIndex++;
   }
-  rest(n, m);
+  rest(removedCount, addedCount);
   return rows;
 }
 
 /** Two lines' word diff when they are alike enough to read as one. */
 function alike(old: string, now: string): Diff | null {
-  const code = (s: string) => s.replace(/\s+/g, "").length;
-  const [x, y] = [code(old), code(now)];
+  const code = (text: string) => text.replace(/\s+/g, "").length;
+  const [oldCode, newCode] = [code(old), code(now)];
   // even sharing all of the shorter, the longer would be mostly new
-  if (Math.min(x, y) < SIMILAR * Math.max(x, y)) return null;
-  const d = wordDiff(old, now);
-  return d && d.similarity >= SIMILAR ? d : null;
+  if (Math.min(oldCode, newCode) < SIMILAR * Math.max(oldCode, newCode)) return null;
+  const diff = wordDiff(old, now);
+  return diff && diff.similarity >= SIMILAR ? diff : null;
 }
 
 /** A line's coloured spans between two offsets, each with where it starts —
  *  how a segment takes its colour from the line it came from. Spans that do
  *  not cover the line's text are not trusted: the text is taken plain. */
 export function spansIn(spans: ReadonlyArray<Span>, text: string, from: number, to: number): Array<{ readonly span: Span; readonly at: number }> {
-  const all = spans.reduce((n, s) => n + s.value.length, 0) === text.length ? spans : [{ value: text }];
+  const all = spans.reduce((total, span) => total + span.value.length, 0) === text.length ? spans : [{ value: text }];
   const out: Array<{ span: Span; at: number }> = [];
-  let o = 0;
-  for (const s of all) {
-    const start = Math.max(o, from);
-    const end = Math.min(o + s.value.length, to);
-    if (start < end) out.push({ span: { ...s, value: s.value.slice(start - o, end - o) }, at: start });
-    o += s.value.length;
+  let offset = 0;
+  for (const span of all) {
+    const start = Math.max(offset, from);
+    const end = Math.min(offset + span.value.length, to);
+    if (start < end) out.push({ span: { ...span, value: span.value.slice(start - offset, end - offset) }, at: start });
+    offset += span.value.length;
   }
   return out;
 }

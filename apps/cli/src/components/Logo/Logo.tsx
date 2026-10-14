@@ -24,32 +24,32 @@ const glyphs = (() => {
   const font = fonts.tiny;
   const rows: string[] = Array.from({ length: font.lines }, () => "");
   const widths: number[] = [];
-  [...WORD.toUpperCase()].forEach((ch, i) => {
-    const g = (font.chars as Record<string, string[]>)[ch] ?? font.chars["?"];
-    if (i > 0) rows.forEach((_, r) => (rows[r] += font.letterspace[r] ?? " "));
-    rows.forEach((_, r) => (rows[r] += g[r] ?? ""));
-    widths.push(Math.max(...g.map((l) => [...l].length)));
+  [...WORD.toUpperCase()].forEach((letter, index) => {
+    const glyph = (font.chars as Record<string, string[]>)[letter] ?? font.chars["?"];
+    if (index > 0) rows.forEach((_, rowIndex) => (rows[rowIndex] += font.letterspace[rowIndex] ?? " "));
+    rows.forEach((_, rowIndex) => (rows[rowIndex] += glyph[rowIndex] ?? ""));
+    widths.push(Math.max(...glyph.map((line) => [...line].length)));
   });
-  const cells = rows.map((r) => [...r]);
+  const cells = rows.map((row) => [...row]);
   // +2: the row of air under the word, then the tagline
-  return { rows: cells, widths, w: Math.max(...cells.map((c) => c.length)), h: cells.length + 2 };
+  return { rows: cells, widths, w: Math.max(...cells.map((row) => row.length)), h: cells.length + 2 };
 })();
 
 /** One row of the logo, coloured per column, adjacent equal colours merged. */
 function Row({ cells, colors }: { cells: ReadonlyArray<string>; colors: ReadonlyArray<string | null> }) {
   const runs: Array<{ text: string; color: string | null }> = [];
-  cells.forEach((ch, i) => {
-    const color = colors[i] ?? null;
-    const shown = color === null ? " " : ch;
+  cells.forEach((cell, index) => {
+    const color = colors[index] ?? null;
+    const shown = color === null ? " " : cell;
     const last = runs[runs.length - 1];
     if (last && last.color === color) last.text += shown;
     else runs.push({ text: shown, color });
   });
   return (
     <text>
-      {runs.map((r, i) => (
-        <span key={i} fg={r.color ?? theme.dim}>
-          {r.text}
+      {runs.map((run, index) => (
+        <span key={index} fg={run.color ?? theme.dim}>
+          {run.text}
         </span>
       ))}
     </text>
@@ -83,16 +83,16 @@ export function Opening({ children }: { children: ReactNode }) {
   const room = useAtomValue(roomAtom);
   const up = AsyncResult.isSuccess(room) || AsyncResult.isFailure(room);
   const { width, height } = useTerminalDimensions();
-  const [t0] = useState(() => Date.now());
-  const [now, setNow] = useState(t0);
+  const [startedAt] = useState(() => Date.now());
+  const [now, setNow] = useState(startedAt);
   const [upAt, setUpAt] = useState<number | null>(null);
   useEffect(() => {
-    if (up && upAt === null) setUpAt(Date.now() - t0);
-  }, [up, upAt, t0]);
+    if (up && upAt === null) setUpAt(Date.now() - startedAt);
+  }, [up, upAt, startedAt]);
 
-  const t = now - t0;
-  const where = useMemo(() => opening(t, upAt, { cols: width, rows: height, w: glyphs.w, h: glyphs.h }), [t, upAt, width, height]);
-  const frame = useMemo(() => logoFrame(t, where.readyAt, glyphs.widths, TAGLINE, theme), [t, where.readyAt]);
+  const elapsed = now - startedAt;
+  const where = useMemo(() => opening(elapsed, upAt, { cols: width, rows: height, width: glyphs.w, height: glyphs.h }), [elapsed, upAt, width, height]);
+  const frame = useMemo(() => logoFrame(elapsed, where.readyAt, glyphs.widths, TAGLINE, { accent: theme.accent, foreground: theme.fg, dim: theme.dim }), [elapsed, where.readyAt]);
   const done = where.phase === "done";
 
   useEffect(() => {
@@ -111,8 +111,8 @@ export function Opening({ children }: { children: ReactNode }) {
   }
   return (
     <box flexDirection="column" marginLeft={where.x} marginTop={where.y} flexShrink={0}>
-      {glyphs.rows.map((cells, r) => (
-        <Row key={r} cells={cells} colors={frame.columns} />
+      {glyphs.rows.map((cells, index) => (
+        <Row key={index} cells={cells} colors={frame.columns} />
       ))}
       <text marginTop={1}>
         <span fg={frame.taglineColor}>{frame.tagline}</span>

@@ -11,20 +11,20 @@ import type { Hunk } from "./data";
 /** What a file's changes are, in a few characters: every line of every
  *  hunk of it, so a push that touches the file gives it a new one. */
 export const fingerprint = (hunks: ReadonlyArray<Hunk>): string => {
-  let h = 5381;
+  let hash = 5381;
   for (const hunk of hunks)
     for (const line of hunk.lines) {
-      const s = `${line.kind}${line.text}\n`;
-      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+      const text = `${line.kind}${line.text}\n`;
+      for (let index = 0; index < text.length; index++) hash = ((hash << 5) + hash + text.charCodeAt(index)) | 0;
     }
-  return (h >>> 0).toString(36);
+  return (hash >>> 0).toString(36);
 };
 
 /** Each file of the diff and its fingerprint. */
 export const fingerprints = (hunks: ReadonlyArray<Hunk>): ReadonlyMap<string, string> => {
   const byFile = new Map<string, Array<Hunk>>();
-  for (const h of hunks) byFile.set(h.file, [...(byFile.get(h.file) ?? []), h]);
-  return new Map([...byFile].map(([file, hs]) => [file, fingerprint(hs)]));
+  for (const hunk of hunks) byFile.set(hunk.file, [...(byFile.get(hunk.file) ?? []), hunk]);
+  return new Map([...byFile].map(([file, fileHunks]) => [file, fingerprint(fileHunks)]));
 };
 
 export type Viewed = "viewed" | "changed" | "unread";
@@ -32,6 +32,7 @@ export type Viewed = "viewed" | "changed" | "unread";
 /** A mark: the file's fingerprint when it was read, and the branch's commit
  *  then (from a clone), to show what moved since. */
 export interface Mark {
+  // oxlint-disable-next-line naming/no-shorthand-names -- stored in the browser as `fp`
   readonly fp: string;
   readonly at?: string;
 }
@@ -45,9 +46,9 @@ export const viewedState = (marks: Marks, file: string, now: string | undefined)
 export const readMarks = (raw: unknown): Marks => {
   if (!raw || typeof raw !== "object") return {};
   const out: Record<string, Mark> = {};
-  for (const [file, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof v === "string") out[file] = { fp: v };
-    else if (v && typeof v === "object" && typeof (v as Mark).fp === "string") out[file] = { fp: (v as Mark).fp, ...(typeof (v as Mark).at === "string" ? { at: (v as Mark).at } : {}) };
+  for (const [file, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string") out[file] = { fp: value };
+    else if (value && typeof value === "object" && typeof (value as Mark).fp === "string") out[file] = { fp: (value as Mark).fp, ...(typeof (value as Mark).at === "string" ? { at: (value as Mark).at } : {}) };
   }
   return out;
 };
@@ -82,7 +83,7 @@ export const viewedStore = (ticketId: string) => {
   };
   const count = () => {
     const files = [...now().keys()];
-    return { viewed: files.filter((f) => state(f) === "viewed").length, files: files.length };
+    return { viewed: files.filter((file) => state(file) === "viewed").length, files: files.length };
   };
   /** the commit a file was viewed at, when the page knew it */
   const viewedAt = (file: string): string | undefined => marks()[file]?.at;

@@ -43,7 +43,7 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
           Effect.gen(function* () {
             const { room } = yield* rooms.current;
             const peers = yield* SubscriptionRef.get(room.roster);
-            return { peers: peers.map((p) => ({ name: p.name, ai: p.ai, projects: p.projects.map((x) => x.name) })) };
+            return { peers: peers.map((peer) => ({ name: peer.name, ai: peer.ai, projects: peer.projects.map((project) => project.name) })) };
           }),
         ),
     });
@@ -69,7 +69,7 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
           Effect.gen(function* () {
             const { room } = yield* rooms.current;
             const peers = yield* SubscriptionRef.get(room.roster);
-            const found = resolveName(args.peer, [peers], (p) => p.key);
+            const found = resolveName(args.peer, [peers], (peer) => peer.key);
             if (found._tag !== "found") return { delivered: false, detail: noPeerNamed(args.peer, found, roomRollCall(peers, [], "")).replace(/^failed: /, "") };
             const target = found.value;
             return yield* room
@@ -99,7 +99,7 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
       execute: (args: { threadId?: string } | void) =>
         runP(
           rooms.current.pipe(
-            Effect.flatMap((h) => inbox.take(h.id, args?.threadId ?? undefined)),
+            Effect.flatMap((handle) => inbox.take(handle.id, args?.threadId ?? undefined)),
             Effect.map((messages) => ({ messages })),
           ),
         ),

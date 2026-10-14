@@ -9,36 +9,36 @@ import type { Imports } from "./units";
 // changed file by the path a PSR-4 autoloader would give them. Anything
 // else links nothing, and is a unit of its own.
 
-const JS = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+const JS_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 const JS_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
 /** The relative specifiers a JS/TS file names. */
 export const jsSpecifiers = (code: string): ReadonlyArray<string> => {
   const out = new Set<string>();
   const forms = [/\b(?:import|export)\s[^'"`;]*?\bfrom\s*["']([^"']+)["']/g, /\bimport\s*["']([^"']+)["']/g, /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g, /\brequire\s*\(\s*["']([^"']+)["']\s*\)/g];
-  for (const re of forms) for (const m of code.matchAll(re)) if (m[1]!.startsWith(".")) out.add(m[1]!);
+  for (const pattern of forms) for (const match of code.matchAll(pattern)) if (match[1]!.startsWith(".")) out.add(match[1]!);
   return [...out];
 };
 
 /** The class names a PHP file `use`s, as paths ("App\\Models\\User" → "App/Models/User"). */
 export const phpUses = (code: string): ReadonlyArray<string> =>
-  [...code.matchAll(/^\s*use\s+(?:function\s+|const\s+)?([A-Za-z_\\][A-Za-z0-9_\\]*)(?:\s+as\s+\w+)?\s*;/gm)].map((m) => m[1]!.replace(/^\\/, "").replace(/\\/g, "/"));
+  [...code.matchAll(/^\s*use\s+(?:function\s+|const\s+)?([A-Za-z_\\][A-Za-z0-9_\\]*)(?:\s+as\s+\w+)?\s*;/gm)].map((match) => match[1]!.replace(/^\\/, "").replace(/\\/g, "/"));
 
 /** A relative specifier, from a file, to the changed file it names. */
 const resolveJs = (from: string, spec: string, changed: ReadonlySet<string>): string | undefined => {
   const base = posix.normalize(posix.join(dirname(from), spec));
   const stem = base.replace(/\.(js|jsx|mjs|cjs)$/, "");
-  const tries = [base, ...JS_EXTENSIONS.map((e) => `${stem}${e}`), ...JS_EXTENSIONS.map((e) => `${base}/index${e}`)];
-  return tries.find((t) => changed.has(t));
+  const tries = [base, ...JS_EXTENSIONS.map((extension) => `${stem}${extension}`), ...JS_EXTENSIONS.map((extension) => `${base}/index${extension}`)];
+  return tries.find((candidate) => changed.has(candidate));
 };
 
 /** A PHP class path to the changed file a PSR-4 autoloader would load it
  *  from: the longest tail of its namespace the file's path ends with. */
 const resolvePhp = (path: string, changed: ReadonlyArray<string>): string | undefined => {
   const parts = path.split("/");
-  for (let i = 0; i < parts.length; i++) {
-    const tail = `${parts.slice(i).join("/")}.php`;
-    const hit = changed.find((f) => f === tail || f.endsWith(`/${tail}`));
+  for (let index = 0; index < parts.length; index++) {
+    const tail = `${parts.slice(index).join("/")}.php`;
+    const hit = changed.find((file) => file === tail || file.endsWith(`/${tail}`));
     if (hit) return hit;
   }
   return undefined;
@@ -48,17 +48,17 @@ const resolvePhp = (path: string, changed: ReadonlyArray<string>): string | unde
  *  text as the branch has it, or null. */
 export const importsAmong = (files: ReadonlyArray<string>, read: (file: string) => string | null): Imports => {
   const changed = new Set(files);
-  const php = files.filter((f) => f.endsWith(".php"));
+  const php = files.filter((file) => file.endsWith(".php"));
   const out = new Map<string, Set<string>>();
-  for (const f of files) {
-    const code = JS.test(f) || f.endsWith(".php") ? read(f) : null;
+  for (const file of files) {
+    const code = JS_FILE.test(file) || file.endsWith(".php") ? read(file) : null;
     if (code === null) continue;
     const to = new Set<string>();
-    if (JS.test(f)) for (const s of jsSpecifiers(code)) to.add(resolveJs(f, s, changed) ?? "");
-    else for (const u of phpUses(code)) to.add(resolvePhp(u, php) ?? "");
+    if (JS_FILE.test(file)) for (const specifier of jsSpecifiers(code)) to.add(resolveJs(file, specifier, changed) ?? "");
+    else for (const className of phpUses(code)) to.add(resolvePhp(className, php) ?? "");
     to.delete("");
-    to.delete(f);
-    if (to.size > 0) out.set(f, to);
+    to.delete(file);
+    if (to.size > 0) out.set(file, to);
   }
   return out;
 };

@@ -10,20 +10,20 @@ import { pathToFileURL } from "node:url";
 const require = createRequire(new URL("../../review-web/package.json", import.meta.url));
 const { decodeResponse } = await import(pathToFileURL(require.resolve("@solidjs/web/server-functions")).href);
 const argv = process.argv.slice(2);
-let res;
+let response;
 if (argv[0] === "post") {
   const [, url, args, origin] = argv;
-  res = await fetch(url, {
+  response = await fetch(url, {
     method: "POST",
     body: args,
     headers: { "Content-Type": "application/json", "X-Server-Function-Format": "8", Origin: origin ?? new URL(url).origin },
   });
 } else {
   const [url, host] = argv;
-  res = await fetch(url, host ? { headers: { host } } : {});
+  response = await fetch(url, host ? { headers: { host } } : {});
 }
-if (!res.ok) {
-  console.log(`HTTP ${res.status}`);
+if (!response.ok) {
+  console.log(`HTTP ${response.status}`);
   process.exit(0);
 }
-console.log(JSON.stringify((await decodeResponse(res)) ?? null));
+console.log(JSON.stringify((await decodeResponse(response)) ?? null));

@@ -9,16 +9,16 @@ import { bootstrapFile } from "../services/DevBootstrap";
 // (the public DHT hairpins on localhost). Keep this running, then start clients.
 const TestnetLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
+    const fileSystem = yield* FileSystem.FileSystem;
     // hyperdht ships no types
     const testnet = yield* Effect.acquireRelease(
       Effect.promise<any>(() => createTestnet(3)),
-      (t) => Effect.promise(() => t.destroy() as Promise<void>),
+      (running) => Effect.promise(() => running.destroy() as Promise<void>),
     );
-    yield* fs.makeDirectory(dirname(bootstrapFile), { recursive: true });
+    yield* fileSystem.makeDirectory(dirname(bootstrapFile), { recursive: true });
     // pid included so clients can detect a stale file from a killed testnet
-    yield* fs.writeFileString(bootstrapFile, JSON.stringify({ pid: process.pid, bootstrap: testnet.bootstrap }));
-    yield* Effect.addFinalizer(() => fs.remove(bootstrapFile).pipe(Effect.ignore));
+    yield* fileSystem.writeFileString(bootstrapFile, JSON.stringify({ pid: process.pid, bootstrap: testnet.bootstrap }));
+    yield* Effect.addFinalizer(() => fileSystem.remove(bootstrapFile).pipe(Effect.ignore));
     yield* Console.log("collagen dev testnet running.");
     yield* Console.log(`bootstrap: ${JSON.stringify(testnet.bootstrap)}`);
     yield* Console.log(`wrote ${bootstrapFile}`);

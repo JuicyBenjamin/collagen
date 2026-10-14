@@ -72,8 +72,8 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
   const convRef = useRef<BoxRenderable>(null);
   const [convHeight, setConvHeight] = useState(8);
   useEffect(() => {
-    const h = convRef.current?.height;
-    if (h && h > 0 && h !== convHeight) setConvHeight(h);
+    const height = convRef.current?.height;
+    if (height && height > 0 && height !== convHeight) setConvHeight(height);
   });
   const run = useAtomSet(runDiagnosticAtom);
   const openPage = useAtomSet(openReviewPageAtom);
@@ -89,15 +89,15 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
   // page with another ticket, and the cursor must not stay on the epic's list
   // — no section would hold it, and ← (back) would do nothing
   // (an epic's page places its own cursor, on its list)
-  const isEpic = tickets.find((t) => t.id === ticketId)?.kind === "epic";
+  const isEpic = tickets.find((candidate) => candidate.id === ticketId)?.kind === "epic";
   useEffect(() => {
     if (!isEpic && !PAGE_SECTIONS.includes(focus)) setFocus("ticket-steps");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- on each ticket opened
   }, [setFocus, ticketId, isEpic]);
 
-  const ticket = tickets.find((t) => t.id === ticketId);
+  const ticket = tickets.find((candidate) => candidate.id === ticketId);
   // a ticket still waiting on another is its author's alone — not opened by anyone else, however they got here
-  const gated = ticket !== undefined && !visibleTo(ticket, new Map(tickets.map((t) => [t.id, t])), identity?.pubkey ?? "");
+  const gated = ticket !== undefined && !visibleTo(ticket, new Map(tickets.map((candidate) => [candidate.id, candidate])), identity?.pubkey ?? "");
   if (!ticket || gated) {
     return (
       <text fg={theme.dim} marginTop={1}>
@@ -108,45 +108,45 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
-    key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
-  const review = reviews.find((r) => r.ticketId === ticket.id);
+    key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
+  const review = reviews.find((existing) => existing.ticketId === ticket.id);
   // an epic is a folder: a page of its own, its tickets rather than steps
   if (ticket.kind === "epic") {
-    const all = new Map(tickets.map((t) => [t.id, t]));
-    return <EpicPage epic={ticket} all={all} why={review} summaries={(t) => summarize(t, trace, me, heldBy(t, all), all)} nameFor={nameFor} me={me} />;
+    const all = new Map(tickets.map((candidate) => [candidate.id, candidate]));
+    return <EpicPage epic={ticket} all={all} why={review} summaries={(candidate) => summarize(candidate, trace, me, heldBy(candidate, all), all)} nameFor={nameFor} me={me} />;
   }
   const threads = ticketThreads(ticket);
-  const conversation = trace.filter((m) => aboutTicket(ticket, threads, m));
-  const byId = new Map(tickets.map((t) => [t.id, t]));
+  const conversation = trace.filter((message) => aboutTicket(ticket, threads, message));
+  const byId = new Map(tickets.map((candidate) => [candidate.id, candidate]));
   const waitsOn = heldBy(ticket, byId);
   const summary = summarize(ticket, trace, me, waitsOn);
   const now = Date.now();
-  const rows = conversation.map((m) => ({ kind: "msg" as const, id: m.id, m }));
+  const rows = conversation.map((message) => ({ kind: "msg" as const, id: message.id, m: message }));
   // files attached to this ticket: references from the log; the file is here
   // once fetched (or when we attached it)
-  const attachments = allAttachments.filter((a) => a.ticketId === ticket.id);
-  const online = (key: string) => key === me || peers.some((p) => p.key === key);
+  const attachments = allAttachments.filter((attachment) => attachment.ticketId === ticket.id);
+  const online = (key: string) => key === me || peers.some((peer) => peer.key === key);
   const aSel = clamp(attSel, 0, Math.max(0, attachments.length - 1));
   const fetchNote = AsyncResult.isSuccess(fetchOutcome) ? fetchOutcome.value : AsyncResult.isFailure(fetchOutcome) ? `failed: ${String(fetchOutcome.cause)}` : "";
   // every row in full: a head line (who → whom · intent) then its text, wrapped
   const textWidth = Math.max(30, width - 30);
-  const lines = rows.flatMap((r, row) => {
+  const lines = rows.flatMap((entry, row) => {
     const head = (
       <>
-        <Arrow from={nameFor(r.m.from)} to={nameFor(r.m.to)} mine={r.m.from === me} />
-        <span fg={theme.dim}> · {r.m.intent}</span>
+        <Arrow from={nameFor(entry.m.from)} to={nameFor(entry.m.to)} mine={entry.m.from === me} />
+        <span fg={theme.dim}> · {entry.m.intent}</span>
       </>
     );
-    const text = r.m.findings;
-    return [{ kind: "head" as const, row, head, text: "" }, ...wrap(text, textWidth).map((t) => ({ kind: "body" as const, row, head: null, text: t }))];
+    const text = entry.m.findings;
+    return [{ kind: "head" as const, row, head, text: "" }, ...wrap(text, textWidth).map((line) => ({ kind: "body" as const, row, head: null, text: line }))];
   });
-  const firstLineOf = (row: number) => lines.findIndex((l) => l.row === row);
-  const ctx = { roomId, ticketId };
-  const available = diagnostics.flatMap((d) => {
-    const params = d.fromContext(ctx);
-    return params === null ? [] : [{ d, params }];
+  const firstLineOf = (row: number) => lines.findIndex((line) => line.row === row);
+  const context = { roomId, ticketId };
+  const available = diagnostics.flatMap((diagnostic) => {
+    const params = diagnostic.fromContext(context);
+    return params === null ? [] : [{ diagnostic, params }];
   });
-  const done = ticket.steps.filter((s) => s.status === "settled").length;
+  const done = ticket.steps.filter((step) => step.status === "settled").length;
   // what has been said on it, not by whom — the steps below say who
   const people = marksLabel(summary);
   const glyph = summary.state === "done" ? "✓" : summary.state === "failed" ? "✗" : "⧉";
@@ -245,17 +245,17 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
           {(focused) => (
             <>
               <SectionTitle title="steps" note={`${done}/${ticket.steps.length} settled`} focused={focused} />
-              {ticket.steps.map((s, i) => (
-                <box key={s.id} flexDirection="column">
-                  <text fg={focused && i === sSel ? theme.accent : theme.fg} truncate wrapMode="none">
-                    {focused && i === sSel ? "› " : "  "}
-                    <span fg={s.status === "settled" ? theme.ok : s.status === "failed" ? theme.warn : theme.dim}>{STEP_GLYPH[s.status]}</span> {s.id}{" "}
-                    {nameFor(s.owner)} · {s.intent}
-                    {s.needs.length > 0 ? <span fg={theme.dim}> · needs {s.needs.join("+")}</span> : null}
+              {ticket.steps.map((step, index) => (
+                <box key={step.id} flexDirection="column">
+                  <text fg={focused && index === sSel ? theme.accent : theme.fg} truncate wrapMode="none">
+                    {focused && index === sSel ? "› " : "  "}
+                    <span fg={step.status === "settled" ? theme.ok : step.status === "failed" ? theme.warn : theme.dim}>{STEP_GLYPH[step.status]}</span> {step.id}{" "}
+                    {nameFor(step.owner)} · {step.intent}
+                    {step.needs.length > 0 ? <span fg={theme.dim}> · needs {step.needs.join("+")}</span> : null}
                   </text>
                   <text fg={theme.dim} wrapMode="word">
                     {"      "}
-                    {s.result ?? s.description}
+                    {step.result ?? step.description}
                   </text>
                 </box>
               ))}
@@ -276,13 +276,13 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
           onKey={(key) => {
             if (key.name === "up" && aSel > 0) return setAttSel(aSel - 1), true;
             if (key.name === "down" && aSel < attachments.length - 1) return setAttSel(aSel + 1), true;
-            const a = attachments[aSel];
-            if (!a) return false;
-            if (key.name === "y" && !held[a.id]) return fetch({ roomId, attachmentId: a.id }), true;
+            const attachment = attachments[aSel];
+            if (!attachment) return false;
+            if (key.name === "y" && !held[attachment.id]) return fetch({ roomId, attachmentId: attachment.id }), true;
             if (isEnter(key)) {
-              const file = held[a.id];
-              if (file && a.transcript) navigate(to.transcript(file, a.name, route));
-              else if (!file) fetch({ roomId, attachmentId: a.id });
+              const file = held[attachment.id];
+              if (file && attachment.transcript) navigate(to.transcript(file, attachment.name, route));
+              else if (!file) fetch({ roomId, attachmentId: attachment.id });
               return true;
             }
             return false;
@@ -291,21 +291,21 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
           {(focused) => (
             <>
               <SectionTitle title="attachments" note={`${attachments.length} file${attachments.length === 1 ? "" : "s"}${fetchNote ? ` · ${fetchNote}` : ""}`} focused={focused} />
-              {attachments.map((a, i) => (
-                <text key={a.id} fg={focused && i === aSel ? theme.accent : theme.fg} truncate wrapMode="none">
-                  {focused && i === aSel ? "› " : "  "}
-                  <span fg={held[a.id] ? theme.ok : theme.dim}>{held[a.id] ? "⇩" : "○"} </span>
-                  {a.name}
+              {attachments.map((attachment, index) => (
+                <text key={attachment.id} fg={focused && index === aSel ? theme.accent : theme.fg} truncate wrapMode="none">
+                  {focused && index === aSel ? "› " : "  "}
+                  <span fg={held[attachment.id] ? theme.ok : theme.dim}>{held[attachment.id] ? "⇩" : "○"} </span>
+                  {attachment.name}
                   <span fg={theme.dim}>
-                    {" "}· {a.transcript ? `${a.transcript.from}'s ${a.transcript.ai} conversation · ${a.transcript.entries} entries` : `${a.mime} · ${Math.max(1, Math.round(a.bytes / 1024))} kB`}
-                    {a.note ? ` · "${a.note}"` : ""} · {nameFor(a.holder)} {age(a.attachedAt, now)} ago ·{" "}
+                    {" "}· {attachment.transcript ? `${attachment.transcript.from}'s ${attachment.transcript.ai} conversation · ${attachment.transcript.entries} entries` : `${attachment.mime} · ${Math.max(1, Math.round(attachment.bytes / 1024))} kB`}
+                    {attachment.note ? ` · "${attachment.note}"` : ""} · {nameFor(attachment.holder)} {age(attachment.attachedAt, now)} ago ·{" "}
                   </span>
-                  {held[a.id] ? (
-                    <span fg={theme.ok}>{a.transcript ? "here · enter reads it" : `here · ${held[a.id]}`}</span>
-                  ) : online(a.holder) ? (
+                  {held[attachment.id] ? (
+                    <span fg={theme.ok}>{attachment.transcript ? "here · enter reads it" : `here · ${held[attachment.id]}`}</span>
+                  ) : online(attachment.holder) ? (
                     <span fg={theme.warn}>y fetch</span>
                   ) : (
-                    <span fg={theme.dim}>{nameFor(a.holder)} is offline — fetch when they are</span>
+                    <span fg={theme.dim}>{nameFor(attachment.holder)} is offline — fetch when they are</span>
                   )}
                 </text>
               ))}
@@ -345,10 +345,10 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
                   {"  "}nothing said yet
                 </text>
               ) : (
-                lines.slice(lineStart, lineStart + CONVERSATION_HEIGHT).map((l, i) => (
-                  <text key={`${l.row}-${i}`} fg={l.kind === "head" ? (focused && l.row === mSel ? theme.accent : theme.fg) : theme.dim} truncate wrapMode="none">
-                    {l.kind === "head" ? (focused && l.row === mSel ? "› " : "  ") : "      "}
-                    {l.kind === "head" ? l.head : l.text}
+                lines.slice(lineStart, lineStart + CONVERSATION_HEIGHT).map((line, index) => (
+                  <text key={`${line.row}-${index}`} fg={line.kind === "head" ? (focused && line.row === mSel ? theme.accent : theme.fg) : theme.dim} truncate wrapMode="none">
+                    {line.kind === "head" ? (focused && line.row === mSel ? "› " : "  ") : "      "}
+                    {line.kind === "head" ? line.head : line.text}
                   </text>
                 ))
               )}
@@ -368,10 +368,10 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
           if (key.name === "left" && dSel > 0) return setDiagSel(dSel - 1), true;
           if (key.name === "right" && dSel < available.length - 1) return setDiagSel(dSel + 1), true;
           if (isEnter(key)) {
-            const x = available[dSel];
-            if (x) {
-              if (x.d.open) navigate(x.d.open(ctx, route));
-              else run({ id: x.d.id, params: x.params, ctx });
+            const entry = available[dSel];
+            if (entry) {
+              if (entry.diagnostic.open) navigate(entry.diagnostic.open(context, route));
+              else run({ id: entry.diagnostic.id, params: entry.params, context });
             }
             return true;
           }
@@ -382,11 +382,11 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
           <>
             <text truncate wrapMode="none">
               <span fg={focused ? theme.accent : theme.dim}>diagnostics</span>
-              {available.map(({ d }, i) => (
-                <span key={d.id} fg={focused && i === dSel ? theme.accent : theme.dim}>
+              {available.map(({ diagnostic }, index) => (
+                <span key={diagnostic.id} fg={focused && index === dSel ? theme.accent : theme.dim}>
                   {"   "}
-                  {focused && i === dSel ? "› " : "  "}
-                  {d.title}
+                  {focused && index === dSel ? "› " : "  "}
+                  {diagnostic.title}
                 </span>
               ))}
             </text>

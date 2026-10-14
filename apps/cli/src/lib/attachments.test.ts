@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { describeFile, mimeOf, packBytes, safeName, unpackBytes } from "./attachments";
 
-const tmp = () => mkdtempSync(join(tmpdir(), "collagen-attach-"));
+const makeDirectory = () => mkdtempSync(join(tmpdir(), "collagen-attach-"));
 
 describe("attachments", () => {
   it("bytes survive the wire packing", () => {
@@ -19,13 +19,13 @@ describe("attachments", () => {
   });
 
   it("describes a plain file, and a transcript by its meta file", () => {
-    const dir = tmp();
+    const dir = makeDirectory();
     writeFileSync(join(dir, "shot.png"), Buffer.alloc(10));
     expect(describeFile(join(dir, "shot.png"))).toEqual({ file: join(dir, "shot.png"), name: "shot.png", bytes: 10, mime: "image/png" });
-    const t = join(dir, "bob-0123456789abcdef.codex.jsonl");
-    writeFileSync(t, "{}\n{}\n");
-    writeFileSync(`${t}.meta.json`, JSON.stringify({ subject: "thread-0123456789abcdef", from: "bob", fromKey: "k", ai: "codex", threadId: "0123456789abcdef", sessionId: "s", since: 5, entries: 2, receivedAt: 9, requestId: "r" }));
-    expect(describeFile(t)?.transcript).toEqual({ from: "bob", ai: "codex", threadId: "0123456789abcdef", sessionId: "s", entries: 2, since: 5, origin: "thread-0123456789abcdef" });
+    const transcriptFile = join(dir, "bob-0123456789abcdef.codex.jsonl");
+    writeFileSync(transcriptFile, "{}\n{}\n");
+    writeFileSync(`${transcriptFile}.meta.json`, JSON.stringify({ subject: "thread-0123456789abcdef", from: "bob", fromKey: "k", ai: "codex", threadId: "0123456789abcdef", sessionId: "s", since: 5, entries: 2, receivedAt: 9, requestId: "r" }));
+    expect(describeFile(transcriptFile)?.transcript).toEqual({ from: "bob", ai: "codex", threadId: "0123456789abcdef", sessionId: "s", entries: 2, since: 5, origin: "thread-0123456789abcdef" });
     mkdirSync(join(dir, "d"));
     expect(describeFile(join(dir, "d"))).toBeNull();
     expect(describeFile(join(dir, "missing"))).toBeNull();

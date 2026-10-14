@@ -29,10 +29,10 @@ const load = () => Manifest.fromManifest(github, github.repository.defaultBranch
 // 1. a merged release PR → tags + GitHub releases
 const releases = (await (await load()).createReleases()).filter(Boolean);
 output("releases_created", releases.length > 0);
-for (const r of releases) {
-  output(pathKey(r.path ?? ".", "release_created"), true);
-  output(pathKey(r.path ?? ".", "tag_name"), r.tagName);
-  output(pathKey(r.path ?? ".", "version"), String(r.version ?? ""));
+for (const release of releases) {
+  output(pathKey(release.path ?? ".", "release_created"), true);
+  output(pathKey(release.path ?? ".", "tag_name"), release.tagName);
+  output(pathKey(release.path ?? ".", "version"), String(release.version ?? ""));
 }
 
 // 2. pending conventional commits → the release PR

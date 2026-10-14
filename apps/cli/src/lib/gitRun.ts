@@ -8,8 +8,8 @@ import { Effect } from "effect";
  *  network all degrade the page, they do not break it. */
 export const run = (cmd: string, args: ReadonlyArray<string>, cwd: string | undefined, timeoutMs: number): Effect.Effect<string | null> =>
   Effect.callback<string | null>((resume) => {
-    const child = execFile(cmd, [...args], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "utf8" }, (err, stdout) =>
-      resume(Effect.succeed(err ? null : stdout)),
+    const child = execFile(cmd, [...args], { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: "utf8" }, (error, stdout) =>
+      resume(Effect.succeed(error ? null : stdout)),
     );
     return Effect.sync(() => child.kill());
   });

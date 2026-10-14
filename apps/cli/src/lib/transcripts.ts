@@ -24,11 +24,11 @@ function walk(dir: string, depth = 6): Array<string> {
     return [];
   }
   const out: Array<string> = [];
-  for (const n of names) {
-    const p = join(dir, n);
+  for (const name of names) {
+    const path = join(dir, name);
     try {
-      if (statSync(p).isDirectory()) out.push(...walk(p, depth - 1));
-      else out.push(p);
+      if (statSync(path).isDirectory()) out.push(...walk(path, depth - 1));
+      else out.push(path);
     } catch {
       /* vanished — skip */
     }
@@ -42,13 +42,13 @@ function walk(dir: string, depth = 6): Array<string> {
  *  Codex: `<codex>/sessions/YYYY/MM/DD/rollout-<ts>-<threadId>.jsonl` (the
  *  layout is mid-migration to "paginated thread history", so any `.jsonl`
  *  under sessions whose name carries the id counts). */
-export function sessionFile(ai: string, sessionId: string, dirs: SessionDirs): string | null {
+export function sessionFile(provider: string, sessionId: string, dirs: SessionDirs): string | null {
   if (sessionId.length < 8 || /[/\\]/.test(sessionId)) return null;
-  if (ai === "claude-code") {
-    return walk(join(dirs.claude, "projects"), 2).find((p) => p.endsWith(`/${sessionId}.jsonl`)) ?? null;
+  if (provider === "claude-code") {
+    return walk(join(dirs.claude, "projects"), 2).find((file) => file.endsWith(`/${sessionId}.jsonl`)) ?? null;
   }
-  if (ai === "codex") {
-    return walk(join(dirs.codex, "sessions")).find((p) => p.endsWith(".jsonl") && p.includes(sessionId)) ?? null;
+  if (provider === "codex") {
+    return walk(join(dirs.codex, "sessions")).find((file) => file.endsWith(".jsonl") && file.includes(sessionId)) ?? null;
   }
   return null;
 }
@@ -62,22 +62,22 @@ export function sliceSince(jsonl: string, since: number): { readonly lines: Read
   for (const raw of jsonl.split("\n")) {
     const line = raw.trim();
     if (line.length === 0) continue;
-    let obj: { timestamp?: unknown; type?: unknown };
+    let parsed: { timestamp?: unknown; type?: unknown };
     try {
-      obj = JSON.parse(line) as typeof obj;
+      parsed = JSON.parse(line) as typeof parsed;
     } catch {
       continue;
     }
-    if (obj.type === "session_meta") {
+    if (parsed.type === "session_meta") {
       lines.push(line);
       continue;
     }
-    const ts = typeof obj.timestamp === "string" ? Date.parse(obj.timestamp) : typeof obj.timestamp === "number" ? obj.timestamp : NaN;
-    if (Number.isNaN(ts)) {
+    const at = typeof parsed.timestamp === "string" ? Date.parse(parsed.timestamp) : typeof parsed.timestamp === "number" ? parsed.timestamp : NaN;
+    if (Number.isNaN(at)) {
       lines.push(line); // no stamp: keep, it belongs to whatever surrounds it
       continue;
     }
-    if (ts >= since) {
+    if (at >= since) {
       lines.push(line);
       entries++;
     }
@@ -99,47 +99,47 @@ const textOf = (content: unknown): string => {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .map((p: unknown) => {
-      if (typeof p === "string") return p;
-      if (!p || typeof p !== "object") return "";
-      const part = p as { type?: string; text?: string; name?: string; input?: unknown; content?: unknown };
+    .map((item: unknown) => {
+      if (typeof item === "string") return item;
+      if (!item || typeof item !== "object") return "";
+      const part = item as { type?: string; text?: string; name?: string; input?: unknown; content?: unknown };
       if (typeof part.text === "string") return part.text;
       if (part.type === "thinking") return "(thinking)";
       if (part.type === "tool_use") return `⚙ ${part.name ?? "tool"} ${JSON.stringify(part.input ?? {}).slice(0, 200)}`;
       if (part.type === "tool_result") return `↳ ${textOf(part.content).slice(0, 200)}`;
       return "";
     })
-    .filter((s) => s.length > 0)
+    .filter((text) => text.length > 0)
     .join("\n");
 };
 
 export function readLine(raw: string): TranscriptLine | null {
-  let o: Record<string, unknown>;
+  let record: Record<string, unknown>;
   try {
-    o = JSON.parse(raw) as Record<string, unknown>;
+    record = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return null;
   }
-  const ts = typeof o.timestamp === "string" ? o.timestamp : null;
-  const type = typeof o.type === "string" ? o.type : "";
-  const payload = o.payload && typeof o.payload === "object" ? (o.payload as Record<string, unknown>) : null;
+  const stamp = typeof record.timestamp === "string" ? record.timestamp : null;
+  const type = typeof record.type === "string" ? record.type : "";
+  const payload = record.payload && typeof record.payload === "object" ? (record.payload as Record<string, unknown>) : null;
   // codex rollout
-  if (type === "session_meta" && payload) return { ts, who: "session", text: `${String(payload.originator ?? "codex")} · ${String(payload.cwd ?? "")}` };
+  if (type === "session_meta" && payload) return { ts: stamp, who: "session", text: `${String(payload.originator ?? "codex")} · ${String(payload.cwd ?? "")}` };
   if (type === "response_item" && payload) {
-    if (payload.type === "message") return { ts, who: String(payload.role ?? "message"), text: textOf(payload.content) };
-    if (payload.type === "reasoning") return { ts, who: "reasoning", text: textOf(payload.summary) || "(reasoning, encrypted)" };
-    if (payload.type === "function_call") return { ts, who: "tool call", text: `⚙ ${String(payload.name ?? "")} ${String(payload.arguments ?? "").slice(0, 200)}` };
-    if (payload.type === "function_call_output") return { ts, who: "tool result", text: `↳ ${String(payload.output ?? "").slice(0, 200)}` };
-    return { ts, who: String(payload.type ?? "item"), text: "" };
+    if (payload.type === "message") return { ts: stamp, who: String(payload.role ?? "message"), text: textOf(payload.content) };
+    if (payload.type === "reasoning") return { ts: stamp, who: "reasoning", text: textOf(payload.summary) || "(reasoning, encrypted)" };
+    if (payload.type === "function_call") return { ts: stamp, who: "tool call", text: `⚙ ${String(payload.name ?? "")} ${String(payload.arguments ?? "").slice(0, 200)}` };
+    if (payload.type === "function_call_output") return { ts: stamp, who: "tool result", text: `↳ ${String(payload.output ?? "").slice(0, 200)}` };
+    return { ts: stamp, who: String(payload.type ?? "item"), text: "" };
   }
   if (type === "event_msg" || type === "turn_context") return null;
   // claude code session
-  if ((type === "user" || type === "assistant") && o.message && typeof o.message === "object") {
-    const m = o.message as { role?: string; content?: unknown };
-    return { ts, who: m.role ?? type, text: textOf(m.content) };
+  if ((type === "user" || type === "assistant") && record.message && typeof record.message === "object") {
+    const message = record.message as { role?: string; content?: unknown };
+    return { ts: stamp, who: message.role ?? type, text: textOf(message.content) };
   }
-  if (type === "system") return { ts, who: "system", text: typeof o.content === "string" ? o.content : String(o.subtype ?? "") };
-  if (type === "queue-operation") return { ts, who: `collagen (${String(o.operation ?? "queue")})`, text: typeof o.content === "string" ? o.content : "" };
+  if (type === "system") return { ts: stamp, who: "system", text: typeof record.content === "string" ? record.content : String(record.subtype ?? "") };
+  if (type === "queue-operation") return { ts: stamp, who: `collagen (${String(record.operation ?? "queue")})`, text: typeof record.content === "string" ? record.content : "" };
   // anything else with nothing to say is bookkeeping, not conversation
   return null;
 }

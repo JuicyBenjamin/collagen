@@ -33,7 +33,7 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
     // OpenTUI owns the terminal: alternate screen, raw input, in-place redraw.
     const renderer = yield* Effect.acquireRelease(
       Effect.promise(() => createCliRenderer({ screenMode: "alternate-screen", exitOnCtrlC: true })),
-      (r) => Effect.sync(() => r.destroy()),
+      (cliRenderer) => Effect.sync(() => cliRenderer.destroy()),
     );
 
     yield* Effect.acquireRelease(

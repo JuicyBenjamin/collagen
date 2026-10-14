@@ -34,10 +34,10 @@ export const mergesRoom: string | null = (() => {
 
 /** #<project>/<number>: the merge the page opens at, its why open. */
 const target: { readonly project: string; readonly number: number } | null = (() => {
-  const m = /^#(.+)\/(\d+)$/.exec(location.hash);
-  if (!m) return null;
+  const match = /^#(.+)\/(\d+)$/.exec(location.hash);
+  if (!match) return null;
   try {
-    return { project: decodeURIComponent(m[1]!), number: Number(m[2]) };
+    return { project: decodeURIComponent(match[1]!), number: Number(match[2]) };
   } catch {
     return null;
   }
@@ -83,17 +83,17 @@ export function MergesApp(props: { roomId: string }) {
   };
   const more = (project: string, count: number) => {
     setRefreshing(false);
-    setShown((s) => ((s[project] ?? 0) >= count + PAGE ? s : { ...s, [project]: count + PAGE }));
+    setShown((previous) => ((previous[project] ?? 0) >= count + PAGE ? previous : { ...previous, [project]: count + PAGE }));
   };
   const refresh = () => {
     setRefreshing(true);
     setShown({});
-    setRefreshes((n) => n + 1);
+    setRefreshes((previous) => previous + 1);
   };
   return (
     <Errored
-      fallback={(err) => (
-        <p class="failed">{err() instanceof Error ? (err() as Error).message : String(err())}</p>
+      fallback={(error) => (
+        <p class="failed">{error() instanceof Error ? (error() as Error).message : String(error())}</p>
       )}
     >
       <Loading fallback={<p class="loading">Loading the merges…</p>}>
@@ -117,18 +117,18 @@ function Page(props: {
   let found = target === null;
   createEffect(
     () => props.data,
-    (d) => {
+    (data) => {
       if (found || !target) return;
-      const p = d.projects.find((x) => x.project === target.project);
-      if (!p || "none" in p) return void (found = true);
-      if (p.merges.some((m) => m.number === target.number)) {
+      const project = data.projects.find((entry) => entry.project === target.project);
+      if (!project || "none" in project) return void (found = true);
+      if (project.merges.some((merge) => merge.number === target.number)) {
         found = true;
         requestAnimationFrame(() =>
           document
             .getElementById(mergeId(target.project, target.number))
             ?.scrollIntoView({ block: "start", behavior: "instant" }),
         );
-      } else if (p.more) props.more(p.project, p.merges.length);
+      } else if (project.more) props.more(project.project, project.merges.length);
       else found = true;
     },
   );
@@ -145,10 +145,10 @@ function Page(props: {
         <p class="meta">
           {props.data.room}
           <Show when={single()}>
-            {(p) => (
+            {(only) => (
               <>
                 {" · into "}
-                <code>{p().base}</code>
+                <code>{only().base}</code>
               </>
             )}
           </Show>
@@ -168,7 +168,7 @@ function Page(props: {
         fallback={<p class="merges-none">No projects here</p>}
       >
         <For each={props.data.projects}>
-          {(p) => <Project project={p} named={!single()} more={props.more} />}
+          {(project) => <Project project={project} named={!single()} more={props.more} />}
         </For>
       </Show>
     </main>
@@ -183,50 +183,50 @@ function Project(props: {
   named: boolean;
   more: (project: string, count: number) => void;
 }) {
-  const p = () => props.project;
+  const projectHistory = () => props.project;
   const [near, setNear] = createSignal(false);
   let seen: IntersectionObserver | undefined;
-  const watch = (el: HTMLElement) => {
+  const watch = (element: HTMLElement) => {
     seen?.disconnect();
-    seen = new IntersectionObserver(([e]) => setNear(e!.isIntersecting), {
+    seen = new IntersectionObserver(([entry]) => setNear(entry!.isIntersecting), {
       rootMargin: "0px 0px 800px 0px",
     });
-    seen.observe(el);
+    seen.observe(element);
   };
   onCleanup(() => seen?.disconnect());
   // near the end, and still near once the new ones are in: more again
   createEffect(
     () => {
-      const v = p();
-      return near() && "merges" in v && v.more ? v.merges.length : null;
+      const current = projectHistory();
+      return near() && "merges" in current && current.more ? current.merges.length : null;
     },
     (count) => {
-      if (count !== null) props.more(p().project, count);
+      if (count !== null) props.more(projectHistory().project, count);
     },
   );
   return (
     <section class="merges-project">
       <Show when={props.named}>
         <h2>
-          {p().project}
+          {projectHistory().project}
           <span class="merges-project-note">
             {(() => {
-              const v = p();
-              return "none" in v ? ` · ${v.none}` : ` · into ${v.base}`;
+              const current = projectHistory();
+              return "none" in current ? ` · ${current.none}` : ` · into ${current.base}`;
             })()}
           </span>
         </h2>
       </Show>
       <Show
-        when={"merges" in p() ? (p() as Extract<ProjectHistory, { merges: unknown }>).merges : null}
+        when={"merges" in projectHistory() ? (projectHistory() as Extract<ProjectHistory, { merges: unknown }>).merges : null}
       >
         {(merges) => (
           <Show when={merges().length > 0} fallback={<p class="merges-none">None</p>}>
             <ol class="timeline">
-              <For each={merges()}>{(m) => <Merge merge={m} project={p().project} />}</For>
+              <For each={merges()}>{(merge) => <Merge merge={merge} project={projectHistory().project} />}</For>
             </ol>
             <Show
-              when={"more" in p() && (p() as Extract<ProjectHistory, { merges: unknown }>).more}
+              when={"more" in projectHistory() && (projectHistory() as Extract<ProjectHistory, { merges: unknown }>).more}
             >
               <p class="merges-more" ref={watch}>
                 Loading…
@@ -242,32 +242,32 @@ function Project(props: {
 /** A merge: its pull request's title (its branch when it has none), its
  *  number, branch and when — then the tickets it came from. */
 function Merge(props: { merge: MergeEntry; project: string }) {
-  const m = () => props.merge;
+  const merge = () => props.merge;
   const opened =
     target !== null && target.project === props.project && target.number === props.merge.number;
   return (
     <li class={{ merge: true, target: opened }} id={mergeId(props.project, props.merge.number)}>
       <p class="merge-title">
-        <a href={m().url} target="_blank" rel="noreferrer">
-          {m().title || m().branch}
+        <a href={merge().url} target="_blank" rel="noreferrer">
+          {merge().title || merge().branch}
         </a>
       </p>
       <p class="merge-info">
-        #{m().number} · <code>{m().branch}</code> ·{" "}
-        <time datetime={m().at}>{ago(Date.parse(m().at), now())}</time>
+        #{merge().number} · <code>{merge().branch}</code> ·{" "}
+        <time datetime={merge().at}>{ago(Date.parse(merge().at), now())}</time>
       </p>
-      <Show when={m().epics.length > 0}>
+      <Show when={merge().epics.length > 0}>
         <p class="merge-epics">
           <KindIcon kind="epic" />
-          {m()
-            .epics.map((e) => e.name)
+          {merge()
+            .epics.map((epic) => epic.name)
             .join(" · ")}
         </p>
       </Show>
-      <Show when={m().tickets.length > 0}>
+      <Show when={merge().tickets.length > 0}>
         <ul class="lineage">
-          <For each={m().tickets}>
-            {(t) => <Lineage ticket={t} open={opened && t.kind === "review"} />}
+          <For each={merge().tickets}>
+            {(ticket) => <Lineage ticket={ticket} open={opened && ticket.kind === "review"} />}
           </For>
         </ul>
       </Show>
@@ -279,7 +279,7 @@ function Merge(props: { merge: MergeEntry; project: string }) {
  *  review links to its page), whose it is when not the reader's, and its
  *  why, folded under it. */
 function Lineage(props: { ticket: MergeTicket; open: boolean }) {
-  const t = () => props.ticket;
+  const ticket = () => props.ticket;
   // open is what the reader asked; shown keeps the why placed while it closes
   const [open, setOpen] = createSignal(props.open);
   const [shown, setShown] = createSignal(props.open);
@@ -292,18 +292,18 @@ function Lineage(props: { ticket: MergeTicket; open: boolean }) {
     await leave(box);
     if (!open()) setShown(false);
   };
-  const count = () => t().decisions.length;
+  const count = () => ticket().decisions.length;
   return (
-    <li class={["lineage-item", t().kind, { closed: t().closed, open: open() }]}>
+    <li class={["lineage-item", ticket().kind, { closed: ticket().closed, open: open() }]}>
       <div class="lineage-row">
-        <KindIcon kind={t().kind} />
-        <Show when={t().kind === "review"} fallback={<span class="lineage-name">{t().name}</span>}>
-          <a class="lineage-name" href={`/review/${encodeURIComponent(t().id)}`}>
-            {t().name}
+        <KindIcon kind={ticket().kind} />
+        <Show when={ticket().kind === "review"} fallback={<span class="lineage-name">{ticket().name}</span>}>
+          <a class="lineage-name" href={`/review/${encodeURIComponent(ticket().id)}`}>
+            {ticket().name}
           </a>
         </Show>
-        <Show when={!t().mine}>
-          <span class="lineage-by">{t().author}</span>
+        <Show when={!ticket().mine}>
+          <span class="lineage-by">{ticket().author}</span>
         </Show>
         <Show when={count() > 0}>
           <button
@@ -332,22 +332,22 @@ function Lineage(props: { ticket: MergeTicket; open: boolean }) {
       <Show when={shown() && count() > 0}>
         <div
           class="lineage-open"
-          ref={(el) => {
-            box = el;
-            if (toggled) enter(el);
+          ref={(element) => {
+            box = element;
+            if (toggled) enter(element);
           }}
         >
           <div class="lineage-decisions">
-            <For each={t().decisions}>
-              {(d) => (
+            <For each={ticket().decisions}>
+              {(decision) => (
                 <div class="lineage-decision">
-                  <p class="lineage-decision-title">{d.title}</p>
-                  <Show when={d.title !== d.what}>
-                    <p>{d.what}</p>
+                  <p class="lineage-decision-title">{decision.title}</p>
+                  <Show when={decision.title !== decision.what}>
+                    <p>{decision.what}</p>
                   </Show>
-                  <Show when={d.userWhy}>{(w) => <blockquote>{w()}</blockquote>}</Show>
-                  <Show when={d.agentWhy}>
-                    {(w) => <p class="lineage-decision-agent">{w()}</p>}
+                  <Show when={decision.userWhy}>{(why) => <blockquote>{why()}</blockquote>}</Show>
+                  <Show when={decision.agentWhy}>
+                    {(why) => <p class="lineage-decision-agent">{why()}</p>}
                   </Show>
                 </div>
               )}

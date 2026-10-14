@@ -18,8 +18,8 @@ export function Peers() {
   const { navigate } = useRouter();
   const people = useRoomPeople();
   const [width, setWidth] = useState<number | undefined>(undefined);
-  const here = people.filter((p) => p.online);
-  const rest = people.filter((p) => !p.online);
+  const here = people.filter((person) => person.online);
+  const rest = people.filter((person) => !person.online);
 
   return (
     <Focusable
@@ -52,18 +52,18 @@ export function useRoomPeople(): ReadonlyArray<Person> {
   const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => "…");
   const me = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null)?.pubkey ?? "";
   const state = useAtomValue(stateAtom);
-  const ai = AsyncResult.getOrElse(state, () => ({ preferredAi: null })).preferredAi;
+  const preferredAi = AsyncResult.getOrElse(state, () => ({ preferredAi: null })).preferredAi;
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const projects = AsyncResult.isSuccess(state) ? (state.value.rooms[roomId] ?? []).length : 0;
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
   const roster = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
-  return roomPeople({ key: me, name: myName, ai, aiStatus, projects }, roster, members);
+  return roomPeople({ key: me, name: myName, ai: preferredAi, aiStatus, projects }, roster, members);
 }
 
 /** One line of names after its mark, as many as fit, then `…`. */
 function NamesLine({ mark, markColor, people, width, cursor }: { mark: string; markColor: string; people: ReadonlyArray<Person>; width: number | undefined; cursor: boolean }) {
-  const names = people.map((p) => (p.you ? "you" : p.name));
+  const names = people.map((person) => (person.you ? "you" : person.name));
   // the cursor, the mark and a space before the names
   const fit = width === undefined ? { shown: names.length, more: false } : fitNames(names, Math.max(1, width - 4));
   return (
@@ -71,10 +71,10 @@ function NamesLine({ mark, markColor, people, width, cursor }: { mark: string; m
       <span fg={theme.accent}>{cursor ? "› " : "  "}</span>
       <span fg={markColor}>{mark} </span>
       {people.length === 0 ? <span fg={theme.dim}>none</span> : null}
-      {people.slice(0, fit.shown).map((p, i) => (
-        <span key={p.key} fg={p.problem ? theme.warn : p.online ? theme.fg : theme.dim}>
-          {i > 0 ? ", " : ""}
-          {names[i]}
+      {people.slice(0, fit.shown).map((person, index) => (
+        <span key={person.key} fg={person.problem ? theme.warn : person.online ? theme.fg : theme.dim}>
+          {index > 0 ? ", " : ""}
+          {names[index]}
         </span>
       ))}
       {fit.more ? <span fg={theme.dim}> …</span> : null}

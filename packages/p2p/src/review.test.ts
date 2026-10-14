@@ -6,7 +6,7 @@ const base = emptyReview("t1", "k-alice", "alice");
 
 describe("a review's why, amended as the work goes on", () => {
   it("the first delta fills it in and numbers what it is given", () => {
-    const r = mergeReview(
+    const review = mergeReview(
       base,
       {
         summary: "the opening animation",
@@ -17,10 +17,10 @@ describe("a review's why, amended as the work goes on", () => {
       },
       10,
     );
-    expect(r.decisions.map((d) => d.id)).toEqual(["d1", "d2"]);
-    expect(r.forks.map((f) => f.id)).toEqual(["f1"]);
-    expect(r.branch).toBe("opening");
-    expect(r.ts).toBe(10);
+    expect(review.decisions.map((decision) => decision.id)).toEqual(["d1", "d2"]);
+    expect(review.forks.map((fork) => fork.id)).toEqual(["f1"]);
+    expect(review.branch).toBe("opening");
+    expect(review.ts).toBe(10);
   });
 
   it("a later delta appends, and a repeated id corrects in place", () => {
@@ -30,7 +30,7 @@ describe("a review's why, amended as the work goes on", () => {
       { link: "https://github.com/o/r/pull/22", decisions: [{ id: "d1", what: "a, as the user then wanted it", userWhy: "she said keep it centred", where: ["a.ts:1"] }, { what: "b", where: [] }] },
       20,
     );
-    expect(second.decisions.map((d) => [d.id, d.what])).toEqual([
+    expect(second.decisions.map((decision) => [decision.id, decision.what])).toEqual([
       ["d1", "a, as the user then wanted it"],
       ["d2", "b"],
     ]);
@@ -54,7 +54,7 @@ describe("a review's why, amended as the work goes on", () => {
 
   it("units merge by id: new ones numbered, a repeated id corrects one, a retired one goes", () => {
     const first = mergeReview(base, { units: [{ title: "Export streams", what: "rows are streamed", where: ["src/export.ts"] }, { title: "Paging", what: "a hundred a page", where: ["src/page.ts"] }] }, 1);
-    expect(first.units?.map((u) => `${u.id} ${u.title}`)).toEqual(["u1 Export streams", "u2 Paging"]);
+    expect(first.units?.map((unit) => `${unit.id} ${unit.title}`)).toEqual(["u1 Export streams", "u2 Paging"]);
     const fixed = mergeReview(first, { units: [{ id: "u2", title: "Paging by id", what: "paged by id, not offset", where: ["src/page.ts:3"] }], retireUnits: ["u1"] }, 2);
     expect(fixed.units).toEqual([{ id: "u2", title: "Paging by id", what: "paged by id, not offset", where: ["src/page.ts:3"] }]);
     // a unit stored before units had a line beneath the title still decodes, review and all
@@ -65,10 +65,10 @@ describe("a review's why, amended as the work goes on", () => {
   });
 
   it("numbering skips ids the author chose itself", () => {
-    const r = mergeReview(base, { decisions: [{ id: "d7", what: "x", where: [] }, { what: "y", where: [] }] }, 1);
-    expect(r.decisions.map((d) => d.id)).toEqual(["d7", "d2"]);
-    const more = mergeReview(r, { decisions: [{ what: "z", where: [] }] }, 2);
-    expect(more.decisions.map((d) => d.id)).toEqual(["d7", "d2", "d3"]);
+    const review = mergeReview(base, { decisions: [{ id: "d7", what: "x", where: [] }, { what: "y", where: [] }] }, 1);
+    expect(review.decisions.map((decision) => decision.id)).toEqual(["d7", "d2"]);
+    const more = mergeReview(review, { decisions: [{ what: "z", where: [] }] }, 2);
+    expect(more.decisions.map((decision) => decision.id)).toEqual(["d7", "d2", "d3"]);
   });
 });
 
@@ -82,7 +82,7 @@ describe("a review built from assumptions", () => {
     }, 1);
     const amended = mergeReview(filed, { decisions: [{ id: "d2", title: "Pages of 100", what: "a page holds 100 rows", basis: "a constant", confidence: "medium" }] }, 2);
     expect(amended.assumed).toEqual({ author: "octocat", sources: ["PR #7 description", "JIRA-12"] });
-    expect(amended.decisions.map((d) => [d.id, d.basis, d.confidence])).toEqual([
+    expect(amended.decisions.map((decision) => [decision.id, decision.basis, decision.confidence])).toEqual([
       ["d1", "PR description: 'exports time out'", "high"],
       ["d2", "a constant", "medium"],
     ]);
@@ -128,13 +128,13 @@ describe("the code's author takes an assumed review over", () => {
     expect(told.author).toBe("octo-key");
     expect(told.claimed).toEqual({ guessedBy: "alice-key", guessedByName: "alice", at: 9 });
     expect(told.assumed).toEqual(guessed.assumed);
-    const [d1, d2, d3, d4, d5] = told.decisions;
-    expect(d1).toMatchObject({ verdict: "confirmed", basis: "the description" });
-    expect(d2).toMatchObject({ verdict: "corrected", title: "Pages of 50", what: "a page holds 50 rows", userWhy: "the mobile client's memory", guess: { what: "a page holds 100 rows", why: "memory", basis: "a constant" } });
-    expect(d2!.basis).toBeUndefined();
-    expect(d3).toMatchObject({ verdict: "wrong", userWhy: "strings were a stopgap; objects next" });
-    expect(d4!.verdict).toBeUndefined();
-    expect(d5).toMatchObject({ id: "d5", title: "No auth change", userWhy: "out of scope" });
+    const [confirmed, corrected, wrong, unanswered, added] = told.decisions;
+    expect(confirmed).toMatchObject({ verdict: "confirmed", basis: "the description" });
+    expect(corrected).toMatchObject({ verdict: "corrected", title: "Pages of 50", what: "a page holds 50 rows", userWhy: "the mobile client's memory", guess: { what: "a page holds 100 rows", why: "memory", basis: "a constant" } });
+    expect(corrected!.basis).toBeUndefined();
+    expect(wrong).toMatchObject({ verdict: "wrong", userWhy: "strings were a stopgap; objects next" });
+    expect(unanswered!.verdict).toBeUndefined();
+    expect(added).toMatchObject({ id: "d5", title: "No auth change", userWhy: "out of scope" });
     expect(told.forks[0]).toMatchObject({ verdict: "corrected", instead: "a job queue", why: "no infra for a queue", by: "user", guess: { what: "a stream over paging" } });
     expect(Schema.decodeUnknownSync(ReviewContext)(JSON.parse(JSON.stringify(told)))).toEqual(told);
   });
@@ -160,10 +160,10 @@ describe("a guess withdrawn", () => {
     const guess = (title: string) => ({ title, what: title, agentWhy: "w", basis: "b", confidence: "low" as const });
     const filed = mergeReview(emptyReview("t", "me", "alice"), { summary: "s", assumed: { author: "octo", sources: ["x"] }, decisions: [guess("one"), guess("two"), guess("three")] }, 1);
     const trimmed = mergeReview(filed, { retireGuesses: ["d3", "d2"] }, 2);
-    expect(trimmed.decisions.map((d) => d.id)).toEqual(["d1"]);
+    expect(trimmed.decisions.map((decision) => decision.id)).toEqual(["d1"]);
     expect(trimmed.retired).toEqual(["d3", "d2"]);
     const more = mergeReview(trimmed, { decisions: [guess("four")] }, 3);
-    expect(more.decisions.map((d) => d.id)).toEqual(["d1", "d4"]);
+    expect(more.decisions.map((decision) => decision.id)).toEqual(["d1", "d4"]);
     expect(Schema.decodeUnknownSync(ReviewContext)(JSON.parse(JSON.stringify(more)))).toEqual(more);
   });
 });
@@ -172,22 +172,22 @@ describe("reviews of one moment, from different writers", () => {
   const base = mergeReview(emptyReview("t", "a", "alice"), { summary: "s", assumed: { author: "octo", sources: ["x"] }, decisions: [{ title: "g", what: "g", agentWhy: "w", basis: "b", confidence: "low" }] }, 5);
   const takenBy = (key: string, name: string) => ({ ...claimReview(base, { key, name }, [{ id: "d1", verdict: "confirmed" }], {}, 7), ts: 9 });
   const versions = [{ ...base, ts: 9 }, takenBy("b", "bob"), takenBy("c", "carol")];
-  const apply = (order: ReadonlyArray<ReviewContext>) => order.reduce((kept, r) => (supersedes(r, kept) ? r : kept));
-  const orders = (xs: ReadonlyArray<ReviewContext>): Array<Array<ReviewContext>> =>
-    xs.length <= 1 ? [[...xs]] : xs.flatMap((x, i) => orders([...xs.slice(0, i), ...xs.slice(i + 1)]).map((rest) => [x, ...rest]));
+  const apply = (order: ReadonlyArray<ReviewContext>) => order.reduce((kept, review) => (supersedes(review, kept) ? review : kept));
+  const orders = (reviews: ReadonlyArray<ReviewContext>): Array<Array<ReviewContext>> =>
+    reviews.length <= 1 ? [[...reviews]] : reviews.flatMap((review, index) => orders([...reviews.slice(0, index), ...reviews.slice(index + 1)]).map((rest) => [review, ...rest]));
 
   it("every peer keeps the same one, in any order", () => {
-    const kept = new Set(orders(versions).map((o) => apply(o).author));
+    const kept = new Set(orders(versions).map((order) => apply(order).author));
     expect(kept.size).toBe(1);
     // and it is a taken-over one, never the guess
     expect([...kept][0]).not.toBe("a");
   });
 
   it("one replaces the other, never both ways — and a record is not lost to itself", () => {
-    const [, b, c] = versions;
-    expect(supersedes(b!, c!) !== supersedes(c!, b!)).toBe(true);
-    expect(strictlySupersedes(b!, b!)).toBe(false);
-    expect(strictlySupersedes(b!, versions[0]!)).toBe(true);
+    const [, byBob, byCarol] = versions;
+    expect(supersedes(byBob!, byCarol!) !== supersedes(byCarol!, byBob!)).toBe(true);
+    expect(strictlySupersedes(byBob!, byBob!)).toBe(false);
+    expect(strictlySupersedes(byBob!, versions[0]!)).toBe(true);
   });
 });
 

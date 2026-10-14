@@ -21,17 +21,17 @@ import { StateStore } from "./StateStore";
 // by the running instance beside /mcp, on loopback, read-only — a take still
 // goes back through the person's agent (post-review), one path into the log.
 
-/** Where the branch at `b` left the nearest of `refs` (bases it may sit on):
+/** Where `branch` left the nearest of `refs` (bases it may sit on):
  *  their merge-bases with it, the one each other is an ancestor of — a stale
  *  copy of a base, or a base merged elsewhere since, left it earlier. Where
  *  they part ways, the first's. With the ref it came from, for the reason. */
-const leftAt = (path: string, refs: ReadonlyArray<string>, b: string) =>
+const leftAt = (path: string, refs: ReadonlyArray<string>, branch: string) =>
   Effect.gen(function* () {
-    const points = (yield* Effect.forEach(refs, (ref) => run("git", ["merge-base", ref, b], path, 5_000).pipe(Effect.map((out) => ({ ref, at: out?.trim() ?? "" }))))).filter((p) => p.at.length > 0);
+    const points = (yield* Effect.forEach(refs, (ref) => run("git", ["merge-base", ref, branch], path, 5_000).pipe(Effect.map((out) => ({ ref, at: out?.trim() ?? "" }))))).filter((point) => point.at.length > 0);
     const first = points[0];
     if (!first || points.length === 1) return first ?? null;
-    const nearest = (yield* run("git", ["merge-base", "--independent", ...new Set(points.map((p) => p.at))], path, 5_000))?.trim().split("\n") ?? [];
-    return nearest.length === 1 ? (points.find((p) => p.at === nearest[0]) ?? first) : first;
+    const nearest = (yield* run("git", ["merge-base", "--independent", ...new Set(points.map((point) => point.at))], path, 5_000))?.trim().split("\n") ?? [];
+    return nearest.length === 1 ? (points.find((point) => point.at === nearest[0]) ?? first) : first;
   });
 
 /** The diff of a branch against its base from the clone at `path`: fetch
@@ -48,23 +48,23 @@ const fromClone = (path: string, base: string, branch: string, fetch = true, pul
     if (fetch) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin"], path, 20_000);
     // a pull request from a fork has its head on the fork: its host keeps it
     // in this repository too (its pullRef), read here as origin/pr/<n>
-    const pr = /^pr\/(\d+)$/.exec(branch);
-    if (fetch && pr && pullRef) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin", `+${pullRef(Number(pr[1]))}:refs/remotes/origin/pr/${pr[1]}`], path, 20_000);
-    const b = yield* firstRef(path, [branch, `origin/${branch}`]);
-    if (!b) return { diff: null, why: `the branch ${branch} is not in your clone at ${path}, nor on its origin` };
+    const pullMatch = /^pr\/(\d+)$/.exec(branch);
+    if (fetch && pullMatch && pullRef) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin", `+${pullRef(Number(pullMatch[1]))}:refs/remotes/origin/pr/${pullMatch[1]}`], path, 20_000);
+    const branchRef = yield* firstRef(path, [branch, `origin/${branch}`]);
+    if (!branchRef) return { diff: null, why: `the branch ${branch} is not in your clone at ${path}, nor on its origin` };
     const own = (yield* Effect.forEach([base, `origin/${base}`], (ref) => firstRef(path, [ref]))).filter((ref): ref is string => ref !== null);
     // the base's tip under the branch: it is where the branch sits, nothing moved
-    const under = own.length > 0 && (yield* run("git", ["merge-base", "--is-ancestor", own[0]!, b], path, 5_000)) !== null;
+    const under = own.length > 0 && (yield* run("git", ["merge-base", "--is-ancestor", own[0]!, branchRef], path, 5_000)) !== null;
     const into = under || !merged ? null : yield* merged;
     const fallback = defaultBranchOf(path);
     const elsewhere = [...(into ? [`origin/${into}`] : []), ...(fallback && fallback !== base ? [`origin/${fallback}`] : [])];
     const refs = [...own, ...(yield* Effect.forEach(elsewhere, (ref) => firstRef(path, [ref]))).filter((ref): ref is string => ref !== null)];
     if (own.length === 0 && !into) return { diff: null, why: `the base ${base} is not in your clone at ${path}, nor on its origin` };
-    const left = yield* leftAt(path, refs, b);
+    const left = yield* leftAt(path, refs, branchRef);
     if (!left) return { diff: null, why: `${branch} shares no history with ${base} in ${path}` };
-    const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${left.at}..${b}`], path, 30_000);
-    const commit = (yield* run("git", ["rev-parse", `${b}^{commit}`], path, 5_000))?.trim() || undefined;
-    return diff === null ? { diff: null, why: `git diff ${left.ref}...${b} failed in ${path}` } : { diff, why: `${left.ref}...${b} from your clone at ${path}`, commit };
+    const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${left.at}..${branchRef}`], path, 30_000);
+    const commit = (yield* run("git", ["rev-parse", `${branchRef}^{commit}`], path, 5_000))?.trim() || undefined;
+    return diff === null ? { diff: null, why: `git diff ${left.ref}...${branchRef} failed in ${path}` } : { diff, why: `${left.ref}...${branchRef} from your clone at ${path}`, commit };
   });
 
 /** Is `commit` a commit the clone at `path` has? */
@@ -85,11 +85,11 @@ const fromPull = (path: string, pull: HostPull, host: RepoHost, fetch: boolean) 
     // its head is the merge). Diffed from the merge-base, so a squash or a
     // rebase reads the same.
     const before = pull.merged && pull.merged !== pull.head && (yield* commitIn(path, pull.merged)) ? `${pull.merged}^1` : null;
-    const a = before ?? (yield* firstRef(path, [pull.base, `origin/${pull.base}`]));
-    if (!a) return { diff: null, why: `the base ${pull.base} is not in your clone, nor on its origin` };
-    const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${a}...${pull.head}`], path, 30_000);
-    if (diff === null) return { diff: null, why: `git diff ${a}...${short(pull.head)} failed in ${path}` };
-    return { diff, why: `#${pull.number} (${a === before ? `merged as ${short(pull.merged!)}` : pull.base}...${short(pull.head)}) from your clone at ${path}`, commit: pull.head };
+    const baseRef = before ?? (yield* firstRef(path, [pull.base, `origin/${pull.base}`]));
+    if (!baseRef) return { diff: null, why: `the base ${pull.base} is not in your clone, nor on its origin` };
+    const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${baseRef}...${pull.head}`], path, 30_000);
+    if (diff === null) return { diff: null, why: `git diff ${baseRef}...${short(pull.head)} failed in ${path}` };
+    return { diff, why: `#${pull.number} (${baseRef === before ? `merged as ${short(pull.merged!)}` : pull.base}...${short(pull.head)}) from your clone at ${path}`, commit: pull.head };
   });
 
 /** Where a review's diff came from, and why when it has none. */
@@ -120,7 +120,7 @@ export const readDiff = (
       // the base merged since, by its own pull request: what it went into
       // (asked by the repository, never a link naming the review's own pull request)
       const repo = repoWebUrl(clone.path) ?? (review.link && host?.pullIn(review.link) === null ? review.link : null);
-      const merged = host && repo ? host.pull(repo, base).pipe(Effect.map((r) => ("pull" in r && r.pull.merged ? r.pull.base : null))) : undefined;
+      const merged = host && repo ? host.pull(repo, base).pipe(Effect.map((result) => ("pull" in result && result.pull.merged ? result.pull.base : null))) : undefined;
       const got = yield* fromClone(clone.path, base, branch, fetch, host?.pullRef, merged);
       if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: "commit" in got ? got.commit : undefined } satisfies ReadDiff;
       unread = got.diff === null;
@@ -159,12 +159,12 @@ export const readDiff = (
 export const reviewTree = Effect.fn("ReviewView.tree")(function* (ticketId: string) {
   const rooms = yield* Rooms;
   const store = yield* StateStore;
-  for (const h of yield* SubscriptionRef.get(rooms.handles)) {
-    const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
+  for (const handle of yield* SubscriptionRef.get(rooms.handles)) {
+    const ticket = (yield* SubscriptionRef.get(handle.room.tickets)).get(ticketId);
     if (!ticket) continue;
-    const review = (yield* SubscriptionRef.get(h.room.reviews)).find((r) => r.ticketId === ticketId);
+    const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
     if (!review?.branch) return "this review names no branch";
-    const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+    const project = roomProjects(yield* store.get, handle.id).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
     if (!project || !gitDir(project.path)) return `no clone of "${ticket.project}" on this machine to read the code from`;
     // a branch deleted once its pull request merged: the clone still holds
     // the code (its last commit, fetched from the host by the page's data)
@@ -199,7 +199,7 @@ export const wholeFile = Effect.fn("ReviewView.wholeFile")(function* (ticketId: 
 });
 
 /** A commit as the page names it: a full or abbreviated hash, nothing else. */
-export const commitOk = (c: string | undefined): c is string => c !== undefined && /^[0-9a-f]{7,40}$/.test(c);
+export const commitOk = (commit: string | undefined): commit is string => commit !== undefined && /^[0-9a-f]{7,40}$/.test(commit);
 
 /** What changed in one file from the commit the reader viewed it at (`from`)
  *  to the commit the page shows (`to`) — exactly those two, never the
@@ -214,7 +214,7 @@ export const sinceViewed = Effect.fn("ReviewView.since")(function* (ticketId: st
   if ((yield* run("git", ["cat-file", "-e", `${to}^{commit}`], tree.projectPath, 5_000)) === null) return { error: "the commit this page shows is not in your clone" } satisfies SinceResult;
   const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", from, to, "--", file], tree.projectPath, 15_000);
   if (diff === null) return { error: `git diff failed for ${file}` } satisfies SinceResult;
-  return { hunks: parseDiff(diff).map((h) => ({ ...h, id: `since:${h.id}` })) } satisfies SinceResult;
+  return { hunks: parseDiff(diff).map((hunk) => ({ ...hunk, id: `since:${hunk.id}` })) } satisfies SinceResult;
 });
 
 /** The commit `ref` names in the clone at `path`, now — or null. */
@@ -233,19 +233,19 @@ export const unitCoverageNote = (path: string, review: { readonly base?: string;
     return `\nNOTE FOR YOU, NOT FOR YOUR USER: no unit covers the changes in ${shown} — the page puts them under the decision that points at them, else under "Not explained". If they belong to a unit, call ask-review with this ticketId and that unit (same id) with them in its 'where'.`;
   });
 
-export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((s) => s?.trim() || null));
+export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((output) => output?.trim() || null));
 
 export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: string) {
   const rooms = yield* Rooms;
   const store = yield* StateStore;
-  for (const h of yield* SubscriptionRef.get(rooms.handles)) {
-    const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
+  for (const handle of yield* SubscriptionRef.get(rooms.handles)) {
+    const ticket = (yield* SubscriptionRef.get(handle.room.tickets)).get(ticketId);
     if (!ticket) continue;
-    const review = (yield* SubscriptionRef.get(h.room.reviews)).find((r) => r.ticketId === ticketId);
+    const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
     if (!review) return null;
     const base = review.base ?? "main";
     const branch = review.branch;
-    const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+    const project = roomProjects(yield* store.get, handle.id).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
     const host = review.link ? hostOf(review.link) : undefined;
     const got = yield* readDiff(review, project ? { path: project.path } : { noClone: `you have not located "${ticket.project}" on this machine (the projects panel)` }, true);
     const source: ReviewPageData["source"] = { kind: got.kind, detail: got.why };
@@ -256,10 +256,10 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const hunks = diff === null ? [] : parseDiff(diff);
     let imports: Imports = new Map();
     if (project && commit && hunks.length > 0) {
-      const files = [...new Set(hunks.map((h) => h.file))];
+      const files = [...new Set(hunks.map((hunk) => hunk.file))];
       const texts = new Map<string, string | null>();
-      for (const f of files) texts.set(f, yield* run("git", ["show", `${commit}:${f}`], project.path, 5_000));
-      imports = importsAmong(files, (f) => texts.get(f) ?? null);
+      for (const file of files) texts.set(file, yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
+      imports = importsAmong(files, (file) => texts.get(file) ?? null);
     }
     return {
       ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
@@ -279,13 +279,13 @@ export const reviewNamed = (ticketId: string) =>
   Effect.gen(function* () {
     const rooms = yield* Rooms;
     const store = yield* StateStore;
-    for (const h of yield* SubscriptionRef.get(rooms.handles)) {
-      const ticket = (yield* SubscriptionRef.get(h.room.tickets)).get(ticketId);
+    for (const handle of yield* SubscriptionRef.get(rooms.handles)) {
+      const ticket = (yield* SubscriptionRef.get(handle.room.tickets)).get(ticketId);
       if (!ticket) continue;
-      const review = (yield* SubscriptionRef.get(h.room.reviews)).find((r) => r.ticketId === ticketId);
+      const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
       if (!review) return null;
-      const project = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
-      return { room: h.room, ticket, review, project };
+      const project = roomProjects(yield* store.get, handle.id).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+      return { room: handle.room, ticket, review, project };
     }
     return null;
   });
@@ -319,10 +319,10 @@ const reviewEdges = (found: { readonly room: { readonly tickets: SubscriptionRef
   Effect.gen(function* () {
     const { identity } = yield* IdentityService;
     const all = yield* SubscriptionRef.get(found.room.tickets);
-    return (yield* SubscriptionRef.get(found.room.reviews)).flatMap((r): ReadonlyArray<Edge> => {
-      const t = all.get(r.ticketId);
-      if (!t || t.kind !== "review" || isClosed(t) || !r.branch || t.project.trim().toLowerCase() !== found.ticket.project.trim().toLowerCase() || !visibleTo(t, all, identity.pubkey)) return [];
-      return [{ branch: r.branch, base: r.base ?? "main", label: t.title ?? t.goal, url: `/review/${t.id}`, kind: "review" }];
+    return (yield* SubscriptionRef.get(found.room.reviews)).flatMap((review): ReadonlyArray<Edge> => {
+      const ticket = all.get(review.ticketId);
+      if (!ticket || ticket.kind !== "review" || isClosed(ticket) || !review.branch || ticket.project.trim().toLowerCase() !== found.ticket.project.trim().toLowerCase() || !visibleTo(ticket, all, identity.pubkey)) return [];
+      return [{ branch: review.branch, base: review.base ?? "main", label: ticket.title ?? ticket.goal, url: `/review/${ticket.id}`, kind: "review" }];
     });
   });
 
@@ -336,7 +336,7 @@ export const hostView = Effect.fn("ReviewView.host")(function* (ticketId: string
   const branch = found.review.branch;
   const fromRoom = yield* reviewEdges(found);
   const stack = (pulls: ReadonlyArray<HostPull>) =>
-    branch ? stackOf(branch, found.review.base ?? "main", [...pulls.map((p): Edge => ({ branch: p.branch, base: p.base, label: p.title || p.branch, number: p.number, url: p.url, kind: "pull" })), ...fromRoom]) : null;
+    branch ? stackOf(branch, found.review.base ?? "main", [...pulls.map((pull): Edge => ({ branch: pull.branch, base: pull.base, label: pull.title || pull.branch, number: pull.number, url: pull.url, kind: "pull" })), ...fromRoom]) : null;
   const link = hostLink(found.review, found.project);
   if (!link) return { none: "This review names no link to where its code is hosted.", stack: stack([]) } satisfies HostView;
   const host = hostOf(link);
@@ -348,7 +348,7 @@ export const hostView = Effect.fn("ReviewView.host")(function* (ticketId: string
   const [comments, reviews, conversation] = pull
     ? yield* Effect.all([host.comments(link, pull.number), host.reviews(link, pull.number), host.conversation(link, pull.number)], { concurrency: "unbounded" })
     : [{ inline: [], outdated: [] }, [], []];
-  const byTime = <T extends { readonly at: string }>(xs: ReadonlyArray<T>) => [...xs].sort((a, b) => a.at.localeCompare(b.at));
+  const byTime = <T extends { readonly at: string }>(items: ReadonlyArray<T>) => [...items].sort((a, b) => a.at.localeCompare(b.at));
   return {
     host: host.name,
     viewer: "user" in viewer ? viewer.user : null,
@@ -376,7 +376,7 @@ export const ticketIdOk = (id: string | undefined): id is string => id !== undef
 /** Where the built page is (apps/review-web, a Solid app): beside the
  *  bundle in a release (dist/review-web, copied there by the cli build), or
  *  the web app's own dist when collagen runs from source. */
-const WEB_ROOTS = [new URL("./review-web/", import.meta.url), new URL("../../../review-web/dist/", import.meta.url)].map((u) => fileURLToPath(u));
+const WEB_ROOTS = [new URL("./review-web/", import.meta.url), new URL("../../../review-web/dist/", import.meta.url)].map((url) => fileURLToPath(url));
 export const webRoot = (): string | null => WEB_ROOTS.find((dir) => existsSync(join(dir, "index.html"))) ?? null;
 
 const NOT_BUILT = `The review page is not built. From the collagen repo: pnpm --filter @collagen/review-web build (looked in ${WEB_ROOTS.join(", ")})`;

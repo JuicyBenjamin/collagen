@@ -14,7 +14,7 @@ import { transcriptLinesAtom } from "../transcripts/atoms";
 /** The id a turn's head row is drawn under, so the list can keep it in view. */
 const turnRowId = (turn: number): string => `turn-${turn}`;
 
-const hhmmss = (ts: string | null) => (ts ? ts.slice(11, 19) : "  ·  ·  ");
+const hhmmss = (timestamp: string | null) => (timestamp ? timestamp.slice(11, 19) : "  ·  ·  ");
 
 const whoColor = (who: string) =>
   who === "user" ? theme.accent : who === "assistant" ? theme.warn : who.startsWith("collagen") ? theme.ok : theme.dim;
@@ -53,10 +53,10 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
     return line.length > room ? `${line.slice(0, room - 1)}…` : line;
   };
   // rows: one per turn, plus the unfolded turn's text wrapped under its row
-  const rows = turns.flatMap((t, turn) => {
+  const rows = turns.flatMap((entry, turn) => {
     const head = { kind: "head" as const, turn, text: "" };
     if (turn !== unfolded) return [head];
-    const body = wrap(t.text.length > 0 ? t.text : "(nothing said in this turn)", textWidth);
+    const body = wrap(entry.text.length > 0 ? entry.text : "(nothing said in this turn)", textWidth);
     return [head, ...body.map((text) => ({ kind: "body" as const, turn, text }))];
   });
   const jump = (toTurn: number) => setTurnSel(toTurn >= lastTurn ? null : Math.max(0, toTurn));
@@ -76,7 +76,7 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
           if (key.name === "pagedown") return jump(tSel + page()), true;
           if (key.name === "home") return jump(0), true;
           if (key.name === "end") return jump(lastTurn), true;
-          if (isEnter(key) && turns.length > 0) return setUnfolded((u) => (u === tSel ? null : tSel)), true;
+          if (isEnter(key) && turns.length > 0) return setUnfolded((current) => (current === tSel ? null : tSel)), true;
           return false;
         }}
       >
@@ -99,22 +99,22 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
                   {"  "}nothing readable in this file
                 </text>
               ) : (
-                rows.map((r, i) => {
-                  const t = turns[r.turn]!;
-                  const selected = focused && r.turn === tSel;
-                  return r.kind === "head" ? (
-                    <text key={`${path}:${i}`} id={turnRowId(r.turn)} truncate wrapMode="none" flexShrink={0}>
-                      <span fg={selected ? theme.accent : theme.dim}>{selected ? (unfolded === r.turn ? "▾ " : "› ") : "  "}</span>
-                      <span fg={theme.dim}>{hhmmss(t.ts)}  </span>
-                      <span fg={whoColor(t.who)}>{t.who.padEnd(11)}</span>
-                      <span fg={selected ? theme.accent : t.who === "user" || t.who === "assistant" ? theme.fg : theme.dim}>
-                        {unfolded === r.turn ? "" : firstLine(t.text)}
+                rows.map((row, index) => {
+                  const entry = turns[row.turn]!;
+                  const selected = focused && row.turn === tSel;
+                  return row.kind === "head" ? (
+                    <text key={`${path}:${index}`} id={turnRowId(row.turn)} truncate wrapMode="none" flexShrink={0}>
+                      <span fg={selected ? theme.accent : theme.dim}>{selected ? (unfolded === row.turn ? "▾ " : "› ") : "  "}</span>
+                      <span fg={theme.dim}>{hhmmss(entry.ts)}  </span>
+                      <span fg={whoColor(entry.who)}>{entry.who.padEnd(11)}</span>
+                      <span fg={selected ? theme.accent : entry.who === "user" || entry.who === "assistant" ? theme.fg : theme.dim}>
+                        {unfolded === row.turn ? "" : firstLine(entry.text)}
                       </span>
                     </text>
                   ) : (
-                    <text key={`${path}:${i}`} fg={theme.fg} truncate wrapMode="none" flexShrink={0}>
+                    <text key={`${path}:${index}`} fg={theme.fg} truncate wrapMode="none" flexShrink={0}>
                       {"            "}
-                      {r.text}
+                      {row.text}
                     </text>
                   );
                 })

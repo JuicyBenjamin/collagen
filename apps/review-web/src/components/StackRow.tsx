@@ -24,10 +24,10 @@ function Step(props: { step: StackStep }) {
 export function StackRow() {
   return (
     <Show when={hostNow.stack()}>
-      {(s) => (
+      {(stack) => (
         <div class="stack-row" role="navigation" aria-label="The stack this branch sits in">
           <span class="who">Stack</span>
-          <For each={s().below}>
+          <For each={stack().below}>
             {(step) => (
               <>
                 <Step step={step} />
@@ -35,10 +35,10 @@ export function StackRow() {
               </>
             )}
           </For>
-          <span class="stack-step here" title={s().here.branch}>
-            {s().here.number !== undefined ? `#${s().here.number} ` : ""}this one
+          <span class="stack-step here" title={stack().here.branch}>
+            {stack().here.number !== undefined ? `#${stack().here.number} ` : ""}this one
           </span>
-          <For each={s().above}>
+          <For each={stack().above}>
             {(step) => (
               <>
                 <span class="stack-sep">›</span>
@@ -46,13 +46,13 @@ export function StackRow() {
               </>
             )}
           </For>
-          <Show when={s().split.length > 0}>
+          <Show when={stack().split.length > 0}>
             <span class="stack-sep">›</span>
             <span class="stack-split" title="Several branches build on this one">
-              <For each={s().split}>
-                {(step, i) => (
+              <For each={stack().split}>
+                {(step, index) => (
                   <>
-                    {i() > 0 ? <span class="stack-sep"> / </span> : null}
+                    {index() > 0 ? <span class="stack-sep"> / </span> : null}
                     <Step step={step} />
                   </>
                 )}

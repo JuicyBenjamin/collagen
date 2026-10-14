@@ -9,8 +9,8 @@ describe("a comment as markdown", () => {
   });
 
   it("reads formatting, lists, task lists, fences and tables", () => {
-    const [p, list, code, table] = parseMarkdown("**bold** and _soft_\n\n- [x] done\n- [ ] not\n\n```ts\nconst a = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |");
-    expect(p).toMatchObject({ kind: "p", children: [{ kind: "strong" }, { kind: "text", text: " and " }, { kind: "em" }] });
+    const [paragraph, list, code, table] = parseMarkdown("**bold** and _soft_\n\n- [x] done\n- [ ] not\n\n```ts\nconst a = 1;\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |");
+    expect(paragraph).toMatchObject({ kind: "p", children: [{ kind: "strong" }, { kind: "text", text: " and " }, { kind: "em" }] });
     expect(list).toMatchObject({ kind: "list", items: [{ checked: true }, { checked: false }] });
     expect(code).toEqual({ kind: "code", lang: "ts", text: "const a = 1;" });
     expect(table).toMatchObject({ kind: "table", head: [[{ text: "a" }], [{ text: "b" }]] });
@@ -29,7 +29,7 @@ describe("a comment as markdown", () => {
     expect(parseMarkdown("![shot](https://github.com/u/a.png) ![bad](javascript:x) ![old](http://x/a.png)")).toEqual([
       { kind: "p", children: [{ kind: "image", src: "https://github.com/u/a.png", alt: "shot" }, { kind: "text", text: " " }, { kind: "text", text: "bad" }, { kind: "text", text: " " }, { kind: "text", text: "old" }] },
     ]);
-    const [p] = parseMarkdown("[hi](javascript:alert(1)) [ok](https://example.com)");
-    expect(p).toMatchObject({ kind: "p", children: [{ kind: "text", text: "hi" }, { kind: "text", text: " " }, { kind: "link", href: "https://example.com" }] });
+    const [paragraph] = parseMarkdown("[hi](javascript:alert(1)) [ok](https://example.com)");
+    expect(paragraph).toMatchObject({ kind: "p", children: [{ kind: "text", text: "hi" }, { kind: "text", text: " " }, { kind: "link", href: "https://example.com" }] });
   });
 });

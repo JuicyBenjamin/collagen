@@ -8,9 +8,9 @@ import { runtimeAtom } from "../../../../../app/runtime";
  *  Only this section reads it. */
 export const ticketsAtom = runtimeAtom.atom(
   Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((h) =>
-      SubscriptionRef.changes(h.room.tickets).pipe(
-        Stream.map((m) => [...m.values()].sort((a, b) => a.updatedAt - b.updatedAt)),
+    return (yield* Rooms).watch((handle) =>
+      SubscriptionRef.changes(handle.room.tickets).pipe(
+        Stream.map((ticketsById) => [...ticketsById.values()].sort((a, b) => a.updatedAt - b.updatedAt)),
       ),
     );
   })),

@@ -8,20 +8,20 @@ import type { HostMerge } from "../services/RepoHost";
 // reads the diff without it.
 
 type Json = Record<string, unknown>;
-const obj = (v: unknown): Json | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Json) : null);
-const str = (v: unknown): string | undefined => (typeof v === "string" && v.length > 0 ? v : undefined);
-const int = (v: unknown): number | undefined => (Number.isInteger(v) ? (v as number) : undefined);
+const asRecord = (value: unknown): Json | null => (typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Json) : null);
+const asText = (value: unknown): string | undefined => (typeof value === "string" && value.length > 0 ? value : undefined);
+const asInteger = (value: unknown): number | undefined => (Number.isInteger(value) ? (value as number) : undefined);
 
 /** The repository a GitHub link is in. */
 export const githubRepo = (link: string): { readonly owner: string; readonly repo: string } | null => {
-  const m = link.match(/^https:\/\/github\.com\/([^/]+)\/([^/#?]+)/);
-  return m ? { owner: m[1]!, repo: m[2]!.replace(/\.git$/, "") } : null;
+  const match = link.match(/^https:\/\/github\.com\/([^/]+)\/([^/#?]+)/);
+  return match ? { owner: match[1]!, repo: match[2]!.replace(/\.git$/, "") } : null;
 };
 
 /** The pull request a link names (…/pull/12, …/pull/12/files), if it names one. */
 export const pullNumberIn = (link: string): number | null => {
-  const m = link.match(/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/);
-  return m ? Number(m[1]) : null;
+  const match = link.match(/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/);
+  return match ? Number(match[1]) : null;
 };
 
 /** JSON from gh, or null. */
@@ -35,11 +35,11 @@ export const parse = (text: string | null): unknown => {
 };
 
 /** `gh api user`. */
-export const readUser = (v: unknown): HostUser | null => {
-  const o = obj(v);
-  const login = str(o?.login);
-  if (!o || !login) return null;
-  return { login, ...(str(o.name) ? { name: str(o.name)! } : {}), ...(str(o.avatar_url) ? { avatarUrl: str(o.avatar_url)! } : {}) };
+export const readUser = (value: unknown): HostUser | null => {
+  const record = asRecord(value);
+  const login = asText(record?.login);
+  if (!record || !login) return null;
+  return { login, ...(asText(record.name) ? { name: asText(record.name)! } : {}), ...(asText(record.avatar_url) ? { avatarUrl: asText(record.avatar_url)! } : {}) };
 };
 
 /** The fields asked of `gh pr view` / `gh pr list`. */
@@ -49,24 +49,24 @@ const DECISION: Readonly<Record<string, string>> = { APPROVED: "approved", CHANG
 
 /** One pull request as `gh pr view --json PULL_FIELDS` has it, with the head
  *  and base branches it joins (for a stack). `viewer`: the login signed in. */
-export const readPull = (v: unknown, viewer: string | undefined): (PullRequest & { readonly branch: string; readonly base: string; readonly fork?: true; readonly merged?: string }) | null => {
-  const o = obj(v);
-  const number = int(o?.number);
-  const url = str(o?.url);
-  const head = str(o?.headRefOid);
-  const branch = str(o?.headRefName);
-  const base = str(o?.baseRefName);
-  if (!o || number === undefined || !url || !head || !branch || !base) return null;
-  const state = String(o.state).toLowerCase();
-  const author = str(obj(o.author)?.login) ?? "";
-  const decision = DECISION[String(o.reviewDecision)];
-  const merged = state === "merged" ? str(obj(o.mergeCommit)?.oid) : undefined;
+export const readPull = (value: unknown, viewer: string | undefined): (PullRequest & { readonly branch: string; readonly base: string; readonly fork?: true; readonly merged?: string }) | null => {
+  const record = asRecord(value);
+  const number = asInteger(record?.number);
+  const url = asText(record?.url);
+  const head = asText(record?.headRefOid);
+  const branch = asText(record?.headRefName);
+  const base = asText(record?.baseRefName);
+  if (!record || number === undefined || !url || !head || !branch || !base) return null;
+  const state = String(record.state).toLowerCase();
+  const author = asText(asRecord(record.author)?.login) ?? "";
+  const decision = DECISION[String(record.reviewDecision)];
+  const merged = state === "merged" ? asText(asRecord(record.mergeCommit)?.oid) : undefined;
   return {
     number,
     url,
-    title: str(o.title) ?? "",
+    title: asText(record.title) ?? "",
     state: state === "merged" || state === "closed" ? state : "open",
-    draft: o.isDraft === true,
+    draft: record.isDraft === true,
     author,
     head,
     ...(decision ? { decision } : {}),
@@ -74,7 +74,7 @@ export const readPull = (v: unknown, viewer: string | undefined): (PullRequest &
     branch,
     base,
     // its head on a fork: the branch is not on this repository's origin
-    ...(o.isCrossRepository === true ? { fork: true as const } : {}),
+    ...(record.isCrossRepository === true ? { fork: true as const } : {}),
     // the commit it went into its base as: a merge, a squash, the last of a rebase
     ...(merged ? { merged } : {}),
   };
@@ -82,7 +82,7 @@ export const readPull = (v: unknown, viewer: string | undefined): (PullRequest &
 
 /** The pull request a branch is: the open one, else the latest closed or
  *  merged — `gh pr list --head` lists newest first. */
-export const pickPull = <P extends { readonly state: string }>(pulls: ReadonlyArray<P>): P | null => pulls.find((p) => p.state === "open") ?? pulls[0] ?? null;
+export const pickPull = <P extends { readonly state: string }>(pulls: ReadonlyArray<P>): P | null => pulls.find((pull) => pull.state === "open") ?? pulls[0] ?? null;
 
 /** The pull requests merged into a branch, as GraphQL has them, a page at
  *  a time: no merge kind is stored, so it is read from the commit that
@@ -134,10 +134,10 @@ export const MergesAnswer = Schema.fromJsonString(
 
 /** How a pull request landed, read from the commit it landed as; null when
  *  that commit is gone. */
-export const landedAs = (p: MergedPull): HostMerge | null => {
-  const landed = p.mergeCommit;
+export const landedAs = (pull: MergedPull): HostMerge | null => {
+  const landed = pull.mergeCommit;
   if (!landed) return null;
-  const last = p.commits.nodes.at(-1)?.commit;
+  const last = pull.commits.nodes.at(-1)?.commit;
   const kind: HostMerge["kind"] =
     landed.parents.totalCount > 1
       ? "merge"
@@ -146,7 +146,7 @@ export const landedAs = (p: MergedPull): HostMerge | null => {
         : last?.messageHeadline === landed.messageHeadline && last.authoredDate === landed.authoredDate
           ? "rebase"
           : "squash";
-  return { number: p.number, url: p.url, title: p.title, branch: p.headRefName, kind, commit: landed.oid, commits: p.commits.totalCount, at: p.mergedAt };
+  return { number: pull.number, url: pull.url, title: pull.title, branch: pull.headRefName, kind, commit: landed.oid, commits: pull.commits.totalCount, at: pull.mergedAt };
 };
 
 /** One page of merges: those that landed, when the least recently changed
@@ -160,8 +160,8 @@ export interface MergesPage {
 export const mergesPage = (answer: typeof MergesAnswer.Type): MergesPage => {
   const { pageInfo, nodes } = answer.data.repository.pullRequests;
   return {
-    merges: nodes.flatMap((p) => landedAs(p) ?? []),
-    oldestUpdate: nodes.map((p) => p.updatedAt).sort()[0] ?? null,
+    merges: nodes.flatMap((pull) => landedAs(pull) ?? []),
+    oldestUpdate: nodes.map((pull) => pull.updatedAt).sort()[0] ?? null,
     next: pageInfo.hasNextPage ? pageInfo.endCursor : null,
   };
 };
@@ -176,7 +176,7 @@ export const latestMerges = (
   limit: number,
 ): { readonly merges: ReadonlyArray<HostMerge>; readonly done: boolean; readonly more: boolean } => {
   // a pull request changed while the pages were read can be on two of them
-  const all = [...new Map(pages.flatMap((p) => p.merges).map((m) => [m.number, m] as const)).values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+  const all = [...new Map(pages.flatMap((page) => page.merges).map((merge) => [merge.number, merge] as const)).values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   const merges = all.slice(0, limit);
   const last = pages.at(-1);
   const cutoff = merges[limit - 1]?.at;
@@ -185,27 +185,27 @@ export const latestMerges = (
 };
 
 /** Pages from `gh api --paginate --slurp`, flattened. */
-const pages = (v: unknown): ReadonlyArray<unknown> => (Array.isArray(v) ? v.flatMap((page) => (Array.isArray(page) ? page : [page])) : []);
+const pages = (value: unknown): ReadonlyArray<unknown> => (Array.isArray(value) ? value.flatMap((page) => (Array.isArray(page) ? page : [page])) : []);
 
 /** `gh api --paginate --slurp repos/…/pulls/N/comments`: pages of comments,
  *  flattened. Comments GitHub no longer places on a line (outdated, the
  *  code under them moved) have no line to sit under — readOutdated reads those. */
-export const readComments = (v: unknown): ReadonlyArray<LineComment> =>
-  pages(v).flatMap((c): ReadonlyArray<LineComment> => {
-    const comment = readComment(c);
+export const readComments = (value: unknown): ReadonlyArray<LineComment> =>
+  pages(value).flatMap((entry): ReadonlyArray<LineComment> => {
+    const comment = readComment(entry);
     return comment ? [comment] : [];
   });
 
 /** The line comments on code that has changed since they were written: no
  *  line now, so a note saying where they were. */
-export const readOutdated = (v: unknown): ReadonlyArray<HostNote> =>
-  pages(v).flatMap((c): ReadonlyArray<HostNote> => {
-    const o = obj(c);
-    const author = readUser(o?.user);
-    const id = int(o?.id);
-    if (!o || !author || id === undefined || o.line !== null) return [];
-    const was = int(o.original_line);
-    return [{ id: String(id), author, body: typeof o.body === "string" ? o.body : "", at: str(o.created_at) ?? "", url: str(o.html_url) ?? "", outdated: `${str(o.path) ?? "a file"}${was !== undefined ? `, line ${was}` : ""}` }];
+export const readOutdated = (value: unknown): ReadonlyArray<HostNote> =>
+  pages(value).flatMap((comment): ReadonlyArray<HostNote> => {
+    const record = asRecord(comment);
+    const author = readUser(record?.user);
+    const id = asInteger(record?.id);
+    if (!record || !author || id === undefined || record.line !== null) return [];
+    const was = asInteger(record.original_line);
+    return [{ id: String(id), author, body: typeof record.body === "string" ? record.body : "", at: asText(record.created_at) ?? "", url: asText(record.html_url) ?? "", outdated: `${asText(record.path) ?? "a file"}${was !== undefined ? `, line ${was}` : ""}` }];
   });
 
 const VERDICT: Readonly<Record<string, HostReview["verdict"]>> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", COMMENTED: "commented", DISMISSED: "dismissed" };
@@ -213,49 +213,49 @@ const VERDICT: Readonly<Record<string, HostReview["verdict"]>> = { APPROVED: "ap
 /** `gh api --paginate --slurp repos/…/pulls/N/reviews`: each submitted review —
  *  a pending one is its author's alone, and a comment-only review that says
  *  nothing on the whole is just its line comments, shown under their lines. */
-export const readReviews = (v: unknown): ReadonlyArray<HostReview> =>
-  pages(v).flatMap((r): ReadonlyArray<HostReview> => {
-    const o = obj(r);
-    const author = readUser(o?.user);
-    const id = int(o?.id);
-    const verdict = VERDICT[String(o?.state)];
-    if (!o || !author || id === undefined || !verdict) return [];
-    const body = typeof o.body === "string" ? o.body.trim() : "";
+export const readReviews = (value: unknown): ReadonlyArray<HostReview> =>
+  pages(value).flatMap((review): ReadonlyArray<HostReview> => {
+    const record = asRecord(review);
+    const author = readUser(record?.user);
+    const id = asInteger(record?.id);
+    const verdict = VERDICT[String(record?.state)];
+    if (!record || !author || id === undefined || !verdict) return [];
+    const body = typeof record.body === "string" ? record.body.trim() : "";
     if (verdict === "commented" && body.length === 0) return [];
-    return [{ id: String(id), author, verdict, body, at: str(o.submitted_at) ?? "", url: str(o.html_url) ?? "" }];
+    return [{ id: String(id), author, verdict, body, at: asText(record.submitted_at) ?? "", url: asText(record.html_url) ?? "" }];
   });
 
 /** `gh api --paginate --slurp repos/…/issues/N/comments`: the conversation. */
-export const readConversation = (v: unknown): ReadonlyArray<HostNote> =>
-  pages(v).flatMap((c): ReadonlyArray<HostNote> => {
-    const o = obj(c);
-    const author = readUser(o?.user);
-    const id = int(o?.id);
-    if (!o || !author || id === undefined) return [];
-    return [{ id: String(id), author, body: typeof o.body === "string" ? o.body : "", at: str(o.created_at) ?? "", url: str(o.html_url) ?? "" }];
+export const readConversation = (value: unknown): ReadonlyArray<HostNote> =>
+  pages(value).flatMap((comment): ReadonlyArray<HostNote> => {
+    const record = asRecord(comment);
+    const author = readUser(record?.user);
+    const id = asInteger(record?.id);
+    if (!record || !author || id === undefined) return [];
+    return [{ id: String(id), author, body: typeof record.body === "string" ? record.body : "", at: asText(record.created_at) ?? "", url: asText(record.html_url) ?? "" }];
   });
 
 /** One line comment, as GitHub's REST API has it. */
-export const readComment = (v: unknown): LineComment | null => {
-  const o = obj(v);
-  const id = int(o?.id);
-  const file = str(o?.path);
-  const line = int(o?.line);
-  const author = readUser(o?.user);
-  if (!o || id === undefined || !file || line === undefined || !author) return null;
+export const readComment = (value: unknown): LineComment | null => {
+  const record = asRecord(value);
+  const id = asInteger(record?.id);
+  const file = asText(record?.path);
+  const line = asInteger(record?.line);
+  const author = readUser(record?.user);
+  if (!record || id === undefined || !file || line === undefined || !author) return null;
   // a block of lines names where it starts; one line names none (null)
-  const startLine = int(o.start_line);
+  const startLine = asInteger(record.start_line);
   return {
     id: String(id),
     author,
-    body: typeof o.body === "string" ? o.body : "",
+    body: typeof record.body === "string" ? record.body : "",
     file,
     line,
-    side: o.side === "LEFT" ? "LEFT" : "RIGHT",
-    ...(startLine !== undefined && startLine !== line ? { startLine, startSide: o.start_side === "LEFT" ? ("LEFT" as const) : ("RIGHT" as const) } : {}),
-    url: str(o.html_url) ?? "",
-    at: str(o.created_at) ?? "",
-    ...(int(o.in_reply_to_id) !== undefined ? { replyTo: String(o.in_reply_to_id) } : {}),
+    side: record.side === "LEFT" ? "LEFT" : "RIGHT",
+    ...(startLine !== undefined && startLine !== line ? { startLine, startSide: record.start_side === "LEFT" ? ("LEFT" as const) : ("RIGHT" as const) } : {}),
+    url: asText(record.html_url) ?? "",
+    at: asText(record.created_at) ?? "",
+    ...(asInteger(record.in_reply_to_id) !== undefined ? { replyTo: String(record.in_reply_to_id) } : {}),
   };
 };
 
@@ -265,8 +265,8 @@ export const refusal = (stderr: string): string => {
   const line =
     stderr
       .split("\n")
-      .map((l) => l.trim())
-      .find((l) => l.length > 0) ?? "";
+      .map((text) => text.trim())
+      .find((text) => text.length > 0) ?? "";
   const said = line.replace(/^(gh: |error: |failed to [^:]+: )/i, "").replace(/\s*\(HTTP \d+\)\s*$/, "");
   return said.length > 0 ? said : "GitHub refused it";
 };

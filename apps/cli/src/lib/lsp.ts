@@ -73,9 +73,9 @@ export function startLsp(command: string, args: ReadonlyArray<string>, cwd: stri
   let closed = false;
 
   const fail = (why: string) => {
-    for (const [, p] of pending) {
-      clearTimeout(p.timer);
-      p.reject(new Error(why));
+    for (const [, waiting] of pending) {
+      clearTimeout(waiting.timer);
+      waiting.reject(new Error(why));
     }
     pending.clear();
   };
@@ -83,30 +83,30 @@ export function startLsp(command: string, args: ReadonlyArray<string>, cwd: stri
   child.stdout.on("data", (chunk: Buffer) => {
     const { messages, rest } = readFrames(Buffer.concat([buffer, chunk]));
     buffer = rest;
-    for (const m of messages) {
-      const msg = m as { id?: number | string; method?: string; params?: unknown; result?: unknown; error?: { message?: string } };
-      if (msg.method !== undefined && msg.id !== undefined) {
+    for (const raw of messages) {
+      const message = raw as { id?: number | string; method?: string; params?: unknown; result?: unknown; error?: { message?: string } };
+      if (message.method !== undefined && message.id !== undefined) {
         // the server asks something of us (workspace/configuration, …)
         let result: unknown = null;
         try {
-          result = onRequest(msg.method, msg.params) ?? null;
+          result = onRequest(message.method, message.params) ?? null;
         } catch {
           // a handler that throws answers null rather than leaving it waiting
         }
-        child.stdin.write(frame({ jsonrpc: "2.0", id: msg.id, result }));
+        child.stdin.write(frame({ jsonrpc: "2.0", id: message.id, result }));
         continue;
       }
-      if (msg.method !== undefined) {
-        onNotification(msg.method, msg.params);
+      if (message.method !== undefined) {
+        onNotification(message.method, message.params);
         continue;
       }
-      if (typeof msg.id !== "number") continue;
-      const p = pending.get(msg.id);
-      if (!p) continue;
-      pending.delete(msg.id);
-      clearTimeout(p.timer);
-      if (msg.error) p.reject(new Error(msg.error.message ?? "language server error"));
-      else p.resolve(msg.result ?? null);
+      if (typeof message.id !== "number") continue;
+      const waiting = pending.get(message.id);
+      if (!waiting) continue;
+      pending.delete(message.id);
+      clearTimeout(waiting.timer);
+      if (message.error) waiting.reject(new Error(message.error.message ?? "language server error"));
+      else waiting.resolve(message.result ?? null);
     }
   });
   child.stderr.on("data", (chunk: Buffer) => {
@@ -119,9 +119,9 @@ export function startLsp(command: string, args: ReadonlyArray<string>, cwd: stri
       resolve(code);
     }),
   );
-  child.on("error", (e) => {
+  child.on("error", (error) => {
     closed = true;
-    fail(`the language server did not start: ${e.message}`);
+    fail(`the language server did not start: ${error.message}`);
   });
 
   return {

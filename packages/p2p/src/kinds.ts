@@ -68,4 +68,4 @@ export const KINDS: Record<TicketKind, KindInfo> = {
 export const KIND_ORDER: ReadonlyArray<TicketKind> = (["epic", "proposal", "bug", "plan", "task", "review"] as const satisfies ReadonlyArray<TicketKind>);
 
 /** Every kind's agent line, one per row — for a tool description. */
-export const kindsForAgents = (): string => KIND_ORDER.map((k) => `${k}: ${KINDS[k].agent}`).join("; ");
+export const kindsForAgents = (): string => KIND_ORDER.map((kind) => `${kind}: ${KINDS[kind].agent}`).join("; ");

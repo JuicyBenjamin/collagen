@@ -21,83 +21,83 @@ export interface OutgoingSummary {
   readonly subject: string;
 }
 
-export const outgoingSummary = (p: Proposal): OutgoingSummary => {
-  const o = p.outgoing;
+export const outgoingSummary = (proposal: Proposal): OutgoingSummary => {
+  const outgoing = proposal.outgoing;
   const person = (name: string) => (name.startsWith("the room") ? null : name);
-  switch (o.kind) {
+  switch (outgoing.kind) {
     case "message":
-      return { kind: "message", project: o.project, target: o.peer, subject: o.intent };
+      return { kind: "message", project: outgoing.project, target: outgoing.peer, subject: outgoing.intent };
     case "ticket":
-      return { kind: o.ticket.kind, project: o.ticket.project, target: person(p.to), subject: ticketName(o.ticket) };
+      return { kind: outgoing.ticket.kind, project: outgoing.ticket.project, target: person(proposal.to), subject: ticketName(outgoing.ticket) };
     case "review":
-      return o.ticket
-        ? { kind: "review", project: o.ticket.project, target: person(p.to), subject: ticketName(o.ticket) }
-        : { kind: "review", project: null, target: person(p.to), subject: `more why · ${o.review.summary}` };
+      return outgoing.ticket
+        ? { kind: "review", project: outgoing.ticket.project, target: person(proposal.to), subject: ticketName(outgoing.ticket) }
+        : { kind: "review", project: null, target: person(proposal.to), subject: `more why · ${outgoing.review.summary}` };
     case "post-review":
-      return { kind: "review", project: null, target: person(p.to), subject: "your review" };
+      return { kind: "review", project: null, target: person(proposal.to), subject: "your review" };
     case "settle":
-      return { kind: "settle", project: null, target: person(p.to), subject: o.stepId };
+      return { kind: "settle", project: null, target: person(proposal.to), subject: outgoing.stepId };
     case "close":
-      return { kind: "close", project: null, target: null, subject: p.title };
+      return { kind: "close", project: null, target: null, subject: proposal.title };
     case "epic-move":
-      return { kind: "epic", project: null, target: null, subject: o.epic ? `${o.ticketIds.length} ${o.excluded === true ? "excluded in" : o.excluded === false ? "counted again in" : "into"} "${o.name ?? o.goal}"` : `${o.ticketIds.length} out of its epic` };
+      return { kind: "epic", project: null, target: null, subject: outgoing.epic ? `${outgoing.ticketIds.length} ${outgoing.excluded === true ? "excluded in" : outgoing.excluded === false ? "counted again in" : "into"} "${outgoing.name ?? outgoing.goal}"` : `${outgoing.ticketIds.length} out of its epic` };
     case "epic-order":
-      return { kind: "epic", project: null, target: null, subject: `order of "${o.name ?? o.goal}"` };
+      return { kind: "epic", project: null, target: null, subject: `order of "${outgoing.name ?? outgoing.goal}"` };
     case "epic-turn":
-      return { kind: "epic", project: null, target: null, subject: p.title };
+      return { kind: "epic", project: null, target: null, subject: proposal.title };
     case "attach":
-      return { kind: "files", project: null, target: person(p.to), subject: `${o.items.length} on "${o.goal}"` };
+      return { kind: "files", project: null, target: person(proposal.to), subject: `${outgoing.items.length} on "${outgoing.goal}"` };
     case "transcript":
-      return { kind: "transcript", project: null, target: person(p.to), subject: o.subject };
+      return { kind: "transcript", project: null, target: person(proposal.to), subject: outgoing.subject };
   }
 };
 
 /** The full text of a proposal, as the person reads it before saying yes. */
-export function proposalText(p: Proposal): string {
-  const o = p.outgoing;
-  switch (o.kind) {
+export function proposalText(proposal: Proposal): string {
+  const outgoing = proposal.outgoing;
+  switch (outgoing.kind) {
     case "message":
-      return o.findings;
+      return outgoing.findings;
     case "ticket":
-      return o.ticket.steps.map((s) => `${s.id} · ${s.intent}: ${s.description}`).join("\n");
+      return outgoing.ticket.steps.map((step) => `${step.id} · ${step.intent}: ${step.description}`).join("\n");
     case "settle":
-      return o.result;
+      return outgoing.result;
     case "post-review":
-      return o.findings;
+      return outgoing.findings;
     case "review": {
-      const r = o.review;
+      const review = outgoing.review;
       const head = [
-        r.branch ? (r.base ? `${r.branch} → ${r.base}` : r.branch) : "",
-        r.link ?? "",
-      ].filter((x) => x.length > 0);
+        review.branch ? (review.base ? `${review.branch} → ${review.base}` : review.branch) : "",
+        review.link ?? "",
+      ].filter((part) => part.length > 0);
       // your own words are in here: this is the text to read before it goes
       return [
-        o.ticket ? `a review of "${ticketName(o.ticket)}"` : "more why for a review already on the ticket",
+        outgoing.ticket ? `a review of "${ticketName(outgoing.ticket)}"` : "more why for a review already on the ticket",
         ...(head.length > 0 ? [head.join(" · ")] : []),
-        r.summary,
+        review.summary,
         "",
         "why it is the way it is — this goes on the room's log for everyone in it:",
-        ...r.decisions.map((d) => `- ${d.id} ${d.title ?? `(${NO_TITLE})`}\n    ${d.what}${d.userWhy ? `\n    you: ${d.userWhy}` : ""}${d.agentWhy ? `\n    agent: ${d.agentWhy}` : ""}${d.guidedBy && d.guidedBy.length > 0 ? `\n    guided by: ${d.guidedBy.join(", ")}` : ""}${d.where.length > 0 ? `\n    ${d.where.join(", ")}` : ""}`),
-        ...(r.units && r.units.length > 0 ? ["", "units — how the code reads:", ...r.units.map((u) => `- ${u.id} ${u.title}${u.what ? `\n    ${u.what}` : ""}\n    ${u.where.join(", ")}`)] : []),
-        ...(r.forks.length > 0 ? ["", "forks in the road:"] : []),
-        ...r.forks.map((f) => `- ${f.id} ${f.at}: chose ${f.chose} over ${f.instead} — ${f.why}${f.by ? ` (${f.by}'s call)` : ""}`),
+        ...review.decisions.map((decision) => `- ${decision.id} ${decision.title ?? `(${NO_TITLE})`}\n    ${decision.what}${decision.userWhy ? `\n    you: ${decision.userWhy}` : ""}${decision.agentWhy ? `\n    agent: ${decision.agentWhy}` : ""}${decision.guidedBy && decision.guidedBy.length > 0 ? `\n    guided by: ${decision.guidedBy.join(", ")}` : ""}${decision.where.length > 0 ? `\n    ${decision.where.join(", ")}` : ""}`),
+        ...(review.units && review.units.length > 0 ? ["", "units — how the code reads:", ...review.units.map((unit) => `- ${unit.id} ${unit.title}${unit.what ? `\n    ${unit.what}` : ""}\n    ${unit.where.join(", ")}`)] : []),
+        ...(review.forks.length > 0 ? ["", "forks in the road:"] : []),
+        ...review.forks.map((fork) => `- ${fork.id} ${fork.at}: chose ${fork.chose} over ${fork.instead} — ${fork.why}${fork.by ? ` (${fork.by}'s call)` : ""}`),
       ].join("\n");
     }
     case "transcript":
-      return `your ${o.ai} conversation ${o.sessionId.slice(0, 8)}… on thread ${o.threadId}, from ${new Date(o.since).toISOString()} on — every line of it, as the session file has it. It goes to the requester only.`;
+      return `your ${outgoing.ai} conversation ${outgoing.sessionId.slice(0, 8)}… on thread ${outgoing.threadId}, from ${new Date(outgoing.since).toISOString()} on — every line of it, as the session file has it. It goes to the requester only.`;
     case "close":
-      return `closed${o.outcome === "dropped" ? " as dropped" : o.outcome === "done" ? " as done" : ""}${o.reason ? ` — ${o.reason}` : ""}`;
+      return `closed${outgoing.outcome === "dropped" ? " as dropped" : outgoing.outcome === "done" ? " as done" : ""}${outgoing.reason ? ` — ${outgoing.reason}` : ""}`;
     case "epic-move":
-      return o.epic
-        ? `${o.excluded === true ? "kept in the epic but out of its progress" : o.excluded === false ? "counted in the epic's progress again" : "put into the epic"} "${o.name ?? o.goal}": ${o.ticketIds.join(", ")}`
-        : `taken out of their epic: ${o.ticketIds.join(", ")}`;
+      return outgoing.epic
+        ? `${outgoing.excluded === true ? "kept in the epic but out of its progress" : outgoing.excluded === false ? "counted in the epic's progress again" : "put into the epic"} "${outgoing.name ?? outgoing.goal}": ${outgoing.ticketIds.join(", ")}`
+        : `taken out of their epic: ${outgoing.ticketIds.join(", ")}`;
     case "epic-order":
-      return `"${o.name ?? o.goal}" read in this order: ${o.ticketIds.join(", ")}`;
+      return `"${outgoing.name ?? outgoing.goal}" read in this order: ${outgoing.ticketIds.join(", ")}`;
     case "epic-turn":
-      return `${o.closed ? "closed" : "reopened"}${o.reason ? ` — ${o.reason}` : ""}`;
+      return `${outgoing.closed ? "closed" : "reopened"}${outgoing.reason ? ` — ${outgoing.reason}` : ""}`;
     case "attach":
-      return `${o.items.length} file(s) attached to "${o.goal}"${o.note ? ` — ${o.note}` : ""}. The references go on the ticket for everyone; the files go only to whoever fetches them while you are online:\n${o.items
-        .map((i) => `- ${i.name} · ${Math.max(1, Math.round(i.bytes / 1024))} kB${i.transcript ? ` · ${i.transcript.from}'s ${i.transcript.ai} conversation, ${i.transcript.entries} entries` : ` · ${i.mime}`}`)
+      return `${outgoing.items.length} file(s) attached to "${outgoing.goal}"${outgoing.note ? ` — ${outgoing.note}` : ""}. The references go on the ticket for everyone; the files go only to whoever fetches them while you are online:\n${outgoing.items
+        .map((item) => `- ${item.name} · ${Math.max(1, Math.round(item.bytes / 1024))} kB${item.transcript ? ` · ${item.transcript.from}'s ${item.transcript.ai} conversation, ${item.transcript.entries} entries` : ` · ${item.mime}`}`)
         .join("\n")}`;
   }
 }
@@ -119,30 +119,30 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
     const store = yield* StateStore;
     const dispatch = yield* Dispatch;
 
-    const all = store.get.pipe(Effect.map((s) => s.sent ?? []));
-    const changes = SubscriptionRef.changes(store.state).pipe(Stream.map((s) => s.sent ?? []));
+    const all = store.get.pipe(Effect.map((state) => state.sent ?? []));
+    const changes = SubscriptionRef.changes(store.state).pipe(Stream.map((state) => state.sent ?? []));
 
     /** Do it, then remember it — and only if it was done. A refused write
      *  (not admitted yet, peer gone, the file unreadable) leaves no row: the
      *  outbox is a receipt of what left this machine, so a failure recorded
      *  as a send would be a lie the person cannot see through. The caller
      *  gets the outcome, tag and all: some of them have to retry. */
-    const send = (p: Omit<Proposal, "id" | "ts">) =>
+    const send = (proposal: Omit<Proposal, "id" | "ts">) =>
       Effect.gen(function* () {
-        const outcome = yield* dispatch.perform(p.roomId, p.outgoing);
+        const outcome = yield* dispatch.perform(proposal.roomId, proposal.outgoing);
         if (outcome._tag === "sent") {
-          const full: Proposal = { ...p, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis };
-          yield* store.update((s) => ({ ...s, sent: [full, ...(s.sent ?? [])].slice(0, KEPT) }));
+          const full: Proposal = { ...proposal, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis };
+          yield* store.update((state) => ({ ...state, sent: [full, ...(state.sent ?? [])].slice(0, KEPT) }));
         }
         const mark = outcome._tag === "sent" ? "↗" : "✕";
-        yield* Effect.log(`${mark} ${p.outgoing.kind} → ${p.to} · ${p.title} — ${outcome.text.split("\n")[0]}`);
+        yield* Effect.log(`${mark} ${proposal.outgoing.kind} → ${proposal.to} · ${proposal.title} — ${outcome.text.split("\n")[0]}`);
         return outcome;
       });
 
     /** For a caller that only relays what happened to its agent: the text,
      *  without the tag. Anything that must react to a refusal (retry, keep a
      *  peer's request alive) uses `send` and reads the tag. */
-    const tell = (p: Omit<Proposal, "id" | "ts">) => send(p).pipe(Effect.map((d) => d.text));
+    const tell = (proposal: Omit<Proposal, "id" | "ts">) => send(proposal).pipe(Effect.map((outcome) => outcome.text));
 
     return { all, changes, send, tell } as const;
   }),

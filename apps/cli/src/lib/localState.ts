@@ -17,18 +17,18 @@ export const emptyState: LocalState = { preferredAi: null, rooms: {} };
 const decode = <A>(schema: Schema.Codec<A, any>, value: unknown): A | null =>
   Option.getOrNull(Schema.decodeUnknownOption(schema)(value));
 
-const obj = (x: unknown): Record<string, unknown> | null =>
-  typeof x === "object" && x !== null && !Array.isArray(x) ? (x as Record<string, unknown>) : null;
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 
 /** Keep the entries of a record that still decode; count the rest. */
 const salvageRecord = <A>(raw: unknown, schema: Schema.Codec<A, any>, drop: () => void): Record<string, A> | undefined => {
-  const src = obj(raw);
+  const src = asRecord(raw);
   if (!src) return undefined;
   const out: Record<string, A> = {};
-  for (const [k, v] of Object.entries(src)) {
-    const one = decode(schema, v);
+  for (const [key, value] of Object.entries(src)) {
+    const one = decode(schema, value);
     if (one === null) drop();
-    else out[k] = one;
+    else out[key] = one;
   }
   return out;
 };
@@ -49,24 +49,24 @@ export const salvageState = (text: string): Salvaged => {
   const whole = decode(LocalState, raw);
   if (whole !== null) return { state: whole, dropped: [] };
 
-  const src = obj(raw);
+  const src = asRecord(raw);
   if (!src) return { state: emptyState, dropped: ["the state file is not a state file — starting fresh"] };
   const dropped: string[] = [];
   const count = (what: string) => {
-    let n = 0;
+    let drops = 0;
     return {
-      hit: () => n++,
+      hit: () => drops++,
       done: () => {
-        if (n > 0) dropped.push(`${n} ${what}${n === 1 ? "" : "s"}`);
+        if (drops > 0) dropped.push(`${drops} ${what}${drops === 1 ? "" : "s"}`);
       },
     };
   };
 
   const projects = count("shared project");
   const rooms: Record<string, ReadonlyArray<Project>> = {};
-  for (const [roomId, list] of Object.entries(obj(src.rooms) ?? {})) {
-    rooms[roomId] = (Array.isArray(list) ? list : []).flatMap((p) => {
-      const one = decode(Project, p);
+  for (const [roomId, list] of Object.entries(asRecord(src.rooms) ?? {})) {
+    rooms[roomId] = (Array.isArray(list) ? list : []).flatMap((project) => {
+      const one = decode(Project, project);
       if (one === null) {
         projects.hit();
         return [];
@@ -90,12 +90,12 @@ export const salvageState = (text: string): Salvaged => {
 
   // the comments not said yet, per review: one unreadable takes only itself
   const draftDrops = count("unsaid review comment");
-  const draftsRaw = obj(src.drafts);
+  const draftsRaw = asRecord(src.drafts);
   const drafts = draftsRaw
     ? Object.fromEntries(
         Object.entries(draftsRaw).flatMap(([ticket, list]) => {
-          const kept = (Array.isArray(list) ? list : []).flatMap((d) => {
-            const one = decode(DraftComment, d);
+          const kept = (Array.isArray(list) ? list : []).flatMap((draft) => {
+            const one = decode(DraftComment, draft);
             if (one === null) draftDrops.hit();
             return one === null ? [] : [one];
           });
@@ -106,7 +106,7 @@ export const salvageState = (text: string): Salvaged => {
   draftDrops.done();
 
   // which assumed reviews of their code the agent was told of: plain ids, the bad ones dropped
-  const toldGuessed = Array.isArray(src.toldGuessed) ? src.toldGuessed.filter((x): x is string => typeof x === "string") : undefined;
+  const toldGuessed = Array.isArray(src.toldGuessed) ? src.toldGuessed.filter((entry): entry is string => typeof entry === "string") : undefined;
 
   const finishDrops = count("finished review record");
   const finished = salvageRecord(src.finished, Schema.Array(Schema.String), finishDrops.hit);
@@ -114,8 +114,8 @@ export const salvageState = (text: string): Salvaged => {
 
   const proposalDrops = count("sent record");
   const sent = Array.isArray(src.sent)
-    ? src.sent.flatMap((p) => {
-        const one = decode(Proposal, p);
+    ? src.sent.flatMap((proposal) => {
+        const one = decode(Proposal, proposal);
         if (one === null) {
           proposalDrops.hit();
           return [];
@@ -127,8 +127,8 @@ export const salvageState = (text: string): Salvaged => {
 
   const askDrops = count("transcript request");
   const transcriptAsks = Array.isArray(src.transcriptAsks)
-    ? src.transcriptAsks.flatMap((a) => {
-        const one = decode(TranscriptAsk, a);
+    ? src.transcriptAsks.flatMap((ask) => {
+        const one = decode(TranscriptAsk, ask);
         if (one === null) {
           askDrops.hit();
           return [];

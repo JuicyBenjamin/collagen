@@ -8,7 +8,7 @@ import { theme } from "../../../../app/theme";
  *  list can scroll through a long one instead of cutting it off. Everything is
  *  flexShrink 0: a squeezed row draws its lines on top of each other. */
 export function OutgoingRow({
-  proposal: p,
+  proposal,
   selected,
   expanded,
   note,
@@ -18,7 +18,7 @@ export function OutgoingRow({
   expanded: boolean;
   note?: string;
 }) {
-  const summary = outgoingSummary(p);
+  const summary = outgoingSummary(proposal);
   return (
     <text fg={selected ? theme.accent : theme.fg} truncate wrapMode="none" flexShrink={0}>
       {selected ? (expanded ? "▾ " : "› ") : "  "}

@@ -71,7 +71,7 @@ const provided = (): ReviewBackend["Service"] => {
 };
 
 /** Run an effect on the backend, for a server function. */
-export const run = <A>(f: (b: ReviewBackend["Service"]) => Effect.Effect<A>): Promise<A> => Effect.runPromise(f(provided()));
+export const run = <A>(operation: (service: ReviewBackend["Service"]) => Effect.Effect<A>): Promise<A> => Effect.runPromise(operation(provided()));
 
 /** A stream from the backend, as a live server function returns it. */
-export const stream = <A>(f: (b: ReviewBackend["Service"]) => Stream.Stream<A>): AsyncIterable<A> => Stream.toAsyncIterable(f(provided()));
+export const stream = <A>(operation: (service: ReviewBackend["Service"]) => Stream.Stream<A>): AsyncIterable<A> => Stream.toAsyncIterable(operation(provided()));

@@ -13,8 +13,8 @@ const merge = (number: number, branch: string, at: string, kind: HostMerge["kind
   commits: 2,
   at,
 });
-const day = (d: number) => Date.parse(`2026-10-${String(d).padStart(2, "0")}T00:00:00Z`);
-const tied = (merges: ReadonlyArray<HostMerge>, reviewed: ReadonlyArray<ReviewedCode>) => ticketsOfMerges(merges, reviewed).map((m) => [m.merge.number, m.tickets]);
+const day = (dayOfMonth: number) => Date.parse(`2026-10-${String(dayOfMonth).padStart(2, "0")}T00:00:00Z`);
+const tied = (merges: ReadonlyArray<HostMerge>, reviewed: ReadonlyArray<ReviewedCode>) => ticketsOfMerges(merges, reviewed).map((tie) => [tie.merge.number, tie.tickets]);
 
 describe("which tickets each merge came from", () => {
   it("by the pull request a review links to, whatever the merge kind — and only by it", () => {
@@ -45,7 +45,7 @@ describe("which tickets each merge came from", () => {
       [1, []],
     ]);
     // filed after every merge of its branch: not merged yet
-    expect(ticketsOfMerges(merges, [{ ticketId: "late", branch: "fix", filedAt: day(10) }]).flatMap((m) => m.tickets)).toEqual([]);
+    expect(ticketsOfMerges(merges, [{ ticketId: "late", branch: "fix", filedAt: day(10) }]).flatMap((tie) => tie.tickets)).toEqual([]);
   });
 
   it("several tickets on one merge, in the order filed; the link decides over the branch", () => {
@@ -78,14 +78,14 @@ describe("a project's review tickets, as where their code was", () => {
   it("what the reader may see, of this project, with the commits its comments were written at", () => {
     const pending = ticket("plan", { kind: "plan", steps: [{ id: "s", owner: "bob", intent: "take", description: "", needs: [], status: "pending", updatedAt: 1 }] });
     const all = new Map(
-      [ticket("r"), ticket("gated", { after: ["plan"] }), ticket("elsewhere", { project: "api" }), ticket("task", { kind: "task" }), pending].map((t) => [t.id, t] as const),
+      [ticket("r"), ticket("gated", { after: ["plan"] }), ticket("elsewhere", { project: "api" }), ticket("task", { kind: "task" }), pending].map((madeTicket) => [madeTicket.id, madeTicket] as const),
     );
     const got = reviewedCode("shop", all, [review("r", "feat", "https://github.com/acme/shop/pull/7/files"), review("gated", "next")], [comment("r", "c1"), comment("r", "c1"), comment("r", "c2")], "bob", github);
     expect(got).toEqual([{ ticketId: "r", filedAt: 5, pull: 7, branch: "feat", commits: ["c1", "c2"] }]);
     // its author sees their own while it waits
-    expect(reviewedCode("shop", all, [], [], "alice", github).map((c) => c.ticketId)).toEqual(["r", "gated"]);
+    expect(reviewedCode("shop", all, [], [], "alice", github).map((code) => code.ticketId)).toEqual(["r", "gated"]);
     // a project is one project however this machine cases its name
-    expect(reviewedCode("Shop", all, [], [], "bob", github).map((c) => c.ticketId)).toEqual(["r"]);
+    expect(reviewedCode("Shop", all, [], [], "bob", github).map((code) => code.ticketId)).toEqual(["r"]);
   });
 });
 
@@ -101,19 +101,19 @@ describe("what a merge grew from", () => {
         ticket("other-task", "task", ["plan"]),
         ticket("r1", "review", ["do"]),
         ticket("r2", "review", ["other-task", "idea"]),
-      ].map((t) => [t.id, t] as const),
+      ].map((madeTicket) => [madeTicket.id, madeTicket] as const),
     );
-    expect(lineage(["r1"], all, "bob").map((t) => t.id)).toEqual(["idea", "plan", "do", "r1"]);
+    expect(lineage(["r1"], all, "bob").map((madeTicket) => madeTicket.id)).toEqual(["idea", "plan", "do", "r1"]);
     // a stack reviewed in parts: the shared roots once, before both
-    expect(lineage(["r1", "r2"], all, "bob").map((t) => t.id)).toEqual(["idea", "plan", "do", "r1", "other-task", "r2"]);
+    expect(lineage(["r1", "r2"], all, "bob").map((madeTicket) => madeTicket.id)).toEqual(["idea", "plan", "do", "r1", "other-task", "r2"]);
   });
 
   it("a ticket the reader may not see is left out, and the chain past it kept", () => {
     const all = new Map(
       [ticket("idea", "proposal"), ticket("gate", "plan", [], { steps: [{ id: "s", owner: "bob", intent: "take", description: "", needs: [], status: "pending", updatedAt: 1 }] }), ticket("plan", "plan", ["idea"], { after: ["gate"] }), ticket("r", "review", ["plan"])].map(
-        (t) => [t.id, t] as const,
+        (madeTicket) => [madeTicket.id, madeTicket] as const,
       ),
     );
-    expect(lineage(["r"], all, "carol").map((t) => t.id)).toEqual(["idea", "r"]);
+    expect(lineage(["r"], all, "carol").map((madeTicket) => madeTicket.id)).toEqual(["idea", "r"]);
   });
 });
