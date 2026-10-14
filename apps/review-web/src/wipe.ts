@@ -5,8 +5,10 @@ import { createSignal, type Accessor } from "solid-js";
 // the bottom right — each part on its own, as soon as it is read, so a slow
 // part never holds back a fast one. The placeholder is swept, not the part:
 // it is about a screen tall, so the sweep is seen, where a part of thousands
-// of lines would cross the screen in a blink. Once: later reads change in
-// place. None at all when the reader asks their system for less motion.
+// of lines would cross the screen in a blink; it reaches the screen's bottom,
+// so what lies below its shape sweeps in with it. Once: later reads change in
+// place. What arrives with no placeholder of its own sweeps in the same way
+// (arrive). None at all when the reader asks their system for less motion.
 
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 /** As long as the sweep runs (styles.css: swap-ghost). */
@@ -45,4 +47,17 @@ export function wipeIn(): { readonly ghost: Accessor<boolean>; readonly start: (
     requestAnimationFrame(begin);
   };
   return { ghost, start, end };
+}
+
+/** Something arriving with no placeholder of its own (the host's answer, a
+ *  banner, a header read for the first time): swept in the same way, from
+ *  nothing. Call it on the element as it is placed (a ref). The mask goes
+ *  once it is in, so nothing it holds is clipped after. */
+export function arrive(element: HTMLElement): void {
+  if (still.matches) return;
+  element.classList.add("arriving");
+  const done = () => element.classList.remove("arriving");
+  element.addEventListener("animationend", (event) => event.target === element && done(), { once: true });
+  // a tab out of sight runs no animation: in anyway, on time
+  setTimeout(done, SWEEP_MS + 150);
 }
