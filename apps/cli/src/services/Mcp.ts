@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { afterProblem, AI_OPTIONS, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -24,7 +24,7 @@ import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { sharedProject } from "../lib/projects";
 import { Scripting } from "./Scripting";
-import { Rooms } from "./Rooms";
+import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
@@ -141,6 +141,8 @@ export const CreateTicket = Tool.make("create-ticket", {
     goal: Schema.String,
     /** tickets this one follows — a plan it carries out; walked back on request */
     from: Schema.optional(Schema.Array(Schema.String)),
+    /** the epic to file it in; left out, the one the tickets it grows out of are in; null for none */
+    epic: Schema.optional(Schema.NullOr(Schema.String)),
     /** your user's instruction for the moment they close it, handed back then */
     whenClosed: Schema.optional(Schema.String),
     /** tickets this one waits on: nobody else is shown it until they are answered */
@@ -172,6 +174,8 @@ const judgedParameters = {
   summary: Schema.optional(Schema.String),
   focus: Schema.optional(Schema.String),
   from: Schema.optional(Schema.Array(Schema.String)),
+  /** the epic to file it in; left out, the one the tickets it grows out of are in; null for none */
+  epic: Schema.optional(Schema.NullOr(Schema.String)),
   after: Schema.optional(Schema.Array(Schema.String)),
   whenClosed: Schema.optional(Schema.String),
   decisions: Schema.optional(
@@ -428,6 +432,8 @@ export const AskReview = Tool.make("ask-review", {
     base: Schema.optional(Schema.String),
     link: Schema.optional(Schema.String),
     from: Schema.optional(Schema.Array(Schema.String)),
+    /** the epic to file it in; left out, the one the tickets it grows out of are in; null for none */
+    epic: Schema.optional(Schema.NullOr(Schema.String)),
     after: Schema.optional(Schema.Array(Schema.String)),
     whenClosed: Schema.optional(Schema.String),
     decisions: Schema.optional(
@@ -535,10 +541,10 @@ export const RemoveProject = Tool.make("remove-project", {
 
 export const Epic = Tool.make("epic", {
   description: [
-    "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. Filing outcomes may ask you to OFFER one: the epic of the ticket a new one grows out of, or a new epic when your user files several related tickets together — offer in one line, act on their yes.",
-    "An epic belongs to the room, not to a project or a person: anyone may put a ticket in, move one from epic to epic, take one out, order them, close an epic or reopen it. A ticket is in one epic at most, and only where it was put: lineage (from) never moves anything, so a plan grown out of a part is added explicitly if it belongs. Parts may come from any project.",
+    "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. A ticket filed out of a ticket in an epic goes into that epic as it is filed (pass epic: null when filing to keep it out, or remove it after). Filing outcomes may ask you to OFFER one: which epic, when what it grows out of is in several, or a new epic when your user files several related tickets together — offer in one line, act on their yes.",
+    "An epic belongs to the room, not to a project or a person: anyone may put a ticket in, move one from epic to epic, take one out, order them, close an epic or reopen it. A ticket is in one epic at most, and only where it was put — by filing, or by this tool; lineage moves nothing later. Parts may come from any project.",
     "action 'create': title (its headline, a few words), optionally goal (the line beneath it), summary (what it aims for, a sentence or two) and ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'exclude' / 'include': epicId and ticketIds — kept in the epic but out of its progress (work dropped or not to be done there), or counted again. 'order': epicId and ticketIds in the order they are to be read — it hides nothing and sets no after. 'close': epicId — only once everything in it is done, closed or excluded; your user's reason, or by default that its parts are done. 'reopen': epicId and a reason, always. 'rename': epicId and a new title, optionally goal and summary — its author's to do, as a ticket's title is its author's (anyone else asks them).",
-    "Progress is a count: done against everything counted. get-tickets shows each ticket's epic and each epic's parts, progress and what still keeps it open; review-context on an epic reads its aim and its tickets. It goes out as you call it and shows in your user's outbox.",
+    "Progress counts lines of work, not tickets: a proposal, its plan, the task and the review that grew out of each other are one line, done when all of it is — so filing the next stage adds nothing to get through. get-tickets shows each ticket's epic and each epic's parts, progress and what still keeps it open; review-context on an epic reads its aim and its tickets. It goes out as you call it and shows in your user's outbox.",
   ].join("\n"),
   parameters: Schema.Struct({
     action: Schema.Literals(["create", "add", "remove", "exclude", "include", "order", "close", "reopen", "rename"]),
@@ -841,6 +847,16 @@ const makeHandlers = Effect.gen(function* () {
      *  the author settles); what differs — code facts read from git, work
      *  steps for a recipient, the words a reader's agent is handed — turns on
      *  `kind` here, in one place, instead of three copies drifting apart. */
+    /** A ticket being filed, put into the epic it belongs to (epicForFiling):
+     *  the one its filer named, else the one the tickets it grows out of are
+     *  in — or `failed: …` for an epic that is not one. */
+    const filedInEpic = (ticket: Ticket, room: RoomHandle["room"], chosen: string | null | undefined, now: number) =>
+      Effect.map(SubscriptionRef.get(room.tickets), (all: ReadonlyMap<string, Ticket>): Ticket | string => {
+        if (typeof chosen === "string" && all.get(chosen)?.kind !== "epic") return `failed: no epic ${chosen} — check get-tickets`;
+        const epic = epicForFiling(ticket.from ?? [], all, chosen);
+        return epic ? moveToEpic(ticket, epic, identity.pubkey, now) : ticket;
+      });
+
     const fileJudged = Effect.fn("Mcp.fileJudged")(function* (kind: "review" | "plan" | "proposal" | "bug", input: {
         peers?: ReadonlyArray<string>;
         project?: string;
@@ -856,6 +872,7 @@ const makeHandlers = Effect.gen(function* () {
         forks?: ReadonlyArray<ForkInput>;
       
         from?: ReadonlyArray<string>;
+        epic?: string | null;
         after?: ReadonlyArray<string>;
         whenClosed?: string;
         work?: ReadonlyArray<{ readonly id?: string; readonly intent: string; readonly description: string; readonly owner?: string }>;
@@ -1157,11 +1174,14 @@ const makeHandlers = Effect.gen(function* () {
           ...(branch ? { branch } : {}),
           ...(link ? { link } : {}),
         }, now);
+        // grown out of a part of an epic: filed into it, unless its filer says otherwise
+        const inEpic = yield* filedInEpic(ticket, room, input.epic, now);
+        if (typeof inEpic === "string") return inEpic;
         const filed = yield* outbox.tell({
           roomId,
           to: asked.length > 0 ? asked.join(", ") : "the room",
           title: `${projectName} · ${kind} · ${goal}`,
-          outgoing: { kind: "review", ticket, review },
+          outgoing: { kind: "review", ticket: inEpic, review },
         });
         // a stack the author did not say out loud: noticed, never decided —
         // an inferred order would hide this ticket from its readers as a
@@ -1299,6 +1319,7 @@ const makeHandlers = Effect.gen(function* () {
         goal: string;
         project: string;
         from?: ReadonlyArray<string>;
+        epic?: string | null;
         after?: ReadonlyArray<string>;
         whenClosed?: string;
         steps: ReadonlyArray<{
@@ -1354,7 +1375,9 @@ const makeHandlers = Effect.gen(function* () {
           })),
         };
         const to = [...new Set(owners.map((owner) => owner.name))].join(", ");
-        return yield* outbox.tell({ roomId, to, title: `${project} · ${input.title.trim()}`, outgoing: { kind: "ticket", ticket } });
+        const inEpic = yield* filedInEpic(ticket, room, input.epic, now);
+        if (typeof inEpic === "string") return inEpic;
+        return yield* outbox.tell({ roomId, to, title: `${project} · ${input.title.trim()}`, outgoing: { kind: "ticket", ticket: inEpic } });
       }),
       "ask-review": (input: Parameters<typeof fileJudged>[1]) => fileJudged("review", input),
       "claim-review": Effect.fn("Mcp.claimReview")(function* (input: {

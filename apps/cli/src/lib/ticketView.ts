@@ -63,7 +63,7 @@ function partsLine(epic: Ticket, all: ReadonlyMap<string, Ticket>, me: string): 
   const { parts, counted, done, unresolved } = epicParts(epic, all);
   const shown = (ticket: Ticket) => visibleTo(ticket, all, me);
   return {
-    parts: parts.length === 0 ? "none yet" : `${done} of ${counted} done: ${parts.filter(shown).map((part) => part.id).join(" ")}`,
+    parts: parts.length === 0 ? "none yet" : `${done} of ${counted} pieces of work done: ${parts.filter(shown).map((part) => part.id).join(" ")}`,
     ...(unresolved.length > 0 ? { unresolved: unresolved.filter(shown).map((ticket) => ticket.id).join(" ") || `${unresolved.length} not shown to you yet` } : {}),
   };
 }
