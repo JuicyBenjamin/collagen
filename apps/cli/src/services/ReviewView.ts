@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
-import { gitDir, repoWebUrl } from "../lib/gitInfo";
+import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, SinceResult, Verdict, WholeFileResult } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
@@ -21,10 +21,27 @@ import { StateStore } from "./StateStore";
 // by the running instance beside /mcp, on loopback, read-only — a take still
 // goes back through the person's agent (post-review), one path into the log.
 
-/** The diff of base...branch from the clone at `path`: fetch first (the
- *  reviewer may not have the branch yet), then the refs as they are, local
- *  or origin's. Null with the reason when it cannot. */
-const fromClone = (path: string, base: string, branch: string, fetch = true, pullRef?: (pull: number) => string) =>
+/** Where the branch at `b` left the nearest of `refs` (bases it may sit on):
+ *  their merge-bases with it, the one each other is an ancestor of — a stale
+ *  copy of a base, or a base merged elsewhere since, left it earlier. Where
+ *  they part ways, the first's. With the ref it came from, for the reason. */
+const leftAt = (path: string, refs: ReadonlyArray<string>, b: string) =>
+  Effect.gen(function* () {
+    const points = (yield* Effect.forEach(refs, (ref) => run("git", ["merge-base", ref, b], path, 5_000).pipe(Effect.map((out) => ({ ref, at: out?.trim() ?? "" }))))).filter((p) => p.at.length > 0);
+    const first = points[0];
+    if (!first || points.length === 1) return first ?? null;
+    const nearest = (yield* run("git", ["merge-base", "--independent", ...new Set(points.map((p) => p.at))], path, 5_000))?.trim().split("\n") ?? [];
+    return nearest.length === 1 ? (points.find((p) => p.at === nearest[0]) ?? first) : first;
+  });
+
+/** The diff of a branch against its base from the clone at `path`: fetch
+ *  first (the reviewer may not have the branch yet), then the refs as they
+ *  are, local and origin's. The base is where the branch left it — read
+ *  against the freshest copy of it, and against `elsewhere` (the default
+ *  branch; where the base was merged, when its own tip is no longer under
+ *  the branch), so a branch rebased over other work shows its own changes
+ *  alone. Null with the reason when it cannot. */
+const fromClone = (path: string, base: string, branch: string, fetch = true, pullRef?: (pull: number) => string, merged?: Effect.Effect<string | null>) =>
   Effect.gen(function* () {
     if (!gitDir(path)) return { diff: null, why: `${path} is not a git repository` };
     // best effort: offline, or a remote that needs a password, still has whatever is local
@@ -34,12 +51,20 @@ const fromClone = (path: string, base: string, branch: string, fetch = true, pul
     const pr = /^pr\/(\d+)$/.exec(branch);
     if (fetch && pr && pullRef) yield* run("git", ["fetch", "--quiet", "--no-tags", "origin", `+${pullRef(Number(pr[1]))}:refs/remotes/origin/pr/${pr[1]}`], path, 20_000);
     const b = yield* firstRef(path, [branch, `origin/${branch}`]);
-    const a = yield* firstRef(path, [base, `origin/${base}`]);
     if (!b) return { diff: null, why: `the branch ${branch} is not in your clone at ${path}, nor on its origin` };
-    if (!a) return { diff: null, why: `the base ${base} is not in your clone at ${path}, nor on its origin` };
-    const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${a}...${b}`], path, 30_000);
+    const own = (yield* Effect.forEach([base, `origin/${base}`], (ref) => firstRef(path, [ref]))).filter((ref): ref is string => ref !== null);
+    // the base's tip under the branch: it is where the branch sits, nothing moved
+    const under = own.length > 0 && (yield* run("git", ["merge-base", "--is-ancestor", own[0]!, b], path, 5_000)) !== null;
+    const into = under || !merged ? null : yield* merged;
+    const fallback = defaultBranchOf(path);
+    const elsewhere = [...(into ? [`origin/${into}`] : []), ...(fallback && fallback !== base ? [`origin/${fallback}`] : [])];
+    const refs = [...own, ...(yield* Effect.forEach(elsewhere, (ref) => firstRef(path, [ref]))).filter((ref): ref is string => ref !== null)];
+    if (own.length === 0 && !into) return { diff: null, why: `the base ${base} is not in your clone at ${path}, nor on its origin` };
+    const left = yield* leftAt(path, refs, b);
+    if (!left) return { diff: null, why: `${branch} shares no history with ${base} in ${path}` };
+    const diff = yield* run("git", ["diff", "--no-color", "--no-ext-diff", "-U3", `${left.at}..${b}`], path, 30_000);
     const commit = (yield* run("git", ["rev-parse", `${b}^{commit}`], path, 5_000))?.trim() || undefined;
-    return diff === null ? { diff: null, why: `git diff ${a}...${b} failed in ${path}` } : { diff, why: `${a}...${b} from your clone at ${path}`, commit };
+    return diff === null ? { diff: null, why: `git diff ${left.ref}...${b} failed in ${path}` } : { diff, why: `${left.ref}...${b} from your clone at ${path}`, commit };
   });
 
 /** Is `commit` a commit the clone at `path` has? */
@@ -92,7 +117,11 @@ export const readDiff = (
     // the branch unread (no clone, or not in it): the host may still have it
     let unread = true;
     if ("path" in clone) {
-      const got = yield* fromClone(clone.path, base, branch, fetch, host?.pullRef);
+      // the base merged since, by its own pull request: what it went into
+      // (asked by the repository, never a link naming the review's own pull request)
+      const repo = repoWebUrl(clone.path) ?? (review.link && host?.pullIn(review.link) === null ? review.link : null);
+      const merged = host && repo ? host.pull(repo, base).pipe(Effect.map((r) => ("pull" in r && r.pull.merged ? r.pull.base : null))) : undefined;
+      const got = yield* fromClone(clone.path, base, branch, fetch, host?.pullRef, merged);
       if (got.diff) return { kind: "clone", diff: got.diff, why: got.why, commit: "commit" in got ? got.commit : undefined } satisfies ReadDiff;
       unread = got.diff === null;
       why = got.diff === null ? got.why : `${branch} has no changes against ${base}`;
