@@ -50,52 +50,57 @@ export function HeaderSkeleton() {
   );
 }
 
-const CODE_LINES = ["export function readTheRows(page) {", "  const rows = page.rows;", "  return rows.map(toRow);", "}"] as const;
+const CODE_SHAPES = ["export function readTheRows(page) {", "  const rows = page.rows;", "  return rows.map(toRow);", "}", "", "const toRow = (row) => ({", "  id: row.id,", "  name: row.name.trim(),", "});"] as const;
+/** Code lines: enough to run past the bottom of a screen, so the sweep only
+ *  ever trades code for code, never a placeholder's next title for code. */
+const CODE_LINES = Array.from({ length: 36 }, (_, index) => CODE_SHAPES[index % CODE_SHAPES.length]!);
 
-/** Units not read yet: each a title and a line, then a file's card of a few
- *  lines — short, so the code that arrives grows the page below, never
- *  shrinks it above. */
-export function UnitsSkeleton(props: { count: number }) {
+/** The code not read yet: the first unit's title and lines, then its code
+ *  running past the screen's bottom — whatever the review holds below it is
+ *  out of sight while it loads, and grows the page there when it arrives. */
+export function UnitsSkeleton() {
   return (
     <div class="sk" role="status" aria-busy="true" aria-label="Reading the code">
-      <For each={Array.from({ length: props.count }, (_, index) => index)}>
-        {(index) => (
-          <section class="decision unit">
-            <div class="unit-head">
-              <div class="decision-head">
-                <h2>{words(index % 2 ? "Where its code goes" : "What the change does first")}</h2>
-                <p class="decision-what">{words("the code that together achieves it")}</p>
-                <p class="unit-why">
-                  <span class="who">{words("Why")}</span>
-                  <span class="chip">{words("the decision behind it")}</span>
-                </p>
-                <p class="unit-size">{words("4 changes in 2 files")}</p>
-              </div>
-            </div>
-            <div class="unit-body">
-              <div class="decision-main">
-                <div class="hunk-group">
-                  <div class="hunk">
-                    <div class="file">{words("src/the/file.ts")}</div>
-                    <table>
-                      <tbody>
-                        <For each={CODE_LINES}>
-                          {(line, row) => (
-                            <tr>
-                              <td class="n">{words(String(row() + 1))}</td>
-                              <td class="t">{words(line)}</td>
-                            </tr>
-                          )}
-                        </For>
-                      </tbody>
-                    </table>
-                  </div>
+      <section class="decision unit">
+        <div class="unit-head">
+          <div class="decision-head">
+            <h2>{words("What the change does first")}</h2>
+            <p class="decision-what">{words("the code that together achieves it")}</p>
+            <p class="unit-why">
+              <span class="who">{words("Why")}</span>
+              <span class="chip">{words("the decision behind it")}</span>
+            </p>
+            <p class="unit-size">{words("4 changes in 2 files")}</p>
+          </div>
+        </div>
+        <div class="unit-body">
+          <div class="decision-main">
+            <div class="hunk-group">
+              <div class="hunk">
+                <div class="file">
+                  <span class="head path">{words("src/the/file.ts")}</span>
+                  <span class="file-side">
+                    <span class="whole-toggle">{words("Whole file")}</span>
+                    <span class="mark-viewed">{words("Viewed")}</span>
+                  </span>
                 </div>
+                <table>
+                  <tbody>
+                    <For each={CODE_LINES}>
+                      {(line, row) => (
+                        <tr>
+                          <td class="n">{words(String(row() + 1))}</td>
+                          <td class="t">{line ? words(line) : " "}</td>
+                        </tr>
+                      )}
+                    </For>
+                  </tbody>
+                </table>
               </div>
             </div>
-          </section>
-        )}
-      </For>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
