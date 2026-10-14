@@ -13,8 +13,8 @@ interface Entry {
 function listDirs(dir: string): Entry[] {
   try {
     return readdirSync(dir, { withFileTypes: true })
-      .filter((d) => d.isDirectory() && !d.name.startsWith("."))
-      .map((d) => ({ name: d.name, path: join(dir, d.name) }))
+      .filter((dirent) => dirent.isDirectory() && !dirent.name.startsWith("."))
+      .map((dirent) => ({ name: dirent.name, path: join(dir, dirent.name) }))
       .sort((a, b) => a.name.localeCompare(b.name));
   } catch {
     return [];
@@ -22,8 +22,8 @@ function listDirs(dir: string): Entry[] {
 }
 
 /** Keep the tail of a path visible (truncate-start). */
-function tail(s: string, max: number): string {
-  return s.length > max ? `…${s.slice(-(max - 1))}` : s;
+function tail(text: string, max: number): string {
+  return text.length > max ? `…${text.slice(-(max - 1))}` : text;
 }
 
 export const FS_PICKER_HINT = "↑↓ move · → open · ← up · enter pick · space pick this dir · esc cancel";
@@ -48,17 +48,17 @@ export function FsPicker({
   useKeyboard((key) => {
     keyDebug("picker", key);
     if (key.name === "escape") return onCancel();
-    if (key.name === "up" || key.name === "k") return setCursor((i) => Math.max(0, i - 1));
-    if (key.name === "down" || key.name === "j") return setCursor((i) => Math.min(entries.length - 1, i + 1));
+    if (key.name === "up" || key.name === "k") return setCursor((previous) => Math.max(0, previous - 1));
+    if (key.name === "down" || key.name === "j") return setCursor((previous) => Math.min(entries.length - 1, previous + 1));
     if (key.name === "left" || key.name === "backspace") {
-      setDir((d) => dirname(d));
+      setDir((previous) => dirname(previous));
       setCursor(0);
       return;
     }
     if (key.name === "right") {
-      const e = entries[cursor];
-      if (e) {
-        setDir(e.path);
+      const entry = entries[cursor];
+      if (entry) {
+        setDir(entry.path);
         setCursor(0);
       }
       return;
@@ -66,8 +66,8 @@ export function FsPicker({
     if (isEnter(key)) {
       // enter picks the highlighted folder; in an empty dir it picks the
       // folder you're standing in
-      const e = entries[cursor];
-      if (e) return onPick(e.name, e.path);
+      const entry = entries[cursor];
+      if (entry) return onPick(entry.name, entry.path);
       return onPick(basename(dir), dir);
     }
     if (isSpace(key)) onPick(basename(dir), dir);
@@ -87,10 +87,10 @@ export function FsPicker({
       {entries.length === 0 ? (
         <text fg={theme.dim}>(no subfolders)</text>
       ) : (
-        shown.map((e, i) => (
-          <text key={e.path} fg={top + i === cursor ? theme.accent : theme.fg} truncate wrapMode="none">
-            {top + i === cursor ? "› " : "  "}
-            {e.name}/
+        shown.map((entry, index) => (
+          <text key={entry.path} fg={top + index === cursor ? theme.accent : theme.fg} truncate wrapMode="none">
+            {top + index === cursor ? "› " : "  "}
+            {entry.name}/
           </text>
         ))
       )}

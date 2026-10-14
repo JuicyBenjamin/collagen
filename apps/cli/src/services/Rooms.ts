@@ -59,32 +59,32 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
 
     const profileFor = (roomId: string) =>
       Effect.gen(function* () {
-        const s = yield* store.get;
+        const state = yield* store.get;
         return {
           name: yield* SubscriptionRef.get(nameRef),
-          ai: s.preferredAi,
+          ai: state.preferredAi,
           aiStatus: yield* SubscriptionRef.get(aiStatus.current),
           protocol: PROTOCOL_VERSION,
-          projects: roomProjects(s, roomId).map((p) => ({ name: p.name, path: p.path })),
+          projects: roomProjects(state, roomId).map((project) => ({ name: project.name, path: project.path })),
           away: (yield* SubscriptionRef.get(focused)) !== roomId,
         };
       });
 
     const broadcastAll = Effect.gen(function* () {
-      for (const h of yield* SubscriptionRef.get(handles)) yield* h.room.updateProfile;
+      for (const handle of yield* SubscriptionRef.get(handles)) yield* handle.room.updateProfile;
     });
 
     /** Background rules for one room: incoming message → inbox + agent run;
      *  actionable ticket step → nudge; drive requests (mock peers only);
      *  shared room name → persisted. Runs inside the room's scope. */
-    const daemons = (h: RoomHandle) =>
+    const daemons = (handle: RoomHandle) =>
       Effect.gen(function* () {
-        const { room } = h;
+        const { room } = handle;
         yield* room.messages.pipe(
-          Stream.tap(({ msg }) => Effect.log(`← ${msg.fromName} [${msg.project}/${msg.intent}]`)),
-          Stream.tap(({ msg, seq }) => inbox.push(h.id, msg, seq)),
+          Stream.tap(({ message }) => Effect.log(`← ${message.fromName} [${message.project}/${message.intent}]`)),
+          Stream.tap(({ message, seq }) => inbox.push(handle.id, message, seq)),
           // fork: a running agent must not block message intake
-          Stream.tap(({ msg }) => Effect.forkChild(runner.runThread(msg.threadId))),
+          Stream.tap(({ message }) => Effect.forkChild(runner.runThread(message.threadId))),
           Stream.runDrain,
           Effect.forkScoped,
         );
@@ -110,46 +110,46 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 // answered, this map changes and the steps go then.
                 if (gated(ticket, all)) continue;
                 const mine = actionableSteps(ticket, identity.pubkey).filter(
-                  (s) => s.status === "pending" || (redeliver && s.status === "suspended"),
+                  (step) => step.status === "pending" || (redeliver && step.status === "suspended"),
                 );
                 if (mine.length === 0) continue;
                 yield* room.shareTicket({
                   ...ticket,
                   updatedAt: now,
-                  steps: ticket.steps.map((s) =>
-                    mine.some((m) => m.id === s.id) ? { ...s, status: "suspended" as const, updatedAt: now } : s,
+                  steps: ticket.steps.map((step) =>
+                    mine.some((owned) => owned.id === step.id) ? { ...step, status: "suspended" as const, updatedAt: now } : step,
                   ),
                 }).pipe(Effect.catchTag("NotWritable", () => Effect.logWarning("cannot mark step delivered: not admitted to the room log")));
                 // the step is the creator's ask, so it arrives from them by name
                 const creatorName =
                   ticket.createdBy === identity.pubkey
                     ? yield* SubscriptionRef.get(nameRef)
-                    : ((yield* SubscriptionRef.get(room.roster)).find((p) => p.key === ticket.createdBy)?.name ??
+                    : ((yield* SubscriptionRef.get(room.roster)).find((peer) => peer.key === ticket.createdBy)?.name ??
                       ticket.createdBy.slice(0, 8));
                 // the person's steering, said on the step itself: the turn
                 // the agent reads it is the turn it is about to act
                 const steer = steeringLine(steeringOf(yield* store.get));
-                for (const s of mine) {
+                for (const step of mine) {
                   const settled = ticket.steps
-                    .filter((x) => x.status === "settled" && s.needs.includes(x.id))
-                    .map((x) => `- ${x.id} (${x.intent}): ${x.result ?? ""}`)
+                    .filter((other) => other.status === "settled" && step.needs.includes(other.id))
+                    .map((other) => `- ${other.id} (${other.intent}): ${other.result ?? ""}`)
                     .join("\n");
-                  const threadId = stepThreadId(ticket, s);
-                  const msg: RoomMessage = {
+                  const threadId = stepThreadId(ticket, step);
+                  const message: RoomMessage = {
                     id: crypto.randomUUID(),
                     threadId,
                     from: ticket.createdBy,
                     fromName: creatorName,
                     to: identity.pubkey,
                     project: ticket.project,
-                    intent: `ticket-step:${s.intent}`,
-                    findings: `${creatorName} asks your user to "${s.intent}" for the ticket "${ticket.goal}" (${ticket.id}, step ${s.id}).\nThe step, in full: ${s.description}${
+                    intent: `ticket-step:${step.intent}`,
+                    findings: `${creatorName} asks your user to "${step.intent}" for the ticket "${ticket.goal}" (${ticket.id}, step ${step.id}).\nThe step, in full: ${step.description}${
                       settled ? `\nSettled inputs from earlier steps:\n${settled}` : ""
-                    }\n${steer} When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${s.id}", and the result they want to send — it goes out as you call it.`,
+                    }\n${steer} When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${step.id}", and the result they want to send — it goes out as you call it.`,
                     ts: now,
                   };
-                  yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${s.id} actionable`);
-                  yield* inbox.push(h.id, msg);
+                  yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${step.id} actionable`);
+                  yield* inbox.push(handle.id, message);
                   yield* Effect.forkChild(runner.runThread(threadId));
                 }
               }
@@ -169,12 +169,12 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
             if (key === identity.pubkey) return yield* SubscriptionRef.get(nameRef);
             const peers = yield* SubscriptionRef.get(room.roster);
             const members = yield* SubscriptionRef.get(room.members);
-            return peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8);
+            return peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8);
           });
         const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string) =>
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis;
-            const msg: RoomMessage = {
+            const message: RoomMessage = {
               id: crypto.randomUUID(),
               threadId,
               from,
@@ -188,7 +188,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
             };
             // where it goes next is the runner's line: inbox, codex queue or a background resume
             yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)}: ${fromName} ${what}`);
-            yield* inbox.push(h.id, msg);
+            yield* inbox.push(handle.id, message);
             yield* Effect.forkChild(runner.runThread(threadId));
           });
         let prevTickets: ReadonlyMap<string, Ticket> | null = null;
@@ -199,13 +199,13 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               prevTickets = all;
               if (prev === null) return; // what the log already held is history, not news
               const trace = yield* SubscriptionRef.get(room.trace);
-              for (const c of stepChanges(prev, all)) {
-                if (c.step.owner === identity.pubkey) continue; // our own doing
-                if (!visibleTo(c.ticket, all, identity.pubkey)) continue; // not shown to us yet
-                if (!isParticipant(c.ticket, trace, identity.pubkey)) continue;
-                if (actionableSteps(c.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
-                const actorName = yield* nameOf(c.step.owner);
-                yield* notify(myThreadFor(c.ticket, trace, identity.pubkey, c.step.owner), c.step.owner, actorName, c.ticket, stepUpdateWhat(c), stepUpdateText(c, actorName));
+              for (const change of stepChanges(prev, all)) {
+                if (change.step.owner === identity.pubkey) continue; // our own doing
+                if (!visibleTo(change.ticket, all, identity.pubkey)) continue; // not shown to us yet
+                if (!isParticipant(change.ticket, trace, identity.pubkey)) continue;
+                if (actionableSteps(change.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
+                const actorName = yield* nameOf(change.step.owner);
+                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actorName));
               }
             }),
           ),
@@ -219,16 +219,16 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           Stream.mapEffect(
             Effect.fnUntraced(function* (all) {
               const prev = prevReviews;
-              prevReviews = new Map(all.map((r) => [r.ticketId, r.ts]));
+              prevReviews = new Map(all.map((review) => [review.ticketId, review.ts]));
               const trace = yield* SubscriptionRef.get(room.trace);
               const tickets = yield* SubscriptionRef.get(room.tickets);
-              for (const r of reviewChanges(prev, all)) {
-                if (r.author === identity.pubkey) continue; // our own doing
-                const ticket = tickets.get(r.ticketId);
+              for (const review of reviewChanges(prev, all)) {
+                if (review.author === identity.pubkey) continue; // our own doing
+                const ticket = tickets.get(review.ticketId);
                 if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
                 if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
-                const fresh = prev?.has(r.ticketId) !== true;
-                yield* notify(myThreadFor(ticket, trace, identity.pubkey, r.author), r.author, r.authorName, ticket, "revised the why", reviewUpdateText(ticket, r, fresh));
+                const fresh = prev?.has(review.ticketId) !== true;
+                yield* notify(myThreadFor(ticket, trace, identity.pubkey, review.author), review.author, review.authorName, ticket, "revised the why", reviewUpdateText(ticket, review, fresh));
               }
             }),
           ),
@@ -243,32 +243,32 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         yield* SubscriptionRef.changes(room.reviews).pipe(
           Stream.mapEffect(
             Effect.fnUntraced(function* (all) {
-              const guessed = all.filter((r) => r.assumed && !r.claimed && r.author !== identity.pubkey && (r.assumed.identities?.length ?? 0) > 0);
+              const guessed = all.filter((review) => review.assumed && !review.claimed && review.author !== identity.pubkey && (review.assumed.identities?.length ?? 0) > 0);
               if (guessed.length === 0) return;
               const told = new Set((yield* store.get).toldGuessed ?? []);
               const tickets = yield* SubscriptionRef.get(room.tickets);
-              for (const r of guessed) {
-                const asked = `${r.ticketId}|${r.assumed!.identities!.join(",")}`;
-                if (told.has(r.ticketId) || notMine.has(asked)) continue;
-                const ticket = tickets.get(r.ticketId);
+              for (const review of guessed) {
+                const asked = `${review.ticketId}|${review.assumed!.identities!.join(",")}`;
+                if (told.has(review.ticketId) || notMine.has(asked)) continue;
+                const ticket = tickets.get(review.ticketId);
                 if (!ticket) continue;
-                const clone = roomProjects(yield* store.get, h.id).find((p) => p.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
-                const mine = yield* ownIdentities(clone?.path, r.link ? hostOf(r.link) : undefined);
-                const shared = mine.find((m) => r.assumed!.identities!.includes(m));
+                const clone = roomProjects(yield* store.get, handle.id).find((project) => project.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
+                const mine = yield* ownIdentities(clone?.path, review.link ? hostOf(review.link) : undefined);
+                const shared = mine.find((ownIdentity) => review.assumed!.identities!.includes(ownIdentity));
                 if (!shared) {
                   notMine.add(asked);
                   continue;
                 }
-                yield* store.update((s) => ({ ...s, toldGuessed: [...(s.toldGuessed ?? []), r.ticketId] }));
+                yield* store.update((state) => ({ ...state, toldGuessed: [...(state.toldGuessed ?? []), review.ticketId] }));
                 const steer = steeringLine(steeringOf(yield* store.get));
                 const trace = yield* SubscriptionRef.get(room.trace);
                 yield* notify(
-                  myThreadFor(ticket, trace, identity.pubkey, r.author),
-                  r.author,
-                  r.authorName,
+                  myThreadFor(ticket, trace, identity.pubkey, review.author),
+                  review.author,
+                  review.authorName,
                   ticket,
                   "guessed why your user wrote their code",
-                  `${r.authorName}'s AI built a review of your user's code from guesses about why they wrote it: "${ticket.title ?? ticket.goal}" [ticket ${ticket.id}] — the code is theirs (${describeIdentity(shared)}). ${steer} Answer the guesses for them with claim-review: read them (review-context), then answer from what you already know of why your user wrote it — your conversations with them, their commits, the tickets behind it — and add the decisions the guesses missed. Ask your user only what that does not settle. Then tell them in one line that the review is theirs.`,
+                  `${review.authorName}'s AI built a review of your user's code from guesses about why they wrote it: "${ticket.title ?? ticket.goal}" [ticket ${ticket.id}] — the code is theirs (${describeIdentity(shared)}). ${steer} Answer the guesses for them with claim-review: read them (review-context), then answer from what you already know of why your user wrote it — your conversations with them, their commits, the tickets behind it — and add the decisions the guesses missed. Ask your user only what that does not settle. Then tell them in one line that the review is theirs.`,
                 );
               }
             }),
@@ -283,12 +283,12 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               const start = seenTrace < 0 ? trace.length : seenTrace;
               seenTrace = trace.length;
               const tickets = yield* SubscriptionRef.get(room.tickets);
-              for (const m of trace.slice(start)) {
-                if (!m.ticketId || m.from === identity.pubkey || m.to === identity.pubkey) continue;
-                const ticket = tickets.get(m.ticketId);
+              for (const message of trace.slice(start)) {
+                if (!message.ticketId || message.from === identity.pubkey || message.to === identity.pubkey) continue;
+                const ticket = tickets.get(message.ticketId);
                 if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
                 if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
-                yield* notify(myThreadFor(ticket, trace, identity.pubkey, m.from), m.from, m.fromName, ticket, "weighed in", weighInText(ticket, m, yield* nameOf(m.to)));
+                yield* notify(myThreadFor(ticket, trace, identity.pubkey, message.from), message.from, message.fromName, ticket, "weighed in", weighInText(ticket, message, yield* nameOf(message.to)));
               }
             }),
           ),
@@ -301,8 +301,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         yield* room.drives.pipe(
           Stream.tap(({ from, action }) =>
             Effect.gen(function* () {
-              const s = yield* store.get;
-              if (!(s.preferredAi ?? "").startsWith("mock")) {
+              const state = yield* store.get;
+              if (!(state.preferredAi ?? "").startsWith("mock")) {
                 return yield* Effect.logWarning(`drive request ignored (not a mock peer): ${action.kind}`);
               }
               yield* Effect.log(`driven by ${from.slice(0, 8)}: ${action.kind}`);
@@ -322,11 +322,11 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     structureAt: now,
                     kind: "task",
                     updatedAt: now,
-                    steps: action.steps.map((st, i) => ({
-                      id: `s${i + 1}`,
-                      owner: st.mine ? identity.pubkey : from,
-                      intent: st.intent,
-                      description: st.description,
+                    steps: action.steps.map((step, index) => ({
+                      id: `s${index + 1}`,
+                      owner: step.mine ? identity.pubkey : from,
+                      intent: step.intent,
+                      description: step.description,
                       needs: [],
                       status: "pending" as const,
                       updatedAt: now,
@@ -376,7 +376,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         // upsertActiveRoom: a rename must not change which room is focused.
         yield* SubscriptionRef.changes(room.meta).pipe(
           Stream.drop(1),
-          Stream.tap((m) => Effect.sync(() => relabelRoom(profile, h.id, m))),
+          Stream.tap((meta) => Effect.sync(() => relabelRoom(profile, handle.id, meta))),
           Stream.runDrain,
           Effect.forkScoped,
         );
@@ -384,10 +384,10 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         // The log's key, once learned, is remembered: with it the room
         // reopens on its own, without waiting for a member to be online.
         yield* SubscriptionRef.changes(room.logKey).pipe(
-          Stream.filter((k): k is string => k !== null),
+          Stream.filter((key): key is string => key !== null),
           Stream.tap((logKey) =>
             Effect.sync(() => {
-              const entry = readProfileFile(profile).rooms?.find((r) => r.id === h.id);
+              const entry = readProfileFile(profile).rooms?.find((roomEntry) => roomEntry.id === handle.id);
               if (entry && entry.logKey !== logKey) upsertRoom(profile, { ...entry, logKey });
             }),
           ),
@@ -397,14 +397,14 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       });
 
     /** Keep an entry's identity fields (log key, creator) when only the name moved. */
-    const relabelRoom = (prof: string, id: string, m: { name: string; ts: number }) => {
-      const entry = readProfileFile(prof).rooms?.find((r) => r.id === id);
-      upsertRoom(prof, { ...(entry ?? { id }), id, name: m.name, nameTs: m.ts });
+    const relabelRoom = (prof: string, id: string, meta: { name: string; ts: number }) => {
+      const entry = readProfileFile(prof).rooms?.find((roomEntry) => roomEntry.id === id);
+      upsertRoom(prof, { ...(entry ?? { id }), id, name: meta.name, nameTs: meta.ts });
     };
 
     /** Bring a room to life (idempotent). */
     const open = Effect.fn("Rooms.open")(function* (entry: RoomEntry) {
-      const existing = (yield* SubscriptionRef.get(handles)).find((h) => h.id === entry.id);
+      const existing = (yield* SubscriptionRef.get(handles)).find((live) => live.id === entry.id);
       if (existing) return existing;
       const scope = yield* Scope.make();
       const config: Context.Service.Shape<typeof RoomConfig> = {
@@ -424,7 +424,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       const handle: RoomHandle = { id: entry.id, room };
       yield* daemons(handle).pipe(Effect.provideService(Scope.Scope, scope));
       scopes.set(entry.id, scope);
-      yield* SubscriptionRef.update(handles, (hs) => [...hs, handle]);
+      yield* SubscriptionRef.update(handles, (liveHandles) => [...liveHandles, handle]);
       yield* Effect.log(`room open: ${entry.name} [${shortRoomId(entry.id)}]`);
       return handle;
     });
@@ -432,24 +432,24 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     // every room this profile knows comes up at start
     yield* Effect.forEach(knownRooms, open, { discard: true });
     yield* Effect.addFinalizer(() =>
-      Effect.forEach([...scopes.values()], (s) => Scope.close(s, Exit.void), { discard: true }),
+      Effect.forEach([...scopes.values()], (scope) => Scope.close(scope, Exit.void), { discard: true }),
     );
 
     /** The room being looked at / worked in. */
     const current = Effect.gen(function* () {
       const id = yield* SubscriptionRef.get(focused);
-      const h = (yield* SubscriptionRef.get(handles)).find((x) => x.id === id);
-      if (!h) return yield* Effect.die(`focused room ${id} is not open`);
-      return h;
+      const handle = (yield* SubscriptionRef.get(handles)).find((live) => live.id === id);
+      if (!handle) return yield* Effect.die(`focused room ${id} is not open`);
+      return handle;
     });
 
     /** Look at (work in) another room: instant; every room re-broadcasts our
      *  presence so peers see where we are. Persisted as the active room. */
     const setFocus = Effect.fn("Rooms.setFocus")(function* (id: string) {
-      const h = (yield* SubscriptionRef.get(handles)).find((x) => x.id === id);
-      if (!h) return false;
+      const handle = (yield* SubscriptionRef.get(handles)).find((live) => live.id === id);
+      if (!handle) return false;
       yield* SubscriptionRef.set(focused, id);
-      const entry = readProfileFile(profile).rooms?.find((r) => r.id === id);
+      const entry = readProfileFile(profile).rooms?.find((roomEntry) => roomEntry.id === id);
       yield* Effect.sync(() => (entry ? upsertActiveRoom(profile, entry) : writeProfileFile(profile, { activeRoomId: id })));
       yield* broadcastAll;
       return true;
@@ -458,9 +458,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     /** Join (or create) a room live. */
     const join = Effect.fn("Rooms.join")(function* (entry: RoomEntry, focus: boolean) {
       yield* Effect.sync(() => upsertRoom(profile, entry));
-      const h = yield* open(entry);
+      const handle = yield* open(entry);
       if (focus) yield* setFocus(entry.id);
-      return h;
+      return handle;
     });
 
     /** Leave a room: forget it locally and stop taking part. The log and its
@@ -468,39 +468,39 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
      *  invite would pick the same log up). Refused for the last room: the app
      *  needs one to look at. */
     const leave = Effect.fn("Rooms.leave")(function* (id: string) {
-      const hs = yield* SubscriptionRef.get(handles);
-      const h = hs.find((x) => x.id === id);
-      if (!h) return "not in that room";
-      if (hs.length === 1) return "cannot leave your only room — join or create another first";
-      const remaining = hs.filter((x) => x.id !== id);
+      const liveHandles = yield* SubscriptionRef.get(handles);
+      const handle = liveHandles.find((live) => live.id === id);
+      if (!handle) return "not in that room";
+      if (liveHandles.length === 1) return "cannot leave your only room — join or create another first";
+      const remaining = liveHandles.filter((live) => live.id !== id);
       if ((yield* SubscriptionRef.get(focused)) === id) yield* setFocus(remaining[0]!.id);
       yield* SubscriptionRef.set(handles, remaining);
       const scope = scopes.get(id);
       scopes.delete(id);
       if (scope) yield* Scope.close(scope, Exit.void);
       yield* Effect.sync(() => {
-        const f = readProfileFile(profile);
-        writeProfileFile(profile, { rooms: (f.rooms ?? []).filter((r) => r.id !== id) });
+        const profileFile = readProfileFile(profile);
+        writeProfileFile(profile, { rooms: (profileFile.rooms ?? []).filter((roomEntry) => roomEntry.id !== id) });
       });
       yield* Effect.log(`left room [${shortRoomId(id)}]`);
       return "left";
     });
 
     const summaries: Effect.Effect<ReadonlyArray<RoomSummary>> = Effect.gen(function* () {
-      const f = yield* SubscriptionRef.get(focused);
+      const focusedId = yield* SubscriptionRef.get(focused);
       const counts = yield* inbox.unread;
       const out: RoomSummary[] = [];
-      for (const h of yield* SubscriptionRef.get(handles)) {
-        const peers = yield* SubscriptionRef.get(h.room.roster);
-        const meta = yield* SubscriptionRef.get(h.room.meta);
+      for (const handle of yield* SubscriptionRef.get(handles)) {
+        const peers = yield* SubscriptionRef.get(handle.room.roster);
+        const meta = yield* SubscriptionRef.get(handle.room.meta);
         out.push({
-          id: h.id,
-          shortId: shortRoomId(h.id),
+          id: handle.id,
+          shortId: shortRoomId(handle.id),
           name: meta.name,
-          online: peers.filter((p) => !p.away).length + (h.id === f ? 1 : 0),
-          unread: counts.get(h.id)?.unread ?? 0,
-          needsYou: counts.get(h.id)?.needsYou ?? 0,
-          focused: h.id === f,
+          online: peers.filter((peer) => !peer.away).length + (handle.id === focusedId ? 1 : 0),
+          unread: counts.get(handle.id)?.unread ?? 0,
+          needsYou: counts.get(handle.id)?.needsYou ?? 0,
+          focused: handle.id === focusedId,
         });
       }
       return out;
@@ -508,14 +508,14 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
 
     /** `summaries`, live: re-evaluated whenever a room opens, focus moves, a
      *  message lands or is picked up, or any room's roster/name changes. */
-    const pulse = <A>(s: Stream.Stream<A>): Stream.Stream<void> => Stream.map(s, () => undefined);
+    const pulse = <A>(stream: Stream.Stream<A>): Stream.Stream<void> => Stream.map(stream, () => undefined);
     const summaryChanges: Stream.Stream<ReadonlyArray<RoomSummary>> = SubscriptionRef.changes(handles).pipe(
-      Stream.switchMap((hs) =>
+      Stream.switchMap((liveHandles) =>
         Stream.mergeAll(
           [
             pulse(SubscriptionRef.changes(focused)),
             pulse(SubscriptionRef.changes(inbox.buffer)),
-            ...hs.flatMap((h) => [pulse(SubscriptionRef.changes(h.room.roster)), pulse(SubscriptionRef.changes(h.room.meta))]),
+            ...liveHandles.flatMap((handle) => [pulse(SubscriptionRef.changes(handle.room.roster)), pulse(SubscriptionRef.changes(handle.room.meta))]),
           ],
           { concurrency: "unbounded" },
         ),
@@ -532,7 +532,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       );
 
     // Our presence and profile in every room follow the shared state.
-    const tick = <A>(s: Stream.Stream<A>) => s.pipe(Stream.drop(1), Stream.map(() => undefined));
+    const tick = <A>(stream: Stream.Stream<A>) => stream.pipe(Stream.drop(1), Stream.map(() => undefined));
     yield* Stream.mergeAll(
       [tick(SubscriptionRef.changes(store.state)), tick(SubscriptionRef.changes(aiStatus.current)), tick(SubscriptionRef.changes(nameRef))],
       { concurrency: "unbounded" },

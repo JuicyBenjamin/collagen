@@ -40,7 +40,7 @@ export function Tickets() {
   // what a newer collagen wrote here that this build cannot read: a ticket
   // among them gets a row of its own, the rest a count — both say to update
   const unseen = AsyncResult.getOrElse(useAtomValue(unseenAtom), () => [] as const);
-  const unknownTickets = unseen.filter((u) => u.key.startsWith("ticket/"));
+  const unknownTickets = unseen.filter((record) => record.key.startsWith("ticket/"));
   const unseenOther = unseen.length - unknownTickets.length;
   const { navigate } = useRouter();
   const openReviewPage = useAtomSet(openReviewPageAtom);
@@ -56,91 +56,91 @@ export function Tickets() {
 
   const me = identity?.pubkey ?? "";
   const nameFor = (key: string): string =>
-    key === me ? "you" : (peers.find((p) => p.key === key)?.name ?? members.find((m) => m.key === key)?.name ?? key.slice(0, 8));
+    key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
 
   // every ticket the room has that is not over, grouped; the cursor walks
   // the rows in the order they are drawn, headers are not stops
   // a ticket waiting on another (after) is its author's alone until it opens
-  const byId = new Map(tickets.map((t) => [t.id, t]));
+  const byId = new Map(tickets.map((ticket) => [ticket.id, ticket]));
   const nameOf = (id: string): string | undefined => {
-    const t = byId.get(id);
-    return t ? ticketName(t) : undefined;
+    const ticket = byId.get(id);
+    return ticket ? ticketName(ticket) : undefined;
   };
-  const visible = tickets.filter((t) => visibleTo(t, byId, me)).map((t) => ({ t, s: summarize(t, trace, me, heldBy(t, byId), byId) }));
-  const open = visible.filter((r) => r.s.state !== "closed");
-  const inTab = (r: Row) => tab === "all" || r.t.kind === tab;
+  const visible = tickets.filter((ticket) => visibleTo(ticket, byId, me)).map((ticket) => ({ ticket, summary: summarize(ticket, trace, me, heldBy(ticket, byId), byId) }));
+  const open = visible.filter((row) => row.summary.state !== "closed");
+  const inTab = (row: Row) => tab === "all" || row.ticket.kind === tab;
   const rows = open.filter(inTab);
   // every ticket: open epics first, each holding its tickets, the rest by
   // project and kind; a kind's tab: by project alone, its epic said on the row
   const { epics, rest } = tab === "all" ? epicBlocks(rows, byId) : { epics: [] as ReadonlyArray<EpicBlock<Row>>, rest: rows };
   const groups = groupTickets(rest);
   // the closed ones, when asked for: set apart below, by project and kind
-  const closedGroups = showClosed ? groupTickets(visible.filter((r) => r.s.state === "closed" && inTab(r))) : [];
-  const unfolded = new Set(epics.map((e) => e.epic.t.id).filter((id) => !folded.has(id)));
+  const closedGroups = showClosed ? groupTickets(visible.filter((row) => row.summary.state === "closed" && inTab(row))) : [];
+  const unfolded = new Set(epics.map((block) => block.epic.ticket.id).filter((id) => !folded.has(id)));
   // what a row is to the row above it, in its own column: a child under
   // the ticket it grew out of; else its epic (unless drawn inside it),
   // named whole — the column takes what the titles leave and cuts there
-  const related = (t: Ticket, insideEpic: boolean, grew = false): ReadonlyArray<Part> => {
+  const related = (ticket: Ticket, insideEpic: boolean, grew = false): ReadonlyArray<Part> => {
     if (grew) return [{ text: "child" }];
-    const r = relationsOf(t, byId, me);
-    return r.epic && !insideEpic ? [{ text: `${EPIC_MARK} ${r.epic.name}` }] : [];
+    const relations = relationsOf(ticket, byId, me);
+    return relations.epic && !insideEpic ? [{ text: `${EPIC_MARK} ${relations.epic.name}` }] : [];
   };
   // its relatives not drawn where it is: dim rows under it, saying what each is to it
-  const ghosts = (t: Ticket, here: ReadonlySet<string>): ReadonlyArray<Relative> => relativesOf(t, byId, me).filter((x) => !here.has(x.t.id));
-  const idsOf = (rs: ReadonlyArray<Row>): ReadonlySet<string> => new Set(rs.map((x) => x.t.id));
-  const epicHere = new Map(epics.map((e) => [e.epic.t.id, new Set([e.epic.t.id, ...e.rows.map((x) => x.t.id)])]));
+  const ghosts = (ticket: Ticket, here: ReadonlySet<string>): ReadonlyArray<Relative> => relativesOf(ticket, byId, me).filter((relative) => !here.has(relative.ticket.id));
+  const idsOf = (list: ReadonlyArray<Row>): ReadonlySet<string> => new Set(list.map((row) => row.ticket.id));
+  const epicHere = new Map(epics.map((block) => [block.epic.ticket.id, new Set([block.epic.ticket.id, ...block.rows.map((row) => row.ticket.id)])]));
   // every line the cursor stops on, in the order drawn: each epic and, unfolded,
   // its rows; the groups' rows; the closed ones — each row followed by its
   // relatives' rows. A relative is a stop too, so ↑↓ moves one line at a time
   // and the list scrolls a line at a time at its edges, never a block.
   const stops: Array<Stop> = [];
-  const withGhosts = (r: Row, here: ReadonlySet<string>) => {
-    stops.push({ key: r.t.id, t: r.t, row: r });
-    for (const x of ghosts(r.t, here)) stops.push({ key: ghostKey(r.t.id, x.t.id), t: x.t });
+  const withGhosts = (row: Row, here: ReadonlySet<string>) => {
+    stops.push({ key: row.ticket.id, ticket: row.ticket, row });
+    for (const relative of ghosts(row.ticket, here)) stops.push({ key: ghostKey(row.ticket.id, relative.ticket.id), ticket: relative.ticket });
   };
-  for (const e of epics) {
-    stops.push({ key: e.epic.t.id, t: e.epic.t, row: e.epic });
-    if (unfolded.has(e.epic.t.id)) for (const r of e.rows) withGhosts(r, epicHere.get(e.epic.t.id)!);
+  for (const block of epics) {
+    stops.push({ key: block.epic.ticket.id, ticket: block.epic.ticket, row: block.epic });
+    if (unfolded.has(block.epic.ticket.id)) for (const row of block.rows) withGhosts(row, epicHere.get(block.epic.ticket.id)!);
   }
-  for (const g of groups) for (const k of g.kinds) for (const r of k.rows) withGhosts(r, idsOf(k.rows));
-  for (const g of closedGroups) {
-    const all = g.kinds.flatMap((k) => k.rows);
-    for (const r of all) withGhosts(r, idsOf(all));
-  }  const counts = new Map<TicketTab, number>(TICKET_TABS.map((k) => [k, k === "all" ? open.length : open.filter((r) => r.t.kind === k).length]));
-  const needsYou = rows.filter((r) => r.s.state === "needs-you").length;
-  const projects = new Set(rows.filter((r) => r.t.kind !== "epic").map((r) => r.t.project));
+  for (const group of groups) for (const kindGroup of group.kinds) for (const row of kindGroup.rows) withGhosts(row, idsOf(kindGroup.rows));
+  for (const group of closedGroups) {
+    const all = group.kinds.flatMap((kindGroup) => kindGroup.rows);
+    for (const row of all) withGhosts(row, idsOf(all));
+  }  const counts = new Map<TicketTab, number>(TICKET_TABS.map((ticketTab) => [ticketTab, ticketTab === "all" ? open.length : open.filter((row) => row.ticket.kind === ticketTab).length]));
+  const needsYou = rows.filter((row) => row.summary.state === "needs-you").length;
+  const projects = new Set(rows.filter((row) => row.ticket.kind !== "epic").map((row) => row.ticket.project));
   // one lead column for the whole list, as wide as its longest lead
   const width = leadWidth([
-    ...epics.flatMap((e) => [
+    ...epics.flatMap((block) => [
       // an epic's title starts a name's width before the rows' titles
-      " ".repeat(Math.max(0, cells(rowTitle(e.epic.t)) + partsWidth(foldedParts(e, unfolded.has(e.epic.t.id))) + 3 * foldedParts(e, unfolded.has(e.epic.t.id)).length - KIND - NAME)),
-      ...(unfolded.has(e.epic.t.id)
-        ? e.rows.flatMap((r) => [leadOf(r.t, e.depth.get(r.t.id) ?? 0, projects.size > 1 ? r.t.project : undefined), ...ghosts(r.t, epicHere.get(e.epic.t.id)!).map((g) => leadOf(g.t, (e.depth.get(r.t.id) ?? 0) + 1, undefined))])
+      " ".repeat(Math.max(0, cells(rowTitle(block.epic.ticket)) + partsWidth(foldedParts(block, unfolded.has(block.epic.ticket.id))) + 3 * foldedParts(block, unfolded.has(block.epic.ticket.id)).length - KIND - NAME)),
+      ...(unfolded.has(block.epic.ticket.id)
+        ? block.rows.flatMap((row) => [leadOf(row.ticket, block.depth.get(row.ticket.id) ?? 0, projects.size > 1 ? row.ticket.project : undefined), ...ghosts(row.ticket, epicHere.get(block.epic.ticket.id)!).map((relative) => leadOf(relative.ticket, (block.depth.get(row.ticket.id) ?? 0) + 1, undefined))])
         : []),
     ]),
-    ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.flatMap((r) => [leadOf(r.t, k.depth.get(r.t.id) ?? 0, undefined), ...ghosts(r.t, idsOf(k.rows)).map((x) => leadOf(x.t, (k.depth.get(r.t.id) ?? 0) + 1, undefined))]))),
-    ...closedGroups.flatMap((g) => g.kinds.flatMap((k) => k.rows.flatMap((r) => [leadOf(r.t, 0, undefined), ...ghosts(r.t, idsOf(g.kinds.flatMap((x) => x.rows))).map((x) => leadOf(x.t, 1, undefined))]))),
+    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.flatMap((row) => [leadOf(row.ticket, kindGroup.depth.get(row.ticket.id) ?? 0, undefined), ...ghosts(row.ticket, idsOf(kindGroup.rows)).map((relative) => leadOf(relative.ticket, (kindGroup.depth.get(row.ticket.id) ?? 0) + 1, undefined))]))),
+    ...closedGroups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.flatMap((row) => [leadOf(row.ticket, 0, undefined), ...ghosts(row.ticket, idsOf(group.kinds.flatMap((other) => other.rows))).map((relative) => leadOf(relative.ticket, 1, undefined))]))),
   ]);
   // then two info columns, each as wide as its widest: where a ticket stands
   // (marks, holds, an epic's progress, how a closed one ended), and apart
   // from it what the ticket hangs from
   const statusWidth = Math.max(
     0,
-    ...epics.flatMap((e) => [
-      cells(progressShort(epicProgress(e.epic.t, byId))),
-      ...(unfolded.has(e.epic.t.id) ? e.rows.map((r) => partsWidth(rowInfo(r.s, undefined, nameOf, excludedFromEpic(r.t)))) : []),
+    ...epics.flatMap((block) => [
+      cells(progressShort(epicProgress(block.epic.ticket, byId))),
+      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket)))) : []),
     ]),
-    ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(rowInfo(r.s, k.parent.get(r.t.id), nameOf, undefined))))),
-    ...closedGroups.flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(closedInfo(r.t))))),
-    ...[...groups, ...closedGroups].flatMap((g) => g.kinds.flatMap((k) => k.rows.flatMap((r) => relativesOf(r.t, byId, me).map((x) => cells(ghostStatus(x.t)))))),
-    ...epics.flatMap((e) => e.rows.flatMap((r) => relativesOf(r.t, byId, me).map((x) => cells(ghostStatus(x.t))))),
+    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined))))),
+    ...closedGroups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(closedInfo(row.ticket))))),
+    ...[...groups, ...closedGroups].flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket)))))),
+    ...epics.flatMap((block) => block.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket))))),
   );
   const relationWidth = Math.max(
     0,
-    ...epics.flatMap((e) => (unfolded.has(e.epic.t.id) ? e.rows.map((r) => partsWidth(related(r.t, true, e.grew.has(r.t.id)))) : [])),
-    ...[...groups, ...closedGroups].flatMap((g) => g.kinds.flatMap((k) => k.rows.map((r) => partsWidth(related(r.t, false, k.grew.has(r.t.id)))))),
+    ...epics.flatMap((block) => (unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(related(row.ticket, true, block.grew.has(row.ticket.id)))) : [])),
+    ...[...groups, ...closedGroups].flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(related(row.ticket, false, kindGroup.grew.has(row.ticket.id)))))),
     // a relative's row says "parent" or "child"
-    ...[...epics.flatMap((e) => e.rows), ...[...groups, ...closedGroups].flatMap((g) => g.kinds.flatMap((k) => k.rows))].flatMap((r) => relativesOf(r.t, byId, me).map((x) => cells(x.as))),
+    ...[...epics.flatMap((block) => block.rows), ...[...groups, ...closedGroups].flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows))].flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(relative.as))),
   );
   const infoWidth = statusWidth + relationWidth + (statusWidth > 0 && relationWidth > 0 ? GAP : 0);
   // both bounded by the pane, as it is drawn: the titles first, the info in
@@ -150,7 +150,7 @@ export function Tickets() {
   // the status keeps its column whole; what the ticket hangs from gets the rest
   const statusCol = Math.min(statusWidth, infoCol);
   const relationCol = Math.max(0, infoCol - statusCol - (statusCol > 0 ? GAP : 0));
-  const index = new Map(stops.map((x, i) => [x.key, i]));
+  const index = new Map(stops.map((stop, position) => [stop.key, position]));
   const on = (key: string): boolean => index.get(key) === sel;
 
   const last = Math.max(0, stops.length - 1);
@@ -160,10 +160,10 @@ export function Tickets() {
 
   return (
     <box flexDirection="column" marginTop={1} flexShrink={1} minHeight={0}>
-    <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(t) => (setTab(t), setCursor(0))} />
+    <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(nextTab) => (setTab(nextTab), setCursor(0))} />
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open${current?.t.kind === "epic" ? ` · space ${unfolded.has(current.t.id) ? "fold" : "unfold"}` : ""}${current?.t.kind === "review" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
+      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
       flexDirection="column"
       flexShrink={1}
       minHeight={0}
@@ -171,14 +171,14 @@ export function Tickets() {
         if (key.name === "up" && sel > 0) return setCursor(sel - 1), true;
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
         if (isEnter(key)) {
-          if (current) navigate(to.ticket(current.t.id));
+          if (current) navigate(to.ticket(current.ticket.id));
           return true;
         }
         // an epic folds and unfolds where it stands
-        if (key.name === "space" && current?.row && current.t.kind === "epic") {
-          const id = current.t.id;
-          setFolded((u) => {
-            const next = new Set(u);
+        if (key.name === "space" && current?.row && current.ticket.kind === "epic") {
+          const id = current.ticket.id;
+          setFolded((previous) => {
+            const next = new Set(previous);
             if (next.has(id)) next.delete(id);
             else next.add(id);
             return next;
@@ -186,13 +186,13 @@ export function Tickets() {
           return true;
         }
         // straight from the list to the diff read by intent, in the browser
-        if (key.name === "o" && current?.t.kind === "review") return openReviewPage({ ticketId: current.t.id }), true;
+        if (key.name === "o" && current?.ticket.kind === "review") return openReviewPage({ ticketId: current.ticket.id }), true;
         // the closed ones, shown or not
         if (key.name === "h") return setShowClosed(!showClosed), true;
         // one key to what a ticket hangs from
         if (current && (key.name === "e" || key.name === "p")) {
-          const r = relationsOf(current.t, byId, me);
-          const target = key.name === "e" ? r.epic : r.parent;
+          const relations = relationsOf(current.ticket, byId, me);
+          const target = key.name === "e" ? relations.epic : relations.parent;
           if (target) navigate(to.ticket(target.id));
           return true;
         }
@@ -209,61 +209,61 @@ export function Tickets() {
             // the rows scroll inside the pane, the cursor's row kept in view;
             // at the first row all the way up, so what heads the list shows
             <FollowScroll follow={currentId ? (sel === 0 ? "start" : { id: rowId(currentId) }) : null} onWidth={setPane}>
-            {epics.map((e) => (
+            {epics.map((block) => (
               <EpicView
-                key={e.epic.t.id}
-                block={e}
-                open={unfolded.has(e.epic.t.id)}
-                first={epics[0] === e}
+                key={block.epic.ticket.id}
+                block={block}
+                open={unfolded.has(block.epic.ticket.id)}
+                first={epics[0] === block}
                 indent={indent}
                 width={leadCol}
                 infoWidth={statusCol}
                 relationWidth={relationCol}
                 selectedKey={focused ? current?.key : undefined}
-                progress={progressShort(epicProgress(e.epic.t, byId))}
+                progress={progressShort(epicProgress(block.epic.ticket, byId))}
                 nameFor={nameFor}
                 projects={projects.size > 1}
                 goalOf={nameOf}
-                related={(t) => related(t, true, e.grew.has(t.id))}
-                ghosts={(t) => ghosts(t, epicHere.get(e.epic.t.id)!)}
+                related={(ticket) => related(ticket, true, block.grew.has(ticket.id))}
+                ghosts={(ticket) => ghosts(ticket, epicHere.get(block.epic.ticket.id)!)}
               />
             ))}
-            {groups.map((g, i) => (
+            {groups.map((group, groupIndex) => (
               // a line between the tabs and the rows, as an open epic has above it
-              <box key={g.project} flexDirection="column" flexShrink={0} marginTop={i === 0 && epics.length === 0 ? 1 : 0}>
+              <box key={group.project} flexDirection="column" flexShrink={0} marginTop={groupIndex === 0 && epics.length === 0 ? 1 : 0}>
                 {groups.length > 1 ? (
                   <text fg={theme.fg} truncate wrapMode="none">
                     {"  "}
-                    {g.project}
+                    {group.project}
                   </text>
                 ) : null}
-                {g.kinds.map((k) => (
-                  <box key={k.kind} flexDirection="column" flexShrink={0}>
+                {group.kinds.map((kindGroup) => (
+                  <box key={kindGroup.kind} flexDirection="column" flexShrink={0}>
                     {/* on a kind's tab the tab says the kind: no heading for it */}
                     {tab === "all" ? (
                       <text fg={theme.dim} truncate wrapMode="none">
                         {groups.length > 1 ? "    " : "  "}
-                        {kindHeading(k.kind)}
+                        {kindHeading(kindGroup.kind)}
                       </text>
                     ) : null}
-                    {k.rows.map((r) => (
-                      <Fragment key={r.t.id}>
+                    {kindGroup.rows.map((row) => (
+                      <Fragment key={row.ticket.id}>
                         <TicketRow
-                          ticket={r.t}
-                          summary={r.s}
-                          selected={focused && on(r.t.id)}
+                          ticket={row.ticket}
+                          summary={row.summary}
+                          selected={focused && on(row.ticket.id)}
                           nameFor={nameFor}
                           indent={indent}
-                          depth={k.depth.get(r.t.id) ?? 0}
-                          under={k.parent.get(r.t.id)}
+                          depth={kindGroup.depth.get(row.ticket.id) ?? 0}
+                          under={kindGroup.parent.get(row.ticket.id)}
                           goalOf={nameOf}
                           width={leadCol}
                           infoWidth={statusCol}
                           relationWidth={relationCol}
-                          related={related(r.t, false, k.grew.has(r.t.id))}
+                          related={related(row.ticket, false, kindGroup.grew.has(row.ticket.id))}
                         />
-                        {ghosts(r.t, idsOf(k.rows)).map((x) => (
-                          <GhostRow key={x.t.id} id={rowId(ghostKey(r.t.id, x.t.id))} selected={focused && on(ghostKey(r.t.id, x.t.id))} relative={x} nameFor={nameFor} indent={indent} depth={(k.depth.get(r.t.id) ?? 0) + 1} width={leadCol} infoWidth={statusCol} relationWidth={relationCol} />
+                        {ghosts(row.ticket, idsOf(kindGroup.rows)).map((relative) => (
+                          <GhostRow key={relative.ticket.id} id={rowId(ghostKey(row.ticket.id, relative.ticket.id))} selected={focused && on(ghostKey(row.ticket.id, relative.ticket.id))} relative={relative} nameFor={nameFor} indent={indent} depth={(kindGroup.depth.get(row.ticket.id) ?? 0) + 1} width={leadCol} infoWidth={statusCol} relationWidth={relationCol} />
                         ))}
                       </Fragment>
                     ))}
@@ -276,20 +276,20 @@ export function Tickets() {
                 <text fg={theme.dim} truncate wrapMode="none">
                   {"  "}closed{closedGroups.length === 0 ? "   none" : ""}
                 </text>
-                {closedGroups.map((g) => (
-                  <box key={g.project} flexDirection="column" flexShrink={0}>
+                {closedGroups.map((group) => (
+                  <box key={group.project} flexDirection="column" flexShrink={0}>
                     {closedGroups.length > 1 ? (
                       <text fg={theme.dim} truncate wrapMode="none">
                         {"    "}
-                        {g.project}
+                        {group.project}
                       </text>
                     ) : null}
-                    {g.kinds.flatMap((k) => k.rows).map((r, _, all) => (
-                      <Fragment key={r.t.id}>
+                    {group.kinds.flatMap((kindGroup) => kindGroup.rows).map((row, _, all) => (
+                      <Fragment key={row.ticket.id}>
                         <TicketRow
-                          ticket={r.t}
-                          summary={r.s}
-                          selected={focused && on(r.t.id)}
+                          ticket={row.ticket}
+                          summary={row.summary}
+                          selected={focused && on(row.ticket.id)}
                           nameFor={nameFor}
                           indent={indent}
                           depth={0}
@@ -298,11 +298,11 @@ export function Tickets() {
                           width={leadCol}
                           infoWidth={statusCol}
                           relationWidth={relationCol}
-                          info={closedInfo(r.t)}
-                          related={related(r.t, false)}
+                          info={closedInfo(row.ticket)}
+                          related={related(row.ticket, false)}
                         />
-                        {ghosts(r.t, idsOf(all)).map((x) => (
-                          <GhostRow key={x.t.id} id={rowId(ghostKey(r.t.id, x.t.id))} selected={focused && on(ghostKey(r.t.id, x.t.id))} relative={x} nameFor={nameFor} indent={indent} depth={1} width={leadCol} infoWidth={statusCol} relationWidth={relationCol} />
+                        {ghosts(row.ticket, idsOf(all)).map((relative) => (
+                          <GhostRow key={relative.ticket.id} id={rowId(ghostKey(row.ticket.id, relative.ticket.id))} selected={focused && on(ghostKey(row.ticket.id, relative.ticket.id))} relative={relative} nameFor={nameFor} indent={indent} depth={1} width={leadCol} infoWidth={statusCol} relationWidth={relationCol} />
                         ))}
                       </Fragment>
                     ))}
@@ -312,8 +312,8 @@ export function Tickets() {
             ) : null}
             </FollowScroll>
           )}
-          {unknownTickets.map((u) => (
-            <text key={u.key} fg={theme.dim} truncate wrapMode="none">
+          {unknownTickets.map((record) => (
+            <text key={record.key} fg={theme.dim} truncate wrapMode="none">
               {"        "}
               {"unknown".padEnd(9)}update collagen to see this ticket
             </text>
@@ -337,16 +337,16 @@ export function Tickets() {
  *  which shows only that tab's tickets. */
 function KindTabs({ tab, counts, extra, needsYou, width, onTab }: { tab: TicketTab; counts: ReadonlyMap<TicketTab, number>; extra: number; needsYou: boolean; width: number | undefined; onTab: (tab: TicketTab) => void }) {
   // the row fits the pane, the open tab always whole (lib/ticketTabs)
-  const shown = fitTabs(tab, new Map([...counts].map(([t, n]) => [t, n + (t === "all" ? extra : 0)])), width === undefined ? undefined : width - 2);
+  const shown = fitTabs(tab, new Map([...counts].map(([ticketTab, count]) => [ticketTab, count + (ticketTab === "all" ? extra : 0)])), width === undefined ? undefined : width - 2);
   return (
     <Focusable
       id="ticket-tabs"
       flexShrink={0}
       hint="←→ switch tab · ↓ into its tickets"
       onKey={(key) => {
-        const i = TICKET_TABS.indexOf(tab);
-        if (key.name === "left" && i > 0) return onTab(TICKET_TABS[i - 1]!), true;
-        if (key.name === "right" && i < TICKET_TABS.length - 1) return onTab(TICKET_TABS[i + 1]!), true;
+        const index = TICKET_TABS.indexOf(tab);
+        if (key.name === "left" && index > 0) return onTab(TICKET_TABS[index - 1]!), true;
+        if (key.name === "right" && index < TICKET_TABS.length - 1) return onTab(TICKET_TABS[index + 1]!), true;
         // ← past the first and → past the last are not ours: the rail, the projects
         return false;
       }}
@@ -355,14 +355,14 @@ function KindTabs({ tab, counts, extra, needsYou, width, onTab }: { tab: TicketT
         <text wrapMode="none">
           <span fg={focused ? theme.accent : theme.dim}>{focused ? "› " : "  "}</span>
           {shown.before ? <span fg={theme.dim}>{"‹ "}</span> : null}
-          {shown.tabs.flatMap((d, i) => {
-            const n = counts.get(d.tab) ?? 0;
+          {shown.tabs.flatMap((shownTab, index) => {
+            const count = counts.get(shownTab.tab) ?? 0;
             return [
-              ...(i > 0 ? [<span key={`${d.tab}-gap`}>{" ".repeat(shown.gap)}</span>] : []),
-              <span key={d.tab} fg={d.open ? (focused ? theme.accent : theme.fg) : n === 0 && d.tab !== "all" ? theme.dim : theme.fg}>
-                {d.text.slice(0, d.text.lastIndexOf(" "))}
+              ...(index > 0 ? [<span key={`${shownTab.tab}-gap`}>{" ".repeat(shown.gap)}</span>] : []),
+              <span key={shownTab.tab} fg={shownTab.open ? (focused ? theme.accent : theme.fg) : count === 0 && shownTab.tab !== "all" ? theme.dim : theme.fg}>
+                {shownTab.text.slice(0, shownTab.text.lastIndexOf(" "))}
               </span>,
-              <span key={`${d.tab}-n`} fg={d.open && needsYou ? theme.warn : theme.dim}>{d.text.slice(d.text.lastIndexOf(" "))}</span>,
+              <span key={`${shownTab.tab}-n`} fg={shownTab.open && needsYou ? theme.warn : theme.dim}>{shownTab.text.slice(shownTab.text.lastIndexOf(" "))}</span>,
             ];
           })}
           {shown.after ? <span fg={theme.dim}>{" ›"}</span> : null}
@@ -414,10 +414,10 @@ function EpicView({
   /** a row's relatives not in this epic, drawn dim under it */
   ghosts: (t: Ticket) => ReadonlyArray<Relative>;
 }) {
-  const selected = selectedKey === block.epic.t.id;
+  const selected = selectedKey === block.epic.ticket.id;
   return (
     <box flexDirection="column" flexShrink={0} marginTop={first ? 1 : 0} marginBottom={1}>
-      <box id={rowId(block.epic.t.id)} flexDirection="row" flexShrink={0}>
+      <box id={rowId(block.epic.ticket.id)} flexDirection="row" flexShrink={0}>
         <text wrapMode="none" flexShrink={0}>
           {" ".repeat(Math.max(0, indent - 2))}
           <span fg={selected ? theme.accent : theme.epic}>{selected ? "› " : "  "}</span>
@@ -426,7 +426,7 @@ function EpicView({
         {/* the title starts on the tree's column, before the glyphs and the
             names: its column is that much wider than the rows' titles */}
         <text fg={theme.epic} truncate wrapMode="none" flexBasis={width + KIND + NAME} flexShrink={1} minWidth={0}>
-          {rowTitle(block.epic.t)}
+          {rowTitle(block.epic.ticket)}
           {foldedParts(block, open).map((part) => (
             <span key={part.text} fg={part.warn ? theme.warn : theme.dim}>
               {" · "}
@@ -437,29 +437,29 @@ function EpicView({
         <Info parts={[{ text: progress }]} width={infoWidth} />
       </box>
       {open
-        ? block.rows.map((r, i) => {
-            const last = i === block.rows.length - 1;
+        ? block.rows.map((row, index) => {
+            const last = index === block.rows.length - 1;
             return (
-              <Fragment key={r.t.id}>
+              <Fragment key={row.ticket.id}>
                 <TicketRow
-                  ticket={r.t}
-                  summary={r.s}
-                  selected={selectedKey === r.t.id}
+                  ticket={row.ticket}
+                  summary={row.summary}
+                  selected={selectedKey === row.ticket.id}
                   nameFor={nameFor}
                   indent={indent}
-                  depth={block.depth.get(r.t.id) ?? 0}
-                  under={block.parent.get(r.t.id)}
+                  depth={block.depth.get(row.ticket.id) ?? 0}
+                  under={block.parent.get(row.ticket.id)}
                   goalOf={goalOf}
-                  project={projects ? r.t.project : undefined}
-                  excluded={excludedFromEpic(r.t)}
-                  related={related(r.t)}
+                  project={projects ? row.ticket.project : undefined}
+                  excluded={excludedFromEpic(row.ticket)}
+                  related={related(row.ticket)}
                   branch={last ? "last" : "mid"}
                   width={width}
                   infoWidth={infoWidth}
                   relationWidth={relationWidth}
                 />
-                {ghosts(r.t).map((x) => (
-                  <GhostRow key={x.t.id} id={rowId(ghostKey(r.t.id, x.t.id))} selected={selectedKey === ghostKey(r.t.id, x.t.id)} relative={x} nameFor={nameFor} indent={indent} depth={(block.depth.get(r.t.id) ?? 0) + 1} pipe={!last} width={width} infoWidth={infoWidth} relationWidth={relationWidth} />
+                {ghosts(row.ticket).map((relative) => (
+                  <GhostRow key={relative.ticket.id} id={rowId(ghostKey(row.ticket.id, relative.ticket.id))} selected={selectedKey === ghostKey(row.ticket.id, relative.ticket.id)} relative={relative} nameFor={nameFor} indent={indent} depth={(block.depth.get(row.ticket.id) ?? 0) + 1} pipe={!last} width={width} infoWidth={infoWidth} relationWidth={relationWidth} />
                 ))}
               </Fragment>
             );
@@ -476,7 +476,7 @@ const HEAD = 8;
 const AFTER_MAX = 24;
 
 /** A closed row's status: how it ended. */
-const closedInfo = (t: Ticket): ReadonlyArray<Part> => [{ text: closedLine(t) ?? "closed" }];
+const closedInfo = (ticket: Ticket): ReadonlyArray<Part> => [{ text: closedLine(ticket) ?? "closed" }];
 
 /** Between the title and the info column. */
 const GAP = 2;
@@ -489,7 +489,7 @@ const KIND = 4;
 /** What a row says before its info column: the staircase, the project
  *  (inside an epic) and the title — the text the info column aligns after. */
 const staircase = (depth: number): string => (depth > 0 ? `${"  ".repeat(Math.min(depth, 6) - 1)}${STACK.follows} ` : "");
-const leadOf = (t: Ticket, depth: number, project: string | undefined): string => `${staircase(depth)}${project ? `${project} · ` : ""}${rowTitle(t)}`;
+const leadOf = (ticket: Ticket, depth: number, project: string | undefined): string => `${staircase(depth)}${project ? `${project} · ` : ""}${rowTitle(ticket)}`;
 
 /** The columns a list's lead takes: the longest one shown (a title is 60 at
  *  most), so the info column sits just past it on every row. */
@@ -497,31 +497,31 @@ const leadWidth = (leads: ReadonlyArray<string>): number => Math.max(0, ...leads
 
 /** What follows a row's title, in the info column. */
 type Part = { readonly text: string; readonly warn?: boolean };
-const partsWidth = (parts: ReadonlyArray<Part>): number => parts.reduce((n, p, i) => n + cells(p.text) + (i > 0 ? 3 : 0), 0);
+const partsWidth = (parts: ReadonlyArray<Part>): number => parts.reduce((total, part, index) => total + cells(part.text) + (index > 0 ? 3 : 0), 0);
 
 /** A ticket's info: out of its epic's progress, what holds it, what was said on it. */
 const rowInfo = (
-  s: TicketSummary,
+  summary: TicketSummary,
   under: string | undefined,
   goalOf: (ticketId: string) => string | undefined,
   excluded: boolean | undefined,
 ): ReadonlyArray<Part> => {
   // waiting on the row it is drawn under says so in one word; waiting on one
   // elsewhere (another group, or a second of two) names it
-  const elsewhere = s.held.filter((id) => id !== under);
+  const elsewhere = summary.held.filter((id) => id !== under);
   const on = elsewhere.length > 0 ? clip(goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8), AFTER_MAX) : "";
-  const people = marksLabel(s);
+  const people = marksLabel(summary);
   return [
     ...(excluded ? [{ text: "excluded" }] : []),
-    ...(s.held.length > 0 ? [{ text: `${on ? `${STACK.waits} after "${on}"` : `${STACK.waits} waiting`}${elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}` }] : []),
-    ...(people.length > 0 ? [{ text: people, warn: s.state === "needs-you" }] : []),
+    ...(summary.held.length > 0 ? [{ text: `${on ? `${STACK.waits} after "${on}"` : `${STACK.waits} waiting`}${elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}` }] : []),
+    ...(people.length > 0 ? [{ text: people, warn: summary.state === "needs-you" }] : []),
   ];
 };
 
 /** Folded, an epic says after its title how many it holds and how many are
  *  yours — there is room beside a title, and its info column keeps the progress. */
 const foldedParts = (block: EpicBlock<Row>, open: boolean): ReadonlyArray<Part> => {
-  const yours = block.rows.filter((r) => r.s.state === "needs-you").length;
+  const yours = block.rows.filter((row) => row.summary.state === "needs-you").length;
   return [
     ...(!open && block.rows.length > 0 ? [{ text: `${block.rows.length} folded` }] : []),
     ...(!open && yours > 0 ? [{ text: `${GLYPH.yours} ${yours} yours`, warn: true }] : []),
@@ -548,8 +548,8 @@ function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
   }
   return (
     <text wrapMode="none" flexBasis={width} flexShrink={0} marginLeft={GAP}>
-      {fitted.map((part, i) => (
-        <span key={i} fg={part.warn ? theme.warn : theme.dim}>
+      {fitted.map((part, index) => (
+        <span key={index} fg={part.warn ? theme.warn : theme.dim}>
           {part.text}
         </span>
       ))}
@@ -558,7 +558,7 @@ function Info({ parts, width }: { parts: ReadonlyArray<Part>; width: number }) {
 }
 
 /** A relative's row says only whether it is over, and how: what it is to the row above is its other column. */
-const ghostStatus = (t: Ticket): string => endedMark(t) ?? "";
+const ghostStatus = (ticket: Ticket): string => endedMark(ticket) ?? "";
 
 /** A ticket's relative that is not drawn where it is — closed, in another
  *  epic, of another kind's tab — one level under it, dim: what it is to the
@@ -567,7 +567,7 @@ const ghostStatus = (t: Ticket): string => endedMark(t) ?? "";
 function GhostRow({
   id,
   selected,
-  relative: { t, as },
+  relative: { ticket, as },
   nameFor,
   indent,
   depth,
@@ -588,21 +588,21 @@ function GhostRow({
   infoWidth: number;
   relationWidth: number;
 }) {
-  const status = ghostStatus(t);
-  const fg = selected ? theme.accent : theme.dim;
+  const status = ghostStatus(ticket);
+  const color = selected ? theme.accent : theme.dim;
   return (
     <box id={id} flexDirection="row" flexShrink={0}>
-      <text fg={fg} wrapMode="none" flexShrink={0}>
+      <text fg={color} wrapMode="none" flexShrink={0}>
         {" ".repeat(Math.max(0, indent - 2))}
         {selected ? "› " : "  "}
         {"  "}
         {pipe ? <span fg={theme.epic}>│ </span> : "  "}
-        {t.kind === "epic" ? "  " : `${KIND_GLYPH[t.kind]} `}
-        {nameFor(t.createdBy).slice(0, NAME - 1).padEnd(NAME)}
+        {ticket.kind === "epic" ? "  " : `${KIND_GLYPH[ticket.kind]} `}
+        {nameFor(ticket.createdBy).slice(0, NAME - 1).padEnd(NAME)}
       </text>
-      <text fg={fg} truncate wrapMode="none" flexBasis={width} flexShrink={1} minWidth={0}>
+      <text fg={color} truncate wrapMode="none" flexBasis={width} flexShrink={1} minWidth={0}>
         {staircase(depth)}
-        {rowTitle(t)}
+        {rowTitle(ticket)}
       </text>
       <Info parts={status ? [{ text: status }] : []} width={infoWidth} />
       <Info parts={[{ text: as }]} width={relationWidth} />
@@ -611,7 +611,7 @@ function GhostRow({
 }
 
 /** A cursor stop: a ticket's own row, or a relative drawn under one. */
-type Stop = { readonly key: string; readonly t: Ticket; readonly row?: Row };
+type Stop = { readonly key: string; readonly ticket: Ticket; readonly row?: Row };
 
 /** A relative's line, by the row it hangs under: one ticket can be a dim row under several. */
 const ghostKey = (host: string, id: string): string => `${host}>${id}`;
@@ -632,8 +632,8 @@ const rowId = (ticketId: string): string => `row-${ticketId}`;
  *  (It held the kind until the kinds became headers.) Nothing else: the
  *  ticket's own page has the rest, and an agent can read all of it. */
 function TicketRow({
-  ticket: t,
-  summary: s,
+  ticket,
+  summary,
   selected,
   nameFor,
   indent,
@@ -677,13 +677,13 @@ function TicketRow({
   /** the status in place of its own (a closed row's: how it ended) */
   info?: ReadonlyArray<Part>;
 }) {
-  const yours = s.state === "needs-you";
+  const yours = summary.state === "needs-you";
   // waiting on another ticket: only its author sees the row, dim, saying on what
-  const dim = s.state === "done" || s.state === "closed" || s.held.length > 0 || excluded === true;
-  const fg = selected ? theme.accent : dim ? theme.dim : theme.fg;
+  const dim = summary.state === "done" || summary.state === "closed" || summary.held.length > 0 || excluded === true;
+  const color = selected ? theme.accent : dim ? theme.dim : theme.fg;
   return (
-    <box id={rowId(t.id)} flexDirection="row" flexShrink={0}>
-      <text fg={fg} wrapMode="none" flexShrink={0}>
+    <box id={rowId(ticket.id)} flexDirection="row" flexShrink={0}>
+      <text fg={color} wrapMode="none" flexShrink={0}>
         {" ".repeat(Math.max(0, indent - 2))}
         {selected ? "› " : "  "}
         {/* the row's own mark: it is yours to act on. Carried here and not only
@@ -697,16 +697,16 @@ function TicketRow({
         {branch ? <span fg={theme.epic}>{branch === "last" ? "└ " : "├ "}</span> : "  "}
         {/* every row's kind, as a glyph: under a heading it learns what it
             means, and inside an epic — no headings there — it says it */}
-        <span fg={theme.dim}>{t.kind === "epic" ? "  " : `${KIND_GLYPH[t.kind]} `}</span>
-        <span fg={s.mine ? theme.accent : theme.dim}>{nameFor(t.createdBy).slice(0, NAME - 1).padEnd(NAME)}</span>
+        <span fg={theme.dim}>{ticket.kind === "epic" ? "  " : `${KIND_GLYPH[ticket.kind]} `}</span>
+        <span fg={summary.mine ? theme.accent : theme.dim}>{nameFor(ticket.createdBy).slice(0, NAME - 1).padEnd(NAME)}</span>
       </text>
-      <text fg={fg} truncate wrapMode="none" flexBasis={width} flexShrink={1} minWidth={0}>
+      <text fg={color} truncate wrapMode="none" flexBasis={width} flexShrink={1} minWidth={0}>
         {/* a staircase: two columns a level, capped so a long chain keeps its goals readable */}
         {depth > 0 ? <span fg={theme.dim}>{staircase(depth)}</span> : null}
         {project ? <span fg={theme.dim}>{project} · </span> : null}
-        {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
+        {ticket.title ? ticket.title : <span fg={theme.dim}>{rowTitle(ticket)}</span>}
       </text>
-      <Info parts={info ?? rowInfo(s, under, goalOf, excluded)} width={infoWidth} />
+      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded)} width={infoWidth} />
       <Info parts={related} width={relationWidth} />
     </box>
   );

@@ -33,9 +33,9 @@ export const gitDir = (root: string): string | null => {
 /** Where the repo's shared files live: a worktree's own git dir holds HEAD,
  *  but config and remotes are in the common dir it points at. */
 const commonDir = (dir: string): string => {
-  const c = read(join(dir, "commondir"))?.trim();
-  if (!c) return dir;
-  return isAbsolute(c) ? c : resolve(dir, c);
+  const common = read(join(dir, "commondir"))?.trim();
+  if (!common) return dir;
+  return isAbsolute(common) ? common : resolve(dir, common);
 };
 
 /** The checked-out branch, or null when HEAD is detached. */
@@ -52,10 +52,10 @@ export const repoWebUrl = (root: string): string | null => {
   if (!dir) return null;
   const config = read(join(commonDir(dir), "config"));
   if (!config) return null;
-  const section = config.split(/^\[/m).find((s) => /^remote\s+"origin"\]/.test(s));
+  const section = config.split(/^\[/m).find((chunk) => /^remote\s+"origin"\]/.test(chunk));
   const url = section?.match(/^\s*url\s*=\s*(.+)$/m)?.[1]?.trim();
   if (!url) return null;
-  const strip = (u: string) => u.replace(/\.git$/, "").replace(/\/$/, "");
+  const strip = (address: string) => address.replace(/\.git$/, "").replace(/\/$/, "");
   const ssh = url.match(/^(?:ssh:\/\/)?(?:git@)([^/:]+)[:/](.+)$/);
   if (ssh) return strip(`https://${ssh[1]}/${ssh[2]}`);
   if (/^https?:\/\//.test(url)) return strip(url);
@@ -71,6 +71,6 @@ export const defaultBranchOf = (root: string): string | null => {
   const head = read(join(common, "refs", "remotes", "origin", "HEAD"))?.match(/^ref:\s*refs\/remotes\/origin\/(.+)$/m)?.[1]?.trim();
   if (head) return head;
   const packed = read(join(common, "packed-refs")) ?? "";
-  const has = (b: string) => read(join(common, "refs", "remotes", "origin", b)) !== null || packed.split("\n").some((l) => l.endsWith(` refs/remotes/origin/${b}`));
+  const has = (branch: string) => read(join(common, "refs", "remotes", "origin", branch)) !== null || packed.split("\n").some((line) => line.endsWith(` refs/remotes/origin/${branch}`));
   return ["main", "master"].find(has) ?? null;
 };

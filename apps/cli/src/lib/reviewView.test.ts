@@ -32,8 +32,8 @@ deleted file mode 100644
 describe("parseDiff", () => {
   const hunks = parseDiff(DIFF);
   it("reads every hunk with its file, numbering new lines", () => {
-    expect(hunks.map((h) => h.file)).toEqual(["src/a.ts", "src/a.ts", "src/b.ts", "src/gone.ts"]);
-    expect(hunks[0]!.lines.find((l) => l.kind === "+")).toEqual({ kind: "+", text: "two", new: 2 });
+    expect(hunks.map((hunk) => hunk.file)).toEqual(["src/a.ts", "src/a.ts", "src/b.ts", "src/gone.ts"]);
+    expect(hunks[0]!.lines.find((line) => line.kind === "+")).toEqual({ kind: "+", text: "two", new: 2 });
     expect(hunks[1]!.newStart).toBe(41);
   });
   it("leaves no phantom line from the final newline", () => {
@@ -54,8 +54,8 @@ describe("pointers", () => {
   });
   it("claims the hunk holding the line, else the nearest close by, else nothing", () => {
     const hunks = parseDiff(DIFF);
-    expect(claimed(parsePointer("src/a.ts:42"), hunks).map((h) => h.id)).toEqual(["src/a.ts#1"]);
-    expect(claimed(parsePointer("src/a.ts:50"), hunks).map((h) => h.id)).toEqual(["src/a.ts#1"]);
+    expect(claimed(parsePointer("src/a.ts:42"), hunks).map((hunk) => hunk.id)).toEqual(["src/a.ts#1"]);
+    expect(claimed(parsePointer("src/a.ts:50"), hunks).map((hunk) => hunk.id)).toEqual(["src/a.ts#1"]);
     expect(claimed(parsePointer("src/a.ts:200"), hunks)).toEqual([]);
     expect(claimed(parsePointer("src/a.ts"), hunks)).toHaveLength(2);
   });

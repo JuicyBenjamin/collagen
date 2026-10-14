@@ -15,8 +15,8 @@ export const reading = {
   folded: (file: string): boolean => viewed.state(file) === "viewed" && !reopened().has(file),
   /** Open a viewed file again, or fold it back. */
   toggle: (file: string): void => {
-    setReopened((s) => {
-      const next = new Set(s);
+    setReopened((files) => {
+      const next = new Set(files);
       if (next.has(file)) next.delete(file);
       else next.add(file);
       return next;
@@ -24,9 +24,9 @@ export const reading = {
   },
   /** The mark changed: a file newly marked folds, whatever it was before. */
   marked: (file: string): void => {
-    setReopened((s) => {
-      if (!s.has(file)) return s;
-      const next = new Set(s);
+    setReopened((files) => {
+      if (!files.has(file)) return files;
+      const next = new Set(files);
       next.delete(file);
       return next;
     });

@@ -15,6 +15,6 @@ export const sinceOf = (file: string, from: string, to: string): Accessor<SinceR
   asked.set(key, result);
   sinceViewed(ticketId, file, from, to)
     .then(setResult)
-    .catch((e: unknown) => setResult({ error: String(e) }));
+    .catch((error: unknown) => setResult({ error: String(error) }));
   return result;
 };

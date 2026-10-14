@@ -17,16 +17,16 @@ export interface Person {
   readonly projects: number | null;
 }
 
-const problemOf = (ai: string | null, aiStatus: AiStatus | undefined, protocol: string): string | null =>
+const problemOf = (aiName: string | null, aiStatus: AiStatus | undefined, protocol: string): string | null =>
   protocol !== PROTOCOL_VERSION
     ? "other collagen version"
-    : ai !== null && aiStatus === "missing"
+    : aiName !== null && aiStatus === "missing"
       ? "cli not found"
-      : ai !== null && aiStatus === "unauthenticated"
+      : aiName !== null && aiStatus === "unauthenticated"
         ? "unauthed"
         : null;
 
-const byName = (a: Person, b: Person) => a.name.localeCompare(b.name);
+const byName = (first: Person, second: Person) => first.name.localeCompare(second.name);
 
 /** You first, then whoever is here by name, then the rest — away, then
  *  offline (remembered by the room's log), each by name. */
@@ -35,16 +35,16 @@ export function roomPeople(
   roster: ReadonlyArray<Peer>,
   members: ReadonlyArray<Member>,
 ): ReadonlyArray<Person> {
-  const connected = new Set(roster.map((p) => p.key));
-  const peer = (p: Peer): Person => ({ key: p.key, name: p.name, you: false, online: !p.away, away: p.away, ai: p.ai, problem: problemOf(p.ai, p.aiStatus, p.protocol), projects: p.projects.length });
+  const connected = new Set(roster.map((peer) => peer.key));
+  const toPerson = (peer: Peer): Person => ({ key: peer.key, name: peer.name, you: false, online: !peer.away, away: peer.away, ai: peer.ai, problem: problemOf(peer.ai, peer.aiStatus, peer.protocol), projects: peer.projects.length });
   const you: Person = { key: me.key, name: me.name, you: true, online: true, away: false, ai: me.ai, problem: problemOf(me.ai, me.aiStatus, PROTOCOL_VERSION), projects: me.projects };
   const offline = members
-    .filter((m) => m.key !== me.key && !connected.has(m.key))
-    .map((m): Person => ({ key: m.key, name: m.name, you: false, online: false, away: false, ai: null, problem: null, projects: null }));
+    .filter((member) => member.key !== me.key && !connected.has(member.key))
+    .map((member): Person => ({ key: member.key, name: member.name, you: false, online: false, away: false, ai: null, problem: null, projects: null }));
   return [
     you,
-    ...roster.filter((p) => !p.away).map(peer).sort(byName),
-    ...roster.filter((p) => p.away).map(peer).sort(byName),
+    ...roster.filter((peer) => !peer.away).map(toPerson).sort(byName),
+    ...roster.filter((peer) => peer.away).map(toPerson).sort(byName),
     ...offline.sort(byName),
   ];
 }
@@ -53,10 +53,10 @@ export function roomPeople(
  *  room for " …" when some are left over — at least one, cut if it must be. */
 export function fitNames(names: ReadonlyArray<string>, width: number): { readonly shown: number; readonly more: boolean } {
   let used = 0;
-  for (let i = 0; i < names.length; i++) {
-    const next = used + (i > 0 ? 2 : 0) + cells(names[i]!);
-    const rest = i < names.length - 1 ? 2 : 0;
-    if (next + rest > width && i > 0) return { shown: i, more: true };
+  for (let index = 0; index < names.length; index++) {
+    const next = used + (index > 0 ? 2 : 0) + cells(names[index]!);
+    const rest = index < names.length - 1 ? 2 : 0;
+    if (next + rest > width && index > 0) return { shown: index, more: true };
     used = next;
   }
   return { shown: names.length, more: false };

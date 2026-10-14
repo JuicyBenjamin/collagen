@@ -41,17 +41,17 @@ export function Focusable({
   useEffect(
     () =>
       registerFocusable(id, () => {
-        const r = ref.current;
-        return r ? { x: r.screenX, y: r.screenY, width: r.width, height: r.height } : null;
+        const node = ref.current;
+        return node ? { x: node.screenX, y: node.screenY, width: node.width, height: node.height } : null;
       }),
     [id],
   );
 
   useEffect(() => {
-    setHints((h) => ({ ...h, [id]: hint }));
+    setHints((previous) => ({ ...previous, [id]: hint }));
     return () =>
-      setHints((h) => {
-        const { [id]: _gone, ...rest } = h;
+      setHints((previous) => {
+        const { [id]: _gone, ...rest } = previous;
         return rest;
       });
   }, [id, hint, setHints]);

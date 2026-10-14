@@ -27,10 +27,10 @@ export function Crumb({ trail, label, onBack }: { trail: ReadonlyArray<string>; 
       {(focused) => (
         <text truncate wrapMode="none">
           <span fg={focused ? theme.accent : theme.dim}>{focused ? "› " : "  "}</span>
-          {trail.map((t, i) => (
-            <span key={i} fg={theme.dim}>
-              {i === 0 ? "‹ " : ""}
-              {t}
+          {trail.map((crumb, index) => (
+            <span key={index} fg={theme.dim}>
+              {index === 0 ? "‹ " : ""}
+              {crumb}
               {"  ›  "}
             </span>
           ))}

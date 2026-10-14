@@ -3,7 +3,7 @@ import { Option } from "effect";
 import type { RoomMessage } from "@collagen/p2p";
 import { claudeAdapter, codexAdapter, mockAdapter, nudgePrompt, type SpawnCtx } from "./Adapters";
 
-const msg: RoomMessage = {
+const message: RoomMessage = {
   id: "m1",
   threadId: "thread-1",
   to: "bb".repeat(32),
@@ -15,33 +15,33 @@ const msg: RoomMessage = {
   ts: 1,
 };
 
-const ctx = (sessionId: Option.Option<string> = Option.none()): SpawnCtx => ({
+const spawnContext = (sessionId: Option.Option<string> = Option.none()): SpawnCtx => ({
   cwd: "/tmp/sandbox",
   mcpUrl: "http://127.0.0.1:44040/mcp",
   serverName: "collagen-alice",
-  msg,
+  message,
   sessionId,
 });
 
 describe("nudgePrompt", () => {
   it("names the sender, project, intent, and threadId", () => {
-    const p = nudgePrompt(ctx());
-    expect(p).toContain("alice");
-    expect(p).toContain('"sandbox"');
-    expect(p).toContain("question");
-    expect(p).toContain('threadId "thread-1"');
-    expect(p).toContain("collagen-alice");
+    const prompt = nudgePrompt(spawnContext());
+    expect(prompt).toContain("alice");
+    expect(prompt).toContain('"sandbox"');
+    expect(prompt).toContain("question");
+    expect(prompt).toContain('threadId "thread-1"');
+    expect(prompt).toContain("collagen-alice");
   });
 
   it("says new conversation vs new message depending on session", () => {
-    expect(nudgePrompt(ctx())).toContain("a new conversation was started");
-    expect(nudgePrompt(ctx(Option.some("s1")))).toContain("a new message arrived");
+    expect(nudgePrompt(spawnContext())).toContain("a new conversation was started");
+    expect(nudgePrompt(spawnContext(Option.some("s1")))).toContain("a new message arrived");
   });
 });
 
 describe("claude adapter", () => {
   it("fresh run: -p prompt, inline strict MCP config, json output", () => {
-    const args = claudeAdapter.args(ctx());
+    const args = claudeAdapter.args(spawnContext());
     expect(args[0]).toBe("-p");
     expect(args).toContain("--strict-mcp-config");
     expect(args).toContain("--output-format");
@@ -55,7 +55,7 @@ describe("claude adapter", () => {
   });
 
   it("resume run: --resume <id> prefixed", () => {
-    const args = claudeAdapter.args(ctx(Option.some("sess-42")));
+    const args = claudeAdapter.args(spawnContext(Option.some("sess-42")));
     expect(args.slice(0, 2)).toEqual(["--resume", "sess-42"]);
   });
 
@@ -70,20 +70,20 @@ describe("claude adapter", () => {
 
 describe("codex adapter", () => {
   it("fresh run: exec + json + read-only sandbox via -c (no --sandbox flag)", () => {
-    const args = codexAdapter.args(ctx());
+    const args = codexAdapter.args(spawnContext());
     expect(args[0]).toBe("exec");
     expect(args).toContain("--json");
     // codex ≥0.152: `exec resume` rejects --sandbox, so both paths use -c
     expect(args).not.toContain("--sandbox");
     expect(args).toContain('sandbox_mode="read-only"');
-    expect(args.at(-1)).toBe(nudgePrompt(ctx()));
+    expect(args.at(-1)).toBe(nudgePrompt(spawnContext()));
   });
 
   it("resume run: exec resume <id> then flags then prompt", () => {
-    const args = codexAdapter.args(ctx(Option.some("thread-abc")));
+    const args = codexAdapter.args(spawnContext(Option.some("thread-abc")));
     expect(args.slice(0, 3)).toEqual(["exec", "resume", "thread-abc"]);
     expect(args).not.toContain("--sandbox");
-    expect(args.at(-1)).toBe(nudgePrompt(ctx(Option.some("thread-abc"))));
+    expect(args.at(-1)).toBe(nudgePrompt(spawnContext(Option.some("thread-abc"))));
   });
 
   it("parse: scans JSONL for thread id and final agent message, skipping noise", () => {
@@ -103,7 +103,7 @@ describe("codex adapter", () => {
 
 describe("mockAdapter", () => {
   it("spawns node on the mock-agent script with the message context", () => {
-    const args = mockAdapter.args(ctx());
+    const args = mockAdapter.args(spawnContext());
     expect(mockAdapter.cmd).toBe(process.execPath);
     expect(args[0]).toMatch(/mock-agent\.mjs$/);
     expect(args.slice(1)).toEqual([
@@ -117,7 +117,7 @@ describe("mockAdapter", () => {
   });
 
   it("passes the stored session id through — it carries the thread's ack count", () => {
-    expect(mockAdapter.args(ctx(Option.some("mock#2"))).at(-1)).toBe("mock#2");
+    expect(mockAdapter.args(spawnContext(Option.some("mock#2"))).at(-1)).toBe("mock#2");
   });
 
   it("parse: claude-shaped single JSON object", () => {

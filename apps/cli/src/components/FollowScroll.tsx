@@ -66,13 +66,13 @@ export const FollowScroll = forwardRef<FollowScrollHandle, Props>(function Follo
   const width = useRef<number | null>(null);
   const told = useRef("");
   const tell = () => {
-    const l = list.current;
-    if (!l || !onView) return;
-    const v = viewOf(l);
-    const key = `${v.top}|${v.height}|${v.total}`;
+    const scrollbox = list.current;
+    if (!scrollbox || !onView) return;
+    const view = viewOf(scrollbox);
+    const key = `${view.top}|${view.height}|${view.total}`;
     if (key !== told.current) {
       told.current = key;
-      onView(v);
+      onView(view);
     }
   };
   const followNow = () => {
@@ -83,9 +83,9 @@ export const FollowScroll = forwardRef<FollowScrollHandle, Props>(function Follo
   const followKey = follow === null || typeof follow === "string" ? String(follow) : `${follow.id}|${follow.how ?? "edge"}`;
   useEffect(followNow, [followKey]);
   useEffect(() => {
-    const l = list.current;
-    if (!l) return;
-    const undo = [l.content, l.viewport].map((part) => {
+    const scrollbox = list.current;
+    if (!scrollbox) return;
+    const undo = [scrollbox.content, scrollbox.viewport].map((part) => {
       const before = part.onSizeChange;
       part.onSizeChange = function (this: typeof part) {
         before?.call(this);
@@ -95,25 +95,25 @@ export const FollowScroll = forwardRef<FollowScrollHandle, Props>(function Follo
         part.onSizeChange = before;
       };
     });
-    return () => undo.forEach((f) => f());
+    return () => undo.forEach((release) => release());
   });
 
   useImperativeHandle(ref, () => ({
     scrollBy: (lines) => {
-      const l = list.current;
-      if (l) l.scrollTop = followTop(viewOf(l), { kind: "top", at: l.scrollTop + lines });
+      const scrollbox = list.current;
+      if (scrollbox) scrollbox.scrollTop = followTop(viewOf(scrollbox), { kind: "top", at: scrollbox.scrollTop + lines });
       tell();
     },
     scrollTo: (top) => {
-      const l = list.current;
-      if (l) l.scrollTop = followTop(viewOf(l), { kind: "top", at: top });
+      const scrollbox = list.current;
+      if (scrollbox) scrollbox.scrollTop = followTop(viewOf(scrollbox), { kind: "top", at: top });
       tell();
     },
     view: () => (list.current ? viewOf(list.current) : { top: 0, height: 0, total: 0 }),
     rowOf: (id) => {
-      const l = list.current;
-      const row = l?.content.findDescendantById(id);
-      return l && row ? { at: row.y - l.content.y, size: row.height } : null;
+      const scrollbox = list.current;
+      const row = scrollbox?.content.findDescendantById(id);
+      return scrollbox && row ? { at: row.y - scrollbox.content.y, size: row.height } : null;
     },
   }));
 

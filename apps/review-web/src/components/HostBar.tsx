@@ -13,10 +13,10 @@ export function HostBar() {
   // instead, so how far through the reader is stays in view as they read
   const [away, setAway] = createSignal(false);
   let seen: IntersectionObserver | undefined;
-  const watch = (el: HTMLElement) => {
+  const watch = (element: HTMLElement) => {
     seen?.disconnect();
-    seen = new IntersectionObserver(([e]) => setAway(!e!.isIntersecting));
-    seen.observe(el);
+    seen = new IntersectionObserver(([entry]) => setAway(!entry!.isIntersecting));
+    seen.observe(element);
   };
   onCleanup(() => seen?.disconnect());
   const host = hostNow.host;
@@ -34,8 +34,8 @@ export function HostBar() {
           </span>
         </Show>
         <Show when={host()}>
-          {(h) => (
-            <Show when={h().pull} fallback={<span class="host-note">{h().noPull ?? ""}</span>}>
+          {(hostState) => (
+            <Show when={hostState().pull} fallback={<span class="host-note">{hostState().noPull ?? ""}</span>}>
               {(pull) => (
                 <a class={["pull-chip", pull().state]} href={pull().url} target="_blank" rel="noreferrer" title={pull().title}>
                   #{pull().number} · {pull().draft ? "draft" : pull().state}
@@ -51,11 +51,11 @@ export function HostBar() {
           </button>
         </Show>
         <Show when={host()}>
-          {(h) => (
-            <Show when={h().viewer} fallback={<span class="host-note" title={h().signIn}>Not signed in to {h().host}</span>}>
+          {(hostState) => (
+            <Show when={hostState().viewer} fallback={<span class="host-note" title={hostState().signIn}>Not signed in to {hostState().host}</span>}>
               {(me) => (
-                <span class="viewer" title={`Signed in to ${h().host} as ${me().login} — a review or comment sent from here goes out under this name`}>
-                  <Show when={me().avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(e) => (e.currentTarget.style.visibility = "hidden")} width={22} height={22} />}</Show>
+                <span class="viewer" title={`Signed in to ${hostState().host} as ${me().login} — a review or comment sent from here goes out under this name`}>
+                  <Show when={me().avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={22} height={22} />}</Show>
                   <span class="viewer-name">{me().name ?? me().login}</span>
                 </span>
               )}
@@ -77,13 +77,13 @@ export function HostBar() {
 
 /** How many of the review's files are marked viewed: a count and a bar. */
 function Progress() {
-  const c = () => viewed.count();
+  const progress = () => viewed.count();
   return (
-    <span class={["viewed-progress", { done: c().viewed === c().files }]} title="Files you have marked as viewed">
+    <span class={["viewed-progress", { done: progress().viewed === progress().files }]} title="Files you have marked as viewed">
       <span class="bar" aria-hidden="true">
-        <span style={{ width: `${(100 * c().viewed) / c().files}%` }} />
+        <span style={{ width: `${(100 * progress().viewed) / progress().files}%` }} />
       </span>
-      {c().viewed} / {c().files} files viewed
+      {progress().viewed} / {progress().files} files viewed
     </span>
   );
 }

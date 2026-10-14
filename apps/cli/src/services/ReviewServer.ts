@@ -31,50 +31,50 @@ interface ServerEntry {
 const lineOk = (line: unknown, col: unknown): boolean => Number.isInteger(line) && (line as number) > 0 && Number.isInteger(col) && (col as number) >= 0;
 const bad = { error: "bad request" } as const;
 /** What a review can say, and how long anything written to a host may be (GitHub's own limit). */
-const verdictOk = (v: unknown): v is "comment" | "approve" | "request-changes" => v === "comment" || v === "approve" || v === "request-changes";
-const bodyOk = (b: unknown): b is string => typeof b === "string" && b.length <= 65_536;
-const sideOk = (s: unknown): s is "LEFT" | "RIGHT" => s === "LEFT" || s === "RIGHT";
+const verdictOk = (verdict: unknown): verdict is "comment" | "approve" | "request-changes" => verdict === "comment" || verdict === "approve" || verdict === "request-changes";
+const bodyOk = (body: unknown): body is string => typeof body === "string" && body.length <= 65_536;
+const sideOk = (side: unknown): side is "LEFT" | "RIGHT" => side === "LEFT" || side === "RIGHT";
 /** A comment's place, as the page names it — checked whole. */
 const spotOk = (ticketId: unknown, file: unknown, line: unknown, side: unknown, body: unknown, commit: unknown, start: unknown): boolean =>
   ticketIdOk(ticketId as string) && treePathOk(file as string) && lineOk(line, 0) && sideOk(side) && bodyOk(body) && commitOk(commit as string) && startOk(start, line as number, side as "LEFT" | "RIGHT");
 const spot = (file: string, line: number, side: "LEFT" | "RIGHT", start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null) => ({ file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}) });
 /** Drafts named by id — or null, all of them. */
-const idsOk = (ids: unknown): ids is ReadonlyArray<string> | null => ids === null || (Array.isArray(ids) && ids.length <= 500 && ids.every((i) => typeof i === "string" && /^[0-9a-f-]{1,64}$/.test(i)));
+const idsOk = (ids: unknown): ids is ReadonlyArray<string> | null => ids === null || (Array.isArray(ids) && ids.length <= 500 && ids.every((id) => typeof id === "string" && /^[0-9a-f-]{1,64}$/.test(id)));
 /** A draft's words as the reader edited them, by its id. */
-const editsOk = (e: unknown): e is Readonly<Record<string, string>> =>
-  typeof e === "object" && e !== null && !Array.isArray(e) && Object.entries(e).length <= 500 && Object.entries(e).every(([k, v]) => /^[0-9a-f-]{1,64}$/.test(k) && bodyOk(v));
+const editsOk = (edits: unknown): edits is Readonly<Record<string, string>> =>
+  typeof edits === "object" && edits !== null && !Array.isArray(edits) && Object.entries(edits).length <= 500 && Object.entries(edits).every(([draftId, body]) => /^[0-9a-f-]{1,64}$/.test(draftId) && bodyOk(body));
 /** Where a block of lines starts: none (one line), or a line on a side —
  *  before the last one when both are on the same side, as GitHub asks. */
 const startOk = (start: unknown, line: number, side: "LEFT" | "RIGHT"): start is { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null => {
   if (start === null) return true;
   if (typeof start !== "object" || start === undefined) return false;
-  const s = start as { line?: unknown; side?: unknown };
-  return lineOk(s.line, 0) && sideOk(s.side) && (s.side !== side || (s.line as number) < line);
+  const place = start as { line?: unknown; side?: unknown };
+  return lineOk(place.line, 0) && sideOk(place.side) && (place.side !== side || (place.line as number) < line);
 };
 
 /** The login the page shows signed in: none, or a GitHub login. */
-const shownOk = (s: unknown): s is string | null => s === null || (typeof s === "string" && /^[A-Za-z0-9-]{1,39}$/.test(s));
+const shownOk = (login: unknown): login is string | null => login === null || (typeof login === "string" && /^[A-Za-z0-9-]{1,39}$/.test(login));
 
 /** A finish from the page: its id, and the pending comments it saw. */
-const finishOk = (f: unknown): f is { readonly id: string; readonly pending: ReadonlyArray<string> } => {
-  if (typeof f !== "object" || f === null) return false;
-  const { id, pending } = f as { id?: unknown; pending?: unknown };
+const finishOk = (finish: unknown): finish is { readonly id: string; readonly pending: ReadonlyArray<string> } => {
+  if (typeof finish !== "object" || finish === null) return false;
+  const { id, pending } = finish as { id?: unknown; pending?: unknown };
   return typeof id === "string" && /^[0-9a-f-]{8,64}$/.test(id) && Array.isArray(pending) && idsOk(pending);
 };
 
 /** How many merges the page shows of each project: a few names, each a whole count. */
-const shownCountsOk = (s: unknown): s is Readonly<Record<string, number>> =>
-  typeof s === "object" && s !== null && !Array.isArray(s) && Object.keys(s).length <= 64 && Object.values(s).every((n) => Number.isInteger(n) && n >= 0 && n <= 100_000);
+const shownCountsOk = (counts: unknown): counts is Readonly<Record<string, number>> =>
+  typeof counts === "object" && counts !== null && !Array.isArray(counts) && Object.keys(counts).length <= 64 && Object.values(counts).every((count) => Number.isInteger(count) && count >= 0 && count <= 100_000);
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
-  const ctx = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>();
+  const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>();
   const types = yield* ReviewTypes;
   const history = yield* MergeHistory;
-  const on = <A, E>(e: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>) => e.pipe(Effect.provideContext(ctx), Effect.orDie);
+  const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
   return {
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),
-    changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(ctx)) : Stream.empty),
+    changes: (ticketId) => (ticketIdOk(ticketId) ? reviewChanges(ticketId).pipe(Stream.provideContext(context)) : Stream.empty),
     hover: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.hover(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
     definition: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.definition(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
     warm: (ticketId, tool, commit) => (ticketIdOk(ticketId) && toolNamed(tool) && commitOk(commit) ? on(types.warm(ticketId, tool, commit)) : Effect.void),

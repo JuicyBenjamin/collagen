@@ -45,7 +45,7 @@ export function EpicPage({
   // what is in it — put there, in its reading order; the count is the
   // room's, the list only what this reader may be shown
   const { parts, unresolved } = epicParts(epic, all);
-  const inside = parts.filter((t) => visibleTo(t, all, me));
+  const inside = parts.filter((ticket) => visibleTo(ticket, all, me));
   const progress = epicProgress(epic, all);
   const status = epicStatus(epic, all);
   const closed = status.closed;
@@ -53,7 +53,7 @@ export function EpicPage({
   const because = epicBecause(status, all, me);
   const causeBy = status.cause && "by" in status.cause ? status.cause.by : undefined;
   const now = Date.now();
-  const s = clamp(sel, 0, Math.max(0, inside.length - 1));
+  const selected = clamp(sel, 0, Math.max(0, inside.length - 1));
 
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
@@ -100,10 +100,10 @@ export function EpicPage({
         flexDirection="column"
         flexShrink={0}
         onKey={(key) => {
-          if (key.name === "up" && s > 0) return setSel(s - 1), true;
-          if (key.name === "down" && s < inside.length - 1) return setSel(s + 1), true;
+          if (key.name === "up" && selected > 0) return setSel(selected - 1), true;
+          if (key.name === "down" && selected < inside.length - 1) return setSel(selected + 1), true;
           // a ticket opened from here comes back here
-          if (isEnter(key) && inside[s]) return navigate(to.ticket(inside[s]!.id, { name: "room/ticket", ticketId: epic.id })), true;
+          if (isEnter(key) && inside[selected]) return navigate(to.ticket(inside[selected]!.id, { name: "room/ticket", ticketId: epic.id })), true;
           return false;
         }}
       >
@@ -113,17 +113,17 @@ export function EpicPage({
               <span fg={focused ? theme.accent : theme.fg}>in it</span>
               <span fg={theme.dim}> · {inside.length === 0 ? "nothing yet" : `${inside.length} ticket${inside.length === 1 ? "" : "s"}`}</span>
             </text>
-            {inside.map((t, i) => {
-              const st = summaries(t);
-              const excluded = excludedFromEpic(t);
+            {inside.map((ticket, index) => {
+              const summary = summaries(ticket);
+              const excluded = excludedFromEpic(ticket);
               return (
-                <text key={t.id} fg={focused && i === s ? theme.accent : st.state === "closed" || st.state === "done" ? theme.dim : theme.fg} truncate wrapMode="none">
-                  {focused && i === s ? "› " : "  "}
-                  <span fg={theme.dim}>{t.kind.padEnd(9)}</span>
-                  <span fg={theme.dim}>{t.project} · </span>
-                  {t.title ? t.title : <span fg={theme.dim}>{rowTitle(t)}</span>}
-                  <span fg={st.state === "needs-you" ? theme.warn : theme.dim}> · {STATE_LABEL[st.state]}</span>
-                  {excluded ? <span fg={theme.dim}> · excluded from progress</span> : closedAs(t) === "dropped" ? <span fg={theme.dim}> · dropped</span> : null}
+                <text key={ticket.id} fg={focused && index === selected ? theme.accent : summary.state === "closed" || summary.state === "done" ? theme.dim : theme.fg} truncate wrapMode="none">
+                  {focused && index === selected ? "› " : "  "}
+                  <span fg={theme.dim}>{ticket.kind.padEnd(9)}</span>
+                  <span fg={theme.dim}>{ticket.project} · </span>
+                  {ticket.title ? ticket.title : <span fg={theme.dim}>{rowTitle(ticket)}</span>}
+                  <span fg={summary.state === "needs-you" ? theme.warn : theme.dim}> · {STATE_LABEL[summary.state]}</span>
+                  {excluded ? <span fg={theme.dim}> · excluded from progress</span> : closedAs(ticket) === "dropped" ? <span fg={theme.dim}> · dropped</span> : null}
                 </text>
               );
             })}
@@ -136,10 +136,10 @@ export function EpicPage({
           <text fg={theme.fg} truncate wrapMode="none" marginTop={2} flexShrink={0}>
             closed and reopened
           </text>
-          {epic.turns.map((t) => (
-            <text key={`${t.at}-${t.by}`} fg={theme.dim} wrapMode="word" flexShrink={0}>
+          {epic.turns.map((turn) => (
+            <text key={`${turn.at}-${turn.by}`} fg={theme.dim} wrapMode="word" flexShrink={0}>
               {"  "}
-              {t.closed ? "closed" : "reopened"} by {nameFor(t.by)} · {age(t.at, now)}: {t.reason}
+              {turn.closed ? "closed" : "reopened"} by {nameFor(turn.by)} · {age(turn.at, now)}: {turn.reason}
             </text>
           ))}
         </>

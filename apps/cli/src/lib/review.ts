@@ -19,10 +19,10 @@ const LINE_BREAK = /[\u0000-\u001f\u007f\u2028\u2029]/;
  *  lists show — a few words, what the ticket is for — and the goal is the
  *  line beneath it. */
 export const ticketTitleGap = (title: string | undefined): string | null => {
-  const t = title?.trim() ?? "";
-  if (LINE_BREAK.test(t)) return `failed: the title runs over more than one line — a headline is one line (each break would take a row of the list); put the rest in the goal, beneath it`;
-  if (t.length === 0) return `failed: pass a 'title' — the ticket's headline, a few words (${TITLE_MAX} characters at most) saying what it is for; the lists show it, and the goal is the line beneath it`;
-  if (t.length > TITLE_MAX) return `failed: the title is ${t.length} characters ("${t.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most; the detail belongs in the goal, beneath it`;
+  const trimmed = title?.trim() ?? "";
+  if (LINE_BREAK.test(trimmed)) return `failed: the title runs over more than one line — a headline is one line (each break would take a row of the list); put the rest in the goal, beneath it`;
+  if (trimmed.length === 0) return `failed: pass a 'title' — the ticket's headline, a few words (${TITLE_MAX} characters at most) saying what it is for; the lists show it, and the goal is the line beneath it`;
+  if (trimmed.length > TITLE_MAX) return `failed: the title is ${trimmed.length} characters ("${trimmed.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most; the detail belongs in the goal, beneath it`;
   return null;
 };
 
@@ -32,13 +32,13 @@ export const ticketTitleGap = (title: string | undefined): string | null => {
 export const unitTitleGap = (title: string, what: string): string | null => {
   const gap = ticketTitleGap(title);
   if (gap) return gap.replace("the ticket's headline", `a unit's title`).replace("the lists show it, and the goal is the line beneath it", "the review page lists units by it");
-  const t = title.trim();
+  const trimmed = title.trim();
   // a path, or nothing but file names ("Mcp.ts", "export.ts · use.ts") —
   // "Node.js upgrade" and "v1.2 release notes" are purposes and pass
-  const words = t.split(/[\s,·&+]+|\band\b/).filter((w) => w.length > 0);
-  if (/[\\/]/.test(t) || (words.length > 0 && words.every((w) => /^[\w.-]*\.[A-Za-z][A-Za-z0-9]{0,5}$/.test(w) && !/^\d/.test(w.split(".").pop()!))))
-    return `failed: unit "${t}" is titled by a file — title it by what it achieves ("Big exports finish", "Typos caught before merge"); the files go in its 'where'`;
-  if (what.trim().length === 0) return `failed: unit "${t}" has no 'what' — the line beneath its title: what that code does, in a line`;
+  const words = trimmed.split(/[\s,·&+]+|\band\b/).filter((word) => word.length > 0);
+  if (/[\\/]/.test(trimmed) || (words.length > 0 && words.every((word) => /^[\w.-]*\.[A-Za-z][A-Za-z0-9]{0,5}$/.test(word) && !/^\d/.test(word.split(".").pop()!))))
+    return `failed: unit "${trimmed}" is titled by a file — title it by what it achieves ("Big exports finish", "Typos caught before merge"); the files go in its 'where'`;
+  if (what.trim().length === 0) return `failed: unit "${trimmed}" has no 'what' — the line beneath its title: what that code does, in a line`;
   return null;
 };
 
@@ -89,7 +89,7 @@ export interface ReviewInput {
   readonly retireGuesses?: ReadonlyArray<string>;
 }
 
-const blank = (s: string | undefined): boolean => (s ?? "").trim().length === 0;
+const blank = (text: string | undefined): boolean => (text ?? "").trim().length === 0;
 
 /** What is missing before this is worth a reviewer's time, said as the thing
  *  to go and do. A review without the why is the status quo, so the tool
@@ -135,104 +135,104 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
   if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves && !unitsMove && (input.retireGuesses?.length ?? 0) === 0) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
   }
-  for (const [i, d] of decisions.entries()) {
-    const at = d.id ?? `decision ${i + 1}`;
-    if (blank(d.what)) return `failed: ${at} has no 'what' — say what was decided in one line`;
-    if (blank(d.title)) {
-      return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'title'. Every decision needs one: its headline, a few words (${TITLE_MAX} characters at most) saying what it is for — the reader sees it before anything else, so it has to say the purpose at a glance. 'what' stays the one line beneath it.`;
+  for (const [index, decision] of decisions.entries()) {
+    const at = decision.id ?? `decision ${index + 1}`;
+    if (blank(decision.what)) return `failed: ${at} has no 'what' — say what was decided in one line`;
+    if (blank(decision.title)) {
+      return `failed: ${at} ("${decision.what.slice(0, 40)}") has no 'title'. Every decision needs one: its headline, a few words (${TITLE_MAX} characters at most) saying what it is for — the reader sees it before anything else, so it has to say the purpose at a glance. 'what' stays the one line beneath it.`;
     }
-    if (LINE_BREAK.test(d.title.trim())) return `failed: ${at}'s title runs over more than one line — a headline is one line; the rest belongs in 'what', beneath it`;
-    if (d.title.trim().length > TITLE_MAX) {
-      return `failed: ${at}'s title is ${d.title.trim().length} characters ("${d.title.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most: what the decision is for, not how. The detail belongs in 'what', beneath it.`;
+    if (LINE_BREAK.test(decision.title.trim())) return `failed: ${at}'s title runs over more than one line — a headline is one line; the rest belongs in 'what', beneath it`;
+    if (decision.title.trim().length > TITLE_MAX) {
+      return `failed: ${at}'s title is ${decision.title.trim().length} characters ("${decision.title.slice(0, 40)}…") — a title is a headline of a few words, ${TITLE_MAX} at most: what the decision is for, not how. The detail belongs in 'what', beneath it.`;
     }
-    if (blank(d.userWhy) && blank(d.agentWhy)) {
-      return `failed: ${at} ("${d.what.slice(0, 40)}") has no why. 'userWhy' is how your user steered it — what they asked for or ruled out, in their words where you have them; 'agentWhy' is your own reason. One of them at least, or the reviewer is guessing again.`;
+    if (blank(decision.userWhy) && blank(decision.agentWhy)) {
+      return `failed: ${at} ("${decision.what.slice(0, 40)}") has no why. 'userWhy' is how your user steered it — what they asked for or ruled out, in their words where you have them; 'agentWhy' is your own reason. One of them at least, or the reviewer is guessing again.`;
     }
     // a review's why sits beside the code it explains: one pointing nowhere is
     // read beside nothing (a revised one keeps its pointers when it names none)
-    if (kind === "review" && (d.where ?? []).every(blank) && (d.where !== undefined || d.id === undefined)) {
-      return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'where'. Point at the code it shaped — a file, or file:line — every place, when it is a rule applied across the change (each hunk it decided). A decision to leave code alone points at that code: the page shows it as kept.`;
+    if (kind === "review" && (decision.where ?? []).every(blank) && (decision.where !== undefined || decision.id === undefined)) {
+      return `failed: ${at} ("${decision.what.slice(0, 40)}") has no 'where'. Point at the code it shaped — a file, or file:line — every place, when it is a rule applied across the change (each hunk it decided). A decision to leave code alone points at that code: the page shows it as kept.`;
     }
   }
-  for (const [i, f] of forks.entries()) {
-    const at = f.id ?? `fork ${i + 1}`;
-    if (blank(f.at)) return `failed: ${at} has no 'at' — point at the code the choice produced (file:line)`;
-    if (blank(f.chose) || blank(f.instead)) return `failed: ${at} needs both roads: 'chose' and 'instead'`;
-    if (blank(f.why)) return `failed: ${at} has no 'why' — enough for the reviewer to judge the turn, not an essay`;
+  for (const [index, fork] of forks.entries()) {
+    const at = fork.id ?? `fork ${index + 1}`;
+    if (blank(fork.at)) return `failed: ${at} has no 'at' — point at the code the choice produced (file:line)`;
+    if (blank(fork.chose) || blank(fork.instead)) return `failed: ${at} needs both roads: 'chose' and 'instead'`;
+    if (blank(fork.why)) return `failed: ${at} has no 'why' — enough for the reviewer to judge the turn, not an essay`;
   }
   return null;
 };
 
 /** One line: where the code is and how much why came with it. The link is
  *  left out where the line has to fit a terminal row — the page shows it. */
-export const reviewHeadline = (r: ReviewContext, opts?: { readonly link?: boolean }): string => {
-  const where = r.branch ? (r.base ? `${r.branch} → ${r.base}` : r.branch) : "";
-  return [where, (opts?.link ?? true) ? (r.link ?? "") : "", `${r.decisions.length} decision${r.decisions.length === 1 ? "" : "s"}`, `${r.forks.length} fork${r.forks.length === 1 ? "" : "s"}`]
-    .filter((x) => x.length > 0)
+export const reviewHeadline = (review: ReviewContext, options?: { readonly link?: boolean }): string => {
+  const where = review.branch ? (review.base ? `${review.branch} → ${review.base}` : review.branch) : "";
+  return [where, (options?.link ?? true) ? (review.link ?? "") : "", `${review.decisions.length} decision${review.decisions.length === 1 ? "" : "s"}`, `${review.forks.length} fork${review.forks.length === 1 ? "" : "s"}`]
+    .filter((part) => part.length > 0)
     .join(" · ");
 };
 
-const hay = (d: ReviewDecision | ReviewFork | OutlineItem): string =>
-  Object.values(d)
-    .flatMap((v) => (Array.isArray(v) ? v : [v]))
-    .filter((v): v is string => typeof v === "string")
+const hay = (item: ReviewDecision | ReviewFork | OutlineItem): string =>
+  Object.values(item)
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === "string")
     .join(" ")
     .toLowerCase();
 
 /** The whole why, or the part of it that is about something — a file, a
  *  symbol, a phrase the reader just used ("the retry loop"). Filtering keeps
  *  a big review answerable one question at a time. */
-export const reviewRows = (r: ReviewContext, about?: string) => {
-  const q = (about ?? "").trim().toLowerCase();
-  const keep = <T extends ReviewDecision | ReviewFork | OutlineItem>(xs: ReadonlyArray<T>): ReadonlyArray<T> =>
-    q.length === 0 ? xs : xs.filter((x) => hay(x).includes(q));
-  const decisions = keep(r.decisions);
-  const forks = keep(r.forks);
+export const reviewRows = (review: ReviewContext, about?: string) => {
+  const query = (about ?? "").trim().toLowerCase();
+  const keep = <T extends ReviewDecision | ReviewFork | OutlineItem>(items: ReadonlyArray<T>): ReadonlyArray<T> =>
+    query.length === 0 ? items : items.filter((item) => hay(item).includes(query));
+  const decisions = keep(review.decisions);
+  const forks = keep(review.forks);
   // a proposal's outline is searched like the rest: "bob" finds the item he
   // is suggested for, "mailer" the item about the mailer
-  const outline = keep(r.outline ?? []);
+  const outline = keep(review.outline ?? []);
   // the bug report is one block: it is in the answer when nothing is asked
   // about, or when the question touches any of its words
-  const bug = r.bug && (q.length === 0 || hayBug(r.bug).includes(q)) ? r.bug : undefined;
+  const bug = review.bug && (query.length === 0 || hayBug(review.bug).includes(query)) ? review.bug : undefined;
   return {
     review: {
-      by: r.authorName,
-      ...(r.branch ? { branch: r.base ? `${r.branch} → ${r.base}` : r.branch } : {}),
-      ...(r.link ? { link: r.link } : {}),
-      summary: r.summary,
+      by: review.authorName,
+      ...(review.branch ? { branch: review.base ? `${review.branch} → ${review.base}` : review.branch } : {}),
+      ...(review.link ? { link: review.link } : {}),
+      summary: review.summary,
       // nobody told this why: it was inferred, and from what
-      ...(r.assumed && !r.claimed ? { assumed: `${r.authorName}'s AI guessed every decision and fork here about ${r.assumed.author}'s code, from ${r.assumed.sources.join(", ")} — each with what it rests on and how sure it is` } : {}),
-      ...(r.claimed ? { takenOver: `${r.claimed.guessedByName}'s AI guessed this; ${r.authorName}, who wrote the code, answered each guess (confirmed, corrected — with what was guessed — or wrong); one with no verdict is still a guess` } : {}),
+      ...(review.assumed && !review.claimed ? { assumed: `${review.authorName}'s AI guessed every decision and fork here about ${review.assumed.author}'s code, from ${review.assumed.sources.join(", ")} — each with what it rests on and how sure it is` } : {}),
+      ...(review.claimed ? { takenOver: `${review.claimed.guessedByName}'s AI guessed this; ${review.authorName}, who wrote the code, answered each guess (confirmed, corrected — with what was guessed — or wrong); one with no verdict is still a guess` } : {}),
       // reviews outlive the first read: this is the why as it stands NOW
-      updated: new Date(r.ts).toISOString(),
-      ...(q.length > 0
+      updated: new Date(review.ts).toISOString(),
+      ...(query.length > 0
         ? {
-            about: q,
-            matched: `${decisions.length} of ${r.decisions.length} decisions, ${forks.length} of ${r.forks.length} forks${r.outline && r.outline.length > 0 ? `, ${outline.length} of ${r.outline.length} outline items` : ""}${r.bug ? `, the bug report ${bug ? "matched" : "did not match"}` : ""}`,
+            about: query,
+            matched: `${decisions.length} of ${review.decisions.length} decisions, ${forks.length} of ${review.forks.length} forks${review.outline && review.outline.length > 0 ? `, ${outline.length} of ${review.outline.length} outline items` : ""}${review.bug ? `, the bug report ${bug ? "matched" : "did not match"}` : ""}`,
           }
         : {}),
     },
-    decisions: decisions.map((d) =>
-      r.claimed
-        ? { id: d.id, title: d.title ?? NO_TITLE, what: d.what, verdict: d.verdict ?? (d.basis !== undefined ? "still a guess" : "told"), userWhy: d.userWhy ?? "", agentWhy: d.agentWhy ?? "", guessed: d.guess ? `${d.guess.what}${d.guess.why ? ` — ${d.guess.why}` : ""}` : "", where: d.where.join(" ") }
-        : r.assumed
-        ? { id: d.id, title: d.title ?? NO_TITLE, what: d.what, assumedWhy: d.agentWhy ?? "", basis: d.basis ?? "", confidence: d.confidence ?? "", where: d.where.join(" ") }
+    decisions: decisions.map((decision) =>
+      review.claimed
+        ? { id: decision.id, title: decision.title ?? NO_TITLE, what: decision.what, verdict: decision.verdict ?? (decision.basis !== undefined ? "still a guess" : "told"), userWhy: decision.userWhy ?? "", agentWhy: decision.agentWhy ?? "", guessed: decision.guess ? `${decision.guess.what}${decision.guess.why ? ` — ${decision.guess.why}` : ""}` : "", where: decision.where.join(" ") }
+        : review.assumed
+        ? { id: decision.id, title: decision.title ?? NO_TITLE, what: decision.what, assumedWhy: decision.agentWhy ?? "", basis: decision.basis ?? "", confidence: decision.confidence ?? "", where: decision.where.join(" ") }
         : {
-            id: d.id,
-            title: d.title ?? NO_TITLE,
-            what: d.what,
-            userWhy: d.userWhy ?? "",
-            agentWhy: d.agentWhy ?? "",
-            where: d.where.join(" "),
-            guidedBy: (d.guidedBy ?? []).join(", "),
+            id: decision.id,
+            title: decision.title ?? NO_TITLE,
+            what: decision.what,
+            userWhy: decision.userWhy ?? "",
+            agentWhy: decision.agentWhy ?? "",
+            where: decision.where.join(" "),
+            guidedBy: (decision.guidedBy ?? []).join(", "),
           },
     ),
-    forks: forks.map((f) => (r.claimed ? { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, verdict: f.verdict ?? (f.basis !== undefined ? "still a guess" : "told"), guessed: f.guess ? f.guess.what : "" } : r.assumed ? { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, basis: f.basis ?? "", confidence: f.confidence ?? "" } : { id: f.id, at: f.at, chose: f.chose, instead: f.instead, why: f.why, by: f.by ?? "" })),
+    forks: forks.map((fork) => (review.claimed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, verdict: fork.verdict ?? (fork.basis !== undefined ? "still a guess" : "told"), guessed: fork.guess ? fork.guess.what : "" } : review.assumed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, basis: fork.basis ?? "", confidence: fork.confidence ?? "" } : { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, by: fork.by ?? "" })),
     // how the change reads, as its author's agent grouped it
-    ...(r.units && r.units.length > 0 ? { units: r.units.map((u) => ({ id: u.id, title: u.title, ...(u.what ? { what: u.what } : {}), where: u.where.join(" ") })) } : {}),
+    ...(review.units && review.units.length > 0 ? { units: review.units.map((unit) => ({ id: unit.id, title: unit.title, ...(unit.what ? { what: unit.what } : {}), where: unit.where.join(" ") })) } : {}),
     // a proposal's outline: what the work might be and who might do it — the
     // author's suggestion, binding on nobody; a plan lifts it into real steps
-    ...(outline.length > 0 ? { outline: outline.map((o) => ({ id: o.id, intent: o.intent, description: o.description, owner: o.owner ?? "" })) } : {}),
+    ...(outline.length > 0 ? { outline: outline.map((item) => ({ id: item.id, intent: item.intent, description: item.description, owner: item.owner ?? "" })) } : {}),
     // a bug's report, whole: the symptom is the fact, the rest the reporter's reading
     ...(bug ? { bug: bugRows(bug) } : {}),
   };
@@ -240,16 +240,16 @@ export const reviewRows = (r: ReviewContext, about?: string) => {
 
 /** Searched exactly as rendered — the score and its anchor included, so
  *  "4" and "blocking" find the report the reader would see them in. */
-const hayBug = (b: BugReport): string => Object.values(bugRows(b)).join(" ").toLowerCase();
+const hayBug = (bug: BugReport): string => Object.values(bugRows(bug)).join(" ").toLowerCase();
 
 /** The report as a reader gets it: the score with its anchor spelled out, so
  *  "3" reads as "3 — wrong: a feature fails for some" and not as a number. */
-export const bugRows = (b: BugReport) => ({
-  symptom: b.symptom,
-  ...(b.cause ? { cause: b.cause.what, where: b.cause.where.join(" ") } : {}),
-  ...(b.importance ? { importance: `${b.importance.score} — ${IMPORTANCE[b.importance.score]}`, effect: b.importance.effect } : {}),
-  ...(b.suggestion ? { suggestion: b.suggestion.what, requirements: b.suggestion.requirements.join("; ") } : {}),
-  ...(b.remedy ? { remedy: `${b.remedy} — ${REMEDY_WORDS[b.remedy]}` } : {}),
+export const bugRows = (bug: BugReport) => ({
+  symptom: bug.symptom,
+  ...(bug.cause ? { cause: bug.cause.what, where: bug.cause.where.join(" ") } : {}),
+  ...(bug.importance ? { importance: `${bug.importance.score} — ${IMPORTANCE[bug.importance.score]}`, effect: bug.importance.effect } : {}),
+  ...(bug.suggestion ? { suggestion: bug.suggestion.what, requirements: bug.suggestion.requirements.join("; ") } : {}),
+  ...(bug.remedy ? { remedy: `${bug.remedy} — ${REMEDY_WORDS[bug.remedy]}` } : {}),
 });
 
 /** What each remedy means, in one clause — the reporter's coarse estimate of
@@ -265,21 +265,21 @@ export const REMEDY_WORDS = {
  *  reader must be able to weigh each one — what it was inferred from and how
  *  sure the AI is — and nothing in it may pass for the author's own words. */
 export const assumedGaps = (input: ReviewInput, amending: boolean): string | null => {
-  const a = input.assumed;
-  if (!amending && (!a || blank(a.author))) return "failed: pass 'author' — who wrote the code (their login on the host, or their name); with a pull request link it is read from the host";
-  if (!amending && (a?.sources ?? []).filter((x) => !blank(x)).length === 0) {
+  const assumed = input.assumed;
+  if (!amending && (!assumed || blank(assumed.author))) return "failed: pass 'author' — who wrote the code (their login on the host, or their name); with a pull request link it is read from the host";
+  if (!amending && (assumed?.sources ?? []).filter((source) => !blank(source)).length === 0) {
     return "failed: pass 'sources' — what you read to infer the why: the pull request's description, its commits, a linked ticket (\"JIRA-123\"), the code itself. A reader weighs a guess by what it rests on.";
   }
-  for (const [i, d] of (input.decisions ?? []).entries()) {
-    const at = d.id ?? `assumption ${i + 1}`;
-    if (!blank(d.userWhy)) return `failed: ${at} has a 'userWhy' — nobody told you why: the author is not in a chat with you. Put your reading of the reason in 'why', and what it rests on in 'basis'.`;
-    if (blank(d.basis)) return `failed: ${at} ("${d.what.slice(0, 40)}") has no 'basis' — the evidence for the reason: the timing, a linked issue, the fix before it. A guess with nothing under it cannot be checked.`;
-    if (!d.confidence) return `failed: ${at} has no 'confidence' in its reason — high (someone said why), medium (the evidence points there), or low (a hunch from the code)`;
+  for (const [index, decision] of (input.decisions ?? []).entries()) {
+    const at = decision.id ?? `assumption ${index + 1}`;
+    if (!blank(decision.userWhy)) return `failed: ${at} has a 'userWhy' — nobody told you why: the author is not in a chat with you. Put your reading of the reason in 'why', and what it rests on in 'basis'.`;
+    if (blank(decision.basis)) return `failed: ${at} ("${decision.what.slice(0, 40)}") has no 'basis' — the evidence for the reason: the timing, a linked issue, the fix before it. A guess with nothing under it cannot be checked.`;
+    if (!decision.confidence) return `failed: ${at} has no 'confidence' in its reason — high (someone said why), medium (the evidence points there), or low (a hunch from the code)`;
   }
-  for (const [i, f] of (input.forks ?? []).entries()) {
-    const at = f.id ?? `fork ${i + 1}`;
-    if (blank(f.basis)) return `failed: ${at} has no 'basis' — what tells you the other road was considered, or why this one was taken`;
-    if (!f.confidence) return `failed: ${at} has no 'confidence' — high, medium or low`;
+  for (const [index, fork] of (input.forks ?? []).entries()) {
+    const at = fork.id ?? `fork ${index + 1}`;
+    if (blank(fork.basis)) return `failed: ${at} has no 'basis' — what tells you the other road was considered, or why this one was taken`;
+    if (!fork.confidence) return `failed: ${at} has no 'confidence' — high, medium or low`;
   }
   return null;
 };

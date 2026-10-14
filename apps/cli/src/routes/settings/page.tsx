@@ -14,7 +14,7 @@ import { stateAtom, updateStateAtom } from "../room/atoms";
 import { renameRoomAtom, setMyNameAtom } from "./atoms";
 
 type Field = "name" | "room" | SettingKey;
-const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((s) => s.key)];
+const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((setting) => setting.key)];
 
 /** Settings frame: your name + the room's shared name, both applied on
  *  enter, then your switches, each applied the moment it is flipped (your
@@ -35,18 +35,18 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
   const updateState = useAtomSet(updateStateAtom);
-  const flip = (key: SettingKey) => updateState({ update: (st) => withSetting(st, key, !settingOf(st, key)) });
+  const flip = (key: SettingKey) => updateState({ update: (previous) => withSetting(previous, key, !settingOf(previous, key)) });
 
-  const next = () => setField((f) => FIELDS[(FIELDS.indexOf(f) + 1) % FIELDS.length]!);
-  const prev = () => setField((f) => FIELDS[(FIELDS.indexOf(f) + FIELDS.length - 1) % FIELDS.length]!);
+  const next = () => setField((current) => FIELDS[(FIELDS.indexOf(current) + 1) % FIELDS.length]!);
+  const prev = () => setField((current) => FIELDS[(FIELDS.indexOf(current) + FIELDS.length - 1) % FIELDS.length]!);
   const submit = () => {
-    const n = name.trim();
-    const r = label.trim();
-    if (n.length === 0 || r.length === 0) return;
-    writeProfileFile(profile, { name: n });
-    if (n !== myName) setMyName({ name: n });
+    const newName = name.trim();
+    const newRoomName = label.trim();
+    if (newName.length === 0 || newRoomName.length === 0) return;
+    writeProfileFile(profile, { name: newName });
+    if (newName !== myName) setMyName({ name: newName });
     // renaming is shared state — broadcast to the whole room
-    if (r !== roomName) renameRoom({ name: r });
+    if (newRoomName !== roomName) renameRoom({ name: newRoomName });
     setSaved(true);
   };
 
@@ -76,17 +76,17 @@ export function SettingsPage() {
       >
         <input focused={field === "room"} value={label} onInput={setLabel} onSubmit={submit} placeholder="renames the room for the whole room" />
       </box>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={SETTINGS.some((x) => x.key === field) ? theme.accent : theme.dim} paddingX={1} title=" switches ">
-        {SETTINGS.map((x) => {
-          const on = state ? settingOf(state, x.key) : x.default;
-          const here = field === x.key;
+      <box flexDirection="column" border borderStyle="rounded" borderColor={SETTINGS.some((setting) => setting.key === field) ? theme.accent : theme.dim} paddingX={1} title=" switches ">
+        {SETTINGS.map((setting) => {
+          const on = state ? settingOf(state, setting.key) : setting.default;
+          const here = field === setting.key;
           return (
-            <box key={x.key} flexDirection="column">
+            <box key={setting.key} flexDirection="column">
               <text fg={here ? theme.accent : theme.fg}>
                 {here ? "› " : "  "}
-                {on ? "[on] " : "[off]"} {x.label}
+                {on ? "[on] " : "[off]"} {setting.label}
               </text>
-              <text fg={theme.dim}>{`        ${on ? x.on : x.off}`}</text>
+              <text fg={theme.dim}>{`        ${on ? setting.on : setting.off}`}</text>
             </box>
           );
         })}

@@ -39,8 +39,8 @@ export function TranscriptsPage({ subject }: { subject: string }) {
           if (key.name === "up" && fSel > 0) return setFileSel(fSel - 1), true;
           if (key.name === "down" && fSel < files.length - 1) return setFileSel(fSel + 1), true;
           if (isEnter(key)) {
-            const f = files[fSel];
-            if (f) navigate(to.transcript(f.path, f.name, route));
+            const file = files[fSel];
+            if (file) navigate(to.transcript(file.path, file.name, route));
             return true;
           }
           return false;
@@ -61,25 +61,25 @@ export function TranscriptsPage({ subject }: { subject: string }) {
                 {"  "}nothing collected yet — run collect transcripts on the ticket; peers hand theirs over from their outbox
               </text>
             ) : (
-              files.map((f, i) => (
-                <text key={f.path} fg={focused && i === fSel ? theme.accent : theme.fg} truncate wrapMode="none" flexShrink={0}>
-                  {focused && i === fSel ? "› " : "  "}
-                  {f.meta ? (
+              files.map((file, index) => (
+                <text key={file.path} fg={focused && index === fSel ? theme.accent : theme.fg} truncate wrapMode="none" flexShrink={0}>
+                  {focused && index === fSel ? "› " : "  "}
+                  {file.meta ? (
                     <>
-                      from {f.meta.from}
+                      from {file.meta.from}
                       <span fg={theme.dim}>
-                        {" "}· {f.meta.ai} · {f.meta.entries} entries · since {new Date(f.meta.since).toISOString().slice(0, 16).replace("T", " ")} · received{" "}
-                        {age(f.meta.receivedAt, Date.now()) === "now" ? "just now" : `${age(f.meta.receivedAt, Date.now())} ago`}
+                        {" "}· {file.meta.ai} · {file.meta.entries} entries · since {new Date(file.meta.since).toISOString().slice(0, 16).replace("T", " ")} · received{" "}
+                        {age(file.meta.receivedAt, Date.now()) === "now" ? "just now" : `${age(file.meta.receivedAt, Date.now())} ago`}
                       </span>
                     </>
                   ) : (
                     <>
-                      {f.name}
+                      {file.name}
                       <span fg={theme.dim}> · no provenance</span>
                     </>
                   )}
                   <span fg={theme.dim}>
-                    {subject ? "" : ` · ${f.subject}`} · {f.kb} kB
+                    {subject ? "" : ` · ${file.subject}`} · {file.kilobytes} kB
                   </span>
                 </text>
               ))

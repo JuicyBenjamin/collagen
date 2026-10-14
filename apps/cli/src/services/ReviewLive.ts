@@ -36,7 +36,7 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
      *  machine with no browser to open. */
     /** One of this instance's pages: /review/<ticketId> or /merges/<roomId>. */
     const pageUrl = (page: "review" | "merges", id: string) =>
-      Effect.map(mcp.awaitUrl, (u) => `${u.replace(/\/mcp$/, "")}/${page}/${encodeURIComponent(id)}`);
+      Effect.map(mcp.awaitUrl, (mcpUrl) => `${mcpUrl.replace(/\/mcp$/, "")}/${page}/${encodeURIComponent(id)}`);
     const launch = (url: string) => openInBrowser(url).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
     const show = Effect.fn("ReviewPages.show")(function* (ticketId: string) {
       const url = yield* pageUrl("review", ticketId);
@@ -48,8 +48,8 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
     return {
       opened: (id: string) => open.set(id, (open.get(id) ?? 0) + 1),
       closed: (id: string) => {
-        const n = (open.get(id) ?? 1) - 1;
-        if (n > 0) open.set(id, n);
+        const count = (open.get(id) ?? 1) - 1;
+        if (count > 0) open.set(id, count);
         else open.delete(id);
       },
       /** Is a page for this review open in a browser right now? */
@@ -92,19 +92,19 @@ export const reviewChanges = (ticketId: string): Stream.Stream<string, never, Ro
       const pages = yield* ReviewPages;
       const handles = yield* SubscriptionRef.get(rooms.handles);
       let handle: (typeof handles)[number] | undefined;
-      for (const h of handles) if ((yield* SubscriptionRef.get(h.room.tickets)).has(ticketId)) handle = h;
+      for (const candidate of handles) if ((yield* SubscriptionRef.get(candidate.room.tickets)).has(ticketId)) handle = candidate;
       if (!handle) return Stream.empty;
       const { room } = handle;
       const tree = yield* reviewTree(ticketId);
       const store = yield* StateStore;
       const token = Effect.gen(function* () {
-        const why = (yield* SubscriptionRef.get(room.reviews)).find((r) => r.ticketId === ticketId)?.ts ?? 0;
+        const why = (yield* SubscriptionRef.get(room.reviews)).find((review) => review.ticketId === ticketId)?.ts ?? 0;
         const ticket = createHash("sha1").update(JSON.stringify((yield* SubscriptionRef.get(room.tickets)).get(ticketId) ?? null)).digest("hex");
         const commit = typeof tree === "string" || !tree.ref ? "" : ((yield* commitOf(tree.projectPath, tree.ref)) ?? "");
         // the comments on it: the drafts waiting here, and what the room said
         const drafts = (yield* store.get).drafts?.[ticketId] ?? [];
-        const said = (yield* SubscriptionRef.get(room.comments)).filter((c) => c.ticketId === ticketId);
-        const talk = createHash("sha1").update(JSON.stringify([drafts.map((d) => d.id), said.map((c) => c.id)])).digest("hex");
+        const said = (yield* SubscriptionRef.get(room.comments)).filter((comment) => comment.ticketId === ticketId);
+        const talk = createHash("sha1").update(JSON.stringify([drafts.map((draft) => draft.id), said.map((comment) => comment.id)])).digest("hex");
         return `${why}|${commit}|${ticket}|${talk}`;
       });
       // anything that might have moved it, then the token as it is now —

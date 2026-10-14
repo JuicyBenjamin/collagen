@@ -25,18 +25,18 @@ describe("a file read whole", () => {
 
   it("is every line of the file, numbered, the added ones as added", () => {
     const whole = wholeHunk(hunk, ["one", "TWO", "three", "four"], new Set([2, 3]));
-    expect(whole.lines.map((l) => `${l.kind}${l.new} ${l.text}`)).toEqual([" 1 one", "+2 TWO", "+3 three", " 4 four"]);
+    expect(whole.lines.map((line) => `${line.kind}${line.new} ${line.text}`)).toEqual([" 1 one", "+2 TWO", "+3 three", " 4 four"]);
     expect(whole.id).not.toBe(hunk.id);
   });
 
   it("puts back what the diff removed, above the line that took its place, so a changed line never reads as new", () => {
     const whole = wholeHunk(hunk, ["one", "TWO", "three", "four"], new Set([2, 3]), removedLines([hunk]).get("a.ts"));
-    expect(whole.lines.map((l) => `${l.kind}${l.old ?? ""}/${l.new ?? ""} ${l.text}`)).toEqual([" /1 one", "-2/ two", "+/2 TWO", "+/3 three", " /4 four"]);
+    expect(whole.lines.map((line) => `${line.kind}${line.old ?? ""}/${line.new ?? ""} ${line.text}`)).toEqual([" /1 one", "-2/ two", "+/2 TWO", "+/3 three", " /4 four"]);
   });
 
   it("keeps a removal at the file's end at the end", () => {
     const tail: typeof hunk = { ...hunk, header: "@@ -3,2 +3,1 @@", newStart: 3, newLines: 1, lines: [{ kind: " ", text: "three", old: 3, new: 3 }, { kind: "-", text: "last", old: 4 }] };
-    expect(wholeHunk(tail, ["one", "two", "three"], new Set(), removedLines([tail]).get("a.ts")).lines.map((l) => l.text)).toEqual(["one", "two", "three", "last"]);
+    expect(wholeHunk(tail, ["one", "two", "three"], new Set(), removedLines([tail]).get("a.ts")).lines.map((line) => line.text)).toEqual(["one", "two", "three", "last"]);
   });
 
   it("is only offered where the hunk has a new side", () => {

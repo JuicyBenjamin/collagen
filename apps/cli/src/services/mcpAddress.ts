@@ -7,9 +7,9 @@ import { NET } from "../app/net";
  *  from source on the same profile can never land on one port (a shared range
  *  would let the two hashes collide). Mirrored by `port_of` in e2e/lib.sh. */
 export function portForProfile(profile: string, net: Net = NET): number {
-  let h = 0;
-  for (const c of profile) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return (net === "devnet" ? 45000 : 41000) + (h % 4000);
+  let hash = 0;
+  for (const character of profile) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return (net === "devnet" ? 45000 : 41000) + (hash % 4000);
 }
 
 /** MCP server name as the agents' configs know it: `collagen` for the

@@ -42,7 +42,7 @@ export function registerFocusable(id: string, getRect: () => Rect | null): () =>
 }
 
 /** Distance from a point to an interval (0 when inside). */
-const gap = (p: number, lo: number, hi: number) => (p < lo ? lo - p : p > hi ? p - hi : 0);
+const gap = (point: number, low: number, high: number) => (point < low ? low - point : point > high ? point - high : 0);
 
 /** The nearest Focusable in a direction, judged from the hovered one's rect.
  *  Primary axis: how far past our edge the candidate starts. Secondary: how
@@ -55,26 +55,26 @@ export function nearestFocusable(fromId: string, dir: Direction): string | null 
   let best: { id: string; score: number } | null = null;
   for (const [id, get] of bounds) {
     if (id === fromId) continue;
-    const r = get();
-    if (!r) continue;
+    const rect = get();
+    if (!rect) continue;
     let primary: number;
     let secondary: number;
     switch (dir) {
       case "right":
-        primary = r.x - (from.x + from.width);
-        secondary = gap(from.y, r.y, r.y + r.height - 1);
+        primary = rect.x - (from.x + from.width);
+        secondary = gap(from.y, rect.y, rect.y + rect.height - 1);
         break;
       case "left":
-        primary = from.x - (r.x + r.width);
-        secondary = gap(from.y, r.y, r.y + r.height - 1);
+        primary = from.x - (rect.x + rect.width);
+        secondary = gap(from.y, rect.y, rect.y + rect.height - 1);
         break;
       case "down":
-        primary = r.y - (from.y + from.height);
-        secondary = gap(from.x, r.x, r.x + r.width - 1);
+        primary = rect.y - (from.y + from.height);
+        secondary = gap(from.x, rect.x, rect.x + rect.width - 1);
         break;
       case "up":
-        primary = from.y - (r.y + r.height);
-        secondary = gap(from.x, r.x, r.x + r.width - 1);
+        primary = from.y - (rect.y + rect.height);
+        secondary = gap(from.x, rect.x, rect.x + rect.width - 1);
         break;
     }
     // must actually lie in that direction (touching edges count)

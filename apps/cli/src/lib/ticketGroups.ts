@@ -2,8 +2,8 @@ import { epicOf, epicParts, KIND_ORDER, ticketName, type Ticket, type TicketKind
 import { compareSummaries, type TicketSummary } from "./ticketSummary";
 
 export interface Row {
-  readonly t: Ticket;
-  readonly s: TicketSummary;
+  readonly ticket: Ticket;
+  readonly summary: TicketSummary;
 }
 
 /** Rows drawn as a tree: a ticket under the one it waits on (`after`) or
@@ -30,7 +30,7 @@ export interface ProjectGroup<R extends Row> {
   readonly kinds: ReadonlyArray<KindGroup<R>>;
 }
 
-const rank = new Map(KIND_ORDER.map((k, i) => [k, i]));
+const rank = new Map(KIND_ORDER.map((kind, index) => [kind, index]));
 
 /** The overview's shape: a block per project, and inside it a group per
  *  kind in the order work moves through them (KIND_ORDER — proposal, bug,
@@ -43,18 +43,18 @@ const rank = new Map(KIND_ORDER.map((k, i) => [k, i]));
  *  row, and the ▸ and the header's count are what keep it findable. */
 export function groupTickets<R extends Row>(rows: ReadonlyArray<R>): ReadonlyArray<ProjectGroup<R>> {
   const byProject = new Map<string, Array<R>>();
-  for (const r of rows) byProject.set(r.t.project, [...(byProject.get(r.t.project) ?? []), r]);
+  for (const row of rows) byProject.set(row.ticket.project, [...(byProject.get(row.ticket.project) ?? []), row]);
   const projects = [...byProject.entries()].map(([project, mine]) => {
-    const sorted = [...mine].sort((a, b) => compareSummaries(a.s, b.s));
+    const sorted = [...mine].sort((a, b) => compareSummaries(a.summary, b.summary));
     const byKind = new Map<TicketKind, Array<R>>();
-    for (const r of sorted) byKind.set(r.t.kind, [...(byKind.get(r.t.kind) ?? []), r]);
+    for (const row of sorted) byKind.set(row.ticket.kind, [...(byKind.get(row.ticket.kind) ?? []), row]);
     const kinds = [...byKind.entries()]
       .sort(([a], [b]) => (rank.get(a) ?? KIND_ORDER.length) - (rank.get(b) ?? KIND_ORDER.length))
       .map(([kind, rows]) => ({ kind, ...stacked(rows) }));
     return { project, kinds, lead: sorted[0]! };
   });
   return projects
-    .sort((a, b) => compareSummaries(a.lead.s, b.lead.s) || a.project.localeCompare(b.project))
+    .sort((a, b) => compareSummaries(a.lead.summary, b.lead.summary) || a.project.localeCompare(b.project))
     .map(({ project, kinds }) => ({ project, kinds }));
 }
 
@@ -68,43 +68,43 @@ export function groupTickets<R extends Row>(rows: ReadonlyArray<R>): ReadonlyArr
  *  cycle (an `after` one cannot be filed, afterProblem; a `from` one should
  *  not exist) draws its rows plainly at the end. */
 export function stacked<R extends Row>(sorted: ReadonlyArray<R>): Stack<R> {
-  const here = new Set(sorted.map((r) => r.t.id));
-  const preds = (r: R) => [...new Set([...(r.t.after ?? []), ...(r.t.from ?? [])])].filter((id) => here.has(id) && id !== r.t.id);
+  const here = new Set(sorted.map((row) => row.ticket.id));
+  const preds = (row: R) => [...new Set([...(row.ticket.after ?? []), ...(row.ticket.from ?? [])])].filter((id) => here.has(id) && id !== row.ticket.id);
   const out: Array<R> = [];
   const depth = new Map<string, number>();
   const parent = new Map<string, string>();
   const grew = new Set<string>();
-  const at = (id: string) => out.findIndex((o) => o.t.id === id);
+  const at = (id: string) => out.findIndex((placed) => placed.ticket.id === id);
   let pending = [...sorted];
   while (pending.length > 0) {
     const later: Array<R> = [];
     let moved = false;
-    for (const r of pending) {
-      const ps = preds(r);
-      if (!ps.every((p) => at(p) >= 0)) {
-        later.push(r);
+    for (const row of pending) {
+      const predecessors = preds(row);
+      if (!predecessors.every((predecessor) => at(predecessor) >= 0)) {
+        later.push(row);
         continue;
       }
       moved = true;
-      if (ps.length === 0) {
-        out.push(r);
-        depth.set(r.t.id, 0);
+      if (predecessors.length === 0) {
+        out.push(row);
+        depth.set(row.ticket.id, 0);
         continue;
       }
       // under the last-drawn ticket it waits on, past everything already under that one
-      const under = ps.reduce((a, b) => (at(a) >= at(b) ? a : b));
-      const d = depth.get(under)! + 1;
-      let i = at(under) + 1;
-      while (i < out.length && depth.get(out[i]!.t.id)! >= d) i++;
-      out.splice(i, 0, r);
-      depth.set(r.t.id, d);
-      parent.set(r.t.id, under);
-      if (!(r.t.after ?? []).includes(under)) grew.add(r.t.id);
+      const under = predecessors.reduce((last, candidate) => (at(last) >= at(candidate) ? last : candidate));
+      const level = depth.get(under)! + 1;
+      let position = at(under) + 1;
+      while (position < out.length && depth.get(out[position]!.ticket.id)! >= level) position++;
+      out.splice(position, 0, row);
+      depth.set(row.ticket.id, level);
+      parent.set(row.ticket.id, under);
+      if (!(row.ticket.after ?? []).includes(under)) grew.add(row.ticket.id);
     }
     if (!moved) {
-      for (const r of later) {
-        out.push(r);
-        depth.set(r.t.id, 0);
+      for (const row of later) {
+        out.push(row);
+        depth.set(row.ticket.id, 0);
       }
       break;
     }
@@ -127,24 +127,24 @@ export interface EpicBlock<R extends Row> extends Stack<R> {
  *  then by goal. A ticket in a closed (or unknown) epic is drawn in its
  *  project as if it were in none. */
 export function epicBlocks<R extends Row>(rows: ReadonlyArray<R>, all: ReadonlyMap<string, Ticket>): { readonly epics: ReadonlyArray<EpicBlock<R>>; readonly rest: ReadonlyArray<R> } {
-  const open = new Map(rows.filter((r) => r.t.kind === "epic").map((r) => [r.t.id, { epic: r, rows: [] as Array<R> }]));
+  const open = new Map(rows.filter((row) => row.ticket.kind === "epic").map((row) => [row.ticket.id, { epic: row, rows: [] as Array<R> }]));
   const rest: Array<R> = [];
-  for (const r of rows) {
-    if (r.t.kind === "epic") continue;
-    const block = open.get(epicOf(r.t) ?? "");
-    if (block) block.rows.push(r);
-    else rest.push(r);
+  for (const row of rows) {
+    if (row.ticket.kind === "epic") continue;
+    const block = open.get(epicOf(row.ticket) ?? "");
+    if (block) block.rows.push(row);
+    else rest.push(row);
   }
   // an epic is as pressing as the most pressing ticket in it
-  const lead = (b: { readonly epic: R; readonly rows: ReadonlyArray<R> }): R => [b.epic, ...b.rows].reduce((x, y) => (compareSummaries(x.s, y.s) <= 0 ? x : y));
+  const lead = (block: { readonly epic: R; readonly rows: ReadonlyArray<R> }): R => [block.epic, ...block.rows].reduce((best, candidate) => (compareSummaries(best.summary, candidate.summary) <= 0 ? best : candidate));
   const epics = [...open.values()]
-    .map((b): EpicBlock<R> => {
-      const order = epicParts(b.epic.t, all).parts.map((t) => t.id);
-      const ordered = (latestOrder(b.epic.t) ?? []).length > 0;
-      const rank = (r: R) => order.indexOf(r.t.id);
-      return { epic: b.epic, ...stacked([...b.rows].sort((x, y) => (ordered ? rank(x) - rank(y) : 0) || x.t.project.localeCompare(y.t.project) || compareSummaries(x.s, y.s))) };
+    .map((block): EpicBlock<R> => {
+      const order = epicParts(block.epic.ticket, all).parts.map((part) => part.id);
+      const ordered = (latestOrder(block.epic.ticket) ?? []).length > 0;
+      const rank = (row: R) => order.indexOf(row.ticket.id);
+      return { epic: block.epic, ...stacked([...block.rows].sort((a, b) => (ordered ? rank(a) - rank(b) : 0) || a.ticket.project.localeCompare(b.ticket.project) || compareSummaries(a.summary, b.summary))) };
     })
-    .sort((a, b) => compareSummaries(lead(a).s, lead(b).s) || ticketName(a.epic.t).localeCompare(ticketName(b.epic.t)));
+    .sort((a, b) => compareSummaries(lead(a).summary, lead(b).summary) || ticketName(a.epic.ticket).localeCompare(ticketName(b.epic.ticket)));
   return { epics, rest };
 }
 
@@ -154,8 +154,8 @@ const latestOrder = (epic: Ticket): ReadonlyArray<string> | undefined => epic.or
 /** The rows in the order they are drawn — what ↑↓ walks: each epic, and its
  *  rows when it is unfolded, then the project groups. */
 export const drawnOrder = <R extends Row>(groups: ReadonlyArray<ProjectGroup<R>>, epics: ReadonlyArray<EpicBlock<R>> = [], unfolded: ReadonlySet<string> = new Set()): ReadonlyArray<R> => [
-  ...epics.flatMap((e) => [e.epic, ...(unfolded.has(e.epic.t.id) ? e.rows : [])]),
-  ...groups.flatMap((g) => g.kinds.flatMap((k) => k.rows)),
+  ...epics.flatMap((block) => [block.epic, ...(unfolded.has(block.epic.ticket.id) ? block.rows : [])]),
+  ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows)),
 ];
 
 /** "proposals", "bugs" — a group's header. */

@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { LOGO } from "./logoFrame";
 import { OPENING, opening } from "./opening";
 
-const dims = { cols: 100, rows: 30, w: 32, h: 3 };
+const dims = { cols: 100, rows: 30, width: 32, height: 3 };
 
 describe("the opening's timeline", () => {
   it("boots centred, and stays there until the app is up", () => {
-    const f = opening(500, null, dims);
-    expect(f).toEqual({ phase: "boot", readyAt: null, x: 33, y: 12 });
+    const frame = opening(500, null, dims);
+    expect(frame).toEqual({ phase: "boot", readyAt: null, x: 33, y: 12 });
     expect(opening(9000, null, dims).phase).toBe("boot");
   });
 

@@ -31,7 +31,7 @@ describe("highlightHunk", () => {
   const lines = highlightHunk(hunk);
 
   it("one line of spans per diff line, text preserved", () => {
-    expect(lines.map((l) => l.map((s) => s.value).join(""))).toEqual(hunk.lines.map((l) => l.text));
+    expect(lines.map((line) => line.map((span) => span.value).join(""))).toEqual(hunk.lines.map((line) => line.text));
   });
 
   it("each side is coloured as code: the removed line from the old, the added from the new", () => {

@@ -24,16 +24,16 @@ export interface Relations {
   readonly parent?: { readonly id: string; readonly name: string };
 }
 
-const seenBy = (all: ReadonlyMap<string, Ticket>, me: string) => (x: Ticket | undefined): x is Ticket => x !== undefined && visibleTo(x, all, me);
+const seenBy = (all: ReadonlyMap<string, Ticket>, me: string) => (ticket: Ticket | undefined): ticket is Ticket => ticket !== undefined && visibleTo(ticket, all, me);
 
-export function relationsOf(t: Ticket, all: ReadonlyMap<string, Ticket>, me: string): Relations {
+export function relationsOf(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): Relations {
   const seen = seenBy(all, me);
-  const e = epicOf(t);
-  const epic = e ? all.get(e) : undefined;
-  const p = (t.from ?? []).map((id) => all.get(id)).find(seen);
+  const epicId = epicOf(ticket);
+  const epic = epicId ? all.get(epicId) : undefined;
+  const parent = (ticket.from ?? []).map((id) => all.get(id)).find(seen);
   return {
     ...(seen(epic) ? { epic: { id: epic.id, name: ticketName(epic) } } : {}),
-    ...(p ? { parent: { id: p.id, name: ticketName(p) } } : {}),
+    ...(parent ? { parent: { id: parent.id, name: ticketName(parent) } } : {}),
   };
 }
 
@@ -41,27 +41,27 @@ export function relationsOf(t: Ticket, all: ReadonlyMap<string, Ticket>, me: str
  *  tickets it grew out of, then those that grew out of it — under the same
  *  gate as relationsOf. */
 export interface Relative {
-  readonly t: Ticket;
+  readonly ticket: Ticket;
   readonly as: "parent" | "child";
 }
 
-export function relativesOf(t: Ticket, all: ReadonlyMap<string, Ticket>, me: string): ReadonlyArray<Relative> {
+export function relativesOf(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): ReadonlyArray<Relative> {
   const seen = seenBy(all, me);
-  const parents = (t.from ?? []).filter((id) => id !== t.id).map((id) => all.get(id)).filter(seen);
-  const children = [...all.values()].filter((x) => x.id !== t.id && (x.from ?? []).includes(t.id) && seen(x));
-  return [...parents.map((x) => ({ t: x, as: "parent" as const })), ...children.map((x) => ({ t: x, as: "child" as const }))];
+  const parents = (ticket.from ?? []).filter((id) => id !== ticket.id).map((id) => all.get(id)).filter(seen);
+  const children = [...all.values()].filter((other) => other.id !== ticket.id && (other.from ?? []).includes(ticket.id) && seen(other));
+  return [...parents.map((parent) => ({ ticket: parent, as: "parent" as const })), ...children.map((child) => ({ ticket: child, as: "child" as const }))];
 }
 
 /** How a closed ticket ended, as its mark (ENDED): ✓ done, ⊗ dropped. */
-export const endedMark = (t: Ticket): string | null => {
-  const as = closedAs(t);
+export const endedMark = (ticket: Ticket): string | null => {
+  const as = closedAs(ticket);
   return as === null ? null : as === "dropped" ? ENDED.dropped : ENDED.done;
 };
 
 /** How a closed ticket ended, for its row: its mark, then why. */
-export const closedLine = (t: Ticket): string | null => {
-  const mark = endedMark(t);
-  return mark === null ? null : `${mark}${t.closed?.reason ? ` ${t.closed.reason}` : ""}`;
+export const closedLine = (ticket: Ticket): string | null => {
+  const mark = endedMark(ticket);
+  return mark === null ? null : `${mark}${ticket.closed?.reason ? ` ${ticket.closed.reason}` : ""}`;
 };
 
 /** One tab as drawn: its words, and whether it is the open one. */
@@ -76,17 +76,17 @@ export interface DrawnTab {
  *  by glyph and count; else a window of them
  *  around the open one, a ‹ or › where some are cut off. */
 export function fitTabs(tab: TicketTab, counts: ReadonlyMap<TicketTab, number>, width: number | undefined): { readonly tabs: ReadonlyArray<DrawnTab>; readonly gap: number; readonly before: boolean; readonly after: boolean } {
-  const n = (t: TicketTab) => counts.get(t) ?? 0;
-  const full = TICKET_TABS.map((t): DrawnTab => ({ tab: t, open: t === tab, text: `${tabLabel(t)} ${n(t)}` }));
-  const short = TICKET_TABS.map((t): DrawnTab => ({ tab: t, open: t === tab, text: t === tab ? `${tabLabel(t)} ${n(t)}` : `${t === "all" ? "all" : kindGlyph(t)} ${n(t)}` }));
-  const span = (row: ReadonlyArray<DrawnTab>, gap: number) => row.reduce((w, d, i) => w + cells(d.text) + (i > 0 ? gap : 0), 0);
+  const countOf = (ticketTab: TicketTab) => counts.get(ticketTab) ?? 0;
+  const full = TICKET_TABS.map((ticketTab): DrawnTab => ({ tab: ticketTab, open: ticketTab === tab, text: `${tabLabel(ticketTab)} ${countOf(ticketTab)}` }));
+  const short = TICKET_TABS.map((ticketTab): DrawnTab => ({ tab: ticketTab, open: ticketTab === tab, text: ticketTab === tab ? `${tabLabel(ticketTab)} ${countOf(ticketTab)}` : `${ticketTab === "all" ? "all" : kindGlyph(ticketTab)} ${countOf(ticketTab)}` }));
+  const span = (row: ReadonlyArray<DrawnTab>, gap: number) => row.reduce((total, drawn, index) => total + cells(drawn.text) + (index > 0 ? gap : 0), 0);
   if (width === undefined || span(full, 3) <= width) return { tabs: full, gap: 3, before: false, after: false };
   if (span(short, 2) <= width) return { tabs: short, gap: 2, before: false, after: false };
   // a window around the open tab, grown a neighbour at a time while it fits beside its marks
   const at = TICKET_TABS.indexOf(tab);
   let from = at;
   let to = at;
-  const fits = (a: number, b: number) => span(short.slice(a, b + 1), 2) + (a > 0 ? 2 : 0) + (b < short.length - 1 ? 2 : 0) <= width;
+  const fits = (first: number, last: number) => span(short.slice(first, last + 1), 2) + (first > 0 ? 2 : 0) + (last < short.length - 1 ? 2 : 0) <= width;
   for (let grew = true; grew; ) {
     grew = false;
     if (to < short.length - 1 && fits(from, to + 1)) (to++, (grew = true));

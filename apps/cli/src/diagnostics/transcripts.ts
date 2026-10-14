@@ -12,15 +12,15 @@ export const requestTranscripts = diagnostic<{ readonly ticketId?: string; reado
   summary:
     `Collect how the agents behaved around a ticket (or one thread). Everyone present in the room is asked for their agent's conversation on the threads involved; on each machine the ask waits for that person's word (share-transcripts) and covers only what happened after they adopted the thread — nothing arrives by itself. Answers are filed under ${transcriptsDir}/<subject>/ — see list-transcripts. The user's own adopted conversations on those threads are filed at once. Pass ticketId (from get-tickets) or threadId (from pending-threads).`,
   params: Schema.Struct({ ticketId: Schema.optional(Schema.String), threadId: Schema.optional(Schema.String) }),
-  fromContext: (ctx) => (ctx.ticketId ? { ticketId: ctx.ticketId } : null),
-  run: ({ ticketId, threadId }, ctx, { rooms, transcripts, me }) =>
+  fromContext: (context) => (context.ticketId ? { ticketId: context.ticketId } : null),
+  run: ({ ticketId, threadId }, context, { rooms, transcripts, me }) =>
     Effect.gen(function* () {
-      const h = (yield* SubscriptionRef.get(rooms.handles)).find((x) => x.id === ctx.roomId);
-      if (!h) return "failed: that room is gone";
+      const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === context.roomId);
+      if (!handle) return "failed: that room is gone";
       let subject: string;
       let threadIds: ReadonlyArray<string>;
       if (ticketId) {
-        const all = yield* SubscriptionRef.get(h.room.tickets);
+        const all = yield* SubscriptionRef.get(handle.room.tickets);
         const ticket = all.get(ticketId);
         if (!ticket || !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
         subject = `ticket-${ticketId.slice(0, 8)}`;
@@ -31,8 +31,8 @@ export const requestTranscripts = diagnostic<{ readonly ticketId?: string; reado
       } else {
         return "failed: pass ticketId or threadId";
       }
-      const r = yield* transcripts.request(ctx.roomId, subject, threadIds);
-      return `asked ${r.asked} peer(s) present for their conversations on ${threadIds.length} thread(s); ${r.own} of your own filed. Each of them decides; what they hand over lands in ${r.dir}.`;
+      const requested = yield* transcripts.request(context.roomId, subject, threadIds);
+      return `asked ${requested.asked} peer(s) present for their conversations on ${threadIds.length} thread(s); ${requested.own} of your own filed. Each of them decides; what they hand over lands in ${requested.dir}.`;
     }),
 });
 
@@ -67,7 +67,7 @@ export const listTranscripts = diagnostic<Record<string, never>>({
   summary:
     "The agent conversations collected with request-transcripts: subject, file path, size. Read a file to see how an agent behaved. Also lists the requests peers have made of this machine and that nothing has answered — read those to the user; share-transcripts hands one over when they say so.",
   fromContext: () => ({}),
-  open: (ctx, back) => to.transcripts(ctx.ticketId ? `ticket-${ctx.ticketId.slice(0, 8)}` : "", back),
+  open: (context, back) => to.transcripts(context.ticketId ? `ticket-${context.ticketId.slice(0, 8)}` : "", back),
   run: (_params, _ctx, { transcripts }) =>
     Effect.gen(function* () {
       const files = yield* transcripts.list;
@@ -76,26 +76,26 @@ export const listTranscripts = diagnostic<Record<string, never>>({
         files.length === 0
           ? `none yet (they land in ${transcripts.dir})`
           : toToon({
-              transcripts: files.map((f) => ({
-                subject: f.subject,
-                from: f.meta?.from ?? "?",
-                ai: f.meta?.ai ?? "?",
-                entries: f.meta?.entries ?? 0,
-                since: f.meta ? new Date(f.meta.since).toISOString() : "",
-                receivedAt: f.meta ? new Date(f.meta.receivedAt).toISOString() : "",
-                file: f.file,
-                kb: Math.max(1, Math.round(f.bytes / 1024)),
+              transcripts: files.map((file) => ({
+                subject: file.subject,
+                from: file.meta?.from ?? "?",
+                ai: file.meta?.ai ?? "?",
+                entries: file.meta?.entries ?? 0,
+                since: file.meta ? new Date(file.meta.since).toISOString() : "",
+                receivedAt: file.meta ? new Date(file.meta.receivedAt).toISOString() : "",
+                file: file.file,
+                kb: Math.max(1, Math.round(file.bytes / 1024)),
               })),
             });
       if (waiting.length === 0) return have;
       const asks = toToon({
-        askedOfYou: waiting.map((a) => ({
-          requester: a.requesterName,
-          subject: a.subject,
-          threadId: a.threadId,
-          ai: a.ai,
-          since: new Date(a.since).toISOString(),
-          askedAt: new Date(a.ts).toISOString(),
+        askedOfYou: waiting.map((ask) => ({
+          requester: ask.requesterName,
+          subject: ask.subject,
+          threadId: ask.threadId,
+          ai: ask.ai,
+          since: new Date(ask.since).toISOString(),
+          askedAt: new Date(ask.ts).toISOString(),
         })),
       });
       return `${have}\n\n${asks}\n\nNothing above has left this machine. Tell your user who asked and for what; share-transcripts sends it if they say so.`;

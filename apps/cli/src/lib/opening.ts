@@ -25,27 +25,27 @@ export interface OpeningFrame {
   readonly y: number;
 }
 
-const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
-const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const easeInOut = (progress: number) => (progress < 0.5 ? 2 * progress * progress : 1 - (-2 * progress + 2) ** 2 / 2);
+const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 
 /**
- * @param t       ms since the logo painted
+ * @param elapsed ms since the logo painted
  * @param upAt    ms when the app came up, or null
  * @param cols    terminal columns, rows; logo width/height in cells (tagline included)
  */
 export const opening = (
-  t: number,
+  elapsed: number,
   upAt: number | null,
-  dims: { cols: number; rows: number; w: number; h: number },
+  dims: { cols: number; rows: number; width: number; height: number },
 ): OpeningFrame => {
-  const cx = Math.max(0, Math.floor((dims.cols - dims.w) / 2) - 1); // -1: the layout's own padding
-  const cy = Math.max(0, Math.floor((dims.rows - dims.h) / 2) - 1);
+  const centerX = Math.max(0, Math.floor((dims.cols - dims.width) / 2) - 1); // -1: the layout's own padding
+  const centerY = Math.max(0, Math.floor((dims.rows - dims.height) / 2) - 1);
   const readyAt = upAt === null ? null : Math.max(upAt, OPENING.hold);
-  if (readyAt === null || t < readyAt) return { phase: "boot", readyAt: null, x: cx, y: cy };
+  if (readyAt === null || elapsed < readyAt) return { phase: "boot", readyAt: null, x: centerX, y: centerY };
   const moveStart = readyAt + LOGO.settle;
-  if (t < moveStart) return { phase: "settle", readyAt, x: cx, y: cy };
-  const m = clamp01((t - moveStart) / OPENING.move);
-  if (m >= 1) return { phase: "done", readyAt, x: 0, y: 0 };
-  const e = 1 - easeInOut(m);
-  return { phase: "move", readyAt, x: Math.round(cx * e), y: Math.round(cy * e) };
+  if (elapsed < moveStart) return { phase: "settle", readyAt, x: centerX, y: centerY };
+  const progress = clamp01((elapsed - moveStart) / OPENING.move);
+  if (progress >= 1) return { phase: "done", readyAt, x: 0, y: 0 };
+  const eased = 1 - easeInOut(progress);
+  return { phase: "move", readyAt, x: Math.round(centerX * eased), y: Math.round(centerY * eased) };
 };

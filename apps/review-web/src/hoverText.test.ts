@@ -3,28 +3,28 @@ import { final } from "./data";
 import { blocks, brief, inline, signatures } from "./hoverText";
 
 describe("hover markdown", () => {
-  const md = "```typescript\nconst fn: (name: string) => Traced\n```\nCreates a traced function from an [gen](file:///x#1) body.\n\nMore details.\n\n```ts import.meta.vitest\nconst f = 1\n```";
+  const markdown = "```typescript\nconst fn: (name: string) => Traced\n```\nCreates a traced function from an [gen](file:///x#1) body.\n\nMore details.\n\n```ts import.meta.vitest\nconst f = 1\n```";
   it("splits fences from prose, an info string past the language included", () => {
-    expect(blocks(md).map((b) => ("code" in b ? `code:${b.lang}` : "text"))).toEqual(["code:ts", "text", "code:ts"]);
+    expect(blocks(markdown).map((block) => ("code" in block ? `code:${block.lang}` : "text"))).toEqual(["code:ts", "text", "code:ts"]);
   });
   it("a brief is the signature and the first paragraph, and says there is more", () => {
-    const b = brief(md);
-    expect(b.blocks).toEqual([{ code: "const fn: (name: string) => Traced", lang: "ts" }, { text: "Creates a traced function from an [gen](file:///x#1) body." }]);
-    expect(b.more).toBe(true);
+    const summary = brief(markdown);
+    expect(summary.blocks).toEqual([{ code: "const fn: (name: string) => Traced", lang: "ts" }, { text: "Creates a traced function from an [gen](file:///x#1) body." }]);
+    expect(summary.more).toBe(true);
     expect(brief("```typescript\nconst a: number\n```\n").more).toBe(false);
   });
 });
 
 describe("a PHP hover (Intelephense)", () => {
-  const md =
+  const markdown =
     "__App\\\\Exporter::lines__\n\nThe export as lines, one per row.\n\n```php\n<?php\npublic function lines(int $limit = 100): Collection { }\n```\n\n_@param_ `int $limit`\n\n_@return_ `\\Illuminate\\Support\\Collection`";
   it("names the symbol, then its signature without the <?php and the empty body, then its doc", () => {
-    expect(brief(md).blocks).toEqual([
+    expect(brief(markdown).blocks).toEqual([
       { label: "App\\Exporter::lines" },
       { code: "public function lines(int $limit = 100): Collection", lang: "php" },
       { text: "The export as lines, one per row." },
     ]);
-    expect(brief(md).more).toBe(true);
+    expect(brief(markdown).more).toBe(true);
   });
   it("its prose reads plain: tags unemphasised, code kept, links by their text", () => {
     expect(inline("_@param_ `int $limit` The length of the _string_ <https://php.net/x>")).toEqual([

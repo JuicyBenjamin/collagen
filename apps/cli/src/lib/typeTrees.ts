@@ -24,9 +24,9 @@ export const unpack = (projectPath: string, commit: string, dir: string, paths: 
     const git = spawn("git", ["--literal-pathspecs", "-C", projectPath, "archive", "--format=tar", commit, ...(paths.length ? ["--", ...paths] : [])], { stdio: ["ignore", "pipe", "ignore"] });
     const tar = spawn("tar", ["-x", "-m", "-C", dir], { stdio: ["pipe", "ignore", "ignore"] });
     git.stdout.pipe(tar.stdin);
-    const exit = (p: ReturnType<typeof spawn>) => new Promise<number | null>((done, fail) => (p.on("error", fail), p.on("exit", done)));
+    const exit = (child: ReturnType<typeof spawn>) => new Promise<number | null>((done, fail) => (child.on("error", fail), child.on("exit", done)));
     Promise.all([exit(git), exit(tar)]).then(
-      ([g, t]) => (g === 0 && t === 0 ? resolve() : reject(new Error(`could not unpack ${commit} (${g !== 0 ? `git exit ${g}` : `tar exit ${t}`})`))),
+      ([gitExit, tarExit]) => (gitExit === 0 && tarExit === 0 ? resolve() : reject(new Error(`could not unpack ${commit} (${gitExit !== 0 ? `git exit ${gitExit}` : `tar exit ${tarExit}`})`))),
       reject,
     );
   });
@@ -36,14 +36,14 @@ const changes = (projectPath: string, from: string, to: string): Promise<{ reado
   new Promise((resolve) => {
     const git = spawn("git", ["-C", projectPath, "diff", "--name-status", "--no-renames", "-z", from, to], { stdio: ["ignore", "pipe", "ignore"] });
     const out: Array<Buffer> = [];
-    git.stdout.on("data", (c: Buffer) => out.push(c));
+    git.stdout.on("data", (chunk: Buffer) => out.push(chunk));
     git.on("error", () => resolve(null));
     git.on("exit", (code) => {
       if (code !== 0) return resolve(null);
       const parts = Buffer.concat(out).toString("utf8").split("\0").filter(Boolean);
       const changed: Array<string> = [];
       const gone: Array<string> = [];
-      for (let i = 0; i + 1 < parts.length; i += 2) (parts[i] === "D" ? gone : changed).push(parts[i + 1]!);
+      for (let index = 0; index + 1 < parts.length; index += 2) (parts[index] === "D" ? gone : changed).push(parts[index + 1]!);
       resolve({ changed, gone });
     });
   });
@@ -54,8 +54,8 @@ const changes = (projectPath: string, from: string, to: string): Promise<{ reado
 const ownPath = (tree: string, rel: string): boolean => {
   const parts = rel.split("/");
   let at = tree;
-  for (const p of parts.slice(0, -1)) {
-    at = join(at, p);
+  for (const part of parts.slice(0, -1)) {
+    at = join(at, part);
     try {
       if (lstatSync(at).isSymbolicLink()) return false;
     } catch {
@@ -82,7 +82,7 @@ export async function treeAt(projectPath: string, commit: string, tree: string, 
   if (moved) {
     for (const rel of [...moved.gone, ...moved.changed]) if (ownPath(tree, rel)) rmSync(join(tree, rel), { force: true, recursive: true });
     const changed = moved.changed.filter((rel) => ownPath(tree, rel));
-    for (let i = 0; i < changed.length; i += 200) await unpack(projectPath, commit, tree, changed.slice(i, i + 200));
+    for (let start = 0; start < changed.length; start += 200) await unpack(projectPath, commit, tree, changed.slice(start, start + 200));
   } else {
     rmSync(tree, { recursive: true, force: true });
     await unpack(projectPath, commit, tree);
@@ -100,8 +100,8 @@ const alive = (pid: number): boolean => {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "EPERM";
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 };
 
@@ -130,8 +130,8 @@ const held = new Set<string>();
 /** The first slot of this clone and language that nobody holds, taken. */
 export function claimSlot(base: string, projectPath: string, kind: string): Slot {
   const id = createHash("sha256").update(projectPath).digest("hex").slice(0, 12);
-  for (let n = 0; ; n++) {
-    const dir = join(TREES(base), `${id}-${kind}-${n}`);
+  for (let slot = 0; ; slot++) {
+    const dir = join(TREES(base), `${id}-${kind}-${slot}`);
     if (held.has(dir)) continue;
     mkdirSync(dir, { recursive: true });
     const pid = holder(dir);
@@ -139,9 +139,9 @@ export function claimSlot(base: string, projectPath: string, kind: string): Slot
     rmSync(join(dir, "pid"), { force: true });
     try {
       // two processes after the same free slot: one file, made once
-      const fd = openSync(join(dir, "pid"), "wx");
-      writeSync(fd, String(process.pid));
-      closeSync(fd);
+      const descriptor = openSync(join(dir, "pid"), "wx");
+      writeSync(descriptor, String(process.pid));
+      closeSync(descriptor);
     } catch {
       continue;
     }
@@ -179,9 +179,9 @@ export function sweepSlots(base: string, now = Date.now()): void {
       return [];
     }
   };
-  for (const d of list(OLD_TREES(base))) if (/^\d+$/.test(d) && !alive(Number(d))) rmSync(join(OLD_TREES(base), d), { recursive: true, force: true });
-  for (const d of list(TREES(base))) {
-    const dir = join(TREES(base), d);
+  for (const name of list(OLD_TREES(base))) if (/^\d+$/.test(name) && !alive(Number(name))) rmSync(join(OLD_TREES(base), name), { recursive: true, force: true });
+  for (const name of list(TREES(base))) {
+    const dir = join(TREES(base), name);
     try {
       if (!held.has(dir) && holder(dir) === null && now - statSync(dir).mtimeMs > UNUSED_MS) rmSync(dir, { recursive: true, force: true });
     } catch {

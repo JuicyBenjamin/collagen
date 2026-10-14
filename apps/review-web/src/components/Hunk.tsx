@@ -18,10 +18,10 @@ import { moved, placeSince } from "../since";
 
 /** The character a pointer is over, in a line drawn by CodeLine: the text
  *  under the pointer, and where its span starts (data-o). */
-function charAt(x: number, y: number): { readonly col: number; readonly node: Node; readonly offset: number } | null {
-  const pos = document.caretPositionFromPoint?.(x, y);
-  const node = pos?.offsetNode ?? document.caretRangeFromPoint?.(x, y)?.startContainer;
-  const offset = pos?.offset ?? document.caretRangeFromPoint?.(x, y)?.startOffset ?? 0;
+function charAt(pointerX: number, pointerY: number): { readonly col: number; readonly node: Node; readonly offset: number } | null {
+  const pos = document.caretPositionFromPoint?.(pointerX, pointerY);
+  const node = pos?.offsetNode ?? document.caretRangeFromPoint?.(pointerX, pointerY)?.startContainer;
+  const offset = pos?.offset ?? document.caretRangeFromPoint?.(pointerX, pointerY)?.startOffset ?? 0;
   const span = node?.parentElement?.closest("[data-o]");
   if (!node || !span) return null;
   return { col: Number(span.getAttribute("data-o")) + offset, node, offset };
@@ -47,10 +47,10 @@ const headers = new Set<HTMLElement>();
 let pending = false;
 const markStuck = () => {
   pending = false;
-  for (const el of headers) {
-    const top = el.getBoundingClientRect().top;
-    const card = el.closest(".hunk-group")?.getBoundingClientRect();
-    el.classList.toggle("stuck", card !== undefined && card.top < top - 0.5 && top <= STUCK_AT + 0.5 && card.bottom > 0);
+  for (const header of headers) {
+    const top = header.getBoundingClientRect().top;
+    const card = header.closest(".hunk-group")?.getBoundingClientRect();
+    header.classList.toggle("stuck", card !== undefined && card.top < top - 0.5 && top <= STUCK_AT + 0.5 && card.bottom > 0);
   }
 };
 if (typeof window !== "undefined") {
@@ -66,10 +66,10 @@ if (typeof window !== "undefined") {
   // a why closing — changes what is stuck without a scroll
   new ResizeObserver(soon).observe(document.body);
 }
-const watchStuck = (el: HTMLElement) => {
-  headers.add(el);
+const watchStuck = (header: HTMLElement) => {
+  headers.add(header);
   requestAnimationFrame(markStuck);
-  onCleanup(() => headers.delete(el));
+  onCleanup(() => headers.delete(header));
 };
 
 /** The file as the page's commit has it, line by line — read once per file
@@ -79,38 +79,38 @@ const readFile = (file: string, commit: string): Promise<WholeFileResult> => {
   const key = `${commit}:${file}`;
   let got = fileAt.get(key);
   if (!got) {
-    got = wholeFile(ticketId, file, commit).catch((e): WholeFileResult => ({ error: String(e) }));
+    got = wholeFile(ticketId, file, commit).catch((error): WholeFileResult => ({ error: String(error) }));
     fileAt.set(key, got);
     // a failure is not kept: the next click asks again
-    void got.then((r) => "error" in r && fileAt.delete(key));
+    void got.then((result) => "error" in result && fileAt.delete(key));
   }
   return got;
 };
 
 /** A line on screen in a file's card: its number in the new file, and how far
  *  down the window it is. */
-type Place = { readonly n: number; readonly y: number };
+type Place = { readonly line: number; readonly y: number };
 
 /** Where the reader is in a card: its first numbered line not under the
  *  card's header (which sticks over what scrolls past it). */
 const placeIn = (card: Element): Place | null => {
   const below = Math.max(0, card.querySelector(".file")?.getBoundingClientRect().bottom ?? 0);
-  for (const tr of card.querySelectorAll<HTMLElement>("tr[data-new]")) {
-    const r = tr.getBoundingClientRect();
-    if (r.bottom > below) return { n: Number(tr.dataset.new), y: r.top };
+  for (const row of card.querySelectorAll<HTMLElement>("tr[data-new]")) {
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom > below) return { line: Number(row.dataset.new), y: rect.top };
   }
   return null;
 };
 
-/** Once the card is drawn again, its line `at.n` — or the shown line nearest
+/** Once the card is drawn again, its line `at.line` — or the shown line nearest
  *  it — is put back where that line was on screen. */
 const keepPlace = (card: Element, at: Place) =>
   requestAnimationFrame(() => {
     let best: HTMLElement | null = null;
     let off = Infinity;
-    for (const tr of card.querySelectorAll<HTMLElement>("tr[data-new]")) {
-      const d = Math.abs(Number(tr.dataset.new) - at.n);
-      if (d < off) [best, off] = [tr, d];
+    for (const row of card.querySelectorAll<HTMLElement>("tr[data-new]")) {
+      const distance = Math.abs(Number(row.dataset.new) - at.line);
+      if (distance < off) [best, off] = [row, distance];
     }
     // at once: the page's smooth scrolling is for the reader's jumps, not for holding a place
     if (best) window.scrollBy({ top: best.getBoundingClientRect().top - at.y, behavior: "instant" });
@@ -126,8 +126,8 @@ export function wholeRun(run: ReadonlyArray<HunkData>) {
   // the change it was opened from: a failure is said there
   const [asked, setAsked] = createSignal<string | null>(null);
   const shown = createMemo((): HunkData | null => {
-    const w = read();
-    return open() && w && w !== "loading" && "lines" in w ? wholeHunk(first, w.lines, diffNow.addedIn(first.file), diffNow.removedIn(first.file)) : null;
+    const result = read();
+    return open() && result && result !== "loading" && "lines" in result ? wholeHunk(first, result.lines, diffNow.addedIn(first.file), diffNow.removedIn(first.file)) : null;
   });
   return {
     count: run.length,
@@ -137,18 +137,18 @@ export function wholeRun(run: ReadonlyArray<HunkData>) {
     loading: () => open() && read() === "loading",
     asked,
     failed: () => {
-      const w = read();
-      return open() && w && w !== "loading" && "error" in w ? w.error : null;
+      const result = read();
+      return open() && result && result !== "loading" && "error" in result ? result.error : null;
     },
     show: async (by: string, card: Element | null, at: Place | null) => {
       setAsked(by);
       setOpen(true);
       // asked once; asked again only after it failed
-      const w = read();
-      if (w === null || (w !== "loading" && "error" in w)) {
+      const result = read();
+      if (result === null || (result !== "loading" && "error" in result)) {
         setRead("loading");
-        const c = diffNow.commit();
-        setRead(c ? await readFile(first.file, c) : { error: "the page does not know which commit its diff is" });
+        const commit = diffNow.commit();
+        setRead(commit ? await readFile(first.file, commit) : { error: "the page does not know which commit its diff is" });
       }
       if (open() && card && at) keepPlace(card, at);
     },
@@ -186,31 +186,31 @@ export function Hunk(props: {
   const toggleGap = async () => {
     if (gap() !== null && gap() !== "loading") return setGap(null);
     const at = diffNow.commit();
-    const n = props.skipped?.lines ?? 0;
-    if (!at || n <= 0) return;
+    const skippedLines = props.skipped?.lines ?? 0;
+    if (!at || skippedLines <= 0) return;
     setGap("loading");
-    const r = await readFile(props.hunk.file, at);
-    if ("error" in r) return setGap({ error: r.error });
-    const from = props.hunk.newStart - n;
+    const result = await readFile(props.hunk.file, at);
+    if ("error" in result) return setGap({ error: result.error });
+    const from = props.hunk.newStart - skippedLines;
     // old and new numbers stay this far apart between the two changes
-    const pair = props.hunk.lines.find((l) => l.old !== undefined && l.new !== undefined);
+    const pair = props.hunk.lines.find((line) => line.old !== undefined && line.new !== undefined);
     const shift = pair ? pair.old! - pair.new! : 0;
     setGap({
       id: `${props.hunk.id}~gap`,
       file: props.hunk.file,
       header: "",
       newStart: from,
-      newLines: n,
-      lines: r.lines.slice(from - 1, from - 1 + n).map((text, i) => ({ kind: " " as const, text, old: from + i + shift, new: from + i })),
+      newLines: skippedLines,
+      lines: result.lines.slice(from - 1, from - 1 + skippedLines).map((text, index) => ({ kind: " " as const, text, old: from + index + shift, new: from + index })),
     });
   };
   const gapFailed = () => {
-    const g = gap();
-    return g !== null && g !== "loading" && "error" in g ? g.error : null;
+    const current = gap();
+    return current !== null && current !== "loading" && "error" in current ? current.error : null;
   };
   const gapShown = () => {
-    const g = gap();
-    return g !== null && g !== "loading" && "lines" in g ? g : null;
+    const current = gap();
+    return current !== null && current !== "loading" && "lines" in current ? current : null;
   };
   let head: HTMLDivElement | undefined;
   let box: HTMLDivElement | undefined;
@@ -222,8 +222,8 @@ export function Hunk(props: {
   const toggleWhole = () => {
     if (props.whole.shown() !== null || props.whole.loading()) return props.whole.hide(card());
     const row = props.continued ? box?.querySelector<HTMLElement>("tr[data-new]") : null;
-    const c = card();
-    void props.whole.show(props.hunk.id, c, row ? { n: Number(row.dataset.new), y: row.getBoundingClientRect().top } : c && placeIn(c));
+    const group = card();
+    void props.whole.show(props.hunk.id, group, row ? { line: Number(row.dataset.new), y: row.getBoundingClientRect().top } : group && placeIn(group));
   };
   const canWhole = () => diffNow.canReadWhole() && props.whole.readable && !folded();
   // read already: the file folds to its header here and wherever else it shows
@@ -239,12 +239,12 @@ export function Hunk(props: {
     return from && to && from !== to ? sinceOf(props.hunk.file, from, to)() : null;
   });
   const mine = createMemo((): ReadonlyArray<HunkData> | null => {
-    const r = since();
-    return r && r !== "loading" && "hunks" in r ? (placeSince(diffNow.hunksOf(props.hunk.file), r.hunks).get(props.hunk.id) ?? []) : null;
+    const result = since();
+    return result && result !== "loading" && "hunks" in result ? (placeSince(diffNow.hunksOf(props.hunk.file), result.hunks).get(props.hunk.id) ?? []) : null;
   });
   const sinceFailed = () => {
-    const r = since();
-    return r && r !== "loading" && "error" in r ? r.error : null;
+    const result = since();
+    return result && result !== "loading" && "error" in result ? result.error : null;
   };
   const [full, setFull] = createSignal(false);
   const sinceMode = () => props.whole.shown() === null && !full() && mine() !== null;
@@ -254,9 +254,9 @@ export function Hunk(props: {
     // the file whole stands in for all its changes here, drawn at the first
     <Show when={!(props.continued && (folded() || props.whole.shown() !== null))}>
     <div class={["hunk", { viewed: folded(), reread: state() === "viewed" && !folded(), continued: props.continued }]}>
-      <div class={["file", { continued: props.continued }]} ref={(el) => {
-        head = el;
-        if (!props.continued) watchStuck(el);
+      <div class={["file", { continued: props.continued }]} ref={(element) => {
+        head = element;
+        if (!props.continued) watchStuck(element);
       }}>
         {/* a later change in the file: a band saying how much unchanged code
             lies between it and the one above — the file's header stays above */}
@@ -313,9 +313,9 @@ export function Hunk(props: {
         <div class="hunk-body">
         <Show when={gapFailed()}>{(why) => <p class="whole-failed">Could not read the lines between: {why()}</p>}</Show>
         <Show when={gapShown()}>
-          {(g) => (
+          {(expanded) => (
             <div class="code gap">
-              <Lines hunk={g()} threads="new" />
+              <Lines hunk={expanded()} threads="new" />
             </div>
           )}
         </Show>
@@ -340,9 +340,9 @@ export function Hunk(props: {
               Since you viewed it: <span class="since-add">+{counts().added}</span> <span class="since-del">−{counts().removed}</span>
             </p>
             <For each={mine() ?? []}>
-              {(h) => (
+              {(hunk) => (
                 <div class="code since">
-                  <Lines hunk={h} />
+                  <Lines hunk={hunk} />
                 </div>
               )}
             </For>
@@ -378,23 +378,23 @@ function Lines(props: {
 
   /** The word under the pointer on this line, as a spot in the branch, and
    *  the range of text it covers (to mark it). */
-  const wordUnder = (line: DiffLine, e: MouseEvent): { spot: Spot; range: Range | null } | null => {
+  const wordUnder = (line: DiffLine, event: MouseEvent): { spot: Spot; range: Range | null } | null => {
     if (!asks() || line.new === undefined) return null;
-    const at = charAt(e.clientX, e.clientY);
+    const at = charAt(event.clientX, event.clientY);
     const start = at === null ? null : wordAt(line.text, at.col);
     if (at === null || start === null) return null;
-    const len = at.node.textContent?.length ?? 0;
+    const length = at.node.textContent?.length ?? 0;
     const range = document.createRange();
     range.setStart(at.node, Math.max(0, at.offset - (at.col - start)));
-    range.setEnd(at.node, Math.min(len, at.offset + (wordEnd(line.text, start) - at.col)));
+    range.setEnd(at.node, Math.min(length, at.offset + (wordEnd(line.text, start) - at.col)));
     return { spot: { file: props.hunk.file, line: line.new, col: start }, range };
   };
-  const spotAt = (line: DiffLine, e: MouseEvent): Spot | null => wordUnder(line, e)?.spot ?? null;
+  const spotAt = (line: DiffLine, event: MouseEvent): Spot | null => wordUnder(line, event)?.spot ?? null;
 
   /** Where on the pull request's diff a line is: a removed line on the old
    *  side by its old number, any other on the new side by its new one. */
-  const sideOf = (line: DiffLine): { readonly side: "LEFT" | "RIGHT"; readonly n: number } | null =>
-    line.kind === "-" ? (line.old !== undefined ? { side: "LEFT", n: line.old } : null) : line.new !== undefined ? { side: "RIGHT", n: line.new } : null;
+  const sideOf = (line: DiffLine): { readonly side: "LEFT" | "RIGHT"; readonly line: number } | null =>
+    line.kind === "-" ? (line.old !== undefined ? { side: "LEFT", line: line.old } : null) : line.new !== undefined ? { side: "RIGHT", line: line.new } : null;
   const threadOf = (line: DiffLine | undefined) => {
     const at = line && sideOf(line);
     const which = props.threads ?? "none";
@@ -403,62 +403,62 @@ function Lines(props: {
   const talks = () => props.talk === true && hostNow.canComment();
   // the lines picked for a comment in this hunk, first to last, while picked here
   const picked = createMemo(() => {
-    const p = hostNow.pick();
-    return p && p.hunk === props.hunk.id ? { first: Math.min(p.anchor, p.focus), last: Math.max(p.anchor, p.focus) } : null;
+    const pick = hostNow.pick();
+    return pick && pick.hunk === props.hunk.id ? { first: Math.min(pick.anchor, pick.focus), last: Math.max(pick.anchor, pick.focus) } : null;
   });
-  const inPick = (i: number) => {
-    const p = picked();
-    return p !== null && i >= p.first && i <= p.last;
+  const inPick = (index: number) => {
+    const block = picked();
+    return block !== null && index >= block.first && index <= block.last;
   };
   /** The composer for the pick, under its last line once the drag is over. */
-  const composerAt = (i: number) => {
-    const p = picked();
-    if (!p || p.last !== i || hostNow.dragging()) return null;
-    const from = sideOf(rows()[p.first]!.line);
-    const to = sideOf(rows()[p.last]!.line);
+  const composerAt = (index: number) => {
+    const block = picked();
+    if (!block || block.last !== index || hostNow.dragging()) return null;
+    const from = sideOf(rows()[block.first]!.line);
+    const to = sideOf(rows()[block.last]!.line);
     if (!from || !to) return null;
     // a changed row stands for its added line
-    const lines = rows().slice(p.first, p.last + 1).map((r) => r.line);
-    return { from: { side: from.side, line: from.n }, to: { side: to.side, line: to.n }, suggestable: lines.every((l) => l.kind !== "-") ? lines.map((l) => l.text) : null };
+    const lines = rows().slice(block.first, block.last + 1).map((row) => row.line);
+    return { from: { side: from.side, line: from.line }, to: { side: to.side, line: to.line }, suggestable: lines.every((line) => line.kind !== "-") ? lines.map((line) => line.text) : null };
   };
   /** The new file's lines from `from` to `to`, as this hunk shows them — what a suggestion replaces. */
   const codeOf = (from: number, to: number): ReadonlyArray<string> | null => {
-    const got = props.hunk.lines.filter((l) => l.kind !== "-" && l.new !== undefined && l.new >= from && l.new <= to);
-    return got.length === to - from + 1 ? got.map((l) => l.text) : null;
+    const got = props.hunk.lines.filter((line) => line.kind !== "-" && line.new !== undefined && line.new >= from && line.new <= to);
+    return got.length === to - from + 1 ? got.map((line) => line.text) : null;
   };
 
   return (
     <table>
       <tbody>
         <For each={rows()}>
-          {(row, i) => {
+          {(row, index) => {
             const line = row.line;
             return (
             <>
-              <tr class={{ add: line.kind === "+" && !row.was, del: line.kind === "-", changed: row.was !== undefined, picked: inPick(i()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, i())}>
+              <tr class={{ add: line.kind === "+" && !row.was, del: line.kind === "-", changed: row.was !== undefined, picked: inPick(index()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, index())}>
                 <td class="n">{row.was?.line.old ?? line.old ?? ""}</td>
                 <td class="n">{line.new ?? ""}</td>
                 <td
                   class={["t", { asks: asks() && line.new !== undefined }]}
-                  onMouseMove={(e) => {
-                    const w = wordUnder(line, e);
+                  onMouseMove={(event) => {
+                    const word = wordUnder(line, event);
                     // a word is something to click: say so with the pointer and a mark
-                    e.currentTarget.classList.toggle("on-word", w !== null);
-                    markWord(w?.range ?? null);
-                    pointAt(w?.spot ?? null, e.clientX, e.clientY);
+                    event.currentTarget.classList.toggle("on-word", word !== null);
+                    markWord(word?.range ?? null);
+                    pointAt(word?.spot ?? null, event.clientX, event.clientY);
                   }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.classList.remove("on-word");
+                  onMouseLeave={(event) => {
+                    event.currentTarget.classList.remove("on-word");
                     markWord(null);
                     pointAt(null, 0, 0);
                   }}
-                  onClick={(e) => {
+                  onClick={(event) => {
                     // a click that selected text is a selection, not a peek
                     if (getSelection()?.toString()) return;
-                    const spot = spotAt(line, e);
+                    const spot = spotAt(line, event);
                     if (spot) {
                       pointAt(null, 0, 0);
-                      peekAt(props.hunk.id, i(), spot);
+                      peekAt(props.hunk.id, index(), spot);
                     }
                   }}
                 >
@@ -470,13 +470,13 @@ function Lines(props: {
                       class="add-comment"
                       title="Comment on this line — drag, or shift-click another line, for several"
                       aria-label="Comment on this line"
-                      onMouseDown={(e) => {
-                        if (e.button !== 0) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        hostNow.startPick(props.hunk.id, i(), e.shiftKey);
+                      onMouseDown={(event) => {
+                        if (event.button !== 0) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        hostNow.startPick(props.hunk.id, index(), event.shiftKey);
                       }}
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(event) => event.stopPropagation()}
                     >
                       +
                     </button>
@@ -489,28 +489,28 @@ function Lines(props: {
               </tr>
               {/* a line that only changed order says so beneath it */}
               <Show when={row.was?.reorder}>
-                {(r) => (
+                {(reorder) => (
                   <tr class="reorder-note">
                     <td class="n" />
                     <td class="n" />
                     <td class="t">
                       <span class="reorder-chip">order only</span>
                       <span class="reorder-count">
-                        {r().moved} moved · nothing added or removed
+                        {reorder().moved} moved · nothing added or removed
                       </span>
                     </td>
                   </tr>
                 )}
               </Show>
               {/* the removed line's comments too: it is drawn in this row */}
-              <Show when={threadOf(row.was?.line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} codeOf={codeOf} />}</Show>
-              <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().n} codeOf={codeOf} />}</Show>
-              <Show when={composerAt(i())}>{(c) => <LineComposer file={props.hunk.file} from={c().from} to={c().to} suggestable={c().suggestable} />}</Show>
-              <Show when={peek()?.hunk === props.hunk.id && peek()?.index === i() ? peek() : null}>
-                {(p) => (
+              <Show when={threadOf(row.was?.line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().line} codeOf={codeOf} />}</Show>
+              <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().line} codeOf={codeOf} />}</Show>
+              <Show when={composerAt(index())}>{(composer) => <LineComposer file={props.hunk.file} from={composer().from} to={composer().to} suggestable={composer().suggestable} />}</Show>
+              <Show when={peek()?.hunk === props.hunk.id && peek()?.index === index() ? peek() : null}>
+                {(peeked) => (
                   <tr class="peek-row">
                     <td colspan={3}>
-                      <Peek result={p().result} />
+                      <Peek result={peeked().result} />
                     </td>
                   </tr>
                 )}
