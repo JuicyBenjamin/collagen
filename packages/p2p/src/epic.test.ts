@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { Ticket as TicketSchema, closeTicket, ticketName, epicBecause, epicClosed, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
+import { Ticket as TicketSchema, closeTicket, ticketName, epicBecause, epicClosed, epicForFiling, epicOf, epicParts, epicStatus, excludedFromEpic, finished, heldBy, isClosed, isJudged, mergeTicket, moveToEpic, orderEpic, PARTS_DONE, turnEpic, type Ticket } from "./ticket";
 
 const ticket = (over: Partial<Ticket>): Ticket => ({
   id: "t",
@@ -237,5 +237,51 @@ describe("a close's outcome on the log", () => {
     const base = { id: "t", project: "collagen", goal: "g", createdBy: "alice", kind: "task", steps: [], structureAt: 1, updatedAt: 1 };
     expect(decode({ ...base, closed: { by: "alice", ts: 2 } }).closed).toEqual({ by: "alice", ts: 2 });
     expect(decode({ ...base, closed: { by: "alice", ts: 2, outcome: "dropped" } }).closed?.outcome).toBe("dropped");
+  });
+});
+
+describe("progress counts lines of work, not tickets", () => {
+  it("a proposal, its plan and its review are one line: done when all of it is", () => {
+    const proposal = into(done("idea"), 1);
+    const plan = into(done("plan-it"), 2);
+    const review = into(open("review-it"), 3);
+    const lineOf = { ...plan, from: ["idea"] };
+    const reviewed = { ...review, from: ["plan-it"] };
+    const other = into(done("other"), 4);
+    const all = room(epic, proposal, lineOf, reviewed, other);
+    expect(epicParts(epic, all)).toMatchObject({ counted: 2, done: 1 });
+    expect(epicParts(epic, all).lines.map((line) => line.map((part) => part.id))).toEqual([["idea", "plan-it", "review-it"], ["other"]]);
+    // the review done: the whole line is
+    expect(epicParts(epic, room(epic, proposal, lineOf, { ...reviewed, steps: [...step("settled")] }, other))).toMatchObject({ counted: 2, done: 2 });
+  });
+
+  it("a stage grown through a ticket outside the epic still joins its line", () => {
+    const proposal = into(done("idea"), 1);
+    const plan = { ...open("plan-it"), from: ["idea"] };
+    const review = { ...into(open("review-it"), 2), from: ["plan-it"] };
+    expect(epicParts(epic, room(epic, proposal, plan, review)).counted).toBe(1);
+  });
+
+  it("a line all dropped is not counted", () => {
+    const dropped = closeTicket(into(open("gone"), 1), "alice", undefined, 5, "dropped").ticket;
+    expect(epicParts(epic, room(epic, dropped, into(done("kept"), 2)))).toMatchObject({ counted: 1, done: 1 });
+  });
+});
+
+describe("a ticket filed out of a part of an epic goes into it", () => {
+  const part = into(open("part"), 1);
+  it("the one open epic its parents are in, unless its filer named one or none", () => {
+    expect(epicForFiling(["part"], room(epic, part))).toBe("e1");
+    expect(epicForFiling(["part"], room(epic, part), null)).toBeNull();
+    expect(epicForFiling(["part"], room(epic, part), "e2")).toBe("e2");
+  });
+  it("none when its parents are in no epic, in two, or their epic is closed", () => {
+    const otherEpic = ticket({ id: "e2", kind: "epic", project: "", goal: "other" });
+    const elsewhere = moveToEpic(open("elsewhere"), "e2", "bob", 1);
+    expect(epicForFiling(["loose"], room(epic, open("loose")))).toBeNull();
+    expect(epicForFiling(["part", "elsewhere"], room(epic, otherEpic, part, elsewhere))).toBeNull();
+    const finishedPart = closeTicket(part, "alice", undefined, 8, "done").ticket;
+    const closed = turnEpic(epic, true, "done", "alice", room(epic, finishedPart), 9).ticket;
+    expect(epicForFiling(["part"], room(closed, finishedPart))).toBeNull();
   });
 });

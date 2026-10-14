@@ -13,10 +13,10 @@ describe("an epic in get-tickets, per reader", () => {
     const second = moveToEpic(ticketOf("second", { steps: pending, after: ["first"] }), "e1", "alice", 2);
     const all = new Map([epic, first, second].map((ticket) => [ticket.id, ticket]));
     const forBob = ticketView(epic, (key) => key, undefined, [], all, "bob");
-    expect(forBob.parts).toBe("0 of 2 done: first");
+    expect(forBob.parts).toBe("0 of 2 pieces of work done: first");
     expect(forBob.unresolved).toBe("first");
     const forAlice = ticketView(epic, (key) => key, undefined, [], all, "alice");
-    expect(forAlice.parts).toBe("0 of 2 done: first second");
+    expect(forAlice.parts).toBe("0 of 2 pieces of work done: first second");
   });
 
   it("a close that missed a gated addition: the reason never names what the reader may not see", () => {

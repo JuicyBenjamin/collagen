@@ -400,14 +400,18 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
 (its summary), no steps of its own.
 
 - **Any ticket can be in one**, from any project of the room — in one epic at most, and
-  only where it was **put**. Lineage (`from`) never moves anything: a plan grown out of a
-  proposal in an epic is not in it until someone adds it, and moving the proposal leaves
-  the plan where it is. Filing a ticket that grows out of one in an epic *suggests* that
-  epic (or asks which, when its parents sit in different ones); the choice is stored.
-- **Progress is a count**: the tickets done — every step answered, or **closed as done**
-  — against everything counted. A ticket **closed as dropped** leaves the count, as does
-  one taken out or kept in and **excluded**: 4 of 5 becomes 4 of 4 when the fifth is
-  dropped, not 5 of 5. A ticket closed before closes said how they ended counts as done.
+  only where it was **put**. A ticket filed out of one in an epic goes **into that epic as
+  it is filed** — a plan for a proposal in "More languages" is in "More languages" —
+  unless its filer keeps it out (`epic: null`), and anyone can take it out later. When
+  its parents sit in different epics it goes into none and the filing asks which. After
+  filing, lineage moves nothing: moving the proposal leaves the plan where it is.
+- **Progress counts pieces of work, not tickets.** Tickets that grew out of each other —
+  a proposal, its plan, the task and the review — are one piece of work, the stages of
+  it, so filing the next stage adds nothing to get through. A piece is done when every
+  ticket of it is — every step answered, or **closed as done**. One **closed as dropped**
+  or **excluded** leaves the count, and a piece all of it so is not counted: 4 of 5
+  becomes 4 of 4 when the fifth is dropped, not 5 of 5. The epic's page lists its
+  tickets by piece, each stage under the one it grew out of.
 - **Order is for reading.** Anyone may order an epic's tickets — PHP before Rust — and
   that hides nothing: both stay visible and open for discussion. `after` stays the gate,
   for when a later ticket really must wait unseen until the one before is answered.
@@ -424,8 +428,8 @@ An **epic** holds it together: a folder, a ticket of its own kind with a goal an
   later.
 - **Only when asked.** Agents shape epics when their person says so (the `epic` tool), and
   may offer one in a line when a filing suggests it: a filing hands the agent candidates
-  — the epic of the ticket it grows out of, four or more of your open tickets sharing one
-  lineage, or the room's open epics — and the agent asks only when the topics plainly
+  — which epic, when the ticket grows out of tickets in several, four or more of your
+  open tickets sharing one lineage, or the room's open epics — and the agent asks only when the topics plainly
   match, and says nothing otherwise. Being filed close together, or in one project, is no
   sign of a shared topic.
 
