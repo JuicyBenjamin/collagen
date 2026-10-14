@@ -28,6 +28,7 @@ skill into an agent's folder — edit it here.
 | [say-less](say-less/SKILL.md) | writing any text a person sees: say the fact, not the explanation |
 | [types-not-checks](types-not-checks/SKILL.md) | a value from a known set (a language, a kind, a mode): a union type, passed as is; outside text read once where it comes in |
 | [open-and-close](open-and-close/SKILL.md) | anything on the review page opening, closing, appearing or going away: animated in and out |
+| [names-say-what](names-say-what/SKILL.md) | writing any code: every parameter and variable named for what it holds, never `t`, `p`, `res`; `pnpm lint` checks |
 | [review](review/SKILL.md) | reviewing a diff, branch or pull request: leaky abstractions, and more as reviews find it |
 
 When a review finds something none of these cover, and it could come back,
