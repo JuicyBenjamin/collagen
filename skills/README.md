@@ -28,6 +28,9 @@ skill into an agent's folder — edit it here.
 | [say-less](say-less/SKILL.md) | writing any text a person sees: say the fact, not the explanation |
 | [types-not-checks](types-not-checks/SKILL.md) | a value from a known set (a language, a kind, a mode): a union type, passed as is; outside text read once where it comes in |
 | [open-and-close](open-and-close/SKILL.md) | anything on the review page opening, closing, appearing or going away: animated in and out |
+| [component-design](component-design/SKILL.md) | building or changing UI: more components, parents pass data, each part owns its rendering, its placeholder and its arrival |
+| [compound-components](compound-components/SKILL.md) | a component growing props for one caller's look, or getting its placeholder: parts as one namespace (`Foo.Skeleton`) |
+| [folder-structure](folder-structure/SKILL.md) | creating, moving or splitting a component: a folder with `index.ts` and `components/`, children under their parent |
 | [names-say-what](names-say-what/SKILL.md) | writing any code: every parameter and variable named for what it holds, never `t`, `p`, `res`; `pnpm lint` checks |
 | [review](review/SKILL.md) | reviewing a diff, branch or pull request: leaky abstractions, and more as reviews find it |
 
