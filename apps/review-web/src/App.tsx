@@ -42,6 +42,30 @@ async function loadHead(): Promise<ReviewPageHead> {
   return head;
 }
 
+/** Where this review's header was last kept, in this browser. */
+const HEAD_KEY = `collagen.head.v1.${ticketId}`;
+
+/** The header as it was last read, standing in while it is read again: a
+ *  reload shows the page's top as it will be, not a placeholder that moves.
+ *  Only a header of this ticket, of the shape the page reads. */
+const lastHead: ReviewPageHead | null = (() => {
+  try {
+    const kept: unknown = JSON.parse(localStorage.getItem(HEAD_KEY) ?? "null");
+    const head = kept as Partial<ReviewPageHead> | null;
+    return head?.ticket?.id === ticketId && Array.isArray(head.review?.decisions) && Array.isArray(head.review?.forks) ? (head as ReviewPageHead) : null;
+  } catch {
+    return null;
+  }
+})();
+
+const keepHead = (head: ReviewPageHead): void => {
+  try {
+    localStorage.setItem(HEAD_KEY, JSON.stringify({ ticket: head.ticket, review: head.review }));
+  } catch {
+    // a private window or full storage: the next open shows the placeholder
+  }
+};
+
 async function load(): Promise<ReviewPageData> {
   const data = await reviewData(ticketId);
   if (!data) throw new Error(`no review ticket ${ticketId} in your rooms`);
@@ -66,13 +90,20 @@ export function App() {
     state();
     return load().then((loaded) => {
       read = true;
+      keepHead(loaded);
       return loaded;
     });
   });
+  // the header kept from the last visit stands in, once, until the diff is in
+  let standIn = lastHead;
   const head = createMemo((): ReviewPageHead | Promise<ReviewPageHead> => {
     if (read) return data();
     state();
-    return loadHead();
+    const fresh = loadHead().then((loaded) => (keepHead(loaded), loaded));
+    if (!standIn) return fresh;
+    const kept = standIn;
+    standIn = null;
+    return kept;
   });
   return (
     <Errored fallback={(error) => <p class="failed">{String(error())}</p>}>
