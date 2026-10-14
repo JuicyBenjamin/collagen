@@ -559,6 +559,9 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
    size; no borders, only blocks: the words one shade, the box they belong
    to a fainter one (borders go clear, not away, so nothing changes size) */
 .sk, .sk * { border-color: transparent !important; box-shadow: none !important; }
+/* the real parts draw some of their boxes and marks with ::before and ::after
+   (a file header's card, a chip's arrow): none of them in a placeholder */
+.sk *::before, .sk *::after { content: none !important; }
 .sk .sk-w { color: transparent; background: var(--sk-word); border-radius: 6px; -webkit-box-decoration-break: clone; box-decoration-break: clone; animation: sk-breathe 1.6s ease-in-out infinite; }
 .sk .hunk-group, .sk .chip { background: var(--sk-block); }
 .sk .hunk .file, .sk tr td { background: none; }
