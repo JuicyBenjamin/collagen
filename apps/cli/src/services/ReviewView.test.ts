@@ -93,3 +93,64 @@ describe("a merged pull request's diff", () => {
     expect(got.kind).toBe("host");
   });
 });
+
+// A branch rebased onto its target after other work landed there: the
+// review shows the branch's own changes, never the work it was rebased over.
+describe("a rebased branch's diff", () => {
+  let repo = "";
+  let mine = "";
+  let parentPull: HostPull;
+
+  beforeAll(() => {
+    const tmp = mkdtempSync(join(tmpdir(), "collagen-rebased-"));
+    repo = join(tmp, "origin");
+    execFileSync("git", ["init", "-q", "-b", "main", repo]);
+    git(repo, "config", "user.email", "t@collagen.test");
+    git(repo, "config", "user.name", "t");
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "base");
+    git(repo, "branch", "release");
+    // a stack: parent, and child on it
+    git(repo, "checkout", "-qb", "parent");
+    writeFileSync(join(repo, "p.txt"), "parent\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "parent");
+    git(repo, "checkout", "-qb", "child");
+    writeFileSync(join(repo, "c.txt"), "child\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "child");
+    const childCommit = git(repo, "rev-parse", "HEAD");
+    git(repo, "checkout", "-q", "main");
+    // the reader's clone, with its own branches of the stack and of release, as GitButler keeps them
+    mine = join(tmp, "mine");
+    execFileSync("git", ["clone", "-q", repo, mine]);
+    for (const b of ["release", "parent", "child"]) git(mine, "branch", "-q", b, `origin/${b}`);
+    // then on origin: other work lands in release, the parent is squashed in and deleted
+    git(repo, "checkout", "-q", "release");
+    writeFileSync(join(repo, "x.txt"), "someone else\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "other work");
+    git(repo, "merge", "-q", "--squash", "parent");
+    git(repo, "commit", "-qm", "squash parent");
+    parentPull = { number: 9, url: "https://example.test/pull/9", title: "", state: "merged", draft: false, author: "bob", head: git(repo, "rev-parse", "parent"), mine: false, branch: "parent", base: "release", merged: git(repo, "rev-parse", "HEAD") };
+    git(repo, "branch", "-qD", "parent");
+    // and the child rebased onto release, as the reader's branch is too
+    git(repo, "checkout", "-qB", "child", "release");
+    git(repo, "cherry-pick", childCommit);
+    git(mine, "fetch", "-q", "origin");
+    git(mine, "branch", "-qf", "child", "origin/child");
+  });
+
+  it("against a base the clone has a stale copy of: the fresh one", async () => {
+    const got = await Effect.runPromise(readDiff({ base: "release", branch: "child" }, { path: mine }, false));
+    expect(got.kind).toBe("clone");
+    if (got.kind === "clone") expect(files(got.diff)).toEqual(["c.txt"]);
+  });
+
+  it("against a base merged and deleted since: what it was merged into", async () => {
+    const got = await Effect.runPromise(readDiff({ base: "parent", branch: "child", link: "https://example.test/acme/shop" }, { path: mine }, false, hostWith(parentPull)));
+    expect(got.kind).toBe("clone");
+    if (got.kind === "clone") expect(files(got.diff)).toEqual(["c.txt"]);
+  });
+});
