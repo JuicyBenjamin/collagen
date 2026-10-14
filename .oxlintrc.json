@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "jsPlugins": [{ "name": "naming", "specifier": "./lint/naming/index.mjs" }],
+  "categories": { "correctness": "off" },
+  "rules": {
+    "naming/no-shorthand-names": "error"
+  },
+  "ignorePatterns": ["**/dist/**", "**/node_modules/**", "apps/docs/.vitepress/cache/**"]
+}
