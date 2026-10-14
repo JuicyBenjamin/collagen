@@ -1,7 +1,9 @@
 import { createSignal, For, Show } from "solid-js";
 import type { DraftView, LineComment } from "../data";
+import { enter } from "../fold";
 import { hostNow } from "../hostNow";
 import { bodyParts, suggestionBlock } from "../suggest";
+import { arrive } from "../wipe";
 import { Markdown } from "./Markdown";
 
 /** When a comment was written, as a reader says it. */
@@ -221,7 +223,14 @@ export function LineThread(props: { file: string; side: "LEFT" | "RIGHT"; line: 
     <Show when={here().length > 0 || inReview().length > 0 || drafted().length > 0}>
       <tr class="thread-row">
         <td colspan={3}>
-          <div class="thread">
+          {/* a thread comes with the host's answer, or with a comment written: it opens into place */}
+          <div
+            class="thread"
+            ref={(element) => {
+              enter(element);
+              arrive(element);
+            }}
+          >
             <For each={here()}>{(comment) => <Comment comment={comment} codeOf={props.codeOf} />}</For>
             <For each={inReview()}>{(pending) => <Pending comment={pending} codeOf={props.codeOf} />}</For>
             <For each={drafted()}>{(draft) => <Draft draft={draft} codeOf={props.codeOf} />}</For>
