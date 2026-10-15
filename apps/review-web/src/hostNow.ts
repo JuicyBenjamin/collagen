@@ -17,6 +17,8 @@ import { ticketId } from "./ticket";
 type Host = Extract<HostView, { readonly host: string }>;
 
 let view: SourceAccessor<HostView> | null = null;
+/** The host's last answer, standing while it is asked again. */
+let lastView: HostView | null = null;
 let talk: SourceAccessor<TalkView> | null = null;
 let comments: Accessor<ReadonlyArray<LineComment>> = () => [];
 let setComments: (f: (l: ReadonlyArray<LineComment>) => ReadonlyArray<LineComment>) => void = () => {};
@@ -108,8 +110,14 @@ export const hostNow = {
     setPending = setInReview;
   },
 
-  /** The review on its host, once read; null until then. */
-  view: (): HostView | null => (view ? ready(view, null) : null),
+  /** The review on its host, once read; null until then. Asked again, the
+   *  last answer stands until the new one is in — nothing on the page goes
+   *  back to waiting for it. */
+  view: (): HostView | null => {
+    const now = view ? ready(view, null) : null;
+    if (now !== null) lastView = now;
+    return now ?? lastView;
+  },
 
   /** The host's part when there is one (a pull request may still be missing). */
   host: (): Host | null => {
