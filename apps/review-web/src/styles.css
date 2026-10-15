@@ -574,12 +574,14 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .sk .hunk-group { background: var(--sk-block); }
 /* a pill or a button: its shape alone says something is there, its words
    are not drawn */
-.sk .chip, .sk .pull-chip, .sk .whole-toggle { background: var(--sk-word); animation: sk-breathe 1.6s ease-in-out infinite; }
-.sk .chip .sk-w, .sk .pull-chip .sk-w, .sk .whole-toggle .sk-w { background: none; animation: none; }
+.sk .chip, .sk .pull-chip, .sk .whole-toggle, .sk .sk-button { background: var(--sk-word); animation: sk-breathe 1.6s ease-in-out infinite; }
+.sk .chip .sk-w, .sk .pull-chip .sk-w, .sk .whole-toggle .sk-w, .sk .sk-button .sk-w { background: none; animation: none; }
+/* a box a part sits in (the host's section): the fainter shade */
+.host-activity.sk { background: var(--sk-block); }
 .sk .hunk .file, .sk tr td { background: none; }
 .sk a { pointer-events: none; }
 @keyframes sk-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .sk .sk-w, .sk .bar, .sk .sk-avatar, .sk .chip, .sk .pull-chip, .sk .whole-toggle { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .sk .sk-w, .sk .bar, .sk .sk-avatar, .sk .chip, .sk .pull-chip, .sk .whole-toggle, .sk .sk-button { animation: none; } }
 /* a part arriving (components/Arrives): its placeholder lies over it and is
    swept away, top left to bottom right — over the part's own box, no
    taller than the screen, so the sweep is seen on a long part too */
@@ -594,6 +596,9 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
   mask-image: linear-gradient(135deg, transparent calc(var(--wipe) - 14%), #000 var(--wipe));
 }
 .arrives.inline > .arrives-ghost { display: inline-flex; align-items: center; }
+/* a placeholder in a line lays out as its part does, and the part as it:
+   their pieces are flex items, padding counted (a chip is as tall as the chip) */
+.arrives.inline > :not(.arrives-ghost), .arrives.inline > .arrives-ghost > .sk { display: inline-flex; align-items: center; }
 /* in flow, the part's first margin folds through to the page; laid over it,
    the placeholder's would not, and it would stand that much lower */
 .arrives-ghost > *, .arrives-ghost > * > :first-child, .arrives-ghost > * > :first-child > :first-child { margin-top: 0; }
