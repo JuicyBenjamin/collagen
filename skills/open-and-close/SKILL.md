@@ -56,6 +56,10 @@ The TUI is exempt: a terminal redraws in steps.
   it appeared, vanished, appeared.
 - One sweep over the whole screen waited for the slowest read, and parts
   with no placeholder flashed in.
+- The host's section had no placeholder: it opened in when the host
+  answered and pushed the code down, then closed and opened again while
+  the host was asked a second time. A part that waits on a read has a
+  placeholder, and a read asked again keeps its last answer meanwhile.
 
 ## Checklist
 

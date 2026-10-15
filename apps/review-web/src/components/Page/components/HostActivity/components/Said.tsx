@@ -1,8 +1,9 @@
-import { createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, Show } from "solid-js";
 import { ago } from "~/ago";
 import type { HostNote, HostReview, HostUser } from "~/data";
 import { enter, leave } from "~/fold";
 import { hostNow } from "~/hostNow";
+import { lastActivity } from "../lastActivity";
 import { Appear } from "~/components/Appear";
 import { bodyParts } from "~/suggest";
 import { Markdown } from "~/components/Markdown";
@@ -31,7 +32,7 @@ const LATEST = 3;
 /** How many commenters' avatars the folded comments show before "+n". */
 const AVATARS = 5;
 
-export function HostActivity() {
+export function Said() {
   const host = hostNow.host;
   const [all, setAll] = createSignal(false);
   // open is what the reader asked; shown keeps the conversation placed while it closes
@@ -64,7 +65,14 @@ export function HostActivity() {
     const commentCount = activity.conversation.length;
     return [reviewCount > 0 ? `${reviewCount} ${reviewCount === 1 ? "review" : "reviews"}` : "", commentCount > 0 ? `${commentCount} ${commentCount === 1 ? "comment" : "comments"}` : ""].filter(Boolean).join(" · ");
   };
-  // it comes with the host's answer, after the page: it opens into place
+  // whether it stood here, and with comments, kept for the next open's placeholder
+  createEffect(
+    () => (hostNow.view() === null ? null : { shown: Boolean(host()?.pull), talked: items().length > 0 }),
+    (said) => {
+      if (said) lastActivity.keep(said);
+    },
+  );
+  // a pull request that comes, or goes, after the page: it opens into place, and closes
   return (
     <Appear when={host()?.pull}>
       {(pull) => (
