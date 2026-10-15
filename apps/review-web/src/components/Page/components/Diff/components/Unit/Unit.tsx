@@ -234,8 +234,8 @@ const CODE_LINES = Array.from(
   (_, index) => CODE_SHAPES[index % CODE_SHAPES.length]!,
 );
 
-/** A unit before the diff is read: its title and lines, the why's chip, and
- *  a card of code with its file's header. */
+/** A unit before the diff is read: its title and lines, the why's chip, a
+ *  card of code with its file's header, and beside it the why's column. */
 Unit.Skeleton = function Skeleton() {
   return (
     <div class="sk" role="status" aria-busy="true" aria-label="Reading the code">
@@ -294,6 +294,38 @@ Unit.Skeleton = function Skeleton() {
                 </table>
               </div>
             </div>
+          </div>
+          {/* the why beside the code: its own column, not part of the code's block */}
+          <div class="why-rail">
+            <span class="why-toggle rail-toggle sk-button">
+              <span class="sk-icon" />
+            </span>
+            <aside class="why-panel">
+              <div class="why">
+                <p class="why-title">
+                  <Masked>What the decision achieves</Masked>
+                </p>
+                <p class="why-what">
+                  <Masked>what was done, in a line or so</Masked>
+                </p>
+                <div class="why-part">
+                  <p class="who">
+                    <Masked>The person</Masked>
+                  </p>
+                  <p>
+                    <Masked>their words for it, a sentence or two that runs over a few lines of the column</Masked>
+                  </p>
+                </div>
+                <div class="why-part">
+                  <p class="who">
+                    <Masked>The agent</Masked>
+                  </p>
+                  <p>
+                    <Masked>its reason for the shape it took, a few lines long in the narrow column</Masked>
+                  </p>
+                </div>
+              </div>
+            </aside>
           </div>
         </div>
       </section>

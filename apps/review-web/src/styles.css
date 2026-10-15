@@ -582,6 +582,10 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 /* a box a part sits in (the host's section): the fainter shade */
 .host-activity.sk { background: var(--sk-block); }
 .sk .hunk .file, .sk tr td { background: none; }
+/* the why column of a unit's placeholder stands open beside the code, as a
+   wide window shows it (folded under the title on a narrow one) */
+@media (min-width: 1321px) { .sk .why-panel { width: auto; height: auto; } }
+.sk-icon { display: inline-block; width: 15px; height: 12px; }
 .sk a { pointer-events: none; }
 @keyframes sk-breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .sk .sk-w, .sk .bar, .sk .sk-avatar, .sk .chip, .sk .pull-chip, .sk .whole-toggle, .sk .sk-button { animation: none; } }
