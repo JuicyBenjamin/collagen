@@ -42,7 +42,7 @@ echo "## bob creates a ticket (a mock: no outbox on his side)"
 # ticket whose every step is answered is finished and leaves the overview
 call $A "$SA" drive-peer '{"peer":"bob","action":{"kind":"create-ticket","project":"sandbox","goal":"explain average()","steps":[{"intent":"investigate","description":"what does average() do","mine":true},{"intent":"confirm","description":"alice checks the answer","mine":false}]}}' > /dev/null
 wait_until "the ticket is on alice's log" "explain average" goals $A "$SA"
-TICKET=$(call $A "$SA" get-tickets '{}' | grep -oE 'id: [0-9a-f-]{36}' | head -1 | cut -d' ' -f2)
+TICKET=$(call $A "$SA" get-tickets '{}' | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 call $A "$SA" drive-peer "{\"peer\":\"bob\",\"action\":{\"kind\":\"send-message\",\"project\":\"sandbox\",\"intent\":\"two-cents\",\"findings\":\"average divides by length, so an empty list gives NaN — guard it first.\",\"ticketId\":\"$TICKET\"}}" > /dev/null
 wait_until "bob weighed in on the ticket" ",bob,sandbox,[0-9]+,two-cents" call $A "$SA" pending-threads '{}'
 # a collected transcript on disk (as a peer would have handed over), so the viewer has something to show

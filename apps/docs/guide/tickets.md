@@ -170,8 +170,9 @@ that no longer exists.
 - When the author has acted on the feedback they settle their own `address` step, and the
   ticket is done.
 
-On the other side nothing is poured into the reviewer's context. `get-tickets` shows the
-headline only (branch → base, the link, how many decisions and forks). When their person
+On the other side nothing is poured into the reviewer's context. `get-tickets` lists the
+ticket in a row, and `get-ticket` shows the headline only (branch → base, the link, how
+many decisions and forks). When their person
 says *"I don't understand why this was made"*, their agent calls `review-context` —
 whole, or narrowed with `about` to one file, symbol or phrase — and relays what is there.
 Then both sides are reviewing the same thing: the what **and** the why.
@@ -341,7 +342,7 @@ unanswered:
 
 - its **author** sees it — on the overview dim, `⧗ after "…"`, and on its page — and keeps
   it current while it waits;
-- **nobody else** is shown it: `get-tickets` leaves it out, `review-context` and
+- **nobody else** is shown it: `get-tickets` and `get-ticket` leave it out, `review-context` and
   `post-review` answer as if it were not there, and no step of it is delivered to anyone
   (its author's included — their work waits too);
 - it **opens by itself** the moment every ticket it waits on is answered: *finished* —
@@ -452,7 +453,8 @@ close and reopen with who said so and why.
 | --- | --- |
 | `create-ticket` | goal, project, steps (owner by peer name, intent, description, `needs`) — on your word, straight to the room |
 | `settle-step` | settle or fail a step you own, with the result you want to send |
-| `get-tickets` | every ticket in the room you're looking at, merged, with owners resolved to names; a review ticket also shows its headline |
+| `get-tickets` | the open tickets in the room you're looking at, a row each: id, kind, title and the line beneath it, status, whose move it is, its epic; `kind` narrows it, `closed: true` lists the closed ones instead |
+| `get-ticket` | one ticket in full, by id: its goal, steps with owners resolved to names and their results, what it follows and waits on, its epic; a review ticket also shows its headline |
 | `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — the record and the reasons in one write. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
 | `post-review` | put your user's review on a review ticket — asked or not; it lands on a step of their own, and posting again revises it |
 | `review-comments` | comments on a review's code: `draft` them while reviewing for your user (on this machine, under their lines on the review page, for your user to add to their review, edit or decline); on your user's word, `accept` drafts into their review and `submit` it — said in the room and, with an open pull request someone else opened, on it as one review with their verdict (on your user's own, collagen only) — `decline` or `list` |
@@ -496,8 +498,8 @@ end: it makes the ticket its author's to act on, and the settle that finished it
 their agent "when your user says they are done with it, `close-ticket`". *Closing* is the
 author's decision, recorded on the log with how it ended — **done** or **dropped**, which
 its epic counts — and an optional reason: the ticket leaves the
-list and stays, steps exactly as they were, where `get-tickets` still shows it
-(`closed: true`) and later tickets refer back to it. The author can close a ticket whose
+list and stays, steps exactly as they were, where `get-tickets` lists it when asked for
+closed tickets (`closed: true`), `get-ticket` still shows it, and later tickets refer back to it. The author can close a ticket whose
 reviewer never answered or whose work was abandoned — like merging a pull request without
 a review, it is their call. Nothing is deleted, and nobody else can close it for them.
 `enter` opens the
