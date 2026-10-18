@@ -34,7 +34,7 @@ export function nudgePrompt(spawnContext: SpawnCtx): string {
   // in collagen until the person asks. The agent relays, never decides: what
   // it can't find in the thread is either its own user's to answer (from this
   // repo, under direction) or the other peer's (then it drafts the question).
-  const ticketNote = spawnContext.message.ticketId ? ` (about ticket ${spawnContext.message.ticketId.slice(0, 8)}; get-tickets has it)` : "";
+  const ticketNote = spawnContext.message.ticketId ? ` (ticket ${spawnContext.message.ticketId}; get-ticket shows it)` : "";
   const headline = spawnContext.message.intent.startsWith("ticket-update:")
     ? `Collagen: ${spawnContext.message.fromName} ${spawnContext.message.intent.slice("ticket-update:".length)} on a ticket your user is part of, project "${spawnContext.message.project}"${ticketNote}.`
     : `Collagen: ${verb} — ${spawnContext.message.fromName} asks your user to address "${spawnContext.message.intent}" on project "${spawnContext.message.project}"${ticketNote}.`;
@@ -44,7 +44,7 @@ export function nudgePrompt(spawnContext: SpawnCtx): string {
     level === "ask"
       ? `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`
       : `Tell your user exactly that, in one line. ${steeringLine(level)}`,
-    `If your user asks what it says or wants more, read it with the ${spawnContext.serverName} get-messages tool, threadId "${spawnContext.message.threadId}" (a ticket's steps: get-tickets), and relay what is there — never fill gaps from your own head.`,
+    `If your user asks what it says or wants more, read it with the ${spawnContext.serverName} get-messages tool, threadId "${spawnContext.message.threadId}" (a ticket's steps: get-ticket), and relay what is there — never fill gaps from your own head.`,
     `If your user then asks something the thread does not answer, decide which it is: yours to answer from this repo under their direction, or ${spawnContext.message.fromName}'s to answer — then draft that question for them with send-to-peer.`,
     `Anything you send is only what your user decided — it goes to the room as soon as you send it, and the collagen TUI's outbox shows them what went.`,
   ].join(" ");

@@ -242,7 +242,7 @@ CTX=$(call $A "$SA" review-context "$QAT")
 expect "review-context says the why is guessed, and from what" "$CTX" "assumed: .?alice.s AI guessed every decision and fork here about alice-gh.s code"
 expect "…each guess with what it rests on and how sure" "$CTX" "decisions\\[1\\]\\{id,title,what,assumedWhy,basis,confidence,where\\}:"
 expect "…the fork too" "$CTX" "a stream,paging,fewer round trips,the code,low"
-expect "the ticket is alice's to read: her review step, nobody to address it" "$(call $A "$SA" get-tickets '{}' | grep -A12 "id: $AT" | grep -cE '^ +address,')" "^0$"
+expect "the ticket is alice's to read: her review step, nobody to address it" "$(rows $A "$SA" "$AT" | grep -cE '^ +address,')" "^0$"
 DATA=$(sfn reviewData "[\"$AT\"]")
 expect "the page has the guess and its grounds" "$DATA" '"assumed":\{"author":"alice-gh","sources":\["the pull request description","its commits"\]'
 expect "…its branch read from the pull request" "$DATA" '"branch":"feat/stream-export","base":"main"'
@@ -283,7 +283,7 @@ expect "bob adds to it as to any review of his" "$(call $B "$SB" ask-review "{\"
 DATA=$(sfn reviewData "[\"$AT\"]")
 expect "the page has it taken over, each guess's verdict" "$DATA" '"claimed":\{"guessedBy":"[0-9a-f]+","guessedByName":"alice"'
 expect "…the correction keeps the guess" "$DATA" '"verdict":"corrected","guess":\{"what":"a page holds 100 rows","why":"memory","basis":"a constant in the code"\}'
-expect "the ticket is bob's to act on now: an address step of his" "$(call $B "$SB" get-tickets '{}' | grep -A14 "id: $AT" | grep -cE '^ +address,')" "^1$"
+expect "the ticket is bob's to act on now: an address step of his" "$(rows $B "$SB" "$AT" | grep -cE '^ +address,')" "^1$"
 
 echo "## with no host at all, git says who wrote it"
 NOHOST='{"project":"sandbox","title":"Exports, unhosted","summary":"The same change, on no host","branch":"feat/stream-export","base":"main","author":"Ann","sources":["the commits"],"decisions":[{"title":"Stream the rows","what":"rows go out as read","why":"timeouts","basis":"a commit message","confidence":"medium","where":["src/export.ts:2"]}]}'

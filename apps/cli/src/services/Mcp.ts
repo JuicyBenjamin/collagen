@@ -10,13 +10,13 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
-import { ticketView } from "../lib/ticketView";
+import { ticketRow, ticketView } from "../lib/ticketView";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
@@ -486,7 +486,7 @@ export const SettleStep = Tool.make("settle-step", {
 
 export const CloseTicket = Tool.make("close-ticket", {
   description:
-    "Close a ticket your user created — only when they say they are done with it, never because you decided it is over. Closing is the author's decision, separate from completion: a ticket whose every step is answered is READY to close (settle-step tells you so), but the person closes it; and they may close one whose reviewer never answered or whose work was abandoned. The ticket leaves the overview and stays on the room's log with its steps exactly as they were, so later tickets can still refer to it; get-tickets keeps showing it with closed: true. Pass 'outcome': 'done' when its work was done (it counts toward its epic's progress, whether or not every step was answered), 'dropped' when it was abandoned, superseded or will not be done (it leaves its epic's progress, as excluded work does) — ask your user when it is not clear which. Pass 'reason' when the close needs explaining (abandoned, superseded, done differently) — it goes on the record. Somebody else's ticket is refused: say what your user thinks with send-to-peer instead.",
+    "Close a ticket your user created — only when they say they are done with it, never because you decided it is over. Closing is the author's decision, separate from completion: a ticket whose every step is answered is READY to close (settle-step tells you so), but the person closes it; and they may close one whose reviewer never answered or whose work was abandoned. The ticket leaves the overview and stays on the room's log with its steps exactly as they were, so later tickets can still refer to it; get-tickets lists it with closed: true, and get-ticket still shows it. Pass 'outcome': 'done' when its work was done (it counts toward its epic's progress, whether or not every step was answered), 'dropped' when it was abandoned, superseded or will not be done (it leaves its epic's progress, as excluded work does) — ask your user when it is not clear which. Pass 'reason' when the close needs explaining (abandoned, superseded, done differently) — it goes on the record. Somebody else's ticket is refused: say what your user thinks with send-to-peer instead.",
   parameters: Schema.Struct({
     ticketId: Schema.String,
     outcome: Schema.Literals(["done", "dropped"]),
@@ -527,7 +527,7 @@ export const Epic = Tool.make("epic", {
     "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. A ticket filed out of a ticket in an epic goes into that epic as it is filed (pass epic: null when filing to keep it out, or remove it after). Filing outcomes may ask you to OFFER one: which epic, when what it grows out of is in several, or a new epic when your user files several related tickets together — offer in one line, act on their yes.",
     "An epic belongs to the room, not to a project or a person: anyone may put a ticket in, move one from epic to epic, take one out, order them, close an epic or reopen it. A ticket is in one epic at most, and only where it was put — by filing, or by this tool; lineage moves nothing later. Parts may come from any project.",
     "action 'create': title (its headline, a few words), optionally goal (the line beneath it), summary (what it aims for, a sentence or two) and ticketIds to put in it at once. 'add': epicId and ticketIds — moves them in, out of any other epic. 'remove': ticketIds — out of their epic. 'exclude' / 'include': epicId and ticketIds — kept in the epic but out of its progress (work dropped or not to be done there), or counted again. 'order': epicId and ticketIds in the order they are to be read — it hides nothing and sets no after. 'close': epicId — only once everything in it is done, closed or excluded; your user's reason, or by default that its parts are done. 'reopen': epicId and a reason, always. 'rename': epicId and a new title, optionally goal and summary — its author's to do, as a ticket's title is its author's (anyone else asks them).",
-    "Progress counts lines of work, not tickets: a proposal, its plan, the task and the review that grew out of each other are one line, done when all of it is — so filing the next stage adds nothing to get through. get-tickets shows each ticket's epic and each epic's parts, progress and what still keeps it open; review-context on an epic reads its aim and its tickets. It goes out as you call it and shows in your user's outbox.",
+    "Progress counts lines of work, not tickets: a proposal, its plan, the task and the review that grew out of each other are one line, done when all of it is — so filing the next stage adds nothing to get through. get-tickets shows each ticket's epic and each epic's progress; get-ticket on an epic shows its parts and what still keeps it open; review-context on an epic reads its aim and its tickets. It goes out as you call it and shows in your user's outbox.",
   ].join("\n"),
   parameters: Schema.Struct({
     action: Schema.Literals(["create", "add", "remove", "exclude", "include", "order", "close", "reopen", "rename"]),
@@ -657,7 +657,15 @@ export const LeaveRoom = Tool.make("leave-room", {
 
 export const GetTickets = Tool.make("get-tickets", {
   description:
-    `All shared tickets in the room the user is looking at, merged: goal, steps with owner, status, dependencies and settled results. Read it when your user asks about a ticket or wants the steps behind a headline — relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text. The kinds, and what each wants of you — ${kindsForAgents()}. Your user sees the same kinds explained in their TUI (? on the overview).`,
+    `The open tickets in the room the user is looking at, one row each: id, kind, title, the line beneath it, status (open, answered — every step done, ready for its author to close —, held — waiting on another ticket —, or closed; an epic's with how far along it is), whose move it is, and its epic. A list to find a ticket in: its steps, results and why are get-ticket's. 'kind' narrows it to one kind; 'closed: true' lists the closed ones instead, for history. Relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text. The kinds, and what each wants of you — ${kindsForAgents()}. Your user sees the same kinds explained in their TUI (? on the overview).`,
+  parameters: Schema.Struct({ kind: Schema.optional(TicketKind), closed: Schema.optional(Schema.Boolean) }),
+  success: Schema.String,
+});
+
+export const GetTicket = Tool.make("get-ticket", {
+  description:
+    "One ticket in full, by id (from get-tickets): its goal, who made it, what it follows and waits on, its epic (an epic: its parts and what keeps it open), how it was closed, and every step with its owner, status, needs and settled result. Read it when your user asks about a ticket or wants the steps behind a headline — relay what is there, never fill gaps from your own head. A review's why is review-context's. Returns TOON text.",
+  parameters: Schema.Struct({ ticketId: Schema.String }),
   success: Schema.String,
 });
 
@@ -684,6 +692,7 @@ export const CollagenToolkit = Toolkit.make(
   CloseTicket,
   Epic,
   GetTickets,
+  GetTicket,
   AddProject,
   RemoveProject,
   SetAi,
@@ -726,6 +735,7 @@ export const DevCollagenToolkit = Toolkit.make(
   CloseTicket,
   Epic,
   GetTickets,
+  GetTicket,
   AddProject,
   RemoveProject,
   SetAi,
@@ -766,15 +776,21 @@ const makeHandlers = Effect.gen(function* () {
       return { id: handle.id, name: meta.name, room: handle.room };
     });
 
-    const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
+    /** A person's key as their name: mine, a peer's, a member the log remembers. */
+    const nameLookup = Effect.gen(function* () {
       const { room } = yield* focusedRoom;
       const peers = yield* SubscriptionRef.get(room.roster);
       const members = yield* SubscriptionRef.get(room.members);
       const myName = yield* SubscriptionRef.get(nameRef);
-      const lookup = (key: string) =>
+      return (key: string) =>
         key === identity.pubkey
           ? myName
           : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 12));
+    });
+
+    const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
+      const { room } = yield* focusedRoom;
+      const lookup = yield* nameLookup;
       const reviews = yield* SubscriptionRef.get(room.reviews);
       const all = yield* SubscriptionRef.get(room.tickets);
       return ticketView(ticket, lookup, reviews.find((review) => review.ticketId === ticket.id), heldBy(ticket, all), all, identity.pubkey);
@@ -1873,14 +1889,27 @@ const makeHandlers = Effect.gen(function* () {
           yield* rooms.setFocus(hit.id);
           return `now in "${hit.name}" [${hit.shortId}] — ${hit.online} online, ${hit.unread} unread; all tools now refer to this room`;
         }).pipe(Effect.withSpan("Mcp.switchRoom")),
-      "get-tickets": () =>
-        focusedRoom.pipe(
-          Effect.flatMap(({ room }) => SubscriptionRef.get(room.tickets)),
-          // a ticket waiting on another is its author's alone until it opens
-          Effect.flatMap((tickets) => Effect.forEach([...tickets.values()].filter((ticket) => visibleTo(ticket, tickets, identity.pubkey)), renderTicket)),
-          Effect.map((tickets) => toToon({ tickets })),
-          Effect.withSpan("Mcp.getTickets"),
-        ),
+      "get-tickets": (input: { kind?: TicketKind; closed?: boolean } | undefined) =>
+        Effect.gen(function* () {
+          const { room } = yield* focusedRoom;
+          const all = yield* SubscriptionRef.get(room.tickets);
+          const lookup = yield* nameLookup;
+          const reviews = yield* SubscriptionRef.get(room.reviews);
+          // a ticket waiting on another is its author's alone until it opens;
+          // the open ones by default, the closed ones when asked for history
+          const rows = [...all.values()]
+            .filter((ticket) => visibleTo(ticket, all, identity.pubkey) && isClosed(ticket, all) === (input?.closed === true) && (input?.kind === undefined || ticket.kind === input.kind))
+            .map((ticket) => ticketRow(ticket, lookup, heldBy(ticket, all), all, reviews.find((review) => review.ticketId === ticket.id)));
+          return toToon({ note: "get-ticket {id} shows a ticket's steps and results; review-context reads a review's why when your user asks", tickets: rows });
+        }).pipe(Effect.withSpan("Mcp.getTickets")),
+      "get-ticket": (input: { ticketId: string }) =>
+        Effect.gen(function* () {
+          const { room } = yield* focusedRoom;
+          const all = yield* SubscriptionRef.get(room.tickets);
+          const ticket = all.get(input.ticketId);
+          if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+          return toToon(yield* renderTicket(ticket));
+        }).pipe(Effect.withSpan("Mcp.getTicket")),
     };
   });
 

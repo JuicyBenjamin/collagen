@@ -1,6 +1,29 @@
-import { closedAs, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { reviewHeadline } from "./review";
 import { rowTitle } from "./ticketSummary";
+
+/** A ticket as a list row: what it is, the line beneath its title, where it
+ *  stands and whose move it is — enough to pick one; its steps, results and
+ *  why are a get-ticket away. An epic's status says how far along it is. */
+export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, heldBy: ReadonlyArray<string>, all: ReadonlyMap<string, Ticket>, review?: ReviewContext) => {
+  const closed = isClosed(ticket, all);
+  const progress = () => {
+    const { counted, done } = epicParts(ticket, all);
+    return `${done} of ${counted} done`;
+  };
+  const status = closed ? "closed" : heldBy.length > 0 ? "held" : ticket.kind !== "epic" && finished(ticket) ? "answered" : "open";
+  return {
+    id: ticket.id,
+    kind: ticket.kind,
+    title: rowTitle(ticket),
+    /** a review's summary is the line beneath its title (its goal is most often just its branch) */
+    subtitle: ticket.kind === "review" && review?.summary.trim() ? review.summary.trim() : ticket.goal,
+    status: ticket.kind === "epic" ? `${status} · ${progress()}` : status,
+    /** whose move it is: the owners of the steps that are up now */
+    waitingOn: closed ? "" : [...new Set(readySteps(ticket).map((step) => nameFor(step.owner)))].join(", "),
+    epic: epicOf(ticket) ?? "",
+  };
+};
 
 /** A ticket as the agent reads it: keys resolved to names, needs joined. A
  *  review ticket also says where the code is and how much why came with it —
