@@ -115,6 +115,26 @@ browser, per review.
 The plumbing stays out of the way: no decision ids, no pointer lists (each hunk names its
 file), and where the diff came from is one line at the foot of the page.
 
+## How it works
+
+A diff shows what changed in the code, not how the thing it builds behaves. When a change
+adds or alters behaviour that moves through states — a lifecycle, a loading sequence, a
+handshake — its author's agent can draw it, and the **How it works** tab beside **Code**
+plays it.
+
+- **The states are drawn once,** left to right, each saying what a person sees of a thing in
+  it. Arrows between them say what takes a thing from one to the next.
+- **The things that run it move through them,** beat by beat: page parts, tickets, peers. On
+  the left are the sources of what moves them — a service, a person, your clone. When a
+  source gives something, it lights with every thing that needs it, and only those move.
+- **A line beneath says what each beat means.** Blue is what is happening now.
+- **Before and After** appear only when the change alters a machine that was there. Before
+  marks in red what the change takes out; After tags what it adds as new. A machine the
+  change brings in has no Before.
+
+The agent passes it to `ask-review` as `machine`. It is refused if it names a state, thing or
+source it does not have, or plays a move the machine lacks.
+
 ## Tests
 
 Agents write tests by the dozen, and a reader skims them as surely right — so tests nobody

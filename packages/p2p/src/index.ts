@@ -3,6 +3,7 @@ export * from "./ticket";
 export * from "./kinds";
 export * from "./migrate";
 export * from "./review";
+export * from "./machine";
 export * from "./errors";
 export * from "./types";
 export * from "./domain";

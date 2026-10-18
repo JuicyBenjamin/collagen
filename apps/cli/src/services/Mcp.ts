@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -405,6 +405,7 @@ export const AskReview = Tool.make("ask-review", {
     "'peers' is who is asked, and it is 0 to many — it carries exactly the names your user said, and NONE is the default. They named nobody, you name nobody: never infer a reviewer from who is in the room, who is online, or who touched the code. Name several and each gets a review step of their own. With nobody asked the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
     "A reviewer must see what the change is FOR before anything else, so lead with purpose. The ticket's 'title' is the review page's headline: a few words a reader gets at a glance (\"Ticket list stays in its box\"). 'summary' is the line beneath it, a sentence or two (200 characters at most): what is different for whoever uses this once it lands — not how it was built, not a list of the parts, and no ticket ids or branch names (the page shows where the code is). Every decision needs a 'title': its headline, a few words (60 characters at most), what it achieves, in plain words — \"Big exports finish\", \"One tab per review\", \"Typos caught before merge\" — never the mechanism (\"SSE endpoint with SubscriptionRef streams\"). 'what' is the line beneath it: what was actually done, in one line. Short and sweet beats complete: the why, the forks and the code carry the rest.",
     "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line) — required: a rule applied across the change points at every hunk it shaped, and a decision to leave code alone points at that code — and 'guidedBy' when a skill or an agent instruction file told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\"); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then the 'units': the change grouped into code that together achieves ONE thing — a component with its sub-components and its implementation; a service with its routes — each with a 'title' saying what it achieves, never a file name (\"Big exports finish\", not \"export.ts\"; 60 characters at most), a 'what' line beneath it (what that code does, in a line), and 'where' it lives (files, or file:line for one part of a file, as for one route of a big routes file). The review page's sections are units, every piece of code shown once, read building blocks first, each headed by its title, its 'what' and the decisions that shaped it. Cover every change but the tests — the page reads those apart, in a tab of their own, each by its describe and test titles, so name them for what they protect; what you leave out goes under the decision pointing at it, else under \"Not explained\", and the outcome names it. Files that only apply one change, each the same way (a new component put to use on ten pages): give that change its unit an 'id', and the files that use it ONE more unit with 'usesOf' set to that id — its 'title' and 'what' say what each use does. The page shows them as one item, marked viewed together, and flags a file that differs from the rest; a file that also does something of its own is not a copy and belongs elsewhere. 'retireUnits' withdraws one by id. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none. The why is reasons, never a test log: what passed belongs on CI, not on the ticket.",
+    "'machine' (optional): when the change adds or alters behaviour that moves through states — a lifecycle, a loading sequence, a handshake — draw it, and the review page plays it in a tab of its own. 'states' in the order things usually pass through them, each an 'id', a 'name' and 'shows' (what a person sees of a thing in it); 'moves' between them, each 'from', 'to' and 'on' (what takes it, a few words); the 'actors' that run it (page parts, tickets, peers — each an 'id', a 'name' and the state it 'starts' in); the 'sources' of what moves them (each an 'id', a 'name' and what it 'gives'). 'play' is one walk-through, beat by beat: the source a beat comes 'from', the 'moves' it causes ({actor, to}), and what it 'says' — one plain sentence of what happens and why. 'states', 'moves' and 'play' go under 'now'; when the change alters a machine that was there, the same under 'before', and the page marks what the change took out and put in. A machine the change brings in has no 'before'. Every name must exist and every played move be one the machine has, or it is refused. Leave it out when nothing moves through states; null withdraws it.",
     "'title' is the ticket's headline in every list — a few words, 60 characters at most, what the change is for; required when filing. The goal beneath it defaults to the branch.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
     "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
@@ -455,6 +456,7 @@ export const AskReview = Tool.make("ask-review", {
     ),
     units: Schema.optional(Schema.Array(UnitInput)),
     retireUnits: Schema.optional(Schema.Array(Schema.String)),
+    machine: Schema.optional(Schema.NullOr(ReviewMachine)),
   }),
   success: Schema.String,
 });
@@ -884,6 +886,8 @@ const makeHandlers = Effect.gen(function* () {
         retire?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string>; readonly usesOf?: string }>;
         retireUnits?: ReadonlyArray<string>;
+        /** how the change works, drawn and played; null withdraws it */
+        machine?: ReviewMachine | null;
         /** guesses withdrawn by id (assume-review, amending) */
         retireGuesses?: ReadonlyArray<string>;
         /** the why is the filer's AI's assumptions about someone else's change (assume-review) */
@@ -922,6 +926,10 @@ const makeHandlers = Effect.gen(function* () {
           if (unit.usesOf !== undefined && unit.usesOf === unit.id) return `failed: unit "${unit.title}" cannot be uses of itself — 'usesOf' is the id of the unit whose change these files apply`;
         }
         const unitsMove = units !== undefined || retireUnits !== undefined;
+        // a machine that names what is not there, or plays a move it lacks, cannot be drawn
+        const machine = kind === "review" ? input.machine : undefined;
+        const wrong = machine ? machineProblems(machine) : [];
+        if (wrong.length > 0) return `failed: the machine cannot be drawn as given —\n${wrong.map((problem) => `- ${problem}`).join("\n")}`;
         const delta = {
           ...(input.summary ? { summary: input.summary } : {}),
           ...(input.base ? { base: input.base } : {}),
@@ -933,6 +941,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(retireBug ? { retireBug } : {}),
           ...(units ? { units } : {}),
           ...(retireUnits ? { retireUnits } : {}),
+          ...(machine !== undefined ? { machine } : {}),
           ...(input.retireGuesses && input.retireGuesses.length > 0 ? { retireGuesses: input.retireGuesses } : {}),
           ...(input.assumed
             ? {
@@ -967,7 +976,7 @@ const makeHandlers = Effect.gen(function* () {
           }
           // an amendment may move the why, the ticket, or both — but not nothing
           const whyMoves =
-            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves || unitsMove || (input.retireGuesses?.length ?? 0) > 0;
+            delta.decisions.length > 0 || delta.forks.length > 0 || !!input.summary || !!input.branch || !!input.link || !!input.base || outline !== undefined || retireOutline !== undefined || bugMoves || unitsMove || machine !== undefined || (input.retireGuesses?.length ?? 0) > 0;
           if (input.title !== undefined) {
             const gap = ticketTitleGap(input.title);
             if (gap) return gap;

@@ -13,6 +13,7 @@ import { viewed } from "~/viewedNow";
 import { Unit } from "../Unit";
 import { BareDecision } from "./components/BareDecision";
 import { Forks } from "./components/Forks";
+import { Machine } from "./components/Machine";
 import { Outside } from "./components/Outside";
 import { Tabs } from "./components/Tabs";
 import { Tests } from "./components/Tests";
@@ -20,7 +21,8 @@ import { TypesBanner } from "./components/TypesBanner";
 
 /** The diff once read: an offer of type hints per language in it, its
  *  units (else its decisions alone, with no code), what falls outside it,
- *  and where the diff came from. Its tests are apart, in a tab of their own. */
+ *  and where the diff came from. Its tests are apart, in a tab of their own,
+ *  and so is how it works, when its author drew that. */
 export function Body(props: { data: ReviewPageData }) {
   const hunks = createMemo(
     () =>
@@ -38,6 +40,9 @@ export function Body(props: { data: ReviewPageData }) {
     return byDecision;
   });
   const tests = () => props.data.grouped?.tests ?? [];
+  // the tab asked for, if this review has what it shows
+  const shown = () =>
+    tab() === "tests" && tests().length > 0 ? "tests" : tab() === "machine" && props.data.review.machine ? "machine" : "code";
   // the files a mark can be for, as this diff has them — tests are judged, not viewed
   createEffect(
     () => props.data.grouped?.hunks ?? [],
@@ -74,13 +79,16 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
-      <Show when={tests().length > 0}>
-        <Tabs tests={tests()} />
+      <Show when={tests().length > 0 || props.data.review.machine}>
+        <Tabs tests={tests()} machine={props.data.review.machine !== undefined} />
       </Show>
-      <Show when={tab() === "tests" && tests().length > 0}>
+      <Show when={shown() === "tests"}>
         <Tests files={tests()} hunks={hunks()} decisions={decisions()} />
       </Show>
-      <Show when={tab() === "code" || tests().length === 0}>
+      <Show when={shown() === "machine" && props.data.review.machine}>
+        {(machine) => <Machine machine={machine()} />}
+      </Show>
+      <Show when={shown() === "code"}>
       <Show
         when={props.data.grouped}
         fallback={

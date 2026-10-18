@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { ReviewMachine } from "./machine";
 
 // The why behind a change, as data. A code review normally shows only the
 // output — the what — and the reviewer has to guess the reasons. A review
@@ -201,6 +202,8 @@ export const ReviewContext = Schema.Struct({
   outline: Schema.optional(Schema.Array(OutlineItem)),
   /** A bug ticket's report (see BugReport). */
   bug: Schema.optional(BugReport),
+  /** How the change works, drawn and played (see ReviewMachine). */
+  machine: Schema.optional(ReviewMachine),
   /** Present when the why was inferred, not told (see Assumed). */
   assumed: Schema.optional(Assumed),
   /** Present once the code's author took an assumed review over (see Claimed). */
@@ -253,6 +256,8 @@ export interface ReviewDelta {
   readonly bug?: Partial<BugReport>;
   /** Optional report fields withdrawn — a disproven cause, a score that no longer holds. */
   readonly retireBug?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
+  /** The machine, whole: given replaces it, null withdraws it. */
+  readonly machine?: ReviewMachine | null;
   /** The why is inferred: who wrote the code, and what was read (see Assumed). */
   readonly assumed?: Assumed;
   /** Guesses withdrawn by id (d1, f2 …) — only ever an assumed review's: a
@@ -351,8 +356,10 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
           ...(merged.suggestion && !gone.has("suggestion") ? { suggestion: merged.suggestion } : {}),
           ...(merged.remedy && !gone.has("remedy") ? { remedy: merged.remedy } : {}),
         };
+  const machine = delta.machine === null ? undefined : (delta.machine ?? base.machine);
+  const { machine: _machine, ...kept } = base;
   return {
-    ...base,
+    ...kept,
     summary: delta.summary ?? base.summary,
     ...(delta.branch ?? base.branch ? { branch: delta.branch ?? base.branch } : {}),
     ...(delta.base ?? base.base ? { base: delta.base ?? base.base } : {}),
@@ -362,6 +369,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
     ...(units !== undefined ? { units } : {}),
     ...(outline !== undefined ? { outline } : {}),
     ...(bug !== undefined ? { bug } : {}),
+    ...(machine !== undefined ? { machine } : {}),
     ...(delta.assumed ?? base.assumed ? { assumed: delta.assumed ?? base.assumed! } : {}),
     ...(retired.length > 0 ? { retired } : {}),
     ts: writtenAt,
