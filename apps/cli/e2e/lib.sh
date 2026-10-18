@@ -219,26 +219,22 @@ wait_until() {
   echo "  FAIL $label — last: $(echo "$out" | head -c 200)"; FAIL=$((FAIL+1)); return 1
 }
 
-# rows <url> <sid> <ticketId> — the block of ONE ticket, readable (the TOON
-# answer is a JSON string with literal \n). Step ids repeat across tickets —
-# every reader's review step is `review-<their name>` — so an assertion about
-# one ticket must be scoped to it.
+# rows <url> <sid> <ticketId> — ONE ticket in full, readable (the TOON
+# answer is a JSON string with literal \n): get-ticket's answer.
 rows() {
-  call "$1" "$2" get-tickets '{}' | python3 -c '
-import sys
-text = sys.stdin.read().replace("\\n", "\n")
-tid = sys.argv[1]
-# the ticket own block first: its id may also appear on another (after, from)
-i = text.find("- id: " + tid)
-i = i if i >= 0 else text.find(tid)
-if i < 0:
-    print("")
-    raise SystemExit
-j = text.find("  - id:", i)
-print(text[i : j if j > 0 else len(text)])' "$3"
+  call "$1" "$2" get-ticket "{\"ticketId\":\"$3\"}" | python3 -c 'import sys; print(sys.stdin.read().replace("\\n", "\n"))'
 }
 
-goals() { call "$1" "$2" get-tickets '{}' | grep -o 'goal: [^\\]*' | sed 's/goal: //' | tr '\n' ' '; }
+# everything <url> <sid> — every ticket the reader may be shown, open and
+# closed, each in full as get-ticket shows it, one answer a line
+everything() {
+  local ids
+  ids=$( { call "$1" "$2" get-tickets '{}'; call "$1" "$2" get-tickets '{"closed":true}'; } | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | sort -u)
+  for id in $ids; do call "$1" "$2" get-ticket "{\"ticketId\":\"$id\"}"; echo; done
+}
+
+# goals <url> <sid> — the open tickets' list: their titles and the lines beneath
+goals() { call "$1" "$2" get-tickets '{}' | tr '\n' ' '; }
 
 # expect <label> <text> <pattern> — assertion with a readable line
 expect() {
