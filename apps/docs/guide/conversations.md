@@ -17,7 +17,7 @@ judgment, the bigger picture. So:
   address *ask-review* on *sandbox*" — nothing more. Their agent does not read the details,
   investigate, decide or answer by itself;
 - when the person asks what it says, the agent reads it from collagen (`get-messages`, a
-  ticket's steps with `get-tickets`) and relays what is there — never filling gaps from its
+  ticket's steps with `get-ticket`) and relays what is there — never filling gaps from its
   own head. With that context, the person steers;
 - when the person asks something the thread doesn't answer, the agent decides which it is:
   the person's own to answer, from this repo under their direction — or the other peer's,
