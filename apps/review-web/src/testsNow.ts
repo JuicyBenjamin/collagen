@@ -23,11 +23,14 @@ export const testsJudged = (files: ReadonlyArray<TestFile>) => {
   };
 };
 
-/** The code or the tests: the page opens on the code, or where its url says. */
-const [tabNow, setTab] = createSignal<"code" | "tests">(location.hash.startsWith("#tests") ? "tests" : "code");
+/** What the page shows under its header: the code, how the change works, or
+ *  its tests — the code, unless the url says otherwise. */
+type Tab = "code" | "machine" | "tests";
+const hashes: Record<Tab, string> = { code: "", machine: "#how-it-works", tests: "#tests" };
+const [tabNow, setTab] = createSignal<Tab>(location.hash.startsWith("#tests") ? "tests" : location.hash.startsWith("#how-it-works") ? "machine" : "code");
 export const tab = tabNow;
-export const showTab = (shown: "code" | "tests") => {
+export const showTab = (shown: Tab) => {
   setTab(shown);
-  history.replaceState(null, "", shown === "tests" ? "#tests" : location.pathname + location.search);
+  history.replaceState(null, "", hashes[shown] || location.pathname + location.search);
   window.scrollTo({ top: 0 });
 };

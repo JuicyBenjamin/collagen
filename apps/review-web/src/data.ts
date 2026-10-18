@@ -152,6 +152,25 @@ export interface Grouped {
   readonly outside: ReadonlyArray<string>;
 }
 
+/** How a change works: states, the moves between them, the things that run
+ *  it and where what moves them comes from, with one walk-through. `before`
+ *  when the change alters a machine that was there. */
+export interface Machine {
+  readonly title: string;
+  readonly summary: string;
+  readonly sources: ReadonlyArray<{ readonly id: string; readonly name: string; readonly gives: string }>;
+  readonly actors: ReadonlyArray<{ readonly id: string; readonly name: string; readonly starts: string }>;
+  readonly now: MachineVersion;
+  readonly before?: MachineVersion;
+}
+
+/** The machine as one version of the code has it. */
+export interface MachineVersion {
+  readonly states: ReadonlyArray<{ readonly id: string; readonly name: string; readonly shows: string }>;
+  readonly moves: ReadonlyArray<{ readonly from: string; readonly to: string; readonly on: string }>;
+  readonly play: ReadonlyArray<{ readonly from?: string; readonly moves?: ReadonlyArray<{ readonly actor: string; readonly to: string }>; readonly says: string }>;
+}
+
 /** The review's own part of the page: its ticket, its why and its links,
  *  known as soon as the room is read — the diff comes after. */
 export interface ReviewPageHead {
@@ -168,6 +187,8 @@ export interface ReviewPageHead {
     readonly assumed?: Assumed;
     /** present once the code's author took it over: whose AI guessed it */
     readonly claimed?: { readonly guessedBy: string; readonly guessedByName: string; readonly at: number };
+    /** how the change works, drawn and played, when its author drew it */
+    readonly machine?: Machine;
     readonly ts: number;
   };
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
