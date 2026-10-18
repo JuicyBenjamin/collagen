@@ -32,23 +32,23 @@ expect "an epic needs a title" "$(call $A "$SA" epic "$NOTITLE")" "failed: pass 
 E1J="{\"title\":\"More languages\",\"action\":\"create\",\"goal\":\"More languages\",\"summary\":\"Review PHP and Rust like TypeScript.\",\"ticketIds\":[\"$L\",\"$PHP\",\"$RUST\"]}"
 MADE=$(call $A "$SA" epic "$E1J"); E1=$(echo "$MADE" | uuid)
 expect "filed, and the three put in it: one piece of work, grown out of each other" "$MADE" "epic filed: .{1,3}More languages.*put into the epic .{1,3}More languages.{1,3}: .*It now holds 3 ticket\\(s\\) in 1 piece\\(s\\) of work, 0 of 1 done"
-wait_until "bob sees the epic and what is in it" "parts: .?0 of 1 pieces of work done" call $B "$SB" get-tickets '{}'
-expect "…each part names its epic" "$(call $B "$SB" get-tickets '{}' | grep -cE "epic: .?$E1")" "^[3-9]"
+wait_until "bob sees the epic and what is in it" "parts: .?0 of 1 pieces of work done" everything $B "$SB"
+expect "…each part names its epic" "$(everything $B "$SB" | grep -cE "epic: .?$E1")" "^[3-9]"
 
 echo "## anyone shapes it: bob adds one from another project, takes one out"
 B1='{"title":"a PHP lint in the backoffice","project":"backoffice","goal":"a PHP lint in the backoffice","decisions":[{"title":"Lint it","what":"phpstan","agentWhy":"cheap"}]}'
 BO=$(call $B "$SB" propose "$B1" | uuid)
 ADD="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$BO\"]}"
 expect "bob — not its author — adds a backoffice ticket to alice's epic: a second piece of work" "$(call $B "$SB" epic "$ADD")" "put into the epic .{1,3}More languages.*It now holds 4 ticket\\(s\\) in 2 piece\\(s\\) of work"
-wait_until "alice sees two pieces of work, across two projects" "parts: .?0 of 2 pieces of work done" call $A "$SA" get-tickets '{}'
+wait_until "alice sees two pieces of work, across two projects" "parts: .?0 of 2 pieces of work done" everything $A "$SA"
 OUTJ="{\"action\":\"remove\",\"ticketIds\":[\"$PHP\"]}"
 expect "bob takes the PHP proposal out" "$(call $B "$SB" epic "$OUTJ")" "taken out of their epic: .{1,3}PHP on the review page"
-wait_until "…and alice sees three tickets in it" "parts: .?0 of 2 pieces of work done" call $A "$SA" get-tickets '{}'
+wait_until "…and alice sees three tickets in it" "parts: .?0 of 2 pieces of work done" everything $A "$SA"
 E2J='{"title":"Backoffice quality","action":"create","goal":"Backoffice quality","summary":"Catch PHP mistakes before review."}'
 E2=$(call $B "$SB" epic "$E2J" | uuid)
 MOVE="{\"action\":\"add\",\"epicId\":\"$E2\",\"ticketIds\":[\"$BO\"]}"
 expect "bob moves his ticket from alice's epic to his own" "$(call $B "$SB" epic "$MOVE")" "put into the epic .{1,3}Backoffice quality"
-wait_until "it is in one epic only: his" "epic: .?$E2" call $A "$SA" get-tickets '{}'
+wait_until "it is in one epic only: his" "epic: .?$E2" everything $A "$SA"
 Q1="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$E2\"]}"
 expect "an epic is never part of another" "$(call $A "$SA" epic "$Q1")" "an epic is never part of another"
 
@@ -58,13 +58,13 @@ PLOUT=$(call $A "$SA" ask-plan "$PL"); PLAN=$(echo "$PLOUT" | uuid)
 expect "filing it puts it in the Rust proposal's epic, and says so" "$PLOUT" "It went into the epic .{1,3}More languages.*epic remove takes it out"
 expect "…its user is told where it went" "$PLOUT" "plan ticket has been filed, in the epic .{1,3}More languages"
 expect "…and nobody is asked about it" "$(echo "$PLOUT" | grep -c 'EPIC:')" "^0$"
-expect "…it is in the epic now" "$(call $A "$SA" get-tickets '{}' | grep -cE "epic: .?$E1")" "^3$"
-wait_until "…a stage of the same piece of work: still one" "parts: .?0 of 1 pieces of work done" call $A "$SA" get-tickets '{}'
+expect "…it is in the epic now" "$(everything $A "$SA" | grep -cE "epic: .?$E1")" "^3$"
+wait_until "…a stage of the same piece of work: still one" "parts: .?0 of 1 pieces of work done" everything $A "$SA"
 KEPT="{\"title\":\"Rust in CI\",\"project\":\"sandbox\",\"goal\":\"Rust in CI\",\"summary\":\"a CI job\",\"from\":[\"$RUST\"],\"epic\":null,\"decisions\":[{\"title\":\"A job\",\"what\":\"cargo check\",\"agentWhy\":\"cheap\"}],\"forks\":[]}"
 KOUT=$(call $A "$SA" ask-plan "$KEPT")
 expect "filed with epic: null, it stays out" "$KOUT" "plan ticket has been filed.{1,3} They asked"
 expect "…and is not offered the epic either" "$(echo "$KOUT" | grep -c 'EPIC:')" "^0$"
-expect "…the epic still holds three" "$(call $A "$SA" get-tickets '{}' | grep -cE "epic: .?$E1")" "^3$"
+expect "…the epic still holds three" "$(everything $A "$SA" | grep -cE "epic: .?$E1")" "^3$"
 
 echo "## progress counts pieces of work, order is for reading"
 TASK='{"title":"a Go grammar spike","project":"sandbox","goal":"a Go grammar spike","steps":[{"id":"s1","owner":"alice","intent":"spike","description":"try it"}]}'
@@ -73,21 +73,21 @@ ADDT="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$TID\"]}"
 expect "the task goes in too: a second piece of work" "$(call $A "$SA" epic "$ADDT")" "It now holds 4 ticket\\(s\\) in 2 piece\\(s\\) of work, 0 of 2 done"
 SETTLE="{\"ticketId\":\"$TID\",\"stepId\":\"s1\",\"result\":\"works\"}"
 call $A "$SA" settle-step "$SETTLE" > /dev/null
-wait_until "a done piece counts: 1 of 2" "parts: .?1 of 2 pieces of work done" call $A "$SA" get-tickets '{}'
+wait_until "a done piece counts: 1 of 2" "parts: .?1 of 2 pieces of work done" everything $A "$SA"
 CLOSE0="{\"action\":\"close\",\"epicId\":\"$E1\"}"
 expect "closing waits on what is unresolved, and names it" "$(call $B "$SB" epic "$CLOSE0")" "still holds 3 unresolved ticket\\(s\\).*Rust on the review page.*exclude them from its progress"
 EXC="{\"action\":\"exclude\",\"epicId\":\"$E1\",\"ticketIds\":[\"$L\",\"$RUST\"]}"
 expect "dropped work is excluded from progress, not counted done" "$(call $B "$SB" epic "$EXC")" "kept in .{1,3}More languages.{1,3} but out of its progress.*1 of 2 done"
 ORD="{\"action\":\"order\",\"epicId\":\"$E1\",\"ticketIds\":[\"$RUST\",\"$TID\",\"$L\"]}"
 expect "anyone orders it — for reading, it sets no after" "$(call $B "$SB" epic "$ORD")" "now read in this order: .{1,3}Rust on the review page.*sets no after"
-expect "…get-tickets lists its parts in that order" "$(call $A "$SA" get-tickets '{}' | grep -oE "1 of 2 pieces of work done: [0-9a-f -]+" | head -1)" "^1 of 2 pieces of work done: $RUST $TID $L $PLAN"
+expect "…get-ticket lists its parts in that order" "$(everything $A "$SA" | grep -oE "1 of 2 pieces of work done: [0-9a-f -]+" | head -1)" "^1 of 2 pieces of work done: $RUST $TID $L $PLAN"
 
 echo "## closing and reopening: anyone, with a reason"
 CLP="{\"ticketId\":\"$PLAN\",\"outcome\":\"done\",\"reason\":\"merged\"}"
 expect "alice closes the plan as done, its step never settled" "$(call $A "$SA" close-ticket "$CLP")" "how Rust gets its server.{1,3} .ticket [0-9a-f-]{36}. as done .{1,3} merged"
-wait_until "its piece of work is done with it: 2 of 2" "parts: .?2 of 2 pieces of work done" call $A "$SA" get-tickets '{}'
+wait_until "its piece of work is done with it: 2 of 2" "parts: .?2 of 2 pieces of work done" everything $A "$SA"
 expect "with everything resolved it closes, on that alone" "$(call $B "$SB" epic "$CLOSE0")" "closed the epic .{1,3}More languages.*its parts are done"
-wait_until "alice sees it closed, and why" "closedBecause: its parts are done" call $A "$SA" get-tickets '{}'
+wait_until "alice sees it closed, and why" "closedBecause: its parts are done" everything $A "$SA"
 GO='{"title":"a Go server","project":"sandbox","goal":"a Go server","steps":[{"id":"s1","owner":"alice","intent":"build","description":"gopls"}]}'
 GOID=$(call $A "$SA" create-ticket "$GO" | uuid)
 Q2="{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$GOID\"]}"
@@ -96,7 +96,7 @@ REOPEN0="{\"action\":\"reopen\",\"epicId\":\"$E1\"}"
 expect "reopening always needs a reason" "$(call $A "$SA" epic "$REOPEN0")" "reopening .{1,3}More languages.{1,3} needs a reason"
 REOPEN1="{\"action\":\"reopen\",\"epicId\":\"$E1\",\"reason\":\"more languages in the same area: Go next\"}"
 expect "alice reopens it" "$(call $A "$SA" epic "$REOPEN1")" "reopened the epic .{1,3}More languages.*Go next"
-wait_until "bob sees it open again, and why" "openBecause: .?more languages in the same area: Go next" call $B "$SB" get-tickets '{}'
+wait_until "bob sees it open again, and why" "openBecause: .?more languages in the same area: Go next" everything $B "$SB"
 expect "…and the Go work can go in now" "$(call $A "$SA" epic "$Q2")" "put into the epic .{1,3}More languages"
 Q4="{\"ticketId\":\"$E1\"}"
 CTX=$(call $A "$SA" review-context "$Q4")
@@ -109,14 +109,14 @@ expect "close-ticket on an epic points at the epic tool" "$(call $A "$SA" close-
 echo "## a close says how it ended, and the epic counts it"
 CLG="{\"ticketId\":\"$GOID\",\"outcome\":\"done\",\"reason\":\"merged\"}"
 expect "alice closes the Go work as done, its step never settled" "$(call $A "$SA" close-ticket "$CLG")" "a Go server.{1,3} .ticket [0-9a-f-]{36}. as done .{1,3} merged"
-wait_until "the epic counts it done: 3 of 3" "parts: .?3 of 3 pieces of work done" call $A "$SA" get-tickets '{}'
+wait_until "the epic counts it done: 3 of 3" "parts: .?3 of 3 pieces of work done" everything $A "$SA"
 TASK2='{"title":"a Kotlin grammar spike","project":"sandbox","goal":"a Kotlin grammar spike","steps":[{"id":"s1","owner":"alice","intent":"spike","description":"try it"}]}'
 TID2=$(call $A "$SA" create-ticket "$TASK2" | uuid)
 ADDOUT=$(call $A "$SA" epic "{\"action\":\"add\",\"epicId\":\"$E1\",\"ticketIds\":[\"$TID2\"]}")
 expect "another goes in" "$ADDOUT" "3 of 4 done"
 CLOUT=$(call $A "$SA" close-ticket "{\"ticketId\":\"$TID2\",\"outcome\":\"dropped\",\"reason\":\"not now\"}")
 expect "closing it as dropped" "$CLOUT" "as dropped \\(out of its epic's progress\\)"
-wait_until "…takes it out of the count: 3 of 3" "parts: .?3 of 3 pieces of work done" call $A "$SA" get-tickets '{}'
+wait_until "…takes it out of the count: 3 of 3" "parts: .?3 of 3 pieces of work done" everything $A "$SA"
 expect "review-context says how each ended" "$(call $A "$SA" review-context "$Q4")" "a Kotlin grammar spike,dropped"
 expect "…a close without an outcome is refused at the tool" "$(call $A "$SA" close-ticket "{\"ticketId\":\"$TID2\"}")" "outcome"
 
@@ -124,8 +124,8 @@ echo "## renaming: its author's, as a ticket's title is"
 RN="{\"action\":\"rename\",\"epicId\":\"$E1\",\"title\":\"Support more review languages\",\"goal\":\"the review page reads code beyond TypeScript\"}"
 expect "bob — not its author — is pointed at alice" "$(call $B "$SB" epic "$RN")" "is its author's to rename"
 expect "alice renames it" "$(call $A "$SA" epic "$RN")" "epic .{1,3}Support more review languages.{1,3} .*updated"
-wait_until "bob sees the new title" "Support more review languages" call $B "$SB" get-tickets '{}'
-expect "…and its parts kept" "$(call $B "$SB" get-tickets '{}' | grep -cE "epic: .?$E1")" "^[3-9]"
+wait_until "bob sees the new title" "Support more review languages" everything $B "$SB"
+expect "…and its parts kept" "$(everything $B "$SB" | grep -cE "epic: .?$E1")" "^[3-9]"
 expect "…and the epic tool names it by its new title" "$(call $B "$SB" epic "$ORD")" "Support more review languages.{1,3} is now read in this order"
 
 if [ "${KEEP:-0}" = "1" ]; then summary; exit; fi

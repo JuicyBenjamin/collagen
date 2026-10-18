@@ -14,7 +14,7 @@ wait_until "carol sees t1" "t1 all three up" goals $C "$SC"
 echo "## B. carol offline (2 of 3 indexers)"
 stop carol
 call $A "$SA" create-ticket '{"title":"t2 carol away","goal":"t2 carol away","project":"sandbox","steps":[{"id":"s1","owner":"bob","intent":"investigate","description":"bob settles"},{"id":"s2","owner":"alice","intent":"review","description":"alice reviews","needs":["s1"]}]}' > /dev/null
-wait_until "view advanced with one indexer offline" "s1,bob,investigate,settled" call $A "$SA" get-tickets '{}'
+wait_until "view advanced with one indexer offline" "s1,bob,investigate,settled" everything $A "$SA"
 
 echo "## C. bob offline too (1 of 3)"
 stop bob

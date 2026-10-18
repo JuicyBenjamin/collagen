@@ -28,7 +28,7 @@ echo "## 4. everyone restarts; alice alone"
 stop_all
 start alice
 SA=$(mcp $A)
-wait_until "ticket still there with bob's result" "s1,bob,investigate,settled" call $A "$SA" get-tickets '{}'
+wait_until "ticket still there with bob's result" "s1,bob,investigate,settled" everything $A "$SA"
 wait_until "review step re-delivered and the ack still unread (2 waiting)" "$THREAD,[a-z]+,sandbox,2," call $A "$SA" pending-threads '{}'
 wait_until "bob remembered as an offline member" "offlineMembers\[1\]: bob" call $A "$SA" list-room '{}'
 
