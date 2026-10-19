@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, flush, Show } from "solid-js";
 import type { Verdict } from "~/data";
 import { hostNow } from "~/hostNow";
 
@@ -23,11 +23,17 @@ export function ReviewComposer(props: { onDone: () => void }) {
   const count = () => hostNow.pending().length;
   const pull = () => hostNow.host()?.pull ?? null;
   const onHost = () => hostNow.canWrite();
-  const ready = () => !sending() && (!onHost() ? count() > 0 : verdict() === "approve" || (verdict() === "request-changes" ? body().trim().length > 0 : body().trim().length > 0 || count() > 0));
+  // words are needed only where nothing else says it: a verdict or comments do
+  const ready = () => !sending() && (!onHost() ? count() > 0 : verdict() === "approve" || body().trim().length > 0 || count() > 0);
+  // one finish at a time: a second click while one is on its way sends nothing
+  let busy = false;
   const send = async () => {
-    if (!ready()) return;
+    if (busy || !ready()) return;
+    busy = true;
     setSending(true);
     setSaid(null);
+    // shown now: left to the finish's own read, it would show only once it is over
+    flush();
     try {
       // in the room alone there is nowhere for words on the whole, or a verdict
       const result = await hostNow.submit(onHost() ? verdict() : "comment", onHost() ? body() : "");
@@ -44,6 +50,7 @@ export function ReviewComposer(props: { onDone: () => void }) {
     } catch (error) {
       setSaid(String(error));
     } finally {
+      busy = false;
       setSending(false);
     }
   };
@@ -61,7 +68,7 @@ export function ReviewComposer(props: { onDone: () => void }) {
       </div>
       <Show when={onHost()}>
       <textarea
-        placeholder={verdict() === "approve" ? "Anything to add (optional)" : count() > 0 && verdict() === "comment" ? "Leave a comment on the whole (optional)" : "Leave a comment"}
+        placeholder={verdict() === "approve" || count() > 0 ? "Anything to add (optional)" : verdict() === "request-changes" ? "What should change" : "Leave a comment"}
         value={body()}
         onInput={(event) => setBody(event.currentTarget.value)}
         rows={4}
