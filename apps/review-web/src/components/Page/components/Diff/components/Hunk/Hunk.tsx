@@ -11,6 +11,8 @@ import { ChangedLine, CodeLine } from "~/components/Code";
 import { rowsOf } from "~/inline";
 import { Peek } from "./components/Peek";
 import { LineComposer, LineThread } from "./components/LineThread";
+import { Rendered } from "./components/Rendered";
+import { isMarkdown, mdView } from "~/mdView";
 import { hostNow } from "~/hostNow";
 import { reading, viewed } from "~/viewedNow";
 import { sinceOf } from "~/sinceNow";
@@ -225,7 +227,9 @@ export function Hunk(props: {
     const group = card();
     void props.whole.show(props.hunk.id, group, row ? { line: Number(row.dataset.new), y: row.getBoundingClientRect().top } : group && placeIn(group));
   };
-  const canWhole = () => diffNow.canReadWhole() && props.whole.readable && !folded();
+  // a Markdown file reads rendered, unless the reader turned it to raw
+  const asDocument = () => isMarkdown(props.hunk.file) && diffNow.canReadWhole() && props.whole.readable && !mdView.raw(props.hunk.file);
+  const canWhole = () => diffNow.canReadWhole() && props.whole.readable && !folded() && !asDocument();
   // read already: the file folds to its header here and wherever else it shows
   const state = () => viewed.state(props.hunk.file);
   // folded: viewed and not opened again to read
@@ -252,7 +256,7 @@ export function Hunk(props: {
 
   return (
     // the file whole stands in for all its changes here, drawn at the first
-    <Show when={!(props.continued && (folded() || props.whole.shown() !== null))}>
+    <Show when={!(props.continued && (folded() || props.whole.shown() !== null || asDocument()))}>
     <div class={["hunk", { viewed: folded(), reread: state() === "viewed" && !folded(), continued: props.continued }]}>
       <div class={["file", { continued: props.continued }]} ref={(element) => {
         head = element;
@@ -287,6 +291,11 @@ export function Hunk(props: {
               {full() ? "Since you viewed" : "Whole change"}
             </button>
           </Show>
+          <Show when={!props.continued && isMarkdown(props.hunk.file) && diffNow.canReadWhole() && props.whole.readable && !folded()}>
+            <button type="button" class="whole-toggle" onClick={() => mdView.toggle(props.hunk.file)} title={asDocument() ? "The file's lines as written, with this diff's changes" : "The file as it reads, this diff's changes marked"}>
+              {asDocument() ? "Raw" : "Rendered"}
+            </button>
+          </Show>
           <Show when={canWhole()}>
             <button type="button" class="whole-toggle" onClick={toggleWhole} title="The whole file as the branch has it, with this diff's added and removed lines">
               {props.whole.loading() ? "Reading…" : props.whole.shown() !== null ? (props.whole.count > 1 ? "Just the changes" : "Just the change") : "Whole file"}
@@ -309,7 +318,15 @@ export function Hunk(props: {
           </Show>
         </span>
       </div>
-      <Show when={!folded()}>
+      <Show when={!folded() && asDocument()}>
+        <div class="hunk-body">
+          <Rendered file={props.hunk.file} read={() => {
+            const commit = diffNow.commit();
+            return commit ? readFile(props.hunk.file, commit) : Promise.resolve({ error: "the page does not know which commit its diff is" });
+          }} />
+        </div>
+      </Show>
+      <Show when={!folded() && !asDocument()}>
         <div class="hunk-body">
         <Show when={gapFailed()}>{(why) => <p class="whole-failed">Could not read the lines between: {why()}</p>}</Show>
         <Show when={gapShown()}>
