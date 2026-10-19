@@ -150,3 +150,16 @@ export const mergeHistory = GET(async (roomId: string, shown: MergesShown, fresh
   "use server";
   return run((backend) => backend.merges(roomId, shown, fresh));
 });
+
+/** The reader's take on someone else's review, from the page — said in the
+ *  room as theirs, as their agent's post-review would; `failed` rejects it. */
+export const takeReview = async (ticketId: string, findings: string, failed: boolean): Promise<HostWrite> => {
+  "use server";
+  return run((backend) => backend.take(ticketId, findings, failed));
+};
+
+/** Close a review the reader filed: accepted as done, or dropped. */
+export const closeReview = async (ticketId: string, outcome: "done" | "dropped"): Promise<HostWrite> => {
+  "use server";
+  return run((backend) => backend.close(ticketId, outcome));
+};
