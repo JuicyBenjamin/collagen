@@ -193,6 +193,9 @@ export interface ReviewPageHead {
     readonly ts: number;
   };
   readonly links: ReadonlyArray<{ readonly label: string; readonly url: string }>;
+  /** the stack as the room's own reviews make it, before the host is asked:
+   *  so the row stands from the first paint, the host adding its pull requests */
+  readonly stack?: Stack | null;
 }
 
 export interface ReviewPageData extends ReviewPageHead {

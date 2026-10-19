@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import type { StackStep } from "~/data";
+import type { ReviewPageHead, StackStep } from "~/data";
 import { Appear } from "~/components/Appear";
 import { hostNow } from "~/hostNow";
 
@@ -21,10 +21,11 @@ function Step(props: { step: StackStep }) {
 /** Where the review's branch sits when it is part of a stack: what it is
  *  built on, from the trunk up, then this one, then what builds on it — read
  *  from the host's open pull requests and the room's own reviews. Nothing
- *  when the branch stands alone on the trunk. */
-export function StackRow() {
+ *  when the branch stands alone on the trunk. The room's part comes with
+ *  the head, so the row stands from the first paint; the host's adds to it. */
+export function StackRow(props: { head: ReviewPageHead }) {
   return (
-    <Appear when={hostNow.stack()}>
+    <Appear when={hostNow.view() ? hostNow.stack() : (props.head.stack ?? null)}>
       {(stack) => (
         <div class="stack-row" role="navigation" aria-label="The stack this branch sits in">
           <span class="who">Stack</span>
