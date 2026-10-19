@@ -5,11 +5,8 @@ import { hostNow } from "~/hostNow";
 import { ticketId } from "~/ticket";
 import { asksForChanges } from "~/strength";
 
-const VERDICTS: ReadonlyArray<{ readonly value: VerdictValue; readonly label: string; readonly hint: string }> = [
-  { value: "comment", label: "Comment", hint: "Feedback without a verdict" },
-  { value: "approve", label: "Approve", hint: "It can be merged" },
-  { value: "request-changes", label: "Request changes", hint: "It needs changes before it is merged" },
-];
+/** What each verdict is called, at the head of its panel. */
+export const VERDICT_LABEL: Record<VerdictValue, string> = { approve: "Approve", "request-changes": "Request changes", comment: "Comment" };
 
 /** What a verdict says on the collagen ticket when the reader gave no words. */
 const SAID: Record<VerdictValue, string> = { comment: "", approve: "Approved.", "request-changes": "Changes requested — see my comments." };
@@ -19,10 +16,11 @@ const SAID: Record<VerdictValue, string> = { comment: "", approve: "Approved.", 
  *  every comment pending in it, said at once — the comments in the room, and
  *  on the pull request as one review through their own gh when there is one
  *  to put them on; the verdict and words on the collagen ticket as their
- *  take, as their agent's post-review would. */
-export function Verdict(props: { onDone: () => void }) {
+ *  take, as their agent's post-review would. The verdict is the one picked
+ *  on the dial; a must comment makes it a request for changes. A comment
+ *  goes on the ticket as words alone: it approves nothing. */
+export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
   const [body, setBody] = createSignal("");
-  const [verdict, setVerdict] = createSignal<VerdictValue>("comment");
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
   const count = () => hostNow.pending().length;
@@ -30,7 +28,7 @@ export function Verdict(props: { onDone: () => void }) {
   const onHost = () => hostNow.canWrite();
   /** a must in the review asks for changes: the whole review does, the host having one verdict for all of it */
   const musts = () => hostNow.pending().filter((draft) => asksForChanges(draft.body)).length;
-  const chosen = (): VerdictValue => (musts() > 0 ? "request-changes" : verdict());
+  const chosen = (): VerdictValue => (musts() > 0 ? "request-changes" : props.verdict);
   // words are needed only where nothing else says it: a verdict or comments do
   const ready = () => !sending() && (chosen() === "approve" || body().trim().length > 0 || count() > 0);
   // one finish at a time: a second click while one is on its way sends nothing
@@ -48,17 +46,14 @@ export function Verdict(props: { onDone: () => void }) {
         const result = await hostNow.submit(onHost() ? chosen() : "comment", onHost() ? body() : "");
         if ("error" in result) {
           // its words and verdict reached the pull request: only the room is left to tell
-          if (result.onHost) {
-            setBody("");
-            setVerdict("comment");
-          }
+          if (result.onHost) setBody("");
           return setSaid(result.error);
         }
       }
       // the verdict and words on the collagen ticket, as the reader's take
       const findings = body().trim() || SAID[chosen()] || (count() > 0 ? "See my comments on the code." : "");
       if (findings) {
-        const taken = await takeReview(ticketId, findings, chosen() === "request-changes");
+        const taken = await takeReview(ticketId, findings, chosen() === "request-changes", chosen() === "comment");
         if ("error" in taken) return setSaid(taken.error);
       }
       setBody("");
@@ -79,7 +74,7 @@ export function Verdict(props: { onDone: () => void }) {
       }}
     >
       <div class="composer-head">
-        <strong>Finish your review</strong>
+        <strong>{VERDICT_LABEL[chosen()]}</strong>
         <span>{count() === 0 ? "no comments pending" : count() === 1 ? "1 comment pending" : `${count()} comments pending`}</span>
       </div>
       <textarea
@@ -91,14 +86,6 @@ export function Verdict(props: { onDone: () => void }) {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void send();
         }}
       />
-      <fieldset class="verdicts">
-        {VERDICTS.map((option) => (
-          <label title={option.hint} class={{ disabled: musts() > 0 && option.value !== "request-changes" }}>
-            <input type="radio" name="verdict" value={option.value} checked={chosen() === option.value} disabled={musts() > 0 && option.value !== "request-changes"} onChange={() => setVerdict(option.value)} />
-            {option.label}
-          </label>
-        ))}
-      </fieldset>
       <Show when={musts() > 0}>
         <p class="host-note left">{musts() === 1 ? "A must comment requests changes." : `${musts()} must comments request changes.`}</p>
       </Show>

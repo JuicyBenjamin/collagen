@@ -3,6 +3,7 @@ import { Diff } from "./components/Diff";
 import { Header } from "./components/Header";
 import { HostActivity } from "./components/HostActivity";
 import { Outline } from "./components/Outline";
+import { Corner } from "./components/ReviewDial";
 
 // One section per unit — what it achieves, a line on what it does, the
 // decisions that shaped it, then its code, each change shown once; beside
@@ -16,19 +17,22 @@ import { Outline } from "./components/Outline";
 // the room, the diff, the host) and arrives as soon as that is in.
 
 /** The review page: the outline beside, the review's header, what was said
- *  on its host, and its code. */
+ *  on its host, its code, and the corner that floats once the header is out of sight. */
 export function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
   return (
-    <div class="wrap">
-      <nav aria-label="Outline">
-        <Outline data={props.data} />
-      </nav>
-      <main>
-        <Header head={props.head} />
-        <HostActivity head={props.head} />
-        <Diff head={props.head} data={props.data} />
-      </main>
-    </div>
+    <>
+      <div class="wrap">
+        <nav aria-label="Outline">
+          <Outline data={props.data} />
+        </nav>
+        <main>
+          <Header head={props.head} />
+          <HostActivity head={props.head} />
+          <Diff head={props.head} data={props.data} />
+        </main>
+      </div>
+      <Corner head={props.head} />
+    </>
   );
 }
 

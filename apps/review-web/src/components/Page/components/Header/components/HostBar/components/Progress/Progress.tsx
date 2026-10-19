@@ -1,8 +1,7 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js";
-import { Portal } from "@solidjs/web";
-import { Appear } from "~/components/Appear";
+import { createEffect, onCleanup, Show } from "solid-js";
 import { Arrives } from "~/components/Arrives";
 import { Masked } from "~/components/Masked";
+import { followPill, setFloating } from "~/floating";
 import { kept } from "~/kept";
 import { ticketId } from "~/ticket";
 import { viewed } from "~/viewedNow";
@@ -15,17 +14,20 @@ const lastCount = kept(
 );
 
 /** How far through the review's files the reader is, as GitHub's toolbar
- *  has it: a count and a bar. Scrolled out of sight, it floats in the
- *  corner instead, so it stays in view as they read. Waits on the diff. */
+ *  has it: a count and a bar. Scrolled well out of sight, it floats in the
+ *  corner instead (the review's Corner, floating.ts), so it stays in view as
+ *  they read.
+ *  Waits on the diff. */
 export function Progress() {
-  const [away, setAway] = createSignal(false);
-  let seen: IntersectionObserver | undefined;
+  let stop: (() => void) | undefined;
   const watch = (element: HTMLElement) => {
-    seen?.disconnect();
-    seen = new IntersectionObserver(([entry]) => setAway(!entry!.isIntersecting));
-    seen.observe(element);
+    stop?.();
+    stop = followPill(element);
   };
-  onCleanup(() => seen?.disconnect());
+  onCleanup(() => {
+    stop?.();
+    setFloating(false);
+  });
   createEffect(
     () =>
       viewed.read() && viewed.count().files > 0
@@ -36,24 +38,13 @@ export function Progress() {
     },
   );
   return (
-    <>
-      <Arrives inline skeleton={Progress.Skeleton} ready={viewed.read()}>
-        <Show when={viewed.count().files > 0}>
-          <span ref={watch}>
-            <Count />
-          </span>
-        </Show>
-      </Arrives>
-      <Portal>
-        <Appear when={away() && viewed.count().files > 0}>
-          {() => (
-            <div class="progress-float" role="status">
-              <Count />
-            </div>
-          )}
-        </Appear>
-      </Portal>
-    </>
+    <Arrives inline skeleton={Progress.Skeleton} ready={viewed.read()}>
+      <Show when={viewed.count().files > 0}>
+        <span ref={watch}>
+          <Count />
+        </span>
+      </Show>
+    </Arrives>
   );
 }
 

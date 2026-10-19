@@ -259,7 +259,9 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
     const ticket = (yield* SubscriptionRef.get(handle.room.tickets)).get(ticketId);
     if (!ticket) continue;
     const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
-    return review ? headOf(ticket, review, me) : null;
+    if (!review) return null;
+    const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ room: handle.room, ticket })) : null;
+    return { ...headOf(ticket, review, me), stack };
   }
   return null;
 });

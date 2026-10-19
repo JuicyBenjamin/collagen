@@ -301,9 +301,11 @@ and never takes a number from the page.
 ## Your review, as on GitHub
 
 A review is written, then finished. Comments go into **your review** — pending, on your
-machine only — and are said together when you **finish** it: **Finish review** (top right,
-with how many are pending) takes your words on the whole and a verdict — Comment, Approve or
-Request changes — and says every pending comment at once: **in the room** as yours (the
+machine only — and are said together when you **finish** it, from the three round buttons
+in one pill with how many files you have viewed — under your name at the top, and flying to
+the corner once that has scrolled away: **comment** (blue, with how many are pending), **request changes** (yellow)
+or **approve** (green). Each opens its
+panel for your words on the whole, and sending it says every pending comment at once: **in the room** as yours (the
 author's agent reads them in `review-context`) and, when the review has an open pull request,
 **on it as one review**, through your own `gh`, under whoever `gh` is signed in as at that
 moment — if that is no longer who the page showed, nothing is sent and the page says who it
@@ -395,13 +397,18 @@ however the copies arrive.
 
 ## Saying what you think
 
-**Review**, top right, finishes a review on the page, whatever its pull request:
+The three round buttons beside the files viewed finish a review on the page, whatever its
+pull request:
 
 - **Someone else's review:** your verdict and words go on the collagen ticket as your take,
   as your agent's `post-review` would, and on the pull request too when there is one to put
   them on, with your pending comments.
-- **A review you filed:** **Accept** closes it as done; **Drop** closes it as not done. Any
-  comments still pending in it are said first.
+- **A review you filed:** approve opens **Accept**, which closes it as done, and **Drop**,
+  which closes it as not done. Request changes puts a take asking for changes on it, for your
+  agent to act on. Comments still pending are said first, whichever you send.
+
+A comment, yours or anyone's, approves nothing: it answers the review, but collagen never
+merges on it.
 
 Both go out through your outbox like everything you send.
 
