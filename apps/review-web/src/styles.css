@@ -168,6 +168,12 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .hunk .file .path { direction: rtl; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whole-toggle { font: 12px -apple-system, sans-serif; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
 .whole-toggle:hover { color: var(--accent); border-color: var(--accent); }
+/* a Markdown file's two readings, side by side: the one shown filled */
+.view-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.view-switch button { font: 12px -apple-system, sans-serif; color: var(--dim); background: none; border: 0; padding: 1px 8px; cursor: pointer; white-space: nowrap; }
+.view-switch button + button { border-left: 1px solid var(--line); }
+.view-switch button:hover { color: var(--accent); }
+.view-switch button.on { color: var(--fg); background: color-mix(in srgb, var(--accent) 18%, transparent); cursor: default; }
 .whole-failed { margin: 0; padding: 6px 12px; font-size: 12.5px; color: var(--warn); border-bottom: 1px solid var(--line); }
 .since-note { margin: 0; padding: 6px 12px; font-size: 12.5px; color: var(--warn); border-bottom: 1px solid var(--line); }
 .since-add { color: var(--sign-add); font-weight: 600; }
