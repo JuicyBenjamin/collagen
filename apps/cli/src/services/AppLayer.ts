@@ -13,6 +13,7 @@ import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";
 import { McpLive } from "./Mcp";
+import { MergerDaemon } from "./Merger";
 import { Outbox } from "./Outbox";
 import { registerAll } from "./Registrar";
 import { Rooms } from "./Rooms";
@@ -62,7 +63,7 @@ const SwarmLive = Swarm.layer.pipe(
 /** The whole app apart from the UI. Requires CliArgs.
  *  Process layer (identity, state, inbox, agents, MCP) wraps the room layer
  *  (Rooms: every joined room live, one focused, on one swarm). */
-export const AppLayer = Layer.mergeAll(Daemons, McpLive).pipe(
+export const AppLayer = Layer.mergeAll(Daemons, McpLive, MergerDaemon).pipe(
   Layer.provideMerge(ReviewTypes.layer),
   Layer.provideMerge(ReviewPages.layer),
   Layer.provideMerge(MergeHistory.layer),

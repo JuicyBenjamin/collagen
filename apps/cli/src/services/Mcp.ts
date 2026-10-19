@@ -10,13 +10,14 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { type MergeFor, afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
+import { MERGE_HELP, mergeForOf, withMergeFor } from "../lib/merging";
 import { MOCK_AI_OPTIONS } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
@@ -407,6 +408,7 @@ export const AskReview = Tool.make("ask-review", {
     "A reviewer must see what the change is FOR before anything else, so lead with purpose. The ticket's 'title' is the review page's headline: a few words a reader gets at a glance (\"Ticket list stays in its box\"). 'summary' is the line beneath it, a sentence or two (200 characters at most): what is different for whoever uses this once it lands — not how it was built, not a list of the parts, and no ticket ids or branch names (the page shows where the code is). Every decision needs a 'title': its headline, a few words (60 characters at most), what it achieves, in plain words — \"Big exports finish\", \"One tab per review\", \"Typos caught before merge\" — never the mechanism (\"SSE endpoint with SubscriptionRef streams\"). 'what' is the line beneath it: what was actually done, in one line. Short and sweet beats complete: the why, the forks and the code carry the rest.",
     "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line) — required: a rule applied across the change points at every hunk it shaped, and a decision to leave code alone points at that code — and 'guidedBy' when a skill or an agent instruction file told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\"); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then the 'units': the change grouped into code that together achieves ONE thing — a component with its sub-components and its implementation; a service with its routes — each with a 'title' saying what it achieves, never a file name (\"Big exports finish\", not \"export.ts\"; 60 characters at most), a 'what' line beneath it (what that code does, in a line), and 'where' it lives (files, or file:line for one part of a file, as for one route of a big routes file). The review page's sections are units, every piece of code shown once, read building blocks first, each headed by its title, its 'what' and the decisions that shaped it. Cover every change but the tests — the page reads those apart, in a tab of their own, each by its describe and test titles, so name them for what they protect; what you leave out goes under the decision pointing at it, else under \"Not explained\", and the outcome names it. Files that only apply one change, each the same way (a new component put to use on ten pages): give that change its unit an 'id', and the files that use it ONE more unit with 'usesOf' set to that id — its 'title' and 'what' say what each use does. The page shows them as one item, marked viewed together, and flags a file that differs from the rest; a file that also does something of its own is not a copy and belongs elsewhere. 'retireUnits' withdraws one by id. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none. The why is reasons, never a test log: what passed belongs on CI, not on the ticket.",
     "'machine' (optional): when the change adds or alters behaviour that moves through states — a lifecycle, a loading sequence, a handshake — draw it, and the review page plays it in a tab of its own. 'states' in the order things usually pass through them, each an 'id', a 'name' and 'shows' (what a person sees of a thing in it); 'moves' between them, each 'from', 'to' and 'on' (what takes it, a few words); the 'actors' that run it (page parts, tickets, peers — each an 'id', a 'name' and the state it 'starts' in); the 'sources' of what moves them (each an 'id', a 'name' and what it 'gives'). 'play' is one walk-through, beat by beat: the source a beat comes 'from', the 'moves' it causes ({actor, to}), and what it 'says' — one plain sentence of what happens and why. 'states', 'moves' and 'play' go under 'now'; when the change alters a machine that was there, the same under 'before', and the page marks what the change took out and put in. A machine the change brings in has no 'before'. Every name must exist and every played move be one the machine has, or it is refused. Leave it out when nothing moves through states; null withdraws it.",
+    "'merge' (optional, only when your user says): whose approval collagen waits for before it merges this review's pull request for them — off, theirs, mine or both — overriding their room's setting for this review; null gives it back (see set-merging).",
     "'title' is the ticket's headline in every list — a few words, 60 characters at most, what the change is for; required when filing. The goal beneath it defaults to the branch.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
     "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
@@ -458,6 +460,7 @@ export const AskReview = Tool.make("ask-review", {
     units: Schema.optional(Schema.Array(UnitInput)),
     retireUnits: Schema.optional(Schema.Array(Schema.String)),
     machine: Schema.optional(Schema.NullOr(ReviewMachine)),
+    merge: Schema.optional(Schema.NullOr(Schema.Literals(["off", "theirs", "mine", "both"]))),
   }),
   success: Schema.String,
 });
@@ -465,12 +468,13 @@ export const AskReview = Tool.make("ask-review", {
 export const PostReview = Tool.make("post-review", {
   description: [
     "Put your user's review of a review ticket on that ticket — what they think of the change, in their words. For a review they were asked for AND for one they were not: anyone in the room may read a review ticket, and each reader's review lands on a step of their own, so nobody takes anything from anyone. Posting again revises your user's own review.",
-    "Only when your user has said what they think — never your own reading of the code, and never a summary you produced on your own initiative. Read the why first (review-context) so the review answers the reasons and not just the diff. It goes out as you call it, like everything else that leaves this machine, and shows in your user's outbox; set 'failed' when they are rejecting the change rather than commenting on it.",
+    "Only when your user has said what they think — never your own reading of the code, and never a summary you produced on your own initiative. Read the why first (review-context) so the review answers the reasons and not just the diff. It goes out as you call it, like everything else that leaves this machine, and shows in your user's outbox; set 'failed' when they are rejecting the change, 'comment' when they only say something about it and approve nothing (left out, a review that is not failed approves it).",
   ].join("\n"),
   parameters: Schema.Struct({
     ticketId: Schema.String,
     findings: Schema.String,
     failed: Schema.optional(Schema.Boolean),
+    comment: Schema.optional(Schema.Boolean),
   }),
   success: Schema.String,
 });
@@ -555,6 +559,17 @@ export const SetSteering = Tool.make("set-steering", {
   description:
     "Set your user's STEERING — how much you may do on your own with what collagen hands you (a step, a take, a peer's message): 'ask' (tell them what it asks and what you would do, and wait — the default), 'act' (start the work in their repo and tell them as you go), 'auto' (do the work and say when it is done). Only when your user says so — it is their setting, never yours to raise. Whatever the level, anything said in the room for them (a message, a take, a settle, a close) stays their word, and it gates nothing: their harness's own permission mode does that. The level is restated on every delivery you read. Applies live.",
   parameters: Schema.Struct({ steering: Schema.Literals(["ask", "act", "auto"]) }),
+  success: Schema.String,
+});
+
+export const SetMerging = Tool.make("set-merging", {
+  description:
+    "Whether collagen merges the pull request of a review your user filed, for them, once it is approved — and whose approval it waits for: 'off' (never: they merge it), 'theirs' (when someone else approves it), 'mine' (when your user accepts it on its review page), 'both'. In three layers, the narrowest winning: 'review' (one review, by ticketId; level null gives it back to its room's), 'room' (the room in focus; null gives it back to the default), and 'default' (what each room is given when it is first entered — changing it leaves rooms already set as they are). Every case also waits for green checks and no take asking for changes, and the host's own rules come first (an approval the repository requires, branch protection): collagen merges as your user, never past them. Once merged, the review is closed as done and you are told, with what the ticket said to do when closed and the tickets waiting on it, so queued work goes on by their steering. Only when your user says so — it is their setting. With no level, it only says how things stand.",
+  parameters: Schema.Struct({
+    scope: Schema.optional(Schema.Literals(["default", "room", "review"])),
+    level: Schema.optional(Schema.NullOr(Schema.Literals(["off", "theirs", "mine", "both"]))),
+    ticketId: Schema.optional(Schema.String),
+  }),
   success: Schema.String,
 });
 
@@ -701,6 +716,7 @@ export const CollagenToolkit = Toolkit.make(
   RemoveProject,
   SetAi,
   SetSteering,
+  SetMerging,
   SetSettings,
   OpenReview,
   ReviewComments,
@@ -744,6 +760,7 @@ export const DevCollagenToolkit = Toolkit.make(
   RemoveProject,
   SetAi,
   SetSteering,
+  SetMerging,
   SetSettings,
   OpenReview,
   ReviewComments,
@@ -890,6 +907,8 @@ const makeHandlers = Effect.gen(function* () {
         retireUnits?: ReadonlyArray<string>;
         /** how the change works, drawn and played; null withdraws it */
         machine?: ReviewMachine | null;
+        /** whose approval collagen waits for before it merges this review (ask-review); null gives it back to the room's */
+        merge?: MergeFor | null;
         /** guesses withdrawn by id (assume-review, amending) */
         retireGuesses?: ReadonlyArray<string>;
         /** the why is the filer's AI's assumptions about someone else's change (assume-review) */
@@ -984,6 +1003,11 @@ const makeHandlers = Effect.gen(function* () {
             if (gap) return gap;
           }
           const ticketMoves = input.title !== undefined || input.goal !== undefined || input.from !== undefined || input.after !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
+          // the merge override alone is the author's, on this machine: nothing for the room
+          if (!whyMoves && !ticketMoves && kind === "review" && input.merge !== undefined && existing?.author === identity.pubkey) {
+            yield* store.update((state) => withMergeFor(state, { ticket: input.ticketId! }, input.merge ?? null));
+            return `merging for this review: ${input.merge ?? "back to its room's setting"} — ${mergeForOf(yield* store.get, roomId, input.ticketId)} in effect.`;
+          }
           if (!whyMoves && !ticketMoves) return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
           if (whyMoves) {
             const gap = reviewGaps({ ...delta, branch: input.branch, link: input.link }, true, kind);
@@ -1058,6 +1082,8 @@ const makeHandlers = Effect.gen(function* () {
             title: `${revised.goal} · ${changed ? "revised" : "more why"}`,
             outgoing: { kind: "review", ...(changed ? { ticket: revised } : {}), review },
           });
+          // the merge override is the author's own, kept on their machine
+          if (kind === "review" && input.merge !== undefined && !told.startsWith("failed")) yield* store.update((state) => withMergeFor(state, { ticket: input.ticketId! }, input.merge ?? null));
           const clone = unitsMove && !told.startsWith("failed") ? roomProjects(yield* store.get, roomId).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase()) : undefined;
           return clone ? told + (yield* unitCoverageNote(clone.path, review)) : told;
         }
@@ -1204,6 +1230,7 @@ const makeHandlers = Effect.gen(function* () {
                 (other) => other.kind === "review" && other.id !== ticketId && !isClosed(other) && !finished(other) && visibleTo(other, tickets, identity.pubkey) && reviews.find((candidate) => candidate.ticketId === other.id)?.branch === input.base,
               )
             : [];
+        if (kind === "review" && input.merge && !filed.startsWith("failed")) yield* store.update((state) => withMergeFor(state, { ticket: ticketId }, input.merge ?? null));
         const coverage = units && !filed.startsWith("failed") ? yield* unitCoverageNote(projectPath, review) : "";
         return under.length > 0 && !filed.startsWith("failed")
           ? `${filed}${coverage}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
@@ -1541,7 +1568,7 @@ const makeHandlers = Effect.gen(function* () {
       "ask-plan": (input: Parameters<typeof fileJudged>[1]) => fileJudged("plan", input),
       propose: (input: Parameters<typeof fileJudged>[1]) => fileJudged("proposal", input),
       "report-bug": (input: Parameters<typeof fileJudged>[1]) => fileJudged("bug", input),
-      "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean }) {
+      "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean; comment?: boolean }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ticket = all.get(input.ticketId);
@@ -1562,7 +1589,7 @@ const makeHandlers = Effect.gen(function* () {
           roomId,
           to: author,
           title: `${ticket.goal} · your ${ticket.kind === "review" ? "review" : "take"}`,
-          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false },
+          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}) },
         });
       }),
       epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen" | "rename"; epicId?: string; title?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
@@ -1770,6 +1797,23 @@ const makeHandlers = Effect.gen(function* () {
           Effect.map(() => `steering set to ${steering} — ${STEERING_LABEL[steering]}; every delivery now says so. Room-facing actions (messages, takes, settles, closes) remain your user's word.`),
           Effect.withSpan("Mcp.setSteering"),
         ),
+      "set-merging": Effect.fn("Mcp.setMerging")(function* (input: { scope?: "default" | "room" | "review"; level?: MergeFor | null; ticketId?: string }) {
+        const { id: roomId } = yield* focusedRoom;
+        if (input.scope === "review" && !input.ticketId) return "failed: pass the review's ticketId";
+        if (input.level !== undefined) {
+          if (input.level === null && (input.scope ?? "default") === "default") return "failed: the default takes a level — off, theirs, mine or both";
+          const scope = input.scope === "review" ? { ticket: input.ticketId! } : input.scope === "room" ? { room: roomId } : { default: true as const };
+          yield* store.update((state) => withMergeFor(state, scope, input.level ?? null));
+        }
+        const state = yield* store.get;
+        const level = (value: MergeFor | undefined) => (value ? `${value} — ${MERGE_HELP[value]}` : "not set");
+        return [
+          `default (each room first entered): ${level(state.merging?.default)}`,
+          `this room: ${level(state.merging?.rooms?.[roomId])}${state.merging?.rooms?.[roomId] ? "" : " (its default applies)"}`,
+          ...(input.ticketId ? [`review ${input.ticketId}: ${level(state.merging?.tickets?.[input.ticketId])} — in effect: ${mergeForOf(state, roomId, input.ticketId)}`] : []),
+          "Whatever the level: green checks and no take asking for changes, and the host's own rules come first.",
+        ].join("\n");
+      }),
       "set-settings": (input: { openReviewPage?: boolean }) =>
         Effect.gen(function* () {
           const changes = SETTINGS.filter((setting) => input[setting.key] !== undefined);

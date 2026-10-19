@@ -39,6 +39,9 @@ export const TicketStep = Schema.Struct({
   status: StepStatus,
   /** The owning agent's findings once settled (or the failure reason). */
   result: Schema.optional(Schema.String),
+  /** A take that says something without a verdict: it answers the ticket,
+   *  but approves nothing. Absent on every other step (and on older takes). */
+  comment: Schema.optional(Schema.Boolean),
   updatedAt: Schema.Finite,
 });
 export type TicketStep = typeof TicketStep.Type;
@@ -621,13 +624,15 @@ export function settleStep(
  *  second and a third reader can review the same change without taking
  *  anything from each other, and posting again revises your own. This is why
  *  a review ticket needs no placeholder step for "somebody, eventually": a
- *  step exists when a person has something on it. */
+ *  step exists when a person has something on it. `comment`: words with no
+ *  verdict — answered, approving nothing. */
 export function postReview(
   ticket: Ticket,
   by: { readonly key: string; readonly name: string },
   findings: string,
   failed: boolean,
   now: number,
+  comment = false,
 ): { readonly ticket: Ticket; readonly stepId: string } {
   const id = reviewStepId(by.name, by.key, new Map(ticket.steps.map((ticketStep) => [ticketStep.id, ticketStep.owner])));
   const existing = ticket.steps.find((ticketStep) => ticketStep.id === id);
@@ -639,6 +644,7 @@ export function postReview(
     needs: existing?.needs ?? [],
     status: failed ? "failed" : "settled",
     result: findings,
+    ...(comment && !failed ? { comment: true } : {}),
     updatedAt: now,
   };
   return {
