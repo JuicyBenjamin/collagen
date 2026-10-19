@@ -404,3 +404,31 @@ however the copies arrive.
   comments still pending in it are said first.
 
 Both go out through your outbox like everything you send.
+
+### Merged for you
+
+Collagen can merge the pull request of a review you filed once it is approved, so you do not
+have to. Whose approval it waits for is yours to say:
+
+| Setting | Merges when |
+| --- | --- |
+| **never** (the default) | you merge it yourself |
+| **when someone else approves** | another reader approves it |
+| **when I accept** | you press Accept on its page — Accept then approves it instead of closing it |
+| **when they approve and I accept** | both |
+
+It is set in three layers, the narrowest winning: one review (on its page, next to Accept, or
+`merge` on `ask-review`), the room you are in, and a default each room is given when you first
+enter it — your work room can wait for a colleague while a side project merges on your own
+accept. Settings has the default and the room; your agent sets any of them with `set-merging`.
+
+Whatever the setting, it also waits for green checks and for no take asking for changes, and
+the repository's own rules come first: collagen merges as you, through your own `gh`, in the
+repository's default way, and never past branch protection. If the repository wants an approval
+from someone else, it waits, and your agent tells you why.
+
+Only your own collagen merges your reviews. It looks whenever the room's tickets move and every
+minute while one waits on its checks, so an approval that came while you were away is merged
+when you are back. Once merged, the review is closed as done and your agent is told — with what
+the ticket said to do when closed and the tickets waiting on it — so the work you queued behind
+it carries on by your steering.

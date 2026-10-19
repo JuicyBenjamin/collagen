@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, DraftComment, LocalState, Project, Proposal, Settings, Steering, TranscriptAsk } from "@collagen/p2p";
+import { AdoptedThread, DraftComment, LocalState, Merging, Project, Proposal, Settings, Steering, TranscriptAsk } from "@collagen/p2p";
 
 /** Reading the user's own state file must never cost them their rooms.
  *
@@ -149,11 +149,16 @@ export const salvageState = (text: string): Salvaged => {
   const settings = decode(Settings, src.settings);
   if (src.settings !== undefined && settings === null) dropped.push("unreadable settings (back to their defaults)");
 
+  // unreadable, nothing is merged for them until it is set again
+  const merging = decode(Merging, src.merging);
+  if (src.merging !== undefined && merging === null) dropped.push("unreadable merge settings (back to: never)");
+
   return {
     state: {
       preferredAi,
       ...(steering ? { steering } : {}),
       ...(settings ? { settings } : {}),
+      ...(merging ? { merging } : {}),
       rooms,
       ...(threads ? { threads } : {}),
       ...(consumed ? { consumed } : {}),

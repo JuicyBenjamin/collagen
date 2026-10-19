@@ -10,7 +10,7 @@ import { commitOk, hostView, localHost, reviewData, reviewHead, sinceViewed, tic
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
-import { closeReview, takeReview } from "./ReviewFinish";
+import { closeReview, mergeView, setMerge, takeReview } from "./ReviewFinish";
 import { Outbox } from "./Outbox";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -98,7 +98,10 @@ const backend = Effect.gen(function* () {
     accept: (ticketId, ids, edits) => (ticketIdOk(ticketId) && idsOk(ids) && editsOk(edits) ? on(acceptDrafts(ticketId, ids, edits)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     edit: (ticketId, id, body) => (ticketIdOk(ticketId) && idsOk([id]) && bodyOk(body) ? on(editDraft(ticketId, id, body)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     repin: (ticketId, id, commit) => (ticketIdOk(ticketId) && idsOk([id]) && commitOk(commit) ? on(repinDraft(ticketId, id, commit)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
-    take: (ticketId, findings, failed) => (ticketIdOk(ticketId) && bodyOk(findings) && typeof failed === "boolean" ? on(takeReview(ticketId, findings, failed)) : Effect.succeed(bad)),
+    take: (ticketId, findings, failed, comment) =>
+      ticketIdOk(ticketId) && bodyOk(findings) && typeof failed === "boolean" && typeof comment === "boolean" ? on(takeReview(ticketId, findings, failed, comment)) : Effect.succeed(bad),
+    mergeView: (ticketId) => (ticketIdOk(ticketId) ? on(mergeView(ticketId)) : Effect.succeed(null)),
+    setMerge: (ticketId, level) => (ticketIdOk(ticketId) && (level === null || level === "off" || level === "theirs" || level === "mine" || level === "both") ? on(setMerge(ticketId, level)) : Effect.succeed(null)),
     close: (ticketId, outcome) => (ticketIdOk(ticketId) && (outcome === "done" || outcome === "dropped") ? on(closeReview(ticketId, outcome)) : Effect.succeed(bad)),
     merges: (roomId, shown, fresh) => (ticketIdOk(roomId) && shownCountsOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, shown, fresh)) : Effect.succeed(null)),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
