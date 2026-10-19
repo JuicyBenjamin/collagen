@@ -1,65 +1,42 @@
-import { createSignal, Show } from "solid-js";
 import type { ReviewPageHead } from "~/data";
-import { Appear } from "~/components/Appear";
-import { hostNow } from "~/hostNow";
+import { floating } from "~/floating";
+import { DialButtons, DialPanel } from "../../../ReviewDial";
 import { Progress } from "./components/Progress";
-import { Pull } from "./components/Pull";
-import { ReviewComposer } from "./components/ReviewComposer";
-import { Viewer } from "./components/Viewer";
 
-/** Top right of the page: how far through the files the reader is, the
- *  review's pull request (its number, state and decision, a link to it), a
- *  Review button when the reader can review it, and who is signed in to its
- *  host — so whose name a review goes out under is seen before anything is
- *  sent. Each part arrives on its own read; each missing part says why, quietly. */
+/** Under the header's top line, on the right: one pill holding how far
+ *  through the files the reader is and the buttons that finish the review —
+ *  the same pill the corner holds once this one has scrolled away, and it
+ *  flies there (floating.ts), leaving its place here empty until it flies
+ *  back. The open panel under it. */
 export function HostBar(props: { head: ReviewPageHead }) {
-  const [open, setOpen] = createSignal(false);
-  const pending = () => hostNow.pending().length;
-  // an open review ticket can always be finished here: someone else's with a
-  // verdict, the reader's own accepted or dropped
-  const reviewOpen = () => props.head.ticket.kind === "review" && !props.head.ticket.closed;
-  const canReview = () => reviewOpen() || hostNow.canWrite() || pending() > 0;
   return (
     <div class="host-bar">
-      <div class="host-row">
-        <Progress />
-        <Pull />
-        <Appear when={canReview()}>
-          {() => (
-            <button
-              type="button"
-              class={["review-open", { on: open() }]}
-              onClick={() => setOpen(!open())}
-              aria-expanded={open() ? "true" : "false"}
-              title={
-                props.head.ticket.mine
-                  ? "Accept or drop your review"
-                  : pending() > 0
-                    ? "Finish your review: say the pending comments, with a verdict"
-                    : "Give your review"
-              }
-            >
-              {pending() > 0 ? `Finish review · ${pending()}` : "Review"}
-            </button>
-          )}
-        </Appear>
-        <Viewer />
+      {/* while it is in the corner its place here stays, empty: one pill, never two */}
+      <div class="pill-outer" style={{ "view-transition-name": floating() ? "none" : "review-pill", visibility: floating() ? "hidden" : undefined }}>
+        <span class="pill-inner">
+          <Progress />
+        </span>
+        <DialButtons head={props.head} />
       </div>
-      <Show when={open() && canReview()}>
-        <ReviewComposer mine={props.head.ticket.mine} onDone={() => setOpen(false)} />
-      </Show>
+      <DialPanel head={props.head} where="bar" />
     </div>
   );
 }
 
-/** The bar before the host and the diff are read: its parts' placeholders. */
+/** The pill before the diff is read: the count's placeholder, and the
+ *  buttons' places. */
 HostBar.Skeleton = function Skeleton() {
   return (
     <div class="host-bar">
-      <div class="host-row">
-        <Progress.Skeleton />
-        <Pull.Skeleton />
-        <Viewer.Skeleton />
+      <div class="pill-outer sk" aria-hidden="true">
+        <span class="pill-inner">
+          <Progress.Skeleton />
+        </span>
+        <span class="dial-buttons">
+          <span class="dial sk-button" />
+          <span class="dial sk-button" />
+          <span class="dial sk-button" />
+        </span>
       </div>
     </div>
   );
