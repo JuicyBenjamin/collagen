@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emojify, parseMarkdown } from "./markdown";
+import { emojify, parseDocument, parseMarkdown } from "./markdown";
 
 describe("a comment as markdown", () => {
   it("turns emoji shortcodes into emoji, and leaves unknown names and code alone", () => {
@@ -31,5 +31,17 @@ describe("a comment as markdown", () => {
     ]);
     const [paragraph] = parseMarkdown("[hi](javascript:alert(1)) [ok](https://example.com)");
     expect(paragraph).toMatchObject({ kind: "p", children: [{ kind: "text", text: "hi" }, { kind: "text", text: " " }, { kind: "link", href: "https://example.com" }] });
+  });
+});
+
+describe("a Markdown file, read as a document", () => {
+  it("gives each block the lines it spans, so a changed line marks the block it is in", () => {
+    const file = ["# Title", "", "First paragraph,", "on two lines.", "", "- one", "- two", "", "```ts", "const a = 1;", "```"].join("\n");
+    expect(parseDocument(file).map((section) => [section.blocks[0]!.kind, section.from, section.to])).toEqual([
+      ["heading", 1, 1],
+      ["p", 3, 4],
+      ["list", 6, 7],
+      ["code", 9, 11],
+    ]);
   });
 });
