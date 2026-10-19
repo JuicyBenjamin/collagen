@@ -2,7 +2,8 @@ import { createEffect, createMemo, createSignal, Errored, Loading } from "solid-
 import type { ReviewPageData, ReviewPageHead } from "./data";
 import { Page } from "./components/Page";
 import { Popover } from "./components/Popover";
-import { reviewChanges, reviewData, reviewHead } from "./api";
+import { reviewData, reviewHead } from "./api";
+import { overSocket } from "./liveSocket";
 import { hostNow } from "./hostNow";
 import { kept } from "./kept";
 import { lasting } from "./lasting";
@@ -45,7 +46,7 @@ export function App() {
   // page is: a token that moves when its why is revised, the ticket moves,
   // or the branch's commit in the clone changes — opened again whenever the
   // connection breaks (collagen restarted), its first value catching up
-  const state = createMemo(() => lasting(() => reviewChanges(ticketId)));
+  const state = createMemo(() => lasting(() => overSocket("changes", ticketId)));
   // the review on its host, read beside the data
   hostNow.start(state);
   // its data, read again whenever that state moves — what is on screen
