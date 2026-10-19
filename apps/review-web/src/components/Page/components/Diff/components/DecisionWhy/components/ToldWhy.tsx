@@ -1,3 +1,4 @@
+import { Markdown } from "~/components/Markdown";
 import { For, Show } from "solid-js";
 import type { Decision } from "~/data";
 
@@ -34,7 +35,7 @@ export function ToldWhy(props: { decision: Decision }) {
         {(why) => (
           <div class="why-part">
             <p class="who">The agent</p>
-            <p>{why()}</p>
+            <Markdown text={why()} />
           </div>
         )}
       </Show>

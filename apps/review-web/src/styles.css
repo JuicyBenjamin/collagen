@@ -483,6 +483,15 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 
 /* a comment's words as markdown */
 .md { overflow-wrap: anywhere; color: var(--fg); }
+/* a Markdown file in the diff, rendered: each block the diff changed marked at its side */
+.md-document { padding: 14px 20px 14px 24px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14.5px; line-height: 1.6; }
+.md-document .md-h1 { font-size: 1.6em; }
+.md-document .md-h2 { font-size: 1.3em; }
+.md-section { margin-left: -12px; padding-left: 9px; border-left: 3px solid transparent; }
+.md-section.changed { border-left-color: var(--sign-add); background: color-mix(in srgb, var(--add-bg) 55%, transparent); }
+.md-reading { margin: 0; padding: 14px 20px; color: var(--faint); font-size: 13px; }
+/* the why's own words: as quiet as the rest of the why */
+.why-part .md, .fork-why .md { color: inherit; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
 .md p, .md ul, .md ol, .md blockquote, .md pre, .md .md-table { margin: 0 0 8px; }

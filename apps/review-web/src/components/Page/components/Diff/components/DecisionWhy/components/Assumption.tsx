@@ -1,3 +1,4 @@
+import { Markdown } from "~/components/Markdown";
 import { Show } from "solid-js";
 import type { Decision } from "~/data";
 import { assumedNow } from "~/assumedNow";
@@ -21,7 +22,7 @@ export function AssumedWhy(props: { decision: Decision }) {
         {(why) => (
           <div class="why-part">
             <p class="who">The AI's reading</p>
-            <p>{why()}</p>
+            <Markdown text={why()} />
           </div>
         )}
       </Show>
