@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import type { ToolId } from "~/data";
-import { toolStates, warmTypes } from "~/api";
+import { warmTypes } from "~/api";
+import { overSocket } from "~/liveSocket";
 import { diffNow } from "~/diffNow";
 import { lasting } from "~/lasting";
 import { installTool, keepTool, toolState } from "~/intel";
@@ -29,7 +30,7 @@ export function TypesBanner(props: { tool: ToolId }) {
   const unseen = () => (toolState(props.tool)?.notices ?? []).filter((notice) => !seen().has(notice));
   // the tool's state, live from the instance while the banner is on the
   // page: the offer, an install seen through, the server's notices
-  const live = createMemo(() => lasting(() => toolStates(props.tool)));
+  const live = createMemo(() => lasting(() => overSocket("tool", props.tool)));
   createEffect(live, (tool) => {
     keepTool(tool);
   });

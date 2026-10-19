@@ -1,7 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Fiber, Layer, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
@@ -130,11 +130,76 @@ const handle = (load: Effect.Effect<ServerEntry | null>) => (request: HttpServer
     return HttpServerResponse.fromWeb(yield* Effect.promise(() => entry.handleServerFunctionRequest(web)));
   }).pipe(Effect.catch(() => Effect.succeed(HttpServerResponse.text("bad request", { status: 400 }))));
 
+/** What a page asks its live socket for: a stream opened under its own id,
+ *  or one it no longer needs. */
+type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool"; readonly subject: string } | { readonly close: string };
+const liveIdOk = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,32}$/.test(id);
+const liveAskOf = (text: string): LiveAsk | null => {
+  try {
+    const ask = JSON.parse(text) as Record<string, unknown>;
+    if (liveIdOk(ask["close"])) return { close: ask["close"] };
+    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
+  } catch {
+    // not one: ignored
+  }
+  return null;
+};
+
+/** A page's live updates, every one of them on one WebSocket. A browser lets
+ *  a page hold only six connections to a host, and a stream held open on
+ *  each would take them all with a few tabs; a WebSocket is not counted
+ *  against them, so the page's reads and a reload always get through. A
+ *  WebSocket is not held to the same-origin rule either: only a page served
+ *  from here — its Origin this very host — may open one. */
+const liveSocket = (impl: ReviewBackend["Service"]) => (request: HttpServerRequest.HttpServerRequest) =>
+  Effect.gen(function* () {
+    const host = request.headers["host"];
+    if (!localHost(host) || request.headers["origin"] !== `http://${host}`) return HttpServerResponse.text("forbidden", { status: 403 });
+    const socket = yield* request.upgrade;
+    const write = (yield* socket.writer).write;
+    const reader = yield* socket.reader;
+    const running = new Map<string, Fiber.Fiber<void>>();
+    const stop = (id: string) => {
+      const fiber = running.get(id);
+      running.delete(id);
+      return fiber ? Fiber.interrupt(fiber) : Effect.void;
+    };
+    // each message read, until the page goes
+    yield* Effect.gen(function* () {
+      for (;;) {
+        for (const message of yield* reader.pull) {
+          const ask = liveAskOf(typeof message === "string" ? message : new TextDecoder().decode(message));
+          if (ask === null) continue;
+          if ("close" in ask) {
+            yield* stop(ask.close);
+            continue;
+          }
+          yield* stop(ask.open);
+          const values: Stream.Stream<unknown> = ask.topic === "changes" ? impl.changes(ask.subject) : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
+          const fiber = yield* values.pipe(
+            Stream.runForEach((value) => write(JSON.stringify({ id: ask.open, value }))),
+            // its stream ended: the page is told, to open it again
+            Effect.andThen(write(JSON.stringify({ id: ask.open, end: true }))),
+            Effect.ignore,
+            Effect.forkChild,
+          );
+          running.set(ask.open, fiber);
+        }
+      }
+    }).pipe(Effect.ignore);
+    yield* Effect.forEach([...running.keys()], stop, { discard: true });
+    return HttpServerResponse.empty();
+  }).pipe(
+    Effect.scoped,
+    Effect.catch(() => Effect.succeed(HttpServerResponse.text("bad request", { status: 400 }))),
+  );
+
 export const ReviewServerRoutes = Layer.unwrap(
   Effect.gen(function* () {
-    const load = bundle(yield* backend);
+    const impl = yield* backend;
+    const load = bundle(impl);
     // the wildcard takes the endpoint itself too (POSTed calls) and what
     // is under it (a GET's /<id>, a live call's /live/<id>)
-    return HttpRouter.add("*", "/review/_server/*", handle(load));
+    return Layer.mergeAll(HttpRouter.add("*", "/review/_server/*", handle(load)), HttpRouter.add("GET", "/review/_live", liveSocket(impl)));
   }),
 );
