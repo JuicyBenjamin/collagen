@@ -132,3 +132,25 @@ const blocks = (tokens: ReadonlyArray<Token>): ReadonlyArray<Block> =>
 /** A comment's words as blocks. Single newlines are line breaks, as in a
  *  GitHub comment. */
 export const parseMarkdown = (source: string): ReadonlyArray<Block> => blocks(new Lexer({ gfm: true, breaks: true }).lex(source));
+
+/** One top-level block of a Markdown file and the lines it spans (1-based,
+ *  both ends in), so a diff's lines can be laid on what they made. */
+export interface Section {
+  readonly blocks: ReadonlyArray<Block>;
+  readonly from: number;
+  readonly to: number;
+}
+
+/** A Markdown file as blocks, each with its lines. A single newline is a
+ *  space here, as in a file and unlike a comment. */
+export const parseDocument = (source: string): ReadonlyArray<Section> => {
+  let line = 1;
+  return new Lexer({ gfm: true }).lex(source).flatMap((token): ReadonlyArray<Section> => {
+    const from = line;
+    const breaks = token.raw.split("\n").length - 1;
+    line += breaks;
+    const made = blocks([token]);
+    // a block's raw text can carry the blank lines after it
+    return made.length > 0 ? [{ blocks: made, from, to: from + token.raw.replace(/\n+$/, "").split("\n").length - 1 }] : [];
+  });
+};
