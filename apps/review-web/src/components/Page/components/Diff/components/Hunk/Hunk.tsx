@@ -291,15 +291,21 @@ export function Hunk(props: {
               {full() ? "Since you viewed" : "Whole change"}
             </button>
           </Show>
-          <Show when={!props.continued && isMarkdown(props.hunk.file) && diffNow.canReadWhole() && props.whole.readable && !folded()}>
-            <button type="button" class="whole-toggle" onClick={() => mdView.toggle(props.hunk.file)} title={asDocument() ? "The file's lines as written, with this diff's changes" : "The file as it reads, this diff's changes marked"}>
-              {asDocument() ? "Raw" : "Rendered"}
-            </button>
-          </Show>
           <Show when={canWhole()}>
             <button type="button" class="whole-toggle" onClick={toggleWhole} title="The whole file as the branch has it, with this diff's added and removed lines">
               {props.whole.loading() ? "Reading…" : props.whole.shown() !== null ? (props.whole.count > 1 ? "Just the changes" : "Just the change") : "Whole file"}
             </button>
+          </Show>
+          {/* both ways side by side, next to Viewed: the switch never moves under the pointer */}
+          <Show when={!props.continued && isMarkdown(props.hunk.file) && diffNow.canReadWhole() && props.whole.readable && !folded()}>
+            <span class="view-switch" role="group" aria-label="How this file reads">
+              <button type="button" class={{ on: asDocument() }} aria-pressed={asDocument() ? "true" : "false"} onClick={() => mdView.raw(props.hunk.file) && mdView.toggle(props.hunk.file)} title="The file as it reads, this diff's changes marked">
+                Rendered
+              </button>
+              <button type="button" class={{ on: !asDocument() }} aria-pressed={asDocument() ? "false" : "true"} onClick={() => !mdView.raw(props.hunk.file) && mdView.toggle(props.hunk.file)} title="The file's lines as written, with this diff's changes">
+                Raw
+              </button>
+            </span>
           </Show>
           <Show when={!props.continued}>
           <label class={["mark-viewed", { changed: state() === "changed" }]} title="Fold this file everywhere on the page, as read; it opens again if its changes move, showing what moved">
