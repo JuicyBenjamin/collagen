@@ -50,7 +50,18 @@ sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" 
 sfn_url() { echo "$ORIGIN/review/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 sfn() { node "$E2E/sfn.mjs" "$(sfn_url "$1" "$2")"; }
 # a live one's first few seconds, as it streams them: one event per value
-sfn_live() { curl -s -N -m "${3:-4}" "$(sfn_url "$1" "$2" live)"; }
+# a live state, as the page gets it: over its WebSocket (ReviewServer's
+# /review/_live), each value on a line, for $3 seconds (4)
+sfn_live() {
+  node -e '
+    const [origin, name, args, seconds] = process.argv.slice(1);
+    const topic = { toolStates: "tool", reviewChanges: "changes" }[name];
+    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+    socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic, subject: JSON.parse(args)[0] }));
+    socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(JSON.stringify(message.value)); };
+    setTimeout(() => process.exit(0), Number(seconds) * 1000);
+  ' "$ORIGIN" "$1" "$2" "${3:-4}"
+}
 
 echo "## the page's data: the diff from the clone, in units, the why beside them"
 wait_until "the review's data is served" "\"units\"" sfn reviewData "[\"$TICKET\"]"
@@ -111,7 +122,7 @@ expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sT
 
 echo "## types and definitions, from collagen's own TypeScript 7 over the branch"
 expect "the page follows the pinned TypeScript live: there, and ready" "$(sfn_live toolStates '["typescript"]')" "\"7\.[0-9.]+\".*\"ready\""
-expect "…a tool collagen does not have streams nothing" "$(sfn_live toolStates '["cobol"]' 2 | grep -c '^id:')" "^0$"
+expect "…a tool collagen does not have streams nothing" "$(sfn_live toolStates '["cobol"]' 2 | grep -c .)" "^0$"
 expect "installing from another origin is refused (Solid's same-origin guard)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'Origin: https://evil.example' --data '["typescript"]' "$ORIGIN/review/_server/$(sfn_id installTool)")" "^403$"
 # the commit the page's diff is read at: types, peeks, the whole file and
 # what moved since are all of it
@@ -210,6 +221,12 @@ expect "a function documented on its own line: the peek keeps its declaration, t
 expect "a project with its own vendor-dir: its package hovers" "$(sfn hoverAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now),\"$PHPAT\"]")" "Clock::now.*public function now\\(\\): string"
 expect "…and peeks as the package's file" "$(sfn definitionAt "[\"$TICKET\",\"jobs/src/Stamp.php\",11,$(colof jobs/src/Stamp.php 11 now),\"$PHPAT\"]")" "\"file\":\"acme/clock/src/Clock.php\",\"where\":\"package\""
 expect "peeking a PHP function says it is built into PHP" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
+
+echo "## live updates on one WebSocket, opened only by the page itself"
+upgrade() { curl -s -o /dev/null -w "%{http_code}" --max-time 2 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$@" "$ORIGIN/review/_live"; }
+expect "the page's own origin gets its socket" "$(upgrade -H "Origin: $ORIGIN")" "^101$"
+expect "another site cannot open one — a socket is not held to the same-origin rule" "$(upgrade -H "Origin: http://evil.example")" "^403$"
+expect "…nor can a request naming no origin" "$(upgrade)" "^403$"
 
 echo "## merged into main: no change left to show, and the page says so"
 git -C "$R" checkout -q main; git -C "$R" merge -q --no-ff -m merge feat/stream-export

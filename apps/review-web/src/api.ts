@@ -1,4 +1,4 @@
-import { GET, live } from "@solidjs/web/server-functions";
+import { GET } from "@solidjs/web/server-functions";
 import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
@@ -19,16 +19,6 @@ export const reviewData = GET(async (ticketId: string): Promise<ReviewPageData |
   return run((backend) => backend.data(ticketId));
 });
 
-/** The review's state as a token, current first and again whenever it
- *  moves: the page reads its data again when the token differs from the
- *  last it saw. Held open while the page is. */
-export const reviewChanges = live(
-  GET(async (ticketId: string): Promise<AsyncIterable<string>> => {
-    "use server";
-    return stream((backend) => backend.changes(ticketId));
-  }),
-);
-
 /** Types and peeks are of the code at the commit the page shows — the same
  *  code the reader is pointing at, even after the branch has moved on. */
 export const hoverAt = GET(async (ticketId: string, file: string, line: number, col: number, commit: string): Promise<HoverResult> => {
@@ -47,15 +37,6 @@ export const warmTypes = async (ticketId: string, tool: ToolId, commit: string):
   "use server";
   return run((backend) => backend.warm(ticketId, tool, commit));
 };
-
-/** A language server's state, live: the offer, its install, its notices
- *  follow it as it moves. Held open while the page is. */
-export const toolStates = live(
-  GET(async (tool: ToolId): Promise<AsyncIterable<ToolState>> => {
-    "use server";
-    return stream((backend) => backend.tool(tool));
-  }),
-);
 
 /** Install a language server — only ever on the reader's click. */
 export const installTool = async (tool: ToolId): Promise<ToolState | null> => {
