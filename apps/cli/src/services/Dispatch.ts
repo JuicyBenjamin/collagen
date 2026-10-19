@@ -256,7 +256,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const now = yield* Clock.currentTimeMillis;
           // a review lands on a step of its reader's own: nobody's is taken,
           // and posting again revises theirs
-          const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now);
+          const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now, out.comment ?? false);
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
           const others = merged.steps.filter((step) => isTake(step) && step.owner !== identity.pubkey).length;

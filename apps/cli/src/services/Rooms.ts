@@ -1,3 +1,4 @@
+import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
@@ -424,6 +425,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       const handle: RoomHandle = { id: entry.id, room };
       yield* daemons(handle).pipe(Effect.provideService(Scope.Scope, scope));
       scopes.set(entry.id, scope);
+      // a room entered takes the person's merge default, once: changing the
+      // default later leaves the rooms already set as they were
+      yield* store.update((state) => joinedRoom(state, entry.id));
       yield* SubscriptionRef.update(handles, (liveHandles) => [...liveHandles, handle]);
       yield* Effect.log(`room open: ${entry.name} [${shortRoomId(entry.id)}]`);
       return handle;
