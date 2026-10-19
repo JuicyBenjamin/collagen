@@ -52,7 +52,10 @@ export async function placeWhy(panel: HTMLElement, inner: HTMLElement, open: boo
  *  lets go once the panel leaves the page. */
 export function keepEdges(panel: HTMLElement): void {
   const mark = () => {
-    const below = panel.scrollHeight - panel.clientHeight - panel.scrollTop;
+    // the reasons' own height, not the panel's scroll height: the fades are
+    // taller than a short why, and would count as more of it below
+    const tall = (panel.firstElementChild as HTMLElement | null)?.offsetHeight ?? panel.scrollHeight;
+    const below = tall - panel.clientHeight - panel.scrollTop;
     panel.toggleAttribute("data-above", panel.scrollTop > 1);
     panel.toggleAttribute("data-below", below > 1);
   };
