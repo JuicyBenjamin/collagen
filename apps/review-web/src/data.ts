@@ -174,7 +174,8 @@ export interface MachineVersion {
 /** The review's own part of the page: its ticket, its why and its links,
  *  known as soon as the room is read — the diff comes after. */
 export interface ReviewPageHead {
-  readonly ticket: { readonly id: string; readonly title?: string; readonly goal: string; readonly kind: string; readonly project: string };
+  /** `mine`: the reader filed it — theirs to accept or drop; `closed`: it is over */
+  readonly ticket: { readonly id: string; readonly title?: string; readonly goal: string; readonly kind: string; readonly project: string; readonly mine: boolean; readonly closed: boolean };
   readonly review: {
     readonly summary: string;
     readonly branch?: string;

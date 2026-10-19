@@ -1,24 +1,28 @@
 import { createSignal, flush, Show } from "solid-js";
-import type { Verdict } from "~/data";
+import type { Verdict as VerdictValue } from "~/data";
+import { takeReview } from "~/api";
 import { hostNow } from "~/hostNow";
+import { ticketId } from "~/ticket";
 import { asksForChanges } from "~/strength";
 
-const VERDICTS: ReadonlyArray<{ readonly value: Verdict; readonly label: string; readonly hint: string }> = [
+const VERDICTS: ReadonlyArray<{ readonly value: VerdictValue; readonly label: string; readonly hint: string }> = [
   { value: "comment", label: "Comment", hint: "Feedback without a verdict" },
   { value: "approve", label: "Approve", hint: "It can be merged" },
   { value: "request-changes", label: "Request changes", hint: "It needs changes before it is merged" },
 ];
 
-/** Finishing the reader's review, as GitHub's "Finish your review" has it:
- *  their words on the whole, a verdict, and every comment pending in the
- *  review, said at once — in the room, and on the pull request as one review
- *  through their own gh. On their own pull request — or with none — the
- *  pending comments are said in the room alone: no verdict, and no words on
- *  the whole, which would have nowhere to go. Their take on the collagen
- *  ticket itself still goes through their agent. */
-export function ReviewComposer(props: { onDone: () => void }) {
+/** What a verdict says on the collagen ticket when the reader gave no words. */
+const SAID: Record<VerdictValue, string> = { comment: "", approve: "Approved.", "request-changes": "Changes requested — see my comments." };
+
+/** Finishing the reader's review of someone else's change, as GitHub's
+ *  "Finish your review" has it: their words on the whole, a verdict, and
+ *  every comment pending in it, said at once — the comments in the room, and
+ *  on the pull request as one review through their own gh when there is one
+ *  to put them on; the verdict and words on the collagen ticket as their
+ *  take, as their agent's post-review would. */
+export function Verdict(props: { onDone: () => void }) {
   const [body, setBody] = createSignal("");
-  const [verdict, setVerdict] = createSignal<Verdict>("comment");
+  const [verdict, setVerdict] = createSignal<VerdictValue>("comment");
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
   const count = () => hostNow.pending().length;
@@ -26,9 +30,9 @@ export function ReviewComposer(props: { onDone: () => void }) {
   const onHost = () => hostNow.canWrite();
   /** a must in the review asks for changes: the whole review does, the host having one verdict for all of it */
   const musts = () => hostNow.pending().filter((draft) => asksForChanges(draft.body)).length;
-  const chosen = (): Verdict => (musts() > 0 ? "request-changes" : verdict());
+  const chosen = (): VerdictValue => (musts() > 0 ? "request-changes" : verdict());
   // words are needed only where nothing else says it: a verdict or comments do
-  const ready = () => !sending() && (!onHost() ? count() > 0 : chosen() === "approve" || body().trim().length > 0 || count() > 0);
+  const ready = () => !sending() && (chosen() === "approve" || body().trim().length > 0 || count() > 0);
   // one finish at a time: a second click while one is on its way sends nothing
   let busy = false;
   const send = async () => {
@@ -39,15 +43,23 @@ export function ReviewComposer(props: { onDone: () => void }) {
     // shown now: left to the finish's own read, it would show only once it is over
     flush();
     try {
-      // in the room alone there is nowhere for words on the whole, or a verdict
-      const result = await hostNow.submit(onHost() ? chosen() : "comment", onHost() ? body() : "");
-      if ("error" in result) {
-        // its words and verdict reached the pull request: only the room is left to tell
-        if (result.onHost) {
-          setBody("");
-          setVerdict("comment");
+      // the comments, and on the pull request the words and verdict too
+      if (onHost() || count() > 0) {
+        const result = await hostNow.submit(onHost() ? chosen() : "comment", onHost() ? body() : "");
+        if ("error" in result) {
+          // its words and verdict reached the pull request: only the room is left to tell
+          if (result.onHost) {
+            setBody("");
+            setVerdict("comment");
+          }
+          return setSaid(result.error);
         }
-        return setSaid(result.error);
+      }
+      // the verdict and words on the collagen ticket, as the reader's take
+      const findings = body().trim() || SAID[chosen()] || (count() > 0 ? "See my comments on the code." : "");
+      if (findings) {
+        const taken = await takeReview(ticketId, findings, chosen() === "request-changes");
+        if ("error" in taken) return setSaid(taken.error);
       }
       setBody("");
       props.onDone();
@@ -70,7 +82,6 @@ export function ReviewComposer(props: { onDone: () => void }) {
         <strong>Finish your review</strong>
         <span>{count() === 0 ? "no comments pending" : count() === 1 ? "1 comment pending" : `${count()} comments pending`}</span>
       </div>
-      <Show when={onHost()}>
       <textarea
         placeholder={chosen() === "approve" || count() > 0 ? "Anything to add (optional)" : chosen() === "request-changes" ? "What should change" : "Leave a comment"}
         value={body()}
@@ -91,11 +102,8 @@ export function ReviewComposer(props: { onDone: () => void }) {
       <Show when={musts() > 0}>
         <p class="host-note left">{musts() === 1 ? "A must comment requests changes." : `${musts()} must comments request changes.`}</p>
       </Show>
-      </Show>
       <Show when={!onHost()}>
-        <p class="host-note left">
-          {pull()?.mine ? `Your own pull request: your comments stay in collagen — on ${hostNow.hostName()} you would be their only reader.` : "Your comments are said in the room — there is no open pull request to put them on."} A word on the whole, or a verdict, goes through your agent.
-        </p>
+        <p class="host-note left">{pull()?.mine ? `Your own pull request: it all stays in collagen.` : "No open pull request: it all goes on the ticket, in the room."}</p>
       </Show>
       <Show when={hostNow.unplaced().filter((draft) => !hostNow.isDraft(draft)).length}>
         {(stranded) => <p class="host-note left">{stranded() === 1 ? "1 pending comment sits" : `${stranded()} pending comments sit`} on lines this diff no longer shows — listed at the top of the page, to delete.</p>}

@@ -14,7 +14,7 @@ export function Header(props: { head: ReviewPageHead }) {
     <header>
       <div class="header-top">
         <Meta head={props.head} />
-        <HostBar />
+        <HostBar head={props.head} />
       </div>
       <StackRow />
       <DraftsBar />

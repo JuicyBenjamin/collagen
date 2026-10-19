@@ -395,6 +395,12 @@ however the copies arrive.
 
 ## Saying what you think
 
-A review sent from the page reviews the **pull request**. Your take on the collagen ticket
-goes back the way everything in collagen does — through your agent, in your words, with
-`post-review` — so there is one path into the room's log, and it is yours.
+**Review**, top right, finishes a review on the page, whatever its pull request:
+
+- **Someone else's review:** your verdict and words go on the collagen ticket as your take,
+  as your agent's `post-review` would, and on the pull request too when there is one to put
+  them on, with your pending comments.
+- **A review you filed:** **Accept** closes it as done; **Drop** closes it as not done. Any
+  comments still pending in it are said first.
+
+Both go out through your outbox like everything you send.
