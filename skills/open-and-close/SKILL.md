@@ -28,7 +28,11 @@ place because they see where things went.
   element as it is placed (its `ref`), `await leave(el)` before it is taken
   out. Height and opacity, about a fifth of a second, the shared ease. A
   shape they do not cover (a panel sliding across, a list reordering) uses
-  Motion's `animate` the same way, beside them.
+  Motion's `animate` the same way, beside them. Something moving from one
+  place to another (the review's pill, from the header to the corner) is
+  one view transition: the same `view-transition-name` on each place, only
+  one holding it at a time, the switch inside `startViewTransition`
+  (`floating.ts`).
 - **Two states when it closes.** What the reader asked (`open`) and what is
   still placed (`shown`): `open` flips at once, so the control answers;
   `shown` goes false after `leave`, and only if the reader has not opened
@@ -68,6 +72,13 @@ The TUI is exempt: a terminal redraws in steps.
   review with tabs moved 20px as it arrived. A row whose contents depend on
   data is always there (the code's tab alone when nothing else), its
   placeholder masking what it held last time.
+- The sweep's placeholder, laid over the part, dropped the top margin of
+  every part in it, not just the first: once the tabs led the diff's
+  placeholder, the units under them stood 48px too high and jumped as the
+  sweep ran. Only the first part's margin folds through.
+- The stack row came with the host's answer and opened in, pushing the page
+  down 31px. What the room already knows (its own reviews) comes with the
+  head, so the row stands from the first paint; the host only adds to it.
 
 ## Checklist
 
