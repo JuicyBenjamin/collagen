@@ -127,7 +127,7 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 .no-code-why { color: var(--warn); }
 .no-code .empty { margin-top: 4px; font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-.why { position: sticky; top: 24px; max-height: calc(100vh - 24px - var(--float-room)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; font-size: 13.5px; line-height: 1.55; color: var(--dim); border-left: 2px solid var(--line); padding-left: 16px; }
+.why { position: sticky; top: 24px; max-height: calc(100vh - 24px - var(--float-room)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; font-size: 13.5px; line-height: 1.55; color: var(--dim); border-left: 2px solid var(--line); padding-left: 16px; min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 1320px) { .why { position: static; max-height: none; overflow-y: visible; } .why:not([open]) summary { margin-bottom: 0; } }
 .why summary::before { content: "▸ "; }
 .why[open] summary::before { content: "▾ "; }
