@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 
 /** Where a block of lines starts, or null for one line. */
 type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
@@ -56,10 +56,14 @@ export class ReviewBackend extends Context.Service<
     /** a comment not said yet, confirmed where it sits at `commit` — the one the page shows now */
     readonly repin: (ticketId: string, id: string, commit: string) => Effect.Effect<DraftsResult>;
     /** what was merged into a room's projects, with the tickets each came from; null for a room not here */
-    /** the reader's take on a review, said in the room as theirs; `failed` rejects it */
-    readonly take: (ticketId: string, findings: string, failed: boolean) => Effect.Effect<HostWrite>;
+    /** the reader's take on a review, said in the room as theirs; `failed` rejects it, `comment` approves nothing */
+    readonly take: (ticketId: string, findings: string, failed: boolean, comment: boolean) => Effect.Effect<HostWrite>;
     /** a review the reader filed, closed: accepted as done, or dropped */
     readonly close: (ticketId: string, outcome: "done" | "dropped") => Effect.Effect<HostWrite>;
+    /** merging for a review the reader filed: its own setting, its room's, the one in effect */
+    readonly mergeView: (ticketId: string) => Effect.Effect<MergeView | null>;
+    /** set a review's own merge setting; null gives it back to its room's */
+    readonly setMerge: (ticketId: string, level: MergeFor | null) => Effect.Effect<MergeView | null>;
     readonly merges: (roomId: string, shown: MergesShown, fresh: boolean) => Effect.Effect<MergeHistory | null>;
   }
 >()("review-web/ReviewBackend") {}

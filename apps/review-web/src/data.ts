@@ -482,6 +482,17 @@ export type Verdict = "comment" | "approve" | "request-changes";
 
 /** What the host said to a write: done (the comment as it now stands), or
  *  its refusal in words. */
+/** Whose approval collagen waits for before it merges a review's pull request for its author. */
+export type MergeFor = "off" | "theirs" | "mine" | "both";
+
+/** mergeView(ticketId) — merging for a review the reader filed: its own
+ *  setting (null: its room's applies), its room's, and the one in effect. */
+export interface MergeView {
+  readonly own: MergeFor | null;
+  readonly room: MergeFor;
+  readonly effect: MergeFor;
+}
+
 export type HostWrite = { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
 
 /** A ticket a merge came from, or one that grew into it, as the merge

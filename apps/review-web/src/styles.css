@@ -336,6 +336,9 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 .verdicts { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
 .verdicts label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .verdicts label.disabled { color: var(--faint); cursor: not-allowed; }
+/* a review's own merge setting, in the reader's own review */
+.merge-for { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+.merge-for select { font: 13px -apple-system, sans-serif; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
 .composer-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .quiet { font: 13px -apple-system, sans-serif; color: var(--dim); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
 .banner-go:disabled { opacity: 0.5; cursor: default; }

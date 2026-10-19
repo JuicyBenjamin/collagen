@@ -135,7 +135,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `get-tickets` and `get-ticket`, `ask-review` — a review with the why behind the change; `assume-review` — a review of someone else's pull request, its why inferred and marked as guesses; `claim-review` — the code's author answers those guesses and makes the review theirs; `open-review` — a review's page in your browser, as `o` does; `epic` — folders of tickets, shaped by anyone, only when asked |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks; `token-cost` — what collagen costs your AI in tokens, read from its own session logs ([how](../internals/token-cost)) |
-| Settings | `add-project`, `remove-project`, `set-ai`, `set-steering`, `set-name`, `set-settings` — your switches, listed or set |
+| Settings | `add-project`, `remove-project`, `set-ai`, `set-steering`, `set-name`, `set-settings` — your switches, listed or set; `set-merging` — whether collagen merges your reviewed pull requests for you |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 
 You use it by just asking your agent, e.g. *"check who's in my collagen room and ask

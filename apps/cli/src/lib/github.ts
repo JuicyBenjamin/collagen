@@ -1,6 +1,7 @@
 import type { HostNote, HostReview, HostUser, LineComment, PullRequest } from "@collagen/review-web/data";
 import { Schema } from "effect";
 import type { HostMerge } from "../services/RepoHost";
+import type { HostReadiness } from "./merging";
 
 // What `gh` answers, read into the review page's shapes. Pure: the calls
 // are services/RepoHost's. Anything gh says that is not the shape asked for
@@ -269,4 +270,50 @@ export const refusal = (stderr: string): string => {
       .find((text) => text.length > 0) ?? "";
   const said = line.replace(/^(gh: |error: |failed to [^:]+: )/i, "").replace(/\s*\(HTTP \d+\)\s*$/, "");
   return said.length > 0 ? said : "GitHub refused it";
+};
+
+/** What `gh pr view` is asked for to judge whether a pull request can be merged. */
+export const READINESS_FIELDS = "state,isDraft,mergeable,reviewDecision,statusCheckRollup";
+
+/** A check's state, from either kind GitHub reports: a check run (status,
+ *  conclusion) or a commit status (state). */
+const checkState = (check: Json): "passing" | "pending" | "failing" => {
+  const conclusion = asText(check.conclusion)?.toUpperCase();
+  const status = asText(check.status)?.toUpperCase();
+  const state = asText(check.state)?.toUpperCase();
+  if (state) return state === "SUCCESS" ? "passing" : state === "PENDING" || state === "EXPECTED" ? "pending" : "failing";
+  if (status && status !== "COMPLETED") return "pending";
+  return conclusion === undefined || ["SUCCESS", "NEUTRAL", "SKIPPED"].includes(conclusion) ? "passing" : "failing";
+};
+
+/** `gh pr view --json READINESS_FIELDS`, as merging reads it. */
+export const readReadiness = (value: unknown): HostReadiness | null => {
+  const record = asRecord(value);
+  const state = asText(record?.state)?.toUpperCase();
+  if (!record || !state) return null;
+  const checks = (Array.isArray(record.statusCheckRollup) ? record.statusCheckRollup : []).flatMap((check) => {
+    const each = asRecord(check);
+    return each ? [checkState(each)] : [];
+  });
+  const mergeable = asText(record.mergeable)?.toUpperCase();
+  const decision = asText(record.reviewDecision)?.toUpperCase();
+  return {
+    state: state === "MERGED" ? "merged" : state === "CLOSED" ? "closed" : "open",
+    draft: record.isDraft === true,
+    checks: checks.length === 0 ? "none" : checks.includes("failing") ? "failing" : checks.includes("pending") ? "pending" : "passing",
+    conflicts: mergeable === "CONFLICTING" ? true : mergeable === "MERGEABLE" ? false : null,
+    approvalRequired: decision === "REVIEW_REQUIRED",
+    changesRequested: decision === "CHANGES_REQUESTED",
+  };
+};
+
+/** The repository's default way to merge, as GitHub offers them: a merge
+ *  commit, then squash, then rebase — the first it allows. */
+export const defaultMergeMethod = (value: unknown): "merge" | "squash" | "rebase" | null => {
+  const record = asRecord(value);
+  if (!record) return null;
+  if (record.mergeCommitAllowed === true) return "merge";
+  if (record.squashMergeAllowed === true) return "squash";
+  if (record.rebaseMergeAllowed === true) return "rebase";
+  return null;
 };
