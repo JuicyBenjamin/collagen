@@ -449,11 +449,13 @@ section.decision.unit { display: block; }
 .why-panel > .why { position: static; max-height: none; overflow-y: visible; width: 280px; box-sizing: border-box; }
 /* a why that scrolls softens the ends with more beyond them, as the top of the
    page does: a blurred fade that sticks to the edge (data-above/-below, whyPanel) */
-.why-panel::before, .why-panel::after { content: ""; position: sticky; z-index: 1; display: block; height: 56px; pointer-events: none; opacity: 0; transition: opacity 0.2s; backdrop-filter: blur(2px); }
+/* drawn only where there is more: unmarked, they would add their height to a short why */
+.why-panel::before, .why-panel::after { content: ""; position: sticky; z-index: 1; display: none; height: 56px; pointer-events: none; backdrop-filter: blur(2px); }
 /* tall and gentle: the blur thins out over the whole height, so the text eases away rather than smearing */
 .why-panel::before { top: 0; margin-bottom: -56px; background: linear-gradient(var(--bg), color-mix(in srgb, var(--bg) 0%, transparent)); mask-image: linear-gradient(black 15%, transparent); -webkit-mask-image: linear-gradient(black 15%, transparent); }
 .why-panel::after { bottom: 0; margin-top: -56px; background: linear-gradient(color-mix(in srgb, var(--bg) 0%, transparent), var(--bg)); mask-image: linear-gradient(transparent, black 85%); -webkit-mask-image: linear-gradient(transparent, black 85%); }
-.why-panel[data-above]::before, .why-panel[data-below]::after { opacity: 1; }
+.why-panel[data-above]::before, .why-panel[data-below]::after { display: block; animation: fade-edge 0.2s; }
+@keyframes fade-edge { from { opacity: 0; } }
 .head-toggle { display: none; margin-top: 3px; padding: 4px 10px; }
 @media (max-width: 1320px) {
   .unit-body { flex-direction: column; align-items: stretch; }
