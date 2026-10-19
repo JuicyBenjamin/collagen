@@ -56,6 +56,10 @@ export class ReviewBackend extends Context.Service<
     /** a comment not said yet, confirmed where it sits at `commit` — the one the page shows now */
     readonly repin: (ticketId: string, id: string, commit: string) => Effect.Effect<DraftsResult>;
     /** what was merged into a room's projects, with the tickets each came from; null for a room not here */
+    /** the reader's take on a review, said in the room as theirs; `failed` rejects it */
+    readonly take: (ticketId: string, findings: string, failed: boolean) => Effect.Effect<HostWrite>;
+    /** a review the reader filed, closed: accepted as done, or dropped */
+    readonly close: (ticketId: string, outcome: "done" | "dropped") => Effect.Effect<HostWrite>;
     readonly merges: (roomId: string, shown: MergesShown, fresh: boolean) => Effect.Effect<MergeHistory | null>;
   }
 >()("review-web/ReviewBackend") {}

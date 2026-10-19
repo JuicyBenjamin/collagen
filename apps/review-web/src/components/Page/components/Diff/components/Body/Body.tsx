@@ -130,8 +130,8 @@ export function Body(props: { data: ReviewPageData }) {
       </Show>
       <footer class="note">
         <p>
-          A review or comment sent from here goes to the pull request on its host, in your name.
-          Your take on the collagen ticket still goes through your agent.
+          A review or comment sent from here goes to the pull request on its host, in your name,
+          and your verdict on the collagen ticket, as your take.
         </p>
         <p title={props.data.source.detail}>
           {props.data.source.kind === "clone"
