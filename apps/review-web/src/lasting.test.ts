@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lasting } from "./lasting";
+import { lasting, type Sight } from "./lasting";
 
 /** A connection that sends `values`, then breaks (or ends). */
 async function* connection(values: ReadonlyArray<string>, breaks: boolean): AsyncGenerator<string> {
@@ -79,5 +79,35 @@ describe("a live stream that outlives its connection", () => {
     await it.return!();
     expect(await pending).toEqual({ value: undefined, done: true });
     expect(opens).toBe(1);
+  });
+
+  it("holds no connection while its tab is out of sight, and catches up when it is looked at", async () => {
+    let hidden = false;
+    let changed = () => {};
+    const sight: Sight = { hidden: () => hidden, onChange: (listener) => ((changed = listener), () => {}) };
+    const connections: Array<ReturnType<typeof waiting>> = [];
+    const stream = lasting(
+      () => {
+        const connection = waiting(`now ${connections.length + 1}`);
+        connections.push(connection);
+        return connection.iterable;
+      },
+      async () => {},
+      sight,
+    )[Symbol.asyncIterator]();
+    expect((await stream.next()).value).toBe("now 1");
+    // waiting for a change on the first connection, the tab goes out of sight
+    const pending = stream.next();
+    hidden = true;
+    changed();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(connections[0]!.told.returns).toBe(1);
+    expect(connections).toHaveLength(1);
+    // looked at again: one new connection, its first value how things stand now
+    hidden = false;
+    changed();
+    expect((await pending).value).toBe("now 2");
+    expect(connections).toHaveLength(2);
+    await stream.return?.();
   });
 });
