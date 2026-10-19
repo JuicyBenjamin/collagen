@@ -2,7 +2,8 @@ import { execFile } from "node:child_process";
 import { repoWebUrl } from "../lib/gitInfo";
 import { Data, Effect, Schema } from "effect";
 import type { HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
-import { githubRepo, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, readComment, readComments, readConversation, readOutdated, readPull, readReviews, readUser, refusal } from "../lib/github";
+import { defaultMergeMethod, githubRepo, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, READINESS_FIELDS, readComment, readComments, readConversation, readOutdated, readPull, readReadiness, readReviews, readUser, refusal } from "../lib/github";
+import type { HostReadiness } from "../lib/merging";
 
 // Where a project's code is hosted, as something collagen can act on: read
 // a compare diff when there is no clone, link back to it, and — for the
@@ -105,6 +106,12 @@ export interface RepoHost {
    *  held in it — GitHub's "Finish your review" */
   readonly submit: (link: string, pull: number, review: SubmittedReview) => Effect.Effect<{ readonly ok: true; readonly url: string; readonly comments: ReadonlyArray<LineComment> } | { readonly error: string }>;
   readonly comment: (link: string, pull: number, at: LineSpot, body: string) => Effect.Effect<HostWrite>;
+  /** whether a pull request can be merged now, as the host sees it: its
+   *  state, checks, conflicts and its own rules' approvals */
+  readonly readiness: (link: string, pull: number) => Effect.Effect<{ readonly pull: HostReadiness } | { readonly none: string }>;
+  /** merge it as the person signed in, the repository's default way — never
+   *  past the host's own rules */
+  readonly merge: (link: string, pull: number) => Effect.Effect<{ readonly ok: true } | { readonly error: string }>;
   /** where the host keeps a pull request's head in the repository itself —
    *  how a clone reads one opened from a fork */
   readonly pullRef: (pull: number) => string;
@@ -267,6 +274,27 @@ export const github: RepoHost = {
       // its comments as GitHub placed them — their ids, to show each once
       const listed = id !== null && review.comments.length > 0 ? yield* runGh(["api", "--paginate", "--slurp", `${repo}/reviews/${id}/comments`]) : null;
       return { ok: true as const, url, comments: listed?.ok ? readComments(parse(listed.out)) : [] };
+    }),
+  readiness: (link, pull) =>
+    Effect.gen(function* () {
+      const repository = githubRepo(link)!;
+      const ran = yield* runGh(["pr", "view", String(pull), "--repo", `${repository.owner}/${repository.repo}`, "--json", READINESS_FIELDS]);
+      if (ran.missing) return { none: NO_GH };
+      const read = ran.ok ? readReadiness(parse(ran.out)) : null;
+      return read ? { pull: read } : { none: `Could not read pull request #${pull}: ${refusal(ran.error)}` };
+    }),
+  merge: (link, pull) =>
+    Effect.gen(function* () {
+      const repository = githubRepo(link)!;
+      const repo = `${repository.owner}/${repository.repo}`;
+      const allowed = yield* runGh(["repo", "view", repo, "--json", "mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed"]);
+      if (allowed.missing) return { error: NO_GH };
+      const method = allowed.ok ? defaultMergeMethod(parse(allowed.out)) : null;
+      if (method === null) return { error: `Could not tell how ${repo} merges: ${refusal(allowed.error)}` };
+      // as the person, by the repository's rules: never --admin
+      const ran = yield* runGh(["pr", "merge", String(pull), "--repo", repo, `--${method}`], 60_000);
+      if (ran.missing) return { error: NO_GH };
+      return ran.ok ? { ok: true as const } : { error: refusal(ran.error) };
     }),
   comment: (link, pull, at, body) =>
     Effect.gen(function* () {

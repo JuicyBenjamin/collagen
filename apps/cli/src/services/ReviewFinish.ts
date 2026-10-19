@@ -1,6 +1,9 @@
 import { Effect, SubscriptionRef } from "effect";
 import { isJudged, visibleTo } from "@collagen/p2p";
-import type { HostWrite } from "@collagen/review-web/data";
+import type { HostWrite, MergeView } from "@collagen/review-web/data";
+import type { MergeFor } from "@collagen/p2p";
+import { mergeForOf, withMergeFor } from "../lib/merging";
+import { StateStore } from "./StateStore";
 import { IdentityService } from "./Identity";
 import { Outbox } from "./Outbox";
 import { reviewNamed } from "./ReviewView";
@@ -10,8 +13,9 @@ import { reviewNamed } from "./ReviewView";
 // accepted as done or dropped. Both go out through the outbox, as the
 // agent's do, so they are said in the room as theirs and show in what went.
 
-/** The reader's take on a review: their words, and whether they reject it. */
-export const takeReview = Effect.fn("ReviewFinish.take")(function* (ticketId: string, findings: string, failed: boolean) {
+/** The reader's take on a review: their words, and whether they reject it —
+ *  or, `comment`, approve nothing. */
+export const takeReview = Effect.fn("ReviewFinish.take")(function* (ticketId: string, findings: string, failed: boolean, comment = false) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies HostWrite;
   const me = (yield* IdentityService).identity.pubkey;
@@ -26,7 +30,7 @@ export const takeReview = Effect.fn("ReviewFinish.take")(function* (ticketId: st
     roomId: found.roomId,
     to: author,
     title: `${found.ticket.goal} · your review`,
-    outgoing: { kind: "post-review", ticketId, findings: words, failed },
+    outgoing: { kind: "post-review", ticketId, findings: words, failed, ...(comment ? { comment: true } : {}) },
   });
   return told.startsWith("failed") ? ({ error: told.replace(/^failed: /, "") } satisfies HostWrite) : ({ ok: true as const } satisfies HostWrite);
 });
@@ -44,4 +48,25 @@ export const closeReview = Effect.fn("ReviewFinish.close")(function* (ticketId: 
     outgoing: { kind: "close", ticketId, outcome },
   });
   return told.startsWith("failed") ? ({ error: told.replace(/^failed: /, "") } satisfies HostWrite) : ({ ok: true as const } satisfies HostWrite);
+});
+
+/** How merging stands for a review the reader filed: its own setting, its
+ *  room's, and the one in effect. */
+export const mergeView = Effect.fn("ReviewFinish.mergeView")(function* (ticketId: string) {
+  const found = yield* reviewNamed(ticketId);
+  if (!found) return null;
+  const state = yield* (yield* StateStore).get;
+  return {
+    own: state.merging?.tickets?.[ticketId] ?? null,
+    room: state.merging?.rooms?.[found.roomId] ?? state.merging?.default ?? ("off" as const),
+    effect: mergeForOf(state, found.roomId, ticketId),
+  } satisfies MergeView;
+});
+
+/** Set a review's own merge setting — null gives it back to its room's. Only the author's. */
+export const setMerge = Effect.fn("ReviewFinish.setMerge")(function* (ticketId: string, level: MergeFor | null) {
+  const found = yield* reviewNamed(ticketId);
+  if (!found || found.ticket.createdBy !== (yield* IdentityService).identity.pubkey) return null;
+  yield* (yield* StateStore).update((state) => withMergeFor(state, { ticket: ticketId }, level));
+  return yield* mergeView(ticketId);
 });

@@ -357,6 +357,8 @@ export const Outgoing = Schema.Union([
     ticketId: Schema.String,
     findings: Schema.String,
     failed: Schema.Boolean,
+    /** words with no verdict: neither approves nor asks for changes */
+    comment: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({
     kind: Schema.Literal("settle"),
@@ -475,11 +477,29 @@ export const Settings = Schema.Struct({
 });
 export type Settings = typeof Settings.Type;
 
+/** Whose approval collagen waits for before it merges the pull request of a
+ *  review its person filed (cli lib/merging): never, someone else's, their
+ *  own Accept, or both. The host's own rules always come first. */
+export const MergeFor = Schema.Literals(["off", "theirs", "mine", "both"]);
+export type MergeFor = typeof MergeFor.Type;
+
+/** Merging for the person, in three layers, the narrowest winning: a
+ *  review's own, a room's, and the default a room is given when it is
+ *  joined. Local, never broadcast. */
+export const Merging = Schema.Struct({
+  default: Schema.optional(MergeFor),
+  rooms: Schema.optional(Schema.Record(Schema.String, MergeFor)),
+  tickets: Schema.optional(Schema.Record(Schema.String, MergeFor)),
+});
+export type Merging = typeof Merging.Type;
+
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
   /** absent = "ask": autonomy is opted into */
   steering: Schema.optional(Steering),
   settings: Schema.optional(Settings),
+  /** absent = never merged for them */
+  merging: Schema.optional(Merging),
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
   /** threadId → the user's adopted conversation for it. */
   threads: Schema.optional(Schema.Record(Schema.String, AdoptedThread)),

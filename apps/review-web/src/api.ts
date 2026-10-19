@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import { run, stream } from "./server/backend";
 
 // The page's server functions: called on the page like any function, run in
@@ -152,14 +152,27 @@ export const mergeHistory = GET(async (roomId: string, shown: MergesShown, fresh
 });
 
 /** The reader's take on someone else's review, from the page — said in the
- *  room as theirs, as their agent's post-review would; `failed` rejects it. */
-export const takeReview = async (ticketId: string, findings: string, failed: boolean): Promise<HostWrite> => {
+ *  room as theirs, as their agent's post-review would; `failed` rejects it,
+ *  `comment` approves nothing. */
+export const takeReview = async (ticketId: string, findings: string, failed: boolean, comment = false): Promise<HostWrite> => {
   "use server";
-  return run((backend) => backend.take(ticketId, findings, failed));
+  return run((backend) => backend.take(ticketId, findings, failed, comment));
 };
 
 /** Close a review the reader filed: accepted as done, or dropped. */
 export const closeReview = async (ticketId: string, outcome: "done" | "dropped"): Promise<HostWrite> => {
   "use server";
   return run((backend) => backend.close(ticketId, outcome));
+};
+
+/** Merging for a review the reader filed, as it stands. */
+export const mergeView = async (ticketId: string): Promise<MergeView | null> => {
+  "use server";
+  return run((backend) => backend.mergeView(ticketId));
+};
+
+/** Set a review's own merge setting; null gives it back to its room's. */
+export const setMerge = async (ticketId: string, level: MergeFor | null): Promise<MergeView | null> => {
+  "use server";
+  return run((backend) => backend.setMerge(ticketId, level));
 };
