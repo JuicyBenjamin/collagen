@@ -331,7 +331,8 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     return { ok: true as const, said: recovered + pending.length, roomOnly: to.roomOnly } satisfies SubmitResult;
   }
 
-  if (verdict === "request-changes" && text.length === 0) return { error: `Say what should change — ${to.host.name} asks for it.` } satisfies SubmitResult;
+  // the comments say what should change; with none, the words must
+  if (verdict === "request-changes" && text.length === 0 && pending.length === 0) return { error: `Say what should change — ${to.host.name} asks for it.` } satisfies SubmitResult;
   if (verdict === "comment" && text.length === 0 && pending.length === 0) return { error: "Write something, or add comments to your review first." } satisfies SubmitResult;
   // the one commit the review is of; every comment in it written there
   const written = [...new Set(pending.map((draft) => draft.commit))];
