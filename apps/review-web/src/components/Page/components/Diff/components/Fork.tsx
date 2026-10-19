@@ -1,3 +1,4 @@
+import { Markdown } from "~/components/Markdown";
 import { Show } from "solid-js";
 import type { Fork as ForkData } from "~/data";
 import { assumedNow } from "~/assumedNow";
@@ -21,7 +22,9 @@ export function Fork(props: { fork: ForkData }) {
       <p>
         Chose <strong>{props.fork.chose}</strong> over {props.fork.instead}.
       </p>
-      <p class="fork-why">{props.fork.why}</p>
+      <div class="fork-why">
+        <Markdown text={props.fork.why} />
+      </div>
       <Show when={assumedNow.isGuess(props.fork) && props.fork.basis}>
         <p class="fork-basis">Rests on: {props.fork.basis}</p>
       </Show>

@@ -137,3 +137,6 @@ export function Markdown(props: { text: string }) {
     </div>
   );
 }
+
+/** A Markdown file's blocks, as a document rather than a comment. */
+Markdown.Blocks = Blocks;
