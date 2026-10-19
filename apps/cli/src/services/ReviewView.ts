@@ -3,7 +3,7 @@ import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult } from "@collagen/review-web/data";
@@ -241,11 +241,11 @@ export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", 
 
 /** The review's own part of the page — ticket, why, links — read from the
  *  room alone: no clone, no diff, so it is there at once, before the code is. */
-const headOf = (ticket: Ticket, review: ReviewContext): ReviewPageHead => {
+const headOf = (ticket: Ticket, review: ReviewContext, me: string): ReviewPageHead => {
   const base = review.base ?? "main";
   const host = review.link ? hostOf(review.link) : undefined;
   return {
-    ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project },
+    ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project, mine: ticket.createdBy === me, closed: closedAs(ticket) !== null },
     review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ...(review.machine ? { machine: review.machine } : {}), ts: review.ts },
     links: host && review.link ? host.links(review.link, base, review.branch) : review.link ? [{ label: "link", url: review.link }] : [],
   };
@@ -254,11 +254,12 @@ const headOf = (ticket: Ticket, review: ReviewContext): ReviewPageHead => {
 /** The review without its diff: what the page stands on while the code is read. */
 export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: string) {
   const rooms = yield* Rooms;
+  const me = (yield* IdentityService).identity.pubkey;
   for (const handle of yield* SubscriptionRef.get(rooms.handles)) {
     const ticket = (yield* SubscriptionRef.get(handle.room.tickets)).get(ticketId);
     if (!ticket) continue;
     const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
-    return review ? headOf(ticket, review) : null;
+    return review ? headOf(ticket, review, me) : null;
   }
   return null;
 });
@@ -295,7 +296,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       }
     }
     return {
-      ...headOf(ticket, review),
+      ...headOf(ticket, review, (yield* IdentityService).identity.pubkey),
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
       grouped: diff === null ? null : groupByUnit(review, hunks, imports, (file) => tests.get(file) ?? { after: null, before: null }),
@@ -316,7 +317,7 @@ export const reviewNamed = (ticketId: string) =>
       const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
       if (!review) return null;
       const project = roomProjects(yield* store.get, handle.id).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
-      return { room: handle.room, ticket, review, project };
+      return { roomId: handle.id, room: handle.room, ticket, review, project };
     }
     return null;
   });
