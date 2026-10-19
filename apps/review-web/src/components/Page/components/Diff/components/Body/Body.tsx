@@ -16,6 +16,7 @@ import { Forks } from "./components/Forks";
 import { Machine } from "./components/Machine";
 import { Outside } from "./components/Outside";
 import { Tabs } from "./components/Tabs";
+import { lastTabs } from "../../lastTabs";
 import { Tests } from "./components/Tests";
 import { TypesBanner } from "./components/TypesBanner";
 
@@ -52,6 +53,13 @@ export function Body(props: { data: ReviewPageData }) {
       diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
     },
   );
+  // the tests counted, for the tabs' placeholder next time
+  createEffect(
+    () => tests().reduce((count, file) => count + file.tests.length, 0),
+    (count) => {
+      lastTabs.keep({ tests: count });
+    },
+  );
   // a why guessed, not told: every decision and fork drawn knows it
   createEffect(
     () => props.data.review.assumed,
@@ -79,9 +87,7 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
-      <Show when={tests().length > 0 || props.data.review.machine}>
-        <Tabs tests={tests()} machine={props.data.review.machine !== undefined} />
-      </Show>
+      <Tabs tests={tests()} machine={props.data.review.machine !== undefined} />
       <Show when={shown() === "tests"}>
         <Tests files={tests()} hunks={hunks()} decisions={decisions()} />
       </Show>

@@ -60,6 +60,14 @@ The TUI is exempt: a terminal redraws in steps.
   answered and pushed the code down, then closed and opened again while
   the host was asked a second time. A part that waits on a read has a
   placeholder, and a read asked again keeps its last answer meanwhile.
+- On a first visit the host's placeholder assumed a pull request; a review
+  with none lost it on arrival and the code jumped up 99px. A placeholder
+  for a part that may not come stands only on grounds: what the head
+  already says, or what the part was last visit (`kept`).
+- The tabs over the code came with the diff and had no placeholder, so a
+  review with tabs moved 20px as it arrived. A row whose contents depend on
+  data is always there (the code's tab alone when nothing else), its
+  placeholder masking what it held last time.
 
 ## Checklist
 
@@ -68,3 +76,7 @@ The TUI is exempt: a terminal redraws in steps.
 - [ ] Is it still placed while its exit runs?
 - [ ] Reopening during the exit leaves it open?
 - [ ] Reduced motion: still opens and closes, without animating?
+- [ ] Measured, not guessed: on a first visit (storage cleared) and a
+      return visit, wide and narrow, the page's layout shifts sum to 0 — a
+      `PerformanceObserver` on `layout-shift` with `buffered: true`, read
+      once the page has settled, names any part that moved.
