@@ -1,3 +1,4 @@
+import type { ReviewPageHead } from "~/data";
 import { Arrives } from "~/components/Arrives";
 import { Masked } from "~/components/Masked";
 import { hostNow } from "~/hostNow";
@@ -5,11 +6,12 @@ import { Said } from "./components/Said";
 import { lastActivity } from "./lastActivity";
 
 /** What has been said on the pull request apart from its lines. It waits on
- *  the host: where it stood last time (or on a first open, when most reviews
- *  have a pull request), its placeholder holds its place until the host
- *  answers; where it did not, it opens into place if a pull request comes. */
-export function HostActivity() {
-  const expected = lastActivity.last?.shown ?? true;
+ *  the host: where it stood last time (or on a first open, when the review
+ *  links a pull request), its placeholder holds its place until the host
+ *  answers; where it did not, it opens into place if a pull request comes —
+ *  a placeholder for a part that never comes would leave a hole to close. */
+export function HostActivity(props: { head: ReviewPageHead }) {
+  const expected = lastActivity.last?.shown ?? /\/pull\/\d+/.test(props.head.review.link ?? "");
   return expected ? (
     <Arrives skeleton={HostActivity.Skeleton} ready={hostNow.view() !== null}>
       <Said />

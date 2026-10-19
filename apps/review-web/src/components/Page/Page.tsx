@@ -25,8 +25,8 @@ export function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
       </nav>
       <main>
         <Header head={props.head} />
-        <HostActivity />
-        <Diff data={props.data} />
+        <HostActivity head={props.head} />
+        <Diff head={props.head} data={props.data} />
       </main>
     </div>
   );
