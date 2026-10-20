@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.22.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.21.0-alpha...cli-v0.22.0-alpha) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** a review, a settle, a filing and a message say which agent made it, model and effort too
+
+### Features
+
+* **cli:** a host says what was merged into a branch, and whether merged, squashed or rebased ([4b19bdc](https://github.com/JuicyBenjamin/collagen/commit/4b19bdc0397271066f3b927eee6b53613c6ca919))
+* **cli:** a merge names its epics, and a why opens and closes animated, as everything will ([60ce5da](https://github.com/JuicyBenjamin/collagen/commit/60ce5dada02c63350a3e1c9a016d295affe3e4bf))
+* **cli:** a merges tab lists merges newest first, with the tickets each came from ([4c1405c](https://github.com/JuicyBenjamin/collagen/commit/4c1405cfb8e66751d0a6299bab9eac7d1d9fd6bb))
+* **cli:** a review can show how its change works, a machine played in a tab of its own ([fea3742](https://github.com/JuicyBenjamin/collagen/commit/fea3742a50b476b69d90e026f87a9f1e9005ae8f))
+* **cli:** a review is finished from three round buttons beside the files viewed, not one Review ([2554cb5](https://github.com/JuicyBenjamin/collagen/commit/2554cb597441a000d604c8fbd8476576c6655998))
+* **cli:** a review is finished on its page: your verdict as your take, or yours accepted or dropped ([1c4749e](https://github.com/JuicyBenjamin/collagen/commit/1c4749e75fe18bbc54227034bddb7e3d293c2797))
+* **cli:** a review shows where its change runs: the pages to open, beside the diff ([b56bf71](https://github.com/JuicyBenjamin/collagen/commit/b56bf71475bf62e059829f77431f0eba1ccf23ab))
+* **cli:** a ticket's relatives sit under it, nested when both are in view, dim when not ([2af06aa](https://github.com/JuicyBenjamin/collagen/commit/2af06aa68954657598ee9c37f65edd5c1cd0570b))
+* **cli:** an agent can ask why code is as it is, from its last merge to its tickets' decisions ([28b0118](https://github.com/JuicyBenjamin/collagen/commit/28b011829997051b941505838462436892896cb0))
+* **cli:** an agent can say what collagen costs it in tokens, read from its own session logs ([7f1f2ce](https://github.com/JuicyBenjamin/collagen/commit/7f1f2cefbaf4d4f81c1e70f4403e539b9940ea49))
+* **cli:** collagen merges your reviewed pull request once approved as you say, and work goes on ([a77ec60](https://github.com/JuicyBenjamin/collagen/commit/a77ec60c2ace0cceb8897a206ff237c083527635))
+* **cli:** each merge names the review tickets it came from, or none ([9259448](https://github.com/JuicyBenjamin/collagen/commit/9259448224a5ee0a5b7a6d8cf1d0dfa060ec046a))
+* **cli:** each merge shows the whole chain it grew from, proposal to plan to task to review ([4b56229](https://github.com/JuicyBenjamin/collagen/commit/4b56229669c5d0c6ae5ecabdbb19648aa759e096))
+* **cli:** each review comment says how strongly it asks, from a nit to a must ([5b62386](https://github.com/JuicyBenjamin/collagen/commit/5b62386c518806f8c22539a14590255fc9c2cccc))
+* **cli:** merge history loads as you scroll, and o opens it at a merge with its why ([2cd9d33](https://github.com/JuicyBenjamin/collagen/commit/2cd9d336a774d1fb73a5ddc731e5077c76fbef89))
+* **cli:** projects get their own tab; the overview shows how many each person shares ([57b98d7](https://github.com/JuicyBenjamin/collagen/commit/57b98d71092d89298d5f9fde69c66ae7ea80b514))
+* **cli:** repeated uses of one change are one review item, marked viewed together ([c1bb496](https://github.com/JuicyBenjamin/collagen/commit/c1bb4962ff87cd68d87205dd2d24cafba84cf1ef))
+* **cli:** tests are reviewed in a tab of their own, each judged by its title ([3ad45b3](https://github.com/JuicyBenjamin/collagen/commit/3ad45b370013efe3839c38829cfed5005748abe8))
+* **cli:** the merge history is a web page too, linked to pull requests and reviews ([1818013](https://github.com/JuicyBenjamin/collagen/commit/1818013682db44bfd1bda6bcb1821c566573e0d0))
+* **cli:** the overview shows who is here in two fixed lines; enter opens a people page ([17c8bc4](https://github.com/JuicyBenjamin/collagen/commit/17c8bc4fb96e4adbf6b875daea7e48eb0545125f))
+* **cli:** the review page is themed with daisyUI, a theme picked or made by the reader ([e884e8a](https://github.com/JuicyBenjamin/collagen/commit/e884e8a739908141a5542576ff7f05f5b88688b9))
+* **cli:** the review page shows its shape while it loads and fills in as the diff is read ([0c6984e](https://github.com/JuicyBenjamin/collagen/commit/0c6984e7d21f0ad7ae1f8895c7f7e9260c1fd81d))
+* **p2p:** a review, a settle, a filing and a message say which agent made it, model and effort too ([795abb4](https://github.com/JuicyBenjamin/collagen/commit/795abb4fed936fe15a58f4fdbc4bc0b59845ae13))
+* **p2p:** a ticket grown out of a part of an epic joins it, and progress counts pieces of work ([55fc9a1](https://github.com/JuicyBenjamin/collagen/commit/55fc9a15c3caf5cef4e73195035b85430e9e3f68))
+
+
+### Bug Fixes
+
+* **cli:** a bug's title names the problem, and the why or the fix goes in the goal ([5db3e43](https://github.com/JuicyBenjamin/collagen/commit/5db3e43bea91e272c49d5172664e940e86f1edbb))
+* **cli:** a closed ticket shows how it ended as ✓ done or ⊗ dropped, not in words ([7b60066](https://github.com/JuicyBenjamin/collagen/commit/7b6006663de9bb0a606c6a8a492edde1d93e19ef))
+* **cli:** a merged pull request can still be reviewed, and code never shows as an empty block ([1e7592e](https://github.com/JuicyBenjamin/collagen/commit/1e7592e87af011c9c225927d46f03caa6b07045f))
+* **cli:** a rebased branch's review shows its own changes, not the work it was rebased over ([2122da0](https://github.com/JuicyBenjamin/collagen/commit/2122da03290832847f2a15931a120e83dccd1c4e))
+* **cli:** a review page's live updates ride one WebSocket, so pages and reads never wait ([c31923b](https://github.com/JuicyBenjamin/collagen/commit/c31923b661792214c7e4bef51859147f1b3669cf))
+* **cli:** a review's decision must point at the code it shaped, or the code it kept ([f34331e](https://github.com/JuicyBenjamin/collagen/commit/f34331e2365be69fd6021ae70816a19ae0f2fa96))
+* **cli:** a ticket with changes asked is drawn as changes asked, never as done ([143ee05](https://github.com/JuicyBenjamin/collagen/commit/143ee0580a20030b24925642b12b6bd796a1f081))
+* **cli:** every kind's tab is named, an empty one too ([fea0c80](https://github.com/JuicyBenjamin/collagen/commit/fea0c805b6e7fb40ec1eba86ca1f8d429e9cb892))
+* **cli:** finishing a review shows it is on its way, sends once, and needs no words beside comments ([2bbb0ab](https://github.com/JuicyBenjamin/collagen/commit/2bbb0ab6129fcd584df2041364f03ccc27be112c))
+* **cli:** get-tickets lists the open tickets a row each; get-ticket shows one in full ([903375b](https://github.com/JuicyBenjamin/collagen/commit/903375b5d44afde95cdabb0d3857b2401e0e4d50))
+* **cli:** kinds follow the work: epics, proposals, bugs, plans, tasks, reviews ([f8b3524](https://github.com/JuicyBenjamin/collagen/commit/f8b3524dfd66bf1a6d02464401d5f9b28a2aa88c))
+* **cli:** php type hints start reading the project when the review opens, and keep what they read ([63d5be0](https://github.com/JuicyBenjamin/collagen/commit/63d5be0df248ca74812aec1cda65a6e79c42c5c0))
+* **cli:** room tabs run overview, projects, merges, messages, outbox ([cfc4816](https://github.com/JuicyBenjamin/collagen/commit/cfc48162f1532e33c411fb08bdbc75bc6e9d55ab))
+* **cli:** the people above the ticket list keep a line each, however long the list ([9ee15ab](https://github.com/JuicyBenjamin/collagen/commit/9ee15ab2d41f77e0b42d6da720b90b7f3f4ea581))
+* **cli:** the ticket kind a user names is the kind that gets filed, and a plan can be decided work ([1a2f099](https://github.com/JuicyBenjamin/collagen/commit/1a2f099facf6fd5600780d89aca97235436656d4))
+* **cli:** the ticket list starts below its tabs; status and epic get columns of their own ([c3c478d](https://github.com/JuicyBenjamin/collagen/commit/c3c478da7363f0f9994b546b3a1fdeb3609f0fd1))
+* **e2e:** the review scripts give each decision a place, as decisions now need ([ac9309c](https://github.com/JuicyBenjamin/collagen/commit/ac9309ca374cd9012df0a22602194a014593bb7d))
+
 ## [0.21.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.20.0-alpha...cli-v0.21.0-alpha) (2026-10-05)
 
 
