@@ -53,7 +53,8 @@ expect "…and it says what to report: that the ticket was filed, nothing else" 
 TICKET=$(echo "$ASKED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)
 
 echo "## bob's side: a review ticket whose headline says where the code is"
-wait_until "bob sees it, named for the branch alice is on" "review feat/opening-animation" goals $B "$SB"
+# a row says its title, and under it the review's summary once the why lands (the branch's goal until then)
+wait_until "bob sees it by its title" "The opening animation: the logo starts" goals $B "$SB"
 # the ticket and its why are two log ops; the headline needs the second
 wait_until "…and the why has landed beside it" "2 decisions" rows $B "$SB" "$TICKET"
 TICKETS=$(rows $B "$SB" "$TICKET")
