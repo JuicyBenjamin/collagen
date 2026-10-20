@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.22.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.21.0-alpha...p2p-v0.22.0-alpha) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** a review, a settle, a filing and a message say which agent made it, model and effort too
+
+### Features
+
+* **cli:** a review can show how its change works, a machine played in a tab of its own ([fea3742](https://github.com/JuicyBenjamin/collagen/commit/fea3742a50b476b69d90e026f87a9f1e9005ae8f))
+* **cli:** a review shows where its change runs: the pages to open, beside the diff ([b56bf71](https://github.com/JuicyBenjamin/collagen/commit/b56bf71475bf62e059829f77431f0eba1ccf23ab))
+* **cli:** collagen merges your reviewed pull request once approved as you say, and work goes on ([a77ec60](https://github.com/JuicyBenjamin/collagen/commit/a77ec60c2ace0cceb8897a206ff237c083527635))
+* **cli:** repeated uses of one change are one review item, marked viewed together ([c1bb496](https://github.com/JuicyBenjamin/collagen/commit/c1bb4962ff87cd68d87205dd2d24cafba84cf1ef))
+* **cli:** tests are reviewed in a tab of their own, each judged by its title ([3ad45b3](https://github.com/JuicyBenjamin/collagen/commit/3ad45b370013efe3839c38829cfed5005748abe8))
+* **cli:** the review page is themed with daisyUI, a theme picked or made by the reader ([e884e8a](https://github.com/JuicyBenjamin/collagen/commit/e884e8a739908141a5542576ff7f05f5b88688b9))
+* **p2p:** a review, a settle, a filing and a message say which agent made it, model and effort too ([795abb4](https://github.com/JuicyBenjamin/collagen/commit/795abb4fed936fe15a58f4fdbc4bc0b59845ae13))
+* **p2p:** a ticket grown out of a part of an epic joins it, and progress counts pieces of work ([55fc9a1](https://github.com/JuicyBenjamin/collagen/commit/55fc9a15c3caf5cef4e73195035b85430e9e3f68))
+
+
+### Bug Fixes
+
+* **cli:** kinds follow the work: epics, proposals, bugs, plans, tasks, reviews ([f8b3524](https://github.com/JuicyBenjamin/collagen/commit/f8b3524dfd66bf1a6d02464401d5f9b28a2aa88c))
+
 ## [0.21.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.20.0-alpha...p2p-v0.21.0-alpha) (2026-10-05)
 
 
