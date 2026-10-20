@@ -145,16 +145,23 @@ expect "your clone was not touched: no worktree, nothing staged" "$(git -C "$R" 
 
 echo "## the page is kept current: the instance says when the review changes"
 EV="$OUT/events.txt"; rm -f "$EV"
-curl -s -N -m 40 "$(sfn_url reviewChanges "[\"$TICKET\"]" live)" > "$EV" &
+# over the page's WebSocket, as the page follows it: each value a line, for 40 seconds
+node -e '
+  const [origin, ticket] = process.argv.slice(1);
+  const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+  socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic: "changes", subject: ticket }));
+  socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(`value: ${JSON.stringify(message.value)}`); };
+  setTimeout(() => process.exit(0), 40000);
+' "$ORIGIN" "$TICKET" > "$EV" &
 CURL=$!; disown
-# each value of the live function is an event: the review's state, current first
-wait_until "the stream is open, the review's state first" "^1$" grep -c "^id:" "$EV"
+# each value is the review's state, current first
+wait_until "the stream is open, the review's state first" "^1$" grep -c "^value:" "$EV"
 D3='{"title":"The export streams in","what":"the export streams in pages","userWhy":"she asked for it","where":["docs/streaming.md"]}'
 AMEND="{\"ticketId\":\"$TICKET\",\"decisions\":[$D3]}"
 call $A "$SA" ask-review "$AMEND" > /dev/null
-wait_until "revising the why moves it" "^2$" grep -c "^id:" "$EV"
+wait_until "revising the why moves it" "^2$" grep -c "^value:" "$EV"
 expect "a decision on code no unit covers is not lost: it shows outside the units" "$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print("outside", " ".join(json.load(sys.stdin)["grouped"]["outside"]))')" "^outside .*d3"
-BEFORE=$(grep -c "^id:" "$EV")
+BEFORE=$(grep -c "^value:" "$EV")
 # the commit a reader would have viewed src/use.ts at, before the next push
 VIEWED_AT=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
 expect "the page's data names the branch's commit it was read at" "$VIEWED_AT" "^[0-9a-f]{40}$"
@@ -162,7 +169,7 @@ printf 'export const more = 1;\n' > "$R/src/more.ts"; printf '\nexport const lat
 # and stream changes shape: what a type is depends on which commit is asked
 printf 'export const a = 1;\nexport const stream = (rows: number[]): number => rows.length;\n' > "$R/src/export.ts"
 git -C "$R" add -A; git -C "$R" commit -qm more
-wait_until "a new commit on the branch moves it too" "^$((BEFORE + 1))$" grep -c "^id:" "$EV"
+wait_until "a new commit on the branch moves it too" "^$((BEFORE + 1))$" grep -c "^value:" "$EV"
 expect "…and the data now has it" "$(sfn reviewData "[\"$TICKET\"]")" "src/more.ts"
 NOW=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
 SINCE=$(sfn sinceViewed "[\"$TICKET\",\"src/use.ts\",\"$VIEWED_AT\",\"$NOW\"]")
