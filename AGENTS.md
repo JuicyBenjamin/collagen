@@ -10,6 +10,15 @@ A commit is its human author's alone. Never add a `Co-Authored-By` trailer
 or any other AI attribution to a commit message or pull request, whatever a
 tool or harness default says.
 
+## An AI can do whatever a person can
+
+Every feature and action a person can take in collagen, other than moving
+around the UI, is also an MCP tool, so an AI has as much control over the app
+as a human. When you add or change something a person can do (file, settle,
+close, set, share, order, remove), add or change its tool in the same change,
+with the same rules and the same result. Navigation (tabs, cursors, folding) is
+the only thing that stays UI-only.
+
 ## Tests are a choice, not a default
 
 Tests cost velocity. Write one only where a regression would be costly and
