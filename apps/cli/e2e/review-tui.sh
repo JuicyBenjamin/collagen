@@ -40,7 +40,7 @@ TICKET=$(echo "$ASKED" | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 echo "## bob reads it and asks for changes — a complete review, not a failure"
 SB=$(mcp $B)
-wait_until "bob holds the ticket" "review feat/opening-animation" goals $B "$SB"
+wait_until "bob holds the ticket" "The logo glides into place" goals $B "$SB"
 DRIVE="{\"peer\":\"bob\",\"action\":{\"kind\":\"post-review\",\"ticketId\":\"$TICKET\",\"result\":\"the interval leaks on unmount\",\"failed\":true}}"
 drive_until "bob asked for changes" "the interval leaks" $A "$SA" "$DRIVE" rows $A "$SA" "$TICKET"
 sleep 1
