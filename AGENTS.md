@@ -16,8 +16,13 @@ Every feature and action a person can take in collagen, other than moving
 around the UI, is also an MCP tool, so an AI has as much control over the app
 as a human. When you add or change something a person can do (file, settle,
 close, set, share, order, remove), add or change its tool in the same change,
-with the same rules and the same result. Navigation (tabs, cursors, folding) is
-the only thing that stays UI-only.
+with the same rules and the same result.
+
+Navigation is half open. An AI can take the person to a place: a ticket, a
+review, a tab, the settings, a project's merges, so "show me this" or "take me
+to the settings" works. Moving around inside a screen (cursors, arrow keys,
+folding) stays with the person. A new page or tab that has an address gets a
+tool that goes to it. `open-review` is the pattern.
 
 ## Tests are a choice, not a default
 
