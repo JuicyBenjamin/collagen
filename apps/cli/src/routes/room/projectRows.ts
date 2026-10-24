@@ -1,4 +1,5 @@
 import type { LocalState, Peer, Project } from "@collagen/p2p";
+import { inProjectOrder, projectOrderOf } from "../../lib/projectOrder";
 import { projectKey } from "../../lib/projects";
 
 /** One row in the room's project list: a PROJECT, however many people share
@@ -14,7 +15,7 @@ export interface ProjectRow {
 }
 
 /** Pure derivation of state we already subscribe to — the projects tab's
- *  list. Your spelling
+ *  list, in the order you put them (lib/projectOrder). Your spelling
  *  wins for a project you hold; otherwise the first peer's. */
 export function projectRows(state: LocalState, roomId: string, peers: ReadonlyArray<Peer>): ProjectRow[] {
   const byName = new Map<string, ProjectRow>();
@@ -27,5 +28,5 @@ export function projectRows(state: LocalState, roomId: string, peers: ReadonlyAr
       byName.set(key, row);
     }
   }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return inProjectOrder([...byName.values()], (row) => row.name, projectOrderOf(state, roomId));
 }

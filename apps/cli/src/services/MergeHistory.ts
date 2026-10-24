@@ -4,6 +4,7 @@ import type { MergeHistory as MergeHistoryData, MergesShown } from "@collagen/re
 import { defaultBranchOf, repoWebUrl } from "../lib/gitInfo";
 import { latestMerges, type MergesPage } from "../lib/github";
 import { lineage, reviewedCode, ticketsOfMerges, whyOpen } from "../lib/mergeTickets";
+import { inProjectOrder, projectOrderOf } from "../lib/projectOrder";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostCliMissing, type HostMerge, type HostRefused, type RepoHost } from "./RepoHost";
 import { Rooms, type RoomHandle } from "./Rooms";
@@ -110,10 +111,11 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
         );
       });
 
-    /** A room's projects held here, by name, each with its merges. */
+    /** A room's projects held here, in the person's order, each with its merges. */
     const roomMerges = (roomId: string, shown: Shown) =>
       Effect.gen(function* () {
-        const projects = [...((yield* store.get).rooms[roomId] ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+        const state = yield* store.get;
+        const projects = inProjectOrder(state.rooms[roomId] ?? [], (project) => project.name, projectOrderOf(state, roomId));
         return yield* Effect.forEach(projects, (project) => projectMerges(project, shown[project.name] ?? MERGES_PAGE), { concurrency: 4 });
       });
 

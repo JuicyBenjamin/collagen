@@ -68,7 +68,9 @@ No files are written into your projects.
   are never in that list: whether a row wants you is said by its place and its colour.
 - **projects tab** — each project in the room once, with who shares it. `enter` on a dim
   `not here yet` row points collagen at your copy; `+ add project` adds a folder; `d`
-  removes one of yours.
+  removes one of yours. `shift ↑↓` moves a project up or down: every list of projects you
+  see follows that order. It is kept on your machine and never shared with the room; a
+  project added later comes last.
 - **merges tab** — what was merged into each of your projects' default branch, the
   latest first, each by its pull request's title with its number, branch and age.
   Under a merge, the review tickets it came from (by the pull request its link names,
@@ -135,7 +137,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `take-step` — a task step nobody has, made your user's; `get-tickets` and `get-ticket`, `ask-review` — a review with the why behind the change; `assume-review` — a review of someone else's pull request, its why inferred and marked as guesses; `claim-review` — the code's author answers those guesses and makes the review theirs; `open-review` — a review's page in your browser, as `o` does; `epic` — folders of tickets, shaped by anyone, only when asked |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks; `token-cost` — what collagen costs your AI in tokens, read from its own session logs ([how](../internals/token-cost)) |
-| Settings | `add-project`, `remove-project`, `set-ai`, `set-steering`, `set-name`, `set-settings` — your switches, listed or set; `set-merging` — whether collagen merges your reviewed pull requests for you; `themes`, `set-theme`, `add-theme`, `edit-theme`, `remove-theme` — the theme every page wears (a review, the merges): listed, put on, added from a daisyUI theme generator link, edited (renamed, a colour at a time) or removed |
+| Settings | `add-project`, `remove-project`, `order-projects` — the order you keep the projects in, listed or set, on your machine only; `set-ai`, `set-steering`, `set-name`, `set-settings` — your switches, listed or set; `set-merging` — whether collagen merges your reviewed pull requests for you; `themes`, `set-theme`, `add-theme`, `edit-theme`, `remove-theme` — the theme every page wears (a review, the merges): listed, put on, added from a daisyUI theme generator link, edited (renamed, a colour at a time) or removed |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 
 You use it by just asking your agent, e.g. *"check who's in my collagen room and ask

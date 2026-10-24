@@ -26,7 +26,8 @@ import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
-import { sharedProject } from "../lib/projects";
+import { projectKey, sharedProject } from "../lib/projects";
+import { inProjectOrder, projectOrderOf, withProjectOrder } from "../lib/projectOrder";
 import { Scripting } from "./Scripting";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -555,6 +556,13 @@ export const RemoveProject = Tool.make("remove-project", {
   success: Schema.String,
 });
 
+export const OrderProjects = Tool.make("order-projects", {
+  description:
+    "The order your user keeps the current room's projects in — how their projects tab, merges tab and merges page list them, the same as moving one with shift ↑↓ on their projects tab. Theirs alone: kept on their machine, never sent to the room. Called with nothing it lists the projects in that order; 'projects' (names from it, any case) puts those first, in the order given, and the rest after them as they stood. A project added later comes last. Only when your user asks.",
+  parameters: Schema.Struct({ projects: Schema.optional(Schema.Array(Schema.String)) }),
+  success: Schema.String,
+});
+
 export const Epic = Tool.make("epic", {
   description: [
     "Shape the room's EPICS — folders of tickets that together make one body of work (\"more languages\": a proposal for each language, their plans and reviews). Only when your user asks for it; an epic is never your first thought. A ticket filed out of a ticket in an epic goes into that epic as it is filed (pass epic: null when filing to keep it out, or remove it after). Filing outcomes may ask you to OFFER one: which epic, when what it grows out of is in several, or a new epic when your user files several related tickets together — offer in one line, act on their yes.",
@@ -778,6 +786,7 @@ export const CollagenToolkit = Toolkit.make(
   GetTicket,
   AddProject,
   RemoveProject,
+  OrderProjects,
   SetAi,
   SetSteering,
   SetMerging,
@@ -828,6 +837,7 @@ export const DevCollagenToolkit = Toolkit.make(
   GetTicket,
   AddProject,
   RemoveProject,
+  OrderProjects,
   SetAi,
   SetSteering,
   SetMerging,
@@ -1889,6 +1899,25 @@ const makeHandlers = Effect.gen(function* () {
           }));
           return `stopped sharing "${hit.value.name}"`;
         }).pipe(Effect.withSpan("Mcp.removeProject")),
+      "order-projects": Effect.fn("Mcp.orderProjects")(function* (input: { projects?: ReadonlyArray<string> }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const state = yield* store.get;
+        // every project in the room once, however its holders case it; your spelling first
+        const named = new Map<string, string>();
+        const peers = yield* SubscriptionRef.get(room.roster);
+        for (const name of [...roomProjects(state, roomId).map((project) => project.name), ...peers.flatMap((peer) => peer.projects.map((project) => project.name))]) {
+          if (!named.has(projectKey(name))) named.set(projectKey(name), name);
+        }
+        const before = inProjectOrder([...named.values()], (name) => name, projectOrderOf(state, roomId));
+        const listed = (names: ReadonlyArray<string>) => names.map((name, index) => `${index + 1}. ${name}`).join("\n") || "no projects in this room";
+        if (!input.projects || input.projects.length === 0) return listed(before);
+        const unknown = input.projects.filter((name) => !named.has(projectKey(name)));
+        if (unknown.length > 0) return `failed: no project named ${unknown.map((name) => `"${name}"`).join(", ")} in this room — its projects:\n${listed(before)}`;
+        const first = [...new Set(input.projects.map((name) => named.get(projectKey(name))!))];
+        const after = [...first, ...before.filter((name) => !first.includes(name))];
+        yield* store.update((current) => withProjectOrder(current, roomId, after));
+        return `set — on this machine only:\n${listed(after)}`;
+      }),
       "set-ai": ({ ai: agent }: { ai: string }) =>
         store
           .update((state) => ({ ...state, preferredAi: agent === "none" ? null : agent }))

@@ -44,6 +44,7 @@ const KINDS: Record<string, CallKind> = {
   "list-rooms": "room",
   "add-project": "setup",
   "remove-project": "setup",
+  "order-projects": "setup",
   "set-ai": "setup",
   "set-steering": "setup",
   "set-settings": "setup",
