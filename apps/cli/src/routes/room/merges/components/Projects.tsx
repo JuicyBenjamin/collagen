@@ -5,7 +5,7 @@ import { mergesProjectAtom, openMergesPageAtom } from "../atoms";
 
 /** The row of tabs under the merges tab: the projects held here, in the
  *  person's order, the one whose merges are shown bright. ←→ open the next
- *  one's; ↓ into its merges. */
+ *  one's; ↓ into its merges; o its merges page in the browser. */
 export function Projects({ projects, shown }: { projects: ReadonlyArray<string>; shown: string }) {
   const setProject = useAtomSet(mergesProjectAtom);
   const openPage = useAtomSet(openMergesPageAtom);
@@ -18,7 +18,7 @@ export function Projects({ projects, shown }: { projects: ReadonlyArray<string>;
       onKey={(key) => {
         if (key.name === "left" && index > 0) return setProject(projects[index - 1]!), true;
         if (key.name === "right" && index < projects.length - 1) return setProject(projects[index + 1]!), true;
-        if (key.name === "o") return openPage({}), true;
+        if (key.name === "o") return openPage({ project: shown }), true;
         return false;
       }}
     >

@@ -5,7 +5,7 @@ import { focusAtom, nearestFocusable } from "../../../../components/focus";
 import { isEnter } from "../../../../components/keys";
 import { theme } from "../../../../app/theme";
 import { admittedAtom, rosterAtom } from "../../atoms";
-import { openMergesPageAtom } from "../../merges/atoms";
+import { mergesShownAtom, openMergesPageAtom } from "../../merges/atoms";
 import { TABS, useTabs } from "../../tabs";
 
 /** The tab bar is a section: hover it and ←→ switch tabs (← past the first
@@ -21,6 +21,7 @@ export function TabBar() {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const admitted = AsyncResult.getOrElse(useAtomValue(admittedAtom), () => true);
   const openMergesPage = useAtomSet(openMergesPageAtom);
+  const mergesShown = useAtomValue(mergesShownAtom).shown;
 
   const online = peers.filter((peer) => !peer.away).length + 1;
 
@@ -29,13 +30,14 @@ export function TabBar() {
       id="tabs"
       // one row, always: a page that grows must not push the bar off its line
       flexShrink={0}
-      hint={`←→ switch tab · ↓ into the tab${active === "room/merges" ? " · o in browser" : ""} · 1-5 jump · a cycle ai · g steering · c copy invite · s settings · q quit`}
+      // o first on the merges tab: a long hint loses its middle
+      hint={`${active === "room/merges" ? "o in browser · " : ""}←→ switch tab · ↓ into the tab · 1-5 jump · a cycle ai · g steering · c copy invite · s settings · q quit`}
       onKey={(key) => {
         const index = TABS.indexOf(active);
         if (key.name === "left" && index > 0) return jump(TABS[index - 1]!), true;
         if (key.name === "right" && index < TABS.length - 1) return jump(TABS[index + 1]!), true;
-        // o on the merges tab: the whole history as a web page, the latest first
-        if (key.name === "o" && active === "room/merges") return openMergesPage({}), true;
+        // o on the merges tab: the shown project's merges as a web page, the latest first
+        if (key.name === "o" && active === "room/merges") return openMergesPage(mergesShown === undefined ? {} : { project: mergesShown }), true;
         // enter behaves like ↓: hand the cursor to whatever sits below
         if (isEnter(key)) {
           const below = nearestFocusable("tabs", "down");
