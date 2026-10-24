@@ -415,6 +415,13 @@ pull request:
   which closes it as not done. Request changes puts a take asking for changes on it, for your
   agent to act on. Comments still pending are said first, whichever you send.
 
+Once you have finished one, what you gave and when stands in for the buttons — **You
+requested changes · 2 h ago** — whether you finished it here, through your agent or on
+GitHub; the latest counts. The buttons come back when the change moves after it (a push, a
+revised why: "changed since"), when comments are pending, or when you press it to review
+again. Under **On GitHub**, your face is ringed and your reviews are marked **you**. Your
+agent reads the same in `get-ticket` (`yourUserReviewed`), from the room.
+
 A comment, yours or anyone's, approves nothing: it answers the review, but collagen never
 merges on it.
 

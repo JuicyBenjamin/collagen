@@ -328,7 +328,15 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 .dial-count { position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 999px; background: var(--tone); color: var(--panel); font: 600 10.5px/16px -apple-system, sans-serif; }
 .dial-panel.in-bar { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; width: min(440px, 92vw); }
 .dial-panel.in-corner { width: min(440px, calc(100vw - 36px)); }
-@media (prefers-reduced-motion: reduce) { .dial { transition: none; } }
+/* a review the reader finished: what they gave and when, in the colour of its button */
+.reviewed { --tone: var(--tone-say); display: inline-flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 12px; border: 1.5px solid var(--tone); border-radius: 999px; background: color-mix(in srgb, var(--tone) 12%, var(--panel)); color: var(--tone); font: 600 13px -apple-system, sans-serif; white-space: nowrap; transition: background 0.15s; }
+.reviewed svg { width: 14px; height: 14px; flex: none; }
+.reviewed.change { --tone: var(--sign-chg); }
+.reviewed.go { --tone: var(--kind-review); }
+.reviewed.quiet { --tone: var(--dim); }
+button.reviewed { cursor: pointer; }
+button.reviewed:hover, .reviewed.on { background: color-mix(in srgb, var(--tone) 24%, var(--panel)); }
+@media (prefers-reduced-motion: reduce) { .dial, .reviewed { transition: none; } }
 /* the finish panel, over the page */
 .review-composer { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); display: grid; gap: 10px; }
 .review-composer .textarea, .line-composer .textarea { width: 100%; resize: vertical; font: 13.5px/1.5 -apple-system, sans-serif; }
@@ -585,6 +593,11 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .host-avatars .avatar:first-child { margin-left: 0; }
 .host-initial { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; box-sizing: border-box; font-size: 10px; font-weight: 600; }
 .host-more { margin-left: 5px; font-size: 12px; color: var(--faint); }
+/* the reader's own, on the host: their face ringed, their reviews marked */
+.host-avatars .avatar.mine { box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--accent); }
+.host-avatars .avatar.mine { position: relative; z-index: 1; margin-right: 3px; }
+.host-item.mine { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.you-mark { font-size: 11.5px; font-weight: 600; color: var(--accent); }
 
 /* a part's placeholder while it waits (each part's .Skeleton): its own
    markup with its words masked, so it is the size of what replaces it, and

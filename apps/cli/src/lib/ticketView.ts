@@ -1,5 +1,5 @@
 import { closedAs, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
-import { reviewHeadline } from "./review";
+import { finishLine, reviewHeadline, yourFinish } from "./review";
 import { rowTitle } from "./ticketSummary";
 
 /** A ticket as a list row: what it is, the line beneath its title, where it
@@ -57,6 +57,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   /** how its author closed it: done, or dropped (one closed before this was asked reads as done) */
   ...(ticket.kind !== "epic" && closedAs(ticket) ? { closedAs: closedAs(ticket)! } : {}),
   ...(ticket.kind === "epic" ? becauseLine(ticket, all, me) : ticket.closed?.reason ? { closedBecause: ticket.closed.reason } : {}),
+  /** a review your user finished: their verdict (or how they closed it) and when, as its page shows it — "changed since" when its why was revised after */
+  ...yoursLine(ticket, review, me),
   ...(review
     ? { review: `${reviewHeadline(review)} — call review-context {ticketId} when your user asks why something is the way it is` }
     : {}),
@@ -76,6 +78,11 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
 /** Who has a step, by name — or, for one nobody has, that anyone may take it. */
 const ownerName = (owner: string | undefined, nameFor: (key: string) => string): string => (owner === undefined ? "anyone (nobody has taken it: take-step)" : nameFor(owner));
 
+/** Your user's own finish of a review, as a line — from the room: one given only on the host is on the review page. */
+function yoursLine(ticket: Ticket, review: ReviewContext | undefined, me: string): { yourUserReviewed?: string } {
+  const finish = ticket.kind === "review" && me ? yourFinish(ticket, review, me) : undefined;
+  return finish ? { yourUserReviewed: finishLine(finish) } : {};
+}
 /** "epic: <id> "<goal>"" for a ticket put in one — and when it is kept out
  *  of the epic's progress. */
 function epicLine(ticket: Ticket, all: ReadonlyMap<string, Ticket>): { epic?: string } {

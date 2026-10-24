@@ -6,8 +6,9 @@ import { HttpRouter, HttpServerResponse } from "effect/http";
 import { closedAs, isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
-import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult } from "@collagen/review-web/data";
+import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult, YourReview } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
+import { yourFinish } from "../lib/review";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isTest } from "../lib/tests";
@@ -240,13 +241,15 @@ export const unitCoverageNote = (path: string, review: { readonly base?: string;
 
 export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((output) => output?.trim() || null));
 
+const withYours = (yours: YourReview | undefined) => (yours ? { yours } : {});
+
 /** The review's own part of the page — ticket, why, links — read from the
  *  room alone: no clone, no diff, so it is there at once, before the code is. */
 const headOf = (ticket: Ticket, review: ReviewContext, me: string): ReviewPageHead => {
   const base = review.base ?? "main";
   const host = review.link ? hostOf(review.link) : undefined;
   return {
-    ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project, mine: ticket.createdBy === me, closed: closedAs(ticket) !== null },
+    ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project, mine: ticket.createdBy === me, closed: closedAs(ticket) !== null, ...withYours(yourFinish(ticket, review, me)) },
     review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, ...(review.agent ? { agent: review.agent } : {}), decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ...(review.machine ? { machine: review.machine } : {}), ts: review.ts },
     links: host && review.link ? host.links(review.link, base, review.branch) : review.link ? [{ label: "link", url: review.link }] : [],
   };

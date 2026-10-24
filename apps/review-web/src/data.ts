@@ -180,11 +180,24 @@ export interface MachineVersion {
   readonly play: ReadonlyArray<{ readonly from?: string; readonly moves?: ReadonlyArray<{ readonly actor: string; readonly to: string }>; readonly says: string }>;
 }
 
+/** How the reader last finished a review: their verdict, in the host's
+ *  words, or — on one they filed — how they closed it. */
+export type ReviewedAs = "approved" | "changes requested" | "commented" | "accepted" | "dropped";
+
+/** The reader's own finish of a review: what, when (ms), and whether the
+ *  change moved after it (a push, its why revised), so another is due. */
+export interface YourReview {
+  readonly as: ReviewedAs;
+  readonly at: number;
+  readonly since: boolean;
+}
+
 /** The review's own part of the page: its ticket, its why and its links,
  *  known as soon as the room is read — the diff comes after. */
 export interface ReviewPageHead {
-  /** `mine`: the reader filed it — theirs to accept or drop; `closed`: it is over */
-  readonly ticket: { readonly id: string; readonly title?: string; readonly goal: string; readonly kind: string; readonly project: string; readonly mine: boolean; readonly closed: boolean };
+  /** `mine`: the reader filed it — theirs to accept or drop; `closed`: it is over;
+   *  `yours`: the reader's own finish of it in the room, when there is one */
+  readonly ticket: { readonly id: string; readonly title?: string; readonly goal: string; readonly kind: string; readonly project: string; readonly mine: boolean; readonly closed: boolean; readonly yours?: YourReview };
   readonly review: {
     readonly summary: string;
     readonly branch?: string;
@@ -368,6 +381,8 @@ export interface HostReview {
   readonly body: string;
   readonly at: string;
   readonly url: string;
+  /** the commit it was given at, when the host says */
+  readonly commit?: string;
 }
 
 /** A comment in the pull request's conversation — on the whole, not a line —
