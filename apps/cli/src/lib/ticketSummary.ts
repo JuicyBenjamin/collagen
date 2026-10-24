@@ -1,4 +1,4 @@
-import { epicParts, finished, isClosed, isJudged, isTake, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { epicParts, finished, isClosed, isJudged, isOwned, isTake, readySteps, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { NO_TITLE } from "./review";
 
 /** A ticket's line in the TUI: its title. An old ticket filed before titles
@@ -18,6 +18,8 @@ export interface TicketSummary {
   readonly state: TicketState;
   /** Owners (keys) of the steps that are up right now. */
   readonly waitingOn: ReadonlyArray<string>;
+  /** Steps up right now that nobody has: anyone's to take. */
+  readonly open: number;
   /** Everyone asked to own a step, in step order, distinct. */
   readonly asked: ReadonlyArray<string>;
   /** Who spoke about it (messages about the ticket, or on its threads), how often. */
@@ -80,7 +82,8 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   // a ticket waiting on another has nothing up for anyone: nobody is
   // delivered a step of it until the one it waits on is answered
   const up = held.length > 0 && !isClosed(ticket, all) ? [] : readySteps(ticket);
-  const waitingOn = [...new Set(up.map((step) => step.owner))];
+  const waitingOn = [...new Set(up.filter(isOwned).map((step) => step.owner))];
+  const open = up.filter((step) => !isOwned(step)).length;
   // completion is p2p's `finished`: every step answered, where on a review a
   // reader's ↻ is an answer. Closure is the author's recorded decision. A
   // finished ticket the author has not closed is theirs to close — needs-you
@@ -94,7 +97,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
       ? "waiting"
       : waitingOn.includes(me) || (done && mine)
         ? "needs-you"
-        : waitingOn.length > 0
+        : waitingOn.length > 0 || open > 0
           ? "waiting"
           : failed
             ? "failed"
@@ -106,7 +109,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   const about = messages.filter((message) => aboutTicket(ticket, threads, message));
   const weighedIn = new Map<string, number>();
   for (const message of about) weighedIn.set(message.from, (weighedIn.get(message.from) ?? 0) + 1);
-  const settledBy = new Set(ticket.steps.filter((step) => step.status === "settled" || step.status === "failed").map((step) => step.owner));
+  const settledBy = new Set(ticket.steps.filter(isOwned).filter((step) => step.status === "settled" || step.status === "failed").map((step) => step.owner));
   const lastActivity = Math.max(ticket.updatedAt, ...about.map((message) => message.ts));
 
   // what each person did, strongest thing first: a failed step outranks a
@@ -120,7 +123,7 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
     if (had === undefined || rank[mark] > rank[had]) marks.set(key, mark);
   };
   for (const key of weighedIn.keys()) put(key, "spoke");
-  for (const step of ticket.steps) {
+  for (const step of ticket.steps.filter(isOwned)) {
     // on a judged ticket, only a TAKE is a mark: the author's own address step
     // settling is them acting, not them approving their own change
     if (isJudged(ticket.kind) && !isTake(step)) continue;
@@ -131,7 +134,8 @@ export function summarize(ticket: Ticket, messages: ReadonlyArray<RoomMessage>, 
   return {
     state,
     waitingOn,
-    asked: [...new Set(ticket.steps.map((step) => step.owner))],
+    open,
+    asked: [...new Set(ticket.steps.filter(isOwned).map((step) => step.owner))],
     weighedIn,
     settledBy,
     marks,
@@ -189,7 +193,7 @@ export const STATE_LABEL: Record<TicketState, string> = { "needs-you": "needs yo
 /** What each state means, spelled out — for the ? panel. */
 export const STATE_WORDS: Record<TicketState, string> = {
   "needs-you": "a step of yours is up — or every step of your own ticket is answered and it is yours to close",
-  waiting: "a step is up for somebody else",
+  waiting: "a step is up for somebody else, or for anyone to take",
   failed: "a step failed, and nothing is up",
   done: "every step answered; its author has not closed it yet",
   closed: "its author closed it: off the lists, kept on the log",

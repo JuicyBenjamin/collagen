@@ -19,8 +19,8 @@ export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, held
     /** a review's summary is the line beneath its title (its goal is most often just its branch) */
     subtitle: ticket.kind === "review" && review?.summary.trim() ? review.summary.trim() : ticket.goal,
     status: ticket.kind === "epic" ? `${status} · ${progress()}` : status,
-    /** whose move it is: the owners of the steps that are up now */
-    waitingOn: closed ? "" : [...new Set(readySteps(ticket).map((step) => nameFor(step.owner)))].join(", "),
+    /** whose move it is: the owners of the steps that are up now — "anyone" for one nobody has taken */
+    waitingOn: closed ? "" : [...new Set(readySteps(ticket).map((step) => ownerName(step.owner, nameFor)))].join(", "),
     epic: epicOf(ticket) ?? "",
   };
 };
@@ -62,7 +62,7 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
     : {}),
   steps: ticket.steps.map((step) => ({
     id: step.id,
-    owner: nameFor(step.owner),
+    owner: ownerName(step.owner, nameFor),
     intent: step.intent,
     status: step.status,
     needs: step.needs.join("+"),
@@ -72,6 +72,9 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
     agent: step.agent ?? "",
   })),
 });
+
+/** Who has a step, by name — or, for one nobody has, that anyone may take it. */
+const ownerName = (owner: string | undefined, nameFor: (key: string) => string): string => (owner === undefined ? "anyone (nobody has taken it: take-step)" : nameFor(owner));
 
 /** "epic: <id> "<goal>"" for a ticket put in one — and when it is kept out
  *  of the epic's progress. */

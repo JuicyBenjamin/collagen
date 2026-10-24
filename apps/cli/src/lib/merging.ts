@@ -1,4 +1,4 @@
-import { closedAs, isTake, type LocalState, type MergeFor, type Ticket, type TicketStep } from "@collagen/p2p";
+import { closedAs, isOwned, isTake, type LocalState, type MergeFor, type Ticket, type TicketStep } from "@collagen/p2p";
 
 // Merging a review's pull request for its author: whose approval collagen
 // waits for (MergeFor), in three layers — a review's own, its room's, and
@@ -65,7 +65,7 @@ export const ticketReadiness = (ticket: Ticket, me: string, level: MergeFor, nam
   if (ticket.kind !== "review") return { never: "only a review's pull request is merged" };
   if (ticket.createdBy !== me) return { never: "only its author's collagen merges it" };
   if (closedAs(ticket) !== null) return { never: "the review is closed" };
-  const takes = ticket.steps.filter(isTake);
+  const takes = ticket.steps.filter(isTake).filter(isOwned);
   const asking = takes.find((step) => step.status === "failed");
   if (asking) return { waiting: `${nameOf(asking.owner)} asked for changes` };
   const others = takes.filter((step) => step.owner !== me);

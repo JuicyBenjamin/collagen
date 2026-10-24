@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { type MergeFor, afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -139,7 +139,7 @@ export const DescribeScripting = Tool.make("describe-scripting", {
 
 export const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. 'title' is its headline in every list — a few words, 60 characters at most, what it is for; 'goal' is the line beneath it. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps name an owner (a peer name from list-room, or yourself), an intent verb, a full description, and optional 'needs' (ids of steps that must settle first). When a step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
+    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. 'title' is its headline in every list — a few words, 60 characters at most, what it is for; 'goal' is the line beneath it. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps have an intent verb, a full description, optional 'needs' (ids of steps that must settle first), and an 'owner' (a peer name from list-room, or yourself) — or none, when your user asks nobody in particular: that step sits in the room, delivered to no one, until someone takes it (take-step) or settles it. When an owned step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
   parameters: Schema.Struct({
     /** the headline the lists show: a few words, 60 characters at most */
     title: Schema.String,
@@ -157,7 +157,8 @@ export const CreateTicket = Tool.make("create-ticket", {
     steps: Schema.Array(
       Schema.Struct({
         id: Schema.optional(Schema.String),
-        owner: Schema.String,
+        /** left out: nobody asked — anyone in the room may take it */
+        owner: Schema.optional(Schema.String),
         intent: Schema.String,
         description: Schema.String,
         needs: Schema.optional(Schema.Array(Schema.String)),
@@ -496,12 +497,22 @@ export const PostReview = Tool.make("post-review", {
 
 export const SettleStep = Tool.make("settle-step", {
   description:
-    "Settle (or fail) a ticket step your user owns, with the result they want to send — only when they say the step is done (or declined), never because you decided it is. The updated ticket is broadcast to the room at once, and steps waiting on this one become actionable and are delivered to their owners (as messages on the ticket creator's thread with them). A step belongs to the person who owns it: settling someone else's is refused on any ticket — to say what your user thinks of a change, use post-review (a review ticket) or send-to-peer with its ticketId.",
+    "Settle (or fail) a ticket step your user owns — or one nobody has, which settling takes — with the result they want to send — only when they say the step is done (or declined), never because you decided it is. The updated ticket is broadcast to the room at once, and steps waiting on this one become actionable and are delivered to their owners (as messages on the ticket creator's thread with them). A step belongs to the person who owns it: settling someone else's is refused on any ticket — to say what your user thinks of a change, use post-review (a review ticket) or send-to-peer with its ticketId.",
   parameters: Schema.Struct({
     ticketId: Schema.String,
     stepId: Schema.String,
     result: Schema.String,
     failed: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.String,
+});
+
+export const TakeStep = Tool.make("take-step", {
+  description:
+    "Take a task step nobody has (get-ticket shows its owner as anyone) for your user — only when they say they will do it, never on your own initiative. It is theirs from then on, as if they had been asked: settle it with settle-step when they say it is done. Anyone in the room may take such a step; a step someone has is refused. Two people taking it at once end with one of them, the same on every side; the outcome says whether it is your user's.",
+  parameters: Schema.Struct({
+    ticketId: Schema.String,
+    stepId: Schema.String,
   }),
   success: Schema.String,
 });
@@ -760,6 +771,7 @@ export const CollagenToolkit = Toolkit.make(
   ReportBug,
   PostReview,
   SettleStep,
+  TakeStep,
   CloseTicket,
   Epic,
   GetTickets,
@@ -809,6 +821,7 @@ export const DevCollagenToolkit = Toolkit.make(
   ReportBug,
   PostReview,
   SettleStep,
+  TakeStep,
   CloseTicket,
   Epic,
   GetTickets,
@@ -1122,7 +1135,7 @@ const makeHandlers = Effect.gen(function* () {
             if (who._tag === "refused") return who.text;
             newReaders.push(who.person);
           }
-          const takenNow = new Map(revised.steps.map((step) => [step.id, step.owner]));
+          const takenNow = new Map(revised.steps.filter(isOwned).map((step) => [step.id, step.owner]));
           for (const reader of newReaders) {
             if (reader.key === identity.pubkey || revised.steps.some((step) => isTake(step) && step.owner === reader.key)) continue;
             const id = reviewStepId(reader.name, reader.key, takenNow);
@@ -1150,7 +1163,7 @@ const makeHandlers = Effect.gen(function* () {
           // the author's clock only ever moves forward, even inside one millisecond
           if (changed) revised = { ...revised, structureAt: Math.max(now, ticket.structureAt + 1), updatedAt: now };
 
-          const owners = [...new Set(revised.steps.map((step) => step.owner).filter((owner) => owner !== identity.pubkey))];
+          const owners = [...new Set(revised.steps.filter(isOwned).map((step) => step.owner).filter((owner) => owner !== identity.pubkey))];
           const named = owners.map(nameOf).filter((name): name is string => name !== undefined);
           const to = named.length > 0 ? named.join(", ") : "the room";
           const told = yield* outbox.tell({
@@ -1440,7 +1453,7 @@ const makeHandlers = Effect.gen(function* () {
         whenClosed?: string;
         steps: ReadonlyArray<{
           id?: string;
-          owner: string;
+          owner?: string;
           intent: string;
           description: string;
           needs?: ReadonlyArray<string>;
@@ -1450,11 +1463,17 @@ const makeHandlers = Effect.gen(function* () {
         const peers = yield* SubscriptionRef.get(room.roster);
         const members = yield* SubscriptionRef.get(room.members);
         const myName = yield* SubscriptionRef.get(nameRef);
-        // yourself, present peers, then anyone the log remembers — an owner may be offline
-        const owners: Array<Person> = [];
+        // yourself, present peers, then anyone the log remembers — an owner may
+        // be offline; no owner: nobody asked, the step is open to the room
+        const owners: Array<Person | undefined> = [];
         for (const step of input.steps) {
-          const who = personNamed(step.owner, { peers, members, me: identity.pubkey, self: { key: identity.pubkey, name: myName } });
-          if (who._tag === "refused") return `${who.text} — every step's owner is a person in the room, or your user`;
+          const name = step.owner?.trim();
+          if (!name) {
+            owners.push(undefined);
+            continue;
+          }
+          const who = personNamed(name, { peers, members, me: identity.pubkey, self: { key: identity.pubkey, name: myName } });
+          if (who._tag === "refused") return `${who.text} — a step's owner is a person in the room, or your user; leave it out to ask nobody in particular`;
           owners.push(who.person);
         }
         const now = yield* Clock.currentTimeMillis;
@@ -1482,7 +1501,7 @@ const makeHandlers = Effect.gen(function* () {
           updatedAt: now,
           steps: input.steps.map((step, index) => ({
             id: step.id ?? `s${index + 1}`,
-            owner: owners[index]!.key,
+            ...(owners[index] ? { owner: owners[index].key } : {}),
             intent: step.intent,
             description: step.description,
             needs: step.needs ?? [],
@@ -1490,7 +1509,8 @@ const makeHandlers = Effect.gen(function* () {
             updatedAt: now,
           })),
         };
-        const to = [...new Set(owners.map((owner) => owner.name))].join(", ");
+        const named = [...new Set(owners.flatMap((owner) => (owner ? [owner.name] : [])))];
+        const to = [...named, ...(owners.includes(undefined) ? ["the room"] : [])].join(", ");
         const inEpic = yield* filedInEpic(ticket, room, input.epic, now);
         if (typeof inEpic === "string") return inEpic;
         return yield* outbox.tell({ roomId, to, title: `${project} · ${input.title.trim()}`, outgoing: { kind: "ticket", ticket: inEpic } });
@@ -1790,6 +1810,16 @@ const makeHandlers = Effect.gen(function* () {
           to: creator,
           title: `${ticket.goal} · ${input.stepId} ${input.failed ? "failed" : "settled"}`,
           outgoing: { kind: "settle", ticketId: input.ticketId, stepId: input.stepId, result: input.result, failed: input.failed ?? false },
+        });
+      }),
+      "take-step": Effect.fn("Mcp.takeStep")(function* (input: { ticketId: string; stepId: string }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
+        return yield* outbox.tell({
+          roomId,
+          to: "the room",
+          title: `${ticket ? ticketName(ticket) : input.ticketId} · ${input.stepId} taken`,
+          outgoing: { kind: "take", ticketId: input.ticketId, stepId: input.stepId },
         });
       }),
       "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: { peer: string; action: DriveAction }) {

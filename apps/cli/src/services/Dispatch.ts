@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isTake, moveToEpic, orderEpic, postReview, settleStep, ticketName, turnEpic, visibleTo, withAgent, type Outgoing, type Ticket } from "@collagen/p2p";
+import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isOwned, isTake, moveToEpic, orderEpic, postReview, settleStep, takeStep, ticketName, turnEpic, visibleTo, withAgent, type Outgoing, type Ticket } from "@collagen/p2p";
 import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
@@ -125,7 +125,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const held = `(${decisions.length} decision(s), ${forks.length} fork(s) now on it — for your own bookkeeping, not for your user)`;
           if (!out.ticket || known) return sent(`${kind} ticket updated [ticket ${out.review.ticketId}] ${held}. ${say("updated")} ${keepCurrent}`);
           // asked of others — a reading step of the filer's own (an assumed review) is not asking anyone
-          const readers = out.ticket.steps.filter((step) => isTake(step) && step.owner !== identity.pubkey);
+          const readers = out.ticket.steps.filter(isOwned).filter((step) => isTake(step) && step.owner !== identity.pubkey);
           const who =
             readers.length === 0
               ? "in the room, nobody asked in particular"
@@ -150,8 +150,9 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const now = yield* Clock.currentTimeMillis;
           // one rule, shared with the drive path (see p2p settleStep)
           const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now, agent);
-          if (!done || done.outcome === "not-yours") {
-            return refused(`failed: step ${out.stepId} is ${nameFor(step.owner)}'s to settle${isJudged(ticket.kind) ? " — put your user's own take on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
+          if (!done) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
+          if (done.outcome === "not-yours") {
+            return refused(`failed: step ${out.stepId} is ${nameFor(done.owner)}'s to settle${isJudged(ticket.kind) ? " — put your user's own take on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
           }
           const merged = yield* room.shareTicket(done.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
@@ -171,6 +172,27 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
               ? `\nEvery step on this ticket is answered.${next} When your user says they are done with it — and only then — call close-ticket with ticketId "${merged.id}"; it leaves the lists and stays on the log.`
               : "";
           return sent(render(merged) + offer);
+        }
+        case "take": {
+          const all = yield* SubscriptionRef.get(room.tickets);
+          const ticket = all.get(out.ticketId);
+          if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
+          const now = yield* Clock.currentTimeMillis;
+          // one rule for the person's key and their agent's tool (see p2p takeStep)
+          const taken = takeStep(ticket, out.stepId, identity.pubkey, now, agent);
+          const step = ticket.steps.find((candidate) => candidate.id === out.stepId);
+          if (!taken || !step) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
+          if (taken.outcome === "already") return refused(`failed: step ${out.stepId} is your user's already`);
+          if (taken.outcome === "not-open") return refused(`failed: step ${out.stepId} is ${nameFor(taken.owner)}'s — only a step nobody has can be taken`);
+          if (taken.outcome === "over") return refused(`failed: step ${out.stepId} is over (${ticket.closed ? "the ticket is closed" : step.status}) — nothing to take`);
+          const merged = yield* room.shareTicket(taken.ticket).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
+          if (!merged) return NOT_ADMITTED;
+          // someone else's take, or its author withdrawing it, may have won the merge already
+          const held = merged.steps.find((candidate) => candidate.id === out.stepId);
+          if (held?.owner !== identity.pubkey) return sent(`step ${out.stepId} ${held?.owner === undefined ? "was withdrawn" : `went to ${nameFor(held.owner)}, who took it at the same time`} — it is not your user's. ${render(merged)}`);
+          return sent(
+            `step ${out.stepId} is your user's now: "${step.intent}" for "${ticketName(merged)}" [ticket ${merged.id}] — ${step.description}\n${held.status === "suspended" ? "It is up now." : `It waits on ${step.needs.join(", ")}, and is delivered to you once they settle.`} When your user says it is done (or declined), call settle-step with ticketId "${merged.id}" and stepId "${out.stepId}".\n${render(merged)}`,
+          );
         }
         case "epic-move": {
           const all = yield* SubscriptionRef.get(room.tickets);

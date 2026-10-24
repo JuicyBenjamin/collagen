@@ -22,7 +22,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "11";
+export const PROTOCOL_VERSION = "12";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -370,6 +370,12 @@ export const Outgoing = Schema.Union([
     stepId: Schema.String,
     result: Schema.String,
     failed: Schema.Boolean,
+  }),
+  /** A step nobody has, taken by the person: theirs from then on (p2p takeStep). */
+  Schema.Struct({
+    kind: Schema.Literal("take"),
+    ticketId: Schema.String,
+    stepId: Schema.String,
   }),
   /** The author closes their ticket: off the lists, on the log, steps as they were. */
   Schema.Struct({

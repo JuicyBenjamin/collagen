@@ -1,4 +1,4 @@
-import { type ReviewContext, type RoomMessage, type StepStatus, type Ticket, type TicketStep, deriveThreadId, isJudged, isTake, stepThreadId, ticketName } from "@collagen/p2p";
+import { type OwnedStep, type ReviewContext, type RoomMessage, type StepStatus, type Ticket, deriveThreadId, isJudged, isOwned, isTake, stepThreadId, ticketName } from "@collagen/p2p";
 import { actedBy } from "./agents";
 import { aboutTicket, ticketThreads } from "./ticketSummary";
 
@@ -28,7 +28,8 @@ export function myThreadFor(ticket: Ticket, messages: ReadonlyArray<RoomMessage>
 
 export interface StepChange {
   readonly ticket: Ticket;
-  readonly step: TicketStep;
+  /** settled or failed, so somebody's: settling a step nobody had takes it */
+  readonly step: OwnedStep;
   readonly from: StepStatus | undefined;
   readonly to: StepStatus;
 }
@@ -38,7 +39,7 @@ export function stepChanges(prev: ReadonlyMap<string, Ticket>, next: ReadonlyMap
   const out: Array<StepChange> = [];
   for (const ticket of next.values()) {
     const before = prev.get(ticket.id);
-    for (const step of ticket.steps) {
+    for (const step of ticket.steps.filter(isOwned)) {
       const from = before?.steps.find((candidate) => candidate.id === step.id)?.status;
       if ((step.status === "settled" || step.status === "failed") && from !== step.status) out.push({ ticket, step, from, to: step.status });
     }

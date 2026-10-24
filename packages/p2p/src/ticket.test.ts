@@ -1,5 +1,6 @@
+import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { actionableSteps, closeTicket, contributes, finished, mergeTicket, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, type Ticket, type TicketStep } from "./ticket";
+import { actionableSteps, closeTicket, contributes, finished, mergeTicket, readySteps, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, takeStep, Ticket as TicketSchema, type Ticket, type TicketStep } from "./ticket";
 import { deriveThreadId } from "./topic";
 
 const step = (over: Partial<TicketStep>): TicketStep => ({
@@ -419,5 +420,68 @@ describe("which agent did it", () => {
     const { Ticket } = await import("./ticket");
     const old = { id: "t1", project: "p", goal: "g", createdBy: "a", structureAt: 1, kind: "task", steps: [{ id: "s1", owner: "a", intent: "x", description: "d", needs: [], status: "settled", result: "r", updatedAt: 1 }], updatedAt: 1 };
     expect(Schema.decodeUnknownSync(Ticket)(old).steps[0]!.agent).toBeUndefined();
+  });
+});
+
+describe("a task step nobody was asked for", () => {
+  const { owner: _, ...unowned } = step({ id: "s1", intent: "implement" });
+  const open = ticket({ steps: [unowned, step({ id: "s2", owner: "alice", intent: "check", needs: ["s1"] })] });
+
+  it("still decodes from the log without an owner", () => {
+    const raw = { id: "t1", project: "sandbox", goal: "g", createdBy: "alice", kind: "task", structureAt: 1, updatedAt: 1, steps: [{ id: "s1", intent: "implement", description: "do it", needs: [], status: "pending", updatedAt: 1 }] };
+    expect(Schema.decodeUnknownSync(TicketSchema)(raw).steps[0]!.owner).toBeUndefined();
+  });
+
+  it("is up, and delivered to no one — its author included", () => {
+    expect(readySteps(open).map((ready) => ready.id)).toEqual(["s1"]);
+    expect(actionableSteps(open, "alice")).toEqual([]);
+    expect(actionableSteps(open, "bob")).toEqual([]);
+  });
+
+  it("anyone in the room takes it, and it is theirs — marked delivered, since they know", () => {
+    const taken = takeStep(open, "s1", "bob", 5);
+    expect(taken?.outcome).toBe("taken");
+    const mine = taken!.ticket.steps.find((candidate) => candidate.id === "s1")!;
+    expect(mine.owner).toBe("bob");
+    expect(mine.status).toBe("suspended");
+    expect(actionableSteps(taken!.ticket, "bob").map((ready) => ready.id)).toEqual(["s1"]);
+    expect(takeStep(taken!.ticket, "s1", "carol", 6)).toMatchObject({ outcome: "not-open", owner: "bob" });
+    expect(takeStep(taken!.ticket, "s1", "bob", 6)?.outcome).toBe("already");
+  });
+
+  it("one taken before it is up waits for its needs like any other", () => {
+    const later = ticket({ steps: [step({ id: "s0", owner: "alice" }), { ...unowned, needs: ["s0"] }] });
+    const taken = takeStep(later, "s1", "bob", 5)!;
+    expect(taken.ticket.steps.find((candidate) => candidate.id === "s1")).toMatchObject({ owner: "bob", status: "pending" });
+    expect(actionableSteps(taken.ticket, "bob")).toEqual([]);
+  });
+
+  it("settling it takes it; a step someone has is still theirs alone", () => {
+    const settled = settleStep(open, "s1", "carol", "done", false, 5)!;
+    expect(settled.outcome).toBe("settled");
+    expect(settled.ticket.steps.find((candidate) => candidate.id === "s1")).toMatchObject({ owner: "carol", status: "settled" });
+    expect(settleStep(open, "s2", "carol", "done", false, 5)).toMatchObject({ outcome: "not-yours", owner: "alice" });
+  });
+
+  it("nothing is taken from a closed ticket", () => {
+    const closed = closeTicket(open, "alice", undefined, 3).ticket;
+    expect(takeStep(closed, "s1", "bob", 5)?.outcome).toBe("over");
+  });
+
+  it("two takes that never saw each other end with one owner, however the copies are grouped", () => {
+    const byBob = takeStep(open, "s1", "bob", 5)!.ticket;
+    const byCarol = takeStep(open, "s1", "carol", 7)!.ticket;
+    const byDan = takeStep(open, "s1", "dan", 7)!.ticket; // the same millisecond as carol's
+    const ownerOf = (merged: Ticket) => merged.steps.find((candidate) => candidate.id === "s1")?.owner;
+    for (const [left, middle, right] of [[open, byBob, byCarol], [byBob, byCarol, byDan], [open, byCarol, byDan]] as const) {
+      const want = ownerOf(mergeTicket(mergeTicket(left, middle), right));
+      for (const [first, second, third] of [[left, middle, right], [left, right, middle], [middle, left, right], [middle, right, left], [right, left, middle], [right, middle, left]] as const) {
+        expect(ownerOf(mergeTicket(mergeTicket(first, second), third))).toBe(want);
+        expect(ownerOf(mergeTicket(first, mergeTicket(second, third)))).toBe(want);
+      }
+    }
+    // the later take holds; an untaken copy never undoes a take
+    expect(ownerOf(mergeTicket(byBob, byCarol))).toBe("carol");
+    expect(ownerOf(mergeTicket(byBob, open))).toBe("bob");
   });
 });
