@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Effect, Semaphore, SubscriptionRef } from "effect";
 import type { DraftComment, ReviewComment } from "@collagen/p2p";
 import type { DraftsResult, DraftView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "@collagen/review-web/data";
+import { sameComment } from "@collagen/review-web/sameComment";
 import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
 import { placeComment, type Spot } from "../lib/comments";
 import { IdentityService } from "./Identity";
@@ -371,7 +372,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   // each pending comment with its copy on the host, matched by where it sits and what it says
   const unclaimed = [...sent.comments];
   const posted = pending.map((draft): DraftComment => {
-    const index = unclaimed.findIndex((hosted) => hosted.file === draft.file && hosted.line === draft.line && hosted.side === draft.side && hosted.body === draft.body);
+    const index = unclaimed.findIndex((hosted) => sameComment(hosted, draft));
     const copy = index === -1 ? undefined : unclaimed.splice(index, 1)[0];
     return { ...draft, status: "posted", ...(copy ? { host: { id: Number(copy.id), url: copy.url } } : {}) };
   });
