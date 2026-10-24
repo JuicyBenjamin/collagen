@@ -331,6 +331,8 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 /* a review the reader finished: what they gave and when, in the colour of its button */
 .reviewed { --tone: var(--tone-say); display: inline-flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 12px; border: 1.5px solid var(--tone); border-radius: 999px; background: color-mix(in srgb, var(--tone) 12%, var(--panel)); color: var(--tone); font: 600 13px -apple-system, sans-serif; white-space: nowrap; transition: background 0.15s; }
 .reviewed svg { width: 14px; height: 14px; flex: none; }
+/* beside the buttons: its mark alone, a round of their size */
+.reviewed.compact { width: 32px; padding: 0; justify-content: center; }
 .reviewed.change { --tone: var(--sign-chg); }
 .reviewed.go { --tone: var(--kind-review); }
 .reviewed.quiet { --tone: var(--dim); }

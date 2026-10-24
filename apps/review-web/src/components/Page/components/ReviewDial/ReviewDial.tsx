@@ -61,6 +61,7 @@ export function DialButtons(props: { head: ReviewPageHead }) {
             yours={finish()}
             again={again() === finish().at}
             pressable={canReview(props.head) && !due()}
+            compact={shown()}
             onAgain={() => {
               const asked = again() === finish().at;
               setAgain(asked ? null : finish().at);
