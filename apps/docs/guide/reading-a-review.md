@@ -328,7 +328,9 @@ collagen, and the page says so. **Discard review** drops what is pending.
 
 A review is of one commit: the one the page shows. A comment written before the branch moved
 says **Written at …** under it, as its lines may not be the ones it meant; **Keep it here**
-confirms it where it shows now, or delete it — until then, finishing refuses it. A comment
+confirms it where it shows now, or delete it. Until each is kept or deleted the review is not
+submitted: its panel lists them, each with a way to it, **Keep it here** and **Delete**, and
+**Submit review** waits. A comment
 whose line the diff no longer shows at all — its file gone or renamed — is listed at the top
 of the page, to delete or decline there. Should a
 finish stop after GitHub has the review but before the room does, its comments stay marked

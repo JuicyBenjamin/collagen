@@ -33,7 +33,7 @@ import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
-import { acceptDrafts, draftComments, draftsOf, dropDrafts, submitReview } from "./ReviewTalk";
+import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, submitReview } from "./ReviewTalk";
 import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
@@ -669,10 +669,10 @@ export const ReviewComments = Tool.make("review-comments", {
   description: [
     "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line, startLine?, side?, strength?, body}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
     "Drafts stay on this machine. Your user reads them beside the code and accepts (into their review, as on GitHub), edits or declines each; their review is said when they finish it — in the room as theirs and, when the review is an open pull request someone else opened, on it as one review with their verdict (through their own gh; on their own pull request it stays in collagen, where it has readers); you call nothing else for that. Say in the chat what you found in a line or two and that the comments are drafts on the review page; do not repeat them there.",
-    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
+    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. 'keep' (ids): a pending comment written on another commit is about the same lines at the review's commit now — read the diff first. A finish waits, nothing submitted, while comments in it were written on different commits: each kept or declined first. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
   ].join("\n"),
   parameters: Schema.Struct({
-    action: Schema.Literals(["draft", "accept", "decline", "submit", "list"]),
+    action: Schema.Literals(["draft", "accept", "decline", "keep", "submit", "list"]),
     ticketId: Schema.String,
     comments: Schema.optional(
       Schema.Array(
@@ -2027,7 +2027,7 @@ const makeHandlers = Effect.gen(function* () {
         return yield* pages.showMerges(roomId, project.name, input.number);
       }),
       "review-comments": Effect.fn("Mcp.reviewComments")(function* (input: {
-        action: "draft" | "accept" | "decline" | "submit" | "list";
+        action: "draft" | "accept" | "decline" | "keep" | "submit" | "list";
         ticketId: string;
         comments?: ReadonlyArray<{ readonly file: string; readonly line: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly strength?: Strength; readonly body: string }>;
         ids?: ReadonlyArray<string>;
@@ -2061,8 +2061,18 @@ const makeHandlers = Effect.gen(function* () {
         }
         if (input.action === "submit") {
           const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null);
+          if ("held" in result && result.held) {
+            const waiting = yield* draftsOf(input.ticketId);
+            const held = result.held.flatMap((id) => waiting.filter((draft) => draft.id === id)).map((draft) => `- ${draft.id} ${where(draft)}, written at ${draft.commit.slice(0, 7)}`);
+            return `failed: NOT SUBMITTED — ${result.error} 'keep' (ids) confirms one where it sits at the review's commit now; 'decline' (ids) deletes it.\n${held.join("\n")}`;
+          }
           if ("error" in result) return `failed: ${result.error} — the review stays pending`;
           return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request${"changesRequested" in result && result.changesRequested ? ", requesting changes (a must comment in it)" : ""}${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
+        }
+        if (input.action === "keep") {
+          if (!ids) return "failed: pass 'ids' — the pending comments to keep where they sit at the review's commit now";
+          const result = yield* keepDrafts(input.ticketId, ids);
+          return `${result.done} comment(s) kept where they sit at the review's commit now.${failures(result.failed)}`;
         }
         if (input.action === "decline") {
           const dropped = yield* dropDrafts(input.ticketId, ids, "ai");

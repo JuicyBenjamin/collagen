@@ -354,10 +354,12 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     if ("error" in diff) return { error: `cannot read the review's code here: ${diff.error}` } satisfies SubmitResult;
     at = diff.commit;
   }
-  const elsewhere = pending.filter((draft) => draft.commit !== at);
+  // held back, all of it, until each is kept where it sits now or deleted
+  const elsewhere = at === null ? pending : pending.filter((draft) => draft.commit !== at);
   if (at === null || elsewhere.length > 0)
     return {
-      error: `${elsewhere.length || pending.length} comment(s) in your review were written on ${at === null ? "different commits" : `another commit than the one ${commit ? "the page shows" : "the others were"} (${short(at)})`}: their lines may have moved. Confirm where each sits ("Keep it here") or delete it, then finish the review.`,
+      error: `${elsewhere.length} comment(s) in your review were written on ${at === null ? "different commits" : `another commit than ${commit ? "the one the page shows" : "the others"} (${short(at)})`}: keep or delete each, then finish the review.`,
+      held: elsewhere.map((draft) => draft.id),
     } satisfies SubmitResult;
   const sent = yield* to.host.submit(to.link, to.number, {
     verdict: asked,
@@ -389,6 +391,28 @@ const repinOnce = Effect.fn("ReviewTalk.repin")(function* (ticketId: string, id:
   if (!(yield* draftsOf(ticketId)).some((draft) => draft.id === id && !isPosted(draft))) return { done: 0, failed: [{ id, error: "no such comment waiting" }] } satisfies DraftsResult;
   yield* setDrafts(ticketId, (drafts) => drafts.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
   return { done: 1, failed: [] } satisfies DraftsResult;
+});
+
+/** Confirm where comments not said yet sit, at the review's commit now — the
+ *  agent's way to keep them, as the page's "Keep it here" is the reader's:
+ *  one whose lines the diff there does not show is refused, to delete. */
+export const keepDrafts = (ticketId: string, ids: ReadonlyArray<string>) => one(ticketId, keepOnce(ticketId, ids));
+const keepOnce = Effect.fn("ReviewTalk.keep")(function* (ticketId: string, ids: ReadonlyArray<string>) {
+  const found = yield* reviewNamed(ticketId);
+  if (!found) return { done: 0, failed: ids.map((id) => ({ id, error: `no review ticket ${ticketId} in your rooms` })) } satisfies DraftsResult;
+  const diff = yield* reviewHunks(found);
+  if ("error" in diff) return { done: 0, failed: ids.map((id) => ({ id, error: `cannot read the review's code here: ${diff.error}` })) } satisfies DraftsResult;
+  const mine = yield* draftsOf(ticketId);
+  const failed: Array<{ readonly id: string; readonly error: string }> = [];
+  const kept = new Set<string>();
+  for (const id of ids) {
+    const draft = mine.find((candidate) => candidate.id === id && !isPosted(candidate));
+    const why = draft ? placeComment(diff.hunks, spotOf(draft)) : "no such comment waiting";
+    if (why) failed.push({ id, error: why });
+    else kept.add(id);
+  }
+  if (kept.size > 0) yield* setDrafts(ticketId, (drafts) => drafts.map((draft) => (kept.has(draft.id) ? { ...draft, commit: diff.commit } : draft)));
+  return { done: kept.size, failed } satisfies DraftsResult;
 });
 
 /** A comment said in the room, as the page shows one. */

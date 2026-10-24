@@ -187,7 +187,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
     setEditing(false);
   };
   return (
-    <div class="line-comment pending-review">
+    <div class="line-comment pending-review" id={`pending-${props.comment.id}`}>
       <div class="line-comment-head">
         <span class="pending-badge">{props.comment.posted ? `On ${hostNow.hostName()}` : "Pending"}</span>
         <Show when={!editing()}>
