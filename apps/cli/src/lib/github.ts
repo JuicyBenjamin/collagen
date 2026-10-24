@@ -223,7 +223,8 @@ export const readReviews = (value: unknown): ReadonlyArray<HostReview> =>
     if (!record || !author || id === undefined || !verdict) return [];
     const body = typeof record.body === "string" ? record.body.trim() : "";
     if (verdict === "commented" && body.length === 0) return [];
-    return [{ id: String(id), author, verdict, body, at: asText(record.submitted_at) ?? "", url: asText(record.html_url) ?? "" }];
+    const commit = asText(record.commit_id);
+    return [{ id: String(id), author, verdict, body, at: asText(record.submitted_at) ?? "", url: asText(record.html_url) ?? "", ...(commit ? { commit } : {}) }];
   });
 
 /** `gh api --paginate --slurp repos/…/issues/N/comments`: the conversation. */

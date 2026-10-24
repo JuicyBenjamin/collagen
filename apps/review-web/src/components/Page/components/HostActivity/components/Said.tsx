@@ -56,11 +56,13 @@ export function Said() {
     if (!activity) return [];
     return [...activity.reviews.map((review): Item => ({ kind: "review", ...review })), ...activity.conversation.map((note): Item => ({ kind: "note", ...note }))].sort((a, b) => a.at.localeCompare(b.at));
   };
-  /** who said something, each once, in the order they first did */
+  /** the reader, as the host knows them: whose avatar and reviews are marked theirs */
+  const isMe = (user: HostUser) => host()?.viewer?.login === user.login;
+  /** who said something, each once, in the order they first did — the reader first */
   const speakers = (): ReadonlyArray<HostUser> => {
     const seen = new Map<string, HostUser>();
     for (const item of items()) if (!seen.has(item.author.login)) seen.set(item.author.login, item.author);
-    return [...seen.values()];
+    return [...seen.values()].sort((a, b) => Number(isMe(b)) - Number(isMe(a)));
   };
   const counts = () => {
     const activity = host();
@@ -100,9 +102,9 @@ export function Said() {
                 <For each={speakers().slice(0, AVATARS)}>
                   {(speaker) =>
                     speaker.avatarUrl ? (
-                      <img class="avatar" src={speaker.avatarUrl} alt="" title={speaker.login} onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={18} height={18} />
+                      <img class={["avatar", { mine: isMe(speaker) }]} src={speaker.avatarUrl} alt="" title={isMe(speaker) ? `${speaker.login} (you)` : speaker.login} onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={18} height={18} />
                     ) : (
-                      <span class="avatar host-initial" title={speaker.login}>
+                      <span class={["avatar host-initial", { mine: isMe(speaker) }]} title={isMe(speaker) ? `${speaker.login} (you)` : speaker.login}>
                         {speaker.login.slice(0, 1).toUpperCase()}
                       </span>
                     )
@@ -130,10 +132,13 @@ export function Said() {
             <ol class="host-items">
               <For each={all() ? items() : items().slice(-LATEST)}>
                 {(item) => (
-                  <li class="host-item">
+                  <li class={["host-item", { mine: isMe(item.author) }]}>
                     <div class="line-comment-head">
                       <Show when={item.author.avatarUrl}>{(src) => <img class="avatar" src={src()} alt="" onError={(event) => (event.currentTarget.style.visibility = "hidden")} width={18} height={18} />}</Show>
                       <strong>{item.author.login}</strong>
+                      <Show when={isMe(item.author)}>
+                        <span class="you-mark">you</span>
+                      </Show>
                       <Show when={item.kind === "review"}>
                         <span class={["verdict", (item as HostReview).verdict.replace(" ", "-")]}>{(item as HostReview).verdict}</span>
                       </Show>

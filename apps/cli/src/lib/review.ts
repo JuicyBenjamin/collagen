@@ -1,4 +1,5 @@
-import { IMPORTANCE, type Assumed, type BugReport, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork } from "@collagen/p2p";
+import { closedAs, IMPORTANCE, isTake, type Assumed, type BugReport, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork, type Ticket } from "@collagen/p2p";
+import type { YourReview } from "@collagen/review-web/data";
 import { actedBy } from "./agents";
 
 /** A review's why, as the agent hands it over and as a reader gets it back.
@@ -289,3 +290,21 @@ export const assumedGaps = (input: ReviewInput, amending: boolean): string | nul
   }
   return null;
 };
+
+/** The reader's own finish of a review in the room, the later of two: their
+ *  take on it (a verdict) and, on one they filed, its close. `since`: its
+ *  why was revised after the take. None while they have given neither. */
+export const yourFinish = (ticket: Ticket, review: ReviewContext | undefined, me: string): YourReview | undefined => {
+  const takes = ticket.steps.filter((step) => step.owner === me && isTake(step) && (step.status === "settled" || step.status === "failed"));
+  const take = takes.reduce<(typeof takes)[number] | undefined>((latest, step) => (!latest || step.updatedAt >= latest.updatedAt ? step : latest), undefined);
+  const taken: YourReview | undefined = take
+    ? { as: take.status === "failed" ? "changes requested" : take.comment ? "commented" : "approved", at: take.updatedAt, since: review !== undefined && review.ts > take.updatedAt }
+    : undefined;
+  const ended = closedAs(ticket);
+  const closed: YourReview | undefined = ended && ticket.closed && ticket.createdBy === me ? { as: ended === "done" ? "accepted" : "dropped", at: ticket.closed.ts, since: false } : undefined;
+  if (!taken || !closed) return taken ?? closed;
+  return closed.at >= taken.at ? closed : taken;
+};
+
+/** A finish as a line: "changes requested, 2026-10-24T09:12:00.000Z — changed since". */
+export const finishLine = (finish: YourReview): string => `${finish.as}, ${new Date(finish.at).toISOString()}${finish.since ? " — changed since" : ""}`;

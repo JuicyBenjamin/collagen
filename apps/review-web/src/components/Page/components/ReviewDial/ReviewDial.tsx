@@ -4,9 +4,11 @@ import { Appear } from "~/components/Appear";
 import { flies, floating } from "~/floating";
 import { hostNow } from "~/hostNow";
 import { viewed } from "~/viewedNow";
+import { yourReview } from "~/yourReview";
 import { Count } from "../Header/components/HostBar/components/Progress";
 import { Accept } from "./components/Accept";
 import { ArrowRound, CommentBox, ThumbsUp } from "./components/Icons";
+import { Reviewed } from "./components/Reviewed";
 import { Verdict } from "./components/Verdict";
 
 // Finishing the review, from wherever the reader is: three round buttons —
@@ -15,7 +17,10 @@ import { Verdict } from "./components/Verdict";
 // the corner, the count's pill and the buttons held in one pill around them. Each opens its panel with that verdict, under
 // the bar or above the corner. On a review the reader filed, approving is
 // accepting it (or dropping it). Pending comments go with whichever is
-// sent; their count sits on the comment button.
+// sent; their count sits on the comment button. Once the reader has
+// finished a review, what they gave and when stands in for the buttons;
+// they come back when the change moves, when comments are pending, or on
+// the reader's word.
 
 const CHOICES: ReadonlyArray<{ readonly verdict: VerdictValue; readonly tone: string; readonly title: string; readonly icon: () => Element }> = [
   { verdict: "comment", tone: "say", title: "Comment", icon: CommentBox },
@@ -26,39 +31,68 @@ const CHOICES: ReadonlyArray<{ readonly verdict: VerdictValue; readonly tone: st
 /** The verdict whose panel is open: one for the page, wherever its buttons are. */
 const [open, setOpen] = createSignal<VerdictValue | null>(null);
 
+/** The finish the reader asked to review again after (its time): one for
+ *  the page, like `open`. A new finish puts the buttons away again. */
+const [again, setAgain] = createSignal<number | null>(null);
+
+/** The reader's own finish of the review: the room's or the host's, the later. */
+const yours = (head: ReviewPageHead) => yourReview(head.ticket.yours, hostNow.host());
+
 /** Whether the reader can finish a review here: an open review ticket
  *  always — someone else's with a verdict, their own accepted or dropped —
  *  else a pull request they can write to, or comments pending. */
 const canReview = (head: ReviewPageHead) =>
   (head.ticket.kind === "review" && !head.ticket.closed) || hostNow.canWrite() || hostNow.pending().length > 0;
 
-/** The three buttons. */
+/** The three buttons — and, once the reader has finished a review, what
+ *  they gave, in their place until another is due. */
 export function DialButtons(props: { head: ReviewPageHead }) {
   const pending = () => hostNow.pending().length;
+  const done = () => yours(props.head);
+  /** another review is due on its own: the change moved, or comments wait to be said */
+  const due = () => done()?.since === true || pending() > 0;
+  // a panel open stays with its buttons until it is done
+  const shown = () => canReview(props.head) && (done() === null || due() || again() === done()?.at || open() !== null);
   return (
-    <Appear when={canReview(props.head)}>
-      {() => (
-      <div class="dial-buttons">
-        <For each={CHOICES}>
-          {(choice) => (
-            <button
-              type="button"
-              class={["dial", choice.tone, { on: open() === choice.verdict }]}
-              onClick={() => setOpen(open() === choice.verdict ? null : choice.verdict)}
-              aria-expanded={open() === choice.verdict ? "true" : "false"}
-              title={choice.title}
-              aria-label={choice.title}
-            >
-              <choice.icon />
-              <Show when={choice.verdict === "comment" && pending() > 0}>
-                <span class="dial-count">{pending()}</span>
-              </Show>
-            </button>
-          )}
-        </For>
-      </div>
-      )}
-    </Appear>
+    <>
+      <Appear when={done()}>
+        {(finish) => (
+          <Reviewed
+            yours={finish()}
+            again={again() === finish().at}
+            pressable={canReview(props.head) && !due()}
+            onAgain={() => {
+              const asked = again() === finish().at;
+              setAgain(asked ? null : finish().at);
+              if (asked) setOpen(null);
+            }}
+          />
+        )}
+      </Appear>
+      <Appear when={shown()}>
+        {() => (
+        <div class="dial-buttons">
+          <For each={CHOICES}>
+            {(choice) => (
+              <button
+                type="button"
+                class={["dial", choice.tone, { on: open() === choice.verdict }]}
+                onClick={() => setOpen(open() === choice.verdict ? null : choice.verdict)}
+                aria-expanded={open() === choice.verdict ? "true" : "false"}
+                title={choice.title}
+                aria-label={choice.title}
+              >
+                <choice.icon />
+                <Show when={choice.verdict === "comment" && pending() > 0}>
+                  <span class="dial-count">{pending()}</span>
+                </Show>
+              </button>
+            )}
+          </For>
+        </div>
+        )}
+      </Appear>
+    </>
   );
 }
 
@@ -84,7 +118,7 @@ export function DialPanel(props: { head: ReviewPageHead; where: "bar" | "corner"
  *  it. It flies here from the header as one view transition; with none, it
  *  opens in. Fixed: nothing on the page moves when it comes. */
 export function Corner(props: { head: ReviewPageHead }) {
-  const when = () => floating() && (viewed.count().files > 0 || canReview(props.head));
+  const when = () => floating() && (viewed.count().files > 0 || canReview(props.head) || yours(props.head) !== null);
   const body = () => (
     <div class="corner">
       <DialPanel head={props.head} where="corner" />
