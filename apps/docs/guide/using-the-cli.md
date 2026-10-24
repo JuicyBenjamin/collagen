@@ -71,7 +71,9 @@ No files are written into your projects.
   removes one of yours. `shift ↑↓` moves a project up or down: every list of projects you
   see follows that order. It is kept on your machine and never shared with the room; a
   project added later comes last.
-- **merges tab** — what was merged into each of your projects' default branch, the
+- **merges tab** — one of your projects at a time, under a row of tabs naming them in
+  your order: the first one's when you come to the tab, `←→` on that row for another's,
+  each read when its tab is opened. What was merged into its default branch, the
   latest first, each by its pull request's title with its number, branch and age.
   Under a merge, the review tickets it came from (by the pull request its link names,
   else its branch, else a commit it was read at), and what each grew from above it: a
