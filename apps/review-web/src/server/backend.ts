@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 
 /** Where a block of lines starts, or null for one line. */
@@ -56,7 +56,6 @@ export class ReviewBackend extends Context.Service<
     readonly drop: (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending") => Effect.Effect<number>;
     /** a comment not said yet, confirmed where it sits at `commit` — the one the page shows now */
     readonly repin: (ticketId: string, id: string, commit: string) => Effect.Effect<DraftsResult>;
-    /** what was merged into a room's projects, with the tickets each came from; null for a room not here */
     /** the reader's take on a review, said in the room as theirs; `failed` rejects it, `comment` approves nothing */
     readonly take: (ticketId: string, findings: string, failed: boolean, comment: boolean) => Effect.Effect<HostWrite>;
     /** a review the reader filed, closed: accepted as done, or dropped */
@@ -65,7 +64,10 @@ export class ReviewBackend extends Context.Service<
     readonly mergeView: (ticketId: string) => Effect.Effect<MergeView | null>;
     /** set a review's own merge setting; null gives it back to its room's */
     readonly setMerge: (ticketId: string, level: MergeFor | null) => Effect.Effect<MergeView | null>;
-    readonly merges: (roomId: string, shown: MergesShown, fresh: boolean) => Effect.Effect<MergeHistory | null>;
+    /** what was merged into one of a room's projects, `shown` of them, with the tickets each came from; null for a room not here */
+    readonly merges: (roomId: string, project: string, shown: number, fresh: boolean) => Effect.Effect<MergeHistory | null>;
+    /** a room's projects held here, in the reader's order; null for a room not here */
+    readonly mergeProjects: (roomId: string) => Effect.Effect<MergeProjects | null>;
     /** the page's themes as collagen keeps them — now, then on every change, whoever made it
      *  (a page, the person's agent); null while it keeps none yet */
     readonly themes: Stream.Stream<PageThemes | null>;

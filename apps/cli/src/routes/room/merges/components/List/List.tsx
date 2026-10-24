@@ -64,7 +64,7 @@ export function List({ project }: { project: string }) {
   const byId = new Map(tickets.map((ticket) => [ticket.id, ticket] as const));
   const now = Date.now();
 
-  const [timeline] = read ? timelineOf([read], byId, reviews, comments, me) : [];
+  const timeline = read ? timelineOf(read, byId, reviews, comments, me) : null;
   const lines: Array<Line> = [];
   if (timeline && !("none" in timeline)) {
     for (const { merge, tickets: shown } of timeline.merges) {
@@ -113,8 +113,8 @@ export function List({ project }: { project: string }) {
       marginTop={1}
       onKey={(key) => {
         if (key.name === "r") return refresh(), true;
-        // o is always one of collagen's own pages: a review's page, else this history at the merge
-        if (key.name === "o") return current?.kind === "ticket" && current.ticket.kind === "review" ? openReviewPage({ ticketId: current.ticket.id }) : openPage(current ? { at: { project, number: current.merge.number } } : {}), true;
+        // o is always one of collagen's own pages: a review's page, else this project's merges at the merge
+        if (key.name === "o") return current?.kind === "ticket" && current.ticket.kind === "review" ? openReviewPage({ ticketId: current.ticket.id }) : openPage({ project, ...(current ? { at: current.merge.number } : {}) }), true;
         if (stops.length === 0) return false;
         if (key.name === "up" && sel > 0) return at(sel - 1);
         if (key.name === "down" && sel < last) return at(sel + 1);

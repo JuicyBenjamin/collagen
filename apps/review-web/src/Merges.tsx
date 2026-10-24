@@ -12,46 +12,53 @@ import {
 import { ago } from "./ago";
 import { Corner } from "./components/Corner";
 import { enter, leave } from "./fold";
-import { mergeHistory } from "./api";
-import type { MergeEntry, MergeHistory, MergesShown, MergeTicket, ProjectHistory } from "./data";
+import { mergeHistory, mergeProjects } from "./api";
+import type { MergeEntry, MergeHistory, MergeProjects, MergeTicket, ProjectHistory } from "./data";
 
-// The merge history page: what was merged into each of a room's projects,
+// A project's merges page: what was merged into one of a room's projects,
 // the latest first, as the TUI's merges tab has it — each merge linked to
 // its pull request, and under it the tickets it came from, each linked to
-// its review page. One read, from one moment (the host's merges and the
+// its review page; above, a tab for each of the room's projects, in the
+// reader's order. One read, from one moment (the host's merges and the
 // room's tickets together); read again when the reader asks. Merges are not
-// pushed to the instance, so nothing here moves on its own.
+// pushed to the instance, so nothing here moves on its own. A room's
+// address, /merges/<roomId>, goes on to its first project's.
 
-/** /merges/<roomId> — the page's one argument; null on any other page. */
-export const mergesRoom: string | null = (() => {
-  const [first, id] = location.pathname.split("/").filter(Boolean);
+/** /merges/<roomId>/<project>, or a room's /merges/<roomId> — the page's
+ *  arguments; null on any other page. */
+export const mergesPlace: { readonly room: string; readonly project: string | null } | null = (() => {
+  const [first, room, project] = location.pathname.split("/").filter(Boolean);
   if (first !== "merges") return null;
   try {
-    return decodeURIComponent(id ?? "");
+    return { room: decodeURIComponent(room ?? ""), project: project === undefined ? null : decodeURIComponent(project) };
   } catch {
-    return "";
+    return { room: "", project: null };
   }
 })();
 
-/** #<project>/<number>: the merge the page opens at, its why open. */
-const target: { readonly project: string; readonly number: number } | null = (() => {
-  const match = /^#(.+)\/(\d+)$/.exec(location.hash);
-  if (!match) return null;
-  try {
-    return { project: decodeURIComponent(match[1]!), number: Number(match[2]) };
-  } catch {
-    return null;
-  }
+/** A project's merges page, at one of its merges when `number` names it. */
+const projectUrl = (roomId: string, project: string, number?: number) =>
+  `/merges/${encodeURIComponent(roomId)}/${encodeURIComponent(project)}${number === undefined ? "" : `#${number}`}`;
+
+/** #<number>: the merge the page opens at, its why open. */
+const target: number | null = (() => {
+  const match = /^#(\d+)$/.exec(location.hash);
+  return match ? Number(match[1]) : null;
 })();
 
-const mergeId = (project: string, number: number) =>
-  `merge-${encodeURIComponent(project)}-${number}`;
+const mergeId = (number: number) => `merge-${number}`;
 
-/** More merges each time the reader nears a project's end, as the instance pages them. */
+/** More merges each time the reader nears the end, as the instance pages them. */
 const PAGE = 50;
 
-async function load(roomId: string, shown: MergesShown, fresh: boolean): Promise<MergeHistory> {
-  const data = await mergeHistory(roomId, shown, fresh);
+async function load(roomId: string, project: string, shown: number, fresh: boolean): Promise<MergeHistory> {
+  const data = await mergeHistory(roomId, project, shown, fresh);
+  if (!data) throw new Error("This room is not open here.");
+  return data;
+}
+
+async function loadProjects(roomId: string): Promise<MergeProjects> {
+  const data = await mergeProjects(roomId);
   if (!data) throw new Error("This room is not open here.");
   return data;
 }
@@ -60,11 +67,50 @@ async function load(roomId: string, shown: MergesShown, fresh: boolean): Promise
 const [now, setNow] = createSignal(Date.now());
 setInterval(() => setNow(Date.now()), 30_000);
 
-export function MergesApp(props: { roomId: string }) {
+/** A room's merges address: on to the project a link names
+ *  (#<project>/<number>, as these links once were), else the reader's first. */
+export function MergesRoom(props: { roomId: string }) {
+  const data = createMemo(() => loadProjects(props.roomId));
+  createEffect(
+    () => data(),
+    (read) => {
+      const named = /^#(.+)\/(\d+)$/.exec(location.hash);
+      let project: string | undefined;
+      try {
+        project = named ? decodeURIComponent(named[1]!) : undefined;
+      } catch {
+        project = undefined;
+      }
+      const to = project ?? read.projects[0];
+      if (to !== undefined) location.replace(projectUrl(props.roomId, to, named && project ? Number(named[2]) : undefined));
+    },
+  );
+  return (
+    <Errored
+      fallback={(error) => (
+        <p class="failed">{error() instanceof Error ? (error() as Error).message : String(error())}</p>
+      )}
+    >
+      <Loading fallback={<p class="loading">Loading the merges…</p>}>
+        <Show when={data().projects.length === 0}>
+          <main class="merges-page">
+            <header>
+              <h1>Merges</h1>
+              <p class="meta">{data().room}</p>
+            </header>
+            <p class="merges-none">No projects here</p>
+          </main>
+        </Show>
+      </Loading>
+    </Errored>
+  );
+}
+
+export function MergesApp(props: { roomId: string; project: string }) {
   // where it opens is the page's to say (a merge, else the latest), not
   // where it was last scrolled to
   history.scrollRestoration = "manual";
-  const [shown, setShown] = createSignal<MergesShown>({});
+  const [shown, setShown] = createSignal(PAGE);
   const [refreshes, setRefreshes] = createSignal(0);
   const [refreshing, setRefreshing] = createSignal(false);
   let read = 0;
@@ -73,7 +119,7 @@ export function MergesApp(props: { roomId: string }) {
     const asked = refreshes();
     const fresh = asked !== read;
     read = asked;
-    return load(props.roomId, shown(), fresh);
+    return load(props.roomId, props.project, shown(), fresh);
   });
   const reading = () => {
     try {
@@ -82,13 +128,13 @@ export function MergesApp(props: { roomId: string }) {
       return true;
     }
   };
-  const more = (project: string, count: number) => {
+  const more = (count: number) => {
     setRefreshing(false);
-    setShown((previous) => ((previous[project] ?? 0) >= count + PAGE ? previous : { ...previous, [project]: count + PAGE }));
+    setShown((previous) => (previous >= count + PAGE ? previous : count + PAGE));
   };
   const refresh = () => {
     setRefreshing(true);
-    setShown({});
+    setShown(PAGE);
     setRefreshes((previous) => previous + 1);
   };
   return (
@@ -98,45 +144,40 @@ export function MergesApp(props: { roomId: string }) {
       )}
     >
       <Loading fallback={<p class="loading">Loading the merges…</p>}>
-        <Page data={data()} refreshing={refreshing() && reading()} refresh={refresh} more={more} />
+        <Page roomId={props.roomId} data={data()} refreshing={refreshing() && reading()} refresh={refresh} more={more} />
       </Loading>
     </Errored>
   );
 }
 
 function Page(props: {
+  roomId: string;
   data: MergeHistory;
   refreshing: boolean;
   refresh: () => void;
-  more: (project: string, count: number) => void;
+  more: (count: number) => void;
 }) {
-  const single = createMemo(() => {
-    const [only, ...rest] = props.data.projects;
-    return only && rest.length === 0 && "base" in only ? only : undefined;
-  });
   // opened at a merge: more is read until it is in, then it is scrolled to
   let found = target === null;
   createEffect(
     () => props.data,
     (data) => {
-      if (found || !target) return;
-      const project = data.projects.find((entry) => entry.project === target.project);
-      if (!project || "none" in project) return void (found = true);
-      if (project.merges.some((merge) => merge.number === target.number)) {
+      if (found || target === null) return;
+      const history = data.history;
+      if ("none" in history) return void (found = true);
+      if (history.merges.some((merge) => merge.number === target)) {
         found = true;
         requestAnimationFrame(() =>
-          document
-            .getElementById(mergeId(target.project, target.number))
-            ?.scrollIntoView({ block: "start", behavior: "instant" }),
+          document.getElementById(mergeId(target))?.scrollIntoView({ block: "start", behavior: "instant" }),
         );
-      } else if (project.more) props.more(project.project, project.merges.length);
+      } else if (history.more) props.more(history.merges.length);
       else found = true;
     },
   );
   createEffect(
-    () => props.data.room,
-    (room) => {
-      document.title = `Merges — ${room}`;
+    () => [props.data.history.project, props.data.room] as const,
+    ([project, room]) => {
+      document.title = `Merges — ${project} · ${room}`;
     },
   );
   return (
@@ -146,14 +187,17 @@ function Page(props: {
         <Corner />
         <p class="meta">
           {props.data.room}
-          <Show when={single()}>
-            {(only) => (
+          {(() => {
+            const history = props.data.history;
+            return "none" in history ? (
+              ` · ${history.none}`
+            ) : (
               <>
                 {" · into "}
-                <code>{only().base}</code>
+                <code>{history.base}</code>
               </>
-            )}
-          </Show>
+            );
+          })()}
           {" · "}
           <button
             type="button"
@@ -165,25 +209,29 @@ function Page(props: {
           </button>
         </p>
       </header>
-      <Show
-        when={props.data.projects.length > 0}
-        fallback={<p class="merges-none">No projects here</p>}
-      >
+      <nav class="merges-projects" aria-label="Projects">
         <For each={props.data.projects}>
-          {(project) => <Project project={project} named={!single()} more={props.more} />}
+          {(project) => (
+            <a
+              href={projectUrl(props.roomId, project)}
+              class={{ on: project === props.data.history.project }}
+              aria-current={project === props.data.history.project ? "page" : undefined}
+            >
+              {project}
+            </a>
+          )}
         </For>
-      </Show>
+      </nav>
+      <Project project={props.data.history} more={props.more} />
     </main>
   );
 }
 
-/** A project's merges — under its name when the room has more than one —
- *  and, while there are more, a line past the last that reads the next ones
- *  as it nears the screen. */
+/** A project's merges and, while there are more, a line past the last
+ *  that reads the next ones as it nears the screen. */
 function Project(props: {
   project: ProjectHistory;
-  named: boolean;
-  more: (project: string, count: number) => void;
+  more: (count: number) => void;
 }) {
   const projectHistory = () => props.project;
   const [near, setNear] = createSignal(false);
@@ -203,29 +251,18 @@ function Project(props: {
       return near() && "merges" in current && current.more ? current.merges.length : null;
     },
     (count) => {
-      if (count !== null) props.more(projectHistory().project, count);
+      if (count !== null) props.more(count);
     },
   );
   return (
     <section class="merges-project">
-      <Show when={props.named}>
-        <h2>
-          {projectHistory().project}
-          <span class="merges-project-note">
-            {(() => {
-              const current = projectHistory();
-              return "none" in current ? ` · ${current.none}` : ` · into ${current.base}`;
-            })()}
-          </span>
-        </h2>
-      </Show>
       <Show
         when={"merges" in projectHistory() ? (projectHistory() as Extract<ProjectHistory, { merges: unknown }>).merges : null}
       >
         {(merges) => (
           <Show when={merges().length > 0} fallback={<p class="merges-none">None</p>}>
             <ol class="timeline">
-              <For each={merges()}>{(merge) => <Merge merge={merge} project={projectHistory().project} />}</For>
+              <For each={merges()}>{(merge) => <Merge merge={merge} />}</For>
             </ol>
             <Show
               when={"more" in projectHistory() && (projectHistory() as Extract<ProjectHistory, { merges: unknown }>).more}
@@ -243,12 +280,11 @@ function Project(props: {
 
 /** A merge: its pull request's title (its branch when it has none), its
  *  number, branch and when — then the tickets it came from. */
-function Merge(props: { merge: MergeEntry; project: string }) {
+function Merge(props: { merge: MergeEntry }) {
   const merge = () => props.merge;
-  const opened =
-    target !== null && target.project === props.project && target.number === props.merge.number;
+  const opened = target !== null && target === props.merge.number;
   return (
-    <li class={{ merge: true, target: opened }} id={mergeId(props.project, props.merge.number)}>
+    <li class={{ merge: true, target: opened }} id={mergeId(props.merge.number)}>
       <p class="merge-title">
         <a href={merge().url} target="_blank" rel="noreferrer">
           {merge().title || merge().branch}

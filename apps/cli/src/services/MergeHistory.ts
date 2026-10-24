@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { epicOf, isClosed, ticketName, visibleTo, type Project, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
-import type { MergeHistory as MergeHistoryData, MergesShown } from "@collagen/review-web/data";
+import type { MergeEntry, MergeHistory as MergeHistoryData, MergeProjects, ProjectHistory } from "@collagen/review-web/data";
 import { defaultBranchOf, repoWebUrl } from "../lib/gitInfo";
 import { latestMerges, type MergesPage } from "../lib/github";
 import { lineage, reviewedCode, ticketsOfMerges, whyOpen } from "../lib/mergeTickets";
@@ -12,11 +12,11 @@ import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 
 // What was merged into a room's projects: the TUI's merges tab and the
-// merge history page (review-web, /merges/<roomId>) read the same. Both
-// show a page of merges and more as the reader scrolls on; the host's pages
-// read so far are kept, so scrolling on reads only the pages past them, and
-// a refresh starts over. The tab reads one project at a time, the one whose
-// tab is open.
+// merges page (review-web, /merges/<roomId>/<project>) read the same, one
+// project at a time — the one whose tab is open, the one the page is of.
+// Both show a page of merges and more as the reader scrolls on; the host's
+// pages read so far are kept, so scrolling on reads only the pages past
+// them, and a refresh starts over.
 
 /** Merges shown at first, and how many more each time the reader nears the end. */
 export const MERGES_PAGE = 50;
@@ -30,7 +30,7 @@ export type ProjectMerges = { readonly project: string } & (
 );
 
 /** How many merges to show of each project, by its name; MERGES_PAGE of one not named. */
-export type Shown = MergesShown;
+type Shown = Readonly<Record<string, number>>;
 
 /** The merges tab's room: how many of each project it shows, and how many times it was refreshed. */
 interface View {
@@ -45,26 +45,26 @@ export type ProjectTimeline = { readonly project: string } & (
   | { readonly none: string }
 );
 
-/** Each merge read, with the room's tickets it came from that `me` may see
- *  (lib/mergeTickets) and those they grew from, what each grew from first. */
+/** A project's merges read, each with the room's tickets it came from that
+ *  `me` may see (lib/mergeTickets) and those they grew from, what each grew
+ *  from first. */
 export const timelineOf = (
-  read: ReadonlyArray<ProjectMerges>,
+  project: ProjectMerges,
   tickets: ReadonlyMap<string, Ticket>,
   reviews: ReadonlyArray<ReviewContext>,
   comments: ReadonlyArray<ReviewComment>,
   me: string,
-): ReadonlyArray<ProjectTimeline> =>
-  read.map((project) => {
-    if ("none" in project) return project;
-    const host = hostOf(project.repo);
-    const code = host ? reviewedCode(project.project, tickets, reviews, comments, me, host) : [];
-    return {
-      project: project.project,
-      base: project.base,
-      more: project.more,
-      merges: ticketsOfMerges(project.merges, code).map(({ merge, tickets: ids }) => ({ merge, tickets: lineage(ids, tickets, me) })),
-    };
-  });
+): ProjectTimeline => {
+  if ("none" in project) return project;
+  const host = hostOf(project.repo);
+  const code = host ? reviewedCode(project.project, tickets, reviews, comments, me, host) : [];
+  return {
+    project: project.project,
+    base: project.base,
+    more: project.more,
+    merges: ticketsOfMerges(project.merges, code).map(({ merge, tickets: ids }) => ({ merge, tickets: lineage(ids, tickets, me) })),
+  };
+};
 
 /** Who a key is in a room, as the TUI names them: "you", a peer's name, a
  *  member's, else the key's start. */
@@ -115,13 +115,11 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
         );
       });
 
-    /** A room's projects held here, in the person's order, each with its merges. */
-    const roomMerges = (roomId: string, shown: Shown) =>
-      Effect.gen(function* () {
-        const state = yield* store.get;
-        const projects = inProjectOrder(state.rooms[roomId] ?? [], (project) => project.name, projectOrderOf(state, roomId));
-        return yield* Effect.forEach(projects, (project) => projectMerges(project, shown[project.name] ?? MERGES_PAGE), { concurrency: 4 });
-      });
+    /** A room's projects held here, in the person's order, by name. */
+    const heldNames = (roomId: string) =>
+      Effect.map(store.get, (state) => inProjectOrder(state.rooms[roomId] ?? [], (project) => project.name, projectOrderOf(state, roomId)).map((project) => project.name));
+
+    const roomOf = (roomId: string) => Effect.map(SubscriptionRef.get(rooms.handles), (handles) => handles.find((candidate) => candidate.id === roomId));
 
     /** One of a room's projects held here, by its name, with its merges. */
     const heldMerges = (roomId: string, name: string, want: number, fresh: boolean): Effect.Effect<ProjectMerges> =>
@@ -174,16 +172,17 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
             SubscriptionRef.update(ref, (current) => ({ shown: {}, refreshed: current.refreshed + 1 })),
           ),
         ),
-      /** The merge history page's data: a room's timeline, `shown` merges of
-       *  each project, named as the TUI names it — from scratch when `fresh`.
-       *  The room is read once the merges are in, so the tickets and their
+      /** The merges page's data: one of a room's projects, its latest
+       *  `shown` merges, named as the TUI names it — from scratch when
+       *  `fresh` — and the room's projects held here, for its tabs. The
+       *  room is read once the merges are in, so the tickets and their
        *  names are of one moment. Null for a room not open here. */
-      page: (roomId: string, shown: Shown, fresh: boolean) =>
+      page: (roomId: string, project: string, shown: number, fresh: boolean) =>
         Effect.gen(function* () {
-          const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === roomId);
+          const handle = yield* roomOf(roomId);
           if (!handle) return null;
-          if (fresh) pages.clear();
-          const read = yield* roomMerges(roomId, shown);
+          const projects = yield* heldNames(roomId);
+          const read = yield* heldMerges(roomId, project, shown, fresh);
           const { room } = handle;
           const me = identity.pubkey;
           const tickets = yield* SubscriptionRef.get(room.tickets);
@@ -192,44 +191,42 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
           const comments = yield* SubscriptionRef.get(room.comments);
           const name = (yield* SubscriptionRef.get(room.meta)).name;
           const nameFor = yield* namesIn(room, me);
-          return {
-            room: name,
-            readAt: new Date().toISOString(),
-            projects: timelineOf(read, tickets, reviews, comments, me).map((project) =>
-              "none" in project
-                ? project
-                : {
-                    project: project.project,
-                    base: project.base,
-                    more: project.more,
-                    merges: project.merges.map(({ merge, tickets: from }) => ({
-                      number: merge.number,
-                      url: merge.url,
-                      title: merge.title,
-                      branch: merge.branch,
-                      at: merge.at,
-                      epics: [...new Set(from.flatMap((ticket) => epicOf(ticket) ?? []))].flatMap((id) => {
-                        const epic = tickets.get(id);
-                        return epic && visibleTo(epic, tickets, me) ? [{ id, name: ticketName(epic) }] : [];
-                      }),
-                      tickets: from.map((ticket) => ({
-                        id: ticket.id,
-                        name: ticketName(ticket),
-                        author: nameFor(ticket.createdBy),
-                        mine: ticket.createdBy === me,
-                        closed: isClosed(ticket),
-                        kind: ticket.kind,
-                        decisions: (whyOpen(ticket, me) ? (why.get(ticket.id)?.decisions ?? []) : []).map((decision) => ({
-                          title: decision.title ?? decision.what,
-                          what: decision.what,
-                          ...(decision.userWhy ? { userWhy: decision.userWhy } : {}),
-                          ...(decision.agentWhy ? { agentWhy: decision.agentWhy } : {}),
-                        })),
-                      })),
-                    })),
-                  },
-            ),
-          } satisfies MergeHistoryData;
+          const timeline = timelineOf(read, tickets, reviews, comments, me);
+          const entry = ({ merge, tickets: from }: { readonly merge: HostMerge; readonly tickets: ReadonlyArray<Ticket> }): MergeEntry => ({
+            number: merge.number,
+            url: merge.url,
+            title: merge.title,
+            branch: merge.branch,
+            at: merge.at,
+            epics: [...new Set(from.flatMap((ticket) => epicOf(ticket) ?? []))].flatMap((id) => {
+              const epic = tickets.get(id);
+              return epic && visibleTo(epic, tickets, me) ? [{ id, name: ticketName(epic) }] : [];
+            }),
+            tickets: from.map((ticket) => ({
+              id: ticket.id,
+              name: ticketName(ticket),
+              author: nameFor(ticket.createdBy),
+              mine: ticket.createdBy === me,
+              closed: isClosed(ticket),
+              kind: ticket.kind,
+              decisions: (whyOpen(ticket, me) ? (why.get(ticket.id)?.decisions ?? []) : []).map((decision) => ({
+                title: decision.title ?? decision.what,
+                what: decision.what,
+                ...(decision.userWhy ? { userWhy: decision.userWhy } : {}),
+                ...(decision.agentWhy ? { agentWhy: decision.agentWhy } : {}),
+              })),
+            })),
+          });
+          const history: ProjectHistory = "none" in timeline ? timeline : { project: timeline.project, base: timeline.base, more: timeline.more, merges: timeline.merges.map(entry) };
+          return { room: name, projects, history, readAt: new Date().toISOString() } satisfies MergeHistoryData;
+        }),
+      /** A room's projects held here, in the person's order: where its
+       *  merges address goes. Null for a room not open here. */
+      projects: (roomId: string) =>
+        Effect.gen(function* () {
+          const handle = yield* roomOf(roomId);
+          if (!handle) return null;
+          return { room: (yield* SubscriptionRef.get(handle.room.meta)).name, projects: yield* heldNames(roomId) } satisfies MergeProjects;
         }),
     };
   }),

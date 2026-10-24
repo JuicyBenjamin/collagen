@@ -30,6 +30,7 @@ const KINDS: Record<string, CallKind> = {
   "take-step": "review",
   "close-ticket": "review",
   "open-review": "review",
+  "open-merges": "review",
   "review-comments": "review",
   "review-context": "review",
   "get-tickets": "tickets",

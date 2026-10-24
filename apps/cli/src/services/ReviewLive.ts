@@ -55,11 +55,14 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
       /** Is a page for this review open in a browser right now? */
       isOpen,
       show,
-      /** Open a room's merge history page (review-web, /merges/<roomId>) in
-       *  the person's browser — at one merge of a project, its decisions
-       *  open, when `at` names it. Says what happened, url included. */
-      showMerges: Effect.fn("ReviewPages.showMerges")(function* (roomId: string, at?: { readonly project: string; readonly number: number }) {
-        const url = `${yield* pageUrl("merges", roomId)}${at ? `#${encodeURIComponent(at.project)}/${at.number}` : ""}`;
+      /** Open a project's merges page (review-web,
+       *  /merges/<roomId>/<project>) in the person's browser — at one of
+       *  its merges, its decisions open, when `at` names it; with no
+       *  project, the room's, which goes on to the person's first. Says
+       *  what happened, url included. */
+      showMerges: Effect.fn("ReviewPages.showMerges")(function* (roomId: string, project?: string, at?: number) {
+        const room = yield* pageUrl("merges", roomId);
+        const url = project === undefined ? room : `${room}/${encodeURIComponent(project)}${at === undefined ? "" : `#${at}`}`;
         return (yield* launch(url)) ? `merges page opened: ${url}` : `merges page: ${url} (could not open a browser — paste it into one)`;
       }),
       /** The person's agent has started on a review: its page opens, unless

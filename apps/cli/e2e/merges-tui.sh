@@ -6,8 +6,9 @@
 # enter drops onto the row of project tabs, ↓ into the list, `p` hands #6's pull request to the browser opener (a stand-in on
 # PATH), ↓ reaches its review, under what it grew from, enter opens its page, esc comes back
 # to the merges with the cursor where it was, `o` there opens the ticket's
-# review page, and `o` on a merge the same history as a web page (review-web,
-# /merges/<roomId>), whose data is read here as the page reads it.
+# review page, and `o` on a merge the project's merges as a web page
+# (review-web, /merges/<roomId>/<project>), whose data is read here as the
+# page reads it; the room's address goes on to it (/merges/<roomId>).
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 # the web page is a Solid app served from its build; build it if this checkout has not
@@ -57,24 +58,31 @@ expect "the cursor reached the list" "$KEYS" "merges"
 expect "enter on the ticket's line opened its page" "$KEYS" "ticket-steps"
 expect "p handed the pull request to the browser" "$(head -1 "$OUT/opened" 2>/dev/null)" "^https://github.com/acme/sandbox/pull/6$"
 expect "o on the ticket's line handed its review page to the browser" "$(cat "$OUT/opened" 2>/dev/null)" "/review/"
-echo "## the same history as a web page"
+echo "## the project's merges as a web page"
 WEB=$(grep -oE 'http://[^ ]+/merges/[^ ]+' "$OUT/opened" 2>/dev/null | head -1)
-expect "o on a merge handed the merges page to the browser, at that merge" "$WEB" "^${A%/mcp}/merges/[0-9A-Za-z-]+#sandbox/6$"
-PAGE=${WEB%%#*}; ROOM=${PAGE##*/}
+expect "o on a merge handed the project's merges page to the browser, at that merge" "$WEB" "^${A%/mcp}/merges/[0-9A-Za-z-]+/sandbox#6$"
+PAGE=${WEB%%#*}; ROOM=$(echo "$PAGE" | sed -E 's#.*/merges/([^/]+)/.*#\1#')
 expect "the page is served" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$PAGE")" "^200 text/html"
+expect "…and the room's, which goes on to a project's" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "${PAGE%/*}")" "^200 text/html"
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
-SFN=$(grep -oE 'registerServerReference\("mergeHistory-[0-9a-f]+"' "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')
-HISTORY=$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "[\"$ROOM\",{},false]")")
-expect "its data: into main, the latest first" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["projects"][0]; print(d["base"], *[m["number"] for m in d["merges"]])')" "^main 6 5 1000 "
-expect "…#6 linked to its pull request, her ticket under it as hers" "$(echo "$HISTORY" | python3 -c 'import json,sys; m=json.load(sys.stdin)["projects"][0]["merges"][0]; t=m["tickets"][-1]; print(m["url"], t["name"], t["author"], t["mine"])')" "^https://github.com/acme/sandbox/pull/6 Paging the rows you True$"
-expect "…what it grew from above it, each by its kind: her proposal, her plan, her review" "$(echo "$HISTORY" | python3 -c 'import json,sys; print(*[t["kind"] for t in json.load(sys.stdin)["projects"][0]["merges"][0]["tickets"]])')" "^proposal plan review$"
-expect "…and what was decided on it, and why" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["projects"][0]["merges"][0]["tickets"][2]["decisions"][0]; print(d["title"], "/", d["userWhy"])')" "^Rows a page / long lists were slow$"
-expect "…a page of them, and more past it" "$(echo "$HISTORY" | python3 -c 'import json,sys; p=json.load(sys.stdin)["projects"][0]; print(len(p["merges"]), p["more"])')" "^50 True$"
-MORE=$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "[\"$ROOM\",{\"sandbox\":150},false]")")
-expect "scrolled on: the host's next page read, and nothing past the last" "$(echo "$MORE" | python3 -c 'import json,sys; p=json.load(sys.stdin)["projects"][0]; print(len(p["merges"]), p["more"], p["merges"][-1]["number"])')" "^122 False 1119$"
+sfn() { node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$(grep -oE "registerServerReference\\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+expect "the room's projects here, for its tabs and where its address goes" "$(sfn mergeProjects "[\"$ROOM\"]" | python3 -c 'import json,sys; print(*json.load(sys.stdin)["projects"])')" "^sandbox$"
+HISTORY=$(sfn mergeHistory "[\"$ROOM\",\"sandbox\",50,false]")
+expect "its data: into main, the latest first" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["history"]; print(d["base"], *[m["number"] for m in d["merges"]])')" "^main 6 5 1000 "
+expect "…#6 linked to its pull request, her ticket under it as hers" "$(echo "$HISTORY" | python3 -c 'import json,sys; m=json.load(sys.stdin)["history"]["merges"][0]; t=m["tickets"][-1]; print(m["url"], t["name"], t["author"], t["mine"])')" "^https://github.com/acme/sandbox/pull/6 Paging the rows you True$"
+expect "…what it grew from above it, each by its kind: her proposal, her plan, her review" "$(echo "$HISTORY" | python3 -c 'import json,sys; print(*[t["kind"] for t in json.load(sys.stdin)["history"]["merges"][0]["tickets"]])')" "^proposal plan review$"
+expect "…and what was decided on it, and why" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["history"]["merges"][0]["tickets"][2]["decisions"][0]; print(d["title"], "/", d["userWhy"])')" "^Rows a page / long lists were slow$"
+expect "…a page of them, and more past it" "$(echo "$HISTORY" | python3 -c 'import json,sys; p=json.load(sys.stdin)["history"]; print(len(p["merges"]), p["more"])')" "^50 True$"
+MORE=$(sfn mergeHistory "[\"$ROOM\",\"sandbox\",150,false]")
+expect "scrolled on: the host's next page read, and nothing past the last" "$(echo "$MORE" | python3 -c 'import json,sys; p=json.load(sys.stdin)["history"]; print(len(p["merges"]), p["more"], p["merges"][-1]["number"])')" "^122 False 1119$"
 expect "…the next page asked from where the first ended" "$(grep -c '"after=100"' "$GH/calls.log")" "^[1-9]"
-expect "…#5 from no ticket" "$(echo "$HISTORY" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["projects"][0]["merges"][1]["tickets"]))')" "^0$"
-expect "a room not here has no history" "$(node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$SFN?args=%5B%22not-a-room%22%2C%7B%7D%2Cfalse%5D")" "^null$"
+expect "…#5 from no ticket" "$(echo "$HISTORY" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["history"]["merges"][1]["tickets"]))')" "^0$"
+expect "a project not here has none" "$(sfn mergeHistory "[\"$ROOM\",\"elsewhere\",50,false]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["history"]["none"])')" "^not here$"
+expect "a room not here has no history" "$(sfn mergeHistory '["not-a-room","sandbox",50,false]')" "^null$"
+echo "## her agent takes her there too"
+expect "open-merges opens the project's merges page, at a merge" "$(call $A "$SA" open-merges '{"project":"SANDBOX","number":6}')" "^merges page opened: ${A%/mcp}/merges/[0-9A-Za-z-]+/sandbox#6$"
+expect "…her first project's when none is named" "$(call $A "$SA" open-merges '{}')" "^merges page opened: ${A%/mcp}/merges/[0-9A-Za-z-]+/sandbox$"
+expect "…a project not hers here is refused" "$(call $A "$SA" open-merges '{"project":"nope"}')" "^failed: no project of your user's named"
 touch "$OUT/merges-tui.done"
 
 HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes

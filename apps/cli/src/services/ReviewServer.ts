@@ -6,7 +6,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
-import { commitOk, hostView, localHost, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
+import { commitOk, hostView, localHost, projectNameOk, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
@@ -65,9 +65,8 @@ const finishOk = (finish: unknown): finish is { readonly id: string; readonly pe
   return typeof id === "string" && /^[0-9a-f-]{8,64}$/.test(id) && Array.isArray(pending) && idsOk(pending);
 };
 
-/** How many merges the page shows of each project: a few names, each a whole count. */
-const shownCountsOk = (counts: unknown): counts is Readonly<Record<string, number>> =>
-  typeof counts === "object" && counts !== null && !Array.isArray(counts) && Object.keys(counts).length <= 64 && Object.values(counts).every((count) => Number.isInteger(count) && count >= 0 && count <= 100_000);
+/** How many merges the page shows: a whole count. */
+const mergesShownOk = (count: unknown): count is number => Number.isInteger(count) && (count as number) >= 1 && (count as number) <= 100_000;
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
@@ -110,7 +109,8 @@ const backend = Effect.gen(function* () {
     mergeView: (ticketId) => (ticketIdOk(ticketId) ? on(mergeView(ticketId)) : Effect.succeed(null)),
     setMerge: (ticketId, level) => (ticketIdOk(ticketId) && (level === null || level === "off" || level === "theirs" || level === "mine" || level === "both") ? on(setMerge(ticketId, level)) : Effect.succeed(null)),
     close: (ticketId, outcome) => (ticketIdOk(ticketId) && (outcome === "done" || outcome === "dropped") ? on(closeReview(ticketId, outcome)) : Effect.succeed(bad)),
-    merges: (roomId, shown, fresh) => (ticketIdOk(roomId) && shownCountsOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, shown, fresh)) : Effect.succeed(null)),
+    merges: (roomId, project, shown, fresh) => (ticketIdOk(roomId) && projectNameOk(project) && mergesShownOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, project, shown, fresh)) : Effect.succeed(null)),
+    mergeProjects: (roomId) => (ticketIdOk(roomId) ? on(history.projects(roomId)) : Effect.succeed(null)),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });

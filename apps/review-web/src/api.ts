@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergesShown, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
 
@@ -144,12 +144,18 @@ export const repinDraft = async (ticketId: string, id: string, commit: string): 
   return run((backend) => backend.repin(ticketId, id, commit));
 };
 
-/** The merge history page's read: a room's merges, `shown` of each
- *  project, and the tickets each came from, from one moment — from scratch
+/** The merges page's read: one of a room's projects, `shown` of its
+ *  merges, and the tickets each came from, from one moment — from scratch
  *  when `fresh` (the reader's refresh). */
-export const mergeHistory = GET(async (roomId: string, shown: MergesShown, fresh: boolean): Promise<MergeHistory | null> => {
+export const mergeHistory = GET(async (roomId: string, project: string, shown: number, fresh: boolean): Promise<MergeHistory | null> => {
   "use server";
-  return run((backend) => backend.merges(roomId, shown, fresh));
+  return run((backend) => backend.merges(roomId, project, shown, fresh));
+});
+
+/** A room's projects held here, in the reader's order: where /merges/<roomId> goes. */
+export const mergeProjects = GET(async (roomId: string): Promise<MergeProjects | null> => {
+  "use server";
+  return run((backend) => backend.mergeProjects(roomId));
 });
 
 /** The reader's take on someone else's review, from the page — said in the

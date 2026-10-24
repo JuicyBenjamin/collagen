@@ -549,6 +549,11 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .merges-project h2 { font-size: 17px; margin: 0 0 12px; }
 .merges-project-note { color: var(--dim); font-weight: 400; font-size: 14px; }
 .merges-none { color: var(--dim); }
+/* the room's projects, a tab each: a link to its merges */
+.merges-projects { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 20px; border-bottom: 1px solid var(--line); }
+.merges-projects a { font-size: 14px; color: var(--dim); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 14px; }
+.merges-projects a:hover { color: var(--fg); }
+.merges-projects a.on { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
 .timeline { list-style: none; margin: 0; padding: 0 0 0 20px; border-left: 2px solid var(--line); }
 .merge { position: relative; padding: 0 0 22px 4px; }
 .merge::before { content: ""; position: absolute; left: -28px; top: 7px; width: 10px; height: 10px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); }

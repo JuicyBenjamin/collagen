@@ -3,7 +3,7 @@ import { createThemeBaseCss, createThemeRule } from "@tanstack/highlight/theme";
 import { githubLightTheme } from "@tanstack/highlight/themes/github-light";
 import { oneDarkProTheme } from "@tanstack/highlight/themes/one-dark-pro";
 import { App } from "./App";
-import { MergesApp, mergesRoom } from "./Merges";
+import { MergesApp, mergesPlace, MergesRoom } from "./Merges";
 import { startHandoff } from "./handoff";
 import { themeNow } from "./themeNow";
 import "./themes.css";
@@ -23,7 +23,11 @@ document.head.append(theme);
 // every page wears the theme chosen, and follows it as it changes
 themeNow.start();
 
-// one document for both pages: /review/<ticketId>, and /merges/<roomId>
-const room = mergesRoom;
-if (room === null) startHandoff();
-render(() => (room === null ? <App /> : <MergesApp roomId={room} />), document.getElementById("root")!);
+// one document for every page: /review/<ticketId>, /merges/<roomId>/<project>,
+// and a room's /merges/<roomId>, which goes on to a project's
+const merges = mergesPlace;
+if (merges === null) startHandoff();
+render(
+  () => (merges === null ? <App /> : merges.project === null ? <MergesRoom roomId={merges.room} /> : <MergesApp roomId={merges.room} project={merges.project} />),
+  document.getElementById("root")!,
+);

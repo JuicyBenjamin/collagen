@@ -151,9 +151,9 @@ export const askWhy = (roomId: string, query: WhyQuery) =>
     const comments = yield* SubscriptionRef.get(room.comments);
     const nameFor = yield* namesIn(room, me);
     // tied against every merge read: a branch's ticket goes to its first merge after it was filed
-    const [timeline] = timelineOf([read], tickets, reviews, comments, me);
+    const timeline = timelineOf(read, tickets, reviews, comments, me);
     const from = new Map(
-      timeline && "merges" in timeline
+      "merges" in timeline
         ? timeline.merges.map((entry) => [entry.merge.number, entry.tickets] as const)
         : [],
     );

@@ -417,6 +417,10 @@ const notFound = (text: string) => HttpServerResponse.text(text, { status: 404 }
 /** A ticket id as collagen makes them (a room's too); anything else is not looked up. */
 export const ticketIdOk = (id: string | undefined): id is string => id !== undefined && /^[0-9A-Za-z-]{1,64}$/.test(id);
 
+/** A project's name as an address names it: a folder's name, so no slash
+ *  and nothing unprintable; anything else is not looked up. */
+export const projectNameOk = (name: unknown): name is string => typeof name === "string" && name.length > 0 && name.length <= 255 && !/[/\\\u0000-\u001f\u007f]/.test(name);
+
 /** Where the built page is (apps/review-web, a Solid app): beside the
  *  bundle in a release (dist/review-web, copied there by the cli build), or
  *  the web app's own dist when collagen runs from source. */
@@ -445,7 +449,18 @@ export const ReviewRoutes = Layer.mergeAll(
       return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
     }),
   ),
-  // the merge history: the same document, for a room
+  // a project's merges: the same document, for one of a room's projects
+  HttpRouter.add("GET", "/merges/:roomId/:project", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      const { roomId, project } = yield* HttpRouter.params;
+      if (!ticketIdOk(roomId) || !projectNameOk(project)) return notFound("no project");
+      const root = webRoot();
+      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
+      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
+    }),
+  ),
+  // a room's merges: the same document, which goes on to a project's
   HttpRouter.add("GET", "/merges/:roomId", (request) =>
     Effect.gen(function* () {
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
