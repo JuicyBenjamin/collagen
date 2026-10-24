@@ -541,8 +541,10 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
    line, the tickets it came from under it */
 .merges-page { max-width: 880px; margin: 0 auto; padding: 32px 24px 80px; }
 @media (max-width: 900px) { .merges-page { padding: 20px 16px 64px; } }
-.merges-again { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
-.merges-again:disabled { color: var(--dim); cursor: default; }
+/* the title and the line under it on the left, the page's corner (the theme) top right */
+.merges-page > header { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; }
+.merges-page > header > * { grid-column: 1; }
+.merges-page > header > .header-corner { grid-column: 2; grid-row: 1; align-self: start; }
 .merges-project { margin-top: 32px; }
 .merges-project h2 { font-size: 17px; margin: 0 0 12px; }
 .merges-project-note { color: var(--dim); font-weight: 400; font-size: 14px; }
@@ -768,7 +770,7 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .running-where { font-size: 12.5px; color: var(--faint); }
 .running-where.local { color: var(--warn); }
 
-/* top right, beside who is signed in; the editor drops down under it, over the page */
+/* top right on every page (Corner), beside who is signed in on a review; the editor drops down under it, over the page */
 .header-corner { position: relative; display: flex; align-items: center; gap: 12px; }
 .theme-pick { display: flex; align-items: center; gap: 8px; }
 .theme-select { position: relative; display: inline-flex; }

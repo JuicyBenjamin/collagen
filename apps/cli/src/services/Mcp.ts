@@ -599,15 +599,15 @@ export const SetMerging = Tool.make("set-merging", {
   success: Schema.String,
 });
 
-const OWN_THEMES = "Your user's own themes are theirs: change them only when they say so. Every open review page follows at once, and the page's theme picker shows the same.";
+const OWN_THEMES = "Your user's own themes are theirs: change them only when they say so. Every open collagen page (a review, the merges) wears it and follows at once, and each page's theme switch shows the same.";
 
 export const Themes = Tool.make("themes", {
-  description: `The review page's themes: collagen's own, daisyUI's, and your user's own — each of theirs with its colours — and which is on. Read it before choosing or editing one. ${OWN_THEMES}`,
+  description: `The theme every collagen page wears (a review, the merges): collagen's own, daisyUI's, and your user's own — each of theirs with its colours — and which is on. Read it before choosing or editing one. ${OWN_THEMES}`,
   success: Schema.String,
 });
 
 export const SetTheme = Tool.make("set-theme", {
-  description: `Put a theme on the review page, by its name ('name'): collagen's own, one of daisyUI's, or one of your user's own (see themes). Only when your user says so — it is their look. ${OWN_THEMES}`,
+  description: `Put a theme on every collagen page, by its name ('name'): collagen's own, one of daisyUI's, or one of your user's own (see themes). Only when your user says so — it is their look. ${OWN_THEMES}`,
   parameters: Schema.Struct({ name: Schema.String }),
   success: Schema.String,
 });
@@ -631,7 +631,7 @@ export const EditTheme = Tool.make("edit-theme", {
 });
 
 export const RemoveTheme = Tool.make("remove-theme", {
-  description: `Remove one of your user's own themes, by its name; the page goes back to collagen's own if it was on. ${OWN_THEMES}`,
+  description: `Remove one of your user's own themes, by its name; the pages go back to collagen's own if it was on. ${OWN_THEMES}`,
   parameters: Schema.Struct({ name: Schema.String }),
   success: Schema.String,
 });
@@ -855,7 +855,7 @@ const makeHandlers = Effect.gen(function* () {
     const updates = yield* Updates;
     const store = yield* StateStore;
     /** The page's themes kept, and said back: every open page follows. */
-    const keepThemes = (themes: PageThemes) => store.update((state) => ({ ...state, themes })).pipe(Effect.as(`set — every open review page follows now.\n${describeThemes(themes)}`));
+    const keepThemes = (themes: PageThemes) => store.update((state) => ({ ...state, themes })).pipe(Effect.as(`set — every open page follows now.\n${describeThemes(themes)}`));
     const mcpInfo = yield* McpInfo;
     const pages = yield* ReviewPages;
     const { profile } = yield* CliArgs;

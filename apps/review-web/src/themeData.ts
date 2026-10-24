@@ -1,4 +1,4 @@
-// The review page's themes as data — no page, no browser: which themes there
+// The pages' themes as data — no page, no browser: which themes there
 // are, what a theme of the person's own may hold, and reading one from
 // pasted CSS or a daisyUI theme generator link. The page shows them
 // (theme.ts); collagen keeps them, so the person's agent can choose and add

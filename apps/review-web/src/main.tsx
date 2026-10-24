@@ -5,7 +5,7 @@ import { oneDarkProTheme } from "@tanstack/highlight/themes/one-dark-pro";
 import { App } from "./App";
 import { MergesApp, mergesRoom } from "./Merges";
 import { startHandoff } from "./handoff";
-import { applyTheme, cachedThemes } from "./theme";
+import { themeNow } from "./themeNow";
 import "./themes.css";
 import "./styles.css";
 
@@ -20,7 +20,8 @@ theme.textContent = [
   createThemeRule(':root[data-scheme="dark"]', oneDarkProTheme),
 ].join("\n");
 document.head.append(theme);
-applyTheme(cachedThemes());
+// every page wears the theme chosen, and follows it as it changes
+themeNow.start();
 
 // one document for both pages: /review/<ticketId>, and /merges/<roomId>
 const room = mergesRoom;

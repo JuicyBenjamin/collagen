@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import type { PageThemes } from "@collagen/p2p";
 import { checkedThemes, generatorPayload, nameOf, parseTheme, safeValue, savedIdOf, savedValue, THEME_VARS, THEMES, themeFromGenerator, type Custom, type Saved, type Scheme } from "@collagen/review-web/themeData";
 
-// The review page's themes as the person's agent sees and sets them (themes,
+// The pages' themes as the person's agent sees and sets them (themes,
 // set-theme, add-theme, edit-theme, remove-theme): by name, a theme read from
 // a daisyUI theme generator link or its CSS, a colour by its short name.
 // Kept in the person's state, so every open page follows.
