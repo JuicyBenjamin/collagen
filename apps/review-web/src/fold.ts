@@ -22,6 +22,42 @@ export async function foldAway(card: Element | null): Promise<void> {
   );
 }
 
+/** How long a fold takes to settle: the file's code closing, then its unit's
+ *  why folding when that was the unit's last file open. */
+const SETTLING = 0.8;
+
+/** Keep `element` — the header or button the reader just clicked — where it
+ *  is on the window while the page folds around it, until it settles or the
+ *  reader scrolls. A file folding under its stuck header takes the window's
+ *  place with it otherwise: the page shrinks above it, the scroll stays, and
+ *  the reader lands files further down. Put back on every frame the page
+ *  changes height in, so it holds through the animation, not after it. */
+export function holdInPlace(element: HTMLElement | undefined): Promise<void> {
+  if (!element) return Promise.resolve();
+  const top = element.getBoundingClientRect().top;
+  const putBack = () => {
+    const moved = element.getBoundingClientRect().top - top;
+    // at once: the page's smooth scrolling is for the reader's jumps, not for holding a place
+    if (element.isConnected && Math.abs(moved) > 0.5) window.scrollBy({ top: moved, behavior: "instant" });
+  };
+  const sizes = new ResizeObserver(putBack);
+  sizes.observe(document.body);
+  const reader = ["wheel", "touchmove", "keydown"] as const;
+  return new Promise((settled) => {
+    // the reader moving lets go where they are; settling puts it back once
+    // more, for a tab out of sight that drew no frames to hold it on
+    const letGo = (reading?: Event) => {
+      if (!reading) putBack();
+      sizes.disconnect();
+      clearTimeout(timer);
+      for (const kind of reader) removeEventListener(kind, letGo);
+      settled();
+    };
+    const timer = setTimeout(() => letGo(), SETTLING * 1000);
+    for (const kind of reader) addEventListener(kind, letGo, { passive: true });
+  });
+}
+
 /** An animation's end — or, where no frames come to run it (a tab out of
  *  sight), soon after it should have ended, so nothing is left half open. */
 const ended = (run: PromiseLike<unknown>, seconds: number): Promise<unknown> =>

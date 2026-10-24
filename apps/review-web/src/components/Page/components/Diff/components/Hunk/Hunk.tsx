@@ -4,7 +4,7 @@ import { diffNow } from "~/diffNow";
 import { ticketId } from "~/ticket";
 import { wholeFile } from "~/api";
 import { hasNewSide, wholeHunk } from "~/whole";
-import { foldAway } from "~/fold";
+import { foldAway, holdInPlace } from "~/fold";
 import { highlightHunk } from "~/highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "~/intel";
 import { ChangedLine, CodeLine } from "~/components/Code";
@@ -273,7 +273,8 @@ export function Hunk(props: {
             <Show when={state() === "viewed"} fallback={<span class="head path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>}>
               {/* viewed: the chevron opens it again to read, the mark stays */}
               <button type="button" class="head reread-toggle" onClick={async () => {
-                  // folding it again closes smoothly; opening it is at once
+                  // folding it again closes smoothly, the header held where the reader clicked it; opening it is at once
+                  void holdInPlace(head);
                   if (!folded()) await foldAway(card());
                   reading.toggle(props.hunk.file);
                 }} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
@@ -322,10 +323,21 @@ export function Hunk(props: {
               class="checkbox checkbox-primary checkbox-xs"
               checked={state() === "viewed"}
               onChange={async () => {
-                // marking it folds it: closed smoothly first, then marked
-                if (state() !== "viewed" && !reading.folded(props.hunk.file)) await foldAway(card());
+                // marking it folds it: closed smoothly first, then marked —
+                // its header held where the reader clicked it, so the next
+                // file comes up under it rather than the page running on
+                const marking = state() !== "viewed";
+                const group = card();
+                const settled = holdInPlace(head);
+                if (marking && !reading.folded(props.hunk.file)) await foldAway(group);
                 viewed.toggle(props.hunk.file, diffNow.commit());
                 reading.marked(props.hunk.file);
+                if (!marking || !group) return;
+                await settled;
+                // a header clicked at the window's foot: the next file's comes into view
+                const cards = [...document.querySelectorAll(".hunk-group")];
+                const next = cards[cards.indexOf(group) + 1]?.querySelector(".file");
+                if (next && next.getBoundingClientRect().bottom > innerHeight) next.scrollIntoView({ block: "nearest" });
               }}
             />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}
