@@ -1,4 +1,5 @@
 import { Show } from "solid-js";
+import { Appear } from "~/components/Appear";
 import type { ReviewedAs, YourReview } from "~/data";
 import { ago } from "~/ago";
 import { hostNow } from "~/hostNow";
@@ -22,14 +23,18 @@ const TONE: Record<ReviewedAs, string> = {
   dropped: "quiet",
 };
 
+/** "3 comments", for a review the reader finished by commenting. */
+const counted = (yours: YourReview): string =>
+  yours.as === "commented" && yours.comments ? ` · ${yours.comments} ${yours.comments === 1 ? "comment" : "comments"}` : "";
+
 /** The reader's finished review, where they finished it: their verdict and
- *  when, and whether the change moved since. While it stands in for the
- *  buttons, pressing it brings them back for another review, and pressing
- *  it again puts them away; otherwise it only says. Beside the buttons it is
- *  `compact`: its mark alone, the words in its title, so the pill stays
- *  narrow. */
+ *  when (and, commented, how many comments). It stands until the change
+ *  moves after it. While it stands in for the buttons, pressing it brings
+ *  them back for another review, and pressing it again puts them away;
+ *  otherwise it only says. Beside the buttons it is `compact`: its mark
+ *  alone, the words easing away into its title, so the pill stays narrow. */
 export function Reviewed(props: { yours: YourReview; again: boolean; pressable: boolean; compact: boolean; onAgain: () => void }) {
-  const text = () => `${SAID[props.yours.as]} · ${ago(props.yours.at, hostNow.now())}${props.yours.since ? " · changed since" : ""}`;
+  const text = () => `${SAID[props.yours.as]}${counted(props.yours)} · ${ago(props.yours.at, hostNow.now())}`;
   const label = () => (props.pressable ? `${text()} — ${props.again ? "put the buttons away" : "review again"}` : text());
   return (
     <Show
@@ -37,7 +42,7 @@ export function Reviewed(props: { yours: YourReview; again: boolean; pressable: 
       fallback={
         <span class={["reviewed", TONE[props.yours.as], { compact: props.compact }]} title={props.compact ? text() : undefined} aria-label={props.compact ? text() : undefined}>
           <Check />
-          <Show when={!props.compact}>{text()}</Show>
+          <Appear way="across" when={!props.compact}>{() => <span class="reviewed-words">{text()}</span>}</Appear>
         </span>
       }
     >
@@ -50,7 +55,7 @@ export function Reviewed(props: { yours: YourReview; again: boolean; pressable: 
         aria-label={props.compact ? label() : undefined}
       >
         <Check />
-        <Show when={!props.compact}>{text()}</Show>
+        <Appear way="across" when={!props.compact}>{() => <span class="reviewed-words">{text()}</span>}</Appear>
       </button>
     </Show>
   );

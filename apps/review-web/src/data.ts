@@ -190,6 +190,8 @@ export interface YourReview {
   readonly as: ReviewedAs;
   readonly at: number;
   readonly since: boolean;
+  /** how many comments the reader has said on the review */
+  readonly comments?: number;
 }
 
 /** The review's own part of the page: its ticket, its why and its links,

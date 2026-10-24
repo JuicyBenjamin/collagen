@@ -319,7 +319,7 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 ::view-transition-group(review-pill) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
 :root { view-transition-name: none; }
 .dial-buttons { display: flex; gap: 8px; }
-.dial { --tone: var(--tone-say); position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1.5px solid var(--tone); border-radius: 50%; background: var(--panel); color: var(--tone); cursor: pointer; transition: background 0.15s; }
+.dial { --tone: var(--tone-say); position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1.5px solid var(--tone); border-radius: 50%; background: var(--panel); color: var(--tone); cursor: pointer; transition: background 0.15s; }
 .dial svg { width: 16px; height: 16px; }
 .dial.say { --tone: var(--tone-say); }
 .dial.change { --tone: var(--sign-chg); }
@@ -329,10 +329,11 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 .dial-panel.in-bar { position: absolute; top: calc(100% + 6px); right: 0; z-index: 5; width: min(440px, 92vw); }
 .dial-panel.in-corner { width: min(440px, calc(100vw - 36px)); }
 /* a review the reader finished: what they gave and when, in the colour of its button */
-.reviewed { --tone: var(--tone-say); display: inline-flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 12px; border: 1.5px solid var(--tone); border-radius: 999px; background: color-mix(in srgb, var(--tone) 12%, var(--panel)); color: var(--tone); font: 600 13px -apple-system, sans-serif; white-space: nowrap; transition: background 0.15s; }
+.reviewed { --tone: var(--tone-say); display: inline-flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 12px; border: 1.5px solid var(--tone); border-radius: 999px; background: color-mix(in srgb, var(--tone) 12%, var(--panel)); color: var(--tone); font: 600 13px -apple-system, sans-serif; white-space: nowrap; transition: background 0.15s, padding 0.22s; }
 .reviewed svg { width: 14px; height: 14px; flex: none; }
-/* beside the buttons: its mark alone, a round of their size */
-.reviewed.compact { width: 32px; padding: 0; justify-content: center; }
+/* beside the buttons: its mark alone, a round of their size — its words slide away (fold.ts), so the pill narrows rather than jumps */
+.reviewed .appear { white-space: nowrap; }
+.reviewed.compact { padding: 0 7.5px; }
 .reviewed.change { --tone: var(--sign-chg); }
 .reviewed.go { --tone: var(--kind-review); }
 .reviewed.quiet { --tone: var(--dim); }
