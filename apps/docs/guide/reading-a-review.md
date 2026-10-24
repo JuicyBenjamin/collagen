@@ -425,9 +425,11 @@ pull request:
 - **Someone else's review:** your verdict and words go on the collagen ticket as your take,
   as your agent's `post-review` would, and on the pull request too when there is one to put
   them on, with your pending comments.
-- **A review you filed:** approve opens **Accept**, which closes it as done, and **Drop**,
-  which closes it as not done. Request changes puts a take asking for changes on it, for your
-  agent to act on. Comments still pending are said first, whichever you send.
+- **A review you filed:** approve opens **Accept**, which closes it as done — or, when
+  collagen merges it on your accept, approves it — and says which before you press it. Request
+  changes puts a take asking for changes on it, for your agent to act on. Comments still
+  pending are said first, whichever you send. Dropping a review is not done here: your agent
+  closes it as not done (`close-ticket`).
 
 Once you have finished one, what you gave and when stands in for the buttons — **You
 requested changes · 2 h ago** — whether you finished it here, through your agent or on
@@ -453,7 +455,7 @@ have to. Whose approval it waits for is yours to say:
 | **when I accept** | you press Accept on its page — Accept then approves it instead of closing it |
 | **when they approve and I accept** | both |
 
-It is set in three layers, the narrowest winning: one review (on its page, next to Accept, or
+It is set in three layers, the narrowest winning: one review (on its page, beside its pull request, or
 `merge` on `ask-review`), the room you are in, and a default each room is given when you first
 enter it — your work room can wait for a colleague while a side project merges on your own
 accept. Settings has the default and the room; your agent sets any of them with `set-merging`.
