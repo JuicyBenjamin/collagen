@@ -3,7 +3,7 @@ import { NO_TITLE, type Decision, type Hunk as HunkData, type Unit as UnitData }
 import { assumedNow } from "~/assumedNow";
 import { Masked } from "~/components/Masked";
 import { diffNow } from "~/diffNow";
-import { animateDetails } from "~/fold";
+import { animateDetails, holdInPlace } from "~/fold";
 import { hostNow } from "~/hostNow";
 import { reading, viewed } from "~/viewedNow";
 import { wide } from "~/wide";
@@ -52,7 +52,9 @@ export function Unit(props: {
   const talked = () => same().slice(1).filter((run) => hostNow.talkIn(run[0]!.file));
   const folded = () => same().slice(1).filter((run) => !hostNow.talkIn(run[0]!.file));
   const unread = () => same().map((run) => run[0]!.file).filter((file) => viewed.state(file) !== "viewed");
-  const markSame = () => {
+  const markSame = (event: MouseEvent & { currentTarget: HTMLButtonElement }) => {
+    // the button goes once all are marked: the line it sits on holds its place
+    void holdInPlace(event.currentTarget.parentElement ?? undefined);
     for (const file of unread()) {
       viewed.mark(file, diffNow.commit());
       reading.marked(file);
