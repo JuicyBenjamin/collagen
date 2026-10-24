@@ -1,10 +1,15 @@
 import { Effect, Stream } from "effect";
-import { Atom } from "effect/reactivity";
+import { AsyncResult, Atom } from "effect/reactivity";
+import type { LocalState } from "@collagen/p2p";
+import { sameName } from "../../../lib/names";
 import { openInBrowser } from "../../../lib/opener";
+import { inProjectOrder, projectOrderOf } from "../../../lib/projectOrder";
 import { MergeHistory } from "../../../services/MergeHistory";
 import { ReviewPages } from "../../../services/ReviewLive";
 import { Rooms } from "../../../services/Rooms";
 import { runtimeAtom } from "../../../app/runtime";
+import { roomAtom } from "../../atoms";
+import { stateAtom } from "../atoms";
 
 /** The focused room's merges of one project held here: read from the host
  *  when its tab opens, the room changes, or the reader refreshes, and more
@@ -27,6 +32,17 @@ export const mergesAtom = Atom.family((project: string) =>
  *  as it is each time the tab is opened (useTabs). Kept while the reader
  *  opens a ticket and comes back. */
 export const mergesProjectAtom = Atom.keepAlive(Atom.make<string | null>(null));
+
+/** The projects held here, in the person's order, and the one whose merges
+ *  are shown: the one chosen while it is still here, else the first — the
+ *  tab, its row of projects and `o` all go by it. */
+export const mergesShownAtom = Atom.make((get) => {
+  const roomId = AsyncResult.getOrElse(get(roomAtom), () => ({ id: "", name: "" })).id;
+  const state = AsyncResult.getOrElse(get(stateAtom), (): LocalState => ({ preferredAi: null, rooms: {} }));
+  const chosen = get(mergesProjectAtom);
+  const projects = inProjectOrder(state.rooms[roomId] ?? [], (project) => project.name, projectOrderOf(state, roomId)).map((project) => project.name);
+  return { projects, shown: projects.find((project) => chosen !== null && sameName(project, chosen)) ?? projects[0] };
+});
 
 /** r: the focused room's merges, read from scratch. */
 export const refreshMergesAtom = runtimeAtom.fn(

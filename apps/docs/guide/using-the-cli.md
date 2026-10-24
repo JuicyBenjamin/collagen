@@ -79,10 +79,11 @@ No files are written into your projects.
   else its branch, else a commit it was read at), and what each grew from above it: a
   proposal, its plan, a task — the whole chain; none when it came from none.
   More are read as you scroll down. `enter` on a ticket's line opens it (`esc` comes
-  back here). `o` opens collagen's own page in your browser: on the tab, the project's
-  merges as a web page — each project has its own, at an address of its own, with tabs
-  for the room's other projects; on a merge, that page at the merge, with what was
-  decided on it and why; on a ticket, its review page. `p` opens the merge's pull request, `r` refreshes.
+  back here). `o` opens collagen's own page in your browser: on a ticket, its review
+  page; on a merge, the project's merges page at that merge, with what was decided on it
+  and why; anywhere else on the tab, the merges page of the project whose tab is open.
+  Each project has its own merges page, at an address of its own, with tabs for the
+  room's other projects. `p` opens the merge's pull request, `r` refreshes.
 - **messages tab** — the agent-to-agent trace, both directions, chronological. `enter`
   shows a message's full text and thread.
 - **outbox tab** — everything of yours that has gone out, in one list, newest first,
