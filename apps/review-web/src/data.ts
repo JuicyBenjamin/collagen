@@ -368,6 +368,8 @@ export interface LineComment {
   readonly pending?: true;
   /** drafted by the reader's AI, accepted by the reader */
   readonly drafted?: true;
+  /** the AI's longer version, one step away from the words shown */
+  readonly detail?: string;
   /** a reply: the id of the comment it answers, in the same thread */
   readonly replyTo?: string;
 }
@@ -409,6 +411,8 @@ export interface DraftView {
   readonly startLine?: number;
   readonly startSide?: "LEFT" | "RIGHT";
   readonly body: string;
+  /** the AI's longer version, one step away from the words shown */
+  readonly detail?: string;
   /** pending: accepted from the reader's AI */
   readonly drafted?: true;
   /** pending: on the pull request already — a finish that stopped before the

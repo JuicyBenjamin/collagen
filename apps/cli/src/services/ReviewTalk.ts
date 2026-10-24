@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Effect, Semaphore, SubscriptionRef } from "effect";
 import type { DraftComment, ReviewComment } from "@collagen/p2p";
 import type { DraftsResult, DraftView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "@collagen/review-web/data";
+import { forPeople } from "@collagen/review-web/forPeople";
 import { sameComment } from "@collagen/review-web/sameComment";
 import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
 import { placeComment, type Spot } from "../lib/comments";
@@ -29,7 +30,10 @@ export interface DraftInput {
   readonly line: number;
   readonly startLine?: number;
   readonly side?: "LEFT" | "RIGHT";
+  /** what a person reads, beside the code and on the host */
   readonly body: string;
+  /** the AI's longer version, for an agent — a person opens it on purpose */
+  readonly detail?: string;
   /** how strongly it asks for a change — a prefix on its words */
   readonly strength?: Strength;
 }
@@ -52,8 +56,13 @@ const isAi = (draft: DraftComment) => draft.status === "ai" || draft.status === 
  *  finish tells the room — never edited, moved or dropped. */
 const isPosted = (draft: DraftComment) => draft.status === "posted";
 
+/** A draft as a person reads it: one kept from before drafts had a detail,
+ *  written for an AI, gets its short version, the long one beside it. One on
+ *  the host already stays as it went there. */
+const forPeopleFirst = (draft: DraftComment): DraftComment => (draft.detail !== undefined || isPosted(draft) ? draft : { ...draft, ...forPeople(draft.body) });
+
 /** What is not said yet on a review, on this machine: the AI's drafts and the reader's pending comments. */
-export const draftsOf = (ticketId: string) => StateStore.use((store) => store.get).pipe(Effect.map((state): ReadonlyArray<DraftComment> => state.drafts?.[ticketId] ?? []));
+export const draftsOf = (ticketId: string) => StateStore.use((store) => store.get).pipe(Effect.map((state): ReadonlyArray<DraftComment> => (state.drafts?.[ticketId] ?? []).map(forPeopleFirst)));
 
 /** The ids of the reader's latest finishes of a review from the page. */
 const finishedOf = (ticketId: string) => StateStore.use((store) => store.get).pipe(Effect.map((state): ReadonlyArray<string> => state.finished?.[ticketId] ?? []));
@@ -63,7 +72,7 @@ const finishedOf = (ticketId: string) => StateStore.use((store) => store.get).pi
 const setDrafts = (ticketId: string, change: (drafts: ReadonlyArray<DraftComment>) => ReadonlyArray<DraftComment>, finished: string | null = null) =>
   StateStore.use((store) =>
     store.update((state) => {
-      const next = change(state.drafts?.[ticketId] ?? []);
+      const next = change((state.drafts?.[ticketId] ?? []).map(forPeopleFirst));
       const { [ticketId]: _gone, ...rest } = state.drafts ?? {};
       const before = state.finished?.[ticketId] ?? [];
       return {
@@ -105,10 +114,13 @@ const draftOnce = Effect.fn("ReviewTalk.draft")(function* (ticketId: string, ite
   items.forEach((item, index) => {
     const side = item.side ?? "RIGHT";
     const spot: Spot = { file: item.file.trim(), line: item.line, side, ...(item.startLine !== undefined && item.startLine !== item.line ? { startLine: item.startLine, startSide: side } : {}) };
-    const body = withStrength(item.strength ?? null, item.body.trim());
+    // a person reads the short version; written for an AI, the long one stays beside it
+    const words = forPeople(item.body);
+    const detail = item.detail?.trim() || words.detail;
+    const body = withStrength(item.strength ?? null, words.body);
     const why = saysNothing(body) ? "it says nothing" : placeComment(diff.hunks, spot);
     if (why) refused.push({ at: `#${index + 1} (${item.file}:${item.line})`, why });
-    else kept.push({ id: randomUUID(), ticketId, ...spot, body, commit: diff.commit, status: "ai", ts: now + index });
+    else kept.push({ id: randomUUID(), ticketId, ...spot, body, ...(detail ? { detail } : {}), commit: diff.commit, status: "ai", ts: now + index });
   });
   if (kept.length > 0) yield* setDrafts(ticketId, (drafts) => [...drafts, ...kept]);
   return { drafted: kept, refused };
@@ -198,7 +210,7 @@ const roomRefuses = (found: Found) =>
  *  the host when it went there too. */
 const logComments = (
   found: Found,
-  said: ReadonlyArray<{ readonly id?: string; readonly spot: Spot; readonly commit: string; readonly body: string; readonly drafted: boolean; readonly host?: { readonly id: number; readonly url: string } }>,
+  said: ReadonlyArray<{ readonly id?: string; readonly spot: Spot; readonly commit: string; readonly body: string; readonly detail?: string; readonly drafted: boolean; readonly host?: { readonly id: number; readonly url: string } }>,
 ): Effect.Effect<{ readonly error: string } | { readonly logged: ReadonlyArray<ReviewComment> }, never, IdentityService> =>
   Effect.gen(function* () {
     const { identity, nameRef } = yield* IdentityService;
@@ -214,6 +226,7 @@ const logComments = (
         ...entry.spot,
         commit: entry.commit,
         body: entry.body,
+        ...(entry.detail !== undefined ? { detail: entry.detail } : {}),
         ...(entry.drafted ? { drafted: true } : {}),
         ...(entry.host ? { host: entry.host } : {}),
         ts: Date.now() + index,
@@ -287,7 +300,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   const refuses = yield* roomRefuses(found);
   if (refuses) return { error: refuses } satisfies SubmitResult;
   const sayAll = (drafts: ReadonlyArray<DraftComment>) =>
-    logComments(found, drafts.map((draft) => ({ id: draft.id, spot: spotOf(draft), commit: draft.commit, body: draft.body, drafted: draft.drafted === true, ...(draft.host ? { host: draft.host } : {}) })));
+    logComments(found, drafts.map((draft) => ({ id: draft.id, spot: spotOf(draft), commit: draft.commit, body: draft.body, ...(draft.detail !== undefined ? { detail: draft.detail } : {}), drafted: draft.drafted === true, ...(draft.host ? { host: draft.host } : {}) })));
   const done = (ids: ReadonlyArray<string>, finished: string | null = null) => setDrafts(ticketId, (drafts) => drafts.filter((draft) => !ids.includes(draft.id)), finished);
 
   // an earlier finish that stopped after the host had it: the room is told
@@ -428,6 +441,7 @@ const asShown = (comment: ReviewComment): LineComment & { readonly hostId?: stri
   url: comment.host?.url ?? "",
   at: new Date(comment.ts).toISOString(),
   ...(comment.drafted ? { drafted: true as const } : {}),
+  ...(comment.detail !== undefined ? { detail: comment.detail } : {}),
   ...(comment.host ? { hostId: String(comment.host.id) } : {}),
 });
 
@@ -440,6 +454,7 @@ const asDraft = (draft: DraftComment): DraftView => ({
   side: draft.side,
   ...(draft.startLine !== undefined ? { startLine: draft.startLine, startSide: draft.startSide ?? draft.side } : {}),
   body: draft.body,
+  ...(draft.detail !== undefined ? { detail: draft.detail } : {}),
   ...(draft.drafted ? { drafted: true as const } : {}),
 });
 

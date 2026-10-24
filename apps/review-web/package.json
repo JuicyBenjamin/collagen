@@ -33,6 +33,7 @@
     "./data": "./src/data.ts",
     "./strength": "./src/strength.ts",
     "./sameComment": "./src/sameComment.ts",
+    "./forPeople": "./src/forPeople.ts",
     "./themeData": "./src/themeData.ts",
     "./backend": "./src/server/backend.ts"
   }

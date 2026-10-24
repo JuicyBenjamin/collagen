@@ -446,7 +446,13 @@ export const ReviewComment = Schema.Struct({
   author: Schema.String,
   authorName: Schema.String,
   ...CommentSpot,
+  /** what a person reads — beside the code, and on the host */
   body: Schema.String,
+  /** the AI's longer version, when it drafted one: what an agent reads, and
+   *  a person opens on purpose. Optional on the log: comments written before
+   *  it have none. Written once by the comment's author, never rewritten by
+   *  a peer, so an older build reading past it loses nothing (no protocol bump) */
+  detail: Schema.optional(Schema.String),
   /** drafted by the reader's AI, then accepted by the reader (or by the AI on their word) */
   drafted: Schema.optional(Schema.Boolean),
   host: Schema.optional(Schema.Struct({ id: Schema.Finite, url: Schema.String })),
@@ -464,6 +470,8 @@ export const DraftComment = Schema.Struct({
   ticketId: Schema.String,
   ...CommentSpot,
   body: Schema.String,
+  /** the AI's longer version, kept beside the words a person reads */
+  detail: Schema.optional(Schema.String),
   status: Schema.optional(Schema.Literals(["ai", "pending", "posted"])),
   /** in the review because the reader accepted it from their AI */
   drafted: Schema.optional(Schema.Boolean),

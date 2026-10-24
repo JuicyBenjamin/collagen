@@ -376,6 +376,10 @@ tr.thread-row td { padding: 0; white-space: normal; background: var(--bg); }
 .line-comment-when { color: var(--faint); }
 .line-comment-link { margin-left: auto; color: var(--faint); font-size: 12px; }
 .line-comment .md { margin-top: 4px; }
+/* a comment in full, as its AI wrote it: one click away */
+.detail-toggle { margin-top: 4px; background: none; border: 0; padding: 0; font: 12px -apple-system, sans-serif; color: var(--faint); cursor: pointer; }
+.detail-toggle:hover { color: var(--fg); }
+.detail-body { padding-top: 4px; color: var(--dim); }
 .line-composer { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 
 /* the stack the branch sits in: trunk first, this one marked, what builds on it after */
