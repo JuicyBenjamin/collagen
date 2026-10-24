@@ -371,6 +371,12 @@ you wrote, and goes out when you finish it — marked **with AI** once said. You
 the same on your word ("looks good, post them": it adds them, then finishes the review),
 never calling GitHub itself: collagen wires it.
 
+A draft reads as a person would say it: a sentence or two, no priority codes like `[P2]`.
+What your agent wrote at length for the author's agent sits under **In full**, closed until
+you open it; that is what the author's agent reads (`review-context`), and the short words
+are what goes to GitHub. A comment posted to GitHub shows once on the page — GitHub's copy,
+marked **with AI** when your agent drafted it.
+
 ## A review built from assumptions
 
 For a change its author did not file in collagen — a colleague's pull request, say — ask

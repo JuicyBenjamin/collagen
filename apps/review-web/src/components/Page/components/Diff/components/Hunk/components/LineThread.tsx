@@ -4,7 +4,9 @@ import { enter } from "~/fold";
 import { hostNow } from "~/hostNow";
 import { bodyParts, suggestionBlock } from "~/suggest";
 import { Markdown } from "~/components/Markdown";
+import { Detail } from "~/components/Detail";
 import { StrengthMark, StrengthPicker } from "~/components/Strength";
+import { wordsOf } from "~/forPeople";
 import { readStrength, withStrength, type Strength } from "~/strength";
 
 /** When a comment was written, as a reader says it. */
@@ -65,7 +67,8 @@ function Suggestion(props: { code: string; replaces: ReadonlyArray<string> | nul
  *  as HTML; a suggested change in it shown as one. The reader's own, on its
  *  way, is marked so. */
 function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
-  const words = () => readStrength(props.comment.body);
+  const shown = () => wordsOf(props.comment);
+  const words = () => readStrength(shown().body);
   const replaces = () => {
     const comment = props.comment;
     return comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(comment.startLine ?? comment.line, comment.line) : null;
@@ -94,6 +97,7 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
       <For each={bodyParts(words().text)}>
         {(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}
       </For>
+      <Detail text={shown().detail} />
     </div>
   );
 }
@@ -118,7 +122,8 @@ function Moved(props: { comment: DraftView }) {
 }
 
 function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
-  const words = () => readStrength(props.draft.body);
+  const shown = () => wordsOf(props.draft);
+  const words = () => readStrength(shown().body);
   const [editing, setEditing] = createSignal(false);
   const [body, setBody] = createSignal(words().text);
   const [strength, setStrength] = createSignal<Strength | null>(words().strength);
@@ -153,6 +158,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
         <textarea class="textarea draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
         <StrengthPicker value={strength()} onChange={setStrength} />
       </Show>
+      <Detail text={shown().detail} />
       <Moved comment={props.draft} />
       <Show when={hostNow.refusal(props.draft.id)}>{(why) => <p class="host-error">Not posted: {why()}</p>}</Show>
       <div class="composer-actions">
@@ -173,7 +179,8 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
 /** A comment pending in the reader's review: theirs (or their AI's, taken
  *  in), said with the rest when they finish it — to edit or delete till then. */
 function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
-  const words = () => readStrength(props.comment.body);
+  const shown = () => wordsOf(props.comment);
+  const words = () => readStrength(shown().body);
   const [editing, setEditing] = createSignal(false);
   const [body, setBody] = createSignal(words().text);
   const [strength, setStrength] = createSignal<Strength | null>(words().strength);
@@ -183,7 +190,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
   };
   const save = () => {
     const text = withStrength(strength(), body().trim());
-    if (body().trim().length > 0 && text !== props.comment.body) void hostNow.edit(props.comment.id, text);
+    if (body().trim().length > 0 && text !== shown().body) void hostNow.edit(props.comment.id, text);
     setEditing(false);
   };
   return (
@@ -205,6 +212,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
         <textarea class="textarea draft-edit" rows={Math.min(14, Math.max(3, body().split("\n").length + 1))} value={body()} onInput={(event) => setBody(event.currentTarget.value)} />
         <StrengthPicker value={strength()} onChange={setStrength} />
       </Show>
+      <Detail text={shown().detail} />
       <Show when={!props.comment.posted} fallback={<p class="moved-note">On the pull request already — finish the review again to say it in the room.</p>}>
         <Moved comment={props.comment} />
       </Show>

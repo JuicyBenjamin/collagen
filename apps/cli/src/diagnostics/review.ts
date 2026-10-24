@@ -1,5 +1,6 @@
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
+import { readStrength, withStrength } from "@collagen/review-web/strength";
 import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, visibleTo } from "@collagen/p2p";
 import { whyOpen } from "../lib/mergeTickets";
 import { reviewRows } from "../lib/review";
@@ -83,14 +84,15 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
         return `nothing in the why mentions "${about}" — call review-context without 'about' for all ${review.decisions.length} decision(s) and ${review.forks.length} fork(s), or ask ${review.authorName} through their person (send-to-peer, with this ticketId)${opened}`;
       }
       // what readers said on the code, line by line — the review page's comments, in the room
-      const said = (yield* SubscriptionRef.get(handle.room.comments)).filter((comment) => comment.ticketId === ticketId && (!about || `${comment.file} ${comment.body}`.toLowerCase().includes(about.toLowerCase())));
+      const said = (yield* SubscriptionRef.get(handle.room.comments)).filter((comment) => comment.ticketId === ticketId && (!about || `${comment.file} ${comment.body} ${comment.detail ?? ""}`.toLowerCase().includes(about.toLowerCase())));
       const comments =
         said.length > 0
           ? {
               comments: said.map((comment) => ({
                 by: comment.authorName,
                 at: `${comment.file}:${comment.startLine !== undefined ? `${comment.startLine}-` : ""}${comment.line}${comment.side === "LEFT" ? " (old)" : ""}`,
-                body: comment.body,
+                // an agent reads the AI's longer version, where there is one, as strongly as it asks
+                body: comment.detail !== undefined ? withStrength(readStrength(comment.body).strength, comment.detail) : comment.body,
                 ...(comment.host ? { onHost: comment.host.url } : {}),
               })),
             }

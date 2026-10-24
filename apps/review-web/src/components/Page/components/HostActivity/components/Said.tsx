@@ -8,11 +8,18 @@ import { Appear } from "~/components/Appear";
 import { bodyParts } from "~/suggest";
 import { Markdown } from "~/components/Markdown";
 import { StrengthMark } from "~/components/Strength";
-import { readStrength } from "~/strength";
+import { Detail } from "~/components/Detail";
+import { wordsOf } from "~/forPeople";
+import { readStrength, type Strength } from "~/strength";
 
 type Item = ({ readonly kind: "review" } & HostReview) | ({ readonly kind: "note" } & HostNote);
-/** A comment's strength apart from its words; a review's words on the whole carry none. */
-const words = (item: Item) => (item.kind === "note" ? readStrength(item.body) : { strength: null, text: item.body });
+/** A comment's strength apart from its words, written for people first (an
+ *  AI's in full one step away); a review's words on the whole carry none. */
+const words = (item: Item): { readonly strength: Strength | null; readonly text: string; readonly detail?: string } => {
+  if (item.kind !== "note") return { strength: null, text: item.body };
+  const shown = wordsOf(item);
+  return { ...readStrength(shown.body), ...(shown.detail !== undefined ? { detail: shown.detail } : {}) };
+};
 
 /** Words as markdown, never as HTML; a suggested change in them as code. */
 function Words(props: { body: string }) {
@@ -157,6 +164,7 @@ export function Said() {
                     </div>
                     <Show when={item.body.trim().length > 0}>
                       <Words body={words(item).text} />
+                      <Detail text={words(item).detail} />
                     </Show>
                   </li>
                 )}

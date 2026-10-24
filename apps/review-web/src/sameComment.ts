@@ -6,7 +6,7 @@ import type { LineComment } from "./data";
 // the host said which it was; one that does not — the host's answer lost,
 // or written before collagen read it right — is matched by where it sits and
 // what it says. Either way the page shows it once: the host's copy, marked
-// as the reader's AI's when the room's is.
+// as the reader's AI's when the room's is, with the AI's longer version.
 
 /** Where a comment sits and what it says. */
 interface Said {
@@ -48,5 +48,10 @@ export const onceEach = (onHost: ReadonlyArray<LineComment>, said: ReadonlyArray
     if (copy) copies.set(copy.id, comment);
     else roomOnly.push(comment);
   }
-  return [...onHost.map((hosted) => (copies.get(hosted.id)?.drafted ? { ...hosted, drafted: true as const } : hosted)), ...roomOnly];
+  // the host's copy, with what the room's knows of it: drafted by the AI, and the AI's longer version
+  const withCopy = (hosted: LineComment): LineComment => {
+    const copy = copies.get(hosted.id);
+    return copy ? { ...hosted, ...(copy.drafted ? { drafted: true as const } : {}), ...(copy.detail !== undefined ? { detail: copy.detail } : {}) } : hosted;
+  };
+  return [...onHost.map(withCopy), ...roomOnly];
 };
