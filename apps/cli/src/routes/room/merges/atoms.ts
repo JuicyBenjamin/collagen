@@ -6,20 +6,27 @@ import { ReviewPages } from "../../../services/ReviewLive";
 import { Rooms } from "../../../services/Rooms";
 import { runtimeAtom } from "../../../app/runtime";
 
-/** The focused room's projects held here, each with its merges: read from
- *  the host when the tab opens, the room changes, or the reader refreshes,
- *  and more as they scroll on (MergeHistory) — merges are not pushed to us.
- *  null while a room's are being read, so another room's are never shown
- *  under this one. */
-export const mergesAtom = runtimeAtom.atom(
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const rooms = yield* Rooms;
-      const history = yield* MergeHistory;
-      return rooms.watch((handle) => history.view(handle.id));
-    }),
+/** The focused room's merges of one project held here: read from the host
+ *  when its tab opens, the room changes, or the reader refreshes, and more
+ *  as they scroll on (MergeHistory) — merges are not pushed to us. null
+ *  while they are being read, so another room's are never shown under this
+ *  one. */
+export const mergesAtom = Atom.family((project: string) =>
+  runtimeAtom.atom(
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const rooms = yield* Rooms;
+        const history = yield* MergeHistory;
+        return rooms.watch((handle) => history.view(handle.id, project));
+      }),
+    ),
   ),
 );
+
+/** The project whose merges are shown, by name: null, the person's first —
+ *  as it is each time the tab is opened (useTabs). Kept while the reader
+ *  opens a ticket and comes back. */
+export const mergesProjectAtom = Atom.keepAlive(Atom.make<string | null>(null));
 
 /** r: the focused room's merges, read from scratch. */
 export const refreshMergesAtom = runtimeAtom.fn(

@@ -7,6 +7,7 @@ import { lineage, reviewedCode, ticketsOfMerges, whyOpen } from "../lib/mergeTic
 import { inProjectOrder, projectOrderOf } from "../lib/projectOrder";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostCliMissing, type HostMerge, type HostRefused, type RepoHost } from "./RepoHost";
+import { sameName } from "../lib/names";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 
@@ -14,7 +15,8 @@ import { StateStore } from "./StateStore";
 // merge history page (review-web, /merges/<roomId>) read the same. Both
 // show a page of merges and more as the reader scrolls on; the host's pages
 // read so far are kept, so scrolling on reads only the pages past them, and
-// a refresh starts over.
+// a refresh starts over. The tab reads one project at a time, the one whose
+// tab is open.
 
 /** Merges shown at first, and how many more each time the reader nears the end. */
 export const MERGES_PAGE = 50;
@@ -94,7 +96,8 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
         );
       });
 
-    const projectMerges = (project: Project, want: number): Effect.Effect<ProjectMerges> =>
+    /** A project's latest `want` merges — read again from its first page when `fresh`. */
+    const projectMerges = (project: Project, want: number, fresh = false): Effect.Effect<ProjectMerges> =>
       Effect.gen(function* () {
         const repo = repoWebUrl(project.path);
         if (!repo) return { project: project.name, none: "no remote" };
@@ -102,6 +105,7 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
         if (!host) return { project: project.name, none: "host not supported" };
         const base = defaultBranchOf(project.path);
         if (!base) return { project: project.name, none: "no default branch" };
+        if (fresh) pages.delete(`${repo} ${base}`);
         return yield* readTo(`${repo} ${base}`, host, repo, base, want).pipe(
           Effect.map((read): ProjectMerges => ({ project: project.name, repo, base, ...latestMerges(read, want) })),
           Effect.catchTags({
@@ -119,6 +123,13 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
         return yield* Effect.forEach(projects, (project) => projectMerges(project, shown[project.name] ?? MERGES_PAGE), { concurrency: 4 });
       });
 
+    /** One of a room's projects held here, by its name, with its merges. */
+    const heldMerges = (roomId: string, name: string, want: number, fresh: boolean): Effect.Effect<ProjectMerges> =>
+      Effect.flatMap(store.get, (state) => {
+        const project = (state.rooms[roomId] ?? []).find((held) => sameName(held.name, name));
+        return project ? projectMerges(project, want, fresh) : Effect.succeed({ project: name, none: "not here" });
+      });
+
     const viewOf = (roomId: string) =>
       Effect.suspend(() => {
         const known = views.get(roomId);
@@ -129,17 +140,20 @@ export class MergeHistory extends Context.Service<MergeHistory>()("cli/MergeHist
     return {
       /** A project's latest `want` merges, read from its host (ask-why). */
       projectMerges,
-      /** The merges tab's room: its merges, read again as the reader scrolls
-       *  on (more), and from scratch on a refresh — null while it is. */
-      view: (roomId: string): Stream.Stream<ReadonlyArray<ProjectMerges> | null> =>
+      /** The merges tab's open project: its merges, read when its tab is
+       *  opened, again as the reader scrolls on (more), and from scratch on
+       *  a refresh — null while it is. */
+      view: (roomId: string, project: string): Stream.Stream<ProjectMerges | null> =>
         Stream.unwrap(
           Effect.map(viewOf(roomId), (ref) =>
             SubscriptionRef.changes(ref).pipe(
+              Stream.map((current) => ({ want: current.shown[project] ?? MERGES_PAGE, refreshed: current.refreshed })),
+              Stream.changesWith((before, after) => before.want === after.want && before.refreshed === after.refreshed),
               Stream.zipWithPrevious,
               Stream.switchMap(([before, current]) => {
-                const read = Stream.fromEffect(roomMerges(roomId, current.shown));
                 // the tab opened: what was merged since is read too
-                if (Option.isNone(before)) return Stream.concat(Stream.succeed(null), Stream.fromEffect(Effect.sync(() => pages.clear())).pipe(Stream.drain, Stream.concat(read)));
+                if (Option.isNone(before)) return Stream.concat(Stream.succeed(null), Stream.fromEffect(heldMerges(roomId, project, current.want, true)));
+                const read = Stream.fromEffect(heldMerges(roomId, project, current.want, false));
                 return before.value.refreshed !== current.refreshed ? Stream.concat(Stream.succeed(null), read) : read;
               }),
             ),

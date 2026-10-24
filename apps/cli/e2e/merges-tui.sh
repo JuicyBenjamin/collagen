@@ -2,8 +2,8 @@
 # The merges tab: what was merged into alice's project's default branch, the
 # latest first, named by its pull request — her review of pull request #6
 # drawn under it, #5 (from no ticket) with nothing under it. The host is a
-# stand-in (fake-gh.mjs). In the pty: `3` opens the tab, enter drops into the
-# list, `p` hands #6's pull request to the browser opener (a stand-in on
+# stand-in (fake-gh.mjs). In the pty: `3` opens the tab on her first project,
+# enter drops onto the row of project tabs, ↓ into the list, `p` hands #6's pull request to the browser opener (a stand-in on
 # PATH), ↓ reaches its review, under what it grew from, enter opens its page, esc comes back
 # to the merges with the cursor where it was, `o` there opens the ticket's
 # review page, and `o` on a merge the same history as a web page (review-web,
@@ -24,7 +24,7 @@ mkdir -p "$OUT/bin"; for b in open xdg-open; do printf '#!/bin/sh\necho "$@" >> 
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/merges-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '3'; sleep 3; mark M0_tab
-  printf '\r'; sleep 1; mark M1_list
+  printf '\r'; sleep 1; printf '\033[B'; sleep 1; mark M1_list
   printf 'p'; sleep 2
   for _ in 1 2 3; do printf '\033[B'; sleep 0.5; done; sleep 1; mark M2_ticket_row
   printf '\r'; sleep 2; mark M3_ticket
