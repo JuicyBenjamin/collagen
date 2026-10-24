@@ -10,6 +10,7 @@ import {
   Show,
 } from "solid-js";
 import { ago } from "./ago";
+import { Corner } from "./components/Corner";
 import { enter, leave } from "./fold";
 import { mergeHistory } from "./api";
 import type { MergeEntry, MergeHistory, MergesShown, MergeTicket, ProjectHistory } from "./data";
@@ -142,6 +143,7 @@ function Page(props: {
     <main class="merges-page">
       <header>
         <h1>Merges</h1>
+        <Corner />
         <p class="meta">
           {props.data.room}
           <Show when={single()}>
@@ -155,7 +157,7 @@ function Page(props: {
           {" · "}
           <button
             type="button"
-            class="merges-again"
+            class="btn btn-xs"
             disabled={props.refreshing}
             onClick={() => props.refresh()}
           >

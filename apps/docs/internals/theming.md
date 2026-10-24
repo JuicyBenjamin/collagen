@@ -1,9 +1,9 @@
-# Review page themes
+# Page themes
 
-The review page (`apps/review-web`) is styled with [daisyUI](https://daisyui.com) 5,
+Every page collagen serves (`apps/review-web`: a review, a room's merges) is styled with [daisyUI](https://daisyui.com) 5,
 used as plain CSS — no Tailwind build. `src/themes.css` imports daisyUI's variables
-for a handful of its themes and the few components the page uses (button, textarea,
-checkbox, radio, select). The page's own CSS (`src/styles.css`) reads its palette —
+for a handful of its themes and the few components the pages use (button, textarea,
+checkbox, radio, select, input). The pages' own CSS (`src/styles.css`) reads its palette —
 `--bg`, `--panel`, `--fg`, `--dim`, `--line`, `--accent`, `--warn`, the diff colours —
 from daisyUI's variables, so every rule follows whichever theme is on show.
 
@@ -32,10 +32,19 @@ adds a load on every switch.
 Collagen keeps the choice and the person's themes in their profile's state
 (`themes`, local, never broadcast), so their agent can choose and add them too
 (`themes`, `set-theme`, `add-theme`, `edit-theme`, `remove-theme`; a daisyUI theme generator link is taken as it is pasted), and
-every open review page follows at once over its live connection. The browser keeps a
+every open page follows at once over its live connection. The browser keeps a
 copy (`collagen.theme.v2`) so a page opens in its theme before collagen answers.
 Themes an older page kept in the browser alone are handed to collagen the first time
 a page opens; its one custom theme becomes "My theme".
+
+## One theme, one switch, every page
+
+`src/themeNow.ts` holds the theme on show for whichever page is open: `main.tsx`
+starts it before any page renders, so every page wears the theme and follows
+collagen's copy live, switch on screen or not. The switch is the page's corner
+(`components/Corner`): the theme picker, then whatever the page keeps beside it.
+A new page puts `<Corner />` in its header and reads its colours from
+`styles.css`'s variables; nothing else.
 
 ## The editor
 

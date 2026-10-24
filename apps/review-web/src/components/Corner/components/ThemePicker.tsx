@@ -1,24 +1,23 @@
-import { createEffect, createMemo, createSignal, For } from "solid-js";
-import { saveThemes } from "../api";
-import { lasting } from "../lasting";
-import { overSocket } from "../liveSocket";
-import { applyTheme, cacheThemes, cachedThemes, currentAsCustom, EDITABLE, heldBeforeCollagen, NEW, themeFromText, toHex } from "../theme";
-import { NAME_MAX, nameOf, savedValue, THEMES, type PageThemes, type Saved } from "../themeData";
-import { Appear } from "./Appear";
+import { createSignal, For } from "solid-js";
+import { currentAsCustom, EDITABLE, NEW, themeFromText, toHex } from "~/theme";
+import { NAME_MAX, nameOf, savedValue, THEMES, type Saved } from "~/themeData";
+import { themeNow } from "~/themeNow";
+import { Appear } from "~/components/Appear";
 
 /** A name as the select shows it: as much as fits beside its arrow at its one width. */
 const SHOWN_MAX = 14;
 const shown = (name: string): string => (name.length > SHOWN_MAX ? `${name.slice(0, SHOWN_MAX - 1).trimEnd()}…` : name);
 
-/** The page's theme: one of daisyUI's, collagen's own, or one of the
- *  person's — as many as they make, each named, edited here a colour at a
- *  time or pasted whole (CSS, or a daisyUI theme generator link). Collagen
- *  keeps them, so the person's agent can choose and add them too
- *  (set-theme), and every open page follows; this browser keeps a copy to
- *  open in. Edit sits left of the select: it comes and goes without moving
- *  the select or anything right of it. */
+/** The theme switch, the same on every page: one of daisyUI's, collagen's
+ *  own, or one of the person's — as many as they make, each named, edited
+ *  here a colour at a time or pasted whole (CSS, or a daisyUI theme
+ *  generator link). Collagen keeps them (themeNow), so the person's agent
+ *  can choose and add them too (set-theme), and every open page follows.
+ *  Edit sits left of the select: it comes and goes without moving the
+ *  select or anything right of it. */
 export function ThemePicker() {
-  const [themes, setThemes] = createSignal<PageThemes>(cachedThemes());
+  const themes = themeNow.themes;
+  const commit = themeNow.commit;
   const [editing, setEditing] = createSignal(false);
   const [pasted, setPasted] = createSignal("");
   const [unread, setUnread] = createSignal(false);
@@ -26,27 +25,6 @@ export function ThemePicker() {
   const chosen = () => themes().chosen;
   /** the person's own theme on show, when one is */
   const own = () => saved().find((theme) => savedValue(theme.id) === chosen()) ?? null;
-
-  const show = (next: PageThemes) => {
-    setThemes(next);
-    applyTheme(next);
-    cacheThemes(next);
-  };
-  /** shown now, and kept by collagen, which tells every page */
-  const commit = (next: PageThemes) => {
-    show(next);
-    void saveThemes(next).catch(() => undefined);
-  };
-  // collagen's copy, live: a change made elsewhere — another page, the person's agent — shows here at once
-  const live = createMemo(() => lasting(() => overSocket("themes", "")));
-  createEffect(live, (kept) => {
-    // collagen keeps none yet: this browser's (an older page's too) become collagen's
-    if (kept === null) {
-      if (heldBeforeCollagen() || saved().length > 0 || chosen() !== "") void saveThemes(themes()).catch(() => undefined);
-      return;
-    }
-    if (kept) show(kept);
-  });
 
   /** the one on show, changed */
   const change = (update: (theme: Saved) => Saved) => {

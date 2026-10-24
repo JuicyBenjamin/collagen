@@ -1,5 +1,5 @@
 import type { ReviewPageHead } from "~/data";
-import { ThemePicker } from "~/components/ThemePicker";
+import { Corner } from "~/components/Corner";
 import { DraftsBar } from "./components/DraftsBar";
 import { HostBar } from "./components/HostBar";
 import { Pull } from "./components/HostBar/components/Pull";
@@ -18,10 +18,9 @@ export function Header(props: { head: ReviewPageHead }) {
     <header>
       <div class="header-top">
         <Meta head={props.head} />
-        <div class="header-corner">
-          <ThemePicker />
+        <Corner>
           <Viewer />
-        </div>
+        </Corner>
         <div class="pull-line">
           <Pull />
         </div>
@@ -41,10 +40,9 @@ Header.Skeleton = function Skeleton() {
     <header>
       <div class="header-top">
         <Meta.Skeleton />
-        <div class="header-corner">
-          <ThemePicker />
+        <Corner>
           <Viewer.Skeleton />
-        </div>
+        </Corner>
         <div class="pull-line">
           <Pull.Skeleton />
         </div>
