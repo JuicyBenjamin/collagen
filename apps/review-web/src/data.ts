@@ -348,20 +348,40 @@ export interface PullRequest {
   readonly mine: boolean;
 }
 
-/** A comment on a line, or a block of lines, of the pull request's diff.
- *  `side`: the new file's line (RIGHT) or a removed line of the old one
- *  (LEFT). A block runs from `startLine` on `startSide` to `line` on `side`,
- *  and sits under its last line, as on GitHub. */
-export interface LineComment {
+/** A side of the pull request's diff: the new file's lines (RIGHT), or the
+ *  removed lines of the old one (LEFT). */
+export type DiffSide = "LEFT" | "RIGHT";
+
+/** On lines of a file: the (last) `line` on `side`; a block runs from
+ *  `startLine` on `startSide` and sits under its last line, as on GitHub.
+ *  `subject` is never written for these (no comment before file comments had
+ *  one); it is here to tell the two apart. */
+export interface OnLines {
+  readonly subject?: "line";
+  readonly file: string;
+  readonly line: number;
+  readonly side: DiffSide;
+  readonly startLine?: number;
+  readonly startSide?: DiffSide;
+}
+
+/** On the file itself, with no line — its place, its name, that it should
+ *  not be there — shown at the top of the file (GitHub's file comment). */
+export interface OnFile {
+  readonly subject: "file";
+  readonly file: string;
+}
+
+/** Where a comment sits on the review's code: on lines, or on a whole file. */
+export type CommentSpot = OnLines | OnFile;
+
+/** A comment on the pull request's code: on a line, a block of lines, or a
+ *  whole file (`CommentSpot`). */
+export type LineComment = CommentSpot & {
   /** the host's id for it, or collagen's own for one said only in the room */
   readonly id: string;
   readonly author: HostUser;
   readonly body: string;
-  readonly file: string;
-  readonly line: number;
-  readonly side: "LEFT" | "RIGHT";
-  readonly startLine?: number;
-  readonly startSide?: "LEFT" | "RIGHT";
   readonly url: string;
   readonly at: string;
   /** shown before the host has answered: the reader's own, on its way */
@@ -372,7 +392,7 @@ export interface LineComment {
   readonly detail?: string;
   /** a reply: the id of the comment it answers, in the same thread */
   readonly replyTo?: string;
-}
+};
 
 /** A review on the pull request as its host has it: who, their verdict, and
  *  what they wrote on the whole (their line comments are LineComments). */
@@ -401,15 +421,10 @@ export interface HostNote {
 
 /** A comment not said yet: drafted by the reader's AI and waiting on them,
  *  or pending in their review — said with the rest when they finish it. */
-export interface DraftView {
+export type DraftView = CommentSpot & {
   readonly id: string;
   /** the commit it was written at — its lines are that commit's */
   readonly commit: string;
-  readonly file: string;
-  readonly line: number;
-  readonly side: "LEFT" | "RIGHT";
-  readonly startLine?: number;
-  readonly startSide?: "LEFT" | "RIGHT";
   readonly body: string;
   /** the AI's longer version, one step away from the words shown */
   readonly detail?: string;
@@ -418,7 +433,7 @@ export interface DraftView {
   /** pending: on the pull request already — a finish that stopped before the
    *  room had it; finishing again tells the room */
   readonly posted?: true;
-}
+};
 
 /** talkView(ticketId) — the comments on the review's code that collagen
  *  holds: what the reader's AI drafted and what is pending in the reader's

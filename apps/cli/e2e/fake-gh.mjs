@@ -73,18 +73,52 @@ if (command === "pr" && subcommand === "review") {
 }
 // a whole review: its body comes on stdin (gh api --input -); kept in reviews.log, its comments with the rest
 const reviewsFile = join(dir, "reviews.json");
+const STATE = { APPROVE: "APPROVED", REQUEST_CHANGES: "CHANGES_REQUESTED", COMMENT: "COMMENTED" };
 const reviews = () => (existsSync(reviewsFile) ? JSON.parse(readFileSync(reviewsFile, "utf8")) : {});
 if (command === "api" && args.includes("POST") && args.some((argument) => /pulls\/7\/reviews$/.test(argument))) {
   // GitHub taking its time, while a test does something else meanwhile
   if (existsSync(join(dir, "slow-review"))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
   const review = JSON.parse(readFileSync(0, "utf8"));
-  appendFileSync(join(dir, "reviews.log"), JSON.stringify(review) + "\n");
+  // a pending one is logged when it is submitted
+  if (review.event !== undefined) appendFileSync(join(dir, "reviews.log"), JSON.stringify(review) + "\n");
   if (review.comments.some((comment) => !["src/export.ts", "src/page.ts", "src/use.ts"].includes(comment.path))) fail("gh: Unprocessable Entity (HTTP 422)");
   const id = 500 + Object.keys(reviews()).length;
   const made = review.comments.map((comment, index) => ({ id: 2000 + id * 10 + index, pull_request_review_id: id, body: comment.body, path: comment.path, line: comment.line, side: comment.side, start_line: comment.start_line ?? null, start_side: comment.start_side ?? null, commit_id: review.commit_id }));
   writeFileSync(commentsFile, JSON.stringify([...comments(), ...made]));
-  writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [id]: { comments: made.map((comment) => comment.id), event: review.event, body: review.body ?? "" } }));
-  out({ id, state: review.event === "APPROVE" ? "APPROVED" : review.event === "REQUEST_CHANGES" ? "CHANGES_REQUESTED" : "COMMENTED", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` });
+  // no event: pending, as GitHub keeps a review not submitted yet
+  writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [id]: { comments: made.map((comment) => comment.id), event: review.event ?? null, body: review.body ?? "", commit: review.commit_id } }));
+  out({ id, node_id: `PRR_${id}`, state: review.event === undefined ? "PENDING" : review.event === "APPROVE" ? "APPROVED" : review.event === "REQUEST_CHANGES" ? "CHANGES_REQUESTED" : "COMMENTED", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` });
+}
+// a comment on a whole file, into a pending review — GraphQL's only way to put one in a review
+if (command === "api" && subcommand === "graphql" && (fields("-f").query ?? "").includes("addPullRequestReviewThread")) {
+  const form = fields("-f");
+  const id = form.review?.replace(/^PRR_/, "");
+  const stored = reviews()[id];
+  if (!stored || stored.event !== null) fail("GraphQL: Could not resolve to a node with the global id of '" + form.review + "' (addPullRequestReviewThread)");
+  if (!["src/export.ts", "src/page.ts", "src/use.ts"].includes(form.path)) fail("GraphQL: Path could not be resolved (addPullRequestReviewThread)");
+  const comment = { id: 3000 + comments().length, body: form.body, path: form.path, line: null, side: null, start_line: null, start_side: null, subject_type: "file", commit_id: stored.commit };
+  writeFileSync(commentsFile, JSON.stringify([...comments(), comment]));
+  writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [id]: { ...stored, comments: [...stored.comments, comment.id] } }));
+  out({ data: { addPullRequestReviewThread: { thread: { id: `PRRT_${comment.id}` } } } });
+}
+// a pending review submitted, with its verdict
+const submitting = args.map((argument) => argument.match(/pulls\/7\/reviews\/(\d+)\/events$/)).find(Boolean);
+if (command === "api" && args.includes("POST") && submitting) {
+  const stored = reviews()[submitting[1]];
+  if (!stored || stored.event !== null) fail("gh: Not Found (HTTP 404)");
+  const submitted = JSON.parse(readFileSync(0, "utf8"));
+  appendFileSync(join(dir, "reviews.log"), JSON.stringify({ ...submitted, comments: comments().filter((comment) => stored.comments.includes(comment.id)) }) + "\n");
+  writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [submitting[1]]: { ...stored, event: submitted.event, body: submitted.body ?? stored.body } }));
+  out({ id: Number(submitting[1]), state: STATE[submitted.event] });
+}
+// a pending review deleted, its comments with it
+const deleting = args.map((argument) => argument.match(/pulls\/7\/reviews\/(\d+)$/)).find(Boolean);
+if (command === "api" && args.includes("DELETE") && deleting) {
+  const { [deleting[1]]: gone, ...rest } = reviews();
+  if (!gone || gone.event !== null) fail("gh: Unprocessable Entity (HTTP 422)");
+  writeFileSync(commentsFile, JSON.stringify(comments().filter((comment) => !gone.comments.includes(comment.id))));
+  writeFileSync(reviewsFile, JSON.stringify(rest));
+  out({ id: Number(deleting[1]), state: "PENDING" });
 }
 const ofReview = args.map((argument) => argument.match(/pulls\/7\/reviews\/(\d+)\/comments$/)).find(Boolean);
 if (command === "api" && ofReview) {
@@ -92,10 +126,9 @@ if (command === "api" && ofReview) {
   // as GitHub lists one review's comments: without the lines they are on
   out([comments().filter((comment) => ids.includes(comment.id)).map(({ line: _line, side: _side, start_line: _start, start_side: _startSide, ...comment }) => commentJson(comment))]);
 }
-const STATE = { APPROVE: "APPROVED", REQUEST_CHANGES: "CHANGES_REQUESTED", COMMENT: "COMMENTED" };
 if (command === "api" && args.some((argument) => /pulls\/7\/reviews$/.test(argument))) {
   const seeded = { id: 98, state: "APPROVED", body: "Good to go.", user: { login: "carol", avatar_url: "http://127.0.0.1:9/carol.png" }, submitted_at: "2026-10-03T09:00:00Z", html_url: "https://github.com/acme/sandbox/pull/7#pullrequestreview-98" };
-  const sent = Object.entries(reviews()).map(([id, stored]) => ({ id: Number(id), state: STATE[stored.event], body: stored.body, user: { login: "bob" }, submitted_at: "2026-10-03T11:00:00Z", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` }));
+  const sent = Object.entries(reviews()).filter(([, stored]) => stored.event !== null).map(([id, stored]) => ({ id: Number(id), state: STATE[stored.event], body: stored.body, user: { login: "bob" }, submitted_at: "2026-10-03T11:00:00Z", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` }));
   out([[seeded, ...sent]]);
 }
 if (command === "api" && args.some((argument) => /issues\/7\/comments$/.test(argument))) {
@@ -104,7 +137,9 @@ if (command === "api" && args.some((argument) => /issues\/7\/comments$/.test(arg
 if (command === "api" && args.includes("POST")) {
   const form = { ...fields("-f"), ...fields("-F") };
   if (!["src/export.ts", "src/page.ts", "src/use.ts"].includes(form.path)) fail("gh: Validation Failed (HTTP 422)");
-  const comment = { id: 1000 + comments().length, body: form.body, path: form.path, line: Number(form.line), side: form.side, commit_id: form.commit_id, start_line: form.start_line ? Number(form.start_line) : null, start_side: form.start_side ?? null };
+  // on a whole file: no line, GitHub's subject the file
+  const where = form.subject_type === "file" ? { line: null, side: null, subject_type: "file" } : { line: Number(form.line), side: form.side };
+  const comment = { id: 1000 + comments().length, body: form.body, path: form.path, ...where, commit_id: form.commit_id, start_line: form.start_line ? Number(form.start_line) : null, start_side: form.start_side ?? null };
   writeFileSync(commentsFile, JSON.stringify([...comments(), comment]));
   out(commentJson(comment));
 }

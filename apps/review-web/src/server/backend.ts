@@ -1,9 +1,6 @@
 import { Context, Effect, Stream } from "effect";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
-
-/** Where a block of lines starts, or null for one line. */
-type LineStart = { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null;
 
 // What the review page's server functions (src/api.ts) ask of the collagen
 // instance that serves them. The page declares it; the instance provides it
@@ -42,10 +39,10 @@ export class ReviewBackend extends Context.Service<
      *  login the page shows signed in — a write under anyone else is refused; `seen`: this finish's
      *  own id and the pending comments the page showed — done once, and refused if the review changed */
     readonly submit: (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish) => Effect.Effect<SubmitResult>;
-    /** a single comment, said at once — on a line, or a block of lines from `start`, at the commit the page shows */
-    readonly lineComment: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart, shownAs: string | null) => Effect.Effect<HostWrite>;
-    /** a comment into the reader's review: pending, said when they finish it */
-    readonly addToReview: (ticketId: string, file: string, line: number, side: "LEFT" | "RIGHT", body: string, commit: string, start: LineStart) => Effect.Effect<HostWrite>;
+    /** a single comment, said at once — on lines, or on a whole file — at the commit the page shows */
+    readonly comment: (ticketId: string, spot: CommentSpot, body: string, commit: string, shownAs: string | null) => Effect.Effect<HostWrite>;
+    /** a comment into the reader's review — on lines, or on a whole file: pending, said when they finish it */
+    readonly addToReview: (ticketId: string, spot: CommentSpot, body: string, commit: string) => Effect.Effect<HostWrite>;
     /** the comments on the review collagen holds: the AI's drafts and the pending review here, and what the room has said */
     readonly talk: (ticketId: string) => Effect.Effect<TalkView>;
     /** accept AI drafts (by id, or all: null) into the review — with the reader's words where edited */

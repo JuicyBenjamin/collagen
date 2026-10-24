@@ -41,6 +41,9 @@ SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
 sfn() { node "$E2E/sfn.mjs" "$ORIGIN/review/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 post() { node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
+# where a comment sits, as the page sends it: a file, a line and a side, and where a block starts
+# (built here: a {…} written inside "$(…)" is brace-expanded by macOS's bash 3.2)
+at() { printf '{"file":"%s","line":%s,"side":"%s"%s}' "$1" "$2" "$3" "${4:+,\"startLine\":$4,\"startSide\":\"$3\"}"; }
 calls() { cat "$GH/calls.log" 2>/dev/null; }
 # a finish from the page: its own id (fresh unless given) and the pending comments it shows
 seen() { python3 -c 'import json,sys,uuid; v=json.loads(sys.argv[1]); print(json.dumps({"id": sys.argv[2] or str(uuid.uuid4()), "pending": [p["id"] for p in v["pending"]]}, separators=(",", ":")))' "$(sfn talkView "[\"$1\"]")" "${2:-}"; }
@@ -90,7 +93,7 @@ expect "a verdict that is not one is a bad request" "$(submit "$TICKET" merge ""
 expect "your own pull request is yours to comment on, not to approve" "$(sfn hostView "[\"$OWN\"]")" '"pull":\{"number":6,.*"mine":true'
 expect "…approving it is refused in words, before GitHub is asked" "$(submit "$OWN" approve "")" '"error":"Cannot approve here — it is your own pull request'
 N=$(calls | wc -l)
-expect "a comment on your own pull request is kept in collagen" "$(post sendLineComment "[\"$OWN\",\"src/export.ts\",2,\"RIGHT\",\"note to self\",\"$SHOWN\",null,null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"note to self"'
+expect "a comment on your own pull request is kept in collagen" "$(post sendComment "[\"$OWN\",$(at src/export.ts 2 RIGHT),\"note to self\",\"$SHOWN\",null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"note to self"'
 expect "…and never posted to GitHub, where you would be its only reader" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
 N=$(calls | wc -l)
 expect "a write from another site is refused" "$(post submitReview "[\"$TICKET\",\"approve\",\"\",null,null,{\"id\":\"0123abcd\",\"pending\":[]}]" http://evil.example)" "^HTTP 403$"
@@ -103,21 +106,21 @@ expect "…gh asked right then, not remembered" "$(calls | sed -n "$((N + 1)),\$
 expect "…and nothing posted" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
 
 echo "## a single comment on a line, said at once, at the commit the page shows"
-LINE=$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"Strings, or rows?\",\"$SHOWN\",null,\"bob\"]")
+LINE=$(post sendComment "[\"$TICKET\",$(at src/export.ts 2 RIGHT),\"Strings, or rows?\",\"$SHOWN\",\"bob\"]")
 expect "posted, and the comment comes back as GitHub has it" "$LINE" '"ok":true,"comment":\{"id":"1000","author":\{"login":"bob".*"body":"Strings, or rows\?","file":"src/export.ts","line":2,"side":"RIGHT"'
 expect "…on that file, line and side, at the commit the page shows" "$(calls | tail -1)" "\"-f\",\"body=Strings, or rows\\?\",\"-f\",\"commit_id=$SHOWN\",\"-f\",\"path=src/export.ts\",\"-F\",\"line=2\",\"-f\",\"side=RIGHT\""
 expect "…and read back with the others" "$(sfn hostView "[\"$TICKET\"]" | shape)" "^comment bob src/export.ts RIGHT 2 Strings, or rows\?$"
-BLOCK_ARGS=$(python3 -c 'import json, sys; print(json.dumps([sys.argv[1], "src/page.ts", 3, "RIGHT", "Name the size:\n```suggestion\n  return n * PAGE;\n}\n```", sys.argv[2], {"line": 2, "side": "RIGHT"}, "bob"]))' "$TICKET" "$SHOWN")
-BLOCK=$(post sendLineComment "$BLOCK_ARGS")
+BLOCK_ARGS=$(python3 -c 'import json, sys; print(json.dumps([sys.argv[1], {"file": "src/page.ts", "line": 3, "side": "RIGHT", "startLine": 2, "startSide": "RIGHT"}, "Name the size:\n```suggestion\n  return n * PAGE;\n}\n```", sys.argv[2], "bob"]))' "$TICKET" "$SHOWN")
+BLOCK=$(post sendComment "$BLOCK_ARGS")
 expect "a comment on a block of lines, with a suggested change in it" "$BLOCK" '"ok":true,"comment":\{.*"file":"src/page.ts","line":3,"side":"RIGHT","startLine":2,"startSide":"RIGHT"'
 expect "…sent from its first line to its last" "$(calls | tail -1)" '"-F","line=3","-f","side=RIGHT","-F","start_line=2","-f","start_side=RIGHT"\]'
 expect "…its suggestion sent as written" "$(calls | tail -1)" 'suggestion\\n  return n \* PAGE;'
-expect "a block that starts after it ends is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/page.ts\",2,\"RIGHT\",\"x\",\"$SHOWN\",{\"line\":3,\"side\":\"RIGHT\"},null]")" '"error":"bad request"'
-expect "a line GitHub does not take is refused in its words" "$(post sendLineComment "[\"$TICKET\",\"src/notes.txt\",25,\"RIGHT\",\"hm\",\"$SHOWN\",null,null]")" '"error":"Validation Failed"'
-expect "an empty comment is refused before GitHub is asked" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"   \",\"$SHOWN\",null,null]")" '"error":"Write the comment first."'
-expect "a side that is not one is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"MIDDLE\",\"x\",\"$SHOWN\",null,null]")" '"error":"bad request"'
-expect "a path out of the tree is a bad request" "$(post sendLineComment "[\"$TICKET\",\"../etc/passwd\",2,\"RIGHT\",\"x\",\"$SHOWN\",null,null]")" '"error":"bad request"'
-expect "a commit that is not one is a bad request" "$(post sendLineComment "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"x\",\"HEAD\",null,null]")" '"error":"bad request"'
+expect "a block that starts after it ends is a bad request" "$(post sendComment "[\"$TICKET\",$(at src/page.ts 2 RIGHT 3),\"x\",\"$SHOWN\",null]")" '"error":"bad request"'
+expect "a line GitHub does not take is refused in its words" "$(post sendComment "[\"$TICKET\",$(at src/notes.txt 25 RIGHT),\"hm\",\"$SHOWN\",null]")" '"error":"Validation Failed"'
+expect "an empty comment is refused before GitHub is asked" "$(post sendComment "[\"$TICKET\",$(at src/export.ts 2 RIGHT),\"   \",\"$SHOWN\",null]")" '"error":"Write the comment first."'
+expect "a side that is not one is a bad request" "$(post sendComment "[\"$TICKET\",$(at src/export.ts 2 MIDDLE),\"x\",\"$SHOWN\",null]")" '"error":"bad request"'
+expect "a path out of the tree is a bad request" "$(post sendComment "[\"$TICKET\",$(at ../etc/passwd 2 RIGHT),\"x\",\"$SHOWN\",null]")" '"error":"bad request"'
+expect "a commit that is not one is a bad request" "$(post sendComment "[\"$TICKET\",$(at src/export.ts 2 RIGHT),\"x\",\"HEAD\",null]")" '"error":"bad request"'
 
 echo "## the reader's AI drafts its comments; they wait on the page, beside the code"
 talk() { sfn talkView "[\"$1\"]"; }
@@ -135,7 +138,7 @@ expect "accepting one on the page, as the reader edited it, puts it in their rev
 TALK=$(talk "$TICKET")
 expect "…pending there, in their words, marked as the AI's" "$TALK" '"pending":\[\{"id":"[0-9a-f-]+","commit":"'"$SHOWN"'","file":"src/export.ts","line":2,"side":"RIGHT","body":"Strings lose the row shape: keep the objects.","drafted":true\}\]'
 expect "…one draft left" "$(count drafts <<< "$TALK")" "^1$"
-expect "a comment the reader writes goes into the review too" "$(post addToReview "[\"$TICKET\",\"src/use.ts\",3,\"RIGHT\",\"Does first need exporting?\",\"$SHOWN\",null]")" '^\{"ok":true\}$'
+expect "a comment the reader writes goes into the review too" "$(post addToReview "[\"$TICKET\",$(at src/use.ts 3 RIGHT),\"Does first need exporting?\",\"$SHOWN\"]")" '^\{"ok":true\}$'
 PID=$(python3 -c 'import json,sys; v=json.load(sys.stdin); print([p["id"] for p in v["pending"] if p["file"] == "src/use.ts"][0])' <<< "$(talk "$TICKET")")
 expect "…and can be reworded while it is pending" "$(post editDraft "[\"$TICKET\",\"$PID\",\"Does first need to be exported?\"]")" '^\{"done":1,"failed":\[\]\}$'
 expect "nothing pending has reached GitHub" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
@@ -154,13 +157,13 @@ expect "the author's agent reads them in review-context" "$CONTEXT" '^comments\[
 expect "…each with where it is on GitHub" "$CONTEXT" 'alice,"src/use.ts:3",Does first need to be exported\?,"https://github.com/acme/sandbox/pull/7#discussion_r[0-9]+"$'
 call $A "$SA" review-comments "{\"action\":\"draft\",\"ticketId\":\"$TICKET\",\"comments\":[{\"file\":\"src/page.ts\",\"line\":1,\"body\":\"nit\"}]}" > /dev/null
 expect "declining on the page drops a draft, said nowhere" "$(post dropDrafts "[\"$TICKET\",null,\"ai\"]")" "^1$"
-post addToReview "[\"$TICKET\",\"src/page.ts\",1,\"RIGHT\",\"second thoughts\",\"$SHOWN\",null]" > /dev/null
+post addToReview "[\"$TICKET\",$(at src/page.ts 1 RIGHT),\"second thoughts\",\"$SHOWN\"]" > /dev/null
 expect "discarding the review drops what is pending in it" "$(post dropDrafts "[\"$TICKET\",null,\"pending\"]")" "^1$"
 expect "…nothing left" "$(talk "$TICKET")" '^\{"drafts":\[\],"pending":\[\]'
 
 echo "## a comment written at another commit waits on the reader before it is said"
 OLD=0123456789abcdef0123456789abcdef01234567
-post addToReview "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"from before\",\"$OLD\",null]" > /dev/null
+post addToReview "[\"$TICKET\",$(at src/export.ts 2 RIGHT),\"from before\",\"$OLD\"]" > /dev/null
 N=$(calls | wc -l)
 expect "finishing at the commit the page shows refuses it, saying why" "$(submit "$TICKET" comment "" "\"$SHOWN\"")" '"error":"1 comment\(s\) in your review were written on another commit than the one the page shows'
 expect "…nothing posted" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
@@ -188,7 +191,7 @@ expect "…sent again (a retry, a second click): done already, nothing said" "$(
 expect "…one review on GitHub" "$(REVIEWS)" "^$((N + 1))$"
 
 echo "## a comment deleted while GitHub takes the review waits for it"
-post addToReview "[\"$TICKET\",\"src/export.ts\",2,\"RIGHT\",\"on its way\",\"$SHOWN\",null]" > /dev/null
+post addToReview "[\"$TICKET\",$(at src/export.ts 2 RIGHT),\"on its way\",\"$SHOWN\"]" > /dev/null
 touch "$GH/slow-review"
 submit "$TICKET" comment "" "\"$SHOWN\"" > "$OUT/finish3" & F3=$!
 sleep 0.5
@@ -216,7 +219,7 @@ PY
 }
 half 4a1f0000-0000-4000-8000-000000000001 "said on GitHub, not yet here"
 expect "the page shows it on GitHub, still to be said here" "$(talk "$TICKET")" '"pending":\[\{"id":"4a1f0000-[0-9a-f-]+","commit":"[0-9a-f]+","posted":true'
-post addToReview "[\"$TICKET\",\"src/page.ts\",3,\"RIGHT\",\"a new thought\",\"$SHOWN\",null]" > /dev/null
+post addToReview "[\"$TICKET\",$(at src/page.ts 3 RIGHT),\"a new thought\",\"$SHOWN\"]" > /dev/null
 N=$(REVIEWS)
 expect "a new finish, its own words and verdict: both said" "$(submit "$TICKET" request-changes "A new blocker." "\"$SHOWN\"" '"bob"')" '^\{"ok":true,"said":2,"url"'
 expect "…the earlier one in the room, never sent to GitHub again" "$(talk "$TICKET")" '"body":"said on GitHub, not yet here".*"hostId":"1999"'
@@ -325,7 +328,7 @@ expect "words on the whole have nowhere to go either: refused, nothing said" "$(
 expect "…the review still pending" "$(talk "$BARE" | count pending)" "^1$"
 expect "finished, the review is said in the room only, and why" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$BARE\"}")" "^review finished: 1 comment\(s\) said in the room as your user's — not on GitHub: the review names no pull request"
 expect "…GitHub never asked to post" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
-expect "a comment typed on its page is said in the room too" "$(post sendLineComment "[\"$BARE\",\"src/export.ts\",1,\"RIGHT\",\"typed here\",\"$SHOWN\",null,null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"typed here"'
+expect "a comment typed on its page is said in the room too" "$(post sendComment "[\"$BARE\",$(at src/export.ts 1 RIGHT),\"typed here\",\"$SHOWN\",null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"typed here"'
 expect "…and read back on the page" "$(talk "$BARE")" '"body":"room only".*"body":"typed here"'
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi

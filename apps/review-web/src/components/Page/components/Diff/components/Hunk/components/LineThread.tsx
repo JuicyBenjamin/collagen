@@ -1,5 +1,5 @@
 import { createSignal, For, Show } from "solid-js";
-import type { DraftView, LineComment } from "~/data";
+import type { CommentSpot, DiffSide, DraftView, LineComment } from "~/data";
 import { enter } from "~/fold";
 import { hostNow } from "~/hostNow";
 import { bodyParts, suggestionBlock } from "~/suggest";
@@ -21,11 +21,20 @@ const when = (iso: string): string => {
 };
 
 /** A place on the diff as GitHub names it: +12 on the new side, −12 on the old. */
-const named = (side: "LEFT" | "RIGHT", line: number) => `${side === "LEFT" ? "−" : "+"}${line}`;
+const named = (side: DiffSide, line: number) => `${side === "LEFT" ? "−" : "+"}${line}`;
 
-/** Which lines a comment is on, in words: "line +12", "lines +12 to +15". */
-const linesOf = (comment: { readonly line: number; readonly side: "LEFT" | "RIGHT"; readonly startLine?: number; readonly startSide?: "LEFT" | "RIGHT" }) =>
-  comment.startLine !== undefined ? `lines ${named(comment.startSide ?? comment.side, comment.startLine)} to ${named(comment.side, comment.line)}` : `line ${named(comment.side, comment.line)}`;
+/** Where a comment is, in words: "line +12", "lines +12 to +15", "the file". */
+const whereOf = (comment: CommentSpot) =>
+  comment.subject === "file"
+    ? "the file"
+    : comment.startLine !== undefined
+      ? `lines ${named(comment.startSide ?? comment.side, comment.startLine)} to ${named(comment.side, comment.line)}`
+      : `line ${named(comment.side, comment.line)}`;
+
+/** The new file's lines a comment is on, which a suggestion in it replaces:
+ *  none on a whole file, or with an old-side line in it. */
+const replacedBy = (comment: CommentSpot, codeOf: CodeOf) =>
+  comment.subject !== "file" && comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? codeOf(comment.startLine ?? comment.line, comment.line) : null;
 
 /** The code a suggestion would replace: the new file's lines it is on, when
  *  the hunk shows them (a suggestion only ever replaces new-side lines). */
@@ -66,13 +75,10 @@ function Suggestion(props: { code: string; replaces: ReadonlyArray<string> | nul
 /** One comment: who, when, which lines, what — its words as markdown, never
  *  as HTML; a suggested change in it shown as one. The reader's own, on its
  *  way, is marked so. */
-function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
+export function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
   const shown = () => wordsOf(props.comment);
   const words = () => readStrength(shown().body);
-  const replaces = () => {
-    const comment = props.comment;
-    return comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(comment.startLine ?? comment.line, comment.line) : null;
-  };
+  const replaces = () => replacedBy(props.comment, props.codeOf);
   return (
     <div class={["line-comment", { pending: props.comment.pending, reply: props.comment.replyTo !== undefined }]}>
       <div class="line-comment-head">
@@ -83,7 +89,7 @@ function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
           <span class="drafted-mark" title="Drafted by their AI, accepted by them">with AI</span>
         </Show>
         <span class="line-comment-when">
-          {props.comment.startLine !== undefined ? `on ${linesOf(props.comment)} · ` : ""}
+          {props.comment.subject !== "file" && props.comment.startLine !== undefined ? `on ${whereOf(props.comment)} · ` : ""}
           {props.comment.pending ? "sending…" : when(props.comment.at)}
         </span>
         <Show when={props.comment.url}>
@@ -121,7 +127,7 @@ function Moved(props: { comment: DraftView }) {
   );
 }
 
-function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
+export function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
   const shown = () => wordsOf(props.draft);
   const words = () => readStrength(shown().body);
   const [editing, setEditing] = createSignal(false);
@@ -129,10 +135,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
   const [strength, setStrength] = createSignal<Strength | null>(words().strength);
   const [busy, setBusy] = createSignal(false);
   const edited = () => withStrength(strength(), body().trim());
-  const replaces = () => {
-    const draft = props.draft;
-    return draft.side === "RIGHT" && (draft.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(draft.startLine ?? draft.line, draft.line) : null;
-  };
+  const replaces = () => replacedBy(props.draft, props.codeOf);
   const accept = async () => {
     setBusy(true);
     try {
@@ -149,7 +152,7 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
         <Show when={!editing()}>
           <StrengthMark strength={words().strength} />
         </Show>
-        <span class="line-comment-when">on {linesOf(props.draft)}</span>
+        <span class="line-comment-when">on {whereOf(props.draft)}</span>
       </div>
       <Show
         when={editing()}
@@ -178,16 +181,13 @@ function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
 
 /** A comment pending in the reader's review: theirs (or their AI's, taken
  *  in), said with the rest when they finish it — to edit or delete till then. */
-function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
+export function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
   const shown = () => wordsOf(props.comment);
   const words = () => readStrength(shown().body);
   const [editing, setEditing] = createSignal(false);
   const [body, setBody] = createSignal(words().text);
   const [strength, setStrength] = createSignal<Strength | null>(words().strength);
-  const replaces = () => {
-    const comment = props.comment;
-    return comment.side === "RIGHT" && (comment.startSide ?? "RIGHT") === "RIGHT" ? props.codeOf(comment.startLine ?? comment.line, comment.line) : null;
-  };
+  const replaces = () => replacedBy(props.comment, props.codeOf);
   const save = () => {
     const text = withStrength(strength(), body().trim());
     if (body().trim().length > 0 && text !== shown().body) void hostNow.edit(props.comment.id, text);
@@ -203,7 +203,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
         <Show when={props.comment.drafted}>
           <span class="drafted-mark" title="Drafted by your AI, taken into your review">with AI</span>
         </Show>
-        <span class="line-comment-when">on {linesOf(props.comment)}</span>
+        <span class="line-comment-when">on {whereOf(props.comment)}</span>
       </div>
       <Show
         when={editing()}
@@ -239,7 +239,7 @@ function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
 /** The comments on one line of a hunk, the ones pending in the reader's
  *  review, and the drafts their AI left there — a block of lines' sit under
  *  its last line, as on GitHub. */
-export function LineThread(props: { file: string; side: "LEFT" | "RIGHT"; line: number; codeOf: CodeOf }) {
+export function LineThread(props: { file: string; side: DiffSide; line: number; codeOf: CodeOf }) {
   const here = () => hostNow.commentsAt(props.file, props.side, props.line);
   const inReview = () => hostNow.pendingAt(props.file, props.side, props.line);
   const drafted = () => hostNow.draftsAt(props.file, props.side, props.line);
@@ -269,8 +269,8 @@ export function LineThread(props: { file: string; side: "LEFT" | "RIGHT"; line: 
  *  has it, and says why if it refused. */
 export function LineComposer(props: {
   file: string;
-  from: { readonly side: "LEFT" | "RIGHT"; readonly line: number };
-  to: { readonly side: "LEFT" | "RIGHT"; readonly line: number };
+  from: { readonly side: DiffSide; readonly line: number };
+  to: { readonly side: DiffSide; readonly line: number };
   /** the picked lines' code, when every one is on the new side */
   suggestable: ReadonlyArray<string> | null;
 }) {
@@ -280,6 +280,7 @@ export function LineComposer(props: {
   const [said, setSaid] = createSignal<string | null>(null);
   let box: HTMLTextAreaElement | undefined;
   const block = () => props.from.line !== props.to.line || props.from.side !== props.to.side;
+  const spot = (): CommentSpot => ({ file: props.file, line: props.to.line, side: props.to.side, ...(block() ? { startLine: props.from.line, startSide: props.from.side } : {}) });
   const close = () => hostNow.clearPick();
   const suggest = () => {
     if (!box || !props.suggestable) return;
@@ -299,8 +300,7 @@ export function LineComposer(props: {
     setSending(true);
     setSaid(null);
     try {
-      const start = block() ? props.from : null;
-      const result = single ? await hostNow.comment(props.file, props.to.side, props.to.line, text, start) : await hostNow.addToReview(props.file, props.to.side, props.to.line, text, start);
+      const result = single ? await hostNow.comment(spot(), text) : await hostNow.addToReview(spot(), text);
       if ("error" in result) return setSaid(result.error);
       setBody("");
       close();
@@ -322,7 +322,7 @@ export function LineComposer(props: {
             }}
           >
             <div class="composer-head">
-              <span>Comment on {linesOf({ ...props.to, startLine: block() ? props.from.line : undefined, startSide: props.from.side })}</span>
+              <span>Comment on {whereOf(spot())}</span>
               <Show when={props.suggestable}>
                 <button type="button" class="btn btn-xs" onClick={suggest} title="Put these lines in a suggestion to edit — the author can take it as it is">
                   ± Suggest a change

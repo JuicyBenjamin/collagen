@@ -6,7 +6,7 @@ import { StrengthMark } from "~/components/Strength";
 import { wordsOf } from "~/forPeople";
 import { readStrength } from "~/strength";
 
-const where = (draft: DraftView) => `${draft.file}:${draft.startLine !== undefined ? `${draft.startLine}–` : ""}${draft.line}${draft.side === "LEFT" ? " (old)" : ""}`;
+const where = (draft: DraftView) => (draft.subject === "file" ? draft.file : `${draft.file}:${draft.startLine !== undefined ? `${draft.startLine}–` : ""}${draft.line}${draft.side === "LEFT" ? " (old)" : ""}`);
 
 /** Comments not said yet whose line this diff no longer shows — the file
  *  gone, renamed, or its change moved: listed here, each to delete, since
