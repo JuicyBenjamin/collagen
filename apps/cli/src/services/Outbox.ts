@@ -38,6 +38,8 @@ export const outgoingSummary = (proposal: Proposal): OutgoingSummary => {
       return { kind: "review", project: null, target: person(proposal.to), subject: "your review" };
     case "settle":
       return { kind: "settle", project: null, target: person(proposal.to), subject: outgoing.stepId };
+    case "take":
+      return { kind: "take", project: null, target: null, subject: proposal.title };
     case "close":
       return { kind: "close", project: null, target: null, subject: proposal.title };
     case "epic-move":
@@ -63,6 +65,8 @@ export function proposalText(proposal: Proposal): string {
       return outgoing.ticket.steps.map((step) => `${step.id} · ${step.intent}: ${step.description}`).join("\n");
     case "settle":
       return outgoing.result;
+    case "take":
+      return `step ${outgoing.stepId} taken: yours now`;
     case "post-review":
       return outgoing.findings;
     case "review": {

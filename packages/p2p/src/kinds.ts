@@ -54,10 +54,10 @@ export const KINDS: Record<TicketKind, KindInfo> = {
     agent: "code under review, with its why: your user's review goes on it with post-review; review-context reads the why when they ask",
   },
   task: {
-    what: "agreed work: a goal, and steps with an owner each",
+    what: "agreed work: a goal, and steps someone owns or anyone may take",
     asks: "do your step, and settle it when it is done",
     closes: "its author — when the work is over",
-    agent: "agreed work with owners: settle-step settles a step your user owns, when they say so — nobody else's",
+    agent: "agreed work: settle-step settles a step your user owns, when they say so — nobody else's; a step nobody has is anyone's, taken with take-step when your user says they will do it",
   },
 };
 

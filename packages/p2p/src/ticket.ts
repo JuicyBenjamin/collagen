@@ -27,9 +27,11 @@ export const STATUS_RANK: Record<StepStatus, number> = {
 
 export const TicketStep = Schema.Struct({
   id: Schema.String,
-  /** Pubkey (hex) of the peer expected to settle this step. Always a person:
-   *  a step nobody is doing does not exist. */
-  owner: Schema.String,
+  /** Pubkey (hex) of the peer expected to settle this step. Absent on a
+   *  task step filed with nobody asked: it sits in the room, delivered to no
+   *  one, until somebody takes it (`takeStep`) or settles it. Once a step has
+   *  an owner it keeps one. */
+  owner: Schema.optional(Schema.String),
   /** Short verb, mirrors RoomMessage.intent (e.g. "review", "investigate"). */
   intent: Schema.String,
   /** What is being asked, in full. */
@@ -50,6 +52,10 @@ export const TicketStep = Schema.Struct({
   updatedAt: Schema.Finite,
 });
 export type TicketStep = typeof TicketStep.Type;
+
+/** A step somebody has: asked of them, or taken. */
+export type OwnedStep = TicketStep & { readonly owner: string };
+export const isOwned = (step: TicketStep): step is OwnedStep => step.owner !== undefined;
 
 /** What kind of work the ticket is. "task" is the plain one: a goal and its
  *  steps. Four ask for JUDGMENT and carry a why record (review.ts): a
@@ -201,7 +207,8 @@ export type Ticket = typeof Ticket.Type;
  *  regardless of arrival order (join semilattice per field):
  *  - steps are unioned by id — the creator adds structure, owners never lose steps
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
- *    by updatedAt, then lexicographic result as the final tiebreak
+ *    by updatedAt, then one order over the whole step — so two takes of an
+ *    open step that never saw each other end on the later one, everywhere
  *  - title, goal, kind, from, after, whenClosed and agent follow the copy with the newer
  *    `structureAt` — the author's own clock, which only the author advances,
  *    so a peer's take or settle (which advances updatedAt on a possibly stale
@@ -560,8 +567,14 @@ function mergeStep(first: TicketStep, second: TicketStep): TicketStep {
   if (first.updatedAt !== second.updatedAt) return first.updatedAt > second.updatedAt ? first : second;
   // deterministic final tiebreak so all peers converge on the same copy
   if ((first.result ?? "") !== (second.result ?? "")) return (first.result ?? "") > (second.result ?? "") ? first : second;
-  return (first.agent ?? "") >= (second.agent ?? "") ? first : second;
+  if ((first.agent ?? "") !== (second.agent ?? "")) return (first.agent ?? "") > (second.agent ?? "") ? first : second;
+  // what is left (two takes in one millisecond, a settle and a fail): the whole step decides
+  return stepKey(first) >= stepKey(second) ? first : second;
 }
+
+/** A whole step as one comparable string, its fields in one order. */
+const stepKey = (step: TicketStep): string =>
+  JSON.stringify([step.status, step.owner ?? null, step.comment ?? null, step.intent, step.description, step.needs]);
 
 /** The conversation a step belongs to. A ticket has no thread of its own:
  *  its steps ride the same threads messages use, so a step landing on your
@@ -600,22 +613,18 @@ export const withAgent = <A extends { readonly agent?: string | undefined }>(rec
   return (agent ? { ...rest, agent } : rest) as A;
 };
 
-export type SettleOutcome =
-  /** the step was yours: settled (or failed) in place */
-  | "settled"
-  /** someone else's step: refused, nothing changed (say it with a message, or
+export type Settlement =
+  /** the step was yours, or nobody's: settled (or failed) in place */
+  | { readonly ticket: Ticket; readonly outcome: "settled" }
+  /** `owner`'s step: refused, nothing changed (say it with a message, or
    *  post your own review — see `postReview`) */
-  | "not-yours";
-
-export interface Settlement {
-  readonly ticket: Ticket;
-  readonly outcome: SettleOutcome;
-}
+  | { readonly ticket: Ticket; readonly outcome: "not-yours"; readonly owner: string };
 
 /** Settling a step, as one rule for every caller (the app's Dispatch and the
  *  test drive alike — two implementations of this drifted apart once). A step
  *  belongs to the person who owns it: nobody else settles it, on any kind of
- *  ticket. Returns null when there is no such step. */
+ *  ticket. A step nobody has is anyone's: settling it takes it. Returns null
+ *  when there is no such step. */
 export function settleStep(
   ticket: Ticket,
   stepId: string,
@@ -627,15 +636,49 @@ export function settleStep(
 ): Settlement | null {
   const step = ticket.steps.find((ticketStep) => ticketStep.id === stepId);
   if (!step) return null;
-  if (step.owner !== by) return { ticket, outcome: "not-yours" };
+  if (step.owner !== undefined && step.owner !== by) return { ticket, outcome: "not-yours", owner: step.owner };
   const status = failed ? ("failed" as const) : ("settled" as const);
   return {
     ticket: {
       ...ticket,
       updatedAt: now,
-      steps: ticket.steps.map((ticketStep) => (ticketStep.id === stepId ? withAgent({ ...ticketStep, status, result, updatedAt: now }, agent) : ticketStep)),
+      steps: ticket.steps.map((ticketStep) => (ticketStep.id === stepId ? withAgent({ ...ticketStep, owner: by, status, result, updatedAt: now }, agent) : ticketStep)),
     },
     outcome: "settled",
+  };
+}
+
+export type Take =
+  /** it was nobody's: it is theirs now */
+  | { readonly ticket: Ticket; readonly outcome: "taken" }
+  /** it was theirs already */
+  | { readonly ticket: Ticket; readonly outcome: "already" }
+  /** `owner` has it */
+  | { readonly ticket: Ticket; readonly outcome: "not-open"; readonly owner: string }
+  /** withdrawn, or the ticket is closed: nothing to take */
+  | { readonly ticket: Ticket; readonly outcome: "over" };
+
+/** Taking a step nobody has, by anyone in the room — the one rule for the
+ *  person's key in the TUI and their agent's tool alike. The step is theirs
+ *  from then on, delivered to them like any step asked of them; one that is
+ *  up already is marked delivered at once (`suspended`), since whoever took
+ *  it knows it: nobody is woken by their own act. Two takes that never saw
+ *  each other merge to one owner on every peer (`mergeStep`). Returns null
+ *  when there is no such step. */
+export function takeStep(ticket: Ticket, stepId: string, by: string, now: number, agent?: string): Take | null {
+  const step = ticket.steps.find((ticketStep) => ticketStep.id === stepId);
+  if (!step) return null;
+  if (step.owner === by) return { ticket, outcome: "already" };
+  if (step.owner !== undefined) return { ticket, outcome: "not-open", owner: step.owner };
+  if (ticket.closed || step.status !== "pending") return { ticket, outcome: "over" };
+  const up = readySteps(ticket).some((ready) => ready.id === stepId);
+  return {
+    ticket: {
+      ...ticket,
+      updatedAt: now,
+      steps: ticket.steps.map((ticketStep) => (ticketStep.id === stepId ? withAgent({ ...ticketStep, owner: by, status: up ? ("suspended" as const) : ("pending" as const), updatedAt: now }, agent) : ticketStep)),
+    },
+    outcome: "taken",
   };
 }
 
@@ -655,7 +698,7 @@ export function postReview(
   agent?: string,
   comment = false,
 ): { readonly ticket: Ticket; readonly stepId: string } {
-  const id = reviewStepId(by.name, by.key, new Map(ticket.steps.map((ticketStep) => [ticketStep.id, ticketStep.owner])));
+  const id = reviewStepId(by.name, by.key, new Map(ticket.steps.filter(isOwned).map((ticketStep) => [ticketStep.id, ticketStep.owner])));
   const existing = ticket.steps.find((ticketStep) => ticketStep.id === id);
   const step: TicketStep = {
     id,
@@ -746,9 +789,10 @@ export function readySteps(ticket: Ticket): TicketStep[] {
   );
 }
 
-/** Steps a given peer should act on now: `readySteps`, theirs. */
-export function actionableSteps(ticket: Ticket, pubkey: string): TicketStep[] {
-  return readySteps(ticket).filter((step) => step.owner === pubkey);
+/** Steps a given peer should act on now: `readySteps`, theirs. A step
+ *  nobody has taken is nobody's to act on: it is delivered to no one. */
+export function actionableSteps(ticket: Ticket, pubkey: string): OwnedStep[] {
+  return readySteps(ticket).filter(isOwned).filter((step) => step.owner === pubkey);
 }
 
 /** Is this ticket's turn over, for whoever waits on it? Finished (every step

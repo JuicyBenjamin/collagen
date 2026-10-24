@@ -27,6 +27,7 @@ const KINDS: Record<string, CallKind> = {
   epic: "filing",
   "post-review": "review",
   "settle-step": "review",
+  "take-step": "review",
   "close-ticket": "review",
   "open-review": "review",
   "review-comments": "review",

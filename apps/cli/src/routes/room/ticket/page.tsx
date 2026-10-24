@@ -19,7 +19,7 @@ import { reviewHeadline } from "../../../lib/review";
 import { Arrow } from "../components/Arrow/Arrow";
 import { wrap } from "../../../lib/wrap";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
-import { runDiagnosticAtom } from "./atoms";
+import { runDiagnosticAtom, takeStepAtom } from "./atoms";
 import { openReviewPageAtom } from "../review/atoms";
 import { EpicPage } from "./EpicPage";
 import { via } from "../../../lib/agents";
@@ -80,6 +80,8 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
   const run = useAtomSet(runDiagnosticAtom);
   const openPage = useAtomSet(openReviewPageAtom);
   const outcome = useAtomValue(runDiagnosticAtom);
+  const take = useAtomSet(takeStepAtom);
+  const taking = useAtomValue(takeStepAtom);
   const [stepSel, setStepSel] = useState(0);
   const [msgSel, setMsgSel] = useState<number | null>(null);
   const [diagSel, setDiagSel] = useState(0);
@@ -155,8 +157,13 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
   // request for changes: the same ↻ the list shows, never a check
   const glyph = summary.changesAsked && summary.state !== "closed" ? GLYPH.changes : summary.state === "done" ? "✓" : summary.state === "failed" ? "✗" : "⧉";
   const glyphColor = summary.changesAsked ? (summary.state === "needs-you" ? theme.warn : theme.dim) : summary.state === "done" ? theme.ok : theme.warn;
-  const stateText = summary.state === "waiting" ? `waiting on ${summary.waitingOn.map(nameFor).join(", ")}` : STATE_LABEL[summary.state];
+  const stateText = summary.state === "waiting" ? `waiting on ${[...summary.waitingOn.map(nameFor), ...(summary.open > 0 ? ["anyone"] : [])].join(", ")}` : STATE_LABEL[summary.state];
   const sSel = clamp(stepSel, 0, Math.max(0, ticket.steps.length - 1));
+  // a step nobody has is anyone's to take
+  const selected = ticket.steps[sSel];
+  const open = selected !== undefined && selected.owner === undefined && selected.status === "pending" && !ticket.closed;
+  // a refusal is said here; a take shows on the step itself
+  const takeNote = AsyncResult.isSuccess(taking) && taking.value.startsWith("failed") ? (taking.value.split("\n")[0] ?? "") : "";
   const mSel = msgSel === null ? Math.max(0, rows.length - 1) : clamp(msgSel, 0, Math.max(0, rows.length - 1));
   const dSel = clamp(diagSel, 0, Math.max(0, available.length - 1));
   const currentRow = rows[mSel];
@@ -236,25 +243,26 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
       <box flexShrink={0}>
         <Focusable
           id="ticket-steps"
-          hint="↑↓ select step · ↓ past the last goes to the conversation · esc back to the list"
+          hint={`↑↓ select step${open ? " · t take it" : ""} · ↓ past the last goes to the conversation · esc back to the list`}
           flexDirection="column"
           flexGrow={1}
           flexShrink={0}
           onKey={(key) => {
             if (key.name === "up" && sSel > 0) return setStepSel(sSel - 1), true;
             if (key.name === "down" && sSel < ticket.steps.length - 1) return setStepSel(sSel + 1), true;
+            if (key.name === "t" && open) return take({ roomId, ticketId: ticket.id, stepId: selected.id, title: rowTitle(ticket) }), true;
             return false;
           }}
         >
           {(focused) => (
             <>
-              <SectionTitle title="steps" note={`${done}/${ticket.steps.length} settled`} focused={focused} />
+              <SectionTitle title="steps" note={`${done}/${ticket.steps.length} settled${takeNote ? ` · ${takeNote}` : ""}`} focused={focused} />
               {ticket.steps.map((step, index) => (
                 <box key={step.id} flexDirection="column">
                   <text fg={focused && index === sSel ? theme.accent : theme.fg} truncate wrapMode="none">
                     {focused && index === sSel ? "› " : "  "}
                     <span fg={step.status === "settled" ? theme.ok : step.status === "failed" ? theme.warn : theme.dim}>{STEP_GLYPH[step.status]}</span> {step.id}{" "}
-                    {nameFor(step.owner)}
+                    {step.owner === undefined ? <span fg={theme.warn}>anyone</span> : nameFor(step.owner)}
                     {step.agent ? <span fg={theme.dim}>{via(step.agent)}</span> : null} · {step.intent}
                     {step.needs.length > 0 ? <span fg={theme.dim}> · needs {step.needs.join("+")}</span> : null}
                   </text>

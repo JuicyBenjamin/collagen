@@ -2,7 +2,7 @@
 
 A ticket is how multi-step work between peers is tracked instead of living only in chat
 threads that scroll away. It is a **shared record**: one goal, a list of steps, each with
-an owner, a dependency list, a status and — once done — a result. Every peer in the room
+an owner (or, on a task, nobody yet), a dependency list, a status and — once done — a result. Every peer in the room
 holds a merged copy, and the TUI shows it in the room's overview.
 
 Tickets are **data, not commands**. Whether and how a step gets done is the owning
@@ -51,7 +51,7 @@ guide and the screen cannot say two different things (a test holds this table to
 | `proposal` | an idea, written down; owed to no one | is it worth doing — and would you do it, or should I | its author — when a plan grew out of it, or it was dropped |
 | `bug` | a symptom, with its reporter's reading of cause, importance and fix | what do you make of the symptom — your diagnosis before theirs | its reporter — fixed, planned, or let be |
 | `plan` | something its author intends to do, and how | do you agree, what would you change, what am I missing | its author — having folded the takes in and decided |
-| `task` | agreed work: a goal, and steps with an owner each | do your step, and settle it when it is done | its author — when the work is over |
+| `task` | agreed work: a goal, and steps someone owns or anyone may take | do your step, and settle it when it is done | its author — when the work is over |
 | `review` | code that exists, with the why behind it | read the change against its reasons; approve it, or ask for changes | its author — once they have acted on the reviews |
 
 ## How a step gets done
@@ -87,6 +87,15 @@ inbox — on the thread their own agent knows the ticket by (their own messages 
 else their step, else the thread with whoever acted) — so an adopted session resumes with
 the news exactly like it would with a message. Headline first, as always. An owner whose
 own step just became actionable gets the step delivery instead, not an update on top.
+
+### A step nobody was asked for
+
+A task's step may have no owner: it sits in the room for whoever takes it. It is delivered
+to no one, and the ticket waits on `anyone`. Anyone in the room takes it — `t` on the step
+in the TUI, `take-step` for their agent — and from then on it is theirs, delivered when it
+is up like any step asked of them (marked delivered at once if it is up already: they took
+it, so nobody needs waking). Settling a step nobody has takes it too. Two people who take
+it at once, each before seeing the other's, end with the later take on every peer.
 
 ### A review gate
 
@@ -457,8 +466,9 @@ close and reopen with who said so and why.
 
 | Tool | Purpose |
 | --- | --- |
-| `create-ticket` | goal, project, steps (owner by peer name, intent, description, `needs`) — on your word, straight to the room |
-| `settle-step` | settle or fail a step you own, with the result you want to send |
+| `create-ticket` | goal, project, steps (owner by peer name — or none, open to the room — intent, description, `needs`) — on your word, straight to the room |
+| `settle-step` | settle or fail a step you own, or one nobody has (settling takes it), with the result you want to send |
+| `take-step` | take a task step nobody has: it is yours from then on, as if you had been asked |
 | `get-tickets` | the open tickets in the room you're looking at, a row each: id, kind, title and the line beneath it, status, whose move it is, its epic; `kind` narrows it, `closed: true` lists the closed ones instead |
 | `get-ticket` | one ticket in full, by id: its goal, steps with owners resolved to names and their results, what it follows and waits on, its epic; a review ticket also shows its headline |
 | `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — the record and the reasons in one write. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
@@ -514,7 +524,7 @@ is the meta: goal, state, age, project, creator, and the people (`bob ↻  carol
 on a review ticket — the branch, the counts and the author's summary, with `enter` opening
 the whole of it as a page (each decision with `the user:` and `the agent:` lines and the
 `file:line` it produced, then the forks with the road not taken);
-**steps** with owner, status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed) and
+**steps** with owner (`anyone` for one nobody has: `t` takes it), status (`·` pending, `⟳` delivered, `✓` settled, `✗` failed) and
 result; **attachments**, when the ticket has any — each file by name, type and size (or
 whose conversation it is), who holds it, `○ y fetch` / `⇩ here` ([attachments](./conversations#attachments));
 the **conversation** on its threads (every message between the creator and the owners

@@ -82,6 +82,9 @@ _Last updated: 2026-09-14._
   whoever weighed in — hears when a step settles or someone weighs in (`ticket-update`
   on the thread their agent knows it by). The overview lists tickets by what they want from
   you (needs you · waiting on … · done) with who was asked and who answered.
+  A task's step may name nobody: delivered to no one, waiting on `anyone`, taken by
+  whoever picks it up (`t` on the ticket page, `take-step`). Protocol 12: an older build
+  cannot read a step with no owner.
 - **MCP server** — `effect/ai` `McpServer` over Streamable HTTP, per-profile
   port. Tools for the room, messages, tickets, settings (projects, ai, name, room name,
   room membership) and a CallScript `execute` engine. Auto-registered in `~/.claude.json`

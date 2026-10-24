@@ -110,7 +110,7 @@ expect "← from the list went back to the ticket's diagnostics (not the rail)" 
 expect "the brand introduces the build under itself: peer-to-peer and the release stage" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'peer-to-peer .{1,6} Alpha v[0-9]+\.[0-9]+\.[0-9]+')" "^[1-9]"
 BEFORE_HELP=$(sed '/seq="?"/,$d' "$LOG.keys" | cut -d' ' -f2 | tr '\n' ' ')
 expect "esc again went back to the list: the next ↓ moved in the tickets section" "$(echo "$BEFORE_HELP" | tr ' ' '\n' | tail -3 | tr '\n' ' ')" "tickets"
-expect "the ticket's header says what kind of thing it is, in the app's words" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'task.{0,12}agreed work: a goal, and steps with an owner each')" "^[1-9]"
+expect "the ticket's header says what kind of thing it is, in the app's words" "$(perl -pe 's/\e\[[0-9;?]*[a-zA-Z]//g' "$PTY" | grep -cE 'task.{0,12}agreed work')" "^[1-9]"
 HELP=$(python3 - "$PTY" "$MARKS" <<'PY'
 import re, sys
 marks = dict(l.split() for l in open(sys.argv[2]))
