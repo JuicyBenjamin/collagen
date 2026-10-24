@@ -528,6 +528,10 @@ export const LocalState = Schema.Struct({
   /** absent = collagen's own, and none of the person's yet */
   themes: Schema.optional(PageThemes),
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
+  /** roomId → the room's project names in the order the person put them
+   *  (cli lib/projectOrder). Local, never broadcast: each person orders
+   *  them their own way. */
+  projectOrder: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
   /** threadId → the user's adopted conversation for it. */
   threads: Schema.optional(Schema.Record(Schema.String, AdoptedThread)),
   /** roomId → threadId → log position of the last message pulled from the

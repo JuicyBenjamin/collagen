@@ -77,6 +77,10 @@ export const salvageState = (text: string): Salvaged => {
   }
   projects.done();
 
+  const orderDrops = count("project order");
+  const projectOrder = salvageRecord(src.projectOrder, Schema.Array(Schema.String), orderDrops.hit);
+  orderDrops.done();
+
   const threadDrops = count("adopted thread");
   const threads = salvageRecord(src.threads, AdoptedThread, threadDrops.hit);
   threadDrops.done();
@@ -167,6 +171,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(merging ? { merging } : {}),
       ...(themes ? { themes } : {}),
       rooms,
+      ...(projectOrder ? { projectOrder } : {}),
       ...(threads ? { threads } : {}),
       ...(consumed ? { consumed } : {}),
       ...(attachedFiles ? { attachedFiles } : {}),

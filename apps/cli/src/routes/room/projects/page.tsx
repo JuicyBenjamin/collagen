@@ -13,6 +13,7 @@ import { clamp } from "../../../lib/math";
 import { roomAtom } from "../../atoms";
 import { rosterAtom, stateAtom, updateStateAtom } from "../atoms";
 import { sharedProject } from "../../../lib/projects";
+import { withProjectOrder } from "../../../lib/projectOrder";
 import { projectRows } from "../projectRows";
 
 /** Projects tab — one row per PROJECT with who shares it. Out of the
@@ -22,7 +23,8 @@ import { projectRows } from "../projectRows";
  *  own, and enter on it LOCATES your copy — the folder picker, and the folder
  *  is registered under the project's shared name whatever it is called here,
  *  so one project stays one row. "+ add project" is for a folder nobody in
- *  the room shares. The picker captures the keyboard; d removes one of yours.
+ *  the room shares. The picker captures the keyboard; d removes one of yours;
+ *  shift ↑↓ moves a project, in the order kept on this machine alone.
  *  Projects belong to the room they were added in (Keet-style). */
 export function ProjectsPage() {
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
@@ -64,6 +66,13 @@ export function ProjectsPage() {
     });
     stopPicking();
   };
+  // the row under the cursor swaps with its neighbour, and the cursor goes with it
+  const move = (by: -1 | 1) => {
+    const names = rows.map((row) => row.name);
+    [names[sel], names[sel + by]] = [names[sel + by]!, names[sel]!];
+    updateState({ update: (previous) => withProjectOrder(previous, roomId, names) });
+    setCursor(sel + by);
+  };
   const remove = (id: string) =>
     updateState({
       update: (previous) => ({ ...previous, rooms: { ...previous.rooms, [roomId]: (previous.rooms[roomId] ?? []).filter((project) => project.id !== id) } }),
@@ -72,12 +81,18 @@ export function ProjectsPage() {
   return (
     <Focusable
       id="projects"
-      hint={`↑↓ select · ${action} · arrows move between sections · esc`}
+      hint={`↑↓ select${current ? " · shift ↑↓ move" : ""} · ${action} · arrows move between sections · esc`}
       flexDirection="column"
       marginTop={1}
       flexGrow={1}
       flexShrink={1}
       onKey={(key) => {
+        if (key.shift && (key.name === "up" || key.name === "down")) {
+          const by = key.name === "up" ? -1 : 1;
+          // the first project goes no higher, the last no lower, "+ add project" nowhere
+          if (sel < rows.length && sel + by >= 0 && sel + by < rows.length) move(by);
+          return true;
+        }
         if (key.name === "up" && sel > 0) return setCursor(sel - 1), true;
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
         if (isEnter(key) && sel === rows.length) return startPicking(), true;

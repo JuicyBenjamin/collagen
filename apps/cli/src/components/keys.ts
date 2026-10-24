@@ -3,6 +3,8 @@ import { appendFileSync } from "node:fs";
 export interface Key {
   name: string;
   sequence: string;
+  /** held with shift (shift ↑ arrives as "up") */
+  shift?: boolean;
 }
 
 /** The kitty keyboard protocol names it "enter", the legacy parser "return". */
