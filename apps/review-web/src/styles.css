@@ -342,9 +342,9 @@ button.reviewed:hover, .reviewed.on { background: color-mix(in srgb, var(--tone)
 /* the finish panel, over the page */
 .review-composer { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); display: grid; gap: 10px; }
 .review-composer .textarea, .line-composer .textarea { width: 100%; resize: vertical; font: 13.5px/1.5 -apple-system, sans-serif; }
-/* a review's own merge setting, in the reader's own review */
-.merge-for { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
-.merge-for .select { width: auto; font: 13px -apple-system, sans-serif; }
+/* whether collagen merges the reader's own review: quiet, beside its pull request */
+.merge-for { display: flex; align-items: center; gap: 4px; margin-left: 10px; flex-shrink: 0; white-space: nowrap; font-size: 12.5px; color: var(--faint); }
+.merge-for .select { width: auto; font: 12.5px -apple-system, sans-serif; color: var(--dim); }
 .composer-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .host-error { margin: 0; font-size: 12.5px; color: var(--warn); }
 
