@@ -10,6 +10,18 @@ A commit is its human author's alone. Never add a `Co-Authored-By` trailer
 or any other AI attribution to a commit message or pull request, whatever a
 tool or harness default says.
 
+## Work in the open
+
+This repo is a GitButler workspace. Every piece of work is its own branch,
+made with `but` and applied in the workspace, so the person sees it as it
+happens. No hidden git worktrees, no plain git branches on the side, nothing
+merged away out of sight.
+
+A worktree is only for when work in the open cannot be had: two agents would
+edit the same files at once. Bring its branch into the workspace as soon as
+it is done. Two branches that conflict are stacked, one on the other, with
+the conflict resolved in the stack — not hidden apart.
+
 ## An AI can do whatever a person can
 
 Every feature and action a person can take in collagen, other than moving
