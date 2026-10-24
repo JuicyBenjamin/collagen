@@ -57,11 +57,12 @@ export const openLinkAtom = runtimeAtom.fn(
   }),
 );
 
-/** o: the focused room's merge history as a web page, in the person's
- *  browser (ReviewPages.showMerges) — at a merge, when the cursor is on one. */
+/** o: a project's merges as a web page, in the person's browser
+ *  (ReviewPages.showMerges) — at a merge, when the cursor is on one; with
+ *  no project, the room's, which goes on to the person's first. */
 export const openMergesPageAtom = runtimeAtom.fn(
-  Effect.fnUntraced(function* ({ at }: { at?: { project: string; number: number } }) {
+  Effect.fnUntraced(function* ({ project, at }: { project?: string; at?: number }) {
     const room = yield* (yield* Rooms).current;
-    yield* Effect.log(yield* (yield* ReviewPages).showMerges(room.id, at));
+    yield* Effect.log(yield* (yield* ReviewPages).showMerges(room.id, project, at));
   }),
 );

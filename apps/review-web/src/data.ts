@@ -570,15 +570,22 @@ export type ProjectHistory = { readonly project: string } & (
   | { readonly none: string }
 );
 
-/** How many merges to show of each project, by its name; a page of one not named. */
-export type MergesShown = Readonly<Record<string, number>>;
-
-/** mergeHistory(roomId, shown, fresh) — what was merged into each of a room's projects
- *  here, as the TUI's merges tab has it: the host's merges and the room's
- *  tickets, read together. */
+/** mergeHistory(roomId, project, shown, fresh) — what was merged into one
+ *  of a room's projects here, as the TUI's merges tab has it: the host's
+ *  merges and the room's tickets, read together. */
 export interface MergeHistory {
   readonly room: string;
-  readonly projects: ReadonlyArray<ProjectHistory>;
+  /** the room's projects held here, in the reader's order: the page's tabs */
+  readonly projects: ReadonlyArray<string>;
+  readonly history: ProjectHistory;
   /** when it was read, ISO */
   readonly readAt: string;
+}
+
+/** mergeProjects(roomId) — a room's projects held here, in the reader's
+ *  order: where its merges address sends them (the first, unless a link
+ *  names one). */
+export interface MergeProjects {
+  readonly room: string;
+  readonly projects: ReadonlyArray<string>;
 }

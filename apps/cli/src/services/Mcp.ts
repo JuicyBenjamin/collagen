@@ -658,6 +658,13 @@ export const OpenReview = Tool.make("open-review", {
   success: Schema.String,
 });
 
+export const OpenMerges = Tool.make("open-merges", {
+  description:
+    "Open a project's merges page in your user's browser — what was merged into its default branch, the latest first, each linked to its pull request with the collagen tickets it came from and their why, tabs for the room's other projects — the same as pressing o on their merges tab. 'project' is one of the current room's projects on this machine (any case); left out, their first in the order they keep (order-projects). 'number' opens it at that pull request's merge, its why unfolded. When your user asks to see a project's merges or history. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Schema.Struct({ project: Schema.optional(Schema.String), number: Schema.optional(Schema.Finite) }),
+  success: Schema.String,
+});
+
 export const ReviewComments = Tool.make("review-comments", {
   description: [
     "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line, startLine?, side?, strength?, body}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
@@ -797,6 +804,7 @@ export const CollagenToolkit = Toolkit.make(
   RemoveTheme,
   SetSettings,
   OpenReview,
+  OpenMerges,
   ReviewComments,
   AskWhy,
   SetName,
@@ -848,6 +856,7 @@ export const DevCollagenToolkit = Toolkit.make(
   RemoveTheme,
   SetSettings,
   OpenReview,
+  OpenMerges,
   ReviewComments,
   AskWhy,
   SetName,
@@ -2007,6 +2016,15 @@ const makeHandlers = Effect.gen(function* () {
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review has a page (its why is in review-context)`;
         return yield* pages.show(ticketId);
+      }),
+      "open-merges": Effect.fn("Mcp.openMerges")(function* (input: { project?: string; number?: number }) {
+        const { id: roomId } = yield* focusedRoom;
+        const state = yield* store.get;
+        const held = inProjectOrder(roomProjects(state, roomId), (project) => project.name, projectOrderOf(state, roomId));
+        const project = input.project === undefined ? held[0] : held.find((candidate) => sameName(candidate.name, input.project!));
+        if (!project) return held.length === 0 ? "failed: no projects of your user's in this room — add one (add-project)" : `failed: no project of your user's named "${input.project}" in this room (theirs: ${held.map((candidate) => candidate.name).join(", ")})`;
+        if (input.number !== undefined && !(Number.isInteger(input.number) && input.number > 0)) return "failed: 'number' is a pull request's number";
+        return yield* pages.showMerges(roomId, project.name, input.number);
       }),
       "review-comments": Effect.fn("Mcp.reviewComments")(function* (input: {
         action: "draft" | "accept" | "decline" | "submit" | "list";
