@@ -81,7 +81,7 @@ if (command === "api" && args.includes("POST") && args.some((argument) => /pulls
   appendFileSync(join(dir, "reviews.log"), JSON.stringify(review) + "\n");
   if (review.comments.some((comment) => !["src/export.ts", "src/page.ts", "src/use.ts"].includes(comment.path))) fail("gh: Unprocessable Entity (HTTP 422)");
   const id = 500 + Object.keys(reviews()).length;
-  const made = review.comments.map((comment, index) => ({ id: 2000 + id * 10 + index, body: comment.body, path: comment.path, line: comment.line, side: comment.side, start_line: comment.start_line ?? null, start_side: comment.start_side ?? null, commit_id: review.commit_id }));
+  const made = review.comments.map((comment, index) => ({ id: 2000 + id * 10 + index, pull_request_review_id: id, body: comment.body, path: comment.path, line: comment.line, side: comment.side, start_line: comment.start_line ?? null, start_side: comment.start_side ?? null, commit_id: review.commit_id }));
   writeFileSync(commentsFile, JSON.stringify([...comments(), ...made]));
   writeFileSync(reviewsFile, JSON.stringify({ ...reviews(), [id]: { comments: made.map((comment) => comment.id), event: review.event, body: review.body ?? "" } }));
   out({ id, state: review.event === "APPROVE" ? "APPROVED" : review.event === "REQUEST_CHANGES" ? "CHANGES_REQUESTED" : "COMMENTED", html_url: `https://github.com/acme/sandbox/pull/7#pullrequestreview-${id}` });
@@ -89,7 +89,8 @@ if (command === "api" && args.includes("POST") && args.some((argument) => /pulls
 const ofReview = args.map((argument) => argument.match(/pulls\/7\/reviews\/(\d+)\/comments$/)).find(Boolean);
 if (command === "api" && ofReview) {
   const ids = reviews()[ofReview[1]]?.comments ?? [];
-  out([comments().filter((comment) => ids.includes(comment.id)).map(commentJson)]);
+  // as GitHub lists one review's comments: without the lines they are on
+  out([comments().filter((comment) => ids.includes(comment.id)).map(({ line: _line, side: _side, start_line: _start, start_side: _startSide, ...comment }) => commentJson(comment))]);
 }
 const STATE = { APPROVE: "APPROVED", REQUEST_CHANGES: "CHANGES_REQUESTED", COMMENT: "COMMENTED" };
 if (command === "api" && args.some((argument) => /pulls\/7\/reviews$/.test(argument))) {

@@ -32,6 +32,7 @@
   "exports": {
     "./data": "./src/data.ts",
     "./strength": "./src/strength.ts",
+    "./sameComment": "./src/sameComment.ts",
     "./themeData": "./src/themeData.ts",
     "./backend": "./src/server/backend.ts"
   }

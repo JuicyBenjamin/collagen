@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { repoWebUrl } from "../lib/gitInfo";
 import { Data, Effect, Schema } from "effect";
 import type { HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
-import { defaultMergeMethod, githubRepo, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, READINESS_FIELDS, readComment, readComments, readConversation, readOutdated, readPull, readReadiness, readReviews, readUser, refusal } from "../lib/github";
+import { defaultMergeMethod, githubRepo, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, READINESS_FIELDS, readComment, readComments, readConversation, readOutdated, readPull, readReadiness, readReviewComments, readReviews, readUser, refusal } from "../lib/github";
 import type { HostReadiness } from "../lib/merging";
 
 // Where a project's code is hosted, as something collagen can act on: read
@@ -271,9 +271,10 @@ export const github: RepoHost = {
       const made = parse(ran.out) as { id?: unknown; html_url?: unknown } | null;
       const id = typeof made?.id === "number" ? made.id : null;
       const url = typeof made?.html_url === "string" ? made.html_url : "";
-      // its comments as GitHub placed them — their ids, to show each once
-      const listed = id !== null && review.comments.length > 0 ? yield* runGh(["api", "--paginate", "--slurp", `${repo}/reviews/${id}/comments`]) : null;
-      return { ok: true as const, url, comments: listed?.ok ? readComments(parse(listed.out)) : [] };
+      // its comments as GitHub placed them — their ids, to show each once.
+      // Read from the pull request's list: the review's own leaves out lines
+      const listed = id !== null && review.comments.length > 0 ? yield* runGh(["api", "--paginate", "--slurp", `${repo}/comments`]) : null;
+      return { ok: true as const, url, comments: listed?.ok && id !== null ? readReviewComments(parse(listed.out), id) : [] };
     }),
   readiness: (link, pull) =>
     Effect.gen(function* () {

@@ -2,6 +2,7 @@ import { action, createMemo, createOptimistic, createSignal, isPending, NotReady
 import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, repinDraft, sendLineComment, submitReview, talkView } from "./api";
 import type { DraftsResult, DraftView, HostUser, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
 import { diffNow } from "./diffNow";
+import { onceEach } from "./sameComment";
 import { ticketId } from "./ticket";
 
 // The review on its host (GitHub), and the comments collagen holds on it, as
@@ -93,12 +94,7 @@ export const hostNow = {
     // the pull request's comments, then the room's that are not on it — one each
     const [list, set] = createOptimistic(() => {
       const host = ready(hostMemo, null);
-      const said = ready(talkMemo, null)?.said ?? [];
-      // the host's copy of one the reader's AI drafted says so too
-      const drafted = new Set(said.flatMap((comment) => (comment.drafted && comment.hostId !== undefined ? [comment.hostId] : [])));
-      const onHost = (host && "host" in host ? host.comments : []).map((comment) => (drafted.has(comment.id) ? { ...comment, drafted: true as const } : comment));
-      const ids = new Set(onHost.map((comment) => comment.id));
-      return [...onHost, ...said.filter((comment) => comment.hostId === undefined || !ids.has(comment.hostId))];
+      return onceEach(host && "host" in host ? host.comments : [], ready(talkMemo, null)?.said ?? []);
     });
     comments = list;
     setComments = set;

@@ -197,6 +197,19 @@ export const readComments = (value: unknown): ReadonlyArray<LineComment> =>
     return comment ? [comment] : [];
   });
 
+/** One review's line comments, read from the pull request's (`gh api
+ *  --paginate --slurp repos/…/pulls/N/comments`): GitHub's own list of a
+ *  review's comments leaves out the lines they are on. Each is where it was
+ *  written — on code changed since, the line it had then. */
+export const readReviewComments = (value: unknown, reviewId: number): ReadonlyArray<LineComment> =>
+  pages(value).flatMap((entry): ReadonlyArray<LineComment> => {
+    const record = asRecord(entry);
+    if (!record || record.pull_request_review_id !== reviewId) return [];
+    const moved = record.line === null && asInteger(record.original_line) !== undefined;
+    const comment = readComment(moved ? { ...record, line: record.original_line, start_line: record.original_start_line ?? null } : record);
+    return comment ? [comment] : [];
+  });
+
 /** The line comments on code that has changed since they were written: no
  *  line now, so a note saying where they were. */
 export const readOutdated = (value: unknown): ReadonlyArray<HostNote> =>
