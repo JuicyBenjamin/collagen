@@ -4,9 +4,10 @@ import { takeReview } from "~/api";
 import { hostNow } from "~/hostNow";
 import { ticketId } from "~/ticket";
 import { asksForChanges } from "~/strength";
+import { Held } from "./components/Held";
 
 /** What each verdict is called, at the head of its panel. */
-export const VERDICT_LABEL: Record<VerdictValue, string> = { approve: "Approve", "request-changes": "Request changes", comment: "Comment" };
+const VERDICT_LABEL: Record<VerdictValue, string> = { approve: "Approve", "request-changes": "Request changes", comment: "Comment" };
 
 /** What a verdict says on the collagen ticket when the reader gave no words. */
 const SAID: Record<VerdictValue, string> = { comment: "", approve: "Approved.", "request-changes": "Changes requested — see my comments." };
@@ -23,14 +24,20 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
   const [body, setBody] = createSignal("");
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
+  // on the pull request and in the room already, the ticket not told yet: a retry tells the ticket alone
+  const [submitted, setSubmitted] = createSignal(false);
   const count = () => hostNow.pending().length;
   const pull = () => hostNow.host()?.pull ?? null;
   const onHost = () => hostNow.canWrite();
   /** a must in the review asks for changes: the whole review does, the host having one verdict for all of it */
   const musts = () => hostNow.pending().filter((draft) => asksForChanges(draft.body)).length;
   const chosen = (): VerdictValue => (musts() > 0 ? "request-changes" : props.verdict);
+  /** pending comments written on another commit than the page shows: the
+   *  review waits until each is kept or deleted (with no pull request to put
+   *  them on, it does not) */
+  const held = () => (onHost() ? hostNow.pending().filter((draft) => !draft.posted && hostNow.moved(draft)) : []);
   // words are needed only where nothing else says it: a verdict or comments do
-  const ready = () => !sending() && (chosen() === "approve" || body().trim().length > 0 || count() > 0);
+  const ready = () => !sending() && held().length === 0 && (submitted() || chosen() === "approve" || body().trim().length > 0 || count() > 0);
   // one finish at a time: a second click while one is on its way sends nothing
   let busy = false;
   const send = async () => {
@@ -42,20 +49,22 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
     flush();
     try {
       // the comments, and on the pull request the words and verdict too
-      if (onHost() || count() > 0) {
+      if (!submitted() && (onHost() || count() > 0)) {
         const result = await hostNow.submit(onHost() ? chosen() : "comment", onHost() ? body() : "");
         if ("error" in result) {
           // its words and verdict reached the pull request: only the room is left to tell
           if (result.onHost) setBody("");
-          return setSaid(result.error);
+          return setSaid(result.onHost ? result.error : `Not submitted: ${result.error}`);
         }
+        setSubmitted(true);
       }
       // the verdict and words on the collagen ticket, as the reader's take
       const findings = body().trim() || SAID[chosen()] || (count() > 0 ? "See my comments on the code." : "");
       if (findings) {
         const taken = await takeReview(ticketId, findings, chosen() === "request-changes", chosen() === "comment");
-        if ("error" in taken) return setSaid(taken.error);
+        if ("error" in taken) return setSaid(submitted() ? `Review submitted, but not taken on the ticket: ${taken.error}` : `Not submitted: ${taken.error}`);
       }
+      setSubmitted(false);
       setBody("");
       props.onDone();
     } catch (error) {
@@ -93,9 +102,10 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
       <Show when={!onHost()}>
         <p class="host-note left">{pull()?.mine ? `Your own pull request: it all stays in collagen.` : "No open pull request: it all goes on the ticket, in the room."}</p>
       </Show>
-      <Show when={hostNow.unplaced().filter((draft) => !hostNow.isDraft(draft)).length}>
+      <Show when={hostNow.unplaced().filter((draft) => !hostNow.isDraft(draft) && !held().some((other) => other.id === draft.id)).length}>
         {(stranded) => <p class="host-note left">{stranded() === 1 ? "1 pending comment sits" : `${stranded()} pending comments sit`} on lines this diff no longer shows — listed at the top of the page, to delete.</p>}
       </Show>
+      <Held comments={held()} />
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">
         <Show when={count() > 0}>
@@ -106,7 +116,7 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
         <button type="button" class="btn btn-sm" onClick={() => props.onDone()}>
           Cancel
         </button>
-        <button type="submit" class="btn btn-primary btn-sm" disabled={!ready()}>
+        <button type="submit" class="btn btn-primary btn-sm" disabled={!ready()} title={held().length > 0 ? "Keep or delete the comments above first" : undefined}>
           {sending() ? "Submitting…" : "Submit review"}
         </button>
       </div>

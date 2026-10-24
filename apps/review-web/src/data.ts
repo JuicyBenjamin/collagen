@@ -461,6 +461,9 @@ export type SubmitResult =
       /** the review reached the host, its words and verdict with it — only the
        *  room is still to be told: a new finish is a new review */
       readonly onHost?: true;
+      /** nothing was submitted: these pending comments were written on
+       *  another commit, each to keep where it sits now or delete first */
+      readonly held?: ReadonlyArray<string>;
     };
 
 /** One branch of a stack: a pull request, a review in the room, or the
