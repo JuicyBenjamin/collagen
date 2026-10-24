@@ -18,9 +18,10 @@ import { Verdict } from "./components/Verdict";
 // the bar or above the corner. On a review the reader filed, approving is
 // accepting it (or dropping it). Pending comments go with whichever is
 // sent; their count sits on the comment button. Once the reader has
-// finished a review, what they gave and when stands in for the buttons;
-// they come back when the change moves, when comments are pending, or on
-// the reader's word.
+// finished a review, what they gave and when stands in for the buttons
+// until the change moves after it; the buttons come back then, when
+// comments are pending, or on the reader's word — sliding in across the
+// pill as the finish goes, not folding.
 
 const CHOICES: ReadonlyArray<{ readonly verdict: VerdictValue; readonly tone: string; readonly title: string; readonly icon: () => Element }> = [
   { verdict: "comment", tone: "say", title: "Comment", icon: CommentBox },
@@ -48,14 +49,20 @@ const canReview = (head: ReviewPageHead) =>
  *  they gave, in their place until another is due. */
 export function DialButtons(props: { head: ReviewPageHead }) {
   const pending = () => hostNow.pending().length;
-  const done = () => yours(props.head);
-  /** another review is due on its own: the change moved, or comments wait to be said */
-  const due = () => done()?.since === true || pending() > 0;
+  /** the reader's finish while it stands: until the change moves after it,
+   *  when there is something new to read and the buttons are back */
+  const done = () => {
+    const finish = yours(props.head);
+    return finish && !finish.since ? finish : null;
+  };
+  /** comments wait to be said */
+  const due = () => pending() > 0;
   // a panel open stays with its buttons until it is done
   const shown = () => canReview(props.head) && (done() === null || due() || again() === done()?.at || open() !== null);
+  // the finish and the buttons trade places across the pill, one sliding in as the other goes
   return (
     <>
-      <Appear when={done()}>
+      <Appear way="across" when={done()}>
         {(finish) => (
           <Reviewed
             yours={finish()}
@@ -70,7 +77,7 @@ export function DialButtons(props: { head: ReviewPageHead }) {
           />
         )}
       </Appear>
-      <Appear when={shown()}>
+      <Appear way="across" when={shown()}>
         {() => (
         <div class="dial-buttons">
           <For each={CHOICES}>

@@ -3,7 +3,7 @@ import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { closedAs, isClosed, roomProjects, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, isClosed, roomProjects, visibleTo, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult, YourReview } from "@collagen/review-web/data";
@@ -241,15 +241,19 @@ export const unitCoverageNote = (path: string, review: { readonly base?: string;
 
 export const commitOf = (path: string, ref: string) => run("git", ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], path, 5_000).pipe(Effect.map((output) => output?.trim() || null));
 
-const withYours = (yours: YourReview | undefined) => (yours ? { yours } : {});
+const withYours = (yours: YourReview | undefined, comments: number) => (yours ? { yours: comments > 0 ? { ...yours, comments } : yours } : {});
+
+/** How many comments `me` has said in the room on a review. */
+const saidBy = (room: { readonly comments: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewComment>> }, ticketId: string, me: string) =>
+  SubscriptionRef.get(room.comments).pipe(Effect.map((comments) => comments.filter((comment) => comment.ticketId === ticketId && comment.author === me).length));
 
 /** The review's own part of the page — ticket, why, links — read from the
  *  room alone: no clone, no diff, so it is there at once, before the code is. */
-const headOf = (ticket: Ticket, review: ReviewContext, me: string): ReviewPageHead => {
+const headOf = (ticket: Ticket, review: ReviewContext, me: string, said: number): ReviewPageHead => {
   const base = review.base ?? "main";
   const host = review.link ? hostOf(review.link) : undefined;
   return {
-    ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project, mine: ticket.createdBy === me, closed: closedAs(ticket) !== null, ...withYours(yourFinish(ticket, review, me)) },
+    ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project, mine: ticket.createdBy === me, closed: closedAs(ticket) !== null, ...withYours(yourFinish(ticket, review, me), said) },
     review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, ...(review.agent ? { agent: review.agent } : {}), decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ...(review.machine ? { machine: review.machine } : {}), ts: review.ts },
     links: host && review.link ? host.links(review.link, base, review.branch) : review.link ? [{ label: "link", url: review.link }] : [],
   };
@@ -267,7 +271,7 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
     const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ room: handle.room, ticket })) : null;
     // where it runs comes with the head: its section stands from the first paint
     const shows = shownShows(review.shows);
-    const head = headOf(ticket, review, me);
+    const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me));
     return { ...head, review: { ...head.review, ...(shows ? { shows } : {}) }, stack };
   }
   return null;
@@ -305,7 +309,8 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       }
     }
     const shows = shownShows(review.shows);
-    const head = headOf(ticket, review, (yield* IdentityService).identity.pubkey);
+    const me = (yield* IdentityService).identity.pubkey;
+    const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me));
     return {
       ...head,
       review: { ...head.review, ...(shows ? { shows } : {}) },

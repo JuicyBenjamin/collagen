@@ -42,6 +42,41 @@ export function enter(element: HTMLElement): void {
   });
 }
 
+/** The gap a row keeps beside an element, and the side it is on: folded
+ *  with the element, so nothing snaps when it is placed or taken away. */
+const gapBeside = (element: HTMLElement): { readonly side: "marginLeft" | "marginRight"; readonly gap: number } => {
+  const row = element.parentElement;
+  const gap = row && (element.previousElementSibling || element.nextElementSibling) ? Number.parseFloat(getComputedStyle(row).columnGap) || 0 : 0;
+  return { side: element.previousElementSibling ? "marginLeft" : "marginRight", gap };
+};
+
+/** Something opening in a row, beside what is there: from nothing to its
+ *  own width, fading in — so what stands beside it slides over. */
+export function enterSideways(element: HTMLElement): void {
+  if (still.matches) return;
+  element.style.overflow = "hidden";
+  element.style.width = "0px";
+  element.style.opacity = "0";
+  queueMicrotask(() => {
+    // its own width, measured open: squeezed to nothing its contents would read narrower
+    element.style.width = "max-content";
+    const width = element.offsetWidth;
+    element.style.width = "0px";
+    const { side, gap } = gapBeside(element);
+    void ended(animate(element, { width: [0, width], opacity: [0, 1], [side]: [-gap, 0] }, { duration: 0.22, ease: EASE }).finished, 0.22).then(() => {
+      for (const property of ["width", "opacity", "overflow", "margin-left", "margin-right"]) element.style.removeProperty(property);
+    });
+  });
+}
+
+/** Something in a row closing: to no width, fading out — resolves once it is gone. */
+export async function leaveSideways(element: HTMLElement | undefined): Promise<void> {
+  if (!element || still.matches) return;
+  element.style.overflow = "hidden";
+  const { side, gap } = gapBeside(element);
+  await ended(animate(element, { width: [element.offsetWidth, 0], opacity: [1, 0], [side]: [0, -gap] }, { duration: 0.2, ease: EASE }).finished, 0.2);
+}
+
 /** Something closing: to nothing, fading out — resolves once it is gone, for
  *  the caller to take it away then. */
 export async function leave(element: HTMLElement | undefined): Promise<void> {
