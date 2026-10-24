@@ -285,6 +285,12 @@ login**. collagen keeps no token; whatever `gh` is signed in as is who the page 
   (last) line; a suggested change shows as the lines it replaces and what it suggests, with
   its code to **copy** — GitHub has no way for another app to commit one. A comment GitHub
   no longer places on a line (the code under it moved) is left out.
+- **Comments on a file**: a remark about the file itself — its place, its name, that it
+  should not exist, that it lacks a test — has no line. **Comment** in the file's header
+  writes one; it sits at the top of the file, and goes to GitHub as a comment on the file
+  (in a review: the review is opened, the file's comments added, then it is submitted —
+  a refusal on the way takes it back, so nothing is half said). GitHub's own file comments
+  sit there too. Your AI drafts one by leaving out the line.
 - **The stack**: when the branch is built on another branch that is itself under review — a
   pull request whose base is another's head, or a review in the room naming that base — a
   row under the branch line shows the chain from the trunk up, this one, and what builds on

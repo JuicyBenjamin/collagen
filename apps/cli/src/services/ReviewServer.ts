@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { Effect, Fiber, Layer, Stream, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
+import type { CommentSpot } from "@collagen/review-web/data";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, projectNameOk, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
@@ -37,10 +38,20 @@ const bad = { error: "bad request" } as const;
 const verdictOk = (verdict: unknown): verdict is "comment" | "approve" | "request-changes" => verdict === "comment" || verdict === "approve" || verdict === "request-changes";
 const bodyOk = (body: unknown): body is string => typeof body === "string" && body.length <= 65_536;
 const sideOk = (side: unknown): side is "LEFT" | "RIGHT" => side === "LEFT" || side === "RIGHT";
-/** A comment's place, as the page names it — checked whole. */
-const spotOk = (ticketId: unknown, file: unknown, line: unknown, side: unknown, body: unknown, commit: unknown, start: unknown): boolean =>
-  ticketIdOk(ticketId as string) && treePathOk(file as string) && lineOk(line, 0) && sideOk(side) && bodyOk(body) && commitOk(commit as string) && startOk(start, line as number, side as "LEFT" | "RIGHT");
-const spot = (file: string, line: number, side: "LEFT" | "RIGHT", start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null) => ({ file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}) });
+/** A comment's place, as the page names it — read whole, once: a whole
+ *  file, or lines of one; null when it is neither. */
+const spotRead = (spot: unknown): CommentSpot | null => {
+  if (typeof spot !== "object" || spot === null) return null;
+  const place = spot as { subject?: unknown; file?: unknown; line?: unknown; side?: unknown; startLine?: unknown; startSide?: unknown };
+  if (typeof place.file !== "string" || !treePathOk(place.file)) return null;
+  if (place.subject === "file") return { subject: "file", file: place.file };
+  if (place.subject !== undefined || !lineOk(place.line, 0) || !sideOk(place.side)) return null;
+  const start = place.startLine === undefined && place.startSide === undefined ? null : { line: place.startLine, side: place.startSide };
+  if (!startOk(start, place.line as number, place.side)) return null;
+  return { file: place.file, line: place.line as number, side: place.side, ...(start ? { startLine: start.line, startSide: start.side } : {}) };
+};
+/** A comment the page sends: its place, words and commit, checked. */
+const commentOk = (ticketId: unknown, body: unknown, commit: unknown): boolean => ticketIdOk(ticketId as string) && bodyOk(body) && commitOk(commit as string);
 /** Drafts named by id — or null, all of them. */
 const idsOk = (ids: unknown): ids is ReadonlyArray<string> | null => ids === null || (Array.isArray(ids) && ids.length <= 500 && ids.every((id) => typeof id === "string" && /^[0-9a-f-]{1,64}$/.test(id)));
 /** A draft's words as the reader edited them, by its id. */
@@ -96,10 +107,14 @@ const backend = Effect.gen(function* () {
       ticketIdOk(ticketId) && verdictOk(verdict) && bodyOk(body) && (commit === null || commitOk(commit)) && shownOk(shownAs) && finishOk(seen)
         ? on(submitReview(ticketId, verdict, body, commit, shownAs, { id: seen.id, pending: seen.pending }))
         : Effect.succeed(bad),
-    lineComment: (ticketId, file, line, side, body, commit, start, shownAs) =>
-      spotOk(ticketId, file, line, side, body, commit, start) && shownOk(shownAs) ? on(sayComment(ticketId, spot(file, line, side, start), commit, body, shownAs)) : Effect.succeed(bad),
-    addToReview: (ticketId, file, line, side, body, commit, start) =>
-      spotOk(ticketId, file, line, side, body, commit, start) ? on(addToReview(ticketId, spot(file, line, side, start), commit, body)) : Effect.succeed(bad),
+    comment: (ticketId, given, body, commit, shownAs) => {
+      const spot = spotRead(given);
+      return spot && commentOk(ticketId, body, commit) && shownOk(shownAs) ? on(sayComment(ticketId, spot, commit, body, shownAs)) : Effect.succeed(bad);
+    },
+    addToReview: (ticketId, given, body, commit) => {
+      const spot = spotRead(given);
+      return spot && commentOk(ticketId, body, commit) ? on(addToReview(ticketId, spot, commit, body)) : Effect.succeed(bad);
+    },
     talk: (ticketId) => (ticketIdOk(ticketId) ? on(talkView(ticketId)) : Effect.succeed({ drafts: [], pending: [], said: [] })),
     accept: (ticketId, ids, edits) => (ticketIdOk(ticketId) && idsOk(ids) && editsOk(edits) ? on(acceptDrafts(ticketId, ids, edits)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     edit: (ticketId, id, body) => (ticketIdOk(ticketId) && idsOk([id]) && bodyOk(body) ? on(editDraft(ticketId, id, body)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),

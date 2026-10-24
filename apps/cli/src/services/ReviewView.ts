@@ -14,7 +14,7 @@ import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isTest } from "../lib/tests";
 import { stackOf, type Edge } from "../lib/stack";
 import { IdentityService } from "./Identity";
-import { hostOf, type HostPull, type LineSpot, type RepoHost } from "./RepoHost";
+import { hostOf, type HostPull, type RepoHost } from "./RepoHost";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { shownShows } from "../lib/shows";

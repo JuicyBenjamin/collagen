@@ -240,12 +240,39 @@ describe("RoomLog", () => {
       await Effect.runPromise(log.append({ op: "comment", comment: { ...sampleComment, body: "rewritten", ts: 2 } }));
       await Effect.runPromise(log.append({ op: "comment", comment: { ...sampleComment, id: "c2", line: 9, startLine: undefined, startSide: undefined, host: undefined, drafted: undefined } }));
       const view = await Effect.runPromise(log.read);
-      expect(view.comments.map((comment) => [comment.id, comment.body, comment.line])).toEqual([
+      expect(view.comments.map((comment) => [comment.id, comment.body, comment.subject === "file" ? null : comment.line])).toEqual([
         ["c1", "why?", 3],
         ["c2", "why?", 9],
       ]);
       expect(view.comments[0]).toEqual(sampleComment);
     });
+  });
+
+  it("a comment on a whole file sits beside line comments, and a build a protocol behind keeps it until it updates", async () => {
+    const ours = protocolForTests.ours;
+    const onLine = { id: "c1", ticketId: "t1", author: "k-bob", authorName: "bob", file: "src/a.ts", line: 3, side: "RIGHT" as const, commit: "abc", body: "why?", ts: 1 };
+    const onFile = { id: "c2", ticketId: "t1", author: "k-bob", authorName: "bob", subject: "file" as const, file: "src/old.ts", commit: "abc", body: "should this file exist?", ts: 2 };
+    try {
+      await withLog(async (log) => {
+        // a line comment as every build before file comments wrote it: no subject
+        await Effect.runPromise(log.append({ op: "comment", comment: onLine }));
+        protocolForTests.ours = ours - 1;
+        await Effect.runPromise(log.append({ op: "comment", comment: onFile }));
+        const behind = await Effect.runPromise(log.read);
+        expect(behind.comments).toEqual([onLine]);
+        expect(behind.unseen.map((record) => record.key)).toEqual(["comment/t1/c2"]);
+        expect(await Effect.runPromise(log.evictStale)).toBe(0);
+        // the update: the entry kept raw is read again, then replayed
+        protocolForTests.ours = ours;
+        await Effect.runPromise(log.read);
+        expect(await Effect.runPromise(log.rewriteMigrated)).toBe(1);
+        const after = await Effect.runPromise(log.read);
+        expect(after.comments).toEqual([onLine, onFile]);
+        expect(after.unseen).toEqual([]);
+      });
+    } finally {
+      protocolForTests.ours = ours;
+    }
   });
 
   it("a settled step is not un-settled by a later copy that says otherwise", async () => {

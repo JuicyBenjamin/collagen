@@ -424,28 +424,39 @@ export const emptyReview = (ticketId: string, author: string, authorName: string
 export const DiffSide = Schema.Literals(["LEFT", "RIGHT"]);
 export type DiffSide = typeof DiffSide.Type;
 
-/** Where a comment sits on a review's code: a file, its (last) line on a
- *  side, where a block of lines starts, and the commit it was written at —
- *  the code the words are about. */
-const CommentSpot = {
+/** Where a comment sits on a review's code, as GitHub's `subject_type` has
+ *  it: on lines of a file — its (last) line on a side, where a block of lines
+ *  starts — or on the file itself, with no line (its place, its name, that it
+ *  should not be there). Every comment written before a file could be
+ *  commented on is on lines and names no subject; one on lines never writes
+ *  it, so an older build reads it unchanged. */
+const OnLines = {
+  subject: Schema.optional(Schema.Literal("line")),
   file: Schema.String,
   line: Schema.Finite,
   side: DiffSide,
   startLine: Schema.optional(Schema.Finite),
   startSide: Schema.optional(DiffSide),
-  commit: Schema.String,
+};
+const OnFile = {
+  subject: Schema.Literal("file"),
+  file: Schema.String,
 };
 
-/** A comment on lines of a review's code, said in the room — by a reader on
- *  the review page, or drafted by their AI and accepted by them. Written once,
- *  by its author; never changed (grow-only). `host`: the same comment where
- *  the code is hosted (a GitHub review comment), when it went there too. */
-export const ReviewComment = Schema.Struct({
+/** Both shapes of a comment record: its own fields, on lines or on a file. */
+const spotted = <Fields extends Schema.Struct.Fields>(fields: Fields) => Schema.Union([Schema.Struct({ ...fields, ...OnLines }), Schema.Struct({ ...fields, ...OnFile })]);
+
+/** A comment on a review's code, said in the room — by a reader on the
+ *  review page, or drafted by their AI and accepted by them. Written once, by
+ *  its author; never changed (grow-only). `commit`: the one it was written
+ *  at — the code the words are about. `host`: the same comment where the
+ *  code is hosted (a GitHub review comment), when it went there too. */
+export const ReviewComment = spotted({
   id: Schema.String,
   ticketId: Schema.String,
   author: Schema.String,
   authorName: Schema.String,
-  ...CommentSpot,
+  commit: Schema.String,
   /** what a person reads — beside the code, and on the host */
   body: Schema.String,
   /** the AI's longer version, when it drafted one: what an agent reads, and
@@ -465,10 +476,10 @@ export type ReviewComment = typeof ReviewComment.Type;
  *  before review comments could be pending), or in the reader's review in
  *  progress ("pending": accepted from their AI, or written by them), said
  *  with the rest when they finish the review. Declined or deleted, it is gone. */
-export const DraftComment = Schema.Struct({
+export const DraftComment = spotted({
   id: Schema.String,
   ticketId: Schema.String,
-  ...CommentSpot,
+  commit: Schema.String,
   body: Schema.String,
   /** the AI's longer version, kept beside the words a person reads */
   detail: Schema.optional(Schema.String),

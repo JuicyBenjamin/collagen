@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { repoWebUrl } from "../lib/gitInfo";
 import { Data, Effect, Schema } from "effect";
-import type { HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
+import type { CommentSpot, HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
 import { defaultMergeMethod, githubRepo, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, READINESS_FIELDS, readComment, readComments, readConversation, readOutdated, readPull, readReadiness, readReviewComments, readReviews, readUser, refusal } from "../lib/github";
 import type { HostReadiness } from "../lib/merging";
 
@@ -45,25 +45,14 @@ export class HostCliMissing extends Data.TaggedError("HostCliMissing")<{}> {}
 /** The host would not answer, or answered something else than asked: why, in its words. */
 export class HostRefused extends Data.TaggedError("HostRefused")<{ readonly reason: string }> {}
 
-/** Where on the pull request's diff a line comment goes: the file, its
- *  (last) line on one side, where a block of lines starts, at the commit the
- *  page shows. */
-export interface LineSpot {
-  readonly file: string;
-  readonly line: number;
-  readonly side: "LEFT" | "RIGHT";
-  readonly start?: { readonly line: number; readonly side: "LEFT" | "RIGHT" };
-  readonly commit: string;
-}
-
 /** A review as it is finished: a verdict, words (may be empty with an
  *  approval, or with comments), the commit it is of, and the comments held
- *  in it until now. */
+ *  in it until now — on lines, or on a whole file. */
 export interface SubmittedReview {
   readonly verdict: Verdict;
   readonly body: string;
   readonly commit: string;
-  readonly comments: ReadonlyArray<{ readonly body: string } & Omit<LineSpot, "commit">>;
+  readonly comments: ReadonlyArray<CommentSpot & { readonly body: string }>;
 }
 
 /** Where code is hosted, as collagen speaks to it. Everything that differs
@@ -91,7 +80,7 @@ export interface RepoHost {
   readonly pull: (link: string, branch: string | undefined) => Effect.Effect<{ readonly pull: HostPull } | { readonly none: string }>;
   /** the number of the pull request a link names (or a page of it), if it names one */
   readonly pullIn: (link: string) => number | null;
-  /** its line comments: those on a line now, and those on code changed since */
+  /** its comments on the code: those on a line or a whole file now, and those on code changed since */
   readonly comments: (link: string, pull: number) => Effect.Effect<{ readonly inline: ReadonlyArray<LineComment>; readonly outdated: ReadonlyArray<HostNote> }>;
   /** the reviews submitted on it */
   readonly reviews: (link: string, pull: number) => Effect.Effect<ReadonlyArray<HostReview>>;
@@ -105,7 +94,8 @@ export interface RepoHost {
   /** a whole review, at once: its verdict, its words, and every comment
    *  held in it — GitHub's "Finish your review" */
   readonly submit: (link: string, pull: number, review: SubmittedReview) => Effect.Effect<{ readonly ok: true; readonly url: string; readonly comments: ReadonlyArray<LineComment> } | { readonly error: string }>;
-  readonly comment: (link: string, pull: number, at: LineSpot, body: string) => Effect.Effect<HostWrite>;
+  /** one comment, said at once — on lines, or on a whole file — at `commit` */
+  readonly comment: (link: string, pull: number, at: CommentSpot, commit: string, body: string) => Effect.Effect<HostWrite>;
   /** whether a pull request can be merged now, as the host sees it: its
    *  state, checks, conflicts and its own rules' approvals */
   readonly readiness: (link: string, pull: number) => Effect.Effect<{ readonly pull: HostReadiness } | { readonly none: string }>;
@@ -143,6 +133,12 @@ const runGh = (args: ReadonlyArray<string>, timeoutMs = 20_000, input?: string):
     child.stdin?.end(input ?? "");
     return Effect.sync(() => child.kill());
   });
+
+/** A comment on a whole file, into a review not submitted yet: GitHub's
+ *  REST API takes one only on its own, never in a review. */
+const FILE_THREAD = `mutation($review: ID!, $path: String!, $body: String!) {
+  addPullRequestReviewThread(input: { pullRequestReviewId: $review, path: $path, body: $body, subjectType: FILE }) { thread { id } }
+}`;
 
 const NO_GH = "Install the GitHub CLI (gh) and run gh auth login to act on the pull request from here.";
 
@@ -259,18 +255,33 @@ export const github: RepoHost = {
       const repository = githubRepo(link)!;
       const repo = `repos/${repository.owner}/${repository.repo}/pulls/${pull}`;
       const event = review.verdict === "approve" ? "APPROVE" : review.verdict === "request-changes" ? "REQUEST_CHANGES" : "COMMENT";
-      const payload = {
-        commit_id: review.commit,
-        event,
-        ...(review.body.length > 0 ? { body: review.body } : {}),
-        comments: review.comments.map((comment) => ({ path: comment.file, line: comment.line, side: comment.side, body: comment.body, ...(comment.start ? { start_line: comment.start.line, start_side: comment.start.side } : {}) })),
-      };
+      const words = review.body.length > 0 ? { body: review.body } : {};
+      const onLines = review.comments.flatMap((comment) =>
+        comment.subject === "file" ? [] : [{ path: comment.file, line: comment.line, side: comment.side, body: comment.body, ...(comment.startLine !== undefined ? { start_line: comment.startLine, start_side: comment.startSide ?? comment.side } : {}) }],
+      );
+      const onFiles = review.comments.flatMap((comment) => (comment.subject === "file" ? [comment] : []));
+      // GitHub takes a comment on a whole file into a review only one at a
+      // time, into a review not submitted yet: with any, the review is opened
+      // pending, each is added, then it is submitted — and a refusal on the
+      // way deletes it, so nothing of it is said
+      const payload = { commit_id: review.commit, ...(onFiles.length === 0 ? { event } : {}), ...words, comments: onLines };
       const ran = yield* runGh(["api", "-X", "POST", `${repo}/reviews`, "--input", "-"], 30_000, JSON.stringify(payload));
       if (ran.missing) return { error: NO_GH };
       if (!ran.ok) return { error: refusal(ran.error) };
-      const made = parse(ran.out) as { id?: unknown; html_url?: unknown } | null;
+      const made = parse(ran.out) as { id?: unknown; node_id?: unknown; html_url?: unknown } | null;
       const id = typeof made?.id === "number" ? made.id : null;
       const url = typeof made?.html_url === "string" ? made.html_url : "";
+      if (onFiles.length > 0) {
+        const node = typeof made?.node_id === "string" ? made.node_id : null;
+        if (id === null || node === null) return { error: "gh answered something else than asked" };
+        const drop = (why: string) => runGh(["api", "-X", "DELETE", `${repo}/reviews/${id}`]).pipe(Effect.as({ error: why }));
+        for (const comment of onFiles) {
+          const added = yield* runGh(["api", "graphql", "-f", `query=${FILE_THREAD}`, "-f", `review=${node}`, "-f", `path=${comment.file}`, "-f", `body=${comment.body}`]);
+          if (!added.ok) return yield* drop(refusal(added.error));
+        }
+        const submitted = yield* runGh(["api", "-X", "POST", `${repo}/reviews/${id}/events`, "--input", "-"], 30_000, JSON.stringify({ event, ...words }));
+        if (!submitted.ok) return yield* drop(refusal(submitted.error));
+      }
       // its comments as GitHub placed them — their ids, to show each once.
       // Read from the pull request's list: the review's own leaves out lines
       const listed = id !== null && review.comments.length > 0 ? yield* runGh(["api", "--paginate", "--slurp", `${repo}/comments`]) : null;
@@ -297,11 +308,16 @@ export const github: RepoHost = {
       if (ran.missing) return { error: NO_GH };
       return ran.ok ? { ok: true as const } : { error: refusal(ran.error) };
     }),
-  comment: (link, pull, at, body) =>
+  comment: (link, pull, at, commit, body) =>
     Effect.gen(function* () {
       const repository = githubRepo(link)!;
-      // -f sends each as a plain string (never read from a file, as -F's @ would); the line is a number
-      const ran = yield* runGh(["api", "-X", "POST", `repos/${repository.owner}/${repository.repo}/pulls/${pull}/comments`, "-f", `body=${body}`, "-f", `commit_id=${at.commit}`, "-f", `path=${at.file}`, "-F", `line=${at.line}`, "-f", `side=${at.side}`, ...(at.start ? ["-F", `start_line=${at.start.line}`, "-f", `start_side=${at.start.side}`] : [])]);
+      // on a whole file GitHub's subject is the file, with no line
+      const where =
+        at.subject === "file"
+          ? ["-f", "subject_type=file"]
+          : ["-F", `line=${at.line}`, "-f", `side=${at.side}`, ...(at.startLine !== undefined ? ["-F", `start_line=${at.startLine}`, "-f", `start_side=${at.startSide ?? at.side}`] : [])];
+      // -f sends each as a plain string (never read from a file, as -F's @ would); a line is a number
+      const ran = yield* runGh(["api", "-X", "POST", `repos/${repository.owner}/${repository.repo}/pulls/${pull}/comments`, "-f", `body=${body}`, "-f", `commit_id=${commit}`, "-f", `path=${at.file}`, ...where]);
       if (ran.missing) return { error: NO_GH };
       if (!ran.ok) return { error: refusal(ran.error) };
       const comment = readComment(parse(ran.out));

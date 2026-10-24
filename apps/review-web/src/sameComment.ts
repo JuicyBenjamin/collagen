@@ -1,4 +1,4 @@
-import type { LineComment } from "./data";
+import type { CommentSpot, LineComment } from "./data";
 
 // One comment, wherever it was said. A comment finished in collagen goes to
 // the room and, on someone else's open pull request, to its host too: two
@@ -9,13 +9,7 @@ import type { LineComment } from "./data";
 // as the reader's AI's when the room's is, with the AI's longer version.
 
 /** Where a comment sits and what it says. */
-interface Said {
-  readonly file: string;
-  readonly line: number;
-  readonly side: "LEFT" | "RIGHT";
-  readonly startLine?: number;
-  readonly body: string;
-}
+type Said = CommentSpot & { readonly body: string };
 
 /** Words as a host keeps them: its line endings and trailing spaces aside. */
 const plain = (body: string): string =>
@@ -26,9 +20,15 @@ const plain = (body: string): string =>
     .join("\n")
     .trim();
 
-/** Whether two comments are one: on the same lines, saying the same. */
-export const sameComment = (one: Said, other: Said): boolean =>
-  one.file === other.file && one.side === other.side && one.line === other.line && (one.startLine ?? one.line) === (other.startLine ?? other.line) && plain(one.body) === plain(other.body);
+/** Whether two comments sit in one place: on the same file, or on the same lines of it. */
+const samePlace = (one: CommentSpot, other: CommentSpot): boolean => {
+  if (one.file !== other.file) return false;
+  if (one.subject === "file" || other.subject === "file") return one.subject === other.subject;
+  return one.side === other.side && one.line === other.line && (one.startLine ?? one.line) === (other.startLine ?? other.line);
+};
+
+/** Whether two comments are one: in the same place, saying the same. */
+export const sameComment = (one: Said, other: Said): boolean => samePlace(one, other) && plain(one.body) === plain(other.body);
 
 /** A comment said in the room, with the host's id for its copy there, if it has one. */
 export type RoomComment = LineComment & { readonly hostId?: string };

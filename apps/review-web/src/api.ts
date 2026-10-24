@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
 
@@ -77,22 +77,13 @@ export const submitReview = async (ticketId: string, verdict: Verdict, body: str
   return run((backend) => backend.submit(ticketId, verdict, body, commit, shownAs, seen));
 };
 
-/** A single comment on a line — or a block of lines, from `start` to `line`
- *  — at the commit the page shows, said at once (GitHub's "Add single
- *  comment"): in the room as the reader's, and on the pull request too when
- *  there is an open one. */
-export const sendLineComment = async (
-  ticketId: string,
-  file: string,
-  line: number,
-  side: "LEFT" | "RIGHT",
-  body: string,
-  commit: string,
-  start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
-  shownAs: string | null,
-): Promise<HostWrite> => {
+/** A single comment — on a line, a block of lines, or a whole file — at the
+ *  commit the page shows, said at once (GitHub's "Add single comment"): in
+ *  the room as the reader's, and on the pull request too when there is an
+ *  open one. */
+export const sendComment = async (ticketId: string, spot: CommentSpot, body: string, commit: string, shownAs: string | null): Promise<HostWrite> => {
   "use server";
-  return run((backend) => backend.lineComment(ticketId, file, line, side, body, commit, start, shownAs));
+  return run((backend) => backend.comment(ticketId, spot, body, commit, shownAs));
 };
 
 /** The comments on the review collagen holds: what the reader's AI drafted
@@ -103,18 +94,10 @@ export const talkView = GET(async (ticketId: string): Promise<TalkView> => {
   return run((backend) => backend.talk(ticketId));
 });
 
-/** A comment into the reader's review: pending, said when they finish it. */
-export const addToReview = async (
-  ticketId: string,
-  file: string,
-  line: number,
-  side: "LEFT" | "RIGHT",
-  body: string,
-  commit: string,
-  start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null,
-): Promise<HostWrite> => {
+/** A comment into the reader's review — on lines, or on a whole file: pending, said when they finish it. */
+export const addToReview = async (ticketId: string, spot: CommentSpot, body: string, commit: string): Promise<HostWrite> => {
   "use server";
-  return run((backend) => backend.addToReview(ticketId, file, line, side, body, commit, start));
+  return run((backend) => backend.addToReview(ticketId, spot, body, commit));
 };
 
 /** Accept the AI's drafts — by id, or all (null) — into the reader's review;

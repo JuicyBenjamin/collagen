@@ -5,14 +5,14 @@ import type { DraftsResult, DraftView, HostWrite, LineComment, SubmitResult, Tal
 import { forPeople } from "@collagen/review-web/forPeople";
 import { sameComment } from "@collagen/review-web/sameComment";
 import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
-import { placeComment, type Spot } from "../lib/comments";
+import { placeComment, whereOf, type Spot } from "../lib/comments";
 import { IdentityService } from "./Identity";
 import { hostOf, type RepoHost } from "./RepoHost";
 import { hostLink, reviewHunks, reviewNamed } from "./ReviewView";
 import { StateStore } from "./StateStore";
 
-// Comments on a review's code, as GitHub has them: a review is written, then
-// finished. The reader's AI DRAFTS comments while it reviews; accepted (as
+// Comments on a review's code — on lines, or on a whole file — as GitHub
+// has them: a review is written, then finished. The reader's AI DRAFTS comments while it reviews; accepted (as
 // they are, or edited), a draft joins the reader's review in progress —
 // PENDING, with the comments they write on the page themselves. Drafts and
 // pending comments are this machine's only. FINISHING the review says them
@@ -22,14 +22,10 @@ import { StateStore } from "./StateStore";
 // their own gh — wired here, so neither the page nor the AI calls GitHub. A
 // single comment can still be said at once, as GitHub's "Add single comment".
 
-/** A comment as the agent drafts it: lines of the branch's code as the diff
- *  shows them — a block from startLine to line — on the new side unless it
- *  is about a removed line. */
+/** A comment as the agent drafts it: where it sits — lines of the branch's
+ *  code as the diff shows them, or a whole file — and its words. */
 export interface DraftInput {
-  readonly file: string;
-  readonly line: number;
-  readonly startLine?: number;
-  readonly side?: "LEFT" | "RIGHT";
+  readonly spot: Spot;
   /** what a person reads, beside the code and on the host */
   readonly body: string;
   /** the AI's longer version, for an agent — a person opens it on purpose */
@@ -40,12 +36,11 @@ export interface DraftInput {
 
 type Found = NonNullable<Effect.Success<ReturnType<typeof reviewNamed>>>;
 
-const spotOf = (comment: { readonly file: string; readonly line: number; readonly side: "LEFT" | "RIGHT"; readonly startLine?: number; readonly startSide?: "LEFT" | "RIGHT" }): Spot => ({
-  file: comment.file,
-  line: comment.line,
-  side: comment.side,
-  ...(comment.startLine !== undefined ? { startLine: comment.startLine, startSide: comment.startSide ?? comment.side } : {}),
-});
+/** Where a comment record sits, and nothing else of it. */
+const spotOf = (comment: Spot): Spot =>
+  comment.subject === "file"
+    ? { subject: "file", file: comment.file }
+    : { file: comment.file, line: comment.line, side: comment.side, ...(comment.startLine !== undefined ? { startLine: comment.startLine, startSide: comment.startSide ?? comment.side } : {}) };
 
 /** Words with nothing in them but, at most, a strength. */
 const saysNothing = (body: string) => readStrength(body).text.trim().length === 0;
@@ -112,14 +107,13 @@ const draftOnce = Effect.fn("ReviewTalk.draft")(function* (ticketId: string, ite
   const kept: Array<DraftComment> = [];
   const refused: Array<{ readonly at: string; readonly why: string }> = [];
   items.forEach((item, index) => {
-    const side = item.side ?? "RIGHT";
-    const spot: Spot = { file: item.file.trim(), line: item.line, side, ...(item.startLine !== undefined && item.startLine !== item.line ? { startLine: item.startLine, startSide: side } : {}) };
+    const spot = spotOf({ ...item.spot, file: item.spot.file.trim() });
     // a person reads the short version; written for an AI, the long one stays beside it
     const words = forPeople(item.body);
     const detail = item.detail?.trim() || words.detail;
     const body = withStrength(item.strength ?? null, words.body);
     const why = saysNothing(body) ? "it says nothing" : placeComment(diff.hunks, spot);
-    if (why) refused.push({ at: `#${index + 1} (${item.file}:${item.line})`, why });
+    if (why) refused.push({ at: `#${index + 1} (${whereOf(spot)})`, why });
     else kept.push({ id: randomUUID(), ticketId, ...spot, body, ...(detail ? { detail } : {}), commit: diff.commit, status: "ai", ts: now + index });
   });
   if (kept.length > 0) yield* setDrafts(ticketId, (drafts) => [...drafts, ...kept]);
@@ -257,7 +251,7 @@ const sayOnce = Effect.fn("ReviewTalk.say")(function* (ticketId: string, spot: S
   let host: { readonly id: number; readonly url: string } | undefined;
   let shown: LineComment | undefined;
   if ("host" in to) {
-    const posted = yield* to.host.comment(to.link, to.number, { file: spot.file, line: spot.line, side: spot.side, commit, ...(spot.startLine !== undefined ? { start: { line: spot.startLine, side: spot.startSide ?? spot.side } } : {}) }, text);
+    const posted = yield* to.host.comment(to.link, to.number, spot, commit, text);
     if ("error" in posted) return posted satisfies HostWrite;
     if (posted.comment) {
       shown = posted.comment;
@@ -379,7 +373,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     verdict: asked,
     body: text,
     commit: at,
-    comments: pending.map((draft) => ({ file: draft.file, line: draft.line, side: draft.side, body: draft.body, ...(draft.startLine !== undefined ? { start: { line: draft.startLine, side: draft.startSide ?? draft.side } } : {}) })),
+    comments: pending.map((draft) => ({ ...spotOf(draft), body: draft.body })),
   });
   if ("error" in sent) return sent satisfies SubmitResult;
   // each pending comment with its copy on the host, matched by where it sits and what it says
@@ -434,10 +428,7 @@ const asShown = (comment: ReviewComment): LineComment & { readonly hostId?: stri
   id: comment.id,
   author: { login: comment.authorName },
   body: comment.body,
-  file: comment.file,
-  line: comment.line,
-  side: comment.side,
-  ...(comment.startLine !== undefined ? { startLine: comment.startLine, startSide: comment.startSide ?? comment.side } : {}),
+  ...spotOf(comment),
   url: comment.host?.url ?? "",
   at: new Date(comment.ts).toISOString(),
   ...(comment.drafted ? { drafted: true as const } : {}),
@@ -449,10 +440,7 @@ const asDraft = (draft: DraftComment): DraftView => ({
   id: draft.id,
   commit: draft.commit,
   ...(isPosted(draft) ? { posted: true as const } : {}),
-  file: draft.file,
-  line: draft.line,
-  side: draft.side,
-  ...(draft.startLine !== undefined ? { startLine: draft.startLine, startSide: draft.startSide ?? draft.side } : {}),
+  ...spotOf(draft),
   body: draft.body,
   ...(draft.detail !== undefined ? { detail: draft.detail } : {}),
   ...(draft.drafted ? { drafted: true as const } : {}),

@@ -33,7 +33,8 @@ import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
 import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
-import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, submitReview } from "./ReviewTalk";
+import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, submitReview, type DraftInput } from "./ReviewTalk";
+import { whereOf } from "../lib/comments";
 import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
@@ -667,7 +668,7 @@ export const OpenMerges = Tool.make("open-merges", {
 
 export const ReviewComments = Tool.make("review-comments", {
   description: [
-    "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line, startLine?, side?, strength?, body, detail?}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. 'body' is what a person reads, beside the code and on the host: plain words, a sentence or two, as a colleague would say it — no priority codes ([P2]), no rule or skill names, no run of identifiers. 'detail' is your longer reasoning, for the author's agent (it reads it in review-context); a person sees it only when they open it. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
+    "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line?, startLine?, side?, strength?, body, detail?}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. A remark about a file itself — its place, its name, that it should not exist, that it lacks a test — leaves out line (and startLine, side): it sits at the top of the file. 'body' is what a person reads, beside the code and on the host: plain words, a sentence or two, as a colleague would say it — no priority codes ([P2]), no rule or skill names, no run of identifiers. 'detail' is your longer reasoning, for the author's agent (it reads it in review-context); a person sees it only when they open it. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
     "Drafts stay on this machine. Your user reads them beside the code and accepts (into their review, as on GitHub), edits or declines each; their review is said when they finish it — in the room as theirs and, when the review is an open pull request someone else opened, on it as one review with their verdict (through their own gh; on their own pull request it stays in collagen, where it has readers); you call nothing else for that. Say in the chat what you found in a line or two and that the comments are drafts on the review page; do not repeat them there.",
     "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. 'keep' (ids): a pending comment written on another commit is about the same lines at the review's commit now — read the diff first. A finish waits, nothing submitted, while comments in it were written on different commits: each kept or declined first. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
   ].join("\n"),
@@ -678,7 +679,7 @@ export const ReviewComments = Tool.make("review-comments", {
       Schema.Array(
         Schema.Struct({
           file: Schema.String,
-          line: Schema.Number,
+          line: Schema.optional(Schema.Number),
           startLine: Schema.optional(Schema.Number),
           side: Schema.optional(Schema.Literals(["new", "old"])),
           strength: Schema.optional(Schema.Literals(["nit", "suggest", "wish", "must"])),
@@ -2030,7 +2031,7 @@ const makeHandlers = Effect.gen(function* () {
       "review-comments": Effect.fn("Mcp.reviewComments")(function* (input: {
         action: "draft" | "accept" | "decline" | "keep" | "submit" | "list";
         ticketId: string;
-        comments?: ReadonlyArray<{ readonly file: string; readonly line: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly strength?: Strength; readonly body: string; readonly detail?: string }>;
+        comments?: ReadonlyArray<{ readonly file: string; readonly line?: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly strength?: Strength; readonly body: string; readonly detail?: string }>;
         ids?: ReadonlyArray<string>;
         verdict?: "comment" | "approve" | "request-changes";
         body?: string;
@@ -2040,17 +2041,22 @@ const makeHandlers = Effect.gen(function* () {
         const ticket = all.get(input.ticketId);
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}: comments go on a review's code`;
-        const where = (comment: { readonly file: string; readonly line: number; readonly startLine?: number; readonly side: string }) =>
-          `${comment.file}:${comment.startLine !== undefined ? `${comment.startLine}-` : ""}${comment.line}${comment.side === "LEFT" ? " (old)" : ""}`;
         if (input.action === "draft") {
-          const items = (input.comments ?? []).filter((comment) => Number.isInteger(comment.line) && comment.line > 0 && (comment.startLine === undefined || Number.isInteger(comment.startLine)));
-          if (items.length === 0) return "failed: pass 'comments' — each with file, line (a whole number of the branch's code) and body";
-          const result = yield* draftComments(input.ticketId, items.map((comment) => ({ file: comment.file, line: comment.line, ...(comment.startLine !== undefined ? { startLine: comment.startLine } : {}), side: comment.side === "old" ? ("LEFT" as const) : ("RIGHT" as const), ...(comment.strength ? { strength: comment.strength } : {}), body: comment.body, ...(comment.detail ? { detail: comment.detail } : {}) })));
+          // where each sits, read once: lines of the branch's code, or with no line the file itself
+          const items = (input.comments ?? []).flatMap((comment): ReadonlyArray<DraftInput> => {
+            const words = { body: comment.body, ...(comment.strength ? { strength: comment.strength } : {}), ...(comment.detail ? { detail: comment.detail } : {}) };
+            if (comment.line === undefined) return comment.startLine === undefined && comment.side === undefined ? [{ spot: { subject: "file", file: comment.file }, ...words }] : [];
+            if (!Number.isInteger(comment.line) || comment.line <= 0 || (comment.startLine !== undefined && !Number.isInteger(comment.startLine))) return [];
+            const side = comment.side === "old" ? ("LEFT" as const) : ("RIGHT" as const);
+            return [{ spot: { file: comment.file, line: comment.line, side, ...(comment.startLine !== undefined && comment.startLine !== comment.line ? { startLine: comment.startLine, startSide: side } : {}) }, ...words }];
+          });
+          if (items.length === 0) return "failed: pass 'comments' — each with file, body, and line (a whole number of the branch's code) unless it is about the whole file";
+          const result = yield* draftComments(input.ticketId, items);
           if ("error" in result) return `failed: ${result.error}`;
           if (result.drafted.length > 0) yield* pages.started(input.ticketId);
           const refused = result.refused.length > 0 ? `\nREFUSED (not drafted — fix and draft them again):\n${result.refused.map((refusal) => `- ${refusal.at}: ${refusal.why}`).join("\n")}` : "";
           if (result.drafted.length === 0) return `failed: no comment could be placed on the diff.${refused}`;
-          return `${result.drafted.length} draft comment(s) on the review page, under the lines they are about: ${result.drafted.map((draft) => `${draft.id} ${where(draft)}`).join(", ")}.${refused}\nTELL YOUR USER, in a line or two: what you found, and that your comments are drafts on the review page beside the code — they accept, edit or decline each there and finish their review, or tell you to post them. Do not repeat the comments in the chat.`;
+          return `${result.drafted.length} draft comment(s) on the review page, under the lines they are about: ${result.drafted.map((draft) => `${draft.id} ${whereOf(draft)}`).join(", ")}.${refused}\nTELL YOUR USER, in a line or two: what you found, and that your comments are drafts on the review page beside the code — they accept, edit or decline each there and finish their review, or tell you to post them. Do not repeat the comments in the chat.`;
         }
         const ids = input.ids && input.ids.length > 0 ? input.ids : null;
         const failures = (failed: ReadonlyArray<{ readonly id: string; readonly error: string }>) => (failed.length > 0 ? `\nNOT DONE:\n${failed.map((failure) => `- ${failure.id}: ${failure.error}`).join("\n")}` : "");
@@ -2064,7 +2070,7 @@ const makeHandlers = Effect.gen(function* () {
           const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null);
           if ("held" in result && result.held) {
             const waiting = yield* draftsOf(input.ticketId);
-            const held = result.held.flatMap((id) => waiting.filter((draft) => draft.id === id)).map((draft) => `- ${draft.id} ${where(draft)}, written at ${draft.commit.slice(0, 7)}`);
+            const held = result.held.flatMap((id) => waiting.filter((draft) => draft.id === id)).map((draft) => `- ${draft.id} ${whereOf(draft)}, written at ${draft.commit.slice(0, 7)}`);
             return `failed: NOT SUBMITTED — ${result.error} 'keep' (ids) confirms one where it sits at the review's commit now; 'decline' (ids) deletes it.\n${held.join("\n")}`;
           }
           if ("error" in result) return `failed: ${result.error} — the review stays pending`;
@@ -2088,9 +2094,9 @@ const makeHandlers = Effect.gen(function* () {
           return { ...(read.strength ? { strength: read.strength } : {}), body: read.text, ...(comment.detail !== undefined ? { detail: comment.detail } : {}) };
         };
         return toToon({
-          drafts: mine.filter((draft) => draft.status !== "pending").map((draft) => ({ id: draft.id, at: where(draft), ...words(draft) })),
-          pending: mine.filter((draft) => draft.status === "pending").map((draft) => ({ id: draft.id, at: where(draft), ...words(draft) })),
-          said: said.map((comment) => ({ by: comment.authorName, at: where(comment), ...words(comment), ...(comment.host ? { onHost: comment.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) })),
+          drafts: mine.filter((draft) => draft.status !== "pending").map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
+          pending: mine.filter((draft) => draft.status === "pending").map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
+          said: said.map((comment) => ({ by: comment.authorName, at: whereOf(comment), ...words(comment), ...(comment.host ? { onHost: comment.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) })),
         });
       }, Effect.provideContext(talkContext)),
       "set-name": ({ name }: { name: string }) =>

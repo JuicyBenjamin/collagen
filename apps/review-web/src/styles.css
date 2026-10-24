@@ -369,6 +369,8 @@ tr.thread-row td { padding: 0; white-space: normal; background: var(--bg); }
 /* one column the thread's own width, never its widest line's: a code block or
    suggestion in a comment scrolls on its own, its words wrap beside it */
 .thread { margin: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; font: 13.5px/1.5 -apple-system, sans-serif; }
+/* at the top of a file, outside the code's box: as wide as the card */
+.file-thread { position: static; width: auto; }
 .line-comment { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 .line-comment.pending { opacity: 0.6; border-style: dashed; }
 .line-comment-head { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: 12.5px; color: var(--dim); }

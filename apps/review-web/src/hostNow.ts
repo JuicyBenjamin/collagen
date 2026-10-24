@@ -1,6 +1,6 @@
 import { action, createMemo, createOptimistic, createSignal, isPending, NotReadyError, refresh, type Accessor, type SourceAccessor } from "solid-js";
-import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, repinDraft, sendLineComment, submitReview, talkView } from "./api";
-import type { DraftsResult, DraftView, HostUser, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
+import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, repinDraft, sendComment, submitReview, talkView } from "./api";
+import type { CommentSpot, DiffSide, DraftsResult, DraftView, HostUser, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
 import { diffNow } from "./diffNow";
 import { onceEach } from "./sameComment";
 import { ticketId } from "./ticket";
@@ -39,7 +39,16 @@ const ready = <T>(read: () => T, otherwise: T): T => {
 };
 
 /** Which line a comment is on: a file, a side, a line number. */
-const spot = (file: string, side: "LEFT" | "RIGHT", line: number) => `${side}:${line}:${file}`;
+const spot = (file: string, side: DiffSide, line: number) => `${side}:${line}:${file}`;
+/** Whether a comment sits on that line — never one on a whole file. */
+const onLine = (comment: CommentSpot, at: string) => comment.subject !== "file" && spot(comment.file, comment.side, comment.line) === at;
+/** Whether a comment is on that whole file. */
+const onFile = (comment: CommentSpot, file: string) => comment.subject === "file" && comment.file === file;
+/** Where a comment not said yet sits, and nothing else of it. */
+const placeOf = (draft: DraftView): CommentSpot =>
+  draft.subject === "file"
+    ? { subject: "file", file: draft.file }
+    : { file: draft.file, line: draft.line, side: draft.side, ...(draft.startLine !== undefined ? { startLine: draft.startLine, startSide: draft.startSide ?? draft.side } : {}) };
 
 /** Lines picked for a comment, in one hunk (GitHub's own rule: a comment's
  *  lines are in one hunk of the diff), by row: where the pointer went down,
@@ -159,10 +168,12 @@ export const hostNow = {
   },
 
   /** The drafts the reader's AI left on one line (a block's on its last). */
-  draftsAt: (file: string, side: "LEFT" | "RIGHT", line: number): ReadonlyArray<DraftView> => {
+  draftsAt: (file: string, side: DiffSide, line: number): ReadonlyArray<DraftView> => {
     const at = spot(file, side, line);
-    return ready(drafts, []).filter((draft) => spot(draft.file, draft.side, draft.line) === at);
+    return ready(drafts, []).filter((draft) => onLine(draft, at));
   },
+  /** The drafts the reader's AI left on a whole file. */
+  draftsOn: (file: string): ReadonlyArray<DraftView> => ready(drafts, []).filter((draft) => onFile(draft, file)),
   /** How many drafts are waiting, and their ids. */
   drafts: (): ReadonlyArray<DraftView> => ready(drafts, []),
 
@@ -188,16 +199,19 @@ export const hostNow = {
 
   /** The comments pending in the reader's review, and those on one line. */
   pending: (): ReadonlyArray<DraftView> => ready(pending, []),
-  pendingAt: (file: string, side: "LEFT" | "RIGHT", line: number): ReadonlyArray<DraftView> => {
+  pendingAt: (file: string, side: DiffSide, line: number): ReadonlyArray<DraftView> => {
     const at = spot(file, side, line);
-    return ready(pending, []).filter((draft) => spot(draft.file, draft.side, draft.line) === at);
+    return ready(pending, []).filter((draft) => onLine(draft, at));
   },
-  /** A comment into the reader's review, pending until they finish it — shown at once. */
-  addToReview: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string, start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null) {
+  /** The comments pending in the reader's review on a whole file. */
+  pendingOn: (file: string): ReadonlyArray<DraftView> => ready(pending, []).filter((draft) => onFile(draft, file)),
+  /** A comment into the reader's review — on lines, or on a whole file —
+   *  pending until they finish it, shown at once. */
+  addToReview: action(function* (at: CommentSpot, body: string) {
     const commit = diffNow.commit();
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
-    setPending((current) => [...current, { id: `new-${Date.now()}`, commit, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), body }]);
-    const result = (yield addToReview(ticketId, file, line, side, body, commit, start)) as HostWrite;
+    setPending((current) => [...current, { id: `new-${Date.now()}`, commit, ...at, body }]);
+    const result = (yield addToReview(ticketId, at, body, commit)) as HostWrite;
     if (talk) refresh(talk);
     return result;
   }),
@@ -243,7 +257,7 @@ export const hostNow = {
     const me: HostUser | null | undefined = hostNow.host()?.viewer;
     const going = ready(pending, []);
     setPending(() => []);
-    setComments((current) => [...current, ...going.map((draft): LineComment => ({ id: `sending-${draft.id}`, author: me ?? { login: "you" }, body: draft.body, file: draft.file, line: draft.line, side: draft.side, ...(draft.startLine !== undefined ? { startLine: draft.startLine, startSide: draft.startSide ?? draft.side } : {}), url: "", at: new Date().toISOString(), pending: true, ...(draft.drafted ? { drafted: true as const } : {}) }))]);
+    setComments((current) => [...current, ...going.map((draft): LineComment => ({ id: `sending-${draft.id}`, author: me ?? { login: "you" }, body: draft.body, ...placeOf(draft), url: "", at: new Date().toISOString(), pending: true, ...(draft.drafted ? { drafted: true as const } : {}) }))]);
     // this finish, named — sent again it is not said twice — with the
     // review as the page showed it (a comment still on its way has no id yet)
     const seen = { id: finishId, pending: going.map((draft) => draft.id).filter((id) => !id.startsWith("new-")) };
@@ -256,10 +270,12 @@ export const hostNow = {
   }),
 
   /** The comments on one line, the reader's own on its way among them. */
-  commentsAt: (file: string, side: "LEFT" | "RIGHT", line: number): ReadonlyArray<LineComment> => {
+  commentsAt: (file: string, side: DiffSide, line: number): ReadonlyArray<LineComment> => {
     const at = spot(file, side, line);
-    return ready(comments, []).filter((comment) => spot(comment.file, comment.side, comment.line) === at);
+    return ready(comments, []).filter((comment) => onLine(comment, at));
   },
+  /** The comments on a whole file, the reader's own on its way among them. */
+  commentsOn: (file: string): ReadonlyArray<LineComment> => ready(comments, []).filter((comment) => onFile(comment, file)),
 
   /** Whether anything is said or waiting on a file: a comment, a pending
    *  comment or a draft — a file holding one is never folded out of sight. */
@@ -286,18 +302,17 @@ export const hostNow = {
     setPick(null);
   },
 
-  /** Post a single comment on a line, or a block of lines from `start`, at
-   *  the commit the page shows — apart from the review (GitHub's "Add single
-   *  comment"). It shows at once as the reader's, marked as on
-   *  its way; the host's answer (read again) takes its place, or a refusal
-   *  takes it away. */
-  comment: action(function* (file: string, side: "LEFT" | "RIGHT", line: number, body: string, start: { readonly line: number; readonly side: "LEFT" | "RIGHT" } | null): Generator<Promise<HostWrite>, HostWrite, unknown> {
+  /** Post a single comment — on lines, or on a whole file — at the commit
+   *  the page shows, apart from the review (GitHub's "Add single comment").
+   *  It shows at once as the reader's, marked as on its way; the host's
+   *  answer (read again) takes its place, or a refusal takes it away. */
+  comment: action(function* (at: CommentSpot, body: string): Generator<Promise<HostWrite>, HostWrite, unknown> {
     const commit = diffNow.commit();
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
     const me: HostUser | null | undefined = hostNow.host()?.viewer;
-    const mine: LineComment = { id: `pending-${Date.now()}`, author: me ?? { login: "you" }, body, file, line, side, ...(start ? { startLine: start.line, startSide: start.side } : {}), url: "", at: new Date().toISOString(), pending: true };
+    const mine: LineComment = { id: `pending-${Date.now()}`, author: me ?? { login: "you" }, body, ...at, url: "", at: new Date().toISOString(), pending: true };
     setComments((current) => [...current, mine]);
-    const said = (yield sendLineComment(ticketId, file, line, side, body, commit, start, me?.login ?? null)) as HostWrite;
+    const said = (yield sendComment(ticketId, at, body, commit, me?.login ?? null)) as HostWrite;
     if ("ok" in said) {
       if (talk) refresh(talk);
       if (view) refresh(view);
@@ -312,8 +327,11 @@ function note(ids: ReadonlyArray<string>, failed: ReadonlyArray<{ readonly id: s
   setRefusals((previous) => ({ ...Object.fromEntries(Object.entries(previous).filter(([id]) => !ids.includes(id))), ...Object.fromEntries(failed.map((failure) => [failure.id, failure.error])) }));
 }
 
-/** Whether the diff shows a comment's line, where its thread sits: a removed
- *  line on the old side, any other on the new. */
+/** Whether the diff shows where a comment's thread sits: its file, for one
+ *  on the whole file; else its line — a removed line on the old side, any
+ *  other on the new. */
 function shown(draft: DraftView): boolean {
-  return diffNow.hunksOf(draft.file).some((hunk) => hunk.lines.some((line) => (draft.side === "LEFT" ? line.kind === "-" && line.old === draft.line : line.kind !== "-" && line.new === draft.line)));
+  const hunks = diffNow.hunksOf(draft.file);
+  if (draft.subject === "file") return hunks.length > 0;
+  return hunks.some((hunk) => hunk.lines.some((line) => (draft.side === "LEFT" ? line.kind === "-" && line.old === draft.line : line.kind !== "-" && line.new === draft.line)));
 }

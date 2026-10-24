@@ -1,4 +1,4 @@
-import type { HostNote, HostReview, HostUser, LineComment, PullRequest } from "@collagen/review-web/data";
+import type { CommentSpot, HostNote, HostReview, HostUser, LineComment, PullRequest } from "@collagen/review-web/data";
 import { Schema } from "effect";
 import type { HostMerge } from "../services/RepoHost";
 import type { HostReadiness } from "./merging";
@@ -189,8 +189,9 @@ export const latestMerges = (
 const pages = (value: unknown): ReadonlyArray<unknown> => (Array.isArray(value) ? value.flatMap((page) => (Array.isArray(page) ? page : [page])) : []);
 
 /** `gh api --paginate --slurp repos/…/pulls/N/comments`: pages of comments,
- *  flattened. Comments GitHub no longer places on a line (outdated, the
- *  code under them moved) have no line to sit under — readOutdated reads those. */
+ *  flattened: on lines, or on a whole file. Comments GitHub no longer places
+ *  on a line (outdated, the code under them moved) have no line to sit under
+ *  — readOutdated reads those. */
 export const readComments = (value: unknown): ReadonlyArray<LineComment> =>
   pages(value).flatMap((entry): ReadonlyArray<LineComment> => {
     const comment = readComment(entry);
@@ -217,7 +218,8 @@ export const readOutdated = (value: unknown): ReadonlyArray<HostNote> =>
     const record = asRecord(comment);
     const author = readUser(record?.user);
     const id = asInteger(record?.id);
-    if (!record || !author || id === undefined || record.line !== null) return [];
+    // a comment on a whole file has no line either: it is read with the rest
+    if (!record || !author || id === undefined || record.line !== null || record.subject_type === "file") return [];
     const was = asInteger(record.original_line);
     return [{ id: String(id), author, body: typeof record.body === "string" ? record.body : "", at: asText(record.created_at) ?? "", url: asText(record.html_url) ?? "", outdated: `${asText(record.path) ?? "a file"}${was !== undefined ? `, line ${was}` : ""}` }];
   });
@@ -250,24 +252,29 @@ export const readConversation = (value: unknown): ReadonlyArray<HostNote> =>
     return [{ id: String(id), author, body: typeof record.body === "string" ? record.body : "", at: asText(record.created_at) ?? "", url: asText(record.html_url) ?? "" }];
   });
 
-/** One line comment, as GitHub's REST API has it. */
+/** One review comment, as GitHub's REST API has it: on a line, a block of
+ *  lines, or a whole file (`subject_type: "file"`, no line). */
 export const readComment = (value: unknown): LineComment | null => {
   const record = asRecord(value);
   const id = asInteger(record?.id);
   const file = asText(record?.path);
   const line = asInteger(record?.line);
   const author = readUser(record?.user);
-  if (!record || id === undefined || !file || line === undefined || !author) return null;
+  if (!record || id === undefined || !file || !author) return null;
   // a block of lines names where it starts; one line names none (null)
   const startLine = asInteger(record.start_line);
+  const spot: CommentSpot | null =
+    record.subject_type === "file"
+      ? { subject: "file", file }
+      : line === undefined
+        ? null
+        : { file, line, side: record.side === "LEFT" ? "LEFT" : "RIGHT", ...(startLine !== undefined && startLine !== line ? { startLine, startSide: record.start_side === "LEFT" ? ("LEFT" as const) : ("RIGHT" as const) } : {}) };
+  if (!spot) return null;
   return {
     id: String(id),
     author,
     body: typeof record.body === "string" ? record.body : "",
-    file,
-    line,
-    side: record.side === "LEFT" ? "LEFT" : "RIGHT",
-    ...(startLine !== undefined && startLine !== line ? { startLine, startSide: record.start_side === "LEFT" ? ("LEFT" as const) : ("RIGHT" as const) } : {}),
+    ...spot,
     url: asText(record.html_url) ?? "",
     at: asText(record.created_at) ?? "",
     ...(asInteger(record.in_reply_to_id) !== undefined ? { replyTo: String(record.in_reply_to_id) } : {}),

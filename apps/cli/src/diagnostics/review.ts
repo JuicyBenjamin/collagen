@@ -2,6 +2,7 @@ import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { readStrength, withStrength } from "@collagen/review-web/strength";
 import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, finished, isClosed, isJudged, visibleTo } from "@collagen/p2p";
+import { whereOf } from "../lib/comments";
 import { whyOpen } from "../lib/mergeTickets";
 import { reviewRows } from "../lib/review";
 import { diagnostic } from "./registry";
@@ -90,7 +91,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
           ? {
               comments: said.map((comment) => ({
                 by: comment.authorName,
-                at: `${comment.file}:${comment.startLine !== undefined ? `${comment.startLine}-` : ""}${comment.line}${comment.side === "LEFT" ? " (old)" : ""}`,
+                at: whereOf(comment),
                 // an agent reads the AI's longer version, where there is one, as strongly as it asks
                 body: comment.detail !== undefined ? withStrength(readStrength(comment.body).strength, comment.detail) : comment.body,
                 ...(comment.host ? { onHost: comment.host.url } : {}),

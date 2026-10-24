@@ -11,6 +11,7 @@ import { ChangedLine, CodeLine } from "~/components/Code";
 import { rowsOf } from "~/inline";
 import { Peek } from "./components/Peek";
 import { LineComposer, LineThread } from "./components/LineThread";
+import { FileThread } from "./components/FileThread";
 import { Rendered } from "./components/Rendered";
 import { isMarkdown, mdView } from "~/mdView";
 import { hostNow } from "~/hostNow";
@@ -251,6 +252,8 @@ export function Hunk(props: {
     return result && result !== "loading" && "error" in result ? result.error : null;
   };
   const [full, setFull] = createSignal(false);
+  // a comment on the file itself being written, under its header
+  const [writing, setWriting] = createSignal(false);
   const sinceMode = () => props.whole.shown() === null && !full() && mine() !== null;
   const counts = () => moved(mine() ?? []);
 
@@ -286,6 +289,11 @@ export function Hunk(props: {
           </Show>
         </Show>
         <span class="file-side">
+          <Show when={!props.continued && !folded() && hostNow.canComment()}>
+            <button type="button" class="whole-toggle" onClick={() => setWriting(!writing())} aria-pressed={writing() ? "true" : "false"} title="Comment on the file itself, not a line of it">
+              Comment
+            </button>
+          </Show>
           <Show when={mine() !== null && props.whole.shown() === null}>
             <button type="button" class="whole-toggle" onClick={() => setFull(!full())} title="Switch between what changed since you viewed it and the whole change against the base">
               {full() ? "Since you viewed" : "Whole change"}
@@ -325,6 +333,12 @@ export function Hunk(props: {
           </Show>
         </span>
       </div>
+      {/* what is said about the file itself, at its top; it folds away with the file */}
+      <Show when={!props.continued && !folded()}>
+        <div class="hunk-body">
+          <FileThread file={props.hunk.file} writing={writing()} onClose={() => setWriting(false)} />
+        </div>
+      </Show>
       <Show when={!folded() && asDocument()}>
         <div class="hunk-body">
           <Rendered file={props.hunk.file} read={() => {

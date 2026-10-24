@@ -46,14 +46,14 @@ describe("what gh answers, read for the review page", () => {
   it("line comments across pages; an outdated one, on no line now, left out", () => {
     const makeComment = (id: number, line: number | null, side = "RIGHT") => ({ id, body: "why?", path: "src/a.ts", line, side, user: { login: "bob", avatar_url: "u" }, html_url: `h${id}`, created_at: "2026-10-03T10:00:00Z" });
     const read = readComments([[makeComment(1, 4), makeComment(2, null)], [makeComment(3, 9, "LEFT")]]);
-    expect(read.map((comment) => [comment.id, comment.line, comment.side])).toEqual([
+    expect(read.map((comment) => [comment.id, comment.subject === "file" ? null : comment.line, comment.subject === "file" ? null : comment.side])).toEqual([
       ["1", 4, "RIGHT"],
       ["3", 9, "LEFT"],
     ]);
     expect(readComments({ message: "Not Found" })).toEqual([]);
     // a block of lines says where it starts; one line does not
     const block = readComments([[{ ...makeComment(4, 7), start_line: 5, start_side: "RIGHT" }, { ...makeComment(5, 7), start_line: null, start_side: null }]]);
-    expect(block.map((comment) => [comment.startLine, comment.startSide, comment.line])).toEqual([
+    expect(block.map((comment) => (comment.subject === "file" ? [] : [comment.startLine, comment.startSide, comment.line]))).toEqual([
       [5, "RIGHT", 7],
       [undefined, undefined, 7],
     ]);

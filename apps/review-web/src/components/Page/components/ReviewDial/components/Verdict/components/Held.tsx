@@ -7,7 +7,7 @@ import { readStrength } from "~/strength";
 import { showTab, tab } from "~/testsNow";
 import { reading } from "~/viewedNow";
 
-const where = (comment: DraftView) => `${comment.file}:${comment.startLine !== undefined ? `${comment.startLine}–` : ""}${comment.line}${comment.side === "LEFT" ? " (old)" : ""}`;
+const where = (comment: DraftView) => (comment.subject === "file" ? comment.file : `${comment.file}:${comment.startLine !== undefined ? `${comment.startLine}–` : ""}${comment.line}${comment.side === "LEFT" ? " (old)" : ""}`);
 
 /** Comments pending in the review that were written at another commit than
  *  the one the page shows: the review is not submitted until each is kept
