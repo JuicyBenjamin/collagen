@@ -25,28 +25,32 @@ const TONE: Record<ReviewedAs, string> = {
 /** The reader's finished review, where they finished it: their verdict and
  *  when, and whether the change moved since. While it stands in for the
  *  buttons, pressing it brings them back for another review, and pressing
- *  it again puts them away; otherwise it only says. */
-export function Reviewed(props: { yours: YourReview; again: boolean; pressable: boolean; onAgain: () => void }) {
+ *  it again puts them away; otherwise it only says. Beside the buttons it is
+ *  `compact`: its mark alone, the words in its title, so the pill stays
+ *  narrow. */
+export function Reviewed(props: { yours: YourReview; again: boolean; pressable: boolean; compact: boolean; onAgain: () => void }) {
   const text = () => `${SAID[props.yours.as]} · ${ago(props.yours.at, hostNow.now())}${props.yours.since ? " · changed since" : ""}`;
+  const label = () => (props.pressable ? `${text()} — ${props.again ? "put the buttons away" : "review again"}` : text());
   return (
     <Show
       when={props.pressable}
       fallback={
-        <span class={["reviewed", TONE[props.yours.as]]}>
+        <span class={["reviewed", TONE[props.yours.as], { compact: props.compact }]} title={props.compact ? text() : undefined} aria-label={props.compact ? text() : undefined}>
           <Check />
-          {text()}
+          <Show when={!props.compact}>{text()}</Show>
         </span>
       }
     >
       <button
         type="button"
-        class={["reviewed", TONE[props.yours.as], { on: props.again }]}
+        class={["reviewed", TONE[props.yours.as], { on: props.again, compact: props.compact }]}
         onClick={() => props.onAgain()}
         aria-expanded={props.again ? "true" : "false"}
-        title={props.again ? "Put the buttons away" : "Review again"}
+        title={label()}
+        aria-label={props.compact ? label() : undefined}
       >
         <Check />
-        {text()}
+        <Show when={!props.compact}>{text()}</Show>
       </button>
     </Show>
   );
