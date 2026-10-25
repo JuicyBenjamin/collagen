@@ -2330,12 +2330,13 @@ const makeDiagnosticHandlers = Effect.gen(function* () {
   const transcripts = yield* Transcripts;
   const attachments = yield* Attachments;
   const harnesses = yield* Harnesses;
+  const store = yield* StateStore;
   const pages = yield* ReviewPages;
   const handlers: Record<string, (params: unknown) => Effect.Effect<string>> = {};
   for (const diagnostic of diagnostics) {
     handlers[diagnostic.id] = (params) =>
       rooms.current.pipe(
-        Effect.flatMap((handle) => diagnostic.run(params ?? {}, { roomId: handle.id }, { rooms, transcripts, attachments, harnesses, me: identity.pubkey, reviewStarted: pages.started, toolDefinitions })),
+        Effect.flatMap((handle) => diagnostic.run(params ?? {}, { roomId: handle.id }, { rooms, transcripts, attachments, harnesses, state: store.get, me: identity.pubkey, reviewStarted: pages.started, toolDefinitions })),
         Effect.withSpan(`Mcp.${diagnostic.id}`),
       );
   }

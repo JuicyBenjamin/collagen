@@ -34,10 +34,10 @@ export const codex: Harness = {
       const proc = yield* ChildProcess.make("codex", ["queue", "--thread", conversation, "--message", line], { stdin: "ignore" });
       const exit = yield* proc.exitCode;
       yield* Effect.log(`queued into codex thread ${conversation.slice(0, 8)}… (exit ${exit})`);
-      return "woken" as const;
+      return { reached: exit === 0 };
     }).pipe(
       Effect.scoped,
-      Effect.catch((error) => Effect.logWarning(`codex queue failed: ${String(error)}`).pipe(Effect.as("unreachable" as const))),
+      Effect.catch((error) => Effect.logWarning(`codex queue failed: ${String(error)}`).pipe(Effect.as({ reached: false }))),
     ),
   signIn: { cmd: "codex", args: ["login", "status"], loggedIn: (out, exitCode) => exitCode === 0 && !/not logged in/i.test(out) },
   watchRecipe: () =>

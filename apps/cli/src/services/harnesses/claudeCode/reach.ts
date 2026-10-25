@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { Effect, Option, Stream } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { DeliverAllowed } from "../../../lib/steering";
-import type { Woken } from "../../Harness";
+import type { Spent, Woken } from "../../Harness";
 
 // Reaching a session and waking it: each Claude Code session is a process
 // with a messaging socket of its own, through which local sessions message
@@ -53,22 +53,58 @@ export const courierPrompt = (socket: string, line: string): string =>
     line,
   ].join("\n");
 
+/** How the courier runs: a small model, with SendMessage as its one tool and
+ *  nothing else loaded — no MCP servers, no settings, no slash commands, no
+ *  project files (it runs in the temp dir) — so a wake reads ~13k tokens, not
+ *  the ~150k a run with everything of the person's loaded does. Its result
+ *  comes back as JSON, with what it spent. */
+const COURIER_FLAGS: ReadonlyArray<string> = [
+  "--model", "haiku",
+  "--tools", "SendMessage",
+  "--allowedTools", "SendMessage",
+  "--max-turns", "3",
+  "--strict-mcp-config", "--mcp-config", JSON.stringify({ mcpServers: {} }),
+  "--setting-sources", "",
+  "--disable-slash-commands",
+  "--output-format", "json",
+];
+
+/** What a courier run spent, from Claude Code's JSON result (`--output-format
+ *  json`): its tokens, read with the cache, its model and its cost estimate. */
+export const courierSpent = (out: string): Spent | undefined => {
+  let result: Record<string, unknown>;
+  try {
+    result = JSON.parse(out.trim().split("\n").at(-1) ?? "") as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  const usage = (result.usage ?? {}) as Record<string, unknown>;
+  const count = (key: string) => (typeof usage[key] === "number" ? (usage[key] as number) : 0);
+  const model = Object.keys((result.modelUsage ?? {}) as Record<string, unknown>)[0];
+  const cost = result.total_cost_usd;
+  return {
+    ...(model ? { model } : {}),
+    inputTokens: count("input_tokens") + count("cache_creation_input_tokens") + count("cache_read_input_tokens"),
+    outputTokens: count("output_tokens"),
+    ...(typeof cost === "number" ? { costUsd: cost } : {}),
+  };
+};
+
 /** Wake the session at socket `reach` with one line, through the courier —
- *  it wakes it, idle or busy, in the terminal or the desktop app. */
+ *  it wakes it, idle or busy, in the terminal or the desktop app — and say
+ *  what the courier spent. */
 export const courier = (conversation: string, reach: string | undefined, line: string): Effect.Effect<Woken, never, DeliverAllowed | ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
     yield* DeliverAllowed;
-    if (!reach) return "unreachable" as const;
-    const proc = yield* ChildProcess.make("claude", ["-p", courierPrompt(reach, line), "--model", "haiku", "--allowedTools", "SendMessage", "--max-turns", "3"], {
-      cwd: homedir(),
-      stdin: "ignore",
-    });
+    if (!reach) return { reached: false };
+    const proc = yield* ChildProcess.make("claude", ["-p", courierPrompt(reach, line), ...COURIER_FLAGS], { cwd: tmpdir(), stdin: "ignore" });
     const out = yield* proc.stdout.pipe(Stream.decodeText(), Stream.mkString);
     const exit = yield* proc.exitCode;
-    yield* Effect.log(`courier to ${conversation.slice(0, 8)}… (exit ${exit}): ${out.trim().slice(0, 160)}`);
-    return "woken" as const;
+    const spent = courierSpent(out);
+    yield* Effect.log(`courier to ${conversation.slice(0, 8)}… (exit ${exit})${spent?.costUsd !== undefined ? ` · $${spent.costUsd.toFixed(4)}` : ""}`);
+    return { reached: exit === 0, ...(spent ? { spent } : {}) };
   }).pipe(
     Effect.scoped,
     Effect.timeout("2 minutes"),
-    Effect.catch((error) => Effect.logWarning(`courier failed: ${String(error)}`).pipe(Effect.as("unreachable" as const))),
+    Effect.catch((error) => Effect.logWarning(`courier failed: ${String(error)}`).pipe(Effect.as({ reached: false }))),
   );

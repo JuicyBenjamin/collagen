@@ -4,6 +4,7 @@ import type { Attachments } from "../services/Attachments";
 import type { Rooms } from "../services/Rooms";
 import type { Transcripts } from "../services/Transcripts";
 import type { Harnesses } from "../services/Harness";
+import type { LocalState } from "@collagen/p2p";
 
 /** What a diagnostic may use. Passed in, not pulled from context, so a
  *  diagnostic is a plain object both surfaces (TUI, MCP) can run the same way. */
@@ -13,6 +14,8 @@ export interface DiagnosticDeps {
   readonly attachments: Attachments["Service"];
   /** The harnesses in use (services/Harness): whatever reads a harness's own files goes through them. */
   readonly harnesses: Harnesses["Service"];
+  /** The person's local state, as it is now. */
+  readonly state: Effect.Effect<LocalState>;
   /** Whose machine this runs on (pubkey) — a diagnostic that behaves
    *  differently for a ticket's author and for a reader needs to know. */
   readonly me: string;
