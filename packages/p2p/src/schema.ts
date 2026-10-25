@@ -500,6 +500,34 @@ export type Worked = typeof Worked.Type;
 export const Steering = Schema.Literals(["ask", "act", "auto"]);
 export type Steering = typeof Steering.Type;
 
+/** The kinds of thing steered, each with a level of its own under the
+ *  master: the work collagen hands the person's agent, acting on the repo
+ *  host in their name (reviews, comments, merges — one level for every
+ *  host), and delivering into their AI conversations. */
+export const SteeringKind = Schema.Literals(["work", "host", "deliver"]);
+export type SteeringKind = typeof SteeringKind.Type;
+
+/** A level for what the person or their own agents caused, and one for
+ *  what another person in the room caused; absent = not chosen. */
+export const SteeringPair = Schema.Struct({ mine: Schema.optional(Steering), others: Schema.optional(Steering) });
+export type SteeringPair = typeof SteeringPair.Type;
+
+/** Where a message for the person goes: nowhere (they ask for it), a
+ *  conversation already holding its thread, that or else a new one, or
+ *  always a new one. Whether it goes at all is the deliver level's. */
+export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
+export type TagRoute = typeof TagRoute.Type;
+
+/** The person's steering (cli lib/steering): a master level every kind
+ *  follows until set, a level per kind, and where a tag goes. Local — the
+ *  person's own choice, never broadcast. */
+export const SteeringLevels = Schema.Struct({
+  master: Schema.optional(SteeringPair),
+  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair) })),
+  tag: Schema.optional(TagRoute),
+});
+export type SteeringLevels = typeof SteeringLevels.Type;
+
 /** The person's switches (cli lib/settings): each one absent means its
  *  default, so a new one needs no migration. Local, never broadcast. */
 export const Settings = Schema.Struct({
@@ -539,8 +567,14 @@ export type PageThemes = typeof PageThemes.Type;
 
 export const LocalState = Schema.Struct({
   preferredAi: Schema.NullOr(Schema.String),
-  /** absent = "ask": autonomy is opted into */
-  steering: Schema.optional(Steering),
+  /** absent = nothing chosen: collagen does nothing outside itself in the
+   *  person's name (an older build's bare level is read as the work level) */
+  steering: Schema.optional(SteeringLevels),
+  /** the conversations already told steering is not chosen (conversation keys, latest last) */
+  steeringAsked: Schema.optional(Schema.Array(Schema.String)),
+  /** reviews whose pull request the person said yes to merging, asked at
+   *  "ask first" — merged once ready, then let go (cli Merger) */
+  mergeYes: Schema.optional(Schema.Array(Schema.String)),
   settings: Schema.optional(Settings),
   /** absent = never merged for them */
   merging: Schema.optional(Merging),

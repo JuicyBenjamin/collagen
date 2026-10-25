@@ -10,7 +10,7 @@ import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
-import { steeringLine, steeringOf } from "../lib/steering";
+import { workLine } from "../lib/steering";
 import { describeIdentity, ownIdentities } from "./Authorship";
 import { hostOf } from "./RepoHost";
 import { actedBy } from "../lib/agents";
@@ -130,7 +130,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                       ticket.createdBy.slice(0, 8));
                 // the person's steering, said on the step itself: the turn
                 // the agent reads it is the turn it is about to act
-                const steer = steeringLine(steeringOf(yield* store.get));
+                const steer = workLine(yield* store.get, ticket.createdBy === identity.pubkey ? "mine" : "others");
                 for (const step of mine) {
                   const settled = ticket.steps
                     .filter((other) => other.status === "settled" && step.needs.includes(other.id))
@@ -265,7 +265,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   continue;
                 }
                 yield* store.update((state) => ({ ...state, toldGuessed: [...(state.toldGuessed ?? []), review.ticketId] }));
-                const steer = steeringLine(steeringOf(yield* store.get));
+                const steer = workLine(yield* store.get, "others");
                 const trace = yield* SubscriptionRef.get(room.trace);
                 yield* notify(
                   myThreadFor(ticket, trace, identity.pubkey, review.author),

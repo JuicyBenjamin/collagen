@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, afterProblem, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { type MergeFor, afterProblem, closedAs, conversationKey, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -44,7 +44,7 @@ import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
-import { STEERING_LABEL, steeringLine, steeringOf } from "../lib/steering";
+import { KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
 import { acting as actingNow } from "../lib/agents";
 
@@ -592,8 +592,20 @@ export const SetAi = Tool.make("set-ai", {
 
 export const SetSteering = Tool.make("set-steering", {
   description:
-    "Set your user's STEERING — how much you may do on your own with what collagen hands you (a step, a take, a peer's message): 'ask' (tell them what it asks and what you would do, and wait — the default), 'act' (start the work in their repo and tell them as you go), 'auto' (do the work and say when it is done). Only when your user says so — it is their setting, never yours to raise. Whatever the level, anything said in the room for them (a message, a take, a settle, a close) stays their word, and it gates nothing: their harness's own permission mode does that. The level is restated on every delivery you read. Applies live.",
-  parameters: Schema.Struct({ steering: Schema.Literals(["ask", "act", "auto"]) }),
+    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. Called with nothing, it says how things stand. Kept on their machine; applies live.",
+  parameters: Schema.Struct({
+    level: Schema.optional(Schema.NullOr(Schema.Literals(["ask", "act", "auto"]))),
+    kind: Schema.optional(Schema.Literals(["master", "work", "host", "deliver"])),
+    whose: Schema.optional(Schema.Literals(["mine", "others", "both"])),
+    tag: Schema.optional(Schema.NullOr(Schema.Literals(["none", "existing", "existing-or-new", "new"]))),
+  }),
+  success: Schema.String,
+});
+
+export const MergeReview = Tool.make("merge-review", {
+  description:
+    "Your user's YES to merging a review's pull request, when their repo-host steering is ask first and collagen told you one is ready: collagen merges it as them, through their own gh, as soon as its host lets it (checks green, its own rules met), closes the review as done, and tells you. Only after you asked them and they said yes — never on your own. Not for a review whose merging is off (set-merging).",
+  parameters: Schema.Struct({ ticketId: Schema.String }),
   success: Schema.String,
 });
 
@@ -670,7 +682,7 @@ export const ReviewComments = Tool.make("review-comments", {
   description: [
     "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line?, startLine?, side?, strength?, body, detail?}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. A remark about a file itself — its place, its name, that it should not exist, that it lacks a test — leaves out line (and startLine, side): it sits at the top of the file. 'body' is what a person reads, beside the code and on the host: plain words, a sentence or two, as a colleague would say it — no priority codes ([P2]), no rule or skill names, no run of identifiers. 'detail' is your longer reasoning, for the author's agent (it reads it in review-context); a person sees it only when they open it. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
     "Drafts stay on this machine. Your user reads them beside the code and accepts (into their review, as on GitHub), edits or declines each; their review is said when they finish it — in the room as theirs and, when the review is an open pull request someone else opened, on it as one review with their verdict (through their own gh; on their own pull request it stays in collagen, where it has readers); you call nothing else for that. Say in the chat what you found in a line or two and that the comments are drafts on the review page; do not repeat them there.",
-    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. 'keep' (ids): a pending comment written on another commit is about the same lines at the review's commit now — read the diff first. A finish waits, nothing submitted, while comments in it were written on different commits: each kept or declined first. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
+    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). Whether it also goes on the pull request is their repo-host steering's: at ask first the submit comes back unsent with the question for them — ask, then submit again with 'onHost' true (yes) or false (the room only); never set onHost without asking. 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. 'keep' (ids): a pending comment written on another commit is about the same lines at the review's commit now — read the diff first. A finish waits, nothing submitted, while comments in it were written on different commits: each kept or declined first. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
   ].join("\n"),
   parameters: Schema.Struct({
     action: Schema.Literals(["draft", "accept", "decline", "keep", "submit", "list"]),
@@ -691,6 +703,8 @@ export const ReviewComments = Tool.make("review-comments", {
     ids: Schema.optional(Schema.Array(Schema.String)),
     verdict: Schema.optional(Schema.Literals(["comment", "approve", "request-changes"])),
     body: Schema.optional(Schema.String),
+    /** your user's answer, once asked, to "also on the pull request?" */
+    onHost: Schema.optional(Schema.Boolean),
   }),
   success: Schema.String,
 });
@@ -798,6 +812,7 @@ export const CollagenToolkit = Toolkit.make(
   OrderProjects,
   SetAi,
   SetSteering,
+  MergeReview,
   SetMerging,
   Themes,
   SetTheme,
@@ -850,6 +865,7 @@ export const DevCollagenToolkit = Toolkit.make(
   OrderProjects,
   SetAi,
   SetSteering,
+  MergeReview,
   SetMerging,
   Themes,
   SetTheme,
@@ -870,6 +886,9 @@ export const DevCollagenToolkit = Toolkit.make(
   LeaveRoom,
   DrivePeer,
 );
+
+/** How many conversations are remembered as told steering is not chosen. */
+const ASKED = 200;
 
 const makeHandlers = Effect.gen(function* () {
     const rooms = yield* Rooms;
@@ -1348,7 +1367,54 @@ const makeHandlers = Effect.gen(function* () {
           : filed + coverage;
     });
 
-    return {
+    // While nothing is chosen, each conversation is told once, on its first
+    // call, to have its person choose: collagen knows which one is calling.
+    // And a message held back from a conversation that adopted its thread
+    // (delivery: ask first) is told to that conversation once, on its next
+    // call, for it to ask its person — questions only ever go through the agent.
+    const heldTold = new Set<string>();
+    const notice = (tool: string) =>
+      Effect.gen(function* () {
+        if (tool === "set-steering") return null;
+        const state = yield* store.get;
+        const held = (yield* SubscriptionRef.get(inbox.buffer)).filter(
+          ({ message }) => !heldTold.has(message.id) && state.threads?.[message.threadId] !== undefined && levelOf(state, "deliver", message.from === message.to ? "mine" : "others") === "ask",
+        );
+        const asking = unchosen(state);
+        if (!asking && held.length === 0) return null;
+        const conversation = (yield* actingNow)?.conversation;
+        if (!conversation) return null;
+        const key = conversationKey(conversation);
+        const lines: Array<string> = [];
+        if (asking && !state.steeringAsked?.includes(key)) {
+          yield* store.update((now) => ({ ...now, steeringAsked: [...(now.steeringAsked ?? []).filter((told) => told !== key), key].slice(-ASKED) }));
+          lines.push(UNCHOSEN_LINE);
+        }
+        const mine = held.filter(({ message }) => {
+          const adopted = state.threads?.[message.threadId];
+          return adopted?.ai === conversation.ai && adopted.sessionId === conversation.id;
+        });
+        for (const { message } of mine) heldTold.add(message.id);
+        const threads = [...new Set(mine.map(({ message }) => message.threadId))];
+        if (threads.length > 0)
+          lines.push(
+            `HELD FOR YOUR USER'S WORD — new messages wait on ${threads.map((threadId) => {
+              const last = mine.filter(({ message }) => message.threadId === threadId).at(-1)!.message;
+              return `thread ${threadId} (${last.fromName}: "${last.intent}")`;
+            }).join(", ")}, which this conversation adopted: their delivery steering is ask first. Tell them in one line; read with get-messages only when they say.`,
+          );
+        return lines.length > 0 ? lines.join("\n\n") : null;
+      });
+    const toldOnce = <H extends Record<string, (...args: ReadonlyArray<never>) => Effect.Effect<unknown, unknown, unknown>>>(handlers: H): H =>
+      Object.fromEntries(
+        Object.entries(handlers).map(([tool, handler]) => [
+          tool,
+          (...args: ReadonlyArray<never>) =>
+            handler(...args).pipe(Effect.flatMap((answer) => (typeof answer === "string" ? notice(tool).pipe(Effect.map((line) => (line ? `${answer}\n\n${line}` : answer))) : Effect.succeed(answer)))),
+        ]),
+      ) as H;
+
+    return toldOnce({
       "list-room": () =>
         Effect.gen(function* () {
           const { id, name, room } = yield* focusedRoom;
@@ -1445,14 +1511,15 @@ const makeHandlers = Effect.gen(function* () {
           const since = yield* Clock.currentTimeMillis;
           yield* store.update((state) => ({ ...state, threads: { ...(state.threads ?? {}), [threadId]: { ai: conversation.ai, sessionId: conversation.id, since } } }));
           yield* Effect.log(`thread ${threadId} adopted → ${conversation.ai} ${conversation.id.slice(0, 8)}…`);
-          return `adopted: new messages on thread ${threadId} will resume your ${conversation.ai} conversation (${conversation.id})`;
+          const delivery = levelOf(yield* store.get, "deliver", "others");
+          return `adopted: new messages on thread ${threadId} go to your ${conversation.ai} conversation (${conversation.id}) as your user's delivery steering allows — for other people's messages it is ${STEERING_LABEL[delivery]}${delivery === "unset" || delivery === "ask" ? ", so they wait in the inbox for now" : ""}`;
         }).pipe(Effect.withSpan("Mcp.adoptThread")),
       "get-messages": ({ threadId }: { threadId: string }) =>
         Effect.gen(function* () {
           const handle = yield* rooms.current;
           const messages = yield* inbox.take(handle.id, threadId);
           // the person's steering rides what the agent is about to act on
-          const steering = steeringLine(steeringOf(yield* store.get));
+          const steering = workLine(yield* store.get, messages.some((received) => received.from !== received.to) ? "others" : "mine");
           return toToon(messages.length > 0 ? { steering, messages } : { messages });
         }).pipe(Effect.withSpan("Mcp.getMessages")),
       execute: ({ script, input }: { script: string; input?: unknown }) =>
@@ -1944,11 +2011,35 @@ const makeHandlers = Effect.gen(function* () {
             ),
             Effect.withSpan("Mcp.setAi"),
           ),
-      "set-steering": ({ steering }: { steering: "ask" | "act" | "auto" }) =>
-        store.update((state) => ({ ...state, steering })).pipe(
-          Effect.map(() => `steering set to ${steering} — ${STEERING_LABEL[steering]}; every delivery now says so. Room-facing actions (messages, takes, settles, closes) remain your user's word.`),
-          Effect.withSpan("Mcp.setSteering"),
-        ),
+      "set-steering": (input: { level?: "ask" | "act" | "auto" | null; kind?: SteeringAt; whose?: "mine" | "others" | "both"; tag?: "none" | "existing" | "existing-or-new" | "new" | null }) =>
+        Effect.gen(function* () {
+          if (input.level !== undefined) yield* store.update((state) => withLevel(state, input.kind ?? "master", input.whose ?? "mine", input.level ?? null));
+          if (input.tag !== undefined) yield* store.update((state) => withTagRoute(state, input.tag ?? null));
+          const state = yield* store.get;
+          const row = (at: SteeringAt) => {
+            const set = at === "master" ? state.steering?.master : state.steering?.kinds?.[at];
+            const shown = (cause: "mine" | "others") =>
+              at === "master" ? STEERING_LABEL[set?.[cause] ?? "unset"] : `${STEERING_LABEL[levelOf(state, at, cause)]}${set?.[cause] === undefined ? " (follows the master)" : ""}`;
+            return `- ${at === "master" ? "master" : `${at}: ${KIND_LABEL[at]}`} — theirs: ${shown("mine")}; other people's: ${shown("others")}`;
+          };
+          const changed = input.level !== undefined || input.tag !== undefined;
+          return [
+            `${changed ? "Steering set" : "Steering"} — your user's own, on this machine:`,
+            ...(["master", ...STEERING_KINDS] as const).map(row),
+            `- a message for them goes to ${TAG_LABEL[tagRouteOf(state)]}${state.steering?.tag === undefined ? " (not chosen: the default)" : ""}`,
+            "Not chosen: collagen does none of it outside itself in their name. Room-facing actions (messages, takes, settles, closes) remain your user's word.",
+          ].join("\n");
+        }).pipe(Effect.withSpan("Mcp.setSteering")),
+      "merge-review": Effect.fn("Mcp.mergeReview")(function* (input: { ticketId: string }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
+        if (!ticket || ticket.kind !== "review") return `failed: no review ticket ${input.ticketId} in this room — check get-tickets`;
+        if (ticket.createdBy !== identity.pubkey) return "failed: only its author's collagen merges a review — this one is someone else's";
+        if (closedAs(ticket) !== null) return "failed: the review is closed";
+        if (mergeForOf(yield* store.get, roomId, ticket.id) === "off") return "failed: merging for your user is off for this review — they turn it on with set-merging first";
+        yield* store.update((state) => ({ ...state, mergeYes: [...(state.mergeYes ?? []).filter((id) => id !== ticket.id), ticket.id] }));
+        return `noted: your user said yes — collagen merges "${ticket.title ?? ticket.goal}" as them, through their own gh, as soon as its host lets it, closes it as done and tells you.`;
+      }),
       "set-merging": Effect.fn("Mcp.setMerging")(function* (input: { scope?: "default" | "room" | "review"; level?: MergeFor | null; ticketId?: string }) {
         const { id: roomId } = yield* focusedRoom;
         if (input.scope === "review" && !input.ticketId) return "failed: pass the review's ticketId";
@@ -2039,6 +2130,7 @@ const makeHandlers = Effect.gen(function* () {
         ids?: ReadonlyArray<string>;
         verdict?: "comment" | "approve" | "request-changes";
         body?: string;
+        onHost?: boolean;
       }) {
         const { room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
@@ -2071,14 +2163,14 @@ const makeHandlers = Effect.gen(function* () {
           return `${result.done} draft(s) put into your user's review — ${pending} comment(s) pending in it, said when the review is finished (submit).${failures(result.failed)}`;
         }
         if (input.action === "submit") {
-          const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null);
+          const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null, null, { agent: true, ...(input.onHost !== undefined ? { onHost: input.onHost } : {}) });
           if ("held" in result && result.held) {
             const waiting = yield* draftsOf(input.ticketId);
             const held = result.held.flatMap((id) => waiting.filter((draft) => draft.id === id)).map((draft) => `- ${draft.id} ${whereOf(draft)}, written at ${draft.commit.slice(0, 7)}`);
             return `failed: NOT SUBMITTED — ${result.error} 'keep' (ids) confirms one where it sits at the review's commit now; 'decline' (ids) deletes it.\n${held.join("\n")}`;
           }
-          if ("error" in result) return `failed: ${result.error} — the review stays pending`;
-          return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request${"changesRequested" in result && result.changesRequested ? ", requesting changes (a must comment in it)" : ""}${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
+          if ("error" in result) return result.error?.startsWith("NOT FINISHED") ? result.error : `failed: ${result.error} — the review stays pending`;
+          return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request as your user, through their own gh${"changesRequested" in result && result.changesRequested ? ", requesting changes (a must comment in it)" : ""}${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
         }
         if (input.action === "keep") {
           if (!ids) return "failed: pass 'ids' — the pending comments to keep where they sit at the review's commit now";
@@ -2185,7 +2277,7 @@ const makeHandlers = Effect.gen(function* () {
           if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
           return toToon(yield* renderTicket(ticket));
         }).pipe(Effect.withSpan("Mcp.getTicket")),
-    };
+    });
   });
 
 export const ToolHandlers = CollagenToolkit.toLayer(

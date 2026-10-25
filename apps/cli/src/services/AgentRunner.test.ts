@@ -220,6 +220,8 @@ describe("AgentRunner", () => {
         ...baseState,
         preferredAi: null,
         threads: { "thread-1": { ai: "fake-ai", sessionId: "my-app-session" } },
+        // the person let messages into their conversations
+        steering: { kinds: { deliver: { mine: "act", others: "act" } } },
       },
     });
     await run(
@@ -240,6 +242,8 @@ describe("AgentRunner", () => {
         ...baseState,
         preferredAi: null,
         threads: { "thread-1": { ai: "codex", sessionId: "codex-thread-9" } },
+        // the person let messages into their conversations
+        steering: { kinds: { deliver: { mine: "act", others: "act" } } },
       },
     });
     await run(
@@ -266,6 +270,8 @@ describe("AgentRunner", () => {
         ...baseState,
         preferredAi: "mock:fake-ai",
         threads: { "thread-1": { ai: "codex", sessionId: "codex-thread-9" } },
+        // the person let messages into their conversations
+        steering: { kinds: { deliver: { mine: "act", others: "act" } } },
       },
     });
     await run(

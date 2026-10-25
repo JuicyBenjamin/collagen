@@ -6,6 +6,7 @@ import { forPeople } from "@collagen/review-web/forPeople";
 import { sameComment } from "@collagen/review-web/sameComment";
 import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
 import { acting as actingNow } from "../lib/agents";
+import { allow, withHost, type Permit } from "../lib/steering";
 import { placeComment, whereOf, type Spot } from "../lib/comments";
 import { IdentityService } from "./Identity";
 import { hostOf, type RepoHost } from "./RepoHost";
@@ -172,14 +173,21 @@ const dropOnce = Effect.fn("ReviewTalk.drop")(function* (ticketId: string, ids: 
 
 /** Where a comment goes besides the room: an open pull request on its host,
  *  or nowhere — and why. */
-type Target = { readonly roomOnly: string } | { readonly refused: string } | { readonly host: RepoHost; readonly link: string; readonly number: number; readonly author: string };
+type Target =
+  | { readonly roomOnly: string }
+  | { readonly refused: string }
+  | { readonly host: RepoHost; readonly link: string; readonly number: number; readonly author: string; readonly permit: Permit<"host"> };
+
+/** Who is finishing or saying it: the reader on the page, or their agent —
+ *  with their answer to "also on the pull request?" once it has asked them. */
+export type SaidFrom = { readonly page: true } | { readonly agent: true; readonly onHost?: boolean };
 
 /** The open pull request comments also go to, if the review has one, its
  *  host takes comments, and it is someone else's — or why they are said in
  *  the room only. On the reader's own pull request (the one signed in to
  *  the host opened it) nothing goes to the host: there they would be the
  *  only one to read it, and collagen holds it already. */
-const hostFor = (found: Found, shownAs: string | null): Effect.Effect<Target> =>
+const hostFor = (found: Found, shownAs: string | null, from: SaidFrom): Effect.Effect<Target, never, StateStore> =>
   Effect.gen(function* () {
     const link = hostLink(found.review, found.project);
     const host = link ? hostOf(link) : undefined;
@@ -193,7 +201,18 @@ const hostFor = (found: Found, shownAs: string | null): Effect.Effect<Target> =>
     if (!("user" in viewer)) return { refused: viewer.signIn };
     if (shownAs !== null && viewer.user.login !== shownAs) return { refused: `${host.name} has ${viewer.user.login} signed in now, not ${shownAs} as the page showed — reload the page to see whose name this goes out under.` };
     if (viewer.user.login === named.pull.author) return { roomOnly: "it is your own pull request, where you would be its only reader" };
-    return { host, link, number: named.pull.number, author: named.pull.author };
+    // the reader's own act on the host, in their name: as their steering says
+    if ("agent" in from && from.onHost === false) return { roomOnly: "your user chose the room only" };
+    const gate = allow(yield* (yield* StateStore).get, "host", "mine", "agent" in from && from.onHost === true);
+    if ("held" in gate && gate.held === "unset") return { roomOnly: `collagen posts nothing on ${host.name} in your name until you choose a repo-host steering level` };
+    if ("held" in gate)
+      return {
+        refused:
+          "page" in from
+            ? `Not sent: your repo-host steering is ask first, so your agent asks you whether this also goes on ${host.name} — ask your agent to do it.`
+            : `NOT FINISHED — ${gate.why}: ask your user whether this should also go on the pull request on ${host.name}, as them through their own gh. Then do it again with onHost: true, or onHost: false for the room only.`,
+      };
+    return { host, link, number: named.pull.number, author: named.pull.author, permit: gate.go };
   });
 
 /** The room takes nothing from a member not admitted to its log yet — asked
@@ -242,20 +261,20 @@ const logComments = (
 /** A comment said at once, apart from any review — GitHub's "Add single
  *  comment": onto the open pull request first, when there is one (a refusal
  *  there leaves nothing half-said), then on the room's log. */
-export const sayComment = (ticketId: string, spot: Spot, commit: string, body: string, shownAs: string | null) => one(ticketId, sayOnce(ticketId, spot, commit, body, shownAs));
-const sayOnce = Effect.fn("ReviewTalk.say")(function* (ticketId: string, spot: Spot, commit: string, body: string, shownAs: string | null) {
+export const sayComment = (ticketId: string, spot: Spot, commit: string, body: string, shownAs: string | null, from: SaidFrom = { page: true }) => one(ticketId, sayOnce(ticketId, spot, commit, body, shownAs, from));
+const sayOnce = Effect.fn("ReviewTalk.say")(function* (ticketId: string, spot: Spot, commit: string, body: string, shownAs: string | null, from: SaidFrom) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies HostWrite;
   const text = body.trim();
   if (saysNothing(text)) return { error: "Write the comment first." } satisfies HostWrite;
   const refuses = yield* roomRefuses(found);
   if (refuses) return { error: refuses } satisfies HostWrite;
-  const to = yield* hostFor(found, shownAs);
+  const to = yield* hostFor(found, shownAs, from);
   if ("refused" in to) return { error: to.refused } satisfies HostWrite;
   let host: { readonly id: number; readonly url: string } | undefined;
   let shown: LineComment | undefined;
   if ("host" in to) {
-    const posted = yield* to.host.comment(to.link, to.number, spot, commit, text);
+    const posted = yield* withHost(to.permit, to.host.comment(to.link, to.number, spot, commit, text));
     if ("error" in posted) return posted satisfies HostWrite;
     if (posted.comment) {
       shown = posted.comment;
@@ -289,9 +308,9 @@ const short = (commit: string) => commit.slice(0, 7);
  *  (`seen`): sent again once done, it is not said again; finding the review
  *  changed under it (finished elsewhere, comments come or gone), it is
  *  refused for the reader to look again. */
-export const submitReview = (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish | null = null) =>
-  one(ticketId, submitOnce(ticketId, verdict, body, commit, shownAs, seen));
-const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish | null) {
+export const submitReview = (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish | null = null, from: SaidFrom = { page: true }) =>
+  one(ticketId, submitOnce(ticketId, verdict, body, commit, shownAs, seen, from));
+const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, verdict: Verdict, body: string, commit: string | null, shownAs: string | null, seen: Finish | null, from: SaidFrom) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies SubmitResult;
   const mine = yield* draftsOf(ticketId);
@@ -337,7 +356,7 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   }
   // only the room was left to tell
   if (recovered > 0 && pending.length === 0 && text.length === 0 && verdict === "comment") return { ok: true as const, said: recovered } satisfies SubmitResult;
-  const to = yield* hostFor(found, shownAs);
+  const to = yield* hostFor(found, shownAs, from);
   if ("refused" in to) return { error: to.refused } satisfies SubmitResult;
   if ("roomOnly" in to) {
     if (verdict !== "comment") return { error: `Cannot ${verdict === "approve" ? "approve" : "request changes"} here — ${to.roomOnly.replace(/\.$/, "")}. Your take on the ticket itself goes through your agent.` } satisfies SubmitResult;
@@ -373,12 +392,15 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
       error: `${elsewhere.length} comment(s) in your review were written on ${at === null ? "different commits" : `another commit than ${commit ? "the one the page shows" : "the others"} (${short(at)})`}: keep or delete each, then finish the review.`,
       held: elsewhere.map((draft) => draft.id),
     } satisfies SubmitResult;
-  const sent = yield* to.host.submit(to.link, to.number, {
-    verdict: asked,
-    body: text,
-    commit: at,
-    comments: pending.map((draft) => ({ ...spotOf(draft), body: draft.body })),
-  });
+  const sent = yield* withHost(
+    to.permit,
+    to.host.submit(to.link, to.number, {
+      verdict: asked,
+      body: text,
+      commit: at,
+      comments: pending.map((draft) => ({ ...spotOf(draft), body: draft.body })),
+    }),
+  );
   if ("error" in sent) return sent satisfies SubmitResult;
   // each pending comment with its copy on the host, matched by where it sits and what it says
   const unclaimed = [...sent.comments];

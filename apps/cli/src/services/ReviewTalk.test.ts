@@ -62,6 +62,8 @@ const make = (open: { taking: boolean }, held: ReadonlyArray<DraftComment> = [ea
         rooms: { testroom: [{ id: "p1", name: "sandbox", path: dir }] },
         drafts: { [TICKET]: [...held] },
         finished: { [TICKET]: ["finish-a"] },
+        // the reader let collagen post their reviews on the host
+        steering: { kinds: { host: { mine: "act" } } },
       });
       return { state, update: (change: (current: LocalState) => LocalState) => SubscriptionRef.update(state, change).pipe(Effect.asVoid), get: SubscriptionRef.get(state) } as unknown as StateStore["Service"];
     }),

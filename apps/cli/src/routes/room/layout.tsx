@@ -19,7 +19,7 @@ import { Sidebar } from "./components/Sidebar/Sidebar";
 import { StatusLine } from "./components/StatusLine/StatusLine";
 import { TabBar } from "./components/TabBar/TabBar";
 import { useTabs } from "./tabs";
-import { nextSteering, steeringOf } from "../../lib/steering";
+import { masterOf, nextSteering, withLevel } from "../../lib/steering";
 
 function nextAi(current: string | null): string | null {
   // null -> claude-code -> codex -> mock:claude-code -> mock:codex -> null …
@@ -113,8 +113,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (captured) return;
     if (key.name === "q") return onExit();
     if (key.name === "a") return updateState({ update: (state) => ({ ...state, preferredAi: nextAi(state.preferredAi) }) });
-    // steering: ask first → act, then tell → just do it — the person's own dial
-    if (key.name === "g") return updateState({ update: (state) => ({ ...state, steering: nextSteering(steeringOf(state)) }) });
+    // the master steering level: ask first → act, then tell → just do it — the person's own dial
+    if (key.name === "g") return updateState({ update: (state) => withLevel(state, "master", "mine", nextSteering(masterOf(state))) });
     if (key.name === "s") return navigate("settings");
     if (key.name === "u") return installUpdate({});
     if (key.name === "1") return jump("room/overview");
