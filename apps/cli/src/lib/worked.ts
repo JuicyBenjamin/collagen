@@ -39,12 +39,36 @@ export const ticketsOf = (out: Outgoing): ReadonlyArray<string> => {
 const added = (known: ReadonlyArray<string>, fresh: ReadonlyArray<string>): ReadonlyArray<string> =>
   [...known.filter((id) => !fresh.includes(id)), ...fresh].slice(-EACH);
 
-/** State with `conversation` remembered to have worked on `on` at `now`. */
-export const withWorked = (state: LocalState, conversation: Conversation, on: { readonly threads: ReadonlyArray<string>; readonly tickets: ReadonlyArray<string> }, now: number): LocalState => {
-  if (on.threads.length === 0 && on.tickets.length === 0) return state;
+/** What a conversation did or said that is remembered: what it worked on,
+ *  where it can be reached, a ticket it wants to hear about or no longer. */
+export interface Noted {
+  readonly threads?: ReadonlyArray<string>;
+  readonly tickets?: ReadonlyArray<string>;
+  readonly socket?: string;
+  readonly watch?: { readonly ticket: string; readonly on: boolean };
+}
+
+/** State with `conversation` remembered as `noted` at `now`. */
+export const withWorked = (state: LocalState, conversation: Conversation, noted: Noted, now: number): LocalState => {
+  const threads = noted.threads ?? [];
+  const tickets = noted.tickets ?? [];
+  if (threads.length === 0 && tickets.length === 0 && noted.socket === undefined && noted.watch === undefined) return state;
   const key = conversationKey(conversation);
   const had = state.worked?.[key];
-  const worked: Worked = { conversation, threads: added(had?.threads ?? [], on.threads), tickets: added(had?.tickets ?? [], on.tickets), last: now };
+  const socket = noted.socket ?? had?.socket;
+  const watching = noted.watch
+    ? noted.watch.on
+      ? added(had?.watching ?? [], [noted.watch.ticket])
+      : (had?.watching ?? []).filter((ticket) => ticket !== noted.watch!.ticket)
+    : had?.watching;
+  const worked: Worked = {
+    conversation,
+    threads: added(had?.threads ?? [], threads),
+    tickets: added(had?.tickets ?? [], tickets),
+    last: now,
+    ...(socket ? { socket } : {}),
+    ...(watching && watching.length > 0 ? { watching } : {}),
+  };
   // the most recent conversations, the oldest let go
   const kept = Object.entries({ ...state.worked, [key]: worked })
     .sort(([, first], [, second]) => second.last - first.last)
@@ -58,3 +82,29 @@ export const conversationsOn = (state: Pick<LocalState, "worked">, on: { readonl
     .filter((worked) => ("thread" in on ? worked.threads.includes(on.thread) : worked.tickets.includes(on.ticket)))
     .sort((first, second) => second.last - first.last)
     .map((worked) => worked.conversation);
+
+/** Why a conversation hears a message: its person adopted the thread or
+ *  said yes to watching the ticket (their yes to this one), or it worked on
+ *  it (heard only where their delivery steering does not ask first). */
+export type Heard = "adopted" | "watching" | "worked";
+
+/** The one conversation a message goes to, if any — never two, so nothing is
+ *  woken twice: the thread's adopter, else the latest watching its ticket,
+ *  else the latest that worked on its ticket or thread. */
+export const listenerFor = (
+  state: Pick<LocalState, "threads" | "worked">,
+  message: { readonly threadId: string; readonly ticketId?: string | undefined },
+): { readonly conversation: Conversation; readonly heard: Heard; readonly socket?: string } | undefined => {
+  const all = Object.values(state.worked ?? {}).sort((first, second) => second.last - first.last);
+  const reach = (conversation: Conversation, heard: Heard) => {
+    const socket = state.worked?.[conversationKey(conversation)]?.socket;
+    return { conversation, heard, ...(socket ? { socket } : {}) };
+  };
+  const adopted = state.threads?.[message.threadId];
+  if (adopted && (adopted.ai === "claude-code" || adopted.ai === "codex")) return reach({ ai: adopted.ai, id: adopted.sessionId }, "adopted");
+  const ticketId = message.ticketId;
+  const watching = ticketId ? all.find((worked) => worked.watching?.includes(ticketId)) : undefined;
+  if (watching) return reach(watching.conversation, "watching");
+  const worked = all.find((one) => (ticketId !== undefined && one.tickets.includes(ticketId)) || one.threads.includes(message.threadId));
+  return worked ? reach(worked.conversation, "worked") : undefined;
+};
