@@ -4,7 +4,7 @@ import { diffNow } from "~/diffNow";
 import { ticketId } from "~/ticket";
 import { wholeFile } from "~/api";
 import { hasNewSide, wholeHunk } from "~/whole";
-import { foldAway, holdInPlace, snapToTop } from "~/fold";
+import { foldAway, glideToTop, holdInPlace } from "~/fold";
 import { highlightHunk } from "~/highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "~/intel";
 import { ChangedLine, CodeLine } from "~/components/Code";
@@ -323,20 +323,17 @@ export function Hunk(props: {
               class="checkbox checkbox-primary checkbox-xs"
               checked={state() === "viewed"}
               onChange={async () => {
-                // marking it folds it: closed smoothly first, then marked —
-                // its header held where the reader clicked it while it folds,
-                // then the next file snapped to the window's top to read on
+                // marking it folds it, the next file gliding up to the
+                // window's top as it closes — one motion; unmarking, or the
+                // last file, holds its header where the reader clicked it
                 const marking = state() !== "viewed";
                 const group = card();
-                const settled = holdInPlace(head);
+                const cards = [...document.querySelectorAll(".hunk-group")];
+                const next = marking && group ? cards[cards.indexOf(group) + 1] : undefined;
+                void (next ? glideToTop(next) : holdInPlace(head));
                 if (marking && !reading.folded(props.hunk.file)) await foldAway(group);
                 viewed.toggle(props.hunk.file, diffNow.commit());
                 reading.marked(props.hunk.file);
-                if (!marking || !group) return;
-                await settled;
-                // the next file at the top, where its header rests; after the last, the folded one itself
-                const cards = [...document.querySelectorAll(".hunk-group")];
-                snapToTop(cards[cards.indexOf(group) + 1] ?? group);
               }}
             />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}

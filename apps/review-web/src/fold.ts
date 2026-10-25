@@ -1,4 +1,4 @@
-import { animate } from "motion";
+import { animate, cubicBezier } from "motion";
 
 // A file folding to its header — marked viewed, or folded again by its
 // chevron — closes over a quarter of a second instead of vanishing, so what
@@ -6,6 +6,8 @@ import { animate } from "motion";
 // why beside it is; none at all when the reader asks their system for less.
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+/** How long a file's code takes to fold away. */
+const FOLDS = 0.24;
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 
 /** Close what a file's card shows under its header — its first change's
@@ -17,7 +19,7 @@ export async function foldAway(card: Element | null): Promise<void> {
   await Promise.all(
     parts.map((element) => {
       element.style.overflow = "hidden";
-      return animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0], marginTop: 0, marginBottom: 0 }, { duration: 0.24, ease: EASE });
+      return animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0], marginTop: 0, marginBottom: 0 }, { duration: FOLDS, ease: EASE });
     }),
   );
 }
@@ -54,6 +56,42 @@ export function holdInPlace(element: HTMLElement | undefined): Promise<void> {
       settled();
     };
     const timer = setTimeout(() => letGo(), SETTLING * 1000);
+    for (const kind of reader) addEventListener(kind, letGo, { passive: true });
+  });
+}
+
+/** Take the reader on to the next section as a file folds above it: it
+ *  rises from where it is to the window's top over the fold's own quarter
+ *  second, on the fold's own curve — one motion, not a hold and then a
+ *  jump — and is kept there while the page settles (the unit's why folding
+ *  after), until the reader scrolls. */
+export function glideToTop(section: Element | undefined): Promise<void> {
+  if (!section) return Promise.resolve();
+  const from = section.getBoundingClientRect().top;
+  const curve = cubicBezier(...EASE);
+  const start = performance.now();
+  const reader = ["wheel", "touchmove", "keydown"] as const;
+  return new Promise((settled) => {
+    let frame = 0;
+    const place = (now: number) => {
+      const done = still.matches ? 1 : Math.min(1, (now - start) / (FOLDS * 1000));
+      const off = section.getBoundingClientRect().top - (from + (RESTS_AT - from) * curve(done));
+      // at once: the page's smooth scrolling is for the reader's jumps, not for this
+      if (section.isConnected && Math.abs(off) > 0.5) window.scrollBy({ top: off, behavior: "instant" });
+    };
+    const letGo = () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+      for (const kind of reader) removeEventListener(kind, letGo);
+      settled();
+    };
+    const step = (now: number) => {
+      place(now);
+      frame = now - start < SETTLING * 1000 ? requestAnimationFrame(step) : (letGo(), 0);
+    };
+    // a tab out of sight draws no frames: it lands at the end all the same
+    const timer = setTimeout(() => (place(start + SETTLING * 1000), letGo()), SETTLING * 1000 + 100);
+    frame = requestAnimationFrame(step);
     for (const kind of reader) addEventListener(kind, letGo, { passive: true });
   });
 }
