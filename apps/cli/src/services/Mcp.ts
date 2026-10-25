@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -25,7 +25,7 @@ import { Adapters, aiChoices } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
-import { Inbox } from "./Inbox";
+import { Inbox, type Read } from "./Inbox";
 import { projectKey, sharedProject } from "../lib/projects";
 import { inProjectOrder, projectOrderOf, withProjectOrder } from "../lib/projectOrder";
 import { Scripting } from "./Scripting";
@@ -928,6 +928,28 @@ const makeHandlers = Effect.gen(function* () {
     const harnesses = yield* Harnesses;
     const adapters = yield* Adapters;
     const actingNow = actingWith(harnesses);
+    /** Whose place in the inbox a call reads from: the calling conversation's
+     *  own, or — for a client no harness names — the one everyone shares. */
+    const readerNow = actingNow.pipe(Effect.map((acting) => (acting?.conversation ? conversationKey(acting.conversation) : undefined)));
+    /** For a conversation new to a thread: the tickets the thread is about,
+     *  as they stand, and the last few messages it came in after. */
+    const catchUpOn = (room: { readonly tickets: SubscriptionRef.SubscriptionRef<ReadonlyMap<string, Ticket>>; readonly reviews: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewContext>> }, threadId: string, read: Read) =>
+      Effect.gen(function* () {
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const reviews = yield* SubscriptionRef.get(room.reviews);
+        const lookup = yield* nameLookup;
+        const named = [...new Set([...read.before, ...read.messages].flatMap((message) => (message.ticketId ? [message.ticketId] : [])))];
+        const tickets = named.flatMap((id) => {
+          const ticket = all.get(id);
+          return ticket && visibleTo(ticket, all, identity.pubkey) ? [ticketRow(ticket, lookup, heldBy(ticket, all), all, reviews.find((review) => review.ticketId === id))] : [];
+        });
+        if (tickets.length === 0 && read.before.length === 0) return undefined;
+        return {
+          note: `this conversation is new to thread ${threadId}: where it stands, and the last messages before what is new to you — get-ticket shows a ticket in full`,
+          tickets,
+          earlier: read.before.map((message) => ({ from: message.fromName, intent: message.intent, ts: message.ts, ...(message.ticketId ? { ticketId: message.ticketId } : {}) })),
+        };
+      });
 
     // Every tool is scoped to the room the user is looking at — resolved per
     // call, so switching rooms retargets all of them without a reconnect.
@@ -1472,11 +1494,11 @@ const makeHandlers = Effect.gen(function* () {
         }).pipe(Effect.withSpan("Mcp.listRoom")),
       "send-to-peer": sendToPeer,
       "pending-threads": () =>
-        rooms.current.pipe(
-          Effect.flatMap((handle) => inbox.pending(handle.id)),
-          Effect.map((threads) => toToon({ threads })),
-          Effect.withSpan("Mcp.pendingThreads"),
-        ),
+        Effect.gen(function* () {
+          const handle = yield* rooms.current;
+          const reader = yield* readerNow;
+          return toToon({ threads: yield* reader ? inbox.pendingFor(handle.id, reader) : inbox.pending(handle.id) });
+        }).pipe(Effect.withSpan("Mcp.pendingThreads")),
       "watch-room": ({ harness: named }: { harness?: string }) =>
         Effect.gen(function* () {
           const url = yield* mcpInfo.awaitUrl;
@@ -1496,9 +1518,10 @@ const makeHandlers = Effect.gen(function* () {
         Effect.gen(function* () {
           const waitMs = Math.min(Math.max(seconds ?? 55, 5), 570) * 1000;
           const started = yield* Clock.currentTimeMillis;
+          const reader = yield* readerNow;
           while (true) {
             const { id } = yield* focusedRoom;
-            const threads = yield* inbox.pending(id);
+            const threads = yield* reader ? inbox.pendingFor(id, reader) : inbox.pending(id);
             if (threads.length > 0) {
               return toToon({
                 threads,
@@ -1548,10 +1571,15 @@ const makeHandlers = Effect.gen(function* () {
       "get-messages": ({ threadId }: { threadId: string }) =>
         Effect.gen(function* () {
           const handle = yield* rooms.current;
-          const messages = yield* inbox.take(handle.id, threadId);
+          const reader = yield* readerNow;
+          // the calling conversation reads from its own place; a client no harness names, from everyone's
+          const read = reader ? yield* inbox.read(handle.id, threadId, reader) : { messages: yield* inbox.take(handle.id, threadId), first: false, before: [] };
+          const { messages } = read;
+          // new to this thread: where it stands, not its whole history as news
+          const catchUp = read.first ? yield* catchUpOn(handle.room, threadId, read) : undefined;
           // the person's steering rides what the agent is about to act on
           const steering = workLine(yield* store.get, messages.some((received) => received.from !== received.to) ? "others" : "mine");
-          return toToon(messages.length > 0 ? { steering, messages } : { messages });
+          return toToon({ ...(messages.length > 0 ? { steering } : {}), messages, ...(catchUp ? { catchUp } : {}) });
         }).pipe(Effect.withSpan("Mcp.getMessages")),
       execute: ({ script, input }: { script: string; input?: unknown }) =>
         actingNow.pipe(
