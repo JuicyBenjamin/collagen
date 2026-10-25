@@ -564,6 +564,11 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .md .md-table { overflow-x: auto; }
 .md .md-table table { width: auto; font: inherit; }
 .md .md-table th, .md .md-table td { padding: 3px 10px; border: 1px solid var(--line); text-align: left; white-space: normal; background: none; }
+/* a cell breaks between words, never inside one: each column is at least its longest word
+   (a file name, a header), the rest wraps, and a table still too wide scrolls in its own box;
+   a name in code (a file, a command) is one word, hyphens and all */
+.md .md-table th, .md .md-table td { overflow-wrap: normal; }
+.md .md-table code { white-space: nowrap; }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
 
 /* the merge history: a timeline, the latest first — each merge a dot on the
