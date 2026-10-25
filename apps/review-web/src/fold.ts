@@ -70,3 +70,17 @@ export function animateDetails(details: HTMLDetailsElement): void {
     });
   });
 }
+
+/** Where a file's top comes to rest when the page goes to it: under the
+ *  window's edge by as much as its header stands off it once stuck (24px in
+ *  styles.css), so the header sits where it stays while reading on. */
+const RESTS_AT = 24;
+
+/** Take the reader to a section: its top snapped to the top of the window,
+ *  not merely brought into view somewhere — the pointer stays on what they
+ *  asked for, not on the section above it. */
+export function snapToTop(section: Element | null): void {
+  if (!section) return;
+  const top = section.getBoundingClientRect().top + scrollY - RESTS_AT;
+  scrollTo({ top: Math.max(0, top), behavior: still.matches ? "instant" : "smooth" });
+}
