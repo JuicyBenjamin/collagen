@@ -211,6 +211,8 @@ nav .nav-unexplained .nav-what { color: var(--warn); }
 .file-side { display: flex; align-items: center; gap: 14px; }
 .mark-viewed { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
 .mark-viewed input { margin: 0; }
+/* a box whatever the theme: a large selector radius would round it into a radio */
+.mark-viewed .checkbox { border-radius: min(var(--radius-selector, 4px), 4px); }
 .mark-viewed.changed { color: var(--warn); }
 /* dimmed by its words, not its box: a see-through header let the code it sticks over show through */
 .hunk.viewed .file > * { opacity: 0.6; }
