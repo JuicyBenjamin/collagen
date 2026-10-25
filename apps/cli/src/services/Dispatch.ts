@@ -5,6 +5,7 @@ import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, i
 import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
+import { callerSocket } from "../lib/reach";
 import { ticketsOf, withWorked } from "../lib/worked";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
@@ -369,15 +370,16 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
     });
 
     /** Write it, and — when an agent's conversation did — remember that the
-     *  conversation worked on its thread and tickets (lib/worked): nothing is
-     *  delivered to it because of that. */
+     *  conversation worked on its thread and tickets (lib/worked), and how
+     *  to reach it — delivered to only as the person's steering lets it. */
     const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing, acting?: Acting) {
       const wroteOn: Array<string> = [];
       const done = yield* write(roomId, out, acting, wroteOn);
       const conversation = acting?.conversation;
       if (done._tag === "sent" && conversation) {
         const now = yield* Clock.currentTimeMillis;
-        yield* store.update((state) => withWorked(state, conversation, { threads: wroteOn, tickets: ticketsOf(out) }, now));
+        const socket = conversation.ai === "claude-code" ? yield* callerSocket : undefined;
+        yield* store.update((state) => withWorked(state, conversation, { threads: wroteOn, tickets: ticketsOf(out), ...(socket ? { socket } : {}) }, now));
       }
       return done;
     });

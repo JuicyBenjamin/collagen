@@ -3,18 +3,20 @@ import { Context, Effect, Layer, Option, Ref, Semaphore, Stream, SynchronizedRef
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { sameName } from "../lib/names";
 import { mcpServerName } from "./mcpAddress";
-import { Adapters, nudgePrompt, type Adapter, type SpawnCtx } from "./Adapters";
+import { Adapters, courierLine, courierPrompt, nudgePrompt, type Adapter, type SpawnCtx } from "./Adapters";
 import { CliArgs } from "./CliArgs";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
 import { allow, DeliverAllowed, levelOf, MOCK_PERMIT, tagRouteOf, withDeliver, type Cause } from "../lib/steering";
+import { listenerFor } from "../lib/worked";
 
 /** Who caused a delivery: the person's own (a message from them to them), or someone else. */
 const causeOf = (spawnContext: SpawnCtx): Cause => (spawnContext.message.from === spawnContext.message.to ? "mine" : "others");
 
-/** Auto-triggers the recipient's preferred AI on incoming messages, one run at
- *  a time per thread (concurrent resumes of one session corrupt it). */
+/** Delivers incoming messages to the conversation of the person's that
+ *  listens for them — a courier for Claude Code, codex queue for Codex — or
+ *  runs the mock; one delivery at a time per thread. */
 export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner", {
   make: Effect.gen(function* () {
     const { profile } = yield* CliArgs;
@@ -103,8 +105,33 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         ),
     );
 
-    /** One agent run over the thread's currently queued messages. Returns the
-     *  set of message ids that were queued when the run started. */
+    /** Collagen's courier: a small Claude run whose one job is to send one
+     *  line, verbatim, to the person's Claude Code session through its
+     *  messaging socket — which wakes it, idle or busy, in the window it is
+     *  in (the desktop app's included) — and exit. Allowed SendMessage and
+     *  nothing else; the line is data to it, never instructions. */
+    const courier = Effect.fn("AgentRunner.courier")(
+      function* (socket: string, line: string) {
+        yield* DeliverAllowed;
+        const proc = yield* ChildProcess.make("claude", ["-p", courierPrompt(socket, line), "--model", "haiku", "--allowedTools", "SendMessage", "--max-turns", "3"], {
+          cwd: homedir(),
+          stdin: "ignore",
+        });
+        const out = yield* proc.stdout.pipe(Stream.decodeText(), Stream.mkString);
+        const exit = yield* proc.exitCode;
+        yield* Effect.log(`courier to ${socket} (exit ${exit}): ${out.trim().slice(0, 160)}`);
+      },
+      (effect) =>
+        effect.pipe(
+          Effect.scoped,
+          Effect.timeout("2 minutes"),
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.catch((error) => Effect.logWarning(`courier failed: ${String(error)}`)),
+        ),
+    );
+
+    /** One delivery over the thread's currently queued messages. Returns the
+     *  set of message ids that were queued when it started. */
     const runOnce = Effect.fn("AgentRunner.runOnce")(function* (threadId: string) {
       const queued = yield* inbox.peekThread(threadId);
       const first = queued[0];
@@ -113,91 +140,58 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
 
       const mcpUrl = yield* mcpInfo.awaitUrl;
       const state = yield* store.get;
-      // An adopted thread resumes the USER'S own conversation (registered
-      // via the adopt-thread tool) with the CLI that owns it; the in-memory
-      // map tracks the freshest resume id within this process.
-      const adopted = state.threads?.[threadId];
-      // A machine running a mock never runs a real CLI, whatever a thread was
-      // adopted into: the mock is the whole agent here.
-      const aiName = (state.preferredAi ?? "").startsWith("mock") ? state.preferredAi : (adopted?.ai ?? state.preferredAi);
-      const sessionId = Option.fromNullishOr(
-        (yield* Ref.get(sessions)).get(threadId) ?? adopted?.sessionId,
-      );
-
-      // A real AI is never cold-started by an incoming message — spawning
-      // invisible conversations behind the user is exactly what we don't
-      // want (and the CLI may not even exist). It only resumes a thread
-      // that already has a conversation (an adoption, or a session it
-      // started itself). Everything else queues in the inbox for the user's
-      // own session to pull — and adopt. Mocks are test dummies and always
-      // auto-respond.
-      const isMock = aiName !== null && aiName !== undefined && aiName.startsWith("mock");
-      // Every line below says WHERE the delivery went, in the person's terms:
-      // "telling your agent" read as "it is in my window now", and none of
-      // these paths can put anything in the window the person is looking at.
-      const about = `${sample.fromName}/${sample.project}`;
-      if (aiName === null || aiName === undefined || (!isMock && Option.isNone(sessionId))) {
-        yield* Effect.log(
-          aiName == null
-            ? `→ inbox · ${about} — no ai set; it waits until your agent pulls it`
-            : `→ inbox · ${about} — no conversation holds this thread; it waits until your agent pulls it (adopt-thread links one)`,
-        );
-        return null;
-      }
-      // Into the person's own conversation only as their steering says: where
-      // a message goes (the tag route), and whether it goes at all (deliver),
-      // for their own acts and for others' apart. A mock reaches nothing outside.
-      const cause: Cause = sample.from === sample.to ? "mine" : "others";
-      let permit = MOCK_PERMIT;
-      if (!isMock) {
-        if (tagRouteOf(state) === "none") {
-          yield* Effect.log(`→ inbox · ${about} — your steering sends messages nowhere; it waits until your agent pulls it`);
-          return null;
-        }
-        const gate = allow(state, "deliver", cause);
-        if ("held" in gate) {
-          yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: ${gate.held === "unset" ? "delivery steering is not chosen" : "delivery steering is ask first"}; it waits until your agent pulls it`);
-          return null;
-        }
-        permit = gate.go;
-      }
-      // codex-adopted threads get the message pushed INTO the user's session
-      // instead of us spawning anything.
-      if (!isMock && adopted?.ai === "codex") {
-        const spawnContext: SpawnCtx = {
-          cwd: homedir(),
-          mcpUrl,
-          serverName: mcpServerName(profile),
-          message: sample,
-          sessionId: Option.some(adopted.sessionId),
-        };
-        yield* Effect.log(`→ codex queue · ${about} — shows in codex thread ${adopted.sessionId.slice(0, 8)}… at its next turn`);
-        yield* withDeliver(permit, queueNudge(adopted.sessionId, spawnContext));
-        return new Set(queued.map((received) => received.message.id));
-      }
-
-      const adapter = adapters[aiName];
-      if (!adapter) {
-        yield* Effect.logWarning(`no spawn adapter for "${aiName}" yet`);
-        return null;
-      }
-
-      const proj = (state.rooms[roomId] ?? []).find((project) => sameName(project.name, sample.project));
-      const spawnContext: SpawnCtx = {
-        cwd: proj?.path ?? homedir(),
-        mcpUrl,
-        serverName: mcpServerName(profile),
-        message: sample,
-        sessionId,
-      };
-      yield* Effect.log(
-        isMock
-          ? `→ ${aiName} · ${about} — the mock answers on its own`
-          : `→ background · ${about} — resuming your ${aiName} conversation ${Option.getOrElse(sessionId, () => "").slice(0, 8)}… in a process of its own; an open window on it does not update`,
-      );
-
       const before = new Set(queued.map((received) => received.message.id));
-      yield* withDeliver(permit, spawn(adapter, spawnContext, threadId));
+      // Every line below says WHERE the delivery went, in the person's terms.
+      const about = `${sample.fromName}/${sample.project}`;
+
+      // A mock is a development dummy and the whole agent here: it answers on its own.
+      const mock = state.preferredAi?.startsWith("mock") ? state.preferredAi : null;
+      if (mock) {
+        const adapter = adapters[mock];
+        if (!adapter) {
+          yield* Effect.logWarning(`no spawn adapter for "${mock}" yet`);
+          return null;
+        }
+        const proj = (state.rooms[roomId] ?? []).find((project) => sameName(project.name, sample.project));
+        const sessionId = Option.fromNullishOr((yield* Ref.get(sessions)).get(threadId) ?? state.threads?.[threadId]?.sessionId);
+        yield* Effect.log(`→ ${mock} · ${about} — the mock answers on its own`);
+        yield* withDeliver(MOCK_PERMIT, spawn(adapter, { cwd: proj?.path ?? homedir(), mcpUrl, serverName: mcpServerName(profile), message: sample, sessionId }, threadId));
+        return before;
+      }
+
+      // A real AI is never started by an incoming message, nor run behind the
+      // person's back: the message goes to the one conversation of theirs that
+      // listens for it (lib/worked) — woken in the window it is in — as their
+      // steering says: where a message goes (the tag route), and whether it
+      // goes at all (deliver), for their own acts and for others' apart.
+      if (tagRouteOf(state) === "none") {
+        yield* Effect.log(`→ inbox · ${about} — your steering sends messages nowhere; it waits until your agent pulls it`);
+        return null;
+      }
+      const listener = listenerFor(state, sample);
+      if (!listener) {
+        yield* Effect.log(`→ inbox · ${about} — no conversation of yours listens for it; it waits until your agent pulls it (watch-ticket or adopt-thread links one)`);
+        return null;
+      }
+      const cause: Cause = sample.from === sample.to ? "mine" : "others";
+      // adopting a thread or watching a ticket is the person's yes to it; having worked on one is not
+      const gate = allow(state, "deliver", cause, listener.heard !== "worked");
+      if ("held" in gate) {
+        yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: ${gate.held === "unset" ? "delivery steering is not chosen" : "delivery steering is ask first"}; it waits until your agent pulls it`);
+        return null;
+      }
+      const spawnContext: SpawnCtx = { cwd: homedir(), mcpUrl, serverName: mcpServerName(profile), message: sample, sessionId: Option.some(listener.conversation.id) };
+      if (listener.conversation.ai === "codex") {
+        yield* Effect.log(`→ codex queue · ${about} — into codex thread ${listener.conversation.id.slice(0, 8)}…, in its window at its next turn`);
+        yield* withDeliver(gate.go, queueNudge(listener.conversation.id, spawnContext));
+        return before;
+      }
+      if (!listener.socket) {
+        yield* Effect.log(`→ inbox · ${about} — your Claude Code conversation ${listener.conversation.id.slice(0, 8)}… has not been reached from here yet; it waits until your agent pulls it`);
+        return null;
+      }
+      yield* Effect.log(`→ courier · ${about} — a small model tells your Claude Code conversation ${listener.conversation.id.slice(0, 8)}…, in the window it is in`);
+      yield* withDeliver(gate.go, courier(listener.socket, courierLine(spawnContext, levelOf(state, "work", cause))));
       return before;
     });
 

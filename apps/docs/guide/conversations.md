@@ -40,7 +40,7 @@ follows the master until you set it:
 | --- | --- |
 | `work` | what your agent starts on its own with what collagen hands it: a step that became yours, a take asking for changes, a peer's message |
 | `host` | acting on the repo host in your name: your review and comments posted on the pull request, merging it — through your own `gh`, one level for every host |
-| `deliver` | collagen delivering messages into your AI conversations (an adopted thread resumed, a Codex queue) |
+| `deliver` | collagen waking your AI conversations when something comes for them (a courier into Claude Code, a Codex queue) |
 
 Each level is one of:
 
@@ -68,7 +68,7 @@ their agent had implemented every change a review asked for without running it b
 autonomy is opted into, per person, per kind. The levels are kept on your machine.
 
 The work level travels **in the words**: every step delivered to you, every `get-messages`,
-and the nudge that resumes an adopted conversation restate it, so the agent reads it on the
+and the line that wakes your conversation restate it, so the agent reads it on the
 turn it is about to act rather than in a tool description it read an hour ago. Two limits,
 stated plainly:
 
@@ -120,9 +120,9 @@ flowchart LR
   BS <-->|"thread: bob↔alice / sandbox"| AS
 ```
 
-A reply doesn't start a fresh conversation — it lands in the same thread, and once the
-thread is adopted (below) it **resumes the same session**, so each agent remembers what
-was already said and what its person decided.
+A reply doesn't start a fresh conversation — it lands in the same thread, and the
+conversation that listens for it (below) is the one woken, so each agent remembers what was
+already said and what its person decided.
 [Ticket steps](./tickets) ride these same threads.
 
 ## What happens when a message arrives
@@ -133,40 +133,49 @@ never starts an agent for you, and the agent it reaches is told to relay it, not
 1. it lands in your **inbox** for that room — read off the room's log, so it's there even if
    it was sent while you were offline (the TUI shows it; the room's avatar gets an unread
    dot);
-2. if your agent has **adopted** the thread, collagen hands the message to *that*
-   conversation — `codex queue --thread <id>` queues it into your codex thread, where it
-   shows at that session's next turn; `claude -p --resume <session>` appends a turn to the
-   Claude Code session **in a process of its own, in the background**. That is delivery to
-   the model, not to your screen: a window you have open on the same session does not
-   repaint, and you see the turn when you next resume it. The turn carries only the
-   headline (who, project, intent) and says: tell your user that, wait, read the thread
-   when they ask, never invent, and a question the thread can't answer is either theirs or
-   the peer's;
+2. if one of your conversations **listens** for it, collagen wakes *that* conversation, in
+   the window you are in, as your delivery [steering](#steering-how-much-your-agent-does-on-its-own)
+   allows — never two, so nothing is woken twice:
+   - **Claude Code** (terminal or the desktop app): a courier — a small model allowed to do
+     one thing, send a message — hands the conversation one line through its session's own
+     messaging socket, and exits. It wakes the conversation whether it is busy or idle.
+   - **Codex**: `codex queue --thread <id>` puts the line into the thread; it shows in the
+     open window and the thread answers.
+
+   The line says it is from collagen, not from you, carries only who added to which ticket,
+   and says: tell your user, read it with `get-messages` when they ask, and wait for their
+   word (or act, if your work steering says so). The content stays in collagen;
 3. otherwise it waits until your agent pulls it: `pending-threads` lists what's waiting,
    `get-messages <threadId>` drains one thread, `await-messages` blocks until something
    arrives (for an agent with nothing else to do). Same instruction on the way out.
 
-The footer's activity log says which of these happened, every time: `→ inbox` (waiting to
-be pulled), `→ codex queue` (shows at the codex thread's next turn), `→ background`
-(resumed in a process of its own). If you want new content to appear in the window you
-are sitting in, keep that session watching — `watch-room` gives the recipe — since
-neither CLI offers collagen a way to write into a live interactive session.
+A conversation listens for a message when:
 
-Adopting is one call from your own session: `adopt-thread {threadId}`. On Claude Code and
-Codex, collagen knows which conversation is calling and adopts that one; another client
-passes `agent` and `sessionId`. It stores a mapping and nothing else — collagen ids are never chosen by an agent. It
-survives restarts. `watch-room` returns the recipe for your harness (background watcher
-for Claude Code, queue-based for Codex, HTTP long-poll for anything else).
+- its person said yes to **watching the ticket** — when your agent files, takes or reviews
+  a ticket and your delivery steering is ask first, it offers ("hear when this ticket
+  moves?"), and on your yes calls `watch-ticket`;
+- it **adopted the thread** (`adopt-thread {threadId}`) — collagen knows which
+  conversation is calling, and adopts that one;
+- or it **worked on** the ticket or thread — heard only once your delivery steering is
+  act, then tell or just do it, without asking per ticket.
+
+The latest such conversation is the one woken. Collagen learns how to reach a Claude Code
+conversation from its own calls (the process at the other end of the call, and its
+socket), never from what an agent types; one it has not seen yet waits in the inbox.
+
+The footer's activity log says which of these happened, every time: `→ inbox` (waiting to
+be pulled, and why), `→ courier` (a line into your Claude Code conversation), `→ codex
+queue` (a line into your Codex thread).
 
 The one exception: `mock:*` AIs are development dummies — they answer by themselves,
 because there is no person behind them to tell.
 
 ::: info Why not spawn automatically?
 The early prototype started a headless agent in the project folder on every incoming
-message. It worked, and it was useless: the conversation happened in a process nobody
-could see. The model now is that *you* work in your agent session, and collagen messages
-that session on your behalf — it works for every harness the same way, because it only
-ever uses the CLI's own resume mechanism.
+message, and later builds resumed your own conversation in a process of its own. Both
+worked, and both were useless: the conversation happened in a process nobody could see.
+The model now is that *you* work in your agent session, and collagen wakes that session in
+the window you are in — a courier for Claude Code, the queue for Codex — and nothing else.
 :::
 
 ## What happens when your agent sends

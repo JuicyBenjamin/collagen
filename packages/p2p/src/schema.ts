@@ -478,16 +478,20 @@ export const Proposal = Schema.Struct({
 export type Proposal = typeof Proposal.Type;
 
 /** What one of the person's AI conversations has worked on here: the
- *  threads it wrote on and the tickets it acted on, newest last. Local,
- *  never broadcast — the tickets that build on it (live push, the loop)
- *  read it to know which conversation holds what. Nothing is delivered or
- *  resumed because of it: that is what adoption (`threads`) is for. */
+ *  threads it wrote on and the tickets it acted on, newest last — and how
+ *  to reach it, and the tickets it said it wants to hear about. Local,
+ *  never broadcast (cli lib/worked, lib/reach). What it worked on is
+ *  delivered to it only when the person's delivery steering lets it. */
 export const Worked = Schema.Struct({
   conversation: Conversation,
   threads: Schema.Array(Schema.String),
   tickets: Schema.Array(Schema.String),
   /** when it last acted */
   last: Schema.Finite,
+  /** Claude Code: the session's messaging socket, as last seen on one of its calls */
+  socket: Schema.optional(Schema.String),
+  /** tickets its person said yes to hearing about here (watch-ticket) */
+  watching: Schema.optional(Schema.Array(Schema.String)),
 });
 export type Worked = typeof Worked.Type;
 

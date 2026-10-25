@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, Sink, Stream, SubscriptionRef } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import type { LocalState, RoomMessage } from "@collagen/p2p";
+import type { LocalState, RoomMessage, Worked } from "@collagen/p2p";
 import { Adapters, type Adapter } from "./Adapters";
 import { mcpServerName } from "./mcpAddress";
 import { AgentRunner } from "./AgentRunner";
@@ -214,26 +214,64 @@ describe("AgentRunner", () => {
     ]);
   });
 
-  it("an adopted thread resumes the user's own conversation, even with no preferred ai", async () => {
-    const { layer, calls } = testLayer({
-      state: {
-        ...baseState,
-        preferredAi: null,
-        threads: { "thread-1": { ai: "fake-ai", sessionId: "my-app-session" } },
-        // the person let messages into their conversations
-        steering: { kinds: { deliver: { mine: "act", others: "act" } } },
-      },
-    });
+  // a Claude Code conversation of the person's, as collagen saw it on one of its calls
+  const claude = { ai: "claude-code" as const, id: "sess-1" };
+  const reached = (more: Partial<Worked> = {}): Record<string, Worked> => ({
+    "claude-code:sess-1": { conversation: claude, threads: [], tickets: [], last: 1, socket: "/tmp/cc-socks/42.sock", ...more },
+  });
+  const delivered = async (state: LocalState, over: Partial<RoomMessage> = {}) => {
+    const { layer, calls } = testLayer({ state: { ...state, preferredAi: null } });
+    let left = 0;
     await run(
       layer,
       Effect.gen(function* () {
         const { inbox, runner } = yield* setup;
-        yield* inbox.push("testroom", message());
+        yield* inbox.push("testroom", message(over));
         yield* runner.runThread("thread-1");
+        left = (yield* inbox.peekThread("thread-1")).length;
       }),
     );
+    return { calls, left };
+  };
+
+  it("a thread its person adopted wakes that Claude Code conversation through a courier at its socket, and the message stays to be read", async () => {
+    const { calls, left } = await delivered({
+      ...baseState,
+      threads: { "thread-1": { ai: "claude-code", sessionId: "sess-1" } },
+      worked: reached(),
+      steering: { kinds: { deliver: { others: "ask" } } },
+    });
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.args[0]).toBe("resume:my-app-session");
+    expect(calls[0]!.cmd).toBe("claude");
+    expect(calls[0]!.args).toEqual(expect.arrayContaining(["--model", "haiku", "--allowedTools", "SendMessage"]));
+    const prompt = calls[0]!.args[1]!;
+    expect(prompt).toContain('"uds:/tmp/cc-socks/42.sock"');
+    expect(prompt).toContain('Collagen (not your user): alice added to a thread of yours');
+    expect(prompt).not.toContain("check average()");
+    expect(left).toBe(1);
+  });
+
+  it("with delivery not chosen, even an adopted conversation is not woken", async () => {
+    const { calls, left } = await delivered({ ...baseState, threads: { "thread-1": { ai: "claude-code", sessionId: "sess-1" } }, worked: reached() });
+    expect(calls).toHaveLength(0);
+    expect(left).toBe(1);
+  });
+
+  it("at ask first, a conversation that only worked on a ticket is not woken, one its person said yes to watching it is", async () => {
+    const asking: LocalState = { ...baseState, steering: { kinds: { deliver: { others: "ask" } } } };
+    expect((await delivered({ ...asking, worked: reached({ tickets: ["t-1"] }) }, { ticketId: "t-1" })).calls).toHaveLength(0);
+    expect((await delivered({ ...asking, worked: reached({ watching: ["t-1"] }) }, { ticketId: "t-1" })).calls).toHaveLength(1);
+    // and once the person lets messages in on their own, having worked on it is enough
+    expect((await delivered({ ...baseState, steering: { kinds: { deliver: { others: "act" } } }, worked: reached({ tickets: ["t-1"] }) }, { ticketId: "t-1" })).calls).toHaveLength(1);
+  });
+
+  it("a Claude Code conversation collagen has no socket for is not woken", async () => {
+    const { calls } = await delivered({
+      ...baseState,
+      threads: { "thread-1": { ai: "claude-code", sessionId: "sess-1" } },
+      steering: { kinds: { deliver: { others: "act" } } },
+    });
+    expect(calls).toHaveLength(0);
   });
 
   it("a codex-adopted thread gets the nudge queued into the user's codex session", async () => {

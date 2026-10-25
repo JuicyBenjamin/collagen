@@ -44,9 +44,11 @@ import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
-import { KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
+import { allow, KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
 import { acting as actingNow } from "../lib/agents";
+import { callerSocket } from "../lib/reach";
+import { listenerFor, withWorked } from "../lib/worked";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
 // `structuredContent` as an object, and Claude Code rejects array roots.
@@ -99,12 +101,19 @@ export const AwaitMessages = Tool.make("await-messages", {
 
 export const AdoptThread = Tool.make("adopt-thread", {
   description:
-    "Link a collagen thread to YOUR OWN conversation in your agent harness, so new messages on it resume that conversation (claude --resume / codex exec resume) instead of waiting in the inbox — the full loop with no manual pulling. 'threadId' is collagen's thread id (from pending-threads or a message you were handed) — it is derived by collagen and can never be chosen or changed. On Claude Code and Codex, collagen knows which conversation is calling and adopts that one: leave 'agent' and 'sessionId' out. Another client passes them: 'sessionId' is the id of its conversation in the harness. This only stores a mapping; it does not alter any collagen ids. Adoption persists across restarts. Only your own conversation can be adopted.",
+    "Link a collagen thread to YOUR OWN conversation in your agent harness, so new messages on it wake this conversation in the window your user is in (Claude Code: a courier sends it one line; Codex: codex queue) instead of waiting in the inbox, as your user's delivery steering allows. Only when your user says so. 'threadId' is collagen's thread id (from pending-threads or a message you were handed) — it is derived by collagen and can never be chosen or changed. On Claude Code and Codex, collagen knows which conversation is calling and adopts that one: leave 'agent' and 'sessionId' out. Another client passes them: 'sessionId' is the id of its conversation in the harness. This only stores a mapping; it does not alter any collagen ids. Adoption persists across restarts. Only your own conversation can be adopted.",
   parameters: Schema.Struct({
     threadId: Schema.String,
     agent: Schema.optional(Schema.Literals(["claude-code", "codex"])),
     sessionId: Schema.optional(Schema.String),
   }),
+  success: Schema.String,
+});
+
+export const WatchTicket = Tool.make("watch-ticket", {
+  description:
+    "Your user's yes to THIS conversation hearing when a ticket moves — a colleague's take, a reply, a step that becomes theirs: collagen wakes this conversation in the window they are in (Claude Code: a courier sends it one line; Codex: codex queue), as their delivery steering allows. Only after you asked them and they said yes — collagen offers it when you file, take or review a ticket. 'stop: true' stops it. Collagen knows which conversation is calling; another client cannot watch.",
+  parameters: Schema.Struct({ ticketId: Schema.String, stop: Schema.optional(Schema.Boolean) }),
   success: Schema.String,
 });
 
@@ -813,6 +822,7 @@ export const CollagenToolkit = Toolkit.make(
   SetAi,
   SetSteering,
   MergeReview,
+  WatchTicket,
   SetMerging,
   Themes,
   SetTheme,
@@ -866,6 +876,7 @@ export const DevCollagenToolkit = Toolkit.make(
   SetAi,
   SetSteering,
   MergeReview,
+  WatchTicket,
   SetMerging,
   Themes,
   SetTheme,
@@ -889,6 +900,15 @@ export const DevCollagenToolkit = Toolkit.make(
 
 /** How many conversations are remembered as told steering is not chosen. */
 const ASKED = 200;
+
+/** The tools after which a conversation is offered to watch the ticket it just acted on. */
+const OFFERS_WATCH: ReadonlySet<string> = new Set(["ask-review", "post-review", "take-step", "create-ticket", "propose", "ask-plan", "report-bug"]);
+
+/** The ticket a call acted on: the one it named, else the first a filing answered with. */
+const ticketIn = (input: unknown, answer: string): string | undefined => {
+  const named = typeof input === "object" && input !== null && "ticketId" in input && typeof input.ticketId === "string" ? input.ticketId : undefined;
+  return named ?? /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/.exec(answer)?.[0];
+};
 
 const makeHandlers = Effect.gen(function* () {
     const rooms = yield* Rooms;
@@ -1373,15 +1393,23 @@ const makeHandlers = Effect.gen(function* () {
     // (delivery: ask first) is told to that conversation once, on its next
     // call, for it to ask its person — questions only ever go through the agent.
     const heldTold = new Set<string>();
-    const notice = (tool: string) =>
+    // When an agent files, takes or reviews a ticket and the person's delivery
+    // steering asks first, the answer offers to watch it — once per ticket and conversation.
+    const offered = new Set<string>();
+    const notice = (tool: string, input: unknown, answer: string) =>
       Effect.gen(function* () {
-        if (tool === "set-steering") return null;
+        if (tool === "set-steering" || tool === "watch-ticket") return null;
         const state = yield* store.get;
-        const held = (yield* SubscriptionRef.get(inbox.buffer)).filter(
-          ({ message }) => !heldTold.has(message.id) && state.threads?.[message.threadId] !== undefined && levelOf(state, "deliver", message.from === message.to ? "mine" : "others") === "ask",
-        );
+        const held = (yield* SubscriptionRef.get(inbox.buffer)).filter(({ message }) => {
+          if (heldTold.has(message.id)) return false;
+          const listener = listenerFor(state, message);
+          if (!listener) return false;
+          const gate = allow(state, "deliver", message.from === message.to ? "mine" : "others", listener.heard !== "worked");
+          return "held" in gate && gate.held === "ask";
+        });
         const asking = unchosen(state);
-        if (!asking && held.length === 0) return null;
+        const offerOn = OFFERS_WATCH.has(tool) && !answer.startsWith("failed") && levelOf(state, "deliver", "others") === "ask" ? ticketIn(input, answer) : undefined;
+        if (!asking && held.length === 0 && offerOn === undefined) return null;
         const conversation = (yield* actingNow)?.conversation;
         if (!conversation) return null;
         const key = conversationKey(conversation);
@@ -1390,10 +1418,7 @@ const makeHandlers = Effect.gen(function* () {
           yield* store.update((now) => ({ ...now, steeringAsked: [...(now.steeringAsked ?? []).filter((told) => told !== key), key].slice(-ASKED) }));
           lines.push(UNCHOSEN_LINE);
         }
-        const mine = held.filter(({ message }) => {
-          const adopted = state.threads?.[message.threadId];
-          return adopted?.ai === conversation.ai && adopted.sessionId === conversation.id;
-        });
+        const mine = held.filter(({ message }) => conversationKey(listenerFor(state, message)!.conversation) === key);
         for (const { message } of mine) heldTold.add(message.id);
         const threads = [...new Set(mine.map(({ message }) => message.threadId))];
         if (threads.length > 0)
@@ -1401,8 +1426,12 @@ const makeHandlers = Effect.gen(function* () {
             `HELD FOR YOUR USER'S WORD — new messages wait on ${threads.map((threadId) => {
               const last = mine.filter(({ message }) => message.threadId === threadId).at(-1)!.message;
               return `thread ${threadId} (${last.fromName}: "${last.intent}")`;
-            }).join(", ")}, which this conversation adopted: their delivery steering is ask first. Tell them in one line; read with get-messages only when they say.`,
+            }).join(", ")}, which this conversation worked on: their delivery steering is ask first. Tell them in one line; read with get-messages only when they say, and offer watch-ticket if they want to hear about it as it moves.`,
           );
+        if (offerOn !== undefined && !offered.has(`${key} ${offerOn}`) && !state.worked?.[key]?.watching?.includes(offerOn)) {
+          offered.add(`${key} ${offerOn}`);
+          lines.push(`WATCH? — this conversation can hear when ticket ${offerOn} moves (a colleague's take, a reply), woken in the window your user is in. Ask them once, in a line; on their yes, call watch-ticket {ticketId: "${offerOn}"}.`);
+        }
         return lines.length > 0 ? lines.join("\n\n") : null;
       });
     const toldOnce = <H extends Record<string, (...args: ReadonlyArray<never>) => Effect.Effect<unknown, unknown, unknown>>>(handlers: H): H =>
@@ -1410,7 +1439,7 @@ const makeHandlers = Effect.gen(function* () {
         Object.entries(handlers).map(([tool, handler]) => [
           tool,
           (...args: ReadonlyArray<never>) =>
-            handler(...args).pipe(Effect.flatMap((answer) => (typeof answer === "string" ? notice(tool).pipe(Effect.map((line) => (line ? `${answer}\n\n${line}` : answer))) : Effect.succeed(answer)))),
+            handler(...args).pipe(Effect.flatMap((answer) => (typeof answer === "string" ? notice(tool, args[0], answer).pipe(Effect.map((line) => (line ? `${answer}\n\n${line}` : answer))) : Effect.succeed(answer)))),
         ]),
       ) as H;
 
@@ -1510,10 +1539,27 @@ const makeHandlers = Effect.gen(function* () {
           // `since`: a transcript handed over later starts here, never earlier
           const since = yield* Clock.currentTimeMillis;
           yield* store.update((state) => ({ ...state, threads: { ...(state.threads ?? {}), [threadId]: { ai: conversation.ai, sessionId: conversation.id, since } } }));
+          // how to reach it, read from this very call
+          const socket = conversation.ai === "claude-code" ? yield* callerSocket : undefined;
+          if (socket) yield* store.update((state) => withWorked(state, conversation, { socket }, since));
           yield* Effect.log(`thread ${threadId} adopted → ${conversation.ai} ${conversation.id.slice(0, 8)}…`);
           const delivery = levelOf(yield* store.get, "deliver", "others");
           return `adopted: new messages on thread ${threadId} go to your ${conversation.ai} conversation (${conversation.id}) as your user's delivery steering allows — for other people's messages it is ${STEERING_LABEL[delivery]}${delivery === "unset" || delivery === "ask" ? ", so they wait in the inbox for now" : ""}`;
         }).pipe(Effect.withSpan("Mcp.adoptThread")),
+      "watch-ticket": Effect.fn("Mcp.watchTicket")(function* (input: { ticketId: string; stop?: boolean }) {
+        const { room } = yield* focusedRoom;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ticket = all.get(input.ticketId);
+        if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+        const conversation = (yield* actingNow)?.conversation;
+        if (!conversation) return "failed: collagen cannot tell which conversation is calling, so it has nothing to wake — this works from Claude Code and Codex";
+        const now = yield* Clock.currentTimeMillis;
+        const socket = conversation.ai === "claude-code" ? yield* callerSocket : undefined;
+        yield* store.update((state) => withWorked(state, conversation, { watch: { ticket: ticket.id, on: input.stop !== true }, ...(socket ? { socket } : {}) }, now));
+        if (input.stop === true) return `stopped: this conversation no longer hears about "${ticketName(ticket)}"`;
+        const delivery = levelOf(yield* store.get, "deliver", "others");
+        return `watching: this conversation hears when "${ticketName(ticket)}" moves — ${conversation.ai === "codex" ? "queued into this Codex thread" : "a courier tells this conversation in one line"}${delivery === "unset" ? ". Your user's delivery steering is not chosen, so nothing comes until they choose one" : ""}.`;
+      }),
       "get-messages": ({ threadId }: { threadId: string }) =>
         Effect.gen(function* () {
           const handle = yield* rooms.current;
