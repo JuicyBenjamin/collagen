@@ -2,7 +2,7 @@ import { Clock, Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { visibleTo } from "@collagen/p2p";
 import { byTool, callsOn, compact, readSessions, tokensOf, type Call, type SessionCost } from "../lib/tokenCost";
-import { sessionDirs } from "../lib/transcripts";
+import { homesOf } from "../services/Harness";
 import { diagnostic } from "./registry";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -19,10 +19,10 @@ export const tokenCost = diagnostic<{ readonly ticketId?: string; readonly days?
   id: "token-cost",
   title: "token cost",
   summary:
-    "What collagen costs the AI in tokens, read from the session logs Claude Code and Codex keep on this machine (nothing leaves it; only counts and sizes are read out). Per collagen tool: calls and roughly how many tokens went in and came back; per session: tokens read in all and collagen's share of them; each time an AI ran out of context window, what collagen had put into it just before; and the standing size of collagen's tool definitions. Pass ticketId to count only the calls that named that ticket; days (default 30) for how far back.",
+    "What collagen costs the AI in tokens, read from the session logs its AI tool keeps on this machine (nothing leaves it; only counts and sizes are read out). Per collagen tool: calls and roughly how many tokens went in and came back; per session: tokens read in all and collagen's share of them; each time an AI ran out of context window, what collagen had put into it just before; and the standing size of collagen's tool definitions. Pass ticketId to count only the calls that named that ticket; days (default 30) for how far back.",
   params: Schema.Struct({ ticketId: Schema.optional(Schema.String), days: Schema.optional(Schema.Finite) }),
   fromContext: (context) => (context.ticketId ? { ticketId: context.ticketId } : null),
-  run: ({ ticketId, days: asked = 30 }, context, { rooms, me, toolDefinitions }) =>
+  run: ({ ticketId, days: asked = 30 }, context, { rooms, me, toolDefinitions, harnesses }) =>
     Effect.gen(function* () {
       const days = Math.max(1, Math.round(asked));
       if (ticketId !== undefined) {
@@ -32,7 +32,7 @@ export const tokenCost = diagnostic<{ readonly ticketId?: string; readonly days?
         if (!ticket || !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
       }
       const since = (yield* Clock.currentTimeMillis) - days * DAY;
-      const sessions = yield* Effect.promise(() => readSessions(sessionDirs(), since));
+      const sessions = yield* Effect.promise(() => readSessions(harnesses, homesOf(harnesses), since));
       return ticketId === undefined ? overall(sessions, days, toolDefinitions) : onTicket(sessions, ticketId, days);
     }),
 });

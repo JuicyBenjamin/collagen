@@ -2,15 +2,14 @@ import { useEffect, type ReactNode } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { AI_OPTIONS, ticketName } from "@collagen/p2p";
-import { MOCK_AI_OPTIONS } from "../../services/Adapters";
+import { ticketName } from "@collagen/p2p";
 import { RESTART_EXIT_CODE } from "../../services/Updates";
 import { Panel } from "../../components/Panel";
 import { captureAtom, focusAtom, leftEdgeAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
 import { useRouter, type Route } from "../../app/router";
 import { roomAtom } from "../atoms";
-import { installAppUpdateAtom, updateStateAtom } from "./atoms";
+import { aiChoicesAtom, installAppUpdateAtom, updateStateAtom } from "./atoms";
 import { ticketsAtom } from "./overview/components/Tickets/atoms";
 import { Crumb } from "./components/Crumb/Crumb";
 import { Footer } from "./components/Footer/Footer";
@@ -21,13 +20,11 @@ import { TabBar } from "./components/TabBar/TabBar";
 import { useTabs } from "./tabs";
 import { masterOf, nextSteering, withLevel } from "../../lib/steering";
 
-function nextAi(current: string | null): string | null {
-  // null -> claude-code -> codex -> mock:claude-code -> mock:codex -> null …
-  // the mocks let a machine without an LLM CLI participate; the mock: prefix
-  // is broadcast so peers see there's no real AI behind it.
-  const cycle: (string | null)[] = [null, ...AI_OPTIONS, ...MOCK_AI_OPTIONS];
-  const index = cycle.indexOf(current);
-  return cycle[(index + 1) % cycle.length] ?? null;
+/** The AI after `current`: none, each harness, each mock, and round again —
+ *  the mocks let a machine without an LLM CLI participate; the mock: prefix
+ *  is broadcast so peers see there's no real AI behind it. */
+function nextAi(choices: ReadonlyArray<string | null>, current: string | null): string | null {
+  return choices[(choices.indexOf(current) + 1) % choices.length] ?? null;
 }
 
 /** Room layout: status line · the rooms sidebar beside the room panel (tab
@@ -94,6 +91,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   const updateState = useAtomSet(updateStateAtom);
   const installUpdate = useAtomSet(installAppUpdateAtom);
   const installed = useAtomValue(installAppUpdateAtom);
+  const aiChoices = AsyncResult.getOrElse(useAtomValue(aiChoicesAtom), (): ReadonlyArray<string | null> => [null]);
 
   // an update was installed: hand the terminal back and let the bin shim
   // start the new version in our place
@@ -112,7 +110,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     keyDebug("room", key, captured ? "captured" : undefined);
     if (captured) return;
     if (key.name === "q") return onExit();
-    if (key.name === "a") return updateState({ update: (state) => ({ ...state, preferredAi: nextAi(state.preferredAi) }) });
+    if (key.name === "a") return updateState({ update: (state) => ({ ...state, preferredAi: nextAi(aiChoices, state.preferredAi) }) });
     // the master steering level: ask first → act, then tell → just do it — the person's own dial
     if (key.name === "g") return updateState({ update: (state) => withLevel(state, "master", "mine", nextSteering(masterOf(state))) });
     if (key.name === "s") return navigate("settings");

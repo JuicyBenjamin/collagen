@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import type { LocalState, Outgoing } from "@collagen/p2p";
 import { Dispatch, refused, sent, type Done } from "./Dispatch";
+import { HarnessesLive } from "./Harness";
 import { outgoingSummary, Outbox, proposalText } from "./Outbox";
 import { StateStore } from "./StateStore";
 
@@ -38,7 +39,7 @@ const run = <A>(
   return Effect.runPromise(
     Effect.gen(function* () {
       return yield* body(yield* Outbox);
-    }).pipe(Effect.provide(Outbox.layer.pipe(Layer.provide(stateWith(kept)), Layer.provide(dispatch.layer)))),
+    }).pipe(Effect.provide(Outbox.layer.pipe(Layer.provide(stateWith(kept)), Layer.provide(dispatch.layer), Layer.provide(HarnessesLive)))),
   ).then((value) => ({ value, wrote: dispatch.wrote }));
 };
 

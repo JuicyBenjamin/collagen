@@ -4,16 +4,24 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServer } from "effect/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { describe, expect, it } from "vitest";
-import { acting, actedBy, agentLabel, agentName, callSays, claudeCall, harnessOf, modelName, via } from "./agents";
+import { harnessOfClient } from "../services/Harness";
+import { claudeCode } from "../services/harnesses/claudeCode";
+import { claudeCall } from "../services/harnesses/claudeCode/call";
+import { codex } from "../services/harnesses/codex";
+import { codexCall } from "../services/harnesses/codex/call";
+import { actingWith, actedBy, agentLabel, agentName, modelName, via } from "./agents";
+
+const HARNESSES = [claudeCode, codex];
+const acting = actingWith(HARNESSES);
 
 describe("which agent is acting", () => {
   it("names the harnesses we know, and any other by its own title or name", () => {
-    expect(agentName({ name: "claude-code" })).toBe("Claude Code");
-    expect(agentName({ name: "codex-mcp-client", title: "Codex" })).toBe("Codex");
-    expect(agentName({ name: "some-client", title: "Some Agent" })).toBe("Some Agent");
-    expect(agentName({ name: "some-client" })).toBe("some-client");
-    expect(agentName({ name: " " })).toBeUndefined();
-    expect(agentName({ name: "x", title: "My\n  Agent" })).toBe("My Agent");
+    expect(agentName({ name: "claude-code" }, HARNESSES)).toBe("Claude Code");
+    expect(agentName({ name: "codex-mcp-client", title: "Codex" }, HARNESSES)).toBe("Codex");
+    expect(agentName({ name: "some-client", title: "Some Agent" }, HARNESSES)).toBe("Some Agent");
+    expect(agentName({ name: "some-client" }, HARNESSES)).toBe("some-client");
+    expect(agentName({ name: " " }, HARNESSES)).toBeUndefined();
+    expect(agentName({ name: "x", title: "My\n  Agent" }, HARNESSES)).toBe("My Agent");
   });
 
   it("says it for an agent and for a person", () => {
@@ -26,10 +34,10 @@ describe("which agent is acting", () => {
   it("takes the turn's model and effort as the call says them, and guesses nothing", () => {
     // as Codex 0.162 sends it with every tools/call
     const codex = { callId: "exec-1", threadId: "th", itemId: "it", "x-codex-turn-metadata": { turn_id: "tu", model: "gpt-6.1-sol", reasoning_effort: "medium" } };
-    expect(callSays(codex)).toEqual({ turn: { model: "gpt-6.1-sol", effort: "medium" }, thread: "th" });
-    expect(callSays({ progressToken: 1, "claudecode/toolUseId": "toolu_a" })).toEqual({ claudeCall: "toolu_a" });
-    expect(callSays({ progressToken: 1 })).toBeNull();
-    expect(callSays(undefined)).toBeNull();
+    expect(codexCall(codex)).toEqual({ turn: { model: "gpt-6.1-sol", effort: "medium" }, thread: "th" });
+    expect(codexCall({ progressToken: 1, "claudecode/toolUseId": "toolu_a" })).toBeNull();
+    expect(codexCall({ progressToken: 1 })).toBeNull();
+    expect(codexCall(undefined)).toBeNull();
   });
 
   it("finds Claude Code's call in its log by the id it sends, whatever else is near it, and the session that made it", () => {
@@ -46,10 +54,10 @@ describe("which agent is acting", () => {
   });
 
   it("tells a conversation only of the harnesses it can, and guesses none", () => {
-    expect(harnessOf({ name: "claude-code" })).toBe("claude-code");
-    expect(harnessOf({ name: "codex-mcp-client" })).toBe("codex");
-    expect(harnessOf({ name: "cursor" })).toBeUndefined();
-    expect(callSays({ threadId: "th-only" })).toEqual({ turn: {}, thread: "th-only" });
+    expect(harnessOfClient(HARNESSES, "claude-code")?.id).toBe("claude-code");
+    expect(harnessOfClient(HARNESSES, "codex-mcp-client")?.id).toBe("codex");
+    expect(harnessOfClient(HARNESSES, "cursor")).toBeUndefined();
+    expect(codexCall({ threadId: "th-only" })).toEqual({ turn: {}, thread: "th-only" });
   });
 
   it("names it for a person: harness, model, effort", () => {

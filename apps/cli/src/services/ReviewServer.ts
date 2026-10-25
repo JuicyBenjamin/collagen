@@ -5,6 +5,7 @@ import { Effect, Fiber, Layer, Stream, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import type { CommentSpot } from "@collagen/review-web/data";
+import type { Harnesses } from "./Harness";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, projectNameOk, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
@@ -81,11 +82,11 @@ const mergesShownOk = (count: unknown): count is number => Number.isInteger(coun
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
-  const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox>();
+  const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox | Harnesses>();
   const types = yield* ReviewTypes;
   const history = yield* MergeHistory;
   const store = yield* StateStore;
-  const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
+  const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox | Harnesses>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
   return {
     head: (ticketId) => (ticketIdOk(ticketId) ? on(reviewHead(ticketId)) : Effect.succeed(null)),
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),

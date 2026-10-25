@@ -4,10 +4,11 @@ import { LanguageModel, Toolkit, type Prompt } from "effect/ai";
 import { encode as toToon } from "@toon-format/toon";
 import type { LocalState, Outgoing, RoomMessage } from "@collagen/p2p";
 import { scriptedModel, type Turn } from "../test/scriptedModel";
-import { nudgePrompt } from "./Adapters";
+import { wakeLine } from "./Adapters";
 import { Dispatch, sent } from "./Dispatch";
 import { Inbox } from "./Inbox";
 import { GetMessages, PendingThreads, SendToPeer } from "./Mcp";
+import { HarnessesLive } from "./Harness";
 import { Outbox } from "./Outbox";
 import { StateStore } from "./StateStore";
 
@@ -29,7 +30,7 @@ const bobsMessage: RoomMessage = {
   findings: "average([2,4]) returns NaN on main; I suspect the loop bound (i <= length). Can you confirm before Friday's release?",
   ts: 1,
 };
-const nudge = nudgePrompt({ cwd: "/", mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice", message: bobsMessage, sessionId: Option.some("s1") });
+const nudge = wakeLine({ cwd: "/", mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice", message: bobsMessage, sessionId: Option.some("s1") });
 
 /** The same tool definitions the MCP server exposes — descriptions included. */
 const RelayToolkit = Toolkit.make(PendingThreads, GetMessages, SendToPeer);
@@ -105,6 +106,7 @@ const converse = (turns: ReadonlyArray<Turn>, userTurns: ReadonlyArray<string>) 
           Layer.provideMerge(Layer.mergeAll(Inbox.layer, Outbox.layer)),
           Layer.provideMerge(recorded.layer),
           Layer.provideMerge(stateWith("codex")),
+          Layer.provideMerge(HarnessesLive),
         ),
       ),
     );

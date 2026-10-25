@@ -3,7 +3,8 @@ import { Context, Effect, Layer, Option, Ref, Semaphore, Stream, SynchronizedRef
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { sameName } from "../lib/names";
 import { mcpServerName } from "./mcpAddress";
-import { Adapters, courierLine, courierPrompt, nudgePrompt, type Adapter, type SpawnCtx } from "./Adapters";
+import { Adapters, wakeLine, type Adapter, type SpawnCtx } from "./Adapters";
+import { harnessFor, Harnesses } from "./Harness";
 import { CliArgs } from "./CliArgs";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
@@ -15,8 +16,8 @@ import { listenerFor } from "../lib/worked";
 const causeOf = (spawnContext: SpawnCtx): Cause => (spawnContext.message.from === spawnContext.message.to ? "mine" : "others");
 
 /** Delivers incoming messages to the conversation of the person's that
- *  listens for them — a courier for Claude Code, codex queue for Codex — or
- *  runs the mock; one delivery at a time per thread. */
+ *  listens for them, woken by its own harness (services/Harness) — or runs
+ *  the mock; one delivery at a time per thread. */
 export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner", {
   make: Effect.gen(function* () {
     const { profile } = yield* CliArgs;
@@ -24,6 +25,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
     const store = yield* StateStore;
     const mcpInfo = yield* McpInfo;
     const adapters = yield* Adapters;
+    const harnesses = yield* Harnesses;
     // Captured here so runThread's public type carries no requirements.
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
@@ -83,53 +85,6 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         ),
     );
 
-    /** Codex can receive messages natively: `codex queue` drops a nudge into
-     *  the user's own thread — it surfaces at their next turn (live session)
-     *  or next resume. Non-blocking, no fork, the user keeps chatting. */
-    const queueNudge = Effect.fn("AgentRunner.queueNudge")(
-      function* (codexThread: string, spawnContext: SpawnCtx) {
-        yield* DeliverAllowed;
-        const proc = yield* ChildProcess.make(
-          "codex",
-          ["queue", "--thread", codexThread, "--message", nudgePrompt({ ...spawnContext, steering: levelOf(yield* store.get, "work", causeOf(spawnContext)) })],
-          { stdin: "ignore" },
-        );
-        const exit = yield* proc.exitCode;
-        yield* Effect.log(`queued nudge into codex thread ${codexThread.slice(0, 8)}… (exit ${exit})`);
-      },
-      (effect) =>
-        effect.pipe(
-          Effect.scoped,
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-          Effect.catch((error) => Effect.logWarning(`codex queue failed: ${String(error)}`)),
-        ),
-    );
-
-    /** Collagen's courier: a small Claude run whose one job is to send one
-     *  line, verbatim, to the person's Claude Code session through its
-     *  messaging socket — which wakes it, idle or busy, in the window it is
-     *  in (the desktop app's included) — and exit. Allowed SendMessage and
-     *  nothing else; the line is data to it, never instructions. */
-    const courier = Effect.fn("AgentRunner.courier")(
-      function* (socket: string, line: string) {
-        yield* DeliverAllowed;
-        const proc = yield* ChildProcess.make("claude", ["-p", courierPrompt(socket, line), "--model", "haiku", "--allowedTools", "SendMessage", "--max-turns", "3"], {
-          cwd: homedir(),
-          stdin: "ignore",
-        });
-        const out = yield* proc.stdout.pipe(Stream.decodeText(), Stream.mkString);
-        const exit = yield* proc.exitCode;
-        yield* Effect.log(`courier to ${socket} (exit ${exit}): ${out.trim().slice(0, 160)}`);
-      },
-      (effect) =>
-        effect.pipe(
-          Effect.scoped,
-          Effect.timeout("2 minutes"),
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-          Effect.catch((error) => Effect.logWarning(`courier failed: ${String(error)}`)),
-        ),
-    );
-
     /** One delivery over the thread's currently queued messages. Returns the
      *  set of message ids that were queued when it started. */
     const runOnce = Effect.fn("AgentRunner.runOnce")(function* (threadId: string) {
@@ -180,18 +135,18 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: ${gate.held === "unset" ? "delivery steering is not chosen" : "delivery steering is ask first"}; it waits until your agent pulls it`);
         return null;
       }
-      const spawnContext: SpawnCtx = { cwd: homedir(), mcpUrl, serverName: mcpServerName(profile), message: sample, sessionId: Option.some(listener.conversation.id) };
-      if (listener.conversation.ai === "codex") {
-        yield* Effect.log(`→ codex queue · ${about} — into codex thread ${listener.conversation.id.slice(0, 8)}…, in its window at its next turn`);
-        yield* withDeliver(gate.go, queueNudge(listener.conversation.id, spawnContext));
-        return before;
-      }
-      if (!listener.socket) {
-        yield* Effect.log(`→ inbox · ${about} — your Claude Code conversation ${listener.conversation.id.slice(0, 8)}… has not been reached from here yet; it waits until your agent pulls it`);
+      const harness = harnessFor(harnesses, listener.conversation.ai);
+      if (!harness) {
+        yield* Effect.log(`→ inbox · ${about} — collagen does not know how to reach a ${listener.conversation.ai} conversation; it waits until your agent pulls it`);
         return null;
       }
-      yield* Effect.log(`→ courier · ${about} — a small model tells your Claude Code conversation ${listener.conversation.id.slice(0, 8)}…, in the window it is in`);
-      yield* withDeliver(gate.go, courier(listener.socket, courierLine(spawnContext, levelOf(state, "work", cause))));
+      const line = wakeLine({ cwd: homedir(), mcpUrl, serverName: mcpServerName(profile), message: sample, sessionId: Option.some(listener.conversation.id), steering: levelOf(state, "work", cause) });
+      const woken = yield* withDeliver(gate.go, harness.wake(listener.conversation.id, listener.socket, line)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+      if (woken === "unreachable") {
+        yield* Effect.log(`→ inbox · ${about} — your ${harness.name} conversation ${listener.conversation.id.slice(0, 8)}… could not be reached from here yet; it waits until your agent pulls it`);
+        return null;
+      }
+      yield* Effect.log(`→ ${harness.name} · ${about} — woke your conversation ${listener.conversation.id.slice(0, 8)}… in the window it is in (${harness.wakesBy})`);
       return before;
     });
 

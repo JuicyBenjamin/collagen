@@ -2,7 +2,8 @@ import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "n
 import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { stepThreadId, type Ticket, type TranscriptAsk } from "@collagen/p2p";
-import { sessionDirs, sessionFile, sliceSince, unpack } from "../lib/transcripts";
+import { sliceSince, unpack } from "../lib/transcripts";
+import { harnessFor, Harnesses, transcriptFile } from "./Harness";
 import { configDir, IdentityService } from "./Identity";
 import { Outbox } from "./Outbox";
 import { Rooms, type RoomHandle } from "./Rooms";
@@ -70,6 +71,7 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
     const rooms = yield* Rooms;
     const outbox = yield* Outbox;
     const store = yield* StateStore;
+    const harnesses = yield* Harnesses;
     const { identity, nameRef } = yield* IdentityService;
     const saved = yield* SubscriptionRef.make<ReadonlyArray<SavedTranscript>>([]);
 
@@ -102,9 +104,9 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       for (const threadId of threadIds) {
         const adopted = state.threads?.[threadId];
         if (!adopted) continue;
-        const path = sessionFile(adopted.ai, adopted.sessionId, sessionDirs());
+        const path = transcriptFile(harnesses, adopted.ai, adopted.sessionId);
         if (!path) continue;
-        const { lines, entries } = sliceSince(readFileSync(path, "utf8"), adopted.since ?? 0);
+        const { lines, entries } = sliceSince(readFileSync(path, "utf8"), adopted.since ?? 0, harnessFor(harnesses, adopted.ai)?.keepsWhole ?? (() => false));
         const now = yield* Clock.currentTimeMillis;
         yield* file(
           { subject, from: me, threadId, ai: adopted.ai, entries, path: fileFor(subject, me, threadId, adopted.ai) },
@@ -150,7 +152,7 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
       const done: Array<TranscriptAsk> = [];
       const kept: Array<TranscriptAsk> = [];
       for (const ask of waiting) {
-        if (!sessionFile(ask.ai, ask.sessionId, sessionDirs())) {
+        if (!transcriptFile(harnesses, ask.ai, ask.sessionId)) {
           lines.push(`${ask.requesterName} · thread ${ask.threadId}: that ${ask.ai} session file is gone — nothing to hand over`);
           done.push(ask);
           continue;
@@ -201,7 +203,7 @@ export class Transcripts extends Context.Service<Transcripts>()("cli/Transcripts
               const now = yield* Clock.currentTimeMillis;
               for (const threadId of transcriptRequest.threadIds) {
                 const adopted = state.threads?.[threadId];
-                if (!adopted || !sessionFile(adopted.ai, adopted.sessionId, sessionDirs())) continue;
+                if (!adopted || !transcriptFile(harnesses, adopted.ai, adopted.sessionId)) continue;
                 const ask: TranscriptAsk = {
                   roomId: handle.id,
                   requestId: transcriptRequest.requestId,

@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { byTool, callsOn, collagenTool, readClaude, readCodex, readSessions } from "./tokenCost";
+import { readUsage as readClaude } from "../services/harnesses/claudeCode/usage";
+import { readUsage as readCodex } from "../services/harnesses/codex/usage";
+import { byTool, callsOn, collagenTool, readSessions } from "./tokenCost";
+import { claudeCode } from "../services/harnesses/claudeCode";
+import { codex } from "../services/harnesses/codex";
+
+const HARNESSES = [claudeCode, codex];
 
 const jsonl = (...lines: ReadonlyArray<unknown>) => lines.map((line) => JSON.stringify(line)).join("\n") + "\n";
 const TICKET = "f69d867e-3183-4a4a-9295-0abbec344ddd";
@@ -135,7 +141,7 @@ describe("readSessions", () => {
     writeFileSync(join(project, "s1.jsonl"), used);
     writeFileSync(join(project, "s1", "subagents", "agent-1.jsonl"), used);
     writeFileSync(join(project, "s2.jsonl"), jsonl(claudeReply("m1", 100)));
-    const found = await readSessions({ claude, codex: "/nowhere" }, 0);
+    const found = await readSessions(HARNESSES, { "claude-code": claude, codex: "/nowhere" }, 0);
     expect(found.map((session) => session.file.replace(project, "")).sort()).toEqual(["/s1.jsonl", "/s1/subagents/agent-1.jsonl"]);
   });
 });

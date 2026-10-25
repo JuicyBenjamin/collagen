@@ -1,6 +1,7 @@
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { actingFields, ticketName, type Outgoing, type Proposal } from "@collagen/p2p";
-import { acting as actingNow } from "../lib/agents";
+import { actingWith } from "../lib/agents";
+import { Harnesses } from "./Harness";
 import { NO_TITLE } from "../lib/review";
 import { Dispatch } from "./Dispatch";
 import { StateStore } from "./StateStore";
@@ -123,6 +124,7 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
   make: Effect.gen(function* () {
     const store = yield* StateStore;
     const dispatch = yield* Dispatch;
+    const actingNow = actingWith(yield* Harnesses);
 
     const all = store.get.pipe(Effect.map((state) => state.sent ?? []));
     const changes = SubscriptionRef.changes(store.state).pipe(Stream.map((state) => state.sent ?? []));

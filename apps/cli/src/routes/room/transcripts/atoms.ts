@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { Effect } from "effect";
 import { readLine, type TranscriptLine } from "../../../lib/transcripts";
+import { Harnesses } from "../../../services/Harness";
 import { Transcripts, type TranscriptMeta } from "../../../services/Transcripts";
 import { runtimeAtom } from "../../../app/runtime";
 
@@ -28,6 +29,7 @@ export const transcriptFilesAtom = runtimeAtom.fn(
 /** One transcript, read and made readable — one row per line worth showing. */
 export const transcriptLinesAtom = runtimeAtom.fn(
   Effect.fnUntraced(function* ({ path }: { path: string }) {
+    const harnesses = yield* Harnesses;
     const text = yield* Effect.sync(() => {
       try {
         return readFileSync(path, "utf8");
@@ -39,7 +41,7 @@ export const transcriptLinesAtom = runtimeAtom.fn(
       .split("\n")
       .filter((line) => line.trim().length > 0)
       .flatMap((raw) => {
-        const line = readLine(raw);
+        const line = readLine(harnesses, raw);
         return line ? [{ ...line, raw }] : [];
       });
   }),

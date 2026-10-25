@@ -2,13 +2,15 @@ import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { AiStatus as Status } from "@collagen/p2p";
 import { Adapters } from "./Adapters";
+import { harnessFor, Harnesses } from "./Harness";
 
-/** Probes whether an agent CLI is installed and authenticated, using the
- *  adapter's cheap auth command (no model call). The result is broadcast in
+/** Probes whether an agent CLI is installed and authenticated, using its
+ *  harness's cheap sign-in check (no model call), or a mock's. The result is broadcast in
  *  the room profile, so an unauthenticated peer is visible to everyone. */
 export class AiStatus extends Context.Service<AiStatus>()("cli/AiStatus", {
   make: Effect.gen(function* () {
     const adapters = yield* Adapters;
+    const harnesses = yield* Harnesses;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
     const current = yield* SubscriptionRef.make<Status>("unknown");
@@ -16,12 +18,14 @@ export class AiStatus extends Context.Service<AiStatus>()("cli/AiStatus", {
     const probe = Effect.fn("AiStatus.probe")(
       function* (aiName: string | null) {
         if (aiName === null) return "unknown" as const;
-        const adapter = adapters[aiName];
-        if (!adapter) return "missing" as const;
-        const handle = yield* ChildProcess.make(adapter.cmd, adapter.auth.args, { stdin: "ignore" });
+        // a harness's own check, else a mock's
+        const mock = adapters[aiName];
+        const check = harnessFor(harnesses, aiName)?.signIn ?? (mock ? { cmd: mock.cmd, ...mock.auth } : undefined);
+        if (!check) return "missing" as const;
+        const handle = yield* ChildProcess.make(check.cmd, [...check.args], { stdin: "ignore" });
         const out = yield* handle.stdout.pipe(Stream.decodeText(), Stream.mkString);
         const exit = yield* handle.exitCode;
-        return adapter.auth.loggedIn(out, exit) ? ("ok" as const) : ("unauthenticated" as const);
+        return check.loggedIn(out, exit) ? ("ok" as const) : ("unauthenticated" as const);
       },
       (effect) =>
         effect.pipe(

@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, afterProblem, closedAs, conversationKey, AI_OPTIONS, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -21,7 +21,7 @@ import type { PageThemes } from "@collagen/p2p";
 import { describeThemes, nameTaken, NO_THEMES, ownNamed, themeFromText, valueNamed, withEdit, withoutTheme, withTheme } from "../lib/pageThemes";
 import { MERGE_HELP, mergeForOf, withMergeFor } from "../lib/merging";
 import { cleanShow, showGap, type ShowInput } from "../lib/shows";
-import { MOCK_AI_OPTIONS } from "./Adapters";
+import { Adapters, aiChoices } from "./Adapters";
 import { portForProfile } from "./mcpAddress";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
@@ -46,8 +46,8 @@ import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { allow, KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
-import { acting as actingNow } from "../lib/agents";
-import { callerSocket } from "../lib/reach";
+import { actingWith } from "../lib/agents";
+import { harnessFor, Harnesses } from "./Harness";
 import { listenerFor, withWorked } from "../lib/worked";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
@@ -83,9 +83,9 @@ export const PendingThreads = Tool.make("pending-threads", {
 
 export const WatchRoom = Tool.make("watch-room", {
   description:
-    "How to stay responsive to room messages WITHOUT blocking your conversation — call this once and follow the instructions for your harness. Pass which harness you are running in: 'claude-code' (you get a background-watcher recipe: events arrive while the user keeps chatting), 'codex' (adopt threads and collagen queues messages directly into your session), or 'other' (polling fallback). This tool changes nothing by itself; it returns setup instructions.",
+    "How to stay responsive to room messages WITHOUT blocking your conversation — call this once and follow the instructions for your harness. Collagen knows which harness is calling; 'harness' only matters for a client it cannot tell. This tool changes nothing by itself; it returns setup instructions.",
   parameters: Schema.Struct({
-    harness: Schema.Literals(["claude-code", "codex", "other"]),
+    harness: Schema.optional(Schema.String),
   }),
   success: Schema.String,
 });
@@ -101,10 +101,10 @@ export const AwaitMessages = Tool.make("await-messages", {
 
 export const AdoptThread = Tool.make("adopt-thread", {
   description:
-    "Link a collagen thread to YOUR OWN conversation in your agent harness, so new messages on it wake this conversation in the window your user is in (Claude Code: a courier sends it one line; Codex: codex queue) instead of waiting in the inbox, as your user's delivery steering allows. Only when your user says so. 'threadId' is collagen's thread id (from pending-threads or a message you were handed) — it is derived by collagen and can never be chosen or changed. On Claude Code and Codex, collagen knows which conversation is calling and adopts that one: leave 'agent' and 'sessionId' out. Another client passes them: 'sessionId' is the id of its conversation in the harness. This only stores a mapping; it does not alter any collagen ids. Adoption persists across restarts. Only your own conversation can be adopted.",
+    "Link a collagen thread to YOUR OWN conversation in your agent harness, so new messages on it wake this conversation in the window your user is in instead of waiting in the inbox, as your user's delivery steering allows. Only when your user says so. 'threadId' is collagen's thread id (from pending-threads or a message you were handed) — it is derived by collagen and can never be chosen or changed. On Claude Code and Codex, collagen knows which conversation is calling and adopts that one: leave 'agent' and 'sessionId' out. Another client passes them: 'sessionId' is the id of its conversation in the harness. This only stores a mapping; it does not alter any collagen ids. Adoption persists across restarts. Only your own conversation can be adopted.",
   parameters: Schema.Struct({
     threadId: Schema.String,
-    agent: Schema.optional(Schema.Literals(["claude-code", "codex"])),
+    agent: Schema.optional(HarnessId),
     sessionId: Schema.optional(Schema.String),
   }),
   success: Schema.String,
@@ -112,7 +112,7 @@ export const AdoptThread = Tool.make("adopt-thread", {
 
 export const WatchTicket = Tool.make("watch-ticket", {
   description:
-    "Your user's yes to THIS conversation hearing when a ticket moves — a colleague's take, a reply, a step that becomes theirs: collagen wakes this conversation in the window they are in (Claude Code: a courier sends it one line; Codex: codex queue), as their delivery steering allows. Only after you asked them and they said yes — collagen offers it when you file, take or review a ticket. 'stop: true' stops it. Collagen knows which conversation is calling; another client cannot watch.",
+    "Your user's yes to THIS conversation hearing when a ticket moves — a colleague's take, a reply, a step that becomes theirs: collagen wakes this conversation in the window they are in, as their delivery steering allows. Only after you asked them and they said yes — collagen offers it when you file, take or review a ticket. 'stop: true' stops it. Collagen knows which conversation is calling; another client cannot watch.",
   parameters: Schema.Struct({ ticketId: Schema.String, stop: Schema.optional(Schema.Boolean) }),
   success: Schema.String,
 });
@@ -594,8 +594,8 @@ export const Epic = Tool.make("epic", {
 
 export const SetAi = Tool.make("set-ai", {
   description:
-    "Set which agent CLI acts for this user: 'claude-code', 'codex', a mock ('mock:claude-code' / 'mock:codex' — test dummies, visibly labeled to peers), or 'none' (inbox mode: nothing ever auto-runs; messages wait to be pulled). Applies live; peers see the choice and its auth status.",
-  parameters: Schema.Struct({ ai: Schema.Literals([...AI_OPTIONS, ...MOCK_AI_OPTIONS, "none"]) }),
+    "Set which AI tool acts for this user: a harness collagen knows, by its id; a mock of one ('mock:<id>' — test dummies, visibly labeled to peers); or 'none' (inbox mode: nothing ever auto-runs; messages wait to be pulled). An id collagen does not know is refused with the list. Applies live; peers see the choice and its auth status.",
+  parameters: Schema.Struct({ ai: Schema.String }),
   success: Schema.String,
 });
 
@@ -924,7 +924,10 @@ const makeHandlers = Effect.gen(function* () {
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
-    const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore | MergeHistory>();
+    const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore | MergeHistory | Harnesses>();
+    const harnesses = yield* Harnesses;
+    const adapters = yield* Adapters;
+    const actingNow = actingWith(harnesses);
 
     // Every tool is scoped to the room the user is looking at — resolved per
     // call, so switching rooms retargets all of them without a reconnect.
@@ -1474,37 +1477,19 @@ const makeHandlers = Effect.gen(function* () {
           Effect.map((threads) => toToon({ threads })),
           Effect.withSpan("Mcp.pendingThreads"),
         ),
-      "watch-room": ({ harness }: { harness: "claude-code" | "codex" | "other" }) =>
+      "watch-room": ({ harness: named }: { harness?: string }) =>
         Effect.gen(function* () {
           const url = yield* mcpInfo.awaitUrl;
           const origin = url.replace(/\/mcp$/, "");
-          if (harness === "codex") {
-            return [
-              "You are on codex — collagen can push messages straight into your session:",
-              "1. For each collagen thread you care about, call adopt-thread {threadId} — collagen knows which codex thread is calling and adopts it.",
-              "2. Done. New messages on adopted threads are queued into your codex session (codex queue) — they appear at your next turn, no blocking, and your user keeps chatting normally. When one appears: tell the user the headline it carries and wait; read the thread only when they ask; never answer it on your own.",
-              "For not-yet-adopted threads, check pending-threads when convenient.",
-            ].join("\n");
-          }
-          if (harness === "claude-code") {
-            return [
-              "You are on Claude Code — arm a persistent background monitor (Monitor tool, or a background bash task). Each output line = one new-message event arriving in this conversation while the user keeps chatting. Script:",
-              "",
-              "while true; do",
-              `  out=$(curl -s -m 70 "${origin}/inbox/wait?seconds=60" || true)`,
-              '  [ -n "$out" ] && printf \'%s\\n\' "$out"',
-              "  sleep 1",
-              "done",
-              "",
-              "On each event: tell the user the headline in the event line (who, project, intent) and wait. Read the thread with get-messages only when they ask what it says; never answer or act on it yourself.",
-              "Optionally also adopt-thread (agent claude-code, your session id) so messages reach you even when this session is closed.",
-            ].join("\n");
-          }
+          // the calling harness, as its call says — else the one the agent named
+          const calling = (yield* actingNow)?.conversation?.ai;
+          const harness = harnessFor(harnesses, calling ?? named ?? "");
+          if (harness) return harness.watchRecipe(origin);
           return [
             "No push mechanism known for your harness. Options:",
             `- Poll GET ${origin}/inbox/pending (one line per waiting thread) or the pending-threads tool when convenient.`,
             "- await-messages blocks until a message arrives — fine for dedicated watcher loops, not for interactive sessions.",
-            "- adopt-thread works if your agent CLI is claude-code or codex.",
+            `- Collagen wakes a conversation itself in ${harnesses.map((one) => one.name).join(" and ")}.`,
           ].join("\n");
         }).pipe(Effect.withSpan("Mcp.watchRoom")),
       "await-messages": ({ seconds }: { seconds?: number }) =>
@@ -1527,7 +1512,7 @@ const makeHandlers = Effect.gen(function* () {
             yield* Effect.sleep("500 millis");
           }
         }).pipe(Effect.withSpan("Mcp.awaitMessages")),
-      "adopt-thread": ({ threadId, agent, sessionId }: { threadId: string; agent?: "claude-code" | "codex"; sessionId?: string }) =>
+      "adopt-thread": ({ threadId, agent, sessionId }: { threadId: string; agent?: HarnessId; sessionId?: string }) =>
         Effect.gen(function* () {
           if (!/^[0-9a-f]{16}$/.test(threadId)) return `failed: "${threadId}" is not a collagen thread id — take it from pending-threads or the message you were handed`;
           // the calling conversation, as the harness says it: never the agent's word
@@ -1540,7 +1525,7 @@ const makeHandlers = Effect.gen(function* () {
           const since = yield* Clock.currentTimeMillis;
           yield* store.update((state) => ({ ...state, threads: { ...(state.threads ?? {}), [threadId]: { ai: conversation.ai, sessionId: conversation.id, since } } }));
           // how to reach it, read from this very call
-          const socket = conversation.ai === "claude-code" ? yield* callerSocket : undefined;
+          const socket = yield* (harnessFor(harnesses, conversation.ai)?.reachOf ?? Effect.succeed(undefined));
           if (socket) yield* store.update((state) => withWorked(state, conversation, { socket }, since));
           yield* Effect.log(`thread ${threadId} adopted → ${conversation.ai} ${conversation.id.slice(0, 8)}…`);
           const delivery = levelOf(yield* store.get, "deliver", "others");
@@ -1552,13 +1537,13 @@ const makeHandlers = Effect.gen(function* () {
         const ticket = all.get(input.ticketId);
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         const conversation = (yield* actingNow)?.conversation;
-        if (!conversation) return "failed: collagen cannot tell which conversation is calling, so it has nothing to wake — this works from Claude Code and Codex";
+        if (!conversation) return `failed: collagen cannot tell which conversation is calling, so it has nothing to wake — this works from ${harnesses.map((one) => one.name).join(" and ")}`;
         const now = yield* Clock.currentTimeMillis;
-        const socket = conversation.ai === "claude-code" ? yield* callerSocket : undefined;
+        const socket = yield* (harnessFor(harnesses, conversation.ai)?.reachOf ?? Effect.succeed(undefined));
         yield* store.update((state) => withWorked(state, conversation, { watch: { ticket: ticket.id, on: input.stop !== true }, ...(socket ? { socket } : {}) }, now));
         if (input.stop === true) return `stopped: this conversation no longer hears about "${ticketName(ticket)}"`;
         const delivery = levelOf(yield* store.get, "deliver", "others");
-        return `watching: this conversation hears when "${ticketName(ticket)}" moves — ${conversation.ai === "codex" ? "queued into this Codex thread" : "a courier tells this conversation in one line"}${delivery === "unset" ? ". Your user's delivery steering is not chosen, so nothing comes until they choose one" : ""}.`;
+        return `watching: this conversation hears when "${ticketName(ticket)}" moves — ${harnessFor(harnesses, conversation.ai)?.wakesBy ?? "woken by collagen"}${delivery === "unset" ? ". Your user's delivery steering is not chosen, so nothing comes until they choose one" : ""}.`;
       }),
       "get-messages": ({ threadId }: { threadId: string }) =>
         Effect.gen(function* () {
@@ -2047,16 +2032,12 @@ const makeHandlers = Effect.gen(function* () {
         return `set — on this machine only:\n${listed(after)}`;
       }),
       "set-ai": ({ ai: agent }: { ai: string }) =>
-        store
-          .update((state) => ({ ...state, preferredAi: agent === "none" ? null : agent }))
-          .pipe(
-            Effect.map(() =>
-              agent === "none"
-                ? "ai set to none — inbox mode: nothing auto-runs, messages wait to be pulled"
-                : `ai set to ${agent} — its auth status is probed now and broadcast to the room`,
-            ),
-            Effect.withSpan("Mcp.setAi"),
-          ),
+        Effect.gen(function* () {
+          const choices = (yield* aiChoices.pipe(Effect.provideService(Adapters, adapters), Effect.provideService(Harnesses, harnesses))).filter((choice) => choice !== null);
+          if (agent !== "none" && !choices.includes(agent)) return `failed: collagen does not know "${agent}" — pick one of: ${[...choices, "none"].join(", ")}`;
+          yield* store.update((state) => ({ ...state, preferredAi: agent === "none" ? null : agent }));
+          return agent === "none" ? "ai set to none — inbox mode: nothing auto-runs, messages wait to be pulled" : `ai set to ${agent} — its auth status is probed now and broadcast to the room`;
+        }).pipe(Effect.withSpan("Mcp.setAi")),
       "set-steering": (input: { level?: "ask" | "act" | "auto" | null; kind?: SteeringAt; whose?: "mine" | "others" | "both"; tag?: "none" | "existing" | "existing-or-new" | "new" | null }) =>
         Effect.gen(function* () {
           if (input.level !== undefined) yield* store.update((state) => withLevel(state, input.kind ?? "master", input.whose ?? "mine", input.level ?? null));
@@ -2348,12 +2329,13 @@ const makeDiagnosticHandlers = Effect.gen(function* () {
   const rooms = yield* Rooms;
   const transcripts = yield* Transcripts;
   const attachments = yield* Attachments;
+  const harnesses = yield* Harnesses;
   const pages = yield* ReviewPages;
   const handlers: Record<string, (params: unknown) => Effect.Effect<string>> = {};
   for (const diagnostic of diagnostics) {
     handlers[diagnostic.id] = (params) =>
       rooms.current.pipe(
-        Effect.flatMap((handle) => diagnostic.run(params ?? {}, { roomId: handle.id }, { rooms, transcripts, attachments, me: identity.pubkey, reviewStarted: pages.started, toolDefinitions })),
+        Effect.flatMap((handle) => diagnostic.run(params ?? {}, { roomId: handle.id }, { rooms, transcripts, attachments, harnesses, me: identity.pubkey, reviewStarted: pages.started, toolDefinitions })),
         Effect.withSpan(`Mcp.${diagnostic.id}`),
       );
   }

@@ -4,6 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { MergeHistory } from "./MergeHistory";
 import { Swarm, SwarmConfig } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
+import { HarnessesLive } from "./Harness";
 import { AiStatus } from "./AiStatus";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
@@ -79,6 +80,7 @@ export const AppLayer = Layer.mergeAll(Daemons, McpLive, MergerDaemon).pipe(
   Layer.provideMerge(AgentRunner.layer),
   Layer.provideMerge(AiStatus.layer),
   Layer.provideMerge(AdaptersLive),
+  Layer.provideMerge(HarnessesLive),
   Layer.provideMerge(Inbox.layer),
   Layer.provideMerge(McpInfo.layer),
   Layer.provideMerge(StateStore.layer),

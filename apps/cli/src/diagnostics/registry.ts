@@ -3,6 +3,7 @@ import type { Route } from "../app/router";
 import type { Attachments } from "../services/Attachments";
 import type { Rooms } from "../services/Rooms";
 import type { Transcripts } from "../services/Transcripts";
+import type { Harnesses } from "../services/Harness";
 
 /** What a diagnostic may use. Passed in, not pulled from context, so a
  *  diagnostic is a plain object both surfaces (TUI, MCP) can run the same way. */
@@ -10,6 +11,8 @@ export interface DiagnosticDeps {
   readonly rooms: Rooms["Service"];
   readonly transcripts: Transcripts["Service"];
   readonly attachments: Attachments["Service"];
+  /** The harnesses in use (services/Harness): whatever reads a harness's own files goes through them. */
+  readonly harnesses: Harnesses["Service"];
   /** Whose machine this runs on (pubkey) — a diagnostic that behaves
    *  differently for a ticket's author and for a reader needs to know. */
   readonly me: string;

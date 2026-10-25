@@ -2,42 +2,49 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { pack, readLine, sessionDirs, sessionFile, sliceSince, unpack } from "./transcripts";
+import { pack, readLine, sliceSince, unpack } from "./transcripts";
+import { homesOf, transcriptFile } from "../services/Harness";
+import { claudeCode } from "../services/harnesses/claudeCode";
+import { codex } from "../services/harnesses/codex";
+
+const HARNESSES = [claudeCode, codex];
 
 describe("readLine — a session line, readable", () => {
   it("codex: messages by role, reasoning, tool calls; token counts and turn context are noise", () => {
-    expect(readLine(JSON.stringify({ timestamp: "t", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "hi" }] } }))).toEqual({ ts: "t", who: "assistant", text: "hi" });
-    expect(readLine(JSON.stringify({ type: "response_item", payload: { type: "reasoning", summary: [], encrypted_content: "x" } }))).toEqual({ ts: null, who: "reasoning", text: "(reasoning, encrypted)" });
-    expect(readLine(JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "get-messages", arguments: "{}" } }))?.text).toBe("⚙ get-messages {}");
-    expect(readLine(JSON.stringify({ type: "event_msg", payload: { type: "token_count" } }))).toBeNull();
-    expect(readLine(JSON.stringify({ type: "turn_context", payload: {} }))).toBeNull();
-    expect(readLine(JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: "/w" } }))?.text).toBe("codex_cli · /w");
+    expect(readLine(HARNESSES, JSON.stringify({ timestamp: "t", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "hi" }] } }))).toEqual({ ts: "t", who: "assistant", text: "hi" });
+    expect(readLine(HARNESSES, JSON.stringify({ type: "response_item", payload: { type: "reasoning", summary: [], encrypted_content: "x" } }))).toEqual({ ts: null, who: "reasoning", text: "(reasoning, encrypted)" });
+    expect(readLine(HARNESSES, JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "get-messages", arguments: "{}" } }))?.text).toBe("⚙ get-messages {}");
+    expect(readLine(HARNESSES, JSON.stringify({ type: "event_msg", payload: { type: "token_count" } }))).toBeNull();
+    expect(readLine(HARNESSES, JSON.stringify({ type: "turn_context", payload: {} }))).toBeNull();
+    expect(readLine(HARNESSES, JSON.stringify({ type: "session_meta", payload: { originator: "codex_cli", cwd: "/w" } }))?.text).toBe("codex_cli · /w");
   });
 
   it("claude code: user and assistant turns, tool use, the collagen nudge; attachments are noise", () => {
-    expect(readLine(JSON.stringify({ timestamp: "t", type: "user", message: { role: "user", content: "hello" } }))).toEqual({ ts: "t", who: "user", text: "hello" });
-    expect(readLine(JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "a" }, { type: "tool_use", name: "Read", input: { p: 1 } }] } }))?.text).toBe('a\n⚙ Read {"p":1}');
-    expect(readLine(JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "Collagen: …" }))).toEqual({ ts: null, who: "collagen (enqueue)", text: "Collagen: …" });
-    expect(readLine(JSON.stringify({ type: "attachment", attachment: {} }))).toBeNull();
-    expect(readLine("nope")).toBeNull();
+    expect(readLine(HARNESSES, JSON.stringify({ timestamp: "t", type: "user", message: { role: "user", content: "hello" } }))).toEqual({ ts: "t", who: "user", text: "hello" });
+    expect(readLine(HARNESSES, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "a" }, { type: "tool_use", name: "Read", input: { p: 1 } }] } }))?.text).toBe('a\n⚙ Read {"p":1}');
+    expect(readLine(HARNESSES, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "Collagen: …" }))).toEqual({ ts: null, who: "collagen (enqueue)", text: "Collagen: …" });
+    expect(readLine(HARNESSES, JSON.stringify({ type: "attachment", attachment: {} }))).toBeNull();
+    expect(readLine(HARNESSES, "nope")).toBeNull();
   });
 });
 
 const makeDir = () => mkdtempSync(join(tmpdir(), "collagen-transcripts-"));
 
-describe("sessionDirs", () => {
+describe("where each harness keeps its sessions", () => {
   it("honours the CLIs' own overrides, else the home defaults", () => {
-    expect(sessionDirs({ CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x" }, "/home/u")).toEqual({ claude: "/c", codex: "/x" });
-    expect(sessionDirs({}, "/home/u")).toEqual({ claude: "/home/u/.claude", codex: "/home/u/.codex" });
+    expect(homesOf(HARNESSES, { CLAUDE_CONFIG_DIR: "/c", CODEX_HOME: "/x" }, "/home/u")).toEqual({ "claude-code": "/c", codex: "/x" });
+    expect(homesOf(HARNESSES, {}, "/home/u")).toEqual({ "claude-code": "/home/u/.claude", codex: "/home/u/.codex" });
   });
 });
+
+const sessionFile = (ai: string, id: string, homes: Record<string, string>) => transcriptFile(HARNESSES, ai, id, homes);
 
 describe("sessionFile", () => {
   it("finds a Claude Code session in any project dir", () => {
     const claude = makeDir();
     mkdirSync(join(claude, "projects", "-Users-me-proj"), { recursive: true });
     writeFileSync(join(claude, "projects", "-Users-me-proj", "11111111-2222-3333-4444-555555555555.jsonl"), "{}\n");
-    const dirs = { claude, codex: "/nowhere" };
+    const dirs = { "claude-code": claude, codex: "/nowhere" };
     expect(sessionFile("claude-code", "11111111-2222-3333-4444-555555555555", dirs)).toBe(join(claude, "projects", "-Users-me-proj", "11111111-2222-3333-4444-555555555555.jsonl"));
     expect(sessionFile("claude-code", "99999999-2222-3333-4444-555555555555", dirs)).toBeNull();
   });
@@ -48,13 +55,13 @@ describe("sessionFile", () => {
     mkdirSync(day, { recursive: true });
     const file = join(day, "rollout-2026-09-09T10-00-00-019c0000-0000-7000-8000-000000000abc.jsonl");
     writeFileSync(file, "{}\n");
-    const dirs = { claude: "/nowhere", codex };
+    const dirs = { "claude-code": "/nowhere", codex };
     expect(sessionFile("codex", "019c0000-0000-7000-8000-000000000abc", dirs)).toBe(file);
     expect(sessionFile("codex", "019c0000-0000-7000-8000-000000000def", dirs)).toBeNull();
   });
 
   it("refuses ids that could escape or match everything", () => {
-    const dirs = { claude: "/nowhere", codex: "/nowhere" };
+    const dirs = { "claude-code": "/nowhere", codex: "/nowhere" };
     expect(sessionFile("codex", "../x", dirs)).toBeNull();
     expect(sessionFile("codex", "ab", dirs)).toBeNull();
     expect(sessionFile("mock:codex", "11111111-2222-3333-4444-555555555555", dirs)).toBeNull();
@@ -71,8 +78,8 @@ describe("sliceSince", () => {
     JSON.stringify({ timestamp: "2026-09-01T12:01:00.000Z", type: "response_item", text: "the person answers" }),
   ].join("\n");
 
-  it("keeps meta and un-stamped lines, drops what predates the adoption, counts the rest", () => {
-    const { lines, entries } = sliceSince(jsonl, Date.parse("2026-09-01T11:00:00.000Z"));
+  it("keeps a Codex session header and un-stamped lines, drops what predates the adoption, counts the rest", () => {
+    const { lines, entries } = sliceSince(jsonl, Date.parse("2026-09-01T11:00:00.000Z"), codex.keepsWhole);
     expect(entries).toBe(2);
     expect(lines.map((line) => (JSON.parse(line) as { type?: string; text?: string }).text ?? "meta")).toEqual([
       "meta",
@@ -83,7 +90,7 @@ describe("sliceSince", () => {
   });
 
   it("round-trips through the wire form", () => {
-    const { lines } = sliceSince(jsonl, 0);
+    const { lines } = sliceSince(jsonl, 0, codex.keepsWhole);
     expect(unpack(pack(lines)).trim().split("\n")).toEqual([...lines]);
   });
 });
