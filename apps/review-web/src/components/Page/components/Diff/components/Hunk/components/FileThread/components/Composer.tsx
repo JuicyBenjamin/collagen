@@ -1,4 +1,5 @@
 import { createSignal, Show } from "solid-js";
+import { snapToTop } from "~/fold";
 import { hostNow } from "~/hostNow";
 import { StrengthPicker } from "~/components/Strength";
 import { withStrength, type Strength } from "~/strength";
@@ -41,7 +42,14 @@ export function Composer(props: { file: string; onClose: () => void }) {
       </div>
       <textarea
         class="textarea"
-        ref={(element) => requestAnimationFrame(() => element.focus())}
+        // opened at the file's top: the page goes to the file, snapped to the window's top,
+        // and focusing scrolls nothing more — the pointer is never left on the file above
+        ref={(element) =>
+          requestAnimationFrame(() => {
+            snapToTop(element.closest(".hunk-group"));
+            element.focus({ preventScroll: true });
+          })
+        }
         rows={3}
         placeholder="Leave a comment"
         value={body()}
