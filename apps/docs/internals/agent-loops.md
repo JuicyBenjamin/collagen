@@ -132,7 +132,7 @@ What does not, found in `AgentRunner.ts` and `Rooms.ts`:
 | Cost is thrown away | `adapter.parse` keeps `sessionId` and `result` | `claude --output-format json` reports `total_cost_usd` and `usage`; codex's `turn.completed` reports tokens; nobody can see what a loop spent |
 | No stop | runs are children of the room's daemons | the only way to stop a run is to leave the room or quit |
 | Causes live in a 50-line log | `LogBuffer` | an outbox row cannot say which run sent it or what woke that run |
-| Who called a tool is unknown | every MCP call looks the same | the single-player nudge would loop back to its author ([single player](/guide/conversations#single-player)) |
+| ~~Who called a tool is unknown~~ | closed: every call from Claude Code or Codex names its conversation (`lib/agents`, `acting`) | — |
 
 ## Recommendations
 
@@ -248,7 +248,7 @@ is already how tickets work (a step's owner is a person), and the single-player 
 
 | Question | Why it is not settled |
 | --- | --- |
-| Does `effect/ai`'s `McpServer` expose request headers to a tool handler? | Recommendation 6 needs it; the fallback is a per-run URL path on the same port. |
+| Does `effect/ai`'s `McpServer` expose request headers to a tool handler? | Not needed for the live session: the call's `_meta` already names its conversation. A background run still needs its run id told apart (recommendation 6). |
 | Are the starting caps right? | They are guesses; the runs page will show what real loops spend. |
 | Should a paused machine tell its peers? | A peer waiting on a reply cannot tell "paused" from "away" today. |
 | Is a chain reset by any live call, or only by one that sends? | Reading a thread is the person looking, but not the person deciding. |

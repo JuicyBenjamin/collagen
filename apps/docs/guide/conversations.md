@@ -131,8 +131,9 @@ be pulled), `→ codex queue` (shows at the codex thread's next turn), `→ back
 are sitting in, keep that session watching — `watch-room` gives the recipe — since
 neither CLI offers collagen a way to write into a live interactive session.
 
-Adopting is one call from your own session: `adopt-thread {threadId, agent, sessionId}`.
-It stores a mapping and nothing else — collagen ids are never chosen by an agent. It
+Adopting is one call from your own session: `adopt-thread {threadId}`. On Claude Code and
+Codex, collagen knows which conversation is calling and adopts that one; another client
+passes `agent` and `sessionId`. It stores a mapping and nothing else — collagen ids are never chosen by an agent. It
 survives restarts. `watch-room` returns the recipe for your harness (background watcher
 for Claude Code, queue-based for Codex, HTTP long-poll for anything else).
 
@@ -309,7 +310,7 @@ Open questions, and they are the reason this is not built yet:
 
 | Question | Why it is not obvious |
 | --- | --- |
-| Which agent caused it? | A tool call does not say which session it came from. Something has to identify the caller — the MCP client, or an explicit session on the call — or the nudge loops back to its author. |
+| Which agent caused it? | Answered: every act from Claude Code or Codex names the conversation that did it (read from what the harness sends on the call), so the nudge can skip its author. |
 | Which sessions count? | Every adopted thread on the machine, or only those on the ticket's own threads? The first is noisy, the second means a fresh agent hears nothing until it adopts. |
 | How does it read? | One person, two agents, one outbox and one trace: the lists would have to say which of your own agents did a thing, which no screen does today. |
 | Is a step ever "theirs"? | Ownership is a person, deliberately (`TicketStep.owner` is a pubkey). A second agent reviewing your change posts on a step of *yours*, which is fine for a review and wrong for a task. |

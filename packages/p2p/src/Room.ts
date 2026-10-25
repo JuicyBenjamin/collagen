@@ -14,6 +14,7 @@ import {
   type TranscriptRequestFrame,
 } from "./schema";
 import { NotWritable, PeerNotConnected } from "./errors";
+import type { Conversation } from "./acting";
 import type { ReviewComment, ReviewContext } from "./review";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic, type Net } from "./topic";
@@ -395,7 +396,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     const sendTo = Effect.fn("Room.sendTo")(function* (
       peerKey: string,
-      payload: { project: string; intent: string; findings: string; ticketId?: string; agent?: string },
+      payload: { project: string; intent: string; findings: string; ticketId?: string; agent?: string; conversation?: Conversation },
     ) {
       const roomLog = yield* requireLog;
       const now = yield* Clock.currentTimeMillis;
@@ -412,6 +413,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         ts: now,
         ...(payload.ticketId ? { ticketId: payload.ticketId } : {}),
         ...(payload.agent ? { agent: payload.agent } : {}),
+        ...(payload.conversation ? { conversation: payload.conversation } : {}),
       };
       yield* roomLog.append({ op: "msg", msg: message }).pipe(Effect.orDie);
       return message;

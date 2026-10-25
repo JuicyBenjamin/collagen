@@ -1,4 +1,4 @@
-import { closedAs, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { finishLine, reviewHeadline, yourFinish } from "./review";
 import { rowTitle } from "./ticketSummary";
 
@@ -39,6 +39,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   createdBy: nameFor(ticket.createdBy),
   /** which of the author's agents filed it or last revised it — not the person themselves */
   ...(ticket.agent ? { agent: ticket.agent } : {}),
+  /** the conversation that agent did it in — yours when it is the one you are in */
+  ...(ticket.conversation ? { conversation: conversationLine(ticket.conversation) } : {}),
   /** the tickets this one follows; walk them with review-context when your user asks why */
   ...(ticket.from && ticket.from.length > 0 ? { from: ticket.from.join(" ") } : {}),
   /** the tickets this one waits on (read after them) */
@@ -72,8 +74,13 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
     result: step.result ?? "",
     /** which of the owner's agents wrote its state ("" — the person, or not known) */
     agent: step.agent ?? "",
+    /** the conversation that agent wrote it in ("" — not known) */
+    conversation: step.conversation ? conversationLine(step.conversation) : "",
   })),
 });
+
+/** A conversation as an agent reads it: "codex 019a…", "claude-code 230d…". */
+const conversationLine = (conversation: Conversation): string => `${conversation.ai} ${conversation.id}`;
 
 /** Who has a step, by name — or, for one nobody has, that anyone may take it. */
 const ownerName = (owner: string | undefined, nameFor: (key: string) => string): string => (owner === undefined ? "anyone (nobody has taken it: take-step)" : nameFor(owner));

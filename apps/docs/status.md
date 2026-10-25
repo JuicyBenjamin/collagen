@@ -35,7 +35,14 @@ _Last updated: 2026-09-14._
   `via Codex` on the ticket page, its steps, the row's `self ✓`, the review page,
   messages and the outbox; agents read
   `Juicy's Codex` in get-tickets, review-context and every delivery. Protocol 11: an
-  older build would drop the field from a ticket it re-shares.
+  older build would drop the field from a ticket it re-shares. The **conversation** that
+  did it travels beside the agent (`conversation: {ai, id}`): the Codex thread from the
+  call's `_meta.threadId`, the Claude Code session from the `sessionId` on the log entry
+  that holds the call (a subagent's names its parent session). Agents read it in
+  get-ticket and get-messages; people see the label only. Each conversation's threads and
+  tickets are remembered on this machine (`worked` in local state) — remembered, never a
+  reason to deliver anything. `adopt-thread` adopts the calling conversation, and refuses
+  an id that is not it.
 - **Ticket page + diagnostics registry** — `enter` on a ticket opens it: steps, the
   conversation on its threads, and the diagnostics that apply. Diagnostics are one file
   each in `src/diagnostics/`; the MCP server and the ticket page both read the registry.
@@ -145,7 +152,7 @@ it with the why attached. Filing that review works today; the nudge does not.
 - [ ] Deliver to **agents attached to a peer**, not only to other peers: every adopted
   session on the machine except the one whose action caused it (Claude asked, so Codex is
   told and Claude is not)
-- [ ] Know which agent called a tool, or the nudge loops back to its author
+- [x] Know which agent called a tool, or the nudge loops back to its author
 - [ ] Say which of your own agents did a thing, in the trace and the outbox
 
 ### 5. Plans & proposals — [spec](/guide/tickets#plans-and-proposals-judgment-before-the-code-exists)

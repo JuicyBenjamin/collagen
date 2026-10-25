@@ -383,13 +383,28 @@ describe("where a reader's own review lands", () => {
 describe("which agent did it", () => {
   it("a settle and a review name the agent beside the person; a later act by the person takes the name off", () => {
     const fixing = ticket({ steps: [step({ id: "s1", owner: "bob", intent: "fix" })] });
-    const byCodex = settleStep(fixing, "s1", "bob", "done", false, 2, "Codex")!.ticket;
-    expect(byCodex.steps[0]).toMatchObject({ owner: "bob", status: "settled", agent: "Codex" });
+    const byCodex = settleStep(fixing, "s1", "bob", "done", false, 2, { agent: "Codex", conversation: { ai: "codex", id: "th-1" } })!.ticket;
+    expect(byCodex.steps[0]).toMatchObject({ owner: "bob", status: "settled", agent: "Codex", conversation: { ai: "codex", id: "th-1" } });
     const byBob = settleStep(byCodex, "s1", "bob", "done, again", false, 3)!.ticket;
     expect(byBob.steps[0]!.agent).toBeUndefined();
+    expect(byBob.steps[0]!.conversation).toBeUndefined();
     const review = ticket({ kind: "review", steps: [] });
-    const { ticket: taken, stepId } = postReview(review, { key: "carol", name: "Carol" }, "fine", false, 2, "Claude Code");
-    expect(taken.steps.find((candidate) => candidate.id === stepId)).toMatchObject({ owner: "carol", agent: "Claude Code" });
+    const { ticket: taken, stepId } = postReview(review, { key: "carol", name: "Carol" }, "fine", false, 2, { agent: "Claude Code", conversation: { ai: "claude-code", id: "s-1" } });
+    expect(taken.steps.find((candidate) => candidate.id === stepId)).toMatchObject({ owner: "carol", agent: "Claude Code", conversation: { ai: "claude-code", id: "s-1" } });
+  });
+
+  it("copies that differ only in which conversation wrote them merge the same however they are grouped", () => {
+    const by = (id?: string) => ({ agent: "Claude Code", ...(id ? { conversation: { ai: "claude-code" as const, id } } : {}) });
+    const steps = [by("s-a"), by("s-b"), by()].map((acting) => ticket({ steps: [step({ status: "settled", result: "same", updatedAt: 5, ...acting })] }));
+    const revisions = [by("s-a"), by("s-b"), by()].map((acting) => ticket({ structureAt: 2, ...acting }));
+    for (const copies of [steps, revisions]) {
+      const results = new Set<string>();
+      for (const [first, second, third] of [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] as const) {
+        results.add(JSON.stringify(mergeTicket(mergeTicket(copies[first]!, copies[second]!), copies[third]!)));
+        results.add(JSON.stringify(mergeTicket(copies[first]!, mergeTicket(copies[second]!, copies[third]!))));
+      }
+      expect(results.size).toBe(1);
+    }
   });
 
   it("a step's agent merges the same however copies are grouped", () => {
@@ -420,6 +435,7 @@ describe("which agent did it", () => {
     const { Ticket } = await import("./ticket");
     const old = { id: "t1", project: "p", goal: "g", createdBy: "a", structureAt: 1, kind: "task", steps: [{ id: "s1", owner: "a", intent: "x", description: "d", needs: [], status: "settled", result: "r", updatedAt: 1 }], updatedAt: 1 };
     expect(Schema.decodeUnknownSync(Ticket)(old).steps[0]!.agent).toBeUndefined();
+    expect(Schema.decodeUnknownSync(Ticket)(old).steps[0]!.conversation).toBeUndefined();
   });
 });
 

@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isOwned, isTake, moveToEpic, orderEpic, postReview, settleStep, takeStep, ticketName, turnEpic, visibleTo, withAgent, type Outgoing, type Ticket } from "@collagen/p2p";
+import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isOwned, isTake, moveToEpic, orderEpic, postReview, settleStep, takeStep, ticketName, turnEpic, visibleTo, actingFields, withActing, type Acting, type Outgoing, type Ticket } from "@collagen/p2p";
 import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
+import { ticketsOf, withWorked } from "../lib/worked";
 import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
 import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
@@ -42,10 +43,11 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
     const store = yield* StateStore;
     const { identity, nameRef } = yield* IdentityService;
 
-    /** `agent`: which of the person's agents is doing this (Claude Code,
-     *  Codex …), recorded beside them on what it writes; none when the person
-     *  acts themselves. */
-    const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing, agent?: string) {
+    /** `acting`: which of the person's agents is doing this (Claude Code,
+     *  Codex …) and in which conversation, recorded beside them on what it
+     *  writes; none when the person acts themselves. A message's thread, once
+     *  sent, is where the conversation wrote. */
+    const write = Effect.fn("Dispatch.write")(function* (roomId: string, out: Outgoing, acting: Acting | undefined, wroteOn: Array<string>) {
       const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === roomId);
       if (!handle) return refused("failed: that room is gone");
       const { room } = handle;
@@ -64,7 +66,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
         SubscriptionRef.get(room.tickets).pipe(
           Effect.map((all) => {
             const had = all.get(ticket.id);
-            return had && had.structureAt >= ticket.structureAt ? ticket : withAgent(ticket, agent);
+            return had && had.structureAt >= ticket.structureAt ? ticket : withActing(ticket, acting);
           }),
         );
 
@@ -75,7 +77,8 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (who._tag === "refused") return refused(who.text);
           const target = who.person;
           const online = peers.some((peer) => peer.key === target.key);
-          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}), ...(agent ? { agent } : {}) }).pipe(
+          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}), ...actingFields(acting) }).pipe(
+            Effect.tap((message) => Effect.sync(() => wroteOn.push(message.threadId))),
             Effect.map(() => sent(online ? `sent to ${target.name}` : `sent to ${target.name} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),
           );
@@ -95,7 +98,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             const shared = yield* room.shareTicket(yield* authored(out.ticket)).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
             if (!shared) return NOT_ADMITTED;
           }
-          const ok = yield* room.shareReview(withAgent(out.review, agent)).pipe(
+          const ok = yield* room.shareReview(withActing(out.review, acting)).pipe(
             Effect.as(true),
             Effect.catchTag("NotWritable", () => Effect.succeed(false)),
           );
@@ -149,7 +152,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (!step) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
           const now = yield* Clock.currentTimeMillis;
           // one rule, shared with the drive path (see p2p settleStep)
-          const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now, agent);
+          const done = settleStep(ticket, out.stepId, identity.pubkey, out.result, out.failed, now, acting);
           if (!done) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
           if (done.outcome === "not-yours") {
             return refused(`failed: step ${out.stepId} is ${nameFor(done.owner)}'s to settle${isJudged(ticket.kind) ? " — put your user's own take on the ticket with post-review" : " — say what your user thinks with send-to-peer (pass ticketId)"}`);
@@ -179,7 +182,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return refused(`failed: no ticket ${out.ticketId} — check get-tickets`);
           const now = yield* Clock.currentTimeMillis;
           // one rule for the person's key and their agent's tool (see p2p takeStep)
-          const taken = takeStep(ticket, out.stepId, identity.pubkey, now, agent);
+          const taken = takeStep(ticket, out.stepId, identity.pubkey, now, acting);
           const step = ticket.steps.find((candidate) => candidate.id === out.stepId);
           if (!taken || !step) return refused(`failed: no step ${out.stepId} on ticket ${out.ticketId}`);
           if (taken.outcome === "already") return refused(`failed: step ${out.stepId} is your user's already`);
@@ -291,7 +294,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           const now = yield* Clock.currentTimeMillis;
           // a review lands on a step of its reader's own: nobody's is taken,
           // and posting again revises theirs
-          const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now, agent, out.comment ?? false);
+          const { ticket: updated, stepId } = postReview(ticket, { key: identity.pubkey, name: myName }, out.findings, out.failed, now, acting, out.comment ?? false);
           const merged = yield* room.shareTicket(updated).pipe(Effect.catchTag("NotWritable", () => Effect.succeed(null)));
           if (!merged) return NOT_ADMITTED;
           const others = merged.steps.filter((step) => isTake(step) && step.owner !== identity.pubkey).length;
@@ -363,6 +366,20 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             );
         }
       }
+    });
+
+    /** Write it, and — when an agent's conversation did — remember that the
+     *  conversation worked on its thread and tickets (lib/worked): nothing is
+     *  delivered to it because of that. */
+    const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing, acting?: Acting) {
+      const wroteOn: Array<string> = [];
+      const done = yield* write(roomId, out, acting, wroteOn);
+      const conversation = acting?.conversation;
+      if (done._tag === "sent" && conversation) {
+        const now = yield* Clock.currentTimeMillis;
+        yield* store.update((state) => withWorked(state, conversation, { threads: wroteOn, tickets: ticketsOf(out) }, now));
+      }
+      return done;
     });
 
     return { perform } as const;

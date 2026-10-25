@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { Conversation } from "./acting";
 import { ReviewMachine } from "./machine";
 
 // The why behind a change, as data. A code review normally shows only the
@@ -201,6 +202,8 @@ export const ReviewContext = Schema.Struct({
   /** Which of the author's agents wrote this revision (Claude Code, Codex …);
    *  absent when the person did, or nobody knows. */
   agent: Schema.optional(Schema.String),
+  /** Which of that agent's conversations wrote it, when the harness said. */
+  conversation: Schema.optional(Conversation),
   /** The change in the author's own words — the what. */
   summary: Schema.String,
   /** Where the code is: the branch, what it is cut from, and a link (a pull
@@ -466,6 +469,11 @@ export const ReviewComment = spotted({
   detail: Schema.optional(Schema.String),
   /** drafted by the reader's AI, then accepted by the reader (or by the AI on their word) */
   drafted: Schema.optional(Schema.Boolean),
+  /** Which of the reader's agents said it, and in which conversation, when
+   *  one did: the finish came through its tool call. Absent when the reader
+   *  finished on the page. */
+  agent: Schema.optional(Schema.String),
+  conversation: Schema.optional(Conversation),
   host: Schema.optional(Schema.Struct({ id: Schema.Finite, url: Schema.String })),
   ts: Schema.Finite,
 });

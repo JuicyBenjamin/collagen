@@ -1,4 +1,5 @@
 export * from "./schema";
+export * from "./acting";
 export * from "./ticket";
 export * from "./kinds";
 export * from "./migrate";
