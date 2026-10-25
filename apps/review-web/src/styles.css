@@ -137,7 +137,8 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
    rail; the band above it is the page's own colour, so nothing shows through */
 .hunk .file.stuck { box-shadow: 0 -25px 0 var(--bg); }
 .hunk .file::before { content: ""; position: absolute; inset: 0 0 -1px; z-index: -1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px 10px 0 0; }
-.hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 9px 13px 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+/* centred like its controls: folded, the side holds only the Viewed box, with no text line for the path to sit on */
+.hunk .file { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 9px 13px 8px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .hunk .file .head { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* a path too long for the header loses its start, not its file name: it is laid
    out right to left so the ellipsis falls on the left, the <bdi> inside keeping
