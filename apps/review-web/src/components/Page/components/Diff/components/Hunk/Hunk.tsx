@@ -4,7 +4,7 @@ import { diffNow } from "~/diffNow";
 import { ticketId } from "~/ticket";
 import { wholeFile } from "~/api";
 import { hasNewSide, wholeHunk } from "~/whole";
-import { foldAway, holdInPlace } from "~/fold";
+import { foldAway, holdInPlace, snapToTop } from "~/fold";
 import { highlightHunk } from "~/highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "~/intel";
 import { ChangedLine, CodeLine } from "~/components/Code";
@@ -324,8 +324,8 @@ export function Hunk(props: {
               checked={state() === "viewed"}
               onChange={async () => {
                 // marking it folds it: closed smoothly first, then marked —
-                // its header held where the reader clicked it, so the next
-                // file comes up under it rather than the page running on
+                // its header held where the reader clicked it while it folds,
+                // then the next file snapped to the window's top to read on
                 const marking = state() !== "viewed";
                 const group = card();
                 const settled = holdInPlace(head);
@@ -334,10 +334,9 @@ export function Hunk(props: {
                 reading.marked(props.hunk.file);
                 if (!marking || !group) return;
                 await settled;
-                // a header clicked at the window's foot: the next file's comes into view
+                // the next file at the top, where its header rests; after the last, the folded one itself
                 const cards = [...document.querySelectorAll(".hunk-group")];
-                const next = cards[cards.indexOf(group) + 1]?.querySelector(".file");
-                if (next && next.getBoundingClientRect().bottom > innerHeight) next.scrollIntoView({ block: "nearest" });
+                snapToTop(cards[cards.indexOf(group) + 1] ?? group);
               }}
             />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}
