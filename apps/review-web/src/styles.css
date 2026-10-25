@@ -452,7 +452,7 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 /* a viewed file's name: a chevron that opens it again to read, the mark kept */
 .reread-toggle { all: unset; display: flex; min-width: 0; cursor: pointer; color: var(--dim); white-space: nowrap; }
 .reread-toggle:hover, .reread-toggle:focus-visible { color: var(--accent); }
-.reread-toggle .chevron { flex: none; width: 1.2em; color: var(--faint); }
+.reread-toggle .chevron { flex: none; display: inline-block; width: 1.2em; text-align: center; margin-right: 0.2em; color: var(--faint); }
 .reread-toggle .path { min-width: 0; }
 
 /* how far through the files the reader is: a count and a thin bar */

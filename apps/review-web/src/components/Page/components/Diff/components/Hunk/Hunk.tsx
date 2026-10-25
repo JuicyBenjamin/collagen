@@ -4,13 +4,14 @@ import { diffNow } from "~/diffNow";
 import { ticketId } from "~/ticket";
 import { wholeFile } from "~/api";
 import { hasNewSide, wholeHunk } from "~/whole";
-import { foldAway, glideToTop, holdInPlace } from "~/fold";
+import { foldAway, glideToTop, holdInPlace, markLanded } from "~/fold";
 import { highlightHunk } from "~/highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "~/intel";
 import { ChangedLine, CodeLine } from "~/components/Code";
 import { rowsOf } from "~/inline";
 import { Peek } from "./components/Peek";
 import { LineComposer, LineThread } from "./components/LineThread";
+import { Chevron } from "./components/Chevron";
 import { FileThread } from "./components/FileThread";
 import { Rendered } from "./components/Rendered";
 import { isMarkdown, mdView } from "~/mdView";
@@ -281,7 +282,7 @@ export function Hunk(props: {
                   flush();
                   settle();
                 }} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
-                <span class="chevron">{folded() ? "▸" : "▾"}</span><span class="path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>
+                <Chevron open={!folded()} /><span class="path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>
               </button>
             </Show>
           }
@@ -342,9 +343,11 @@ export function Hunk(props: {
                 viewed.toggle(props.hunk.file, diffNow.commit());
                 reading.marked(props.hunk.file);
                 reading.foldsNow(props.hunk.file, false);
-                // drawn folded: the card is its header's size of itself again
+                // drawn folded: the card is its header's size of itself again,
+                // and the header settles into its new state as one beat
                 flush();
                 settle();
+                markLanded(head, marking);
               }}
             />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}
