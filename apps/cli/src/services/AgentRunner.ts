@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
-import { Context, Effect, Layer, Option, Ref, Semaphore, Stream, SynchronizedRef } from "effect";
+import { Clock, Context, Effect, Layer, Option, Ref, Semaphore, Stream, SynchronizedRef } from "effect";
+import type { OwnRun } from "@collagen/p2p";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { sameName } from "../lib/names";
 import { mcpServerName } from "./mcpAddress";
@@ -14,6 +15,8 @@ import { listenerFor } from "../lib/worked";
 
 /** How many woken messages are remembered. */
 const WOKEN = 500;
+/** How many of collagen's own model runs are kept. */
+const OWN_RUNS = 1000;
 
 /** Who caused a delivery: the person's own (a message from them to them), or someone else. */
 const causeOf = (spawnContext: SpawnCtx): Cause => (spawnContext.message.from === spawnContext.message.to ? "mine" : "others");
@@ -150,7 +153,13 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       }
       const line = wakeLine({ cwd: homedir(), mcpUrl, serverName: mcpServerName(profile), message: news, sessionId: Option.some(listener.conversation.id), steering: levelOf(state, "work", cause) });
       const woken = yield* withDeliver(gate.go, harness.wake(listener.conversation.id, listener.socket, line)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
-      if (woken === "unreachable") {
+      // what collagen itself spent to wake it, kept beside what its words cost the agents
+      if (woken.spent) {
+        const at = yield* Clock.currentTimeMillis;
+        const run: OwnRun = { at, harness: harness.id, why: "wake", ...woken.spent };
+        yield* store.update((now) => ({ ...now, ownRuns: [...(now.ownRuns ?? []), run].slice(-OWN_RUNS) }));
+      }
+      if (!woken.reached) {
         yield* Effect.log(`→ inbox · ${about} — your ${harness.name} conversation ${listener.conversation.id.slice(0, 8)}… could not be reached from here yet; it waits until your agent pulls it`);
         return null;
       }

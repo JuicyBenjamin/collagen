@@ -254,6 +254,25 @@ describe("AgentRunner", () => {
     expect(left).toBe(1);
   });
 
+  it("what a courier spends to wake a conversation is kept as collagen's own run", async () => {
+    // as Claude Code reports a print run with --output-format json
+    const result = { type: "result", total_cost_usd: 0.001, usage: { input_tokens: 10, cache_read_input_tokens: 12000, output_tokens: 400 }, modelUsage: { "claude-haiku-5-5": {} } };
+    const { layer } = testLayer({
+      state: { ...baseState, preferredAi: null, threads: { "thread-1": { ai: "claude-code", sessionId: "sess-1" } }, worked: reached(), steering: { kinds: { deliver: { others: "act" } } } },
+      respond: () => ({ stdout: JSON.stringify(result) }),
+    });
+    const runs = await run(
+      layer,
+      Effect.gen(function* () {
+        const { inbox, runner } = yield* setup;
+        yield* inbox.push("testroom", message());
+        yield* runner.runThread("thread-1");
+        return (yield* (yield* StateStore).get).ownRuns;
+      }),
+    );
+    expect(runs).toEqual([{ at: expect.any(Number), harness: "claude-code", why: "wake", model: "claude-haiku-5-5", inputTokens: 12010, outputTokens: 400, costUsd: 0.001 }]);
+  });
+
   it("a message wakes its conversation once, even after collagen restarts", async () => {
     const adopted: LocalState = {
       ...baseState,

@@ -500,6 +500,23 @@ export const Worked = Schema.Struct({
 });
 export type Worked = typeof Worked.Type;
 
+/** A model run collagen made itself, in the person's name (cli AgentRunner):
+ *  a courier waking a conversation. Its tokens and cost as the run reported
+ *  them — collagen's own spend, beside what its words cost the agents. Local. */
+export const OwnRun = Schema.Struct({
+  at: Schema.Finite,
+  /** the harness that ran it */
+  harness: Schema.String,
+  /** what it was for */
+  why: Schema.Literals(["wake"]),
+  model: Schema.optional(Schema.String),
+  inputTokens: Schema.Finite,
+  outputTokens: Schema.Finite,
+  /** in US dollars, as the harness estimates it; absent when it did not say */
+  costUsd: Schema.optional(Schema.Finite),
+});
+export type OwnRun = typeof OwnRun.Type;
+
 /** Local, per-user state: preferred AI + per-room projects. A project
  *  belongs to the room it was added in (Keet-style) — the same repo shared
  *  into two rooms is two entries. */
@@ -587,6 +604,8 @@ export const LocalState = Schema.Struct({
   /** messages a conversation of the person's was already woken for (cli
    *  AgentRunner), latest last: each wakes one once, restarts included */
   woken: Schema.optional(Schema.Array(Schema.String)),
+  /** collagen's own model runs, latest last (see OwnRun) */
+  ownRuns: Schema.optional(Schema.Array(OwnRun)),
   settings: Schema.optional(Settings),
   /** absent = never merged for them */
   merging: Schema.optional(Merging),

@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, DraftComment, LocalState, Merging, Project, Proposal, Settings, Steering, SteeringLevels, TranscriptAsk, Worked } from "@collagen/p2p";
+import { AdoptedThread, DraftComment, LocalState, Merging, OwnRun, Project, Proposal, Settings, Steering, SteeringLevels, TranscriptAsk, Worked } from "@collagen/p2p";
 import { checkedThemes } from "@collagen/review-web/themeData";
 
 /** Reading the user's own state file must never cost them their rooms.
@@ -156,6 +156,8 @@ export const salvageState = (text: string): Salvaged => {
   const steeringAsked = decode(Schema.Array(Schema.String), src.steeringAsked);
   const mergeYes = decode(Schema.Array(Schema.String), src.mergeYes);
   const woken = decode(Schema.Array(Schema.String), src.woken);
+  // unreadable, collagen's own spend starts counting again
+  const ownRuns = decode(Schema.Array(OwnRun), src.ownRuns);
   // unreadable, the conversations are simply told again
   const worked = salvageRecord(src.worked, Worked, () => {});
 
@@ -179,6 +181,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(steeringAsked ? { steeringAsked } : {}),
       ...(mergeYes ? { mergeYes } : {}),
       ...(woken ? { woken } : {}),
+      ...(ownRuns ? { ownRuns } : {}),
       ...(settings ? { settings } : {}),
       ...(merging ? { merging } : {}),
       ...(themes ? { themes } : {}),
