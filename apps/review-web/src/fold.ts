@@ -11,20 +11,23 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 const FOLDS = 0.3;
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 
-/** Close what a file's card shows under its header — its first change's
- *  code and every later change of it — then resolve, for the fold itself.
- *  What the reader cannot see (scrolled past above, still to come below)
- *  goes at once, the page shifted by as much so nothing on screen moves;
- *  only what is on screen folds, over the whole fold — a long file closes
- *  where it can be seen closing, not in its first few frames. */
-export async function foldAway(card: Element | null): Promise<void> {
-  if (!card || still.matches) return;
+/** Close a file's card into its header: the card itself — its edge and
+ *  corners — draws up to the header, the code inside fading as it is clipped,
+ *  one box closing rather than a block shrinking under a header. What the
+ *  reader cannot see (scrolled past above, still to come below) goes first,
+ *  at once, the page shifted so nothing on screen moves: a long file closes
+ *  where it can be seen, over the whole fold. Resolves with what puts the
+ *  card back to its own size, for the caller to call once the folded file
+ *  is drawn. */
+export async function foldAway(card: Element | null): Promise<() => void> {
+  if (!(card instanceof HTMLElement) || still.matches) return () => undefined;
   // a change is display: contents (no box to shrink): its first one's body, and every part of the later ones
   const parts = [...card.querySelectorAll<HTMLElement>(":scope > .hunk.continued > *, :scope > .hunk:not(.continued) > .hunk-body")];
+  const head = card.querySelector<HTMLElement>(".file");
   // seen from under the file's header (stuck or not) to the window's foot
-  const seenFrom = Math.max(0, card.querySelector(".file")?.getBoundingClientRect().bottom ?? 0);
+  const seenFrom = Math.max(0, head?.getBoundingClientRect().bottom ?? 0);
   let cutAbove = 0;
-  const seen = parts.map((element) => {
+  for (const element of parts) {
     const box = element.getBoundingClientRect();
     const above = Math.min(box.height, Math.max(0, seenFrom - box.top));
     const below = Math.min(box.height - above, Math.max(0, box.bottom - innerHeight));
@@ -33,14 +36,19 @@ export async function foldAway(card: Element | null): Promise<void> {
     element.style.height = `${box.height - above - below}px`;
     // what was above stays scrolled out of the shortened box
     element.scrollTop = above;
-    return box.height - above - below;
-  });
+  }
   if (cutAbove > 0) scrollBy({ top: -cutAbove, behavior: "instant" });
-  await Promise.all(
-    parts.map((element, index) =>
-      animate(element, { height: [seen[index] ?? 0, 0], opacity: [1, 0], marginTop: 0, marginBottom: 0 }, { duration: FOLDS, ease: EASE }),
-    ),
-  );
+  // the card closes, down to its header alone
+  const from = card.getBoundingClientRect().height;
+  card.style.boxSizing = "border-box";
+  card.style.height = `${from}px`;
+  await Promise.all([
+    ended(animate(card, { height: [from, head?.offsetHeight ?? 0] }, { duration: FOLDS, ease: EASE }).finished, FOLDS),
+    ...parts.map((element) => ended(animate(element, { opacity: [1, 0] }, { duration: FOLDS, ease: EASE }).finished, FOLDS)),
+  ]);
+  return () => {
+    for (const property of ["height", "box-sizing"]) card.style.removeProperty(property);
+  };
 }
 
 /** How long a fold takes to settle: the file's code closing, then its unit's
