@@ -478,6 +478,9 @@ section.decision.unit { display: block; }
 .why-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 12.5px -apple-system, sans-serif; color: var(--dim); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
 .why-toggle:hover, .why-toggle:focus-visible { color: var(--accent); border-color: var(--accent); }
 .why-toggle.on { color: var(--fg); }
+/* beside the code: a square as high as a file's header bar (35px), its corners too, so it reads
+   as a tab of the header row — level with it, open or folded */
+.rail-toggle { width: 35px; height: 35px; padding: 0; border-radius: 10px; }
 .unit-body { display: flex; align-items: flex-start; }
 .unit-body > .decision-main { flex: 1; min-width: 0; }
 /* the rail beside the code: the toggle, then the why — sticking together */
