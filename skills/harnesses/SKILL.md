@@ -41,9 +41,12 @@ live — and every harness answers differently. Adding one must mean writing
 5. **Read from the call, never the agent's word.** `readCall` and `reachOf`
    read what the call itself carries (its `_meta`, its connection). An agent
    typing its own conversation id or address is refused or ignored.
-6. **Waking goes through steering.** `wake` requires `DeliverAllowed`
-   (skill: steering): a harness never wakes a conversation the person did not
-   allow. One line, from collagen, never passed off as the person's words.
+6. **Waking and running go through steering.** `wake` requires
+   `DeliverAllowed`; `runJob` (collagen's own jobs, with the person's model per
+   job, else the harness's `defaultModels`) requires `RunAllowed` (skill:
+   steering): a harness never wakes a conversation or runs the person's AI
+   unless they allowed it. A wake is one line, from collagen, never passed off
+   as the person's words.
 7. **Its id is on shared records.** `Conversation.ai` is the `Harness` literal
    in `@collagen/p2p`: a new harness adds its id there too, which is a change
    to what peers write (skill: replicated-merges).

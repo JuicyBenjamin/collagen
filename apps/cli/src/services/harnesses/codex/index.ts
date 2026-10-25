@@ -6,6 +6,7 @@ import { sessionFiles } from "../../../lib/tokenCost";
 import { walk } from "../../../lib/transcripts";
 import type { Harness } from "../../Harness";
 import { codexCall } from "./call";
+import { runJob } from "./job";
 import { register } from "./register";
 import { keepsWhole, readLine } from "./transcript";
 import { readUsage } from "./usage";
@@ -28,6 +29,9 @@ export const codex: Harness = {
     }),
   reachOf: Effect.succeed(undefined),
   wakesBy: "queued into this Codex thread",
+  // Codex runs your own model setting unless you choose one per job
+  defaultModels: {},
+  runJob,
   wake: (conversation, _reach, line) =>
     Effect.gen(function* () {
       yield* DeliverAllowed;

@@ -11,11 +11,13 @@ import { wrap } from "../../../lib/wrap";
 import { proposalText } from "../../../services/Outbox";
 import { roomAtom } from "../../atoms";
 import { outboxAtom } from "../atoms";
+import { Jobs } from "../components/Jobs";
 import { OutgoingLine, OutgoingRow } from "../components/PendingOutgoing/PendingOutgoing";
 import { dateTimeOf } from "../../../lib/when";
 
 /** The outbox: what has gone out of this machine, newest first — messages,
- *  tickets, reviews, files, from every room you are in. A record, not a
+ *  tickets, reviews, files, from every room you are in — under the jobs
+ *  collagen is running your AI for, while there are any. A record, not a
  *  queue: your agent acts when you ask it to, and this is what it did.
  *  `enter` unfolds the text it sent, whole — the rows are one flat list of
  *  head lines plus the unfolded text's own lines, so ↑↓ (and pgup/pgdn,
@@ -57,6 +59,7 @@ export function OutboxPage() {
 
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
+      <Jobs />
       <Focusable
         id="outbox"
         hint={

@@ -5,6 +5,7 @@ import { MergeHistory } from "./MergeHistory";
 import { Swarm, SwarmConfig } from "@collagen/p2p";
 import { AdaptersLive } from "./Adapters";
 import { HarnessesLive } from "./Harness";
+import { Jobs } from "./Jobs";
 import { AiStatus } from "./AiStatus";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
@@ -77,6 +78,7 @@ export const AppLayer = Layer.mergeAll(Daemons, McpLive, MergerDaemon).pipe(
 ).pipe(
   Layer.provideMerge(Rooms.layer),
   Layer.provideMerge(SwarmLive),
+  Layer.provideMerge(Jobs.layer),
   Layer.provideMerge(AgentRunner.layer),
   Layer.provideMerge(AiStatus.layer),
   Layer.provideMerge(AdaptersLive),

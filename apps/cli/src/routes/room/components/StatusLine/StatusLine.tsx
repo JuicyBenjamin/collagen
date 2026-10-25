@@ -2,7 +2,8 @@ import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { theme } from "../../../../app/theme";
 import { myNameAtom } from "../../../atoms";
-import { aiStatusAtom, appUpdateAtom, stateAtom } from "../../atoms";
+import { aiStatusAtom, appUpdateAtom, jobsAtom, stateAtom } from "../../atoms";
+import { jobsLine } from "../Jobs";
 import type { SteeringLevels } from "@collagen/p2p";
 import { masterOf, STEERING_LABEL } from "../../../../lib/steering";
 
@@ -17,6 +18,7 @@ export function StatusLine() {
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
   const bad = preferredAi !== null && aiStatus !== "ok" && aiStatus !== "unknown";
   const update = AsyncResult.getOrElse(useAtomValue(appUpdateAtom), () => ({ latest: null, installing: false, note: null }));
+  const jobs = jobsLine(AsyncResult.getOrElse(useAtomValue(jobsAtom), () => []));
 
   return (
     // a row of air above: the word, what it is and which build are one block —
@@ -32,6 +34,7 @@ export function StatusLine() {
       <span fg={theme.dim}> · steering </span>
       <span fg={steering === "ask" || steering === "unset" ? theme.dim : theme.warn}>{STEERING_LABEL[steering]}</span>
       <span fg={theme.dim}> (g)</span>
+      {jobs ? <span fg={theme.accent}> · {jobs} (outbox)</span> : null}
       {update.note ? (
         <span fg={update.installing ? theme.warn : theme.dim}> · {update.note}</span>
       ) : update.latest ? (
