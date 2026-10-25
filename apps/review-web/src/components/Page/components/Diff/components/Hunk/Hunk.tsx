@@ -323,14 +323,13 @@ export function Hunk(props: {
               class="checkbox checkbox-primary checkbox-xs"
               checked={state() === "viewed"}
               onChange={async () => {
-                // marking it folds it, the next file gliding up to the
-                // window's top as it closes — one motion; unmarking, or the
-                // last file, holds its header where the reader clicked it
+                // marking it folds it up into its header, which comes to the
+                // window's top, ticked, the next file rising in under it —
+                // the closing is what the reader sees; unmarking holds the
+                // header where it was clicked
                 const marking = state() !== "viewed";
                 const group = card();
-                const cards = [...document.querySelectorAll(".hunk-group")];
-                const next = marking && group ? cards[cards.indexOf(group) + 1] : undefined;
-                void (next ? glideToTop(next) : holdInPlace(head));
+                void (marking ? glideToTop(head) : holdInPlace(head));
                 if (marking && !reading.folded(props.hunk.file)) await foldAway(group);
                 viewed.toggle(props.hunk.file, diffNow.commit());
                 reading.marked(props.hunk.file);
