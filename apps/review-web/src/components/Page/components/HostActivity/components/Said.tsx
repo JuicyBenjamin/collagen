@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, Show } from "solid-js";
-import { ago } from "~/ago";
+import { ago } from "~/when";
 import type { HostNote, HostReview, HostUser } from "~/data";
 import { enter, leave } from "~/fold";
 import { hostNow } from "~/hostNow";

@@ -9,6 +9,7 @@ import { to, useRouter } from "../../../app/router";
 import { clamp } from "../../../lib/math";
 import { age } from "../../../lib/ticketSummary";
 import { transcriptFilesAtom } from "./atoms";
+import { dateTimeOf } from "../../../lib/when";
 
 /** The transcripts collected for a subject (a ticket), as a list: who handed
  *  it over, which agent, size. ↑↓ picks, enter opens one (its turns are the
@@ -68,7 +69,7 @@ export function TranscriptsPage({ subject }: { subject: string }) {
                     <>
                       from {file.meta.from}
                       <span fg={theme.dim}>
-                        {" "}· {file.meta.ai} · {file.meta.entries} entries · since {new Date(file.meta.since).toISOString().slice(0, 16).replace("T", " ")} · received{" "}
+                        {" "}· {file.meta.ai} · {file.meta.entries} entries · since {dateTimeOf(file.meta.since)} · received{" "}
                         {age(file.meta.receivedAt, Date.now()) === "now" ? "just now" : `${age(file.meta.receivedAt, Date.now())} ago`}
                       </span>
                     </>

@@ -11,6 +11,7 @@ import { roomAtom } from "../../atoms";
 import { identityAtom, membersAtom, rosterAtom, traceAtom } from "../atoms";
 import { Arrow } from "../components/Arrow/Arrow";
 import { via } from "../../../lib/agents";
+import { dateTimeOf } from "../../../lib/when";
 
 type Row = { readonly kind: "msg"; readonly id: string; readonly message: RoomMessage };
 
@@ -140,7 +141,7 @@ function MessageRow({
       {expanded ? (
         <box flexDirection="column" paddingLeft={4} marginBottom={1}>
           <text fg={theme.dim} truncate wrapMode="none">
-            thread {message.threadId} · {new Date(message.ts).toLocaleString()}
+            thread {message.threadId} · {dateTimeOf(message.ts)}
           </text>
           <text fg={theme.fg}>{message.findings}</text>
         </box>

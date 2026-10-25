@@ -28,12 +28,15 @@ machine's default formatting decided, not us.
    then `toLocaleString` with explicit options (`dateStyle: "medium"`,
    `timeStyle: "short"`, or `month: "short", day: "numeric"`) — never an
    all-numeric date, never `toLocaleString()` without options.
-4. **One helper, used everywhere.** The review page keeps its formatting in
-   one module (beside `ago.ts`); the TUI in one of its own. A screen never
-   calls `new Date(...).toLocale…` itself.
-5. **Temporal where it is not built in.** Node (the cli) has it. The review
-   page loads `temporal-polyfill` only where the browser lacks `Temporal`,
-   behind the same helper, so callers never know.
+4. **One helper, used everywhere.** The review page formats in
+   `apps/review-web/src/when.ts` (`dateOf`, `dateTimeOf`, `ago`); the TUI in
+   `apps/cli/src/lib/when.ts` (`dateTimeOf`). A screen never calls
+   `new Date(...).toLocale…`, or shows `toISOString()` to a person, itself.
+5. **Temporal where it is built in.** Node (the cli) and current browsers
+   have it. A browser without it gets the same instant formatted through
+   `Intl.DateTimeFormat` with the same options — what Temporal's own
+   formatting does — inside the same helper, so callers never know and
+   nothing extra is loaded.
 6. **An agent reads UTC.** Tool outputs give ISO instants (`…Z`); the agent
    turns them into the person's time when it talks to them. Never a
    formatted local date in a tool result.
@@ -44,6 +47,8 @@ machine's default formatting decided, not us.
   options, ambiguous between day-first and month-first readers.
 - The outbox and messages pages printing `toLocaleString()`: the machine's
   locale and an all-numeric date.
+- The TUI's transcripts and review pages showing a person a raw UTC stamp
+  (`2026-10-25 14:03`), an hour or two off their own clock.
 
 ## Checklist
 
