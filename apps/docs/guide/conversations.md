@@ -146,8 +146,13 @@ never starts an agent for you, and the agent it reaches is told to relay it, not
    and says: tell your user, read it with `get-messages` when they ask, and wait for their
    word (or act, if your work steering says so). The content stays in collagen;
 3. otherwise it waits until your agent pulls it: `pending-threads` lists what's waiting,
-   `get-messages <threadId>` drains one thread, `await-messages` blocks until something
+   `get-messages <threadId>` reads one thread, `await-messages` blocks until something
    arrives (for an agent with nothing else to do). Same instruction on the way out.
+
+Each AI conversation keeps its own place in a thread: what your Claude conversation read
+is still news to your Codex one. A conversation new to a thread starts at its tail — it
+gets what nobody has read yet, plus a short catch-up (the thread's tickets as they stand,
+and the last few messages), never the thread's whole history as news.
 
 A conversation listens for a message when:
 
