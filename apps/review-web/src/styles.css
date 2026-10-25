@@ -207,7 +207,8 @@ section h2 { font-size: 19px; line-height: 1.35; margin: 0 0 14px; max-width: 72
 @keyframes flash { from { background: var(--panel); box-shadow: -18px 0 0 var(--accent); } to { background: transparent; box-shadow: none; } }
 section.unexplained .decision-what { color: var(--warn); }
 nav .nav-unexplained .nav-what { color: var(--warn); }
-.file-side { display: flex; align-items: baseline; gap: 14px; }
+/* centred, not on a baseline: the Viewed box has no text line of its own to sit on */
+.file-side { display: flex; align-items: center; gap: 14px; }
 .mark-viewed { font: 12px -apple-system, sans-serif; color: var(--dim); white-space: nowrap; cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 5px; }
 .mark-viewed input { margin: 0; }
 .mark-viewed.changed { color: var(--warn); }
