@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { Conversation } from "./acting";
 import { DraftComment, ReviewComment, ReviewContext } from "./review";
 import { Ticket } from "./ticket";
 
@@ -67,6 +68,8 @@ export const RoomMessage = Schema.Struct({
    *  when the person did, or nobody knows. Attribution: the words are still
    *  the sender's. */
   agent: Schema.optional(Schema.String),
+  /** Which of that agent's conversations wrote it, when the harness said. */
+  conversation: Schema.optional(Conversation),
 });
 export type RoomMessage = typeof RoomMessage.Type;
 
@@ -469,8 +472,24 @@ export const Proposal = Schema.Struct({
   outgoing: Outgoing,
   /** Which agent sent it (Claude Code, Codex …); absent when the person did. */
   agent: Schema.optional(Schema.String),
+  /** Which of its conversations, when the harness said. */
+  conversation: Schema.optional(Conversation),
 });
 export type Proposal = typeof Proposal.Type;
+
+/** What one of the person's AI conversations has worked on here: the
+ *  threads it wrote on and the tickets it acted on, newest last. Local,
+ *  never broadcast — the tickets that build on it (live push, the loop)
+ *  read it to know which conversation holds what. Nothing is delivered or
+ *  resumed because of it: that is what adoption (`threads`) is for. */
+export const Worked = Schema.Struct({
+  conversation: Conversation,
+  threads: Schema.Array(Schema.String),
+  tickets: Schema.Array(Schema.String),
+  /** when it last acted */
+  last: Schema.Finite,
+});
+export type Worked = typeof Worked.Type;
 
 /** Local, per-user state: preferred AI + per-room projects. A project
  *  belongs to the room it was added in (Keet-style) — the same repo shared
@@ -556,5 +575,8 @@ export const LocalState = Schema.Struct({
   /** Assumed reviews of this person's own code their agent has been told of
    *  — once each, whenever it arrived. */
   toldGuessed: Schema.optional(Schema.Array(Schema.String)),
+  /** conversation key (acting conversationKey) → what that conversation has
+   *  worked on here. Local; see Worked. */
+  worked: Schema.optional(Schema.Record(Schema.String, Worked)),
 });
 export type LocalState = typeof LocalState.Type;

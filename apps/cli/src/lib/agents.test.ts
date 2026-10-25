@@ -4,7 +4,7 @@ import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServer } from "effect/http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { describe, expect, it } from "vitest";
-import { actedBy, actingAgent, agentLabel, agentName, callSays, claudeTurn, modelName, via } from "./agents";
+import { acting, actedBy, agentLabel, agentName, callSays, claudeCall, harnessOf, modelName, via } from "./agents";
 
 describe("which agent is acting", () => {
   it("names the harnesses we know, and any other by its own title or name", () => {
@@ -26,20 +26,30 @@ describe("which agent is acting", () => {
   it("takes the turn's model and effort as the call says them, and guesses nothing", () => {
     // as Codex 0.162 sends it with every tools/call
     const codex = { callId: "exec-1", threadId: "th", itemId: "it", "x-codex-turn-metadata": { turn_id: "tu", model: "gpt-6.1-sol", reasoning_effort: "medium" } };
-    expect(callSays(codex)).toEqual({ turn: { model: "gpt-6.1-sol", effort: "medium" } });
+    expect(callSays(codex)).toEqual({ turn: { model: "gpt-6.1-sol", effort: "medium" }, thread: "th" });
     expect(callSays({ progressToken: 1, "claudecode/toolUseId": "toolu_a" })).toEqual({ claudeCall: "toolu_a" });
     expect(callSays({ progressToken: 1 })).toBeNull();
     expect(callSays(undefined)).toBeNull();
   });
 
-  it("finds Claude Code's call in its log by the id it sends, whatever else is near it", () => {
-    const entry = (id: string, at: string, model: string, effort: string) =>
-      `{"type":"assistant","timestamp":"${at}","effort":"${effort}","message":{"model":"${model}","content":[{"type":"tool_use","id":"${id}","name":"mcp__collagen__post-review","input":{"ticketId":"t1"}}]}}`;
+  it("finds Claude Code's call in its log by the id it sends, whatever else is near it, and the session that made it", () => {
+    const entry = (id: string, at: string, model: string, effort: string, session: string, subagent?: string) =>
+      `{"type":"assistant","timestamp":"${at}","sessionId":"${session}",${subagent ? `"agentId":"${subagent}","isSidechain":true,` : ""}"effort":"${effort}","message":{"model":"${model}","content":[{"type":"tool_use","id":"${id}","name":"mcp__collagen__post-review","input":{"ticketId":"t1"}}]}}`;
     // two sessions' calls a millisecond apart, the same tool and arguments
-    const log = [entry("toolu_a", "2026-10-20T10:00:00.000Z", "claude-opus-5-5", "high"), entry("toolu_b", "2026-10-20T10:00:00.001Z", "claude-haiku-5-5", "low")].join("\n");
-    expect(claudeTurn(`half a line"}\n${log}`, "toolu_a")).toEqual({ model: "claude-opus-5-5", effort: "high" });
-    expect(claudeTurn(log, "toolu_b")).toEqual({ model: "claude-haiku-5-5", effort: "low" });
-    expect(claudeTurn(log, "toolu_elsewhere")).toBeNull();
+    const log = [entry("toolu_a", "2026-10-20T10:00:00.000Z", "claude-opus-5-5", "high", "s-1"), entry("toolu_b", "2026-10-20T10:00:00.001Z", "claude-haiku-5-5", "low", "s-2")].join("\n");
+    expect(claudeCall(`half a line"}\n${log}`, "toolu_a")).toEqual({ turn: { model: "claude-opus-5-5", effort: "high" }, session: "s-1" });
+    expect(claudeCall(log, "toolu_b")).toEqual({ turn: { model: "claude-haiku-5-5", effort: "low" }, session: "s-2" });
+    expect(claudeCall(log, "toolu_elsewhere")).toBeNull();
+    // a subagent's call is logged apart, and still names the conversation it works for
+    const sub = entry("toolu_c", "2026-10-20T10:00:01.000Z", "claude-haiku-5-5", "low", "s-1", "a597");
+    expect(claudeCall(sub, "toolu_c")?.session).toBe("s-1");
+  });
+
+  it("tells a conversation only of the harnesses it can, and guesses none", () => {
+    expect(harnessOf({ name: "claude-code" })).toBe("claude-code");
+    expect(harnessOf({ name: "codex-mcp-client" })).toBe("codex");
+    expect(harnessOf({ name: "cursor" })).toBeUndefined();
+    expect(callSays({ threadId: "th-only" })).toEqual({ turn: {}, thread: "th-only" });
   });
 
   it("names it for a person: harness, model, effort", () => {
@@ -52,16 +62,16 @@ describe("which agent is acting", () => {
   });
 
   it("outside a tool call nobody is acting for the person", async () => {
-    expect(await Effect.runPromise(actingAgent)).toBeUndefined();
+    expect(await Effect.runPromise(acting)).toBeUndefined();
   });
 
   // the attribution rests on the MCP server handing the connection's
   // clientInfo to a tool's handler; an upgrade that stops doing so would
   // silently file every act as the person's own
-  it("a tool called over MCP knows the harness that called it", async () => {
+  it("a tool called over MCP knows the harness that called it, and its conversation", async () => {
     const Who = Tool.make("who", { success: Schema.String });
     const kit = Toolkit.make(Who);
-    const handlers = kit.toLayer({ who: () => actingAgent.pipe(Effect.map((agent) => agent ?? "nobody")) });
+    const handlers = kit.toLayer({ who: () => acting.pipe(Effect.map((caller) => (caller ? JSON.stringify(caller) : "nobody"))) });
     let port = 0;
     const announce = Layer.effectDiscard(
       Effect.gen(function* () {
@@ -93,12 +103,15 @@ describe("which agent is acting", () => {
           const session = init.headers.get("mcp-session-id") ?? undefined;
           yield* Effect.promise(() => init.text());
           yield* post({ jsonrpc: "2.0", method: "notifications/initialized" }, session).pipe(Effect.flatMap((response) => Effect.promise(() => response.text())));
-          const call = yield* post({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "who", arguments: {} } }, session);
+          // as Codex sends it: its thread, and the turn's model and effort
+          const meta = { threadId: "th-9", "x-codex-turn-metadata": { turn_id: "tu", model: "gpt-6.1-sol", reasoning_effort: "medium" } };
+          const call = yield* post({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "who", arguments: {}, _meta: meta } }, session);
           return yield* Effect.promise(() => call.text());
         }),
       ),
     );
-    expect(answer).toContain("Codex");
+    expect(answer).toContain("Codex (GPT-6.1-sol, medium effort)");
+    expect(answer).toContain('\\"conversation\\":{\\"ai\\":\\"codex\\",\\"id\\":\\"th-9\\"}');
     expect(answer).not.toContain("nobody");
   });
 });

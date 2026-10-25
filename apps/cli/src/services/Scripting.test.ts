@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, PubSub, Stream, SubscriptionRef } from "effect";
-import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext, type Unseen, type ReviewComment } from "@collagen/p2p";
+import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext, type Unseen, type ReviewComment, type Conversation } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
 import { Rooms, type RoomHandle } from "./Rooms";
@@ -13,7 +13,8 @@ const peers: Peer[] = [
   { key: "k-dave", name: "dave", ai: null, projects: [], ...here },
 ];
 
-const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: string; agent?: string }>) =>
+type Sent = { peerKey: string; intent: string; findings: string; agent?: string; conversation?: Conversation };
+const roomsStub = (sent: Array<Sent>) =>
   Layer.effect(
     Rooms,
     Effect.gen(function* () {
@@ -21,12 +22,12 @@ const roomsStub = (sent: Array<{ peerKey: string; intent: string; findings: stri
       const inbound = yield* PubSub.unbounded<RoomMessage>();
       const sendTo = (
         peerKey: string,
-        payload: { project: string; intent: string; findings: string; agent?: string },
+        payload: { project: string; intent: string; findings: string; agent?: string; conversation?: Conversation },
       ) =>
         peerKey === "k-dave"
           ? Effect.fail(new NotWritable({ roomId: "testroom" }))
           : Effect.sync(() => {
-              sent.push({ peerKey, intent: payload.intent, findings: payload.findings, ...(payload.agent ? { agent: payload.agent } : {}) });
+              sent.push({ peerKey, intent: payload.intent, findings: payload.findings, ...(payload.agent ? { agent: payload.agent } : {}), ...(payload.conversation ? { conversation: payload.conversation } : {}) });
               const message: RoomMessage = {
                 id: `m-${sent.length}`,
                 threadId: deriveThreadId("me", peerKey, payload.project),
@@ -112,7 +113,7 @@ const stateStoreStub = Layer.effect(
 );
 
 const make = () => {
-  const sent: Array<{ peerKey: string; intent: string; findings: string; agent?: string }> = [];
+  const sent: Array<Sent> = [];
   const layer = Scripting.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(roomsStub(sent), Inbox.layer)),
     Layer.provideMerge(stateStoreStub),
@@ -171,11 +172,12 @@ describe("Scripting", () => {
       layer,
       Effect.gen(function* () {
         const scripting = yield* Scripting;
-        yield* Effect.promise(() => scripting.execute(`return await collagen.sendToPeer({ peer: "bob", project: "sandbox", intent: "ping", findings: "hi" });`, undefined, "Codex"));
+        yield* Effect.promise(() => scripting.execute(`return await collagen.sendToPeer({ peer: "bob", project: "sandbox", intent: "ping", findings: "hi" });`, undefined, { agent: "Codex", conversation: { ai: "codex", id: "th-1" } }));
         yield* Effect.promise(() => scripting.execute(`return await collagen.sendToPeer({ peer: "bob", project: "sandbox", intent: "ping", findings: "hi" });`));
       }),
     );
     expect(sent.map((message) => message.agent)).toEqual(["Codex", undefined]);
+    expect(sent.map((message) => message.conversation)).toEqual([{ ai: "codex", id: "th-1" }, undefined]);
   });
 
   it("rejects unbounded loops at validation, before anything runs", async () => {

@@ -1,5 +1,6 @@
 import { Context, Effect, Layer, SubscriptionRef } from "effect";
 import { scriptEngine, tool, type AgentExecuteResult } from "callscript";
+import { actingFields, type Acting } from "@collagen/p2p";
 import { noPeerNamed, resolveName, roomRollCall } from "../lib/names";
 import { Inbox } from "./Inbox";
 import { Rooms } from "./Rooms";
@@ -17,9 +18,10 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
     const services = yield* Effect.context<never>();
     const runP = Effect.runPromiseWith(services);
 
-    // `agent`: the agent whose script this is, named on what the script sends
-    // as on what its tool calls send — a script is no way to act unattributed
-    const toolsFor = (agent: string | undefined) => {
+    // `acting`: the agent whose script this is, and its conversation, named on
+    // what the script sends as on what its tool calls send — a script is no
+    // way to act unattributed
+    const toolsFor = (acting: Acting | undefined) => {
       const listRoom = tool({
         name: "collagen.listRoom",
         description: "List the peers currently in your collagen room and the projects each shares.",
@@ -95,7 +97,7 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
                   project: args.project,
                   intent: args.intent,
                   findings: args.findings,
-                  ...(agent ? { agent } : {}),
+                  ...actingFields(acting),
                 })
                 .pipe(
                   Effect.map(() => ({ delivered: true, detail: `sent to ${args.peer}` })),
@@ -140,9 +142,9 @@ export class Scripting extends Context.Service<Scripting>()("cli/Scripting", {
     const execute = (
       script: string,
       input?: unknown,
-      agent?: string,
+      acting?: Acting,
     ): Promise<AgentExecuteResult> =>
-      (agent ? scriptEngine({ tools: toolsFor(agent) }).agentTools() : tools).execute.execute(
+      (acting ? scriptEngine({ tools: toolsFor(acting) }).agentTools() : tools).execute.execute(
         input === undefined ? { script } : { script, input },
       ) as Promise<AgentExecuteResult>;
     const search = (query: string, limit?: number): Promise<string> =>

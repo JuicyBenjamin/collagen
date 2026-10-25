@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Effect, Semaphore, SubscriptionRef } from "effect";
-import type { DraftComment, ReviewComment } from "@collagen/p2p";
+import { actingFields, type DraftComment, type ReviewComment } from "@collagen/p2p";
 import type { DraftsResult, DraftView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "@collagen/review-web/data";
 import { forPeople } from "@collagen/review-web/forPeople";
 import { sameComment } from "@collagen/review-web/sameComment";
 import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
+import { acting as actingNow } from "../lib/agents";
 import { placeComment, whereOf, type Spot } from "../lib/comments";
 import { IdentityService } from "./Identity";
 import { hostOf, type RepoHost } from "./RepoHost";
@@ -209,6 +210,8 @@ const logComments = (
   Effect.gen(function* () {
     const { identity, nameRef } = yield* IdentityService;
     const name = yield* SubscriptionRef.get(nameRef);
+    // said through an agent's tool call: that agent and its conversation; from the page, neither
+    const acting = yield* actingNow;
     const out: Array<ReviewComment> = [];
     for (const [index, entry] of said.entries()) {
       const comment: ReviewComment = {
@@ -223,6 +226,7 @@ const logComments = (
         ...(entry.detail !== undefined ? { detail: entry.detail } : {}),
         ...(entry.drafted ? { drafted: true } : {}),
         ...(entry.host ? { host: entry.host } : {}),
+        ...actingFields(acting),
         ts: Date.now() + index,
       };
       const logged = yield* found.room.comment(comment).pipe(

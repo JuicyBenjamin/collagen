@@ -46,7 +46,7 @@ import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { STEERING_LABEL, steeringLine, steeringOf } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
-import { actingAgent } from "../lib/agents";
+import { acting as actingNow } from "../lib/agents";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
 // `structuredContent` as an object, and Claude Code rejects array roots.
@@ -99,11 +99,11 @@ export const AwaitMessages = Tool.make("await-messages", {
 
 export const AdoptThread = Tool.make("adopt-thread", {
   description:
-    "Link a collagen thread to YOUR OWN conversation in your agent harness, so new messages on it resume that conversation (claude --resume / codex exec resume) instead of waiting in the inbox — the full loop with no manual pulling. 'threadId' is collagen's thread id (from pending-threads or a message you were handed) — it is derived by collagen and can never be chosen or changed. 'sessionId' is the id of your conversation IN THE HARNESS: the Claude Code session id, or the codex thread id. This only stores a mapping; it does not alter any collagen ids. Adoption persists across restarts. Adopt only your own conversation.",
+    "Link a collagen thread to YOUR OWN conversation in your agent harness, so new messages on it resume that conversation (claude --resume / codex exec resume) instead of waiting in the inbox — the full loop with no manual pulling. 'threadId' is collagen's thread id (from pending-threads or a message you were handed) — it is derived by collagen and can never be chosen or changed. On Claude Code and Codex, collagen knows which conversation is calling and adopts that one: leave 'agent' and 'sessionId' out. Another client passes them: 'sessionId' is the id of its conversation in the harness. This only stores a mapping; it does not alter any collagen ids. Adoption persists across restarts. Only your own conversation can be adopted.",
   parameters: Schema.Struct({
     threadId: Schema.String,
-    agent: Schema.Literals(["claude-code", "codex"]),
-    sessionId: Schema.String,
+    agent: Schema.optional(Schema.Literals(["claude-code", "codex"])),
+    sessionId: Schema.optional(Schema.String),
   }),
   success: Schema.String,
 });
@@ -1386,9 +1386,8 @@ const makeHandlers = Effect.gen(function* () {
           if (harness === "codex") {
             return [
               "You are on codex — collagen can push messages straight into your session:",
-              "1. Note your own codex thread id (the thread_id of this conversation).",
-              `2. For each collagen thread you care about, call adopt-thread {threadId, agent: "codex", sessionId: <your codex thread id>}.`,
-              "3. Done. New messages on adopted threads are queued into your codex session (codex queue) — they appear at your next turn, no blocking, and your user keeps chatting normally. When one appears: tell the user the headline it carries and wait; read the thread only when they ask; never answer it on your own.",
+              "1. For each collagen thread you care about, call adopt-thread {threadId} — collagen knows which codex thread is calling and adopts it.",
+              "2. Done. New messages on adopted threads are queued into your codex session (codex queue) — they appear at your next turn, no blocking, and your user keeps chatting normally. When one appears: tell the user the headline it carries and wait; read the thread only when they ask; never answer it on your own.",
               "For not-yet-adopted threads, check pending-threads when convenient.",
             ].join("\n");
           }
@@ -1433,15 +1432,20 @@ const makeHandlers = Effect.gen(function* () {
             yield* Effect.sleep("500 millis");
           }
         }).pipe(Effect.withSpan("Mcp.awaitMessages")),
-      "adopt-thread": ({ threadId, agent, sessionId }: { threadId: string; agent: "claude-code" | "codex"; sessionId: string }) =>
+      "adopt-thread": ({ threadId, agent, sessionId }: { threadId: string; agent?: "claude-code" | "codex"; sessionId?: string }) =>
         Effect.gen(function* () {
           if (!/^[0-9a-f]{16}$/.test(threadId)) return `failed: "${threadId}" is not a collagen thread id — take it from pending-threads or the message you were handed`;
-          if (sessionId.trim().length === 0) return "failed: sessionId is empty — pass your harness's session/thread id";
+          // the calling conversation, as the harness says it: never the agent's word
+          const calling = (yield* actingNow)?.conversation;
+          if (calling && ((sessionId !== undefined && sessionId !== calling.id) || (agent !== undefined && agent !== calling.ai)))
+            return `failed: that is not this conversation — this call comes from ${calling.ai} ${calling.id}; leave sessionId out to adopt it`;
+          const conversation = calling ?? (agent && sessionId?.trim() ? { ai: agent, id: sessionId.trim() } : undefined);
+          if (!conversation) return "failed: collagen cannot tell which conversation is calling — pass agent and sessionId (your harness's session/thread id)";
           // `since`: a transcript handed over later starts here, never earlier
           const since = yield* Clock.currentTimeMillis;
-          yield* store.update((state) => ({ ...state, threads: { ...(state.threads ?? {}), [threadId]: { ai: agent, sessionId, since } } }));
-          yield* Effect.log(`thread ${threadId} adopted → ${agent} ${sessionId.slice(0, 8)}…`);
-          return `adopted: new messages on thread ${threadId} will resume your ${agent} conversation (${sessionId})`;
+          yield* store.update((state) => ({ ...state, threads: { ...(state.threads ?? {}), [threadId]: { ai: conversation.ai, sessionId: conversation.id, since } } }));
+          yield* Effect.log(`thread ${threadId} adopted → ${conversation.ai} ${conversation.id.slice(0, 8)}…`);
+          return `adopted: new messages on thread ${threadId} will resume your ${conversation.ai} conversation (${conversation.id})`;
         }).pipe(Effect.withSpan("Mcp.adoptThread")),
       "get-messages": ({ threadId }: { threadId: string }) =>
         Effect.gen(function* () {
@@ -1452,8 +1456,8 @@ const makeHandlers = Effect.gen(function* () {
           return toToon(messages.length > 0 ? { steering, messages } : { messages });
         }).pipe(Effect.withSpan("Mcp.getMessages")),
       execute: ({ script, input }: { script: string; input?: unknown }) =>
-        actingAgent.pipe(
-          Effect.flatMap((agent) => Effect.promise(() => scripting.execute(script, input, agent))),
+        actingNow.pipe(
+          Effect.flatMap((acting) => Effect.promise(() => scripting.execute(script, input, acting))),
           Effect.map((result) => ({ ...result }) as Record<string, unknown>),
           Effect.withSpan("Mcp.execute"),
         ),
