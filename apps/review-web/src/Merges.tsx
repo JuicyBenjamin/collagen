@@ -9,7 +9,7 @@ import {
   onCleanup,
   Show,
 } from "solid-js";
-import { ago } from "./ago";
+import { ago } from "./when";
 import { Corner } from "./components/Corner";
 import { enter, leave } from "./fold";
 import { mergeHistory, mergeProjects } from "./api";

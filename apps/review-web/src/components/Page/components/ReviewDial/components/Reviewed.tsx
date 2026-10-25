@@ -1,7 +1,7 @@
 import { Show } from "solid-js";
 import { Appear } from "~/components/Appear";
 import type { ReviewedAs, YourReview } from "~/data";
-import { ago } from "~/ago";
+import { ago } from "~/when";
 import { hostNow } from "~/hostNow";
 import { Check } from "./Icons";
 

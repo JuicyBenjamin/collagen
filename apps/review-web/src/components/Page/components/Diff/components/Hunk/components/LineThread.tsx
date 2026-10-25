@@ -7,17 +7,13 @@ import { Markdown } from "~/components/Markdown";
 import { Detail } from "~/components/Detail";
 import { StrengthMark, StrengthPicker } from "~/components/Strength";
 import { wordsOf } from "~/forPeople";
+import { ago } from "~/when";
 import { readStrength, withStrength, type Strength } from "~/strength";
 
 /** When a comment was written, as a reader says it. */
 const when = (iso: string): string => {
   const time = Date.parse(iso);
-  if (Number.isNaN(time)) return "";
-  const mins = Math.round((Date.now() - time) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  if (mins < 24 * 60) return `${Math.round(mins / 60)} h ago`;
-  return new Date(time).toLocaleDateString();
+  return Number.isNaN(time) ? "" : ago(time, Date.now());
 };
 
 /** A place on the diff as GitHub names it: +12 on the new side, −12 on the old. */

@@ -13,6 +13,7 @@ import { wrap } from "../../../lib/wrap";
 import { identityAtom, membersAtom, reviewsAtom, rosterAtom } from "../atoms";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { openReviewPageAtom } from "./atoms";
+import { dateTimeOf } from "../../../lib/when";
 
 interface Line {
   readonly text: string;
@@ -30,7 +31,7 @@ const linesOf = (review: ReviewContext, by: string, width: number): ReadonlyArra
   const where = review.branch ? (review.base ? `${review.branch} → ${review.base}` : review.branch) : "";
   if (where.length > 0) out.push({ text: `  ${where}`, color: theme.fg });
   if (review.link) out.push({ text: `  ${review.link}`, color: theme.accent });
-  out.push({ text: `  by ${by} · last revised ${new Date(review.ts).toISOString().slice(0, 16).replace("T", " ")}`, color: theme.dim });
+  out.push({ text: `  by ${by} · last revised ${dateTimeOf(review.ts)}`, color: theme.dim });
   out.push({ text: "", color: theme.dim });
   para(review.summary, theme.fg, "  ");
 

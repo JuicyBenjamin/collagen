@@ -12,6 +12,7 @@ import { proposalText } from "../../../services/Outbox";
 import { roomAtom } from "../../atoms";
 import { outboxAtom } from "../atoms";
 import { OutgoingLine, OutgoingRow } from "../components/PendingOutgoing/PendingOutgoing";
+import { dateTimeOf } from "../../../lib/when";
 
 /** The outbox: what has gone out of this machine, newest first — messages,
  *  tickets, reviews, files, from every room you are in. A record, not a
@@ -45,7 +46,7 @@ export function OutboxPage() {
   all.forEach((proposal, at) => {
     rows.push({ kind: "head", at });
     if (proposal.id !== expanded) return;
-    rows.push({ kind: "line", at, text: `sent ${new Date(proposal.ts).toLocaleString()}`, dim: true });
+    rows.push({ kind: "line", at, text: `sent ${dateTimeOf(proposal.ts)}`, dim: true });
     for (const text of wrap(proposalText(proposal), Math.max(20, boxWidth - 6))) rows.push({ kind: "line", at, text });
   });
   const open = expanded === null ? -1 : all.findIndex((proposal) => proposal.id === expanded);
