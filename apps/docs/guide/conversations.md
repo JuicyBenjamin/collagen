@@ -32,31 +32,52 @@ judgment, the bigger picture. So:
 
 ### Steering: how much your agent does on its own
 
-What your agent does with what collagen hands it — a step that became yours, a take asking
-for changes on your plan, a peer's message — is a dial **you** set, not the agent:
+How far collagen and your agent go on their own, in your name, is a set of dials **you**
+set, not the agent. One **master** level, and a level for each kind of thing under it that
+follows the master until you set it:
 
-| level | your agent… |
+| kind | what it steers |
 | --- | --- |
-| `ask` — ask first (the default) | tells you what it was handed and what it would do, and waits for your word |
-| `act` — act, then tell | starts the work in your repo and tells you what it did as it goes |
-| `auto` — just do it | does the work and tells you when it is done |
+| `work` | what your agent starts on its own with what collagen hands it: a step that became yours, a take asking for changes, a peer's message |
+| `host` | acting on the repo host in your name: your review and comments posted on the pull request, merging it — through your own `gh`, one level for every host |
+| `deliver` | collagen delivering messages into your AI conversations (an adopted thread resumed, a Codex queue) |
 
-Press `g` in the room to cycle it (the status line shows it beside your ai), or ask your
-agent (`set-steering`). The default is the asking end: autonomy is opted into, per person —
-a colleague was once surprised to find their agent had implemented every change a review
-asked for without running it by them.
+Each level is one of:
 
-The level travels **in the words**: every step delivered to you, every `get-messages`, and
-the nudge that resumes an adopted conversation restate it, so the agent reads it on the
+| level | it is… |
+| --- | --- |
+| not chosen | not done outside collagen at all; your agent asks you first |
+| `ask` — ask first | not done until you say yes: the tool your agent called answers with the question instead ("also on the pull request?"), and your agent asks you |
+| `act` — act, then tell | done, and you are told |
+| `auto` — just do it | done |
+
+Every level is held twice: for what **you** or your own agents caused, and for what
+**another person** in the room caused. Theirs never follows yours: anything someone else
+writes is untrusted, so it drives nothing until you allow it for them too. A message for you
+also has a place to go — nowhere (you ask for it), a conversation that already holds its
+thread, that or a new one, or always a new one; starting a new conversation is not built
+yet, so the last two deliver to one that exists.
+
+Nothing is chosen at first, so collagen does nothing outside itself in your name: finishing a
+review on its page says it in the room, not on GitHub, and an approved review is not merged.
+Each AI conversation is told once, on its first call, to ask you to choose. Set them on the
+settings page (`s`), cycle the master with `g` in the room (the status line shows it beside
+your ai), or ask your agent (`set-steering`). Questions only ever come through your agent:
+the TUI and the review page never ask you anything. A colleague was once surprised to find
+their agent had implemented every change a review asked for without running it by them —
+autonomy is opted into, per person, per kind. The levels are kept on your machine.
+
+The work level travels **in the words**: every step delivered to you, every `get-messages`,
+and the nudge that resumes an adopted conversation restate it, so the agent reads it on the
 turn it is about to act rather than in a tool description it read an hour ago. Two limits,
 stated plainly:
 
 - **The room is always your word.** No level lets your agent speak for you: a message, a
-  take, a settle or a close still goes only when you say so. Steering is about the work in
-  your repo.
-- **It gates nothing.** Collagen shapes what your agent is told; it has no hand in its file
-  edits or shell. For a hard stop, use your harness's own permission mode — steering is the
-  soft layer above it.
+  take, a settle or a close still goes only when you say so.
+- **Work gates nothing.** Collagen shapes what your agent is told; it has no hand in its file
+  edits or shell. For a hard stop, use your harness's own permission mode — the work level
+  is the soft layer above it. The repo host and delivery are collagen's own acts, and those
+  it does not do unless their level lets it.
 
 **Your conversation with your AI is still yours.** Peers never see your session history,
 your prompts, or your agent's reasoning — only what you told your agent to send. The one

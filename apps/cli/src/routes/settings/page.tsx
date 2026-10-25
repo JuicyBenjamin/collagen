@@ -10,13 +10,30 @@ import { useSession } from "../../app/session";
 import { theme } from "../../app/theme";
 import { SETTINGS, settingOf, withSetting, type SettingKey } from "../../lib/settings";
 import { MERGE_HELP, MERGE_LEVELS, withMergeFor } from "../../lib/merging";
-import type { MergeFor } from "@collagen/p2p";
+import { KIND_LABEL, STEERING_KINDS, STEERING_LABEL, STEERING_ORDER, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
+import type { MergeFor, Steering, SteeringLevels } from "@collagen/p2p";
 import { myNameAtom, roomAtom } from "../atoms";
 import { stateAtom, updateStateAtom } from "../room/atoms";
 import { renameRoomAtom, setMyNameAtom } from "./atoms";
 
-type Field = "name" | "room" | SettingKey | "mergeDefault" | "mergeRoom";
-const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((setting) => setting.key), "mergeDefault", "mergeRoom"];
+/** A steering level on the page: where it is set, and whose acts. */
+type SteerField = `steer:${SteeringAt}:${Cause}`;
+const STEER_AT: ReadonlyArray<SteeringAt> = ["master", ...STEERING_KINDS];
+const STEER_FIELDS: ReadonlyArray<SteerField> = STEER_AT.flatMap((at) => [`steer:${at}:mine` as const, `steer:${at}:others` as const]);
+
+type Field = "name" | "room" | SettingKey | "mergeDefault" | "mergeRoom" | SteerField | "tag";
+const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((setting) => setting.key), ...STEER_FIELDS, "tag", "mergeDefault", "mergeRoom"];
+
+const isSteer = (field: Field): field is SteerField => field.startsWith("steer:");
+
+/** A level round: not chosen (or following the master) first, then up from asking. */
+const nextSteer = (level: Steering | undefined): Steering | null => {
+  const order: ReadonlyArray<Steering | null> = [null, ...STEERING_ORDER];
+  return order[(order.indexOf(level ?? null) + 1) % order.length]!;
+};
+
+const setLevel = (steering: SteeringLevels | undefined, at: SteeringAt, cause: Cause): Steering | undefined =>
+  at === "master" ? steering?.master?.[cause] : steering?.kinds?.[at]?.[cause];
 
 /** The level after `level` — or, for a room, after its own: none (the default's) first. */
 const nextLevel = (level: MergeFor | undefined, allowNone: boolean): MergeFor | null => {
@@ -52,6 +69,13 @@ export function SettingsPage() {
           ? withMergeFor(previous, { default: true }, nextLevel(previous.merging?.default, false))
           : withMergeFor(previous, { room: room.id }, nextLevel(previous.merging?.rooms?.[room.id], true)),
     });
+  // the person's steering: each level for their own acts and for others', and where a tag goes
+  const cycleSteer = (field: SteerField) => {
+    const [, at, cause] = field.split(":") as [string, SteeringAt, Cause];
+    updateState({ update: (previous) => withLevel(previous, at, cause, nextSteer(setLevel(previous.steering, at, cause))) });
+  };
+  const cycleTag = () =>
+    updateState({ update: (previous) => withTagRoute(previous, TAG_ROUTES[(TAG_ROUTES.indexOf(tagRouteOf(previous)) + 1) % TAG_ROUTES.length]!) });
   const mergeDefault: MergeFor = state?.merging?.default ?? "off";
   const mergeRoom = state?.merging?.rooms?.[room.id];
 
@@ -75,7 +99,11 @@ export function SettingsPage() {
     if (field === "name" || field === "room") return;
     if (key.name === "down") return next();
     if (key.name === "up") return prev();
-    if (key.name === "space" || key.name === "return" || key.name === "enter") return field === "mergeDefault" || field === "mergeRoom" ? cycleMerge(field) : flip(field);
+    if (key.name === "space" || key.name === "return" || key.name === "enter") {
+      if (isSteer(field)) return cycleSteer(field);
+      if (field === "tag") return cycleTag();
+      return field === "mergeDefault" || field === "mergeRoom" ? cycleMerge(field) : flip(field);
+    }
   });
 
   return (
@@ -109,6 +137,25 @@ export function SettingsPage() {
           );
         })}
       </box>
+      <box flexDirection="column" border borderStyle="rounded" borderColor={isSteer(field) || field === "tag" ? theme.accent : theme.dim} paddingX={1} title=" steering — what collagen does in your name ">
+        {STEER_FIELDS.map((steerField) => {
+          const [, at, cause] = steerField.split(":") as [string, SteeringAt, Cause];
+          const set = setLevel(state?.steering, at, cause);
+          const shown = set ? STEERING_LABEL[set] : at === "master" ? STEERING_LABEL.unset : "master's";
+          const here = field === steerField;
+          return (
+            <text key={steerField} fg={here ? theme.accent : set && set !== "ask" ? theme.warn : theme.fg}>
+              {here ? "› " : "  "}
+              {`[${shown}] ${at === "master" ? "master" : KIND_LABEL[at]} — ${cause === "mine" ? "yours" : "other people's"}`}
+            </text>
+          );
+        })}
+        <text fg={field === "tag" ? theme.accent : theme.fg}>
+          {field === "tag" ? "› " : "  "}
+          {`[${state ? tagRouteOf(state) : "existing"}] a message for you goes to ${TAG_LABEL[state ? tagRouteOf(state) : "existing"]}`}
+        </text>
+        <text fg={theme.dim}>{"        not chosen: nothing is done outside collagen in your name · others' never follows yours"}</text>
+      </box>
       <box flexDirection="column" border borderStyle="rounded" borderColor={field === "mergeDefault" || field === "mergeRoom" ? theme.accent : theme.dim} paddingX={1} title=" merge for me ">
         <text fg={field === "mergeDefault" ? theme.accent : theme.fg}>
           {field === "mergeDefault" ? "› " : "  "}
@@ -124,7 +171,7 @@ export function SettingsPage() {
       <text fg={theme.dim} truncate wrapMode="none">
         invite id: <span fg={theme.fg}>{formatInvite(room.id, NET)}</span> (fixed — press c in the room to copy)
       </text>
-      <text fg={theme.dim}>tab next field · enter next/confirm · on a switch: space flips it · on merge: space changes it</text>
+      <text fg={theme.dim}>tab next field · enter next/confirm · on a switch: space flips it · on steering or merge: space changes it</text>
       <text fg={theme.warn}>{saved ? "saved — applies now" : "changes apply live · esc back"}</text>
     </box>
   );

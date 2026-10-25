@@ -81,6 +81,14 @@ expect "its conversation, and a line comment on code changed since, oldest first
 expect "…and when GitHub was asked" "$VIEW" '"checkedAt":"20[0-9]{2}-'
 expect "gh was asked for the pull request by the number in the link" "$(calls)" '\["pr","view","7","--repo","acme/sandbox","--json"'
 
+echo "## the repo host is steered: nothing goes on GitHub in her name until she chooses"
+expect "with no repo-host level chosen, an approval from the page is not sent" "$(submit "$TICKET" approve "")" '"error":"Cannot approve here — collagen posts nothing on GitHub in your name until you choose a repo-host steering level'
+expect "…and GitHub was never written to" "$(grep -c '"-X","POST"' "$GH/calls.log" 2>/dev/null || true)" '^0$'
+call $A "$SA" set-steering '{"kind":"host","level":"ask"}' > /dev/null
+expect "at ask first, the page sends nothing and points her to her agent" "$(submit "$TICKET" approve "")" '"error":"Not sent: your repo-host steering is ask first'
+expect "…and her agent's submit comes back with the question for her" "$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$TICKET\",\"verdict\":\"approve\"}")" 'NOT FINISHED — .*ask your user whether this should also go on the pull request'
+call $A "$SA" set-steering '{"kind":"host","level":"act"}' > /dev/null
+
 echo "## a review in the reader's name, finished at once"
 expect "approving, with nothing pending" "$(submit "$TICKET" approve "")" '^\{"ok":true,"said":0,"url":"https://github.com/acme/sandbox/pull/7#pullrequestreview-500"\}$'
 expect "…goes to GitHub as one review, on the pull request found from the ticket" "$(calls | grep -c '"api","-X","POST","repos/acme/sandbox/pulls/7/reviews","--input","-"')" "^1$"
@@ -145,7 +153,7 @@ expect "nothing pending has reached GitHub" "$(calls | sed -n "$((N + 1)),\$p" |
 AGENTACC=$(call $A "$SA" review-comments "{\"action\":\"accept\",\"ticketId\":\"$TICKET\"}")
 expect "the agent puts the rest in the review on its person's word" "$AGENTACC" "^1 draft\(s\) put into your user's review — 3 comment\(s\) pending in it"
 FINISHED=$(call $A "$SA" review-comments "{\"action\":\"submit\",\"ticketId\":\"$TICKET\",\"body\":\"Close — two questions.\"}")
-expect "…and finishes it: every pending comment said, the review on the pull request" "$FINISHED" "^review finished: 3 comment\(s\) said in the room as your user's, and the review is on the pull request: https://github.com/acme/sandbox/pull/7#pullrequestreview-50[0-9]"
+expect "…and finishes it: every pending comment said, the review on the pull request" "$FINISHED" "^review finished: 3 comment\(s\) said in the room as your user's, and the review is on the pull request as your user, through their own gh: https://github.com/acme/sandbox/pull/7#pullrequestreview-50[0-9]"
 REVIEW=$(reviewed)
 expect "a finished review is read back among the reviews, its verdict and words" "$(sfn hostView "[\"$TICKET\"]")" '"verdict":"commented","body":"Close — two questions."' 
 expect "…one review on GitHub: its words, a comment, every comment in it" "$REVIEW" '"event":"COMMENT","body":"Close — two questions.","comments":\[\{"path":"src/export.ts","line":2,"side":"RIGHT","body":"Strings lose the row shape: keep the objects."\},\{"path":"src/page.ts","line":3,"side":"RIGHT","body":"Name the size:.*","start_line":2,"start_side":"RIGHT"\},\{"path":"src/use.ts","line":3,"side":"RIGHT","body":"Does first need to be exported\?"\}\]'

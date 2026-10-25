@@ -8,7 +8,10 @@ import { CliArgs } from "./CliArgs";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
-import { steeringOf } from "../lib/steering";
+import { allow, DeliverAllowed, levelOf, MOCK_PERMIT, tagRouteOf, withDeliver, type Cause } from "../lib/steering";
+
+/** Who caused a delivery: the person's own (a message from them to them), or someone else. */
+const causeOf = (spawnContext: SpawnCtx): Cause => (spawnContext.message.from === spawnContext.message.to ? "mine" : "others");
 
 /** Auto-triggers the recipient's preferred AI on incoming messages, one run at
  *  a time per thread (concurrent resumes of one session corrupt it). */
@@ -38,9 +41,11 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
      *  record the resumable session id. Never fails — spawn errors are logged. */
     const spawn = Effect.fn("AgentRunner.spawn")(
       function* (adapter: Adapter, spawnContext: SpawnCtx, threadId: string) {
+        // into the person's conversation: only with steering's permit
+        yield* DeliverAllowed;
         // stdin "ignore": headless agents must not wait on input. The
         // person's steering is read now, so the nudge says the current level
-        const steered: SpawnCtx = { ...spawnContext, steering: steeringOf(yield* store.get) };
+        const steered: SpawnCtx = { ...spawnContext, steering: levelOf(yield* store.get, "work", causeOf(spawnContext)) };
         const proc = yield* ChildProcess.make(adapter.cmd, adapter.args(steered), {
           cwd: spawnContext.cwd,
           stdin: "ignore",
@@ -81,9 +86,10 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
      *  or next resume. Non-blocking, no fork, the user keeps chatting. */
     const queueNudge = Effect.fn("AgentRunner.queueNudge")(
       function* (codexThread: string, spawnContext: SpawnCtx) {
+        yield* DeliverAllowed;
         const proc = yield* ChildProcess.make(
           "codex",
-          ["queue", "--thread", codexThread, "--message", nudgePrompt({ ...spawnContext, steering: steeringOf(yield* store.get) })],
+          ["queue", "--thread", codexThread, "--message", nudgePrompt({ ...spawnContext, steering: levelOf(yield* store.get, "work", causeOf(spawnContext)) })],
           { stdin: "ignore" },
         );
         const exit = yield* proc.exitCode;
@@ -138,6 +144,23 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         );
         return null;
       }
+      // Into the person's own conversation only as their steering says: where
+      // a message goes (the tag route), and whether it goes at all (deliver),
+      // for their own acts and for others' apart. A mock reaches nothing outside.
+      const cause: Cause = sample.from === sample.to ? "mine" : "others";
+      let permit = MOCK_PERMIT;
+      if (!isMock) {
+        if (tagRouteOf(state) === "none") {
+          yield* Effect.log(`→ inbox · ${about} — your steering sends messages nowhere; it waits until your agent pulls it`);
+          return null;
+        }
+        const gate = allow(state, "deliver", cause);
+        if ("held" in gate) {
+          yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: ${gate.held === "unset" ? "delivery steering is not chosen" : "delivery steering is ask first"}; it waits until your agent pulls it`);
+          return null;
+        }
+        permit = gate.go;
+      }
       // codex-adopted threads get the message pushed INTO the user's session
       // instead of us spawning anything.
       if (!isMock && adopted?.ai === "codex") {
@@ -149,7 +172,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
           sessionId: Option.some(adopted.sessionId),
         };
         yield* Effect.log(`→ codex queue · ${about} — shows in codex thread ${adopted.sessionId.slice(0, 8)}… at its next turn`);
-        yield* queueNudge(adopted.sessionId, spawnContext);
+        yield* withDeliver(permit, queueNudge(adopted.sessionId, spawnContext));
         return new Set(queued.map((received) => received.message.id));
       }
 
@@ -174,7 +197,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       );
 
       const before = new Set(queued.map((received) => received.message.id));
-      yield* spawn(adapter, spawnContext, threadId);
+      yield* withDeliver(permit, spawn(adapter, spawnContext, threadId));
       return before;
     });
 

@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Context, Layer, Option } from "effect";
-import type { RoomMessage, Steering } from "@collagen/p2p";
-import { steeringLine } from "../lib/steering";
+import type { RoomMessage } from "@collagen/p2p";
+import { steeringLine, type Level } from "../lib/steering";
 import { actedBy } from "../lib/agents";
 
 export interface SpawnCtx {
@@ -11,8 +11,8 @@ export interface SpawnCtx {
   serverName: string;
   message: RoomMessage;
   sessionId: Option.Option<string>;
-  /** the person's steering level (lib/steering); absent = ask */
-  steering?: Steering;
+  /** the person's work level (lib/steering); absent = not chosen */
+  steering?: Level;
 }
 
 export interface Adapter {
@@ -39,10 +39,10 @@ export function nudgePrompt(spawnContext: SpawnCtx): string {
   const headline = spawnContext.message.intent.startsWith("ticket-update:")
     ? `Collagen: ${actedBy(spawnContext.message.fromName, spawnContext.message.agent)} ${spawnContext.message.intent.slice("ticket-update:".length)} on a ticket your user is part of, project "${spawnContext.message.project}"${ticketNote}.`
     : `Collagen: ${verb} — ${actedBy(spawnContext.message.fromName, spawnContext.message.agent)} asks your user to address "${spawnContext.message.intent}" on project "${spawnContext.message.project}"${ticketNote}.`;
-  const level = spawnContext.steering ?? "ask";
+  const level = spawnContext.steering ?? "unset";
   return [
     headline,
-    level === "ask"
+    level === "ask" || level === "unset"
       ? `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`
       : `Tell your user exactly that, in one line. ${steeringLine(level)}`,
     `If your user asks what it says or wants more, read it with the ${spawnContext.serverName} get-messages tool, threadId "${spawnContext.message.threadId}" (a ticket's steps: get-ticket), and relay what is there — never fill gaps from your own head.`,

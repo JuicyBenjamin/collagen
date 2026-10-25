@@ -4,13 +4,15 @@ import { Data, Effect, Schema } from "effect";
 import type { CommentSpot, HostNote, HostReview, HostUser, HostWrite, LineComment, PullRequest, Verdict } from "@collagen/review-web/data";
 import { defaultMergeMethod, githubRepo, MergesAnswer, mergesPage, MERGES_QUERY, type MergesPage, parse, pickPull, PULL_FIELDS, pullNumberIn, READINESS_FIELDS, readComment, readComments, readConversation, readOutdated, readPull, readReadiness, readReviewComments, readReviews, readUser, refusal } from "../lib/github";
 import type { HostReadiness } from "../lib/merging";
+import { HostAllowed } from "../lib/steering";
 
 // Where a project's code is hosted, as something collagen can act on: read
 // a compare diff when there is no clone, link back to it, and — for the
 // review page — say who is signed in, find the pull request a review's
 // branch is, read its line comments, and send a review or a comment in the
 // reader's name. Host-agnostic by design; GitHub is the first, done through
-// the person's own `gh` login, so collagen keeps no token of its own.
+// the person's own `gh` login, so collagen keeps no token of its own. Every
+// write in their name needs steering's permit (HostAllowed, lib/steering).
 
 /** A pull request as a host has it, with the branches it joins. */
 export type HostPull = PullRequest & {
@@ -93,15 +95,15 @@ export interface RepoHost {
   readonly mergesPage: (link: string, base: string, after: string | null) => Effect.Effect<MergesPage, HostCliMissing | HostRefused>;
   /** a whole review, at once: its verdict, its words, and every comment
    *  held in it — GitHub's "Finish your review" */
-  readonly submit: (link: string, pull: number, review: SubmittedReview) => Effect.Effect<{ readonly ok: true; readonly url: string; readonly comments: ReadonlyArray<LineComment> } | { readonly error: string }>;
+  readonly submit: (link: string, pull: number, review: SubmittedReview) => Effect.Effect<{ readonly ok: true; readonly url: string; readonly comments: ReadonlyArray<LineComment> } | { readonly error: string }, never, HostAllowed>;
   /** one comment, said at once — on lines, or on a whole file — at `commit` */
-  readonly comment: (link: string, pull: number, at: CommentSpot, commit: string, body: string) => Effect.Effect<HostWrite>;
+  readonly comment: (link: string, pull: number, at: CommentSpot, commit: string, body: string) => Effect.Effect<HostWrite, never, HostAllowed>;
   /** whether a pull request can be merged now, as the host sees it: its
    *  state, checks, conflicts and its own rules' approvals */
   readonly readiness: (link: string, pull: number) => Effect.Effect<{ readonly pull: HostReadiness } | { readonly none: string }>;
   /** merge it as the person signed in, the repository's default way — never
    *  past the host's own rules */
-  readonly merge: (link: string, pull: number) => Effect.Effect<{ readonly ok: true } | { readonly error: string }>;
+  readonly merge: (link: string, pull: number) => Effect.Effect<{ readonly ok: true } | { readonly error: string }, never, HostAllowed>;
   /** where the host keeps a pull request's head in the repository itself —
    *  how a clone reads one opened from a fork */
   readonly pullRef: (pull: number) => string;
@@ -252,6 +254,8 @@ export const github: RepoHost = {
   },
   submit: (link, pull, review) =>
     Effect.gen(function* () {
+      // only ever with steering's permit: a write in the person's name
+      yield* HostAllowed;
       const repository = githubRepo(link)!;
       const repo = `repos/${repository.owner}/${repository.repo}/pulls/${pull}`;
       const event = review.verdict === "approve" ? "APPROVE" : review.verdict === "request-changes" ? "REQUEST_CHANGES" : "COMMENT";
@@ -297,6 +301,8 @@ export const github: RepoHost = {
     }),
   merge: (link, pull) =>
     Effect.gen(function* () {
+      // only ever with steering's permit: a write in the person's name
+      yield* HostAllowed;
       const repository = githubRepo(link)!;
       const repo = `${repository.owner}/${repository.repo}`;
       const allowed = yield* runGh(["repo", "view", repo, "--json", "mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed"]);
@@ -310,6 +316,8 @@ export const github: RepoHost = {
     }),
   comment: (link, pull, at, commit, body) =>
     Effect.gen(function* () {
+      // only ever with steering's permit: a write in the person's name
+      yield* HostAllowed;
       const repository = githubRepo(link)!;
       // on a whole file GitHub's subject is the file, with no line
       const where =

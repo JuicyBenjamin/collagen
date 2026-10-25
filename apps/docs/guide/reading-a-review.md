@@ -465,6 +465,11 @@ the repository's own rules come first: collagen merges as you, through your own 
 repository's default way, and never past branch protection. If the repository wants an approval
 from someone else, it waits, and your agent tells you why.
 
+Merging is an act on the repo host in your name, so it also waits on your repo-host
+[steering](./conversations#steering-how-much-your-agent-does-on-its-own): not chosen, collagen
+never merges, and your agent tells you it is ready; ask first, your agent asks you, and on your
+yes (`merge-review`) it is merged.
+
 Only your own collagen merges your reviews. It looks whenever the room's tickets move and every
 minute while one waits on its checks, so an approval that came while you were away is merged
 when you are back. Once merged, the review is closed as done and your agent is told — with what

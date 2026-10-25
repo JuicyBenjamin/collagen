@@ -1,7 +1,7 @@
 import { Clock, Effect, Layer, Schedule, Semaphore, Stream, SubscriptionRef } from "effect";
 import { closedAs, ticketName, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { hostReadiness, mergeForOf, ticketReadiness } from "../lib/merging";
-import { steeringLine, steeringOf } from "../lib/steering";
+import { allow, asYou, withHost, workLine, type Cause } from "../lib/steering";
 import { myThreadFor } from "../lib/ticketUpdates";
 import { AgentRunner } from "./AgentRunner";
 import { IdentityService } from "./Identity";
@@ -21,7 +21,9 @@ import { roomProjects } from "@collagen/p2p";
 // their steering. Only the author's own instance ever merges: it looks
 // whenever a room's tickets move, and every minute while one waits on its
 // host (checks running, an approval its rules want), so a review approved
-// while it was away is merged when it is back.
+// while it was away is merged when it is back. Merging is an act on the repo
+// host in their name, so it waits on their steering: not chosen, it is never
+// done; ask first, their agent asks them and merge-review says yes.
 
 /** How often a review waiting on its host is looked at again. */
 const EVERY = "1 minute";
@@ -80,8 +82,22 @@ export const MergerDaemon = Layer.effectDiscard(
               }
               continue;
             }
+            // someone else's approval merging it is their doing; the person's own Accept, theirs
+            const cause: Cause = level === "theirs" ? "others" : "mine";
+            const gate = allow(state, "host", cause, (state.mergeYes ?? []).includes(ticket.id));
+            if ("merge" in ready && "held" in gate) {
+              const why =
+                gate.held === "unset"
+                  ? `"${ticketName(ticket)}" (${ticket.id}) is approved as your user asked and #${found.pull.number} is ready, but collagen merges nothing on ${host.name} in their name: ${gate.why}. Tell your user in one line.`
+                  : `"${ticketName(ticket)}" (${ticket.id}) is approved as your user asked and #${found.pull.number} is ready to merge. Their repo-host steering is ask first: ask them whether collagen should merge it on ${host.name} as them, through their own gh. On their yes, call merge-review {ticketId: "${ticket.id}"}.`;
+              if (told.get(ticket.id) !== why) {
+                told.set(ticket.id, why);
+                yield* tell(handle.id, ticket, trace, gate.held === "unset" ? "not merged" : "ready to merge", why);
+              }
+              continue;
+            }
             // merged by hand meanwhile: its work landed all the same
-            const merged = "merge" in ready ? yield* host.merge(link, found.pull.number) : { ok: true as const };
+            const merged = "merge" in ready && "go" in gate ? yield* withHost(gate.go, host.merge(link, found.pull.number)) : { ok: true as const };
             if ("error" in merged) {
               if (told.get(ticket.id) !== merged.error) {
                 told.set(ticket.id, merged.error);
@@ -90,6 +106,7 @@ export const MergerDaemon = Layer.effectDiscard(
               continue;
             }
             told.delete(ticket.id);
+            yield* store.update((now) => ({ ...now, mergeYes: (now.mergeYes ?? []).filter((id) => id !== ticket.id) }));
             const closed = yield* outbox.tell({ roomId: handle.id, to: "the room", title: `${ticket.goal} · merged and closed`, outgoing: { kind: "close", ticketId: ticket.id, outcome: "done", reason: `merged as #${found.pull.number}` } });
             const waiting = [...tickets.values()].filter((other) => closedAs(other) === null && ((other.after ?? []).includes(ticket.id) || (other.from ?? []).includes(ticket.id)));
             const next = waiting.length > 0 ? ` Waiting on it: ${waiting.map((other) => `"${ticketName(other)}" (${other.id})`).join(", ")} — the work queued behind it can go on.` : "";
@@ -98,7 +115,7 @@ export const MergerDaemon = Layer.effectDiscard(
               ticket,
               trace,
               "merged",
-              `Collagen merged ${found.pull.url} for your user — "${ticketName(ticket)}" was approved as they asked (${level === "theirs" ? "someone else approved it" : level === "mine" ? "they accepted it" : "someone else approved it and they accepted it"}). ${closed}${next} ${steeringLine(steeringOf(yield* store.get))}`,
+              `Collagen merged ${found.pull.url} for your user${"go" in gate ? `, ${asYou(gate.go, "gh")}` : ""} — "${ticketName(ticket)}" was approved as they asked (${level === "theirs" ? "someone else approved it" : level === "mine" ? "they accepted it" : "someone else approved it and they accepted it"}). ${closed}${next} ${workLine(yield* store.get, "mine")}`,
             );
           }
         }
@@ -112,6 +129,14 @@ export const MergerDaemon = Layer.effectDiscard(
       ),
     );
     yield* moved.pipe(Stream.debounce("2 seconds"), Stream.runForEach(() => Effect.ignore(pass)), Effect.forkScoped);
+    // and as soon as the person says yes to merging one
+    yield* SubscriptionRef.changes(store.state).pipe(
+      Stream.map((state) => (state.mergeYes ?? []).join(" ")),
+      Stream.changes,
+      Stream.drop(1),
+      Stream.runForEach(() => Effect.ignore(pass)),
+      Effect.forkScoped,
+    );
     yield* Effect.ignore(pass).pipe(Effect.repeat(Schedule.spaced(EVERY)), Effect.forkScoped);
   }),
 );

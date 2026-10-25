@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, DraftComment, LocalState, Merging, Project, Proposal, Settings, Steering, TranscriptAsk } from "@collagen/p2p";
+import { AdoptedThread, DraftComment, LocalState, Merging, Project, Proposal, Settings, Steering, SteeringLevels, TranscriptAsk, Worked } from "@collagen/p2p";
 import { checkedThemes } from "@collagen/review-web/themeData";
 
 /** Reading the user's own state file must never cost them their rooms.
@@ -47,6 +47,10 @@ export const salvageState = (text: string): Salvaged => {
   } catch {
     return { state: emptyState, dropped: ["the state file is not readable JSON — starting fresh"] };
   }
+  // an older build's one level was the work handed to the agent, and only that:
+  // it chose nothing about acting outside collagen
+  const level = decode(Steering, asRecord(raw)?.steering);
+  if (level !== null) raw = { ...asRecord(raw), steering: { kinds: { work: { mine: level } } } };
   const whole = decode(LocalState, raw);
   if (whole !== null) return { state: whole, dropped: [] };
 
@@ -147,8 +151,12 @@ export const salvageState = (text: string): Salvaged => {
   if (src.preferredAi !== null && typeof src.preferredAi !== "string" && src.preferredAi !== undefined) dropped.push("an unreadable ai setting");
 
   // an unreadable level falls back to the asking end, the default
-  const steering = decode(Steering, src.steering);
-  if (src.steering !== undefined && steering === null) dropped.push("an unreadable steering setting (back to: ask first)");
+  const steering = decode(SteeringLevels, src.steering);
+  if (src.steering !== undefined && steering === null) dropped.push("an unreadable steering setting (back to: not chosen)");
+  const steeringAsked = decode(Schema.Array(Schema.String), src.steeringAsked);
+  const mergeYes = decode(Schema.Array(Schema.String), src.mergeYes);
+  // unreadable, the conversations are simply told again
+  const worked = salvageRecord(src.worked, Worked, () => {});
 
   // unreadable switches go back to their defaults
   const settings = decode(Settings, src.settings);
@@ -167,6 +175,8 @@ export const salvageState = (text: string): Salvaged => {
     state: {
       preferredAi,
       ...(steering ? { steering } : {}),
+      ...(steeringAsked ? { steeringAsked } : {}),
+      ...(mergeYes ? { mergeYes } : {}),
       ...(settings ? { settings } : {}),
       ...(merging ? { merging } : {}),
       ...(themes ? { themes } : {}),
@@ -180,6 +190,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(drafts && Object.keys(drafts).length > 0 ? { drafts } : {}),
       ...(finished ? { finished } : {}),
       ...(toldGuessed && toldGuessed.length > 0 ? { toldGuessed } : {}),
+      ...(worked && Object.keys(worked).length > 0 ? { worked } : {}),
     },
     dropped: dropped.length > 0 ? dropped : ["parts of the state file no longer readable"],
   };
