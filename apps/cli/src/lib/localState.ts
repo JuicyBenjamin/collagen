@@ -155,6 +155,7 @@ export const salvageState = (text: string): Salvaged => {
   if (src.steering !== undefined && steering === null) dropped.push("an unreadable steering setting (back to: not chosen)");
   const steeringAsked = decode(Schema.Array(Schema.String), src.steeringAsked);
   const mergeYes = decode(Schema.Array(Schema.String), src.mergeYes);
+  const woken = decode(Schema.Array(Schema.String), src.woken);
   // unreadable, the conversations are simply told again
   const worked = salvageRecord(src.worked, Worked, () => {});
 
@@ -177,6 +178,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(steering ? { steering } : {}),
       ...(steeringAsked ? { steeringAsked } : {}),
       ...(mergeYes ? { mergeYes } : {}),
+      ...(woken ? { woken } : {}),
       ...(settings ? { settings } : {}),
       ...(merging ? { merging } : {}),
       ...(themes ? { themes } : {}),
