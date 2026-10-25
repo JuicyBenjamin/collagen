@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
 
@@ -153,6 +153,18 @@ export const takeReview = async (ticketId: string, findings: string, failed: boo
 export const closeReview = async (ticketId: string, outcome: "done" | "dropped"): Promise<HostWrite> => {
   "use server";
   return run((backend) => backend.close(ticketId, outcome));
+};
+
+/** What a review the reader filed grew from, still open and theirs to close. */
+export const reviewParents = async (ticketId: string): Promise<ReadonlyArray<TicketRef>> => {
+  "use server";
+  return run((backend) => backend.parents(ticketId));
+};
+
+/** Close, as done, a ticket a review the reader filed grew from. */
+export const closeParent = async (ticketId: string, parentId: string): Promise<HostWrite> => {
+  "use server";
+  return run((backend) => backend.closeParent(ticketId, parentId));
 };
 
 /** Merging for a review the reader filed, as it stands. */

@@ -3,6 +3,7 @@ import { isJudged, visibleTo } from "@collagen/p2p";
 import type { HostWrite, MergeView } from "@collagen/review-web/data";
 import type { MergeFor } from "@collagen/p2p";
 import { mergeForOf, withMergeFor } from "../lib/merging";
+import { openParents } from "../lib/parents";
 import { StateStore } from "./StateStore";
 import { IdentityService } from "./Identity";
 import { Outbox } from "./Outbox";
@@ -46,6 +47,32 @@ export const closeReview = Effect.fn("ReviewFinish.close")(function* (ticketId: 
     to: "the room",
     title: `${found.ticket.goal} · closed`,
     outgoing: { kind: "close", ticketId, outcome },
+  });
+  return told.startsWith("failed") ? ({ error: told.replace(/^failed: /, "") } satisfies HostWrite) : ({ ok: true as const } satisfies HostWrite);
+});
+
+/** What a review the reader filed grew from, still open and theirs to close —
+ *  offered beside Accept as something they may close too, never closed on
+ *  its own. */
+export const parentsOf = Effect.fn("ReviewFinish.parents")(function* (ticketId: string) {
+  const found = yield* reviewNamed(ticketId);
+  const me = (yield* IdentityService).identity.pubkey;
+  if (!found || found.ticket.createdBy !== me) return [];
+  return openParents(found.ticket, yield* SubscriptionRef.get(found.room.tickets), me);
+});
+
+/** Close, as done, a ticket a review the reader filed grew from — the
+ *  reader's own act beside their Accept. Only one of its parents, theirs and open. */
+export const closeParent = Effect.fn("ReviewFinish.closeParent")(function* (ticketId: string, parentId: string) {
+  const parents = yield* parentsOf(ticketId);
+  const parent = parents.find((candidate) => candidate.id === parentId);
+  const found = yield* reviewNamed(ticketId);
+  if (!found || !parent) return { error: "that is not an open ticket of yours this review grew from" } satisfies HostWrite;
+  const told = yield* (yield* Outbox).tell({
+    roomId: found.roomId,
+    to: "the room",
+    title: `${parent.title} · closed`,
+    outgoing: { kind: "close", ticketId: parentId, outcome: "done", reason: `its review, "${found.ticket.title ?? found.ticket.goal}", was accepted` },
   });
   return told.startsWith("failed") ? ({ error: told.replace(/^failed: /, "") } satisfies HostWrite) : ({ ok: true as const } satisfies HostWrite);
 });
