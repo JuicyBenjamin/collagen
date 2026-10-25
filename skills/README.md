@@ -21,6 +21,7 @@ skill into an agent's folder — edit it here.
 | --- | --- |
 | [replicated-merges](replicated-merges/SKILL.md) | changing anything peers write and merge: tickets, reviews, epics, ids, clocks |
 | [one-moment](one-moment/SKILL.md) | a screen or call reads state that can move while it is shown: a branch, a live list, an index |
+| [dates-and-times](dates-and-times/SKILL.md) | storing, sending, comparing or showing a time: UTC everywhere, the reader's date and time only on screen, through Temporal |
 | [offline-and-delivery](offline-and-delivery/SKILL.md) | sending, receiving or waking anyone: outbox, transcripts, steps, readiness |
 | [who-sees-what](who-sees-what/SKILL.md) | showing or explaining tickets to a person or an agent; filtering anything out |
 | [tui-layout](tui-layout/SKILL.md) | laying out, sizing or scrolling anything in the OpenTUI app |
