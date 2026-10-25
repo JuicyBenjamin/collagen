@@ -325,14 +325,19 @@ export function Hunk(props: {
               onChange={async () => {
                 // marking it folds it up into its header, which comes to the
                 // window's top, ticked, the next file rising in under it —
-                // the closing is what the reader sees; unmarking holds the
-                // header where it was clicked
+                // the closing is what the reader sees (and the unit's why,
+                // when this was its last file, closes with it); unmarking
+                // holds the header where it was clicked
                 const marking = state() !== "viewed";
                 const group = card();
                 void (marking ? glideToTop(head) : holdInPlace(head));
-                if (marking && !reading.folded(props.hunk.file)) await foldAway(group);
+                if (marking && !reading.folded(props.hunk.file)) {
+                  reading.foldsNow(props.hunk.file, true);
+                  await foldAway(group);
+                }
                 viewed.toggle(props.hunk.file, diffNow.commit());
                 reading.marked(props.hunk.file);
+                reading.foldsNow(props.hunk.file, false);
               }}
             />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}

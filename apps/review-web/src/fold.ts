@@ -83,7 +83,7 @@ export function holdInPlace(element: HTMLElement | undefined): Promise<void> {
  *  from where it is, over the fold's own time and curve — one motion, so the
  *  reader sees the file close into its header and the next file come up
  *  under it, rather than being taken somewhere — and keep it there while
- *  the page settles (the unit's why folding after), until the reader scrolls. */
+ *  the page settles (the unit's why folding with it), until the reader scrolls. */
 export function glideToTop(section: Element | undefined): Promise<void> {
   if (!section) return Promise.resolve();
   const from = section.getBoundingClientRect().top;

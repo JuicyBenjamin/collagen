@@ -79,12 +79,13 @@ export function Unit(props: {
   });
   // every file here marked viewed (and not opened again to read): the reader
   // is done with this unit, so its why folds with its code — no column of reasons holding the section open.
+  // It starts as the last file starts folding, so the two close as one.
   // Unmarking one opens it again; either can still be opened by hand.
   let wasDone = false;
   createEffect(
     () => {
       const files = [...new Set(props.unit.hunks.flatMap((id) => props.hunks.get(id)?.file ?? []))];
-      return files.length > 0 && files.every((file) => reading.folded(file));
+      return files.length > 0 && files.every((file) => reading.folded(file) || reading.folding(file));
     },
     (done) => {
       if (done) setOpen(false);
