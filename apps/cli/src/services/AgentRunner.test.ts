@@ -254,6 +254,18 @@ describe("AgentRunner", () => {
     expect(left).toBe(1);
   });
 
+  it("a message wakes its conversation once, even after collagen restarts", async () => {
+    const adopted: LocalState = {
+      ...baseState,
+      threads: { "thread-1": { ai: "claude-code", sessionId: "sess-1" } },
+      worked: reached(),
+      steering: { kinds: { deliver: { others: "act" } } },
+    };
+    // a restart reads the message still waiting again; the state remembers it woke for it
+    expect((await delivered({ ...adopted, woken: ["m-seen"] }, { id: "m-seen" })).calls).toHaveLength(0);
+    expect((await delivered({ ...adopted, woken: ["m-seen"] }, { id: "m-new" })).calls).toHaveLength(1);
+  });
+
   it("with delivery not chosen, even an adopted conversation is not woken", async () => {
     const { calls, left } = await delivered({ ...baseState, threads: { "thread-1": { ai: "claude-code", sessionId: "sess-1" } }, worked: reached() });
     expect(calls).toHaveLength(0);

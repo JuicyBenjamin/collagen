@@ -579,6 +579,9 @@ export const LocalState = Schema.Struct({
   /** reviews whose pull request the person said yes to merging, asked at
    *  "ask first" — merged once ready, then let go (cli Merger) */
   mergeYes: Schema.optional(Schema.Array(Schema.String)),
+  /** messages a conversation of the person's was already woken for (cli
+   *  AgentRunner), latest last: each wakes one once, restarts included */
+  woken: Schema.optional(Schema.Array(Schema.String)),
   settings: Schema.optional(Settings),
   /** absent = never merged for them */
   merging: Schema.optional(Merging),
