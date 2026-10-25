@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.23.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.22.0-alpha...p2p-v0.23.0-alpha) (2026-10-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** a reviewer can comment on a whole file, here and on GitHub
+* **p2p:** a task can be filed with nobody asked, and taken by whoever picks it up
+
+### Features
+
+* **cli:** a comment reads as a person would say it, the AI's long version a click away ([2115dd2](https://github.com/JuicyBenjamin/collagen/commit/2115dd2b07c4920832e2dffae917663457555444))
+* **cli:** every web page wears the reader's theme, switched from any of them ([5b95d48](https://github.com/JuicyBenjamin/collagen/commit/5b95d48e9d2bea9c10e307235ac7f1be9d94af84))
+* **cli:** projects stand in the order you put them, kept on your device ([b5fe4a4](https://github.com/JuicyBenjamin/collagen/commit/b5fe4a4a8762a023fcab49da8d90236fa08a85c3))
+* **p2p:** a reviewer can comment on a whole file, here and on GitHub ([ebd3012](https://github.com/JuicyBenjamin/collagen/commit/ebd3012c467001f271b331aa14c711f2dfe6b819))
+
+
+### Bug Fixes
+
+* **p2p:** a task can be filed with nobody asked, and taken by whoever picks it up ([397238e](https://github.com/JuicyBenjamin/collagen/commit/397238ee941352522038f3db91fd555cc7f71163))
+
 ## [0.22.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.21.0-alpha...p2p-v0.22.0-alpha) (2026-10-20)
 
 

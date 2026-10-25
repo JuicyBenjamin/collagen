@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.23.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.22.0-alpha...cli-v0.23.0-alpha) (2026-10-25)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2p:** a reviewer can comment on a whole file, here and on GitHub
+* **p2p:** a task can be filed with nobody asked, and taken by whoever picks it up
+
+### Features
+
+* **cli:** a comment reads as a person would say it, the AI's long version a click away ([2115dd2](https://github.com/JuicyBenjamin/collagen/commit/2115dd2b07c4920832e2dffae917663457555444))
+* **cli:** a finished review says so where you finished it, your verdict and when ([d2d4956](https://github.com/JuicyBenjamin/collagen/commit/d2d4956c17862427c63e6d6a11083b18b6ed08f1))
+* **cli:** each project has a merges page of its own, with tabs for the room's others ([3f91093](https://github.com/JuicyBenjamin/collagen/commit/3f910937ed02653e0578080315946ecf8d356e66))
+* **cli:** every web page wears the reader's theme, switched from any of them ([5b95d48](https://github.com/JuicyBenjamin/collagen/commit/5b95d48e9d2bea9c10e307235ac7f1be9d94af84))
+* **cli:** o on the merges tab opens the merges page of the project shown ([b748802](https://github.com/JuicyBenjamin/collagen/commit/b748802d5289ff7db8dc27635f6bf22d53ab3858))
+* **cli:** projects stand in the order you put them, kept on your device ([b5fe4a4](https://github.com/JuicyBenjamin/collagen/commit/b5fe4a4a8762a023fcab49da8d90236fa08a85c3))
+* **cli:** the merges tab shows one project at a time, your first one first ([9a48db0](https://github.com/JuicyBenjamin/collagen/commit/9a48db0a68cbfbafc95cd2760210f9dcc180f401))
+* **p2p:** a reviewer can comment on a whole file, here and on GitHub ([ebd3012](https://github.com/JuicyBenjamin/collagen/commit/ebd3012c467001f271b331aa14c711f2dfe6b819))
+
+
+### Bug Fixes
+
+* **cli:** a comment posted to GitHub shows once, marked as on GitHub too ([17ad4ce](https://github.com/JuicyBenjamin/collagen/commit/17ad4ceafb56e292d8e372654e0c71e7c7190ef5))
+* **cli:** a review held back by comments on another commit says so, listing them to keep or delete ([f6146a2](https://github.com/JuicyBenjamin/collagen/commit/f6146a243f48419afbfd902f6020024b60773bea))
+* **cli:** every date a person sees is theirs, through Temporal, from one helper per app ([a502845](https://github.com/JuicyBenjamin/collagen/commit/a5028454e13799de80c08ea42199691a3fbdd05c))
+* **cli:** your verdict and the buttons slide across, the verdict holding until a new version lands ([d40f500](https://github.com/JuicyBenjamin/collagen/commit/d40f500d657387fffcfa68df46e3d719176b7edb))
+* **p2p:** a task can be filed with nobody asked, and taken by whoever picks it up ([397238e](https://github.com/JuicyBenjamin/collagen/commit/397238ee941352522038f3db91fd555cc7f71163))
+
 ## [0.22.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.21.0-alpha...cli-v0.22.0-alpha) (2026-10-20)
 
 
