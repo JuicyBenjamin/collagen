@@ -11,7 +11,8 @@ import { theme } from "../../app/theme";
 import { SETTINGS, settingOf, withSetting, type SettingKey } from "../../lib/settings";
 import { MERGE_HELP, MERGE_LEVELS, withMergeFor } from "../../lib/merging";
 import { KIND_LABEL, STEERING_KINDS, STEERING_LABEL, STEERING_ORDER, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
-import type { MergeFor, Steering, SteeringLevels } from "@collagen/p2p";
+import { JOB_KINDS, JOB_LABEL, jobLimitOf, withModel } from "../../lib/jobs";
+import type { JobKind, MergeFor, Steering, SteeringLevels } from "@collagen/p2p";
 import { myNameAtom, roomAtom } from "../atoms";
 import { stateAtom, updateStateAtom } from "../room/atoms";
 import { renameRoomAtom, setMyNameAtom } from "./atoms";
@@ -21,8 +22,16 @@ type SteerField = `steer:${SteeringAt}:${Cause}`;
 const STEER_AT: ReadonlyArray<SteeringAt> = ["master", ...STEERING_KINDS];
 const STEER_FIELDS: ReadonlyArray<SteerField> = STEER_AT.flatMap((at) => [`steer:${at}:mine` as const, `steer:${at}:others` as const]);
 
-type Field = "name" | "room" | SettingKey | "mergeDefault" | "mergeRoom" | SteerField | "tag";
-const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((setting) => setting.key), ...STEER_FIELDS, "tag", "mergeDefault", "mergeRoom"];
+/** A job's model on the page: typed, applied on enter. */
+type ModelField = `model:${JobKind}`;
+const MODEL_FIELDS: ReadonlyArray<ModelField> = JOB_KINDS.map((kind) => `model:${kind}` as const);
+
+type Field = "name" | "room" | SettingKey | "mergeDefault" | "mergeRoom" | SteerField | "tag" | "jobLimit" | ModelField;
+const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((setting) => setting.key), ...STEER_FIELDS, "tag", "jobLimit", ...MODEL_FIELDS, "mergeDefault", "mergeRoom"];
+
+const isModel = (field: Field): field is ModelField => field.startsWith("model:");
+/** The job limit round: 1 → 4 and back. */
+const JOB_LIMITS = [1, 2, 3, 4];
 
 const isSteer = (field: Field): field is SteerField => field.startsWith("steer:");
 
@@ -76,6 +85,11 @@ export function SettingsPage() {
   };
   const cycleTag = () =>
     updateState({ update: (previous) => withTagRoute(previous, TAG_ROUTES[(TAG_ROUTES.indexOf(tagRouteOf(previous)) + 1) % TAG_ROUTES.length]!) });
+  // the jobs collagen runs the person's AI for: how many at once, and each job's model
+  const cycleJobLimit = () => updateState({ update: (previous) => ({ ...previous, jobLimit: JOB_LIMITS[(JOB_LIMITS.indexOf(jobLimitOf(previous)) + 1) % JOB_LIMITS.length]! }) });
+  const [models, setModels] = useState<Partial<Record<JobKind, string>>>({});
+  const modelShown = (kind: JobKind) => models[kind] ?? state?.models?.[kind] ?? "";
+  const saveModel = (kind: JobKind) => updateState({ update: (previous) => withModel(previous, kind, models[kind] ?? previous.models?.[kind] ?? null) });
   const mergeDefault: MergeFor = state?.merging?.default ?? "off";
   const mergeRoom = state?.merging?.rooms?.[room.id];
 
@@ -96,12 +110,13 @@ export function SettingsPage() {
     if (key.name === "tab") return key.shift ? prev() : next();
     if (key.name === "escape") return navigate("room/overview");
     // on a switch (not typing in a field): arrows move, space or enter flips
-    if (field === "name" || field === "room") return;
+    if (field === "name" || field === "room" || isModel(field)) return;
     if (key.name === "down") return next();
     if (key.name === "up") return prev();
     if (key.name === "space" || key.name === "return" || key.name === "enter") {
       if (isSteer(field)) return cycleSteer(field);
       if (field === "tag") return cycleTag();
+      if (field === "jobLimit") return cycleJobLimit();
       return field === "mergeDefault" || field === "mergeRoom" ? cycleMerge(field) : flip(field);
     }
   });
@@ -155,6 +170,25 @@ export function SettingsPage() {
           {`[${state ? tagRouteOf(state) : "existing"}] a message for you goes to ${TAG_LABEL[state ? tagRouteOf(state) : "existing"]}`}
         </text>
         <text fg={theme.dim}>{"        not chosen: nothing is done outside collagen in your name · others' never follows yours"}</text>
+      </box>
+      <box flexDirection="column" border borderStyle="rounded" borderColor={field === "jobLimit" || isModel(field) ? theme.accent : theme.dim} paddingX={1} title=" jobs — what collagen runs your AI for ">
+        <text fg={field === "jobLimit" ? theme.accent : theme.fg}>
+          {field === "jobLimit" ? "› " : "  "}
+          {`[${state ? jobLimitOf(state) : 1}] at a time — the rest wait in line`}
+        </text>
+        {JOB_KINDS.map((kind) => (
+          <box key={kind} flexDirection="row" gap={1}>
+            <text fg={field === `model:${kind}` ? theme.accent : theme.fg}>{`${field === `model:${kind}` ? "› " : "  "}${JOB_LABEL[kind]}:`}</text>
+            <input
+              focused={field === `model:${kind}`}
+              value={modelShown(kind)}
+              onInput={(typed) => setModels((previous) => ({ ...previous, [kind]: typed }))}
+              onSubmit={() => saveModel(kind)}
+              placeholder="your AI's default"
+            />
+          </box>
+        ))}
+        <text fg={theme.dim}>{"        a model name your AI takes; an alias (haiku, sonnet) follows the newest · enter saves"}</text>
       </box>
       <box flexDirection="column" border borderStyle="rounded" borderColor={field === "mergeDefault" || field === "mergeRoom" ? theme.accent : theme.dim} paddingX={1} title=" merge for me ">
         <text fg={field === "mergeDefault" ? theme.accent : theme.fg}>

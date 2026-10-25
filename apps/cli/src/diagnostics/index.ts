@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { Tool, Toolkit } from "effect/ai";
 import type { Diagnostic } from "./registry";
 import { attachFiles, fetchAttachments } from "./attachments";
+import { jobsList, research } from "./research";
 import { reviewContext } from "./review";
 import { tokenCost } from "./tokenCost";
 import { listTranscripts, requestTranscripts, shareTranscripts } from "./transcripts";
@@ -10,7 +11,7 @@ export type { Diagnostic, DiagnosticContext, DiagnosticDeps } from "./registry";
 
 /** Every diagnostic. Add one: write its file, list it here — the MCP server
  *  and the ticket page both pick it up. */
-export const diagnostics: ReadonlyArray<Diagnostic<any>> = [requestTranscripts, shareTranscripts, listTranscripts, attachFiles, fetchAttachments, reviewContext, tokenCost];
+export const diagnostics: ReadonlyArray<Diagnostic<any>> = [requestTranscripts, shareTranscripts, listTranscripts, attachFiles, fetchAttachments, reviewContext, tokenCost, research, jobsList];
 
 /** The agent-facing tool for a diagnostic. All of them say what they are. */
 const toTool = (definition: Diagnostic<any>) =>

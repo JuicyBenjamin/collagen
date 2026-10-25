@@ -41,6 +41,7 @@ follows the master until you set it:
 | `work` | what your agent starts on its own with what collagen hands it: a step that became yours, a take asking for changes, a peer's message |
 | `host` | acting on the repo host in your name: your review and comments posted on the pull request, merging it — through your own `gh`, one level for every host |
 | `deliver` | collagen waking your AI conversations when something comes for them (a courier into Claude Code, a Codex queue) |
+| `run` | collagen running your AI for a job of its own (researching a ticket) |
 
 Each level is one of:
 
@@ -148,6 +149,23 @@ never starts an agent for you, and the agent it reaches is told to relay it, not
 3. otherwise it waits until your agent pulls it: `pending-threads` lists what's waiting,
    `get-messages <threadId>` reads one thread, `await-messages` blocks until something
    arrives (for an agent with nothing else to do). Same instruction on the way out.
+
+### Jobs: collagen running your AI for you
+
+Your **preferred AI** (`a` in the room, or `set-ai`) is the AI collagen runs for jobs of its
+own, each with a model you choose per job (settings, or `set-jobs`): waking a conversation
+(a small model; `haiku` by default for Claude Code) and researching a ticket (`sonnet` by
+default). A model is any name your AI takes; an alias like `haiku` follows the newest, so a
+new model needs nothing from collagen.
+
+**Need more info** on a plan, a proposal or a bug (on its ticket page, or `research`) starts
+a research job: a fresh run of your AI reads the ticket and the thinking behind it, looks
+into it (the project's code, read only, and the web) and posts what it found, and its
+questions for you, as one take on the ticket. Collagen runs as many jobs at once as you
+allow — one unless you say more — and the rest wait in line. The outbox tab lists them as
+they run, with their model, and the status line says how many run and wait. Each job's
+tokens and cost are counted with collagen's own runs (`token-cost`). Running your AI in
+your name follows your `run` steering: not chosen, nothing runs.
 
 Each AI conversation keeps its own place in a thread: what your Claude conversation read
 is still news to your Codex one. A conversation new to a thread starts at its tail — it

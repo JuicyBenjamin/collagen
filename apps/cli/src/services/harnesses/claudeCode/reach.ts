@@ -53,13 +53,12 @@ export const courierPrompt = (socket: string, line: string): string =>
     line,
   ].join("\n");
 
-/** How the courier runs: a small model, with SendMessage as its one tool and
+/** How the courier runs (with the person's wake model): SendMessage as its one tool and
  *  nothing else loaded — no MCP servers, no settings, no slash commands, no
  *  project files (it runs in the temp dir) — so a wake reads ~13k tokens, not
  *  the ~150k a run with everything of the person's loaded does. Its result
  *  comes back as JSON, with what it spent. */
 const COURIER_FLAGS: ReadonlyArray<string> = [
-  "--model", "haiku",
   "--tools", "SendMessage",
   "--allowedTools", "SendMessage",
   "--max-turns", "3",
@@ -93,11 +92,11 @@ export const courierSpent = (out: string): Spent | undefined => {
 /** Wake the session at socket `reach` with one line, through the courier —
  *  it wakes it, idle or busy, in the terminal or the desktop app — and say
  *  what the courier spent. */
-export const courier = (conversation: string, reach: string | undefined, line: string): Effect.Effect<Woken, never, DeliverAllowed | ChildProcessSpawner.ChildProcessSpawner> =>
+export const courier = (conversation: string, reach: string | undefined, line: string, model = "haiku"): Effect.Effect<Woken, never, DeliverAllowed | ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
     yield* DeliverAllowed;
     if (!reach) return { reached: false };
-    const proc = yield* ChildProcess.make("claude", ["-p", courierPrompt(reach, line), ...COURIER_FLAGS], { cwd: tmpdir(), stdin: "ignore" });
+    const proc = yield* ChildProcess.make("claude", ["-p", courierPrompt(reach, line), "--model", model, ...COURIER_FLAGS], { cwd: tmpdir(), stdin: "ignore" });
     const out = yield* proc.stdout.pipe(Stream.decodeText(), Stream.mkString);
     const exit = yield* proc.exitCode;
     const spent = courierSpent(out);
