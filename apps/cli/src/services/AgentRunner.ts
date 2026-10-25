@@ -12,6 +12,9 @@ import { StateStore } from "./StateStore";
 import { allow, DeliverAllowed, levelOf, MOCK_PERMIT, tagRouteOf, withDeliver, type Cause } from "../lib/steering";
 import { listenerFor } from "../lib/worked";
 
+/** How many woken messages are remembered. */
+const WOKEN = 500;
+
 /** Who caused a delivery: the person's own (a message from them to them), or someone else. */
 const causeOf = (spawnContext: SpawnCtx): Cause => (spawnContext.message.from === spawnContext.message.to ? "mine" : "others");
 
@@ -123,12 +126,17 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         yield* Effect.log(`→ inbox · ${about} — your steering sends messages nowhere; it waits until your agent pulls it`);
         return null;
       }
-      const listener = listenerFor(state, sample);
+      // each message wakes a conversation once — a restart reads the messages
+      // still waiting again, and they are not news a second time
+      const fresh = queued.filter((received) => !(state.woken ?? []).includes(received.message.id));
+      if (fresh.length === 0) return null;
+      const news = fresh.at(-1)!.message;
+      const listener = listenerFor(state, news);
       if (!listener) {
         yield* Effect.log(`→ inbox · ${about} — no conversation of yours listens for it; it waits until your agent pulls it (watch-ticket or adopt-thread links one)`);
         return null;
       }
-      const cause: Cause = sample.from === sample.to ? "mine" : "others";
+      const cause: Cause = news.from === news.to ? "mine" : "others";
       // adopting a thread or watching a ticket is the person's yes to it; having worked on one is not
       const gate = allow(state, "deliver", cause, listener.heard !== "worked");
       if ("held" in gate) {
@@ -140,12 +148,13 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         yield* Effect.log(`→ inbox · ${about} — collagen does not know how to reach a ${listener.conversation.ai} conversation; it waits until your agent pulls it`);
         return null;
       }
-      const line = wakeLine({ cwd: homedir(), mcpUrl, serverName: mcpServerName(profile), message: sample, sessionId: Option.some(listener.conversation.id), steering: levelOf(state, "work", cause) });
+      const line = wakeLine({ cwd: homedir(), mcpUrl, serverName: mcpServerName(profile), message: news, sessionId: Option.some(listener.conversation.id), steering: levelOf(state, "work", cause) });
       const woken = yield* withDeliver(gate.go, harness.wake(listener.conversation.id, listener.socket, line)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
       if (woken === "unreachable") {
         yield* Effect.log(`→ inbox · ${about} — your ${harness.name} conversation ${listener.conversation.id.slice(0, 8)}… could not be reached from here yet; it waits until your agent pulls it`);
         return null;
       }
+      yield* store.update((now) => ({ ...now, woken: [...(now.woken ?? []).filter((id) => !before.has(id)), ...before].slice(-WOKEN) }));
       yield* Effect.log(`→ ${harness.name} · ${about} — woke your conversation ${listener.conversation.id.slice(0, 8)}… in the window it is in (${harness.wakesBy})`);
       return before;
     });
