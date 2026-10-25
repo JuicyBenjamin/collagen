@@ -1,4 +1,4 @@
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createMemo, createSignal, flush, For, onCleanup, Show } from "solid-js";
 import type { DiffLine, Hunk as HunkData, WholeFileResult } from "~/data";
 import { diffNow } from "~/diffNow";
 import { ticketId } from "~/ticket";
@@ -275,8 +275,11 @@ export function Hunk(props: {
               <button type="button" class="head reread-toggle" onClick={async () => {
                   // folding it again closes smoothly, the header held where the reader clicked it; opening it is at once
                   void holdInPlace(head);
-                  if (!folded()) await foldAway(card());
+                  const settle = folded() ? () => undefined : await foldAway(card());
                   reading.toggle(props.hunk.file);
+                  // drawn folded: the card is its header's size of itself again
+                  flush();
+                  settle();
                 }} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
                 <span class="chevron">{folded() ? "▸" : "▾"}</span><span class="path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>
               </button>
@@ -331,13 +334,17 @@ export function Hunk(props: {
                 const marking = state() !== "viewed";
                 const group = card();
                 void (marking ? glideToTop(head) : holdInPlace(head));
+                let settle: () => void = () => undefined;
                 if (marking && !reading.folded(props.hunk.file)) {
                   reading.foldsNow(props.hunk.file, true);
-                  await foldAway(group);
+                  settle = await foldAway(group);
                 }
                 viewed.toggle(props.hunk.file, diffNow.commit());
                 reading.marked(props.hunk.file);
                 reading.foldsNow(props.hunk.file, false);
+                // drawn folded: the card is its header's size of itself again
+                flush();
+                settle();
               }}
             />
             {state() === "changed" ? "Changed since viewed" : "Viewed"}
