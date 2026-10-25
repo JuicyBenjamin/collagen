@@ -6,21 +6,40 @@ import { animate, cubicBezier } from "motion";
 // why beside it is; none at all when the reader asks their system for less.
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-/** How long a file's code takes to fold away. */
-const FOLDS = 0.24;
+/** How long a file's code takes to fold away: long enough to be seen
+ *  closing, so marking it viewed reads as closing it, not as a jump. */
+const FOLDS = 0.3;
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 
 /** Close what a file's card shows under its header — its first change's
- *  code and every later change of it — then resolve, for the fold itself. */
+ *  code and every later change of it — then resolve, for the fold itself.
+ *  What the reader cannot see (scrolled past above, still to come below)
+ *  goes at once, the page shifted by as much so nothing on screen moves;
+ *  only what is on screen folds, over the whole fold — a long file closes
+ *  where it can be seen closing, not in its first few frames. */
 export async function foldAway(card: Element | null): Promise<void> {
   if (!card || still.matches) return;
   // a change is display: contents (no box to shrink): its first one's body, and every part of the later ones
   const parts = [...card.querySelectorAll<HTMLElement>(":scope > .hunk.continued > *, :scope > .hunk:not(.continued) > .hunk-body")];
+  // seen from under the file's header (stuck or not) to the window's foot
+  const seenFrom = Math.max(0, card.querySelector(".file")?.getBoundingClientRect().bottom ?? 0);
+  let cutAbove = 0;
+  const seen = parts.map((element) => {
+    const box = element.getBoundingClientRect();
+    const above = Math.min(box.height, Math.max(0, seenFrom - box.top));
+    const below = Math.min(box.height - above, Math.max(0, box.bottom - innerHeight));
+    cutAbove += above;
+    element.style.overflow = "hidden";
+    element.style.height = `${box.height - above - below}px`;
+    // what was above stays scrolled out of the shortened box
+    element.scrollTop = above;
+    return box.height - above - below;
+  });
+  if (cutAbove > 0) scrollBy({ top: -cutAbove, behavior: "instant" });
   await Promise.all(
-    parts.map((element) => {
-      element.style.overflow = "hidden";
-      return animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0], marginTop: 0, marginBottom: 0 }, { duration: FOLDS, ease: EASE });
-    }),
+    parts.map((element, index) =>
+      animate(element, { height: [seen[index] ?? 0, 0], opacity: [1, 0], marginTop: 0, marginBottom: 0 }, { duration: FOLDS, ease: EASE }),
+    ),
   );
 }
 
@@ -60,11 +79,11 @@ export function holdInPlace(element: HTMLElement | undefined): Promise<void> {
   });
 }
 
-/** Take the reader on to the next section as a file folds above it: it
- *  rises from where it is to the window's top over the fold's own quarter
- *  second, on the fold's own curve — one motion, not a hold and then a
- *  jump — and is kept there while the page settles (the unit's why folding
- *  after), until the reader scrolls. */
+/** Bring a file's header to the window's top as its code folds up into it:
+ *  from where it is, over the fold's own time and curve — one motion, so the
+ *  reader sees the file close into its header and the next file come up
+ *  under it, rather than being taken somewhere — and keep it there while
+ *  the page settles (the unit's why folding after), until the reader scrolls. */
 export function glideToTop(section: Element | undefined): Promise<void> {
   if (!section) return Promise.resolve();
   const from = section.getBoundingClientRect().top;
@@ -79,9 +98,16 @@ export function glideToTop(section: Element | undefined): Promise<void> {
       // at once: the page's smooth scrolling is for the reader's jumps, not for this
       if (section.isConnected && Math.abs(off) > 0.5) window.scrollBy({ top: off, behavior: "instant" });
     };
+    // put back as the page changes height, before it is painted — the
+    // fold takes most of its height in the first frames, and a frame late
+    // the header has already slipped out of the window — and on every frame
+    // besides, for the glide's own way up
+    const sizes = new ResizeObserver(() => place(performance.now()));
+    sizes.observe(document.body);
     const letGo = () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
+      sizes.disconnect();
       for (const kind of reader) removeEventListener(kind, letGo);
       settled();
     };
