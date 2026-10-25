@@ -19,6 +19,7 @@ skill into an agent's folder — edit it here.
 
 | Skill | Use it when |
 | --- | --- |
+| [releasing](releasing/SKILL.md) | starting, merging or shipping work: branches off `release`, each merged into `release` on its person's OK, `release` into `main` as one pull request |
 | [replicated-merges](replicated-merges/SKILL.md) | changing anything peers write and merge: tickets, reviews, epics, ids, clocks |
 | [one-moment](one-moment/SKILL.md) | a screen or call reads state that can move while it is shown: a branch, a live list, an index |
 | [dates-and-times](dates-and-times/SKILL.md) | storing, sending, comparing or showing a time: UTC everywhere, the reader's date and time only on screen, through Temporal |

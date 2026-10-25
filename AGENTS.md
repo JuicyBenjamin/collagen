@@ -22,6 +22,10 @@ edit the same files at once. Bring its branch into the workspace as soon as
 it is done. Two branches that conflict are stacked, one on the other, with
 the conflict resolved in the stack — not hidden apart.
 
+The workspace targets `release`, not `main`: every branch starts from
+`release`, is merged into `release` when its person approves it, and
+`release` goes into `main` as one pull request. Skill: `releasing`.
+
 ## An AI can do whatever a person can
 
 Every feature and action a person can take in collagen, other than moving
