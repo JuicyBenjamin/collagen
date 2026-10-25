@@ -227,3 +227,33 @@ export function snapToTop(section: Element | null): void {
   const top = section.getBoundingClientRect().top + scrollY - RESTS_AT;
   scrollTo({ top: Math.max(0, top), behavior: still.matches ? "instant" : "smooth" });
 }
+
+/** The chevron's turn: a spring, so it swings round and settles rather than
+ *  sliding — pointing right for a file folded, down for one open. */
+const TURN = { type: "spring", visualDuration: 0.35, bounce: 0.35 } as const;
+
+/** Turn a file's chevron to say which way it goes — down (open) or right
+ *  (folded) — on a spring; from where it is, or from `from` when it has
+ *  just come and should be seen arriving at it. */
+export function turnChevron(chevron: Element | null, open: boolean, from?: boolean): void {
+  if (!chevron) return;
+  const to = open ? 90 : 0;
+  if (still.matches) return void animate(chevron, { rotate: to }, { duration: 0 });
+  void animate(chevron, { rotate: from === undefined ? to : [from ? 90 : 0, to] }, TURN);
+}
+
+/** A file's mark has landed: its header's words ease to the quieter tone of
+ *  a file read (or back to full, unmarked) while its chevron swings round
+ *  from open to folded — one beat that says the file is done, not a jump.
+ *  The tone is the stylesheet's (`.hunk.viewed .file`); this only eases into it. */
+export function markLanded(head: Element | undefined, viewed: boolean): void {
+  if (!head || still.matches) return;
+  // the chevron's start, written now: the header just drawn shows no frame of where it ends
+  const chevron = head.querySelector<HTMLElement>(".chevron");
+  if (viewed && chevron) chevron.style.transform = "rotate(90deg)";
+  if (viewed) turnChevron(chevron, false, true);
+  // the browser's own animation, on from its first frame and leaving nothing
+  // behind: once it ends, the tone is the stylesheet's
+  for (const part of head.children)
+    part.animate([{ opacity: viewed ? 1 : 0.6 }, { opacity: viewed ? 0.6 : 1 }], { duration: 400, easing: `cubic-bezier(${EASE.join(", ")})` });
+}
