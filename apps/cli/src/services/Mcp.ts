@@ -168,8 +168,8 @@ export const CreateTicket = Tool.make("create-ticket", {
     steps: Schema.Array(
       Schema.Struct({
         id: Schema.optional(Schema.String),
-        /** left out: nobody asked — anyone in the room may take it */
-        owner: Schema.optional(Schema.String),
+        /** left out or null: nobody asked — anyone in the room may take it */
+        owner: Schema.optional(Schema.NullOr(Schema.String)),
         intent: Schema.String,
         description: Schema.String,
         needs: Schema.optional(Schema.Array(Schema.String)),
@@ -391,7 +391,7 @@ export const Propose = Tool.make("propose", {
   ].join("\n"),
   parameters: Schema.Struct({
     ...judgedParameters,
-    work: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String), intent: Schema.String, description: Schema.String, owner: Schema.optional(Schema.String) }))),
+    work: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String), intent: Schema.String, description: Schema.String, owner: Schema.optional(Schema.NullOr(Schema.String)) }))),
     retireWork: Schema.optional(Schema.Array(Schema.String)),
   }),
   success: Schema.String,
@@ -1035,7 +1035,7 @@ const makeHandlers = Effect.gen(function* () {
         epic?: string | null;
         after?: ReadonlyArray<string>;
         whenClosed?: string;
-        work?: ReadonlyArray<{ readonly id?: string; readonly intent: string; readonly description: string; readonly owner?: string }>;
+        work?: ReadonlyArray<{ readonly id?: string; readonly intent: string; readonly description: string; readonly owner?: string | null }>;
         retireWork?: ReadonlyArray<string>;
         symptom?: string;
         cause?: { readonly what: string; readonly where?: ReadonlyArray<string> };
@@ -1576,7 +1576,7 @@ const makeHandlers = Effect.gen(function* () {
         whenClosed?: string;
         steps: ReadonlyArray<{
           id?: string;
-          owner?: string;
+          owner?: string | null;
           intent: string;
           description: string;
           needs?: ReadonlyArray<string>;
