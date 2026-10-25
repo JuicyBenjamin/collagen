@@ -36,11 +36,15 @@ export async function placeWhy(panel: HTMLElement, inner: HTMLElement, open: boo
   } else {
     panel.style.width = "";
   }
+  // moving, its edges say nothing: shrinking, the reasons overflow it for a
+  // moment, and a "more below" fade would glow at its foot as it closes
+  panel.toggleAttribute("data-moving", duration > 0);
   const reasons = animate(inner, { opacity: open ? 1 : 0, x: open || !wide ? 0 : 16, y: open || wide ? 0 : -6 }, { duration: open ? duration : duration * 0.6, ease: EASE, delay: open ? duration * 0.25 : 0 });
   const box = wide
     ? animate(panel, { width: open ? WHY_WIDTH : 0, height: open ? Math.min(inner.offsetHeight, room(panel)) : 0 }, { duration, ease: EASE })
     : animate(panel, { height: open ? inner.offsetHeight : 0, marginBottom: open ? WHY_BELOW : 0 }, { duration, ease: EASE });
   await Promise.all([box, reasons]);
+  panel.removeAttribute("data-moving");
   // open, it follows its content's height from here on
   if (open) panel.style.height = "auto";
   if (!open) panel.style.visibility = "hidden";

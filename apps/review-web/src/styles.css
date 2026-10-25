@@ -497,6 +497,8 @@ section.decision.unit { display: block; }
 .why-panel::before { top: 0; margin-bottom: -56px; background: linear-gradient(var(--bg), color-mix(in srgb, var(--bg) 0%, transparent)); mask-image: linear-gradient(black 15%, transparent); -webkit-mask-image: linear-gradient(black 15%, transparent); }
 .why-panel::after { bottom: 0; margin-top: -56px; background: linear-gradient(color-mix(in srgb, var(--bg) 0%, transparent), var(--bg)); mask-image: linear-gradient(transparent, black 85%); -webkit-mask-image: linear-gradient(transparent, black 85%); }
 .why-panel[data-above]::before, .why-panel[data-below]::after { display: block; animation: fade-edge 0.2s; }
+/* opening or closing, no fades: the reasons overflow the moving panel only for the moment it moves */
+.why-panel[data-moving]::before, .why-panel[data-moving]::after { display: none; }
 @keyframes fade-edge { from { opacity: 0; } }
 .head-toggle { display: none; margin-top: 3px; padding: 4px 10px; }
 @media (max-width: 1320px) {
