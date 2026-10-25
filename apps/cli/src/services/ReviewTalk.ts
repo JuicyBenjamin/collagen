@@ -6,6 +6,7 @@ import { forPeople } from "@collagen/review-web/forPeople";
 import { sameComment } from "@collagen/review-web/sameComment";
 import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
 import { acting as actingNow } from "../lib/agents";
+import type { Harnesses } from "./Harness";
 import { allow, withHost, type Permit } from "../lib/steering";
 import { placeComment, whereOf, type Spot } from "../lib/comments";
 import { IdentityService } from "./Identity";
@@ -225,7 +226,7 @@ const roomRefuses = (found: Found) =>
 const logComments = (
   found: Found,
   said: ReadonlyArray<{ readonly id?: string; readonly spot: Spot; readonly commit: string; readonly body: string; readonly detail?: string; readonly drafted: boolean; readonly host?: { readonly id: number; readonly url: string } }>,
-): Effect.Effect<{ readonly error: string } | { readonly logged: ReadonlyArray<ReviewComment> }, never, IdentityService> =>
+): Effect.Effect<{ readonly error: string } | { readonly logged: ReadonlyArray<ReviewComment> }, never, IdentityService | Harnesses> =>
   Effect.gen(function* () {
     const { identity, nameRef } = yield* IdentityService;
     const name = yield* SubscriptionRef.get(nameRef);

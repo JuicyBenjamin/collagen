@@ -6,6 +6,7 @@ import type { LocalState, RoomMessage, Worked } from "@collagen/p2p";
 import { Adapters, type Adapter } from "./Adapters";
 import { mcpServerName } from "./mcpAddress";
 import { AgentRunner } from "./AgentRunner";
+import { HarnessesLive } from "./Harness";
 import { cliArgsLayer } from "./CliArgs";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
@@ -132,6 +133,7 @@ const testLayer = (options: {
   const layer = AgentRunner.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(Inbox.layer, McpInfo.layer)),
     Layer.provideMerge(Layer.succeed(Adapters, { "mock:fake-ai": fakeAdapter, "fake-ai": fakeAdapter })),
+    Layer.provideMerge(HarnessesLive),
     Layer.provideMerge(stateStoreStub(options.state ?? baseState)),
     Layer.provideMerge(identityStub),
     Layer.provideMerge(exec.layer),
@@ -246,7 +248,8 @@ describe("AgentRunner", () => {
     expect(calls[0]!.args).toEqual(expect.arrayContaining(["--model", "haiku", "--allowedTools", "SendMessage"]));
     const prompt = calls[0]!.args[1]!;
     expect(prompt).toContain('"uds:/tmp/cc-socks/42.sock"');
-    expect(prompt).toContain('Collagen (not your user): alice added to a thread of yours');
+    expect(prompt).toContain('Collagen (not your user): a new message arrived in this conversation — alice asks your user to address "question" on project "sandbox"');
+    expect(prompt).toContain("never fill gaps from your own head");
     expect(prompt).not.toContain("check average()");
     expect(left).toBe(1);
   });

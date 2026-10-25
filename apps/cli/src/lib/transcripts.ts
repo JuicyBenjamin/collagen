@@ -1,21 +1,10 @@
 import { readdirSync, statSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
-
-/** Where the agent CLIs keep their conversations. Both honour an env
- *  override (Claude Code: CLAUDE_CONFIG_DIR; Codex: CODEX_HOME), so do we. */
-export interface SessionDirs {
-  readonly claude: string;
-  readonly codex: string;
-}
-export const sessionDirs = (env: NodeJS.ProcessEnv = process.env, home = homedir()): SessionDirs => ({
-  claude: env.CLAUDE_CONFIG_DIR ?? join(home, ".claude"),
-  codex: env.CODEX_HOME ?? join(home, ".codex"),
-});
+import type { Harness } from "../services/Harness";
 
 /** Every regular file under `dir`, depth-first, or [] when it doesn't exist. */
-function walk(dir: string, depth = 6): Array<string> {
+export function walk(dir: string, depth = 6): Array<string> {
   if (depth < 0) return [];
   let names: Array<string>;
   try {
@@ -36,27 +25,10 @@ function walk(dir: string, depth = 6): Array<string> {
   return out;
 }
 
-/** The session file for an adopted conversation, or null.
- *  Claude Code: `<claude>/projects/<cwd-slug>/<sessionId>.jsonl` — the slug is
- *  the cwd, which we don't know, so every project dir is searched.
- *  Codex: `<codex>/sessions/YYYY/MM/DD/rollout-<ts>-<threadId>.jsonl` (the
- *  layout is mid-migration to "paginated thread history", so any `.jsonl`
- *  under sessions whose name carries the id counts). */
-export function sessionFile(provider: string, sessionId: string, dirs: SessionDirs): string | null {
-  if (sessionId.length < 8 || /[/\\]/.test(sessionId)) return null;
-  if (provider === "claude-code") {
-    return walk(join(dirs.claude, "projects"), 2).find((file) => file.endsWith(`/${sessionId}.jsonl`)) ?? null;
-  }
-  if (provider === "codex") {
-    return walk(join(dirs.codex, "sessions")).find((file) => file.endsWith(".jsonl") && file.includes(sessionId)) ?? null;
-  }
-  return null;
-}
-
 /** The lines of a session file worth handing over: entries stamped at or
- *  after `since` (ms), plus any un-stamped or meta lines that give the rest
- *  its shape (Codex's `session_meta`). Unparseable lines are dropped. */
-export function sliceSince(jsonl: string, since: number): { readonly lines: ReadonlyArray<string>; readonly entries: number } {
+ *  after `since` (ms), plus any un-stamped lines and the ones its harness
+ *  says give the rest its shape (`keepsWhole`). Unparseable lines are dropped. */
+export function sliceSince(jsonl: string, since: number, keepsWhole: (record: Readonly<Record<string, unknown>>) => boolean): { readonly lines: ReadonlyArray<string>; readonly entries: number } {
   const lines: Array<string> = [];
   let entries = 0;
   for (const raw of jsonl.split("\n")) {
@@ -68,7 +40,7 @@ export function sliceSince(jsonl: string, since: number): { readonly lines: Read
     } catch {
       continue;
     }
-    if (parsed.type === "session_meta") {
+    if (keepsWhole(parsed)) {
       lines.push(line);
       continue;
     }
@@ -86,16 +58,15 @@ export function sliceSince(jsonl: string, since: number): { readonly lines: Read
 }
 
 /** One session line, readable: when, who, what — for showing a transcript in
- *  the app. Both CLIs' shapes are known here; anything else shows by its type
- *  so nothing is silently hidden. Null = noise not worth a row (token counts,
- *  turn context, attachments). */
+ *  the app. Each harness reads its own lines (Harness.readLine); null = noise
+ *  not worth a row (token counts, turn context, attachments). */
 export interface TranscriptLine {
   readonly ts: string | null;
   readonly who: string;
   readonly text: string;
 }
 
-const textOf = (content: unknown): string => {
+export const textOf = (content: unknown): string => {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
@@ -113,7 +84,7 @@ const textOf = (content: unknown): string => {
     .join("\n");
 };
 
-export function readLine(raw: string): TranscriptLine | null {
+export function readLine(harnesses: ReadonlyArray<Pick<Harness, "readLine">>, raw: string): TranscriptLine | null {
   let record: Record<string, unknown>;
   try {
     record = JSON.parse(raw) as Record<string, unknown>;
@@ -121,26 +92,12 @@ export function readLine(raw: string): TranscriptLine | null {
     return null;
   }
   const stamp = typeof record.timestamp === "string" ? record.timestamp : null;
-  const type = typeof record.type === "string" ? record.type : "";
-  const payload = record.payload && typeof record.payload === "object" ? (record.payload as Record<string, unknown>) : null;
-  // codex rollout
-  if (type === "session_meta" && payload) return { ts: stamp, who: "session", text: `${String(payload.originator ?? "codex")} · ${String(payload.cwd ?? "")}` };
-  if (type === "response_item" && payload) {
-    if (payload.type === "message") return { ts: stamp, who: String(payload.role ?? "message"), text: textOf(payload.content) };
-    if (payload.type === "reasoning") return { ts: stamp, who: "reasoning", text: textOf(payload.summary) || "(reasoning, encrypted)" };
-    if (payload.type === "function_call") return { ts: stamp, who: "tool call", text: `⚙ ${String(payload.name ?? "")} ${String(payload.arguments ?? "").slice(0, 200)}` };
-    if (payload.type === "function_call_output") return { ts: stamp, who: "tool result", text: `↳ ${String(payload.output ?? "").slice(0, 200)}` };
-    return { ts: stamp, who: String(payload.type ?? "item"), text: "" };
+  // the harness whose line it is says how it reads; anything else with
+  // nothing to say is bookkeeping, not conversation
+  for (const harness of harnesses) {
+    const line = harness.readLine(record, stamp);
+    if (line !== undefined) return line;
   }
-  if (type === "event_msg" || type === "turn_context") return null;
-  // claude code session
-  if ((type === "user" || type === "assistant") && record.message && typeof record.message === "object") {
-    const message = record.message as { role?: string; content?: unknown };
-    return { ts: stamp, who: message.role ?? type, text: textOf(message.content) };
-  }
-  if (type === "system") return { ts: stamp, who: "system", text: typeof record.content === "string" ? record.content : String(record.subtype ?? "") };
-  if (type === "queue-operation") return { ts: stamp, who: `collagen (${String(record.operation ?? "queue")})`, text: typeof record.content === "string" ? record.content : "" };
-  // anything else with nothing to say is bookkeeping, not conversation
   return null;
 }
 

@@ -159,6 +159,11 @@ A conversation listens for a message when:
 - or it **worked on** the ticket or thread — heard only once your delivery steering is
   act, then tell or just do it, without asking per ticket.
 
+Claude Code and Codex are the AI tools collagen can do this with today. Each is one
+implementation behind a single interface in collagen's code (`Harness`: how it tells which
+conversation called, how it is reached and woken, where its sessions live), so adding
+another tool is one implementation, not changes across the app.
+
 The latest such conversation is the one woken. Collagen learns how to reach a Claude Code
 conversation from its own calls (the process at the other end of the call, and its
 socket), never from what an agent types; one it has not seen yet waits in the inbox.

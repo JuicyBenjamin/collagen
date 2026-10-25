@@ -1,9 +1,9 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { SessionDirs } from "./transcripts";
+import type { Harness, Homes } from "../services/Harness";
 
-// What collagen costs an AI, read from the session logs Claude Code and Codex
-// already keep on this machine. Collagen has no AI of its own: its cost is
+// What collagen costs an AI, read from the session logs its harness already
+// keeps on this machine (each harness reads its own format: services/harnesses). Collagen has no AI of its own: its cost is
 // what its tool calls put into the agent's context window — the arguments
 // the agent writes and the results it reads — and how long those stay there.
 // Only counts and sizes come out of here, never what was said.
@@ -116,7 +116,8 @@ export interface ContextBreak {
 }
 
 export interface SessionCost {
-  readonly ai: "claude-code" | "codex";
+  /** the harness whose session it is (services/Harness) */
+  readonly ai: string;
   readonly file: string;
   readonly calls: ReadonlyArray<Call>;
   /** Model replies (Claude) or steps (Codex) whose usage the log records. */
@@ -133,13 +134,13 @@ export interface SessionCost {
   readonly breaks: ReadonlyArray<ContextBreak>;
 }
 
-type Json = Record<string, unknown>;
-const asObject = (value: unknown): Json | null => (value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : null);
-const asCount = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
-const asText = (value: unknown): string => (typeof value === "string" ? value : value === undefined || value === null ? "" : JSON.stringify(value));
+export type Json = Record<string, unknown>;
+export const asObject = (value: unknown): Json | null => (value && typeof value === "object" && !Array.isArray(value) ? (value as Json) : null);
+export const asCount = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+export const asText = (value: unknown): string => (typeof value === "string" ? value : value === undefined || value === null ? "" : JSON.stringify(value));
 
 /** The text a tool result carries, whatever shape it came in. */
-const resultText = (content: unknown): string => {
+export const resultText = (content: unknown): string => {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return content.map((part) => (typeof part === "string" ? part : typeof asObject(part)?.text === "string" ? (asObject(part)!.text as string) : asText(part))).join("");
   const wrapper = asObject(content);
@@ -147,11 +148,12 @@ const resultText = (content: unknown): string => {
   return asText(content);
 };
 
-const TOO_LONG = /prompt is too long|context[ _-]?(window|length)[ _-]?(exceeded|limit)|ran out of room|exceeds the context window/i;
+export const TOO_LONG = /prompt is too long|context[ _-]?(window|length)[ _-]?(exceeded|limit)|ran out of room|exceeds the context window/i;
 
 /** A session being read: calls, how much of the window each reply carried,
- *  and the window's collagen share at that moment. */
-class Reader {
+ *  and the window's collagen share at that moment. Each harness feeds it
+ *  from its own log format (services/harnesses). */
+export class Reader {
   readonly calls: Array<Call> = [];
   readonly breaks: Array<ContextBreak> = [];
   private readonly pending = new Map<string, { tool: string; args: string }>();
@@ -230,7 +232,8 @@ class Reader {
   }
 }
 
-const lines = function* (jsonl: string): Generator<Json> {
+/** A JSONL log's records, a torn last line skipped. */
+export const lines = function* (jsonl: string): Generator<Json> {
   for (const raw of jsonl.split("\n")) {
     if (raw.length === 0) continue;
     try {
@@ -242,103 +245,8 @@ const lines = function* (jsonl: string): Generator<Json> {
   }
 };
 
-/** A Claude Code session (`<claude>/projects/<slug>/<session>.jsonl`). A reply
- *  spans several lines that repeat its usage, so usage counts once per
- *  message id. Compactions are `compact_boundary` system lines. */
-export function readClaude(jsonl: string, file = ""): SessionCost {
-  const reader = new Reader();
-  const seen = new Set<string>();
-  for (const line of lines(jsonl)) {
-    const at = typeof line.timestamp === "string" ? line.timestamp : null;
-    if (line.type === "system" && line.subtype === "compact_boundary") {
-      const meta = asObject(line.compactMetadata);
-      if (meta?.trigger === "manual") reader.compacted();
-      else reader.break(at, "compacted", meta ? asCount(meta.preTokens) || null : null);
-      continue;
-    }
-    const message = asObject(line.message);
-    if (!message) continue;
-    const content = Array.isArray(message.content) ? message.content : [];
-    if (line.type === "assistant") {
-      if (line.isApiErrorMessage === true && TOO_LONG.test(content.map((part) => asText(asObject(part)?.text)).join(" "))) {
-        reader.break(at, "overflow", null);
-        continue;
-      }
-      const usage = asObject(message.usage);
-      const id = typeof message.id === "string" ? message.id : null;
-      if (usage && (id === null || !seen.has(id))) {
-        if (id !== null) seen.add(id);
-        const window = asCount(usage.input_tokens) + asCount(usage.cache_creation_input_tokens) + asCount(usage.cache_read_input_tokens);
-        if (window + asCount(usage.output_tokens) > 0) reader.reply(window, asCount(usage.output_tokens));
-      }
-      for (const entry of content) {
-        const part = asObject(entry);
-        if (part?.type !== "tool_use" || typeof part.name !== "string" || typeof part.id !== "string") continue;
-        const tool = collagenTool(part.name);
-        if (tool) reader.call(part.id, tool, JSON.stringify(part.input ?? {}));
-      }
-    } else if (line.type === "user") {
-      for (const entry of content) {
-        const part = asObject(entry);
-        if (part?.type === "tool_result" && typeof part.tool_use_id === "string") reader.result(part.tool_use_id, resultText(part.content));
-      }
-    }
-  }
-  return done("claude-code", file, reader);
-}
-
-/** A Codex session (`<codex>/sessions/…/rollout-*.jsonl`). Usage comes as
- *  `token_count` events — the last step's input is the window, and the model's
- *  window size is given. A compaction is a `compacted` line or a
- *  `context_compacted` event; an overflow is an error event saying so. */
-export function readCodex(jsonl: string, file = ""): SessionCost {
-  const reader = new Reader();
-  let lastTotal = -1;
-  for (const line of lines(jsonl)) {
-    const at = typeof line.timestamp === "string" ? line.timestamp : null;
-    const payload = asObject(line.payload) ?? {};
-    if (line.type === "compacted") {
-      reader.break(at, "compacted", null);
-      continue;
-    }
-    if (line.type === "response_item") {
-      if (payload.type === "function_call" && typeof payload.name === "string") {
-        const tool = collagenTool(payload.name, typeof payload.namespace === "string" ? payload.namespace : undefined);
-        const id = asText(payload.call_id);
-        if (tool && !reader.has(id)) reader.call(id, tool, asText(payload.arguments));
-      } else if (payload.type === "function_call_output") {
-        reader.result(asText(payload.call_id), resultText(payload.output));
-      }
-      continue;
-    }
-    if (line.type !== "event_msg") continue;
-    if (payload.type === "token_count") {
-      const info = asObject(payload.info);
-      if (!info) continue;
-      if (info.model_context_window !== undefined) reader.contextWindow = asCount(info.model_context_window) || reader.contextWindow;
-      const total = asCount(asObject(info.total_token_usage)?.total_tokens);
-      if (total === lastTotal) continue; // the same step, reported again
-      lastTotal = total;
-      const last = asObject(info.last_token_usage) ?? {};
-      reader.reply(asCount(last.input_tokens), asCount(last.output_tokens) + asCount(last.reasoning_output_tokens));
-    } else if (payload.type === "context_compacted") {
-      reader.break(at, "compacted", null);
-    } else if (payload.type === "error" && TOO_LONG.test(asText(payload.message))) {
-      reader.break(at, "overflow", null);
-    } else if (payload.type === "mcp_tool_call_end") {
-      // older logs carry MCP calls only as events
-      const inv = asObject(payload.invocation) ?? {};
-      const id = asText(payload.call_id);
-      if (typeof inv.server === "string" && isCollagenServer(inv.server) && typeof inv.tool === "string" && !reader.has(id)) {
-        reader.call(id, inv.tool, asText(inv.arguments));
-        reader.result(id, resultText(asObject(payload.result)?.Ok ?? payload.result));
-      }
-    }
-  }
-  return done("codex", file, reader);
-}
-
-const done = (ai: SessionCost["ai"], file: string, reader: Reader): SessionCost => ({
+/** What a reader found in a session, as its cost. */
+export const sessionCost = (ai: SessionCost["ai"], file: string, reader: Reader): SessionCost => ({
   ai,
   file,
   calls: reader.calls,
@@ -352,7 +260,7 @@ const done = (ai: SessionCost["ai"], file: string, reader: Reader): SessionCost 
 });
 
 /** Every `.jsonl` under `dir` changed since `since` (ms). */
-async function sessionFiles(dir: string, since: number, depth: number): Promise<Array<string>> {
+export async function sessionFiles(dir: string, since: number, depth: number): Promise<Array<string>> {
   if (depth < 0) return [];
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   const out: Array<string> = [];
@@ -368,17 +276,17 @@ async function sessionFiles(dir: string, since: number, depth: number): Promise<
  *  at all. Claude Code keeps sub-agents' sessions beside their parent's. One
  *  file at a time, listed and read without blocking: the room runs on this
  *  loop too. */
-export async function readSessions(dirs: SessionDirs, since: number): Promise<ReadonlyArray<SessionCost>> {
-  const files = [
-    ...(await sessionFiles(join(dirs.claude, "projects"), since, 4)).map((file) => ["claude-code", file] as const),
-    ...(await sessionFiles(join(dirs.codex, "sessions"), since, 5)).map((file) => ["codex", file] as const),
-  ];
+export async function readSessions(harnesses: ReadonlyArray<Harness>, homes: Homes, since: number): Promise<ReadonlyArray<SessionCost>> {
   const out: Array<SessionCost> = [];
-  for (const [ai, file] of files) {
-    const text = await readFile(file, "utf8").catch(() => "");
-    if (!text.includes("collagen")) continue;
-    const session = ai === "claude-code" ? readClaude(text, file) : readCodex(text, file);
-    if (session.calls.length > 0) out.push(session);
+  for (const harness of harnesses) {
+    const home = homes[harness.id];
+    if (!home) continue;
+    for (const file of await harness.usage.sessions(home, since)) {
+      const text = await readFile(file, "utf8").catch(() => "");
+      if (!text.includes("collagen")) continue;
+      const session = harness.usage.read(text, file);
+      if (session.calls.length > 0) out.push(session);
+    }
   }
   return out;
 }

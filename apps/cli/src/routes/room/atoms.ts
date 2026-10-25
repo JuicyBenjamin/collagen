@@ -8,6 +8,7 @@ import { Rooms } from "../../services/Rooms";
 import { StateStore } from "../../services/StateStore";
 import { Updates } from "../../services/Updates";
 import { runtimeAtom } from "../../app/runtime";
+import { aiChoices } from "../../services/Adapters";
 
 // Read by the room layout and/or more than one of its sections. Everything
 // room-scoped follows the FOCUSED room — switch rooms and these re-subscribe.
@@ -36,6 +37,9 @@ export const updateStateAtom = runtimeAtom.fn(
     yield* store.update(update);
   }),
 );
+
+/** What a person can pick as their AI, in the order the `a` key goes round. */
+export const aiChoicesAtom = runtimeAtom.atom(aiChoices);
 
 /** Whether the preferred agent CLI is installed and authenticated. */
 export const aiStatusAtom = runtimeAtom.atom(

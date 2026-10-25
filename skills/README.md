@@ -26,6 +26,7 @@ skill into an agent's folder — edit it here.
 | [who-sees-what](who-sees-what/SKILL.md) | showing or explaining tickets to a person or an agent; filtering anything out |
 | [tui-layout](tui-layout/SKILL.md) | laying out, sizing or scrolling anything in the OpenTUI app |
 | [repo-hosts](repo-hosts/SKILL.md) | anything touching where code is hosted: pull requests, sign-in, links, refs, who wrote it |
+| [harnesses](harnesses/SKILL.md) | anything touching an AI tool a person works in — Claude Code, Codex, the next one: everything harness-specific behind `Harness`, so a new one is one implementation |
 | [steering](steering/SKILL.md) | collagen acting outside itself in the person's name — the repo host, their AI conversations, any service: a steering setting, off until they allow it |
 | [say-less](say-less/SKILL.md) | writing any text a person sees: say the fact, not the explanation |
 | [types-not-checks](types-not-checks/SKILL.md) | a value from a known set (a language, a kind, a mode): a union type, passed as is; outside text read once where it comes in |

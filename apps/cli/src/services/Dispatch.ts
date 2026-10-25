@@ -5,9 +5,9 @@ import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, i
 import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
-import { callerSocket } from "../lib/reach";
 import { ticketsOf, withWorked } from "../lib/worked";
-import { MAX_PACKED_BYTES, pack, sessionDirs, sessionFile, sliceSince } from "../lib/transcripts";
+import { MAX_PACKED_BYTES, pack, sliceSince } from "../lib/transcripts";
+import { harnessFor, Harnesses, transcriptFile } from "./Harness";
 import { IdentityService } from "./Identity";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -42,6 +42,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
   make: Effect.gen(function* () {
     const rooms = yield* Rooms;
     const store = yield* StateStore;
+    const harnesses = yield* Harnesses;
     const { identity, nameRef } = yield* IdentityService;
 
     /** `acting`: which of the person's agents is doing this (Claude Code,
@@ -337,7 +338,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
         }
         case "transcript": {
           // read now, not when proposed: the file may have grown since
-          const file = sessionFile(out.ai, out.sessionId, sessionDirs());
+          const file = transcriptFile(harnesses, out.ai, out.sessionId);
           if (!file) return refused(`failed: no ${out.ai} session file for ${out.sessionId.slice(0, 8)}… on this machine`);
           const text = yield* Effect.sync(() => {
             try {
@@ -347,7 +348,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
             }
           });
           if (text === null) return refused(`failed: could not read ${file}`);
-          const { lines, entries } = sliceSince(text, out.since);
+          const { lines, entries } = sliceSince(text, out.since, harnessFor(harnesses, out.ai)?.keepsWhole ?? (() => false));
           const data = pack(lines);
           if (data.length > MAX_PACKED_BYTES) return refused(`failed: transcript too large to send (${Math.round(data.length / 1024 / 1024)} MB packed)`);
           return yield* room
@@ -378,7 +379,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
       const conversation = acting?.conversation;
       if (done._tag === "sent" && conversation) {
         const now = yield* Clock.currentTimeMillis;
-        const socket = conversation.ai === "claude-code" ? yield* callerSocket : undefined;
+        const socket = yield* (harnessFor(harnesses, conversation.ai)?.reachOf ?? Effect.succeed(undefined));
         yield* store.update((state) => withWorked(state, conversation, { threads: wroteOn, tickets: ticketsOf(out), ...(socket ? { socket } : {}) }, now));
       }
       return done;

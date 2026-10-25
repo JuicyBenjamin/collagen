@@ -8,6 +8,7 @@ import { IdentityService } from "./Identity";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { submitReview } from "./ReviewTalk";
+import { HarnessesLive } from "./Harness";
 
 // Finishing a review while an earlier finish is half done — on the pull
 // request, not yet in the room — against the e2e's stand-in gh, with a room
@@ -74,7 +75,7 @@ const make = (open: { taking: boolean }, held: ReadonlyArray<DraftComment> = [ea
       return { identity: { pubkey: "me" }, nameRef: yield* SubscriptionRef.make("alice") } as unknown as IdentityService["Service"];
     }),
   );
-  const layer = Layer.mergeAll(rooms, store, identity);
+  const layer = Layer.mergeAll(rooms, store, identity, HarnessesLive);
   const drafts = StateStore.use((state) => state.get).pipe(Effect.map((state) => state.drafts?.[TICKET] ?? []));
   return { said, layer, drafts };
 };

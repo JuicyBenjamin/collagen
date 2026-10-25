@@ -6,6 +6,7 @@ import { Rooms } from "../../../services/Rooms";
 import { IdentityService } from "../../../services/Identity";
 import { Transcripts } from "../../../services/Transcripts";
 import { runtimeAtom } from "../../../app/runtime";
+import { Harnesses } from "../../../services/Harness";
 
 /** Run one diagnostic from the registry with the params the page derived. */
 export const runDiagnosticAtom = runtimeAtom.fn(
@@ -16,7 +17,8 @@ export const runDiagnosticAtom = runtimeAtom.fn(
     const transcripts = yield* Transcripts;
     const attachments = yield* Attachments;
     const { identity } = yield* IdentityService;
-    return yield* diagnostic.run(params, context, { rooms, transcripts, attachments, me: identity.pubkey });
+    const harnesses = yield* Harnesses;
+    return yield* diagnostic.run(params, context, { rooms, transcripts, attachments, harnesses, me: identity.pubkey });
   }),
 );
 

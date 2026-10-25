@@ -1,4 +1,7 @@
-import { conversationKey, type Conversation, type LocalState, type Outgoing, type Worked } from "@collagen/p2p";
+import { Schema } from "effect";
+import { conversationKey, Harness, type Conversation, type LocalState, type Outgoing, type Worked } from "@collagen/p2p";
+
+const isHarness = Schema.is(Harness);
 
 // What each of the person's AI conversations has worked on here: the threads
 // it wrote on and the tickets it acted on. Remembered as it acts, kept on this
@@ -101,7 +104,7 @@ export const listenerFor = (
     return { conversation, heard, ...(socket ? { socket } : {}) };
   };
   const adopted = state.threads?.[message.threadId];
-  if (adopted && (adopted.ai === "claude-code" || adopted.ai === "codex")) return reach({ ai: adopted.ai, id: adopted.sessionId }, "adopted");
+  if (adopted && isHarness(adopted.ai)) return reach({ ai: adopted.ai, id: adopted.sessionId }, "adopted");
   const ticketId = message.ticketId;
   const watching = ticketId ? all.find((worked) => worked.watching?.includes(ticketId)) : undefined;
   if (watching) return reach(watching.conversation, "watching");
