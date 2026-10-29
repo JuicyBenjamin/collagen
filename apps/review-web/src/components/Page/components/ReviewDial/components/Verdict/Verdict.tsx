@@ -1,6 +1,7 @@
 import { createSignal, flush, Show } from "solid-js";
-import type { Verdict as VerdictValue } from "~/data";
+import type { ReviewedAs, Verdict as VerdictValue } from "~/data";
 import { takeReview } from "~/api";
+import { gave } from "~/finishNow";
 import { hostNow } from "~/hostNow";
 import { ticketId } from "~/ticket";
 import { asksForChanges } from "~/strength";
@@ -8,6 +9,9 @@ import { Held } from "./components/Held";
 
 /** What each verdict is called, at the head of its panel. */
 const VERDICT_LABEL: Record<VerdictValue, string> = { approve: "Approve", "request-changes": "Request changes", comment: "Comment" };
+
+/** What the reader's finish reads as, by the verdict they gave. */
+const GAVE: Record<VerdictValue, ReviewedAs> = { comment: "commented", approve: "approved", "request-changes": "changes requested" };
 
 /** What a verdict says on the collagen ticket when the reader gave no words. */
 const SAID: Record<VerdictValue, string> = { comment: "", approve: "Approved.", "request-changes": "Changes requested — see my comments." };
@@ -64,6 +68,7 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
         const taken = await takeReview(ticketId, findings, chosen() === "request-changes", chosen() === "comment");
         if ("error" in taken) return setSaid(submitted() ? `Review submitted, but not taken on the ticket: ${taken.error}` : `Not submitted: ${taken.error}`);
       }
+      gave(GAVE[chosen()]);
       setSubmitted(false);
       setBody("");
       props.onDone();
