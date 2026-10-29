@@ -429,6 +429,10 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .line-comment.pending-review { border-left: 3px solid var(--warn); }
 .pending-badge { font-size: 11px; font-weight: 600; color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 0 7px; }
 .review-composer .composer-head { font-size: 13px; }
+.accept-parents { display: grid; gap: 6px; }
+.accept-parents-head { margin: 0; color: var(--dim); font-size: 12.5px; }
+.accept-parent { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+.accept-parent > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .host-note.left { text-align: left; max-width: none; margin: 0; }
 .moved-note { margin: 6px 0 0; font-size: 12.5px; color: var(--warn); }
 /* the review held back: comments written on another commit, each to keep or delete before it is submitted */

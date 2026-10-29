@@ -73,11 +73,12 @@ export function Accept(props: { onDone: () => void }) {
       <p class="host-note left">{NOTES[effect()]}</p>
       <Show when={!approves() && parents().length > 0}>
         <div class="accept-parents">
+          <p class="accept-parents-head">Also close</p>
           <For each={parents()}>
             {(parent) => (
-              <label class="label cursor-pointer justify-start gap-2">
-                <input type="checkbox" class="checkbox checkbox-sm" checked={alsoClose().has(parent.id)} onChange={() => tick(parent.id)} />
-                <span>Also close “{parent.title}”, which this grew from</span>
+              <label class="accept-parent">
+                <input type="checkbox" class="checkbox checkbox-xs" checked={alsoClose().has(parent.id)} onChange={() => tick(parent.id)} />
+                <span>{parent.title}</span>
               </label>
             )}
           </For>
