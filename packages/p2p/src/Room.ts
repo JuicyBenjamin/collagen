@@ -175,8 +175,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (admitted.has(writer)) continue;
         admitted.add(writer);
         yield* Effect.log(`admitting ${writer.slice(0, 8)} to the room log`);
+        // a failed admit is not an admit: their next ask (every few seconds) tries again
         yield* roomLog.append({ op: "add-writer", key: writer }).pipe(
-          Effect.catch((error) => Effect.logWarning(`admit failed: ${error.message}`)),
+          Effect.catch((error) => Effect.logWarning(`admit failed: ${error.message}`).pipe(Effect.andThen(Effect.sync(() => void admitted.delete(writer))))),
         );
       }
     });
@@ -291,18 +292,19 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       });
 
     /** Introduce ourselves to one peer in this room: our profile and, if we
-     *  know it, where the room's log lives. Once per connection. */
-    const greet = (key: string) =>
+     *  know it, where the room's log lives. Once per connection. `hello`: our
+     *  first word to them since we joined, not an answer to theirs. */
+    const greet = (key: string, hello = false) =>
       Effect.gen(function* () {
         if (greeted.has(key)) return;
         greeted.add(key);
-        yield* send(key, { kind: "profile", profile: yield* config.getProfile });
+        yield* send(key, { kind: "profile", profile: yield* config.getProfile, ...(hello ? { hello: true as const } : {}) });
         yield* announceLog(key);
         yield* askToJoin(key);
       }).pipe(Effect.catchTag("PeerNotConnected", () => Effect.sync(() => void greeted.delete(key))));
 
     const hooks: TopicHooks = {
-      greet,
+      greet: (key) => greet(key, true),
       onPeerGone: (key) =>
         Effect.suspend(() => {
           greeted.delete(key);
@@ -316,6 +318,14 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             return Effect.suspend(() => {
               const known = peers.has(key);
               peers.set(key, { key, ...frame.profile });
+              // back in the room without the connection dropping (they left
+              // and joined again, or restarted it): they hold nothing from
+              // before, so we start over — or they wait forever to be let in
+              if (known && frame.hello) {
+                greeted.delete(key);
+                announced.delete(key);
+                return Effect.log(`peer back: ${frame.profile.name} (${key.slice(0, 8)})`);
+              }
               if (known) return Effect.void;
               // first profile from a peer = they are actually reachable here
               const theirs = frame.profile.protocol;
@@ -381,7 +391,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       },
     };
 
-    topicHex = yield* swarm.join(roomTopic(config.roomName, config.net), hooks);
+    // known before joining: joining greets the peers already connected
+    // through other rooms, and a greeting under no topic reaches nobody
+    const topic = roomTopic(config.roomName, config.net);
+    topicHex = topic.toString("hex");
+    yield* swarm.join(topic, hooks);
 
     // A join request can land on a member who can't serve it yet (or get lost
     // with a connection); keep asking everyone present until admitted.

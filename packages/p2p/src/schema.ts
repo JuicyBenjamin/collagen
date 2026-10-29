@@ -76,6 +76,11 @@ export type RoomMessage = typeof RoomMessage.Type;
 export const ProfileFrame = Schema.Struct({
   kind: Schema.Literal("profile"),
   profile: SharedProfile,
+  /** a peer's first greeting in this room since it (re)joined: whoever
+   *  already knew it starts over with it — greets back and says where the
+   *  log is — since it holds nothing from before. Absent on a greeting
+   *  answered, and from builds before it (read as today). */
+  hello: Schema.optional(Schema.Literal(true)),
 });
 /** "This room's log is this Autobase" — sent in the greet by anyone who knows. */
 export const LogInfoFrame = Schema.Struct({
