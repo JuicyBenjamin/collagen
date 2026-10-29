@@ -96,15 +96,19 @@ export type Heard = "adopted" | "watching" | "worked";
  *  else the latest that worked on its ticket or thread. */
 export const listenerFor = (
   state: Pick<LocalState, "threads" | "worked">,
-  message: { readonly threadId: string; readonly ticketId?: string | undefined },
+  message: { readonly threadId: string; readonly ticketId?: string | undefined; readonly conversation?: Conversation | undefined },
 ): { readonly conversation: Conversation; readonly heard: Heard; readonly socket?: string } | undefined => {
-  const all = Object.values(state.worked ?? {}).sort((first, second) => second.last - first.last);
+  // the conversation that did what the message tells is never woken by it
+  const actor = message.conversation ? conversationKey(message.conversation) : undefined;
+  const all = Object.values(state.worked ?? {})
+    .filter((worked) => conversationKey(worked.conversation) !== actor)
+    .sort((first, second) => second.last - first.last);
   const reach = (conversation: Conversation, heard: Heard) => {
     const socket = state.worked?.[conversationKey(conversation)]?.socket;
     return { conversation, heard, ...(socket ? { socket } : {}) };
   };
   const adopted = state.threads?.[message.threadId];
-  if (adopted && isHarness(adopted.ai)) return reach({ ai: adopted.ai, id: adopted.sessionId }, "adopted");
+  if (adopted && isHarness(adopted.ai) && conversationKey({ ai: adopted.ai, id: adopted.sessionId }) !== actor) return reach({ ai: adopted.ai, id: adopted.sessionId }, "adopted");
   const ticketId = message.ticketId;
   const watching = ticketId ? all.find((worked) => worked.watching?.includes(ticketId)) : undefined;
   if (watching) return reach(watching.conversation, "watching");
