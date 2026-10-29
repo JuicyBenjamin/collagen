@@ -28,8 +28,20 @@ export interface CallRead {
   readonly conversation?: string;
 }
 
-/** Whether a wake reached the conversation, or there was no way to reach it yet. */
-export type Woken = "woken" | "unreachable";
+/** What a model run collagen made itself spent, as the harness reported it. */
+export interface Spent {
+  readonly model?: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly costUsd?: number;
+}
+
+/** Whether a wake reached the conversation (or there was no way to reach it
+ *  yet), and what it spent when collagen ran a model to do it. */
+export interface Woken {
+  readonly reached: boolean;
+  readonly spent?: Spent;
+}
 
 export interface Harness {
   /** its id on shared records (Conversation.ai, an adoption) */
