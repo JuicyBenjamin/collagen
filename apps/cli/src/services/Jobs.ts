@@ -1,6 +1,6 @@
 import { Clock, Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect";
 import { ChildProcessSpawner } from "effect/process";
-import type { JobKind, OwnRun, Ticket } from "@collagen/p2p";
+import type { JobKind, OwnRun, QueuedJob, Ticket } from "@collagen/p2p";
 import { jobLimitOf, modelFor, researchPrompt } from "../lib/jobs";
 import { allow, withRun } from "../lib/steering";
 import { CliArgs } from "./CliArgs";
@@ -15,7 +15,8 @@ import { StateStore } from "./StateStore";
 // they chose for the job, behind their steering (`run`), at most as many at
 // once as they allow (one unless they say more), the rest queued in order.
 // Every job shows while it waits and runs, and stays shown a while after,
-// so what collagen does in their name is never out of sight.
+// so what collagen does in their name is never out of sight. What is asked
+// for and not yet finished is kept, so a restart picks the queue up again.
 
 /** A job as the person (and their agent) sees it. */
 export interface JobView {
@@ -55,8 +56,15 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
     // jobs outlive the call that asked for them
     const scope = yield* Scope.make();
 
-    const views = yield* SubscriptionRef.make<ReadonlyArray<JobView>>([]);
-    const waiting = yield* Ref.make<ReadonlyArray<{ readonly id: string; readonly job: Job }>>([]);
+    // what was asked for before a restart waits again, first in line
+    const kept = (yield* store.get).queuedJobs ?? [];
+    const views = yield* SubscriptionRef.make<ReadonlyArray<JobView>>(
+      kept.map((job) => ({ id: job.id, kind: job.kind, ticketId: job.ticketId, title: job.title, harness: job.harness, ...(job.model ? { model: job.model } : {}), state: "queued", queuedAt: job.queuedAt })),
+    );
+    const waiting = yield* Ref.make<ReadonlyArray<QueuedJob>>(kept);
+    const name = mcpServerName(profile);
+    /** A job is finished: it is no longer kept for a restart. */
+    const letGo = (id: string) => store.update((now) => ({ ...now, queuedJobs: (now.queuedJobs ?? []).filter((job) => job.id !== id) }));
 
     const update = (id: string, change: (view: JobView) => JobView) =>
       SubscriptionRef.update(views, (all) => {
@@ -78,12 +86,16 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
       const gate = allow(state, "run", "mine", true);
       if (!view || !harness || "held" in gate) {
         yield* update(next.id, (failed) => ({ ...failed, state: "failed", note: "held" in gate ? gate.why : "its AI is gone" }));
+        yield* letGo(next.id);
         return yield* pump;
       }
       yield* update(next.id, (started) => ({ ...started, state: "running", startedAt: Date.now() }));
       yield* Effect.forkIn(
         Effect.gen(function* () {
-          const done = yield* withRun(gate.go, harness.runJob(next.job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+          const url = yield* mcpInfo.awaitUrl;
+          const job: Job = { prompt: next.prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
+          const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+          yield* letGo(next.id);
           const at = yield* Clock.currentTimeMillis;
           if (done.spent) {
             const run: OwnRun = { at, harness: harness.id, why: view.kind, ...done.spent };
@@ -108,15 +120,15 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         if (!harness) return `failed: collagen runs jobs with your preferred AI, and ${state.preferredAi ? `"${state.preferredAi}" is not one it can run` : "none is set"} — choose one with set-ai (or a in the TUI)`;
         const gate = allow(state, "run", "mine", true);
         if ("held" in gate && gate.held === "unset") return `failed: ${gate.why}`;
-        const url = yield* mcpInfo.awaitUrl;
         const model = modelFor(state, "research", harness.defaultModels);
-        const name = mcpServerName(profile);
         const id = crypto.randomUUID();
         const title = asked.ticket.title ?? asked.ticket.goal;
-        const job: Job = { prompt: researchPrompt(asked.ticket, asked.ask, yield* SubscriptionRef.get(nameRef), name), cwd: asked.cwd, server: { name, url }, ...(model ? { model } : {}) };
-        const queued: JobView = { id, kind: "research", ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt: Date.now() };
+        const queuedAt = yield* Clock.currentTimeMillis;
+        const job: QueuedJob = { id, kind: "research", ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: researchPrompt(asked.ticket, asked.ask, yield* SubscriptionRef.get(nameRef), name), cwd: asked.cwd };
+        const queued: JobView = { id, kind: "research", ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
+        yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
         yield* SubscriptionRef.update(views, (all) => [...all, queued]);
-        yield* Ref.update(waiting, (queue) => [...queue, { id, job }]);
+        yield* Ref.update(waiting, (queue) => [...queue, job]);
         yield* pump;
         const shown = (yield* SubscriptionRef.get(views)).find((view) => view.id === id);
         const ahead = (yield* Ref.get(waiting)).findIndex((queued) => queued.id === id);
@@ -125,6 +137,8 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
           : `research on "${title}" is queued${ahead >= 0 ? `, ${ahead + 1} in line` : ""}: collagen runs ${jobLimitOf(state)} job${jobLimitOf(state) === 1 ? "" : "s"} at a time.`;
       });
 
+    // the queue a restart left goes on, once collagen is up
+    if (kept.length > 0) yield* Effect.forkIn(pump, scope);
     return { views, research } as const;
   }),
 }) {
