@@ -107,6 +107,20 @@ function Blocks(props: { of: ReadonlyArray<Block> }) {
           <Match when={block.kind === "hr"}>
             <hr />
           </Match>
+          <Match when={block.kind === "fields" && block}>
+            {(front) => (
+              <dl class="md-fields">
+                <For each={front().fields}>
+                  {(field) => (
+                    <>
+                      <dt>{field.name}</dt>
+                      <dd>{field.value}</dd>
+                    </>
+                  )}
+                </For>
+              </dl>
+            )}
+          </Match>
         </Switch>
       )}
     </For>

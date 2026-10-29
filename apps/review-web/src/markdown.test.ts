@@ -44,4 +44,15 @@ describe("a Markdown file, read as a document", () => {
       ["code", 9, 11],
     ]);
   });
+
+  it("shows front matter as its fields, never a rule and a heading, and keeps the lines after it in place", () => {
+    const file = ["---", "name: editable-field", "description: Building with", "  EditableFieldV2.", "---", "", "# Use", "Body."].join("\n");
+    const sections = parseDocument(file);
+    expect(sections[0]!.blocks[0]).toEqual({ kind: "fields", fields: [{ name: "name", value: "editable-field" }, { name: "description", value: "Building with EditableFieldV2." }] });
+    expect(sections.map((section) => [section.blocks[0]!.kind, section.from, section.to])).toEqual([
+      ["fields", 1, 5],
+      ["heading", 7, 7],
+      ["p", 8, 8],
+    ]);
+  });
 });

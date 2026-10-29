@@ -28,7 +28,8 @@ export type Block =
   | { readonly kind: "quote"; readonly blocks: ReadonlyArray<Block> }
   | { readonly kind: "list"; readonly start: number | undefined; readonly items: ReadonlyArray<Item> }
   | { readonly kind: "table"; readonly head: ReadonlyArray<ReadonlyArray<Inline>>; readonly rows: ReadonlyArray<ReadonlyArray<ReadonlyArray<Inline>>> }
-  | { readonly kind: "hr" };
+  | { readonly kind: "hr" }
+  | { readonly kind: "fields"; readonly fields: ReadonlyArray<{ readonly name: string; readonly value: string }> };
 
 /** `:tada:` as 🎉, as GitHub writes them; a name nobody knows stays as typed. */
 export const emojify = (text: string): string => text.replace(/:([a-z0-9_+-]+):/g, (whole, name: string) => nameToEmoji[name] ?? whole);
@@ -141,10 +142,37 @@ export interface Section {
   readonly to: number;
 }
 
+/** A file's front matter — the `---` block at its very top, as skills and
+ *  docs carry — as its fields, and the lines it takes; null when it has none.
+ *  Plain `name: value` lines; a line that is not one carries on the field
+ *  before it, as a folded YAML value does. */
+export const frontMatter = (source: string): { readonly fields: ReadonlyArray<{ readonly name: string; readonly value: string }>; readonly lines: number } | null => {
+  const lines = source.split("\n");
+  if (lines[0]?.trim() !== "---") return null;
+  const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+  if (end < 0) return null;
+  const fields: Array<{ name: string; value: string }> = [];
+  for (const line of lines.slice(1, end)) {
+    const field = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
+    if (field) fields.push({ name: field[1]!, value: field[2]!.trim() });
+    else if (fields.length > 0 && line.trim()) fields.at(-1)!.value = `${fields.at(-1)!.value} ${line.trim()}`.trim();
+  }
+  const unquoted = fields.map((field) => ({ name: field.name, value: field.value.replace(/^[>|][-+]?\s*/, "").replace(/^(["'])(.*)\1$/, "$2") }));
+  return { fields: unquoted, lines: end + 1 };
+};
+
 /** A Markdown file as blocks, each with its lines. A single newline is a
- *  space here, as in a file and unlike a comment. */
+ *  space here, as in a file and unlike a comment. Front matter is its
+ *  fields, never a rule and a heading. */
 export const parseDocument = (source: string): ReadonlyArray<Section> => {
-  let line = 1;
+  const front = frontMatter(source);
+  const head: ReadonlyArray<Section> = front ? [{ blocks: [{ kind: "fields", fields: front.fields }], from: 1, to: front.lines }] : [];
+  const body = front ? source.split("\n").slice(front.lines).join("\n") : source;
+  return [...head, ...parseBody(body, front ? front.lines + 1 : 1)];
+};
+
+const parseBody = (source: string, first: number): ReadonlyArray<Section> => {
+  let line = first;
   return new Lexer({ gfm: true }).lex(source).flatMap((token): ReadonlyArray<Section> => {
     const from = line;
     const breaks = token.raw.split("\n").length - 1;
