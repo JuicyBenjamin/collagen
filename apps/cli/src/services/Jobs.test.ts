@@ -49,7 +49,7 @@ const setup = (state: LocalState, harness: Harness) =>
 const allowed: LocalState = { preferredAi: "claude-code", rooms: {}, steering: { kinds: { run: { mine: "ask" } } } };
 
 /** Run `body` with a job service over a fake harness; `finish` ends its jobs. */
-const withJobs = <A>(state: LocalState, asked: Array<Job>, body: (jobs: Jobs["Service"], finish: Deferred.Deferred<void>) => Effect.Effect<A>) =>
+const withJobs = <A>(state: LocalState, asked: Array<Job>, body: (jobs: Jobs["Service"], finish: Deferred.Deferred<void>) => Effect.Effect<A, never, StateStore>) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const finish = yield* Deferred.make<void>();
@@ -101,6 +101,24 @@ describe("jobs", () => {
     );
     expect(seen).toEqual(["Plan a:running", "Plan b:running"]);
     expect(asked.map((job) => job.model)).toEqual(["opus", "opus"]);
+  });
+
+  it("still waiting when collagen stopped, run when it starts again, and are then let go", async () => {
+    const asked: Array<Job> = [];
+    const waited = { id: "j1", kind: "research", ticketId: "a", title: "Plan a", harness: "claude-code", model: "opus", queuedAt: 1, prompt: "look into a", cwd: "/tmp" } as const;
+    const seen = await withJobs({ ...allowed, queuedJobs: [waited] }, asked, (jobs, finish) =>
+      Effect.gen(function* () {
+        yield* Effect.sleep("20 millis");
+        const whileRunning = yield* states(jobs);
+        yield* Deferred.succeed(finish, undefined);
+        yield* settled(jobs);
+        return { whileRunning, after: yield* states(jobs), kept: (yield* (yield* StateStore).get).queuedJobs ?? [] };
+      }),
+    );
+    expect(seen.whileRunning).toEqual(["Plan a:running"]);
+    expect(seen.after).toEqual(["Plan a:done"]);
+    expect(seen.kept).toEqual([]);
+    expect(asked.map((job) => [job.prompt, job.model])).toEqual([["look into a", "opus"]]);
   });
 
   it("run nothing while running the person's AI is not chosen in their steering", async () => {
