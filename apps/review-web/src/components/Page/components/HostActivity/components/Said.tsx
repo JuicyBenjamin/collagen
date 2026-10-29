@@ -9,6 +9,7 @@ import { bodyParts } from "~/suggest";
 import { Markdown } from "~/components/Markdown";
 import { StrengthMark } from "~/components/Strength";
 import { Detail } from "~/components/Detail";
+import { Refresh } from "~/components/Icons";
 import { wordsOf } from "~/forPeople";
 import { readStrength, type Strength } from "~/strength";
 
@@ -99,7 +100,7 @@ export function Said() {
               {hostNow.checking() ? "checking…" : `checked ${ago(hostNow.checkedAt() ?? hostNow.now(), hostNow.now())}`}
             </span>
             <button type="button" class="btn btn-xs" onClick={() => hostNow.refresh()} disabled={hostNow.checking()} title={`Ask ${hostNow.hostName()} again for its reviews and comments`}>
-              ↻ Refresh
+              <Refresh size={13} /> Refresh
             </button>
           </div>
           <Show when={items().length > 0}>

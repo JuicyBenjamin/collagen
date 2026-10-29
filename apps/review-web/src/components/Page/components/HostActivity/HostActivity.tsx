@@ -37,7 +37,7 @@ HostActivity.Skeleton = function Skeleton() {
           <Masked>checked just now</Masked>
         </span>
         <span class="btn btn-xs sk-button">
-          <Masked>↻ Refresh</Masked>
+          <Masked>Refresh</Masked>
         </span>
       </div>
       {lastActivity.last?.talked ? (
