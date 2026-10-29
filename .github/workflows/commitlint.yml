@@ -7,6 +7,9 @@ on:
 
 jobs:
   commits:
+    # the release PR's one commit is release-please's own: nothing to lint,
+    # and its merge should not wait on it
+    if: github.head_ref != 'release-please--branches--main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
