@@ -497,7 +497,7 @@ export function Lines(props: {
             const line = row.line;
             return (
             <>
-              <tr class={{ add: line.kind === "+" && !row.was, del: line.kind === "-", changed: row.was !== undefined, picked: inPick(index()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, index())}>
+              <tr class={{ add: line.kind === "+" && !row.was && !row.carries, del: line.kind === "-", changed: row.was !== undefined || row.carries === true, picked: inPick(index()) }} data-new={line.new} onMouseEnter={() => hostNow.dragTo(props.hunk.id, index())}>
                 <td class="n">{row.was?.line.old ?? line.old ?? ""}</td>
                 <td class="n">{line.new ?? ""}</td>
                 <td
@@ -543,7 +543,7 @@ export function Lines(props: {
                       +
                     </button>
                   </Show>
-                  <span class="sign">{row.was ? "~" : line.kind === " " ? " " : line.kind}</span>
+                  <span class="sign">{row.was || row.carries ? "~" : line.kind === " " ? " " : line.kind}</span>
                   <Show when={row.was} fallback={<CodeLine spans={spans()[row.index] ?? []} />}>
                     {(was) => <ChangedLine segments={was().segments} map={was().map} old={{ text: was().line.text, spans: spans()[was().index] ?? [] }} now={{ text: line.text, spans: spans()[row.index] ?? [] }} />}
                   </Show>
