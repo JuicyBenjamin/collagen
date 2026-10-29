@@ -9,6 +9,20 @@ const context = (text: string, line: number): DiffLine => ({ kind: " ", text, ol
 /** A row as one string: `~3/3` for a changed row, else the line's sign and number. */
 const shape = (lines: ReadonlyArray<DiffLine>) => rowsOf(lines).map((row) => (row.was ? `~${row.was.line.old}/${row.line.new}` : `${row.line.kind}${row.line.old ?? row.line.new}`));
 
+describe("a line split in two", () => {
+  const carried = (lines: ReadonlyArray<DiffLine>) => rowsOf(lines).map((row) => (row.was ? `~${row.was.line.old}/${row.line.new}:${row.was.segments.map((segment) => segment.kind).join(",")}` : row.carries ? `>${row.line.new}` : `${row.line.kind}${row.line.old ?? row.line.new}`));
+
+  it("reads as the same words over two lines, nothing deleted, nothing added", () => {
+    const lines = [del('        <form.AppField name="product_type_id">', 111), add("        <form.AppField", 117), add('          name="product_type_id">', 118)];
+    expect(carried(lines)).toEqual(["~111/117:same", ">118"]);
+  });
+
+  it("keeps a real edit a change, beside a split", () => {
+    const lines = [del("const total = price * count;", 1), del('call(first, "second argument");', 2), add("const total = price * amount;", 1), add("call(first,", 2), add('  "second argument");', 3)];
+    expect(carried(lines)).toEqual(["~1/1:same,removed,added,same", "~2/2:same", ">3"]);
+  });
+});
+
 describe("a line changed in place", () => {
   it("reads as one row when the removed and added lines are alike", () => {
     expect(shape([context("a", 1), del("const x = 1;", 2), add("const x = 2;", 2), context("b", 3)])).toEqual([" 1", "~2/2", " 3"]);

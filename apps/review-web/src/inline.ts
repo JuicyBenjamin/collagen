@@ -30,12 +30,14 @@ export interface Reorder {
 }
 
 /** A row as drawn: a line of the diff, or — `was` set — an added line that
- *  took the place of a removed one, both numbers on one row. `index` is the
- *  line's place in the hunk's lines. */
+ *  took the place of a removed one, both numbers on one row. `carries`: an
+ *  added line that goes on with the row above — a line split in two, its
+ *  words unchanged. `index` is the line's place in the hunk's lines. */
 export interface Row {
   readonly line: DiffLine;
   readonly index: number;
   readonly was?: { readonly line: DiffLine; readonly index: number; readonly segments: ReadonlyArray<Segment>; readonly map: ReadonlyArray<Was>; readonly reorder: Reorder | null };
+  readonly carries?: true;
 }
 
 /** Half the line's code shared: below that, red and green would cover most
@@ -51,6 +53,10 @@ const MAX_CELLS = 40_000;
 const MAX_RUN_CELLS = 250_000;
 /** How far apart, in the runs, a removed and an added line may be and still pair. */
 const BAND = 8;
+/** The most lines one line is read as split over. */
+const SPLIT_INTO = 4;
+/** The least code a line needs to be read as split: shorter, any few added lines could spell it. */
+const SPLIT_CODE = 8;
 
 const TOKEN = /[\p{L}\p{N}_$]+|\s+|[^]/gu;
 const tokens = (text: string): Array<string> => text.match(TOKEN) ?? [];
@@ -224,17 +230,61 @@ export function rowsOf(lines: ReadonlyArray<DiffLine>): ReadonlyArray<Row> {
     while (index < lines.length && lines[index]!.kind === "-") index++;
     const addedStart = index;
     while (index < lines.length && lines[index]!.kind === "+") index++;
-    rows.push(...paired(lines, removedStart, addedStart, index));
+    // a line split over several keeps its words: those are set aside first,
+    // and what lies between them pairs as before
+    let removedFrom = removedStart;
+    let addedFrom = addedStart;
+    for (const split of splits(lines, removedStart, addedStart, index)) {
+      rows.push(...paired(lines, removedFrom, split.removed, addedFrom, split.added));
+      const old = lines[split.removed]!;
+      const first = lines[split.added]!;
+      rows.push({ line: first, index: split.added, was: { line: old, index: split.removed, segments: [{ kind: "same", text: first.text, at: 0 }], map: [], reorder: null } });
+      for (let carried = split.added + 1; carried < split.added + split.into; carried++) rows.push({ line: lines[carried]!, index: carried, carries: true });
+      removedFrom = split.removed + 1;
+      addedFrom = split.added + split.into;
+    }
+    rows.push(...paired(lines, removedFrom, addedStart, addedFrom, index));
   }
   return rows;
 }
 
-/** One run of removed lines [removedStart, addedStart) and the added lines after it [addedStart, end). */
-function paired(lines: ReadonlyArray<DiffLine>, removedStart: number, addedStart: number, end: number): Array<Row> {
-  const removedCount = addedStart - removedStart;
-  const addedCount = end - addedStart;
+/** Code alone: what a line says, its spacing aside. */
+const codeOf = (text: string) => text.replace(/\s+/g, "");
+
+/** In a run of removed lines [removedStart, addedStart) and the added lines
+ *  after it [addedStart, end): each removed line whose code is, word for
+ *  word, that of a few added lines in a row — split, not changed — in order. */
+function splits(lines: ReadonlyArray<DiffLine>, removedStart: number, addedStart: number, end: number): Array<{ readonly removed: number; readonly added: number; readonly into: number }> {
+  const found: Array<{ removed: number; added: number; into: number }> = [];
+  let addedFrom = addedStart;
+  for (let removed = removedStart; removed < addedStart; removed++) {
+    const old = codeOf(lines[removed]!.text);
+    if (old.length < SPLIT_CODE) continue;
+    search: for (let added = addedFrom; added < end; added++) {
+      let joined = "";
+      for (let into = 1; into <= SPLIT_INTO && added + into <= end; into++) {
+        const part = codeOf(lines[added + into - 1]!.text);
+        if (part === "") break;
+        joined += part;
+        if (!old.startsWith(joined)) break;
+        if (joined === old && into > 1) {
+          found.push({ removed, added, into });
+          addedFrom = added + into;
+          break search;
+        }
+      }
+    }
+  }
+  return found;
+}
+
+/** Removed lines [removedStart, removedEnd) and added lines [addedStart, addedEnd), paired. */
+function paired(lines: ReadonlyArray<DiffLine>, removedStart: number, removedEnd: number, addedStart: number, addedEnd: number): Array<Row> {
+  const removedCount = removedEnd - removedStart;
+  const addedCount = addedEnd - addedStart;
   // a rewrite of thousands of lines is read as removed and added
-  if (removedCount * addedCount > MAX_RUN_CELLS) return lines.slice(removedStart, end).map((line, offset) => ({ line, index: removedStart + offset }));
+  if (removedCount * addedCount > MAX_RUN_CELLS)
+    return [...lines.slice(removedStart, removedEnd).map((line, offset) => ({ line, index: removedStart + offset })), ...lines.slice(addedStart, addedEnd).map((line, offset) => ({ line, index: addedStart + offset }))];
   const diffs = new Map<number, Diff>();
   const at = (removedIndex: number, addedIndex: number) => removedIndex * (addedCount + 1) + addedIndex;
   // best[removedIndex,addedIndex]: the most similarity pairing the removed lines from removedIndex on with the added from addedIndex on can keep
