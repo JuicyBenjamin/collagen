@@ -41,6 +41,11 @@ export function Body(props: { data: ReviewPageData }) {
     return byDecision;
   });
   const tests = () => props.data.grouped?.tests ?? [];
+  // the files the Code tab holds: every changed file but the tests, as "files viewed" counts them
+  const codeFiles = () => {
+    const testFiles = new Set(tests().map((file) => file.file));
+    return new Set((props.data.grouped?.hunks ?? []).map((hunk) => hunk.file).filter((file) => !testFiles.has(file))).size;
+  };
   // the tab asked for, if this review has what it shows
   const shown = () =>
     tab() === "tests" && tests().length > 0 ? "tests" : tab() === "machine" && props.data.review.machine ? "machine" : "code";
@@ -53,11 +58,11 @@ export function Body(props: { data: ReviewPageData }) {
       diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
     },
   );
-  // the tests counted, for the tabs' placeholder next time
+  // the tests and the code's files counted, for the tabs' placeholder next time
   createEffect(
-    () => tests().reduce((count, file) => count + file.tests.length, 0),
-    (count) => {
-      lastTabs.keep({ tests: count });
+    () => ({ tests: tests().reduce((count, file) => count + file.tests.length, 0), files: codeFiles() }),
+    (counts) => {
+      lastTabs.keep(counts);
     },
   );
   // a why guessed, not told: every decision and fork drawn knows it
@@ -87,7 +92,7 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
-      <Tabs tests={tests()} machine={props.data.review.machine !== undefined} />
+      <Tabs tests={tests()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
       <Show when={shown() === "tests"}>
         <Tests files={tests()} hunks={hunks()} decisions={decisions()} />
       </Show>

@@ -22,7 +22,7 @@ export function Diff(props: { head: ReviewPageHead; data: ReviewPageData }) {
 Diff.Skeleton = function Skeleton(props: { head?: ReviewPageHead }) {
   return (
     <>
-      <Tabs.Skeleton machine={props.head?.review.machine !== undefined} tests={lastTabs.last?.tests ?? 0} />
+      <Tabs.Skeleton machine={props.head?.review.machine !== undefined} tests={lastTabs.last?.tests ?? 0} files={lastTabs.last?.files ?? 0} />
       <Unit.Skeleton />
     </>
   );
