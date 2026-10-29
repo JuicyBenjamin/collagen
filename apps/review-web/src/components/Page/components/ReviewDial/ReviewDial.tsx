@@ -7,7 +7,7 @@ import { viewed } from "~/viewedNow";
 import { yourReview } from "~/yourReview";
 import { Count } from "../Header/components/HostBar/components/Progress";
 import { Accept } from "./components/Accept";
-import { ArrowRound, CommentBox, ThumbsUp } from "./components/Icons";
+import { ArrowRound, CommentBox, ThumbsUp } from "~/components/Icons";
 import { Reviewed } from "./components/Reviewed";
 import { Verdict } from "./components/Verdict";
 

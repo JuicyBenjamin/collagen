@@ -3,7 +3,7 @@ import { Appear } from "~/components/Appear";
 import type { ReviewedAs, YourReview } from "~/data";
 import { ago } from "~/when";
 import { hostNow } from "~/hostNow";
-import { Check } from "./Icons";
+import { Check } from "~/components/Icons";
 
 /** What the reader did, in their words. */
 const SAID: Record<ReviewedAs, string> = {
