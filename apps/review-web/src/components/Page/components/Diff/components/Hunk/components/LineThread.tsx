@@ -274,6 +274,9 @@ export function LineComposer(props: {
   const [strength, setStrength] = createSignal<Strength | null>(null);
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
+  // a single comment on its way: it stands in the thread already, as it will
+  // be, so the composer steps aside — back, with the reason, if it is refused
+  const [handedOff, setHandedOff] = createSignal(false);
   let box: HTMLTextAreaElement | undefined;
   const block = () => props.from.line !== props.to.line || props.from.side !== props.to.side;
   const spot = (): CommentSpot => ({ file: props.file, line: props.to.line, side: props.to.side, ...(block() ? { startLine: props.from.line, startSide: props.from.side } : {}) });
@@ -294,6 +297,7 @@ export function LineComposer(props: {
     if (body().trim().length === 0 || sending()) return;
     const text = withStrength(strength(), body().trim());
     setSending(true);
+    setHandedOff(single);
     setSaid(null);
     try {
       const result = single ? await hostNow.comment(spot(), text) : await hostNow.addToReview(spot(), text);
@@ -304,10 +308,11 @@ export function LineComposer(props: {
       setSaid(String(error));
     } finally {
       setSending(false);
+      setHandedOff(false);
     }
   };
   return (
-    <tr class="thread-row">
+    <tr class={["thread-row", { "handed-off": handedOff() }]}>
       <td colspan={3}>
         <div class="thread">
           <form
