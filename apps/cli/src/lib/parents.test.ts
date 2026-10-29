@@ -13,7 +13,7 @@ describe("what a closed ticket grew from", () => {
       ["epic", ticket("epic", { kind: "epic" })],
     ]);
     const review = ticket("review", { kind: "review", from: ["plan", "done", "theirs", "epic", "gone"] });
-    expect(openParents(review, all, "me")).toEqual([{ id: "plan", title: "Title plan" }]);
+    expect(openParents(review, all, "me")).toEqual([{ id: "plan", title: "Title plan", kind: "plan" }]);
   });
 
   it("offers nothing for a ticket that grew from nothing", () => {
