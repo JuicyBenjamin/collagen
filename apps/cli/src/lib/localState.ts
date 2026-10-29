@@ -156,6 +156,8 @@ export const salvageState = (text: string): Salvaged => {
   const steeringAsked = decode(Schema.Array(Schema.String), src.steeringAsked);
   const mergeYes = decode(Schema.Array(Schema.String), src.mergeYes);
   const woken = decode(Schema.Array(Schema.String), src.woken);
+  // unreadable, each conversation starts again at the tail of its threads
+  const reads = decode(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))), src.reads);
   // unreadable, collagen's own spend starts counting again
   const ownRuns = decode(Schema.Array(OwnRun), src.ownRuns);
   // unreadable, the conversations are simply told again
@@ -181,6 +183,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(steeringAsked ? { steeringAsked } : {}),
       ...(mergeYes ? { mergeYes } : {}),
       ...(woken ? { woken } : {}),
+      ...(reads ? { reads } : {}),
       ...(ownRuns ? { ownRuns } : {}),
       ...(settings ? { settings } : {}),
       ...(merging ? { merging } : {}),

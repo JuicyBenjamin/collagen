@@ -622,6 +622,10 @@ export const LocalState = Schema.Struct({
    *  inbox. Messages live on the room's log; this is what makes "waiting"
    *  a local, per-reader notion that survives restarts. */
   consumed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))),
+  /** conversation key (conversationKey) → roomId → threadId → the time of the
+   *  last message that conversation read there. Each AI conversation keeps
+   *  its own place (cli Inbox); `consumed` stays how far anyone has read. */
+  reads: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite)))),
   /** What has gone out of here, newest first (see cli Outbox) — a record, not
    *  a queue: nothing waits for approval. */
   sent: Schema.optional(Schema.Array(Proposal)),
