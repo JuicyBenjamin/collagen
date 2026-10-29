@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
 
@@ -155,8 +155,9 @@ export const closeReview = async (ticketId: string, outcome: "done" | "dropped")
   return run((backend) => backend.close(ticketId, outcome));
 };
 
-/** What a review the reader filed grew from, still open and theirs to close. */
-export const reviewParents = async (ticketId: string): Promise<ReadonlyArray<TicketRef>> => {
+/** What a review the reader filed grew from, still open and theirs to close,
+ *  and whether their setting ticks it. */
+export const reviewParents = async (ticketId: string): Promise<Parents> => {
   "use server";
   return run((backend) => backend.parents(ticketId));
 };

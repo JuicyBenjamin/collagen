@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, SteeringKind, type JobKind, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, SteeringKind, type JobKind, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -681,8 +681,9 @@ export const RemoveTheme = Tool.make("remove-theme", {
 
 export const SetSettings = Tool.make("set-settings", {
   description:
-    "Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. openReviewPage (on by default): when you start on a review ticket (review-context), collagen opens its page — the diff read by intent — in their browser, once. Applies live, and the settings page in their TUI shows the same switches.",
-  parameters: Schema.Struct({ openReviewPage: Schema.optional(Schema.Boolean) }),
+    `Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. ${SETTINGS.map((setting) => `${setting.key} (${setting.default ? "on" : "off"} by default): ${setting.on}`).join(". ")}. Applies live, and the settings page in their TUI shows the same switches.`,
+  // every switch the Settings schema has, so a new one is settable here as it lands
+  parameters: Settings,
   success: Schema.String,
 });
 
@@ -2193,7 +2194,7 @@ const makeHandlers = Effect.gen(function* () {
         if (!without) return `failed: your user has no theme of their own named "${input.name}"\n${describeThemes(themes)}`;
         return yield* keepThemes(without);
       }),
-      "set-settings": (input: { openReviewPage?: boolean }) =>
+      "set-settings": (input: Settings) =>
         Effect.gen(function* () {
           const changes = SETTINGS.filter((setting) => input[setting.key] !== undefined);
           if (changes.length > 0) yield* store.update((state) => changes.reduce((current, setting) => withSetting(current, setting.key, input[setting.key]!), state));

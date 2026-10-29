@@ -32,7 +32,8 @@ const IS_TO: Record<TicketRef["kind"], string> = {
  *  closes it once it can; otherwise Accept closes it as done. Comments still
  *  pending in it are said first, in the room. What it grew from, still open
  *  and theirs, they may close too — an action they tick, never a question,
- *  and nothing closed unless they do. */
+ *  ticked to begin with unless their setting says otherwise, and nothing
+ *  closed that is not ticked when they accept. */
 export function Accept(props: { head: ReviewPageHead; onDone: () => void }) {
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
@@ -40,8 +41,15 @@ export function Accept(props: { head: ReviewPageHead; onDone: () => void }) {
   const effect = (): MergeFor => mergeNow.view()?.effect ?? "off";
   const approves = () => effect() === "mine" || effect() === "both";
   const [parents, setParents] = createSignal<ReadonlyArray<TicketRef>>([]);
-  void reviewParents(ticketId).then(setParents, () => setParents([]));
   const [alsoClose, setAlsoClose] = createSignal<ReadonlySet<string>>(new Set());
+  // ticked to begin with when the person's setting says so (alsoCloseParents)
+  void reviewParents(ticketId).then(
+    (offered) => {
+      setParents(offered.tickets);
+      if (offered.ticked) setAlsoClose(new Set(offered.tickets.map((parent) => parent.id)));
+    },
+    () => setParents([]),
+  );
   const tick = (id: string) =>
     setAlsoClose((ticked) => {
       const next = new Set(ticked);
