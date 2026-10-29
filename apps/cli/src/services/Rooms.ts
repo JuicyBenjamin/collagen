@@ -106,11 +106,11 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               const redeliver = firstPass && all.size > 0;
               if (all.size > 0) firstPass = false;
               for (const ticket of all.values()) {
-                // a ticket waiting on another (after) is delivered to nobody —
-                // not its readers, who are not shown it, and not its author,
-                // whose work waits too. When the ticket it waits on is
-                // answered, this map changes and the steps go then.
-                if (gated(ticket, all)) continue;
+                // a ticket waiting on another (after) is delivered to nobody it
+                // waits for — not its readers, who are not shown it, and not its
+                // author, whose work waits too. When the ticket it waits on is
+                // answered, or this reader approved it, the steps go then.
+                if (gated(ticket, all, identity.pubkey)) continue;
                 const mine = actionableSteps(ticket, identity.pubkey).filter(
                   (step) => step.status === "pending" || (redeliver && step.status === "suspended"),
                 );

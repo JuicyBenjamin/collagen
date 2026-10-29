@@ -179,8 +179,8 @@ describe("from the review of the epics branch", () => {
     const closed = turnEpic(epic, true, undefined, "alice", room(epic, php), 10).ticket;
     const rust = into(open("rust"), 11);
     const next = ticket({ id: "next", after: ["e1"] });
-    expect(heldBy(next, room(closed, php, next))).toEqual([]);
-    expect(heldBy(next, room(closed, php, rust, next))).toEqual(["e1"]);
+    expect(heldBy(next, room(closed, php, next), "carol")).toEqual([]);
+    expect(heldBy(next, room(closed, php, rust, next), "carol")).toEqual(["e1"]);
   });
 
   it("the reason shown is the one behind the state — a slow clock's reopen, a close that missed an addition", () => {

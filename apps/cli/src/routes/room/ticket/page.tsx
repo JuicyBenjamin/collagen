@@ -117,12 +117,12 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
   // an epic is a folder: a page of its own, its tickets rather than steps
   if (ticket.kind === "epic") {
     const all = new Map(tickets.map((candidate) => [candidate.id, candidate]));
-    return <EpicPage epic={ticket} all={all} why={review} summaries={(candidate) => summarize(candidate, trace, me, heldBy(candidate, all), all)} nameFor={nameFor} me={me} />;
+    return <EpicPage epic={ticket} all={all} why={review} summaries={(candidate) => summarize(candidate, trace, me, heldBy(candidate, all, me), all)} nameFor={nameFor} me={me} />;
   }
   const threads = ticketThreads(ticket);
   const conversation = trace.filter((message) => aboutTicket(ticket, threads, message));
   const byId = new Map(tickets.map((candidate) => [candidate.id, candidate]));
-  const waitsOn = heldBy(ticket, byId);
+  const waitsOn = heldBy(ticket, byId, me);
   const summary = summarize(ticket, trace, me, waitsOn);
   const now = Date.now();
   const rows = conversation.map((message) => ({ kind: "msg" as const, id: message.id, m: message }));

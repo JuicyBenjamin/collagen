@@ -429,7 +429,7 @@ export const AskReview = Tool.make("ask-review", {
     "'merge' (optional, only when your user says): whose approval collagen waits for before it merges this review's pull request for them — off, theirs, mine or both — overriding their room's setting for this review; null gives it back (see set-merging).",
     "'title' is the ticket's headline in every list — a few words, 60 characters at most, what the change is for; required when filing. The goal beneath it defaults to the branch.",
     "'branch', 'base' and 'link' are read from the project's git when you omit them (a pull request link is better than the branch link collagen can derive). 'focus' is what your user wants looked at.",
-    "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
+    "STACKED REVIEWS: 'after' names the review tickets this one must be read after (ids from get-tickets) — a branch built on another's. Until they are answered (their authors have addressed the reviews, or closed them), nobody but your user is shown this ticket, nudged about it, or can post on it; then it opens like any other. A reader who approves the one before has it open to them at once, and their post-review hands it back as the next to read. Only when your user says the order matters — when the base is another open review's branch, the outcome points that out and leaves the decision to them. 'after: []' withdraws it.",
     "It creates a review ticket: a step per person asked (their review) and one you own (acting on what comes back). The why goes on the room's log beside it, so it is there when you are offline — and a reader's agent pulls it only when their person asks.",
     "WHAT TO TELL YOUR USER: that the review ticket has been filed (or updated), and nothing more. They asked for it, so do not read the summary, the decisions, the forks or their counts back to them — the ticket carries all of it for whoever reviews it, and their TUI shows the ticket.",
     "SHOW IT RUNNING. 'shows' are pages where a reader can see the change work — only what you or your user actually opened, never a guess: each a 'title' and a 'url' (localhost, a preview environment, a Storybook story). NEVER a credential in the url — no token, password or key: the ticket reaches every peer. A localhost url runs on your user's machine only: the page says so. Repeating an id corrects one; 'retireShows' withdraws one.",
@@ -956,7 +956,7 @@ const makeHandlers = Effect.gen(function* () {
         const named = [...new Set([...read.before, ...read.messages].flatMap((message) => (message.ticketId ? [message.ticketId] : [])))];
         const tickets = named.flatMap((id) => {
           const ticket = all.get(id);
-          return ticket && visibleTo(ticket, all, identity.pubkey) ? [ticketRow(ticket, lookup, heldBy(ticket, all), all, reviews.find((review) => review.ticketId === id))] : [];
+          return ticket && visibleTo(ticket, all, identity.pubkey) ? [ticketRow(ticket, lookup, heldBy(ticket, all, identity.pubkey), all, reviews.find((review) => review.ticketId === id))] : [];
         });
         if (tickets.length === 0 && read.before.length === 0) return undefined;
         return {
@@ -991,7 +991,7 @@ const makeHandlers = Effect.gen(function* () {
       const lookup = yield* nameLookup;
       const reviews = yield* SubscriptionRef.get(room.reviews);
       const all = yield* SubscriptionRef.get(room.tickets);
-      return ticketView(ticket, lookup, reviews.find((review) => review.ticketId === ticket.id), heldBy(ticket, all), all, identity.pubkey);
+      return ticketView(ticket, lookup, reviews.find((review) => review.ticketId === ticket.id), heldBy(ticket, all, identity.pubkey), all, identity.pubkey);
     });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
@@ -1849,12 +1849,24 @@ const makeHandlers = Effect.gen(function* () {
           ticket.createdBy === identity.pubkey
             ? "the room"
             : (peers.find((peer) => peer.key === ticket.createdBy)?.name ?? members.find((member) => member.key === ticket.createdBy)?.name ?? "the room");
-        return yield* outbox.tell({
+        const told = yield* outbox.tell({
           roomId,
           to: author,
           title: `${ticket.goal} · your ${ticket.kind === "review" ? "review" : "take"}`,
           outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}) },
         });
+        if (input.failed || input.comment || told.startsWith("failed")) return told;
+        // an approval opens what was stacked on this ticket to your user: the
+        // next to read, handed straight back so the review goes on in order
+        const next = [...all.values()].filter(
+          (candidate) =>
+            candidate.createdBy !== identity.pubkey &&
+            closedAs(candidate) === null &&
+            (candidate.after ?? []).includes(input.ticketId) &&
+            heldBy(candidate, all, identity.pubkey).every((id) => id === input.ticketId),
+        );
+        if (next.length === 0) return told;
+        return `${told}\nNEXT IN THE STACK, open to your user now: ${next.map((candidate) => `"${candidate.title ?? candidate.goal}" (${candidate.id})`).join(", ")} — tell them in a line and go on with it when they say (review-context, then post-review).`;
       }),
       epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen" | "rename"; epicId?: string; title?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
         const { id: roomId, room } = yield* focusedRoom;
@@ -2352,7 +2364,7 @@ const makeHandlers = Effect.gen(function* () {
           // the open ones by default, the closed ones when asked for history
           const rows = [...all.values()]
             .filter((ticket) => visibleTo(ticket, all, identity.pubkey) && isClosed(ticket, all) === (input?.closed === true) && (input?.kind === undefined || ticket.kind === input.kind))
-            .map((ticket) => ticketRow(ticket, lookup, heldBy(ticket, all), all, reviews.find((review) => review.ticketId === ticket.id)));
+            .map((ticket) => ticketRow(ticket, lookup, heldBy(ticket, all, identity.pubkey), all, reviews.find((review) => review.ticketId === ticket.id)));
           return toToon({ note: "get-ticket {id} shows a ticket's steps and results; review-context reads a review's why when your user asks", tickets: rows });
         }).pipe(Effect.withSpan("Mcp.getTickets")),
       "get-ticket": (input: { ticketId: string }) =>
