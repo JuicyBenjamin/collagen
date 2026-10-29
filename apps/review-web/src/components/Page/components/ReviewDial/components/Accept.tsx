@@ -5,12 +5,13 @@ import { hostNow } from "~/hostNow";
 import { mergeNow } from "~/mergeNow";
 import { ticketId } from "~/ticket";
 
-/** What Accept does at the review's merge level, in a line. */
-const NOTES: Record<MergeFor, string> = {
-  off: "Accept closes it as done.",
-  theirs: "Accept closes it as done. Collagen merges it once someone else approves it.",
-  mine: "Accept approves it: collagen merges it once its checks pass, then closes it.",
-  both: "Accept approves it: collagen merges it once someone else approves it too and its checks pass, then closes it.",
+/** What Accept does at the review's merge level, said on the button itself:
+ *  closed now, or approved for collagen to merge (and close) once it can. */
+const DOES: Record<MergeFor, string> = {
+  off: "Accept and close ticket",
+  theirs: "Accept and close ticket",
+  mine: "Accept and merge",
+  both: "Accept and merge",
 };
 
 /** A review the reader filed, accepted. Whether collagen merges it is set
@@ -66,11 +67,6 @@ export function Accept(props: { onDone: () => void }) {
   };
   return (
     <div class="review-composer">
-      <div class="composer-head">
-        <strong>Your review</strong>
-        <span>{count() === 0 ? "no comments pending" : count() === 1 ? "1 comment pending, said first" : `${count()} comments pending, said first`}</span>
-      </div>
-      <p class="host-note left">{NOTES[effect()]}</p>
       <Show when={!approves() && parents().length > 0}>
         <div class="accept-parents">
           <p class="accept-parents-head">Also close</p>
@@ -90,7 +86,7 @@ export function Accept(props: { onDone: () => void }) {
           Cancel
         </button>
         <button type="button" class="btn btn-primary btn-sm" disabled={sending()} onClick={() => void accept()}>
-          {sending() ? "Accepting…" : "Accept"}
+          {sending() ? "Accepting…" : DOES[effect()]}
         </button>
       </div>
     </div>
