@@ -50,26 +50,37 @@ export function File(props: { file: TestFile; hunks: ReadonlyMap<string, HunkDat
           </div>
         )}
       </For>
+      {/* what changed outside any test (imports, setup, helpers): a row like
+          the tests', its code a click away the same way */}
       <Show when={other().length > 0}>
-        <div class="tests-other">
-          <label class="test-code-toggle">
-            <input type="checkbox" class="checkbox checkbox-primary checkbox-xs" checked={otherOpen()} onChange={() => setOtherOpen(!otherOpen())} />
-            {other().length === 1 ? "1 change outside a test" : `${other().length} changes outside a test`}
-          </label>
-          <Appear when={otherOpen()}>
-            {() => (
-              <div class="hunk-group test-code">
-                <For each={other()}>
-                  {(hunk) => (
-                    <div class="code">
-                      <Lines hunk={hunk} threads="all" talk />
-                    </div>
-                  )}
-                </For>
-              </div>
-            )}
-          </Appear>
-        </div>
+        <ul class="tests-list tests-other">
+          <li class="test">
+            <div class="test-row">
+              <span class="test-change">shared</span>
+              <span class="test-title">Setup and helpers</span>
+              <span class="test-side">
+                <span class="test-count">{other().length === 1 ? "1 change" : `${other().length} changes`}</span>
+                <label class="test-code-toggle">
+                  <input type="checkbox" class="checkbox checkbox-primary checkbox-xs" checked={otherOpen()} onChange={() => setOtherOpen(!otherOpen())} />
+                  Code
+                </label>
+              </span>
+            </div>
+            <Appear when={otherOpen()}>
+              {() => (
+                <div class="hunk-group test-code">
+                  <For each={other()}>
+                    {(hunk) => (
+                      <div class="code">
+                        <Lines hunk={hunk} threads="all" talk />
+                      </div>
+                    )}
+                  </For>
+                </div>
+              )}
+            </Appear>
+          </li>
+        </ul>
       </Show>
     </section>
   );
