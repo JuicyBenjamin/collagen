@@ -1,6 +1,6 @@
 import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
@@ -175,7 +175,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           });
         // `agent`: which of their agents did it, so the agent told can tell a
         // person's own word from another agent's
-        const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string, agent?: string) =>
+        // `conversation`: on an act of the person's own, the conversation that
+        // did it — told to their other conversations, never back to itself
+        const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string, agent?: string, conversation?: Conversation) =>
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis;
             const message: RoomMessage = {
@@ -190,6 +192,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               ts: now,
               ticketId: ticket.id,
               ...(agent ? { agent } : {}),
+              ...(conversation ? { conversation } : {}),
             };
             // where it goes next is the runner's line: inbox, or woken in a conversation by its harness
             yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)}: ${fromName} ${what}`);
@@ -205,12 +208,15 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               if (prev === null) return; // what the log already held is history, not news
               const trace = yield* SubscriptionRef.get(room.trace);
               for (const change of stepChanges(prev, all)) {
-                if (change.step.owner === identity.pubkey) continue; // our own doing
+                // the person's own doing: news only to their other conversations,
+                // when one of theirs did it (from the TUI, it is nobody's news)
+                const own = change.step.owner === identity.pubkey;
+                if (own && !change.step.conversation) continue;
                 if (!visibleTo(change.ticket, all, identity.pubkey)) continue; // not shown to us yet
                 if (!isParticipant(change.ticket, trace, identity.pubkey)) continue;
                 if (actionableSteps(change.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
                 const actorName = yield* nameOf(change.step.owner);
-                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent);
+                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent, own ? change.step.conversation : undefined);
               }
             }),
           ),
@@ -228,12 +234,14 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               const trace = yield* SubscriptionRef.get(room.trace);
               const tickets = yield* SubscriptionRef.get(room.tickets);
               for (const review of reviewChanges(prev, all)) {
-                if (review.author === identity.pubkey) continue; // our own doing
+                // the person's own doing: news only to their other conversations
+                const own = review.author === identity.pubkey;
+                if (own && !review.conversation) continue;
                 const ticket = tickets.get(review.ticketId);
                 if (!ticket || !isParticipant(ticket, trace, identity.pubkey)) continue;
                 if (!visibleTo(ticket, tickets, identity.pubkey)) continue; // not shown to us yet
                 const fresh = prev?.has(review.ticketId) !== true;
-                yield* notify(myThreadFor(ticket, trace, identity.pubkey, review.author), review.author, review.authorName, ticket, "revised the why", reviewUpdateText(ticket, review, fresh), review.agent);
+                yield* notify(myThreadFor(ticket, trace, identity.pubkey, review.author), review.author, review.authorName, ticket, "revised the why", reviewUpdateText(ticket, review, fresh), review.agent, own ? review.conversation : undefined);
               }
             }),
           ),

@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, SubscriptionRef } from "effect";
-import type { RoomMessage } from "@collagen/p2p";
+import { conversationKey, type RoomMessage } from "@collagen/p2p";
 import { StateStore } from "./StateStore";
 
 /** A message waiting for pickup, tagged with the room it belongs to. Thread
@@ -124,7 +124,8 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
         const thread = (yield* SubscriptionRef.get(history)).get(at(roomId, threadId)) ?? [];
         const unreadByAnyone = yield* take(roomId, threadId);
         const after = place === undefined ? [] : thread.filter((message) => message.ts > place);
-        const messages = [...new Map([...after, ...unreadByAnyone].map((message) => [message.id, message])).values()].sort((first, second) => first.ts - second.ts);
+        // what this conversation did itself is not news to it
+        const messages = [...new Map([...after, ...unreadByAnyone].filter((message) => conversationKey(message.conversation) !== reader).map((message) => [message.id, message])).values()].sort((first, second) => first.ts - second.ts);
         const shown = new Set(messages.map((message) => message.id));
         const before = place === undefined ? thread.filter((message) => !shown.has(message.id)).slice(-CATCH_UP) : [];
         const tail = Math.max(place ?? -1, ...thread.map((message) => message.ts), ...messages.map((message) => message.ts));
@@ -144,7 +145,7 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
         const kept = yield* SubscriptionRef.get(history);
         const waiting = (yield* SubscriptionRef.get(buffer)).filter((received) => received.roomId === roomId).map((received) => received.message);
         const newer = Object.entries(places).flatMap(([threadId, place]) => (kept.get(at(roomId, threadId)) ?? []).filter((message) => message.ts > place));
-        return rows([...new Map([...waiting, ...newer].map((message) => [message.id, message])).values()]);
+        return rows([...new Map([...waiting, ...newer].filter((message) => conversationKey(message.conversation) !== reader).map((message) => [message.id, message])).values()]);
       });
 
     /** Non-destructive read of one thread's queued messages. */
