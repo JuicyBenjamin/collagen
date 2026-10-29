@@ -5,6 +5,7 @@ import { flies, floating } from "~/floating";
 import { hostNow } from "~/hostNow";
 import { viewed } from "~/viewedNow";
 import { yourReview } from "~/yourReview";
+import { withGiven } from "~/finishNow";
 import { Count } from "../Header/components/HostBar/components/Progress";
 import { Accept } from "./components/Accept";
 import { ArrowRound, CommentBox, ThumbsUp } from "~/components/Icons";
@@ -36,8 +37,9 @@ const [open, setOpen] = createSignal<VerdictValue | null>(null);
  *  the page, like `open`. A new finish puts the buttons away again. */
 const [again, setAgain] = createSignal<number | null>(null);
 
-/** The reader's own finish of the review: the room's or the host's, the later. */
-const yours = (head: ReviewPageHead) => yourReview(head.ticket.yours, hostNow.host());
+/** The reader's own finish of the review: the room's or the host's, the
+ *  later — or the one just given here, until their word on it is back. */
+const yours = (head: ReviewPageHead) => withGiven(yourReview(head.ticket.yours, hostNow.host()));
 
 /** Whether the reader can finish a review here: an open review ticket
  *  always — someone else's with a verdict, their own accepted or dropped —
