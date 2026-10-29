@@ -796,32 +796,40 @@ export function actionableSteps(ticket: Ticket, pubkey: string): OwnedStep[] {
   return readySteps(ticket).filter(isOwned).filter((step) => step.owner === pubkey);
 }
 
-/** Is this ticket's turn over, for whoever waits on it? Finished (every step
- *  answered — on a review that includes the author's own address step, so
- *  one reader's take does not open the next review), or closed: a ticket its
- *  author closed unfinished must not hold the next one back forever. */
-const released = (ticket: Ticket, all: ReadonlyMap<string, Ticket>): boolean => isClosed(ticket, all) || finished(ticket);
+/** Is this ticket's turn over for `me`, who waits on it? Finished (every
+ *  step answered — on a review that includes the author's own address step),
+ *  or closed: a ticket its author closed unfinished must not hold the next
+ *  one back forever. And, for one reader, a review they approved: their part
+ *  in it is done, so the next review in a stack opens to them then, in
+ *  order, without waiting on the author. Asking for changes, or a comment,
+ *  opens nothing. */
+const released = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): boolean =>
+  isClosed(ticket, all) || finished(ticket) || (isJudged(ticket.kind) && approvedBy(ticket, me));
 
-/** The tickets in `after` still holding this one back. A predecessor this
- *  peer does not hold is no gate: `afterProblem` refused unknown ids when
- *  the order was set, so a missing one was evicted, and waiting on it would
- *  hide the ticket for good. */
-export function heldBy(ticket: Ticket, all: ReadonlyMap<string, Ticket>): ReadonlyArray<string> {
+/** `me` approved this ticket: a take of theirs settled, not a comment. */
+const approvedBy = (ticket: Ticket, me: string): boolean =>
+  ticket.steps.some((step) => isTake(step) && step.owner === me && step.status === "settled" && step.comment !== true);
+
+/** The tickets in `after` still holding this one back for `me`. A
+ *  predecessor this peer does not hold is no gate: `afterProblem` refused
+ *  unknown ids when the order was set, so a missing one was evicted, and
+ *  waiting on it would hide the ticket for good. */
+export function heldBy(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): ReadonlyArray<string> {
   return (ticket.after ?? []).filter((id) => {
     const predecessor = all.get(id);
-    return predecessor !== undefined && !released(predecessor, all);
+    return predecessor !== undefined && !released(predecessor, all, me);
   });
 }
 
-/** Waiting on a ticket that has not been answered yet. */
-export const gated = (ticket: Ticket, all: ReadonlyMap<string, Ticket>): boolean => heldBy(ticket, all).length > 0;
+/** Waiting, for `me`, on a ticket that has not been answered yet. */
+export const gated = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): boolean => heldBy(ticket, all, me).length > 0;
 
 /** May `me` be shown this ticket? Its author always — they keep it current
- *  while it waits; anyone else once it is no longer gated. Every reader of
- *  "is it there" for a person goes through here: the lists, the agent's
- *  tools, the nudges. */
+ *  while it waits; anyone else once it is no longer gated for them. Every
+ *  reader of "is it there" for a person goes through here: the lists, the
+ *  agent's tools, the nudges. */
 export const visibleTo = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): boolean =>
-  ticket.createdBy === me || !gated(ticket, all);
+  ticket.createdBy === me || !gated(ticket, all, me);
 
 /** Why an `after` cannot stand, or null. The take on the ordering plan named
  *  the three ways a ticket could otherwise become invisible for good: an id
