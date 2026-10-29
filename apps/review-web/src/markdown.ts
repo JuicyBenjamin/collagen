@@ -4,13 +4,15 @@ import { fenceLanguage, type Language } from "./highlight";
 
 // A comment's words as GitHub-flavoured markdown, read into a small tree of
 // the page's own: the page renders each node as an element of its own and
-// never sets HTML, so what a stranger wrote cannot run. Raw HTML in a comment
-// stays text, an image shows only from https (else its words), and a link
-// goes only to http(s) or mail.
+// never sets HTML, so what a stranger wrote cannot run. Of a comment's raw
+// HTML, the few tags GitHub shows as formatting (b, i, sub, sup, br, a,
+// details and summary) become the page's own nodes; layout tags give way to
+// their words; anything else stays text. An image shows only from https
+// (else its words), and a link goes only to http(s) or mail.
 
 export type Inline =
   | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "strong" | "em" | "del"; readonly children: ReadonlyArray<Inline> }
+  | { readonly kind: "strong" | "em" | "del" | "sub" | "sup"; readonly children: ReadonlyArray<Inline> }
   | { readonly kind: "code"; readonly text: string }
   | { readonly kind: "link"; readonly href: string; readonly children: ReadonlyArray<Inline> }
   | { readonly kind: "image"; readonly src: string; readonly alt: string }
@@ -29,6 +31,7 @@ export type Block =
   | { readonly kind: "list"; readonly start: number | undefined; readonly items: ReadonlyArray<Item> }
   | { readonly kind: "table"; readonly head: ReadonlyArray<ReadonlyArray<Inline>>; readonly rows: ReadonlyArray<ReadonlyArray<ReadonlyArray<Inline>>> }
   | { readonly kind: "hr" }
+  | { readonly kind: "details"; readonly open: boolean; readonly summary: ReadonlyArray<Inline>; readonly blocks: ReadonlyArray<Block> }
   | { readonly kind: "fields"; readonly fields: ReadonlyArray<{ readonly name: string; readonly value: string }> };
 
 /** `:tada:` as 🎉, as GitHub writes them; a name nobody knows stays as typed. */
@@ -56,39 +59,91 @@ const words = (source: string): Inline => text(emojify(decode(source)));
 /** An HTML comment: GitHub never shows one, and bots fill comments with them. */
 const hidden = (token: Token): boolean => token.type === "html" && token.raw.trim().startsWith("<!--");
 
+/** The tags GitHub shows as formatting, as the page's own node. */
+const FORMATS: Readonly<Record<string, "strong" | "em" | "del" | "sub" | "sup">> = { b: "strong", strong: "strong", i: "em", em: "em", s: "del", del: "del", strike: "del", sub: "sub", sup: "sup" };
+/** Tags that only lay out: gone, their words kept. */
+const LAYOUT = new Set(["details", "summary", "p", "div", "span", "kbd", "ins", "picture", "source"]);
+
+/** An inline HTML token as a tag: closing or not, its name, its attributes. */
+const tagOf = (token: Token): { readonly closing: boolean; readonly name: string; readonly attributes: string } | null => {
+  if (token.type !== "html") return null;
+  const tag = /^<(\/?)([a-z][a-z0-9]*)\b([^>]*?)\/?>$/i.exec(token.raw.trim());
+  return tag ? { closing: tag[1] === "/", name: tag[2]!.toLowerCase(), attributes: tag[3] ?? "" } : null;
+};
+
+/** Where the tag opened at `start` closes, counting the same tag nested; -1 when it never does. */
+const closingOf = (tokens: ReadonlyArray<Token>, start: number, name: string): number => {
+  let depth = 0;
+  for (let index = start; index < tokens.length; index++) {
+    const tag = tagOf(tokens[index]!);
+    if (tag?.name !== name) continue;
+    depth += tag.closing ? -1 : 1;
+    if (depth === 0) return index;
+  }
+  return -1;
+};
+
 const inline = (tokens: ReadonlyArray<Token> | undefined, raw = ""): ReadonlyArray<Inline> => {
   if (!tokens) return raw ? [words(raw)] : [];
-  return tokens.flatMap((token): ReadonlyArray<Inline> => {
-    switch (token.type) {
-      case "strong":
-      case "em":
-      case "del":
-        return [{ kind: token.type, children: inline((token as Tokens.Strong).tokens) }];
-      case "codespan":
-        return [{ kind: "code", text: (token as Tokens.Codespan).text }];
-      case "br":
-        return [{ kind: "br" }];
-      case "link": {
-        const link = token as Tokens.Link;
-        const href = safeHref(link.href);
-        return href ? [{ kind: "link", href, children: inline(link.tokens, link.text) }] : inline(link.tokens, link.text);
-      }
-      case "image": {
-        const image = token as Tokens.Image;
-        const src = safeSrc(image.href);
-        return src ? [{ kind: "image", src, alt: emojify(decode(image.text)) }] : [words(image.text || image.href)];
-      }
-      case "escape":
-        return [text((token as Tokens.Escape).text)];
-      case "html":
-        return hidden(token) ? [] : [text(token.raw)];
-      default: {
-        const nested = (token as Tokens.Text).tokens;
-        return nested ? inline(nested) : [words(token.raw)];
+  const nodes: Array<Inline> = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const tag = tagOf(tokens[index]!);
+    if (tag?.name === "br") {
+      nodes.push({ kind: "br" });
+      continue;
+    }
+    const format = tag ? FORMATS[tag.name] : undefined;
+    if (tag && !tag.closing && (format || tag.name === "a")) {
+      const end = closingOf(tokens, index, tag.name);
+      if (end > index) {
+        const children = inline(tokens.slice(index + 1, end));
+        const href = tag.name === "a" ? safeHref(/\bhref\s*=\s*"([^"]*)"/i.exec(tag.attributes)?.[1] ?? "") : undefined;
+        if (format) nodes.push({ kind: format, children });
+        else if (href) nodes.push({ kind: "link", href, children });
+        else nodes.push(...children);
+        index = end;
+        continue;
       }
     }
-  });
+    if (tag && LAYOUT.has(tag.name)) continue;
+    nodes.push(...one(tokens[index]!));
+  }
+  return nodes;
 };
+
+/** One inline token that is not a tag `inline` reads itself. */
+const one = (token: Token): ReadonlyArray<Inline> => {
+  switch (token.type) {
+    case "strong":
+    case "em":
+    case "del":
+      return [{ kind: token.type, children: inline((token as Tokens.Strong).tokens) }];
+    case "codespan":
+      return [{ kind: "code", text: (token as Tokens.Codespan).text }];
+    case "br":
+      return [{ kind: "br" }];
+    case "link": {
+      const link = token as Tokens.Link;
+      const href = safeHref(link.href);
+      return href ? [{ kind: "link", href, children: inline(link.tokens, link.text) }] : inline(link.tokens, link.text);
+    }
+    case "image": {
+      const image = token as Tokens.Image;
+      const src = safeSrc(image.href);
+      return src ? [{ kind: "image", src, alt: emojify(decode(image.text)) }] : [words(image.text || image.href)];
+    }
+    case "escape":
+      return [text((token as Tokens.Escape).text)];
+    case "html":
+      return hidden(token) ? [] : [text(token.raw)];
+    default: {
+      const nested = (token as Tokens.Text).tokens;
+      return nested ? inline(nested) : [words(token.raw)];
+    }
+  }
+};
+
+const LEXING = { gfm: true, breaks: true } as const;
 
 const blocks = (tokens: ReadonlyArray<Token>): ReadonlyArray<Block> =>
   tokens.flatMap((token): ReadonlyArray<Block> => {
@@ -122,17 +177,60 @@ const blocks = (tokens: ReadonlyArray<Token>): ReadonlyArray<Block> =>
       }
       case "hr":
         return [{ kind: "hr" }];
+      case "html": {
+        // a block of raw HTML: read as a line of its own, its formatting tags as formatting
+        if (hidden(token)) return [];
+        const children = inline(Lexer.lexInline(token.raw.trim(), LEXING));
+        return children.length ? [{ kind: "p", children }] : [];
+      }
       default: {
-        // raw HTML and anything unknown: the words as written, line by line, never as markup
-        const lines = hidden(token) ? [] : token.raw.trim().split("\n").filter((line) => line.trim());
+        // anything unknown: the words as written, line by line, never as markup
+        const lines = token.raw.trim().split("\n").filter((line) => line.trim());
         return lines.length ? [{ kind: "p", children: lines.flatMap((line, index): ReadonlyArray<Inline> => (index ? [{ kind: "br" }, text(line)] : [text(line)])) }] : [];
       }
     }
   });
 
 /** A comment's words as blocks. Single newlines are line breaks, as in a
- *  GitHub comment. */
-export const parseMarkdown = (source: string): ReadonlyArray<Block> => blocks(new Lexer({ gfm: true, breaks: true }).lex(source));
+ *  GitHub comment. A `<details>` fold is one block: its summary, and what
+ *  it folds read again as markdown; open only when it says so. */
+export const parseMarkdown = (source: string): ReadonlyArray<Block> => {
+  const lines = source.split("\n");
+  const made: Array<Block> = [];
+  let plain: Array<string> = [];
+  const flush = () => {
+    if (plain.some((line) => line.trim())) made.push(...blocks(new Lexer(LEXING).lex(plain.join("\n"))));
+    plain = [];
+  };
+  let fenced = false;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+    const opening = fenced ? null : /^\s*<details(\s[^>]*)?>/i.exec(line);
+    // the fold runs to its own closing tag, counting folds inside it
+    let end = index;
+    for (let depth = 0; opening && end < lines.length; end++) {
+      depth += (lines[end]!.match(/<details\b/gi)?.length ?? 0) - (lines[end]!.match(/<\/details>/gi)?.length ?? 0);
+      if (depth <= 0) break;
+    }
+    if (!opening || end >= lines.length) {
+      plain.push(line); // not a fold, or one never closed: as written
+      continue;
+    }
+    flush();
+    const body = lines.slice(index, end + 1).join("\n").replace(/^\s*<details[^>]*>/i, "").replace(/<\/details>\s*$/i, "");
+    const summary = /^\s*<summary>([\s\S]*?)<\/summary>/i.exec(body);
+    made.push({
+      kind: "details",
+      open: /\bopen\b/i.test(opening[1] ?? ""),
+      summary: summary ? inline(Lexer.lexInline(summary[1]!.trim(), LEXING)) : [text("Details")],
+      blocks: parseMarkdown(summary ? body.slice(summary[0].length) : body),
+    });
+    index = end;
+  }
+  flush();
+  return made;
+};
 
 /** One top-level block of a Markdown file and the lines it spans (1-based,
  *  both ends in), so a diff's lines can be laid on what they made. */

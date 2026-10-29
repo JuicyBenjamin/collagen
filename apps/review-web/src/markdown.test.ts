@@ -34,6 +34,19 @@ describe("a comment as markdown", () => {
   });
 });
 
+describe("a comment's HTML, as GitHub shows it", () => {
+  it("reads the formatting tags and folds, and keeps everything else as text", () => {
+    const comment = ["Bug found<br><sub>Severity: MEDIUM</sub>", "", "<details><summary><b title=\"ref\">Suggested Fix</b></summary>", "", "Use **this**.", "", "<details open>", "<summary>Prompt</summary>", "", "inner", "</details>", "</details>", "", "<script>alert(1)</script>"].join("\n");
+    const [first, fold, script] = parseMarkdown(comment);
+    expect(first).toEqual({ kind: "p", children: [{ kind: "text", text: "Bug found" }, { kind: "br" }, { kind: "sub", children: [{ kind: "text", text: "Severity: MEDIUM" }] }] });
+    expect(fold).toMatchObject({ kind: "details", open: false, summary: [{ kind: "strong", children: [{ kind: "text", text: "Suggested Fix" }] }] });
+    expect(fold?.kind === "details" && fold.blocks.map((block) => block.kind)).toEqual(["p", "details"]);
+    expect(fold?.kind === "details" && fold.blocks[1]).toMatchObject({ kind: "details", open: true, summary: [{ text: "Prompt" }] });
+    expect(JSON.stringify(script)).toContain("<script>");
+    expect(JSON.stringify(script)).not.toMatch(/"kind":"(link|image|details)"/);
+  });
+});
+
 describe("a Markdown file, read as a document", () => {
   it("gives each block the lines it spans, so a changed line marks the block it is in", () => {
     const file = ["# Title", "", "First paragraph,", "on two lines.", "", "- one", "- two", "", "```ts", "const a = 1;", "```"].join("\n");

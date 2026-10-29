@@ -12,6 +12,8 @@ function Inlines(props: { of: ReadonlyArray<Inline> }) {
           <Match when={node.kind === "strong" && node}>{(inline) => <strong><Inlines of={inline().children} /></strong>}</Match>
           <Match when={node.kind === "em" && node}>{(inline) => <em><Inlines of={inline().children} /></em>}</Match>
           <Match when={node.kind === "del" && node}>{(inline) => <del><Inlines of={inline().children} /></del>}</Match>
+          <Match when={node.kind === "sub" && node}>{(inline) => <sub><Inlines of={inline().children} /></sub>}</Match>
+          <Match when={node.kind === "sup" && node}>{(inline) => <sup><Inlines of={inline().children} /></sup>}</Match>
           <Match when={node.kind === "code" && node}>{(inline) => <code>{inline().text}</code>}</Match>
           <Match when={node.kind === "link" && node}>
             {(inline) => (
@@ -106,6 +108,16 @@ function Blocks(props: { of: ReadonlyArray<Block> }) {
           </Match>
           <Match when={block.kind === "hr"}>
             <hr />
+          </Match>
+          <Match when={block.kind === "details" && block}>
+            {(fold) => (
+              <details class="md-details" open={fold().open}>
+                <summary>
+                  <Inlines of={fold().summary} />
+                </summary>
+                <Blocks of={fold().blocks} />
+              </details>
+            )}
           </Match>
           <Match when={block.kind === "fields" && block}>
             {(front) => (
