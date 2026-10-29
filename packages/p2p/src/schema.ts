@@ -521,6 +521,22 @@ export const OwnRun = Schema.Struct({
 });
 export type OwnRun = typeof OwnRun.Type;
 
+/** A job collagen was asked to run and has not finished (cli Jobs): what it
+ *  asks of which AI, kept so a restart picks the queue up where it was. A
+ *  job that was running when collagen stopped starts again. Local. */
+export const QueuedJob = Schema.Struct({
+  id: Schema.String,
+  kind: JobKind,
+  ticketId: Schema.String,
+  title: Schema.String,
+  harness: Schema.String,
+  model: Schema.optional(Schema.String),
+  queuedAt: Schema.Finite,
+  prompt: Schema.String,
+  cwd: Schema.String,
+});
+export type QueuedJob = typeof QueuedJob.Type;
+
 /** Local, per-user state: preferred AI + per-room projects. A project
  *  belongs to the room it was added in (Keet-style) — the same repo shared
  *  into two rooms is two entries. */
@@ -613,6 +629,8 @@ export const LocalState = Schema.Struct({
   models: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   /** how many jobs collagen runs at once; absent = one */
   jobLimit: Schema.optional(Schema.Finite),
+  /** jobs asked for and not yet finished, oldest first (see QueuedJob) */
+  queuedJobs: Schema.optional(Schema.Array(QueuedJob)),
   /** collagen's own model runs, latest last (see OwnRun) */
   ownRuns: Schema.optional(Schema.Array(OwnRun)),
   settings: Schema.optional(Settings),
