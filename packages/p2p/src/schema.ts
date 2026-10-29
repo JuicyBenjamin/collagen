@@ -580,6 +580,9 @@ export type SteeringLevels = typeof SteeringLevels.Type;
 export const Settings = Schema.Struct({
   /** absent = on: a review's page opens in the browser when it is started */
   openReviewPage: Schema.optional(Schema.Boolean),
+  /** absent = on: closing a ticket, what it grew from (open, the person's
+   *  own) is offered ticked to close with it */
+  alsoCloseParents: Schema.optional(Schema.Boolean),
 });
 export type Settings = typeof Settings.Type;
 

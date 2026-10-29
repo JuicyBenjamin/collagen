@@ -12,7 +12,7 @@ import { commitOk, hostView, localHost, projectNameOk, reviewData, reviewHead, s
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
-import { closeParent, closeReview, mergeView, parentsOf, setMerge, takeReview } from "./ReviewFinish";
+import { closeParent, closeReview, mergeView, parentsView, setMerge, takeReview } from "./ReviewFinish";
 import { Outbox } from "./Outbox";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
@@ -122,7 +122,7 @@ const backend = Effect.gen(function* () {
     repin: (ticketId, id, commit) => (ticketIdOk(ticketId) && idsOk([id]) && commitOk(commit) ? on(repinDraft(ticketId, id, commit)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     take: (ticketId, findings, failed, comment) =>
       ticketIdOk(ticketId) && bodyOk(findings) && typeof failed === "boolean" && typeof comment === "boolean" ? on(takeReview(ticketId, findings, failed, comment)) : Effect.succeed(bad),
-    parents: (ticketId) => (ticketIdOk(ticketId) ? on(parentsOf(ticketId)) : Effect.succeed([])),
+    parents: (ticketId) => (ticketIdOk(ticketId) ? on(parentsView(ticketId)) : Effect.succeed({ tickets: [], ticked: false })),
     closeParent: (ticketId, parentId) => (ticketIdOk(ticketId) && ticketIdOk(parentId) ? on(closeParent(ticketId, parentId)) : Effect.succeed(bad)),
     mergeView: (ticketId) => (ticketIdOk(ticketId) ? on(mergeView(ticketId)) : Effect.succeed(null)),
     setMerge: (ticketId, level) => (ticketIdOk(ticketId) && (level === null || level === "off" || level === "theirs" || level === "mine" || level === "both") ? on(setMerge(ticketId, level)) : Effect.succeed(null)),
