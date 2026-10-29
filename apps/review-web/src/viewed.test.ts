@@ -27,6 +27,11 @@ describe("a file marked as viewed", () => {
     expect(viewedState({}, "a.ts", "f1")).toBe("unread");
   });
 
+  it("is never changed since viewed when it cannot be compared: a blind mark, or no fingerprint yet", () => {
+    expect(viewedState({ "a.ts": { fp: "" } }, "a.ts", "f1")).toBe("unread");
+    expect(viewedState({ "a.ts": { fp: "f1" } }, "a.ts", undefined)).toBe("unread");
+  });
+
   it("reads marks as stored, the first ones (a fingerprint alone) too", () => {
     expect(readMarks({ "a.ts": "f1", "b.ts": { fp: "f2", at: "abc1234" }, "c.ts": 3 })).toEqual({ "a.ts": { fp: "f1" }, "b.ts": { fp: "f2", at: "abc1234" } });
     expect(readMarks(null)).toEqual({});
