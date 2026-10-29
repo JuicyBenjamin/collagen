@@ -304,13 +304,13 @@ export const hostNow = {
 
   /** Post a single comment — on lines, or on a whole file — at the commit
    *  the page shows, apart from the review (GitHub's "Add single comment").
-   *  It shows at once as the reader's, marked as on its way; the host's
-   *  answer (read again) takes its place, or a refusal takes it away. */
+   *  It shows at once as the reader's, as it will stand, so the host's
+   *  answer (read again) takes its place unseen, or a refusal takes it away. */
   comment: action(function* (at: CommentSpot, body: string): Generator<Promise<HostWrite>, HostWrite, unknown> {
     const commit = diffNow.commit();
     if (!commit) return { error: "The page does not know which commit its diff is." } as HostWrite;
     const me: HostUser | null | undefined = hostNow.host()?.viewer;
-    const mine: LineComment = { id: `pending-${Date.now()}`, author: me ?? { login: "you" }, body, ...at, url: "", at: new Date().toISOString(), pending: true };
+    const mine: LineComment = { id: `pending-${Date.now()}`, author: me ?? { login: "you" }, body, ...at, url: "", at: new Date().toISOString() };
     setComments((current) => [...current, mine]);
     const said = (yield sendComment(ticketId, at, body, commit, me?.login ?? null)) as HostWrite;
     if ("ok" in said) {
