@@ -66,7 +66,7 @@ export function Tickets() {
     const ticket = byId.get(id);
     return ticket ? ticketName(ticket) : undefined;
   };
-  const visible = tickets.filter((ticket) => visibleTo(ticket, byId, me)).map((ticket) => ({ ticket, summary: summarize(ticket, trace, me, heldBy(ticket, byId), byId) }));
+  const visible = tickets.filter((ticket) => visibleTo(ticket, byId, me)).map((ticket) => ({ ticket, summary: summarize(ticket, trace, me, heldBy(ticket, byId, me), byId) }));
   const open = visible.filter((row) => row.summary.state !== "closed");
   const inTab = (row: Row) => tab === "all" || row.ticket.kind === tab;
   const rows = open.filter(inTab);
