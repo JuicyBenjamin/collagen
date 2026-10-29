@@ -38,9 +38,15 @@ export interface Mark {
 }
 type Marks = Readonly<Record<string, Mark>>;
 
-/** A file's state: marked as it is now, marked as it was before, or not. */
-export const viewedState = (marks: Marks, file: string, now: string | undefined): Viewed =>
-  marks[file] === undefined ? "unread" : marks[file]!.fp === now ? "viewed" : "changed";
+/** A file's state: marked as it is now, marked as it was before, or not.
+ *  "Changed" needs both ends: a mark with a real fingerprint, and the file's
+ *  fingerprint now. A mark made blind, or a file the page has none for yet,
+ *  is unread — never a change the reader did not see. */
+export const viewedState = (marks: Marks, file: string, now: string | undefined): Viewed => {
+  const mark = marks[file];
+  if (!mark?.fp || now === undefined) return "unread";
+  return mark.fp === now ? "viewed" : "changed";
+};
 
 /** Marks as stored — the first ones kept the fingerprint alone. */
 export const readMarks = (raw: unknown): Marks => {
@@ -72,8 +78,11 @@ export const viewedStore = (ticketId: string) => {
   /** marked, or marked again: as it is now, at the branch's commit now */
   const toggle = (file: string, commit: string | undefined) => {
     const next: Record<string, Mark> = { ...marks() };
+    const fingerprintNow = now().get(file);
     if (state(file) === "viewed") delete next[file];
-    else next[file] = { fp: now().get(file) ?? "", ...(commit ? { at: commit } : {}) };
+    // never a mark without what the file was: it could only ever read "changed"
+    else if (fingerprintNow) next[file] = { fp: fingerprintNow, ...(commit ? { at: commit } : {}) };
+    else return;
     setMarks(next);
     try {
       localStorage.setItem(key(ticketId), JSON.stringify(next));
