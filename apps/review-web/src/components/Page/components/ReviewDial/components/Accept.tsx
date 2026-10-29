@@ -1,6 +1,7 @@
 import { createSignal, flush, For, Show } from "solid-js";
-import type { MergeFor, TicketRef } from "~/data";
+import type { MergeFor, ReviewPageHead, TicketRef } from "~/data";
 import { closeParent, closeReview, reviewParents, takeReview } from "~/api";
+import { KindIcon } from "~/components/KindIcon";
 import { hostNow } from "~/hostNow";
 import { mergeNow } from "~/mergeNow";
 import { ticketId } from "~/ticket";
@@ -14,6 +15,17 @@ const DOES: Record<MergeFor, string> = {
   both: "Accept and merge",
 };
 
+/** What this review is to a ticket it grew from, by that ticket's kind: the
+ *  word between them on the tree, so the row reads as a sentence. */
+const IS_TO: Record<TicketRef["kind"], string> = {
+  bug: "fixes",
+  plan: "carries out",
+  proposal: "builds",
+  task: "does",
+  review: "follows",
+  epic: "is part of",
+};
+
 /** A review the reader filed, accepted. Whether collagen merges it is set
  *  ahead, beside its pull request; here it is only told. With a merge
  *  waiting on their accept, Accept approves it and collagen merges and
@@ -21,7 +33,7 @@ const DOES: Record<MergeFor, string> = {
  *  pending in it are said first, in the room. What it grew from, still open
  *  and theirs, they may close too — an action they tick, never a question,
  *  and nothing closed unless they do. */
-export function Accept(props: { onDone: () => void }) {
+export function Accept(props: { head: ReviewPageHead; onDone: () => void }) {
   const [sending, setSending] = createSignal(false);
   const [said, setSaid] = createSignal<string | null>(null);
   const count = () => hostNow.pending().length;
@@ -36,6 +48,9 @@ export function Accept(props: { onDone: () => void }) {
       if (!next.delete(id)) next.add(id);
       return next;
     });
+  const allTicked = () => parents().length > 0 && parents().every((parent) => alsoClose().has(parent.id));
+  /** every one ticked, or (all ticked already) none */
+  const tickAll = () => setAlsoClose(allTicked() ? new Set<string>() : new Set(parents().map((parent) => parent.id)));
   // one at a time: a second click while one is on its way sends nothing
   let busy = false;
   const accept = async () => {
@@ -68,24 +83,53 @@ export function Accept(props: { onDone: () => void }) {
   return (
     <div class="review-composer">
       <Show when={!approves() && parents().length > 0}>
-        <div class="accept-parents">
-          <p class="accept-parents-head">Also close</p>
-          <For each={parents()}>
-            {(parent) => (
-              <label class="accept-parent">
-                <input type="checkbox" class="checkbox checkbox-xs" checked={alsoClose().has(parent.id)} onChange={() => tick(parent.id)} />
-                <span>{parent.title}</span>
-              </label>
-            )}
-          </For>
+        {/* this review, and what it grew from on branches under it, each
+            row a sentence — "This review … fixes ⚑ …" — with a box to close
+            it too, and, with several, a word that ticks them all */}
+        <div class="accept-tree">
+          <div class="accept-self">
+            <KindIcon kind="review" />
+            <span class="accept-title">This review</span>
+            {/* the boxes' own column: "all" sits centred over them */}
+            <span class="accept-slot">
+              <Show when={parents().length > 1}>
+                <button type="button" class="accept-all" onClick={tickAll}>
+                  {allTicked() ? "none" : "all"}
+                </button>
+              </Show>
+            </span>
+          </div>
+          <ul class="accept-parents">
+            <For each={parents()}>
+              {(parent) => (
+                <li>
+                  <label class="accept-parent">
+                    <span class="accept-is">{IS_TO[parent.kind]}</span>
+                    <KindIcon kind={parent.kind} />
+                    <span class="accept-title">{parent.title}</span>
+                    <span class="accept-slot">
+                      <input type="checkbox" class="checkbox checkbox-xs" checked={alsoClose().has(parent.id)} onChange={() => tick(parent.id)} />
+                    </span>
+                  </label>
+                </li>
+              )}
+            </For>
+          </ul>
         </div>
       </Show>
       <Show when={said()}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <div class="composer-actions">
+        {/* what ticking adds, said once something is ticked; Accept in the
+            approve button's colour, since it is the same act */}
+        <span class="accept-also">
+          <Show when={alsoClose().size > 0}>
+            Also closes {alsoClose().size === 1 ? "1 ticket" : `${alsoClose().size} tickets`}
+          </Show>
+        </span>
         <button type="button" class="btn btn-sm" onClick={() => props.onDone()}>
           Cancel
         </button>
-        <button type="button" class="btn btn-primary btn-sm" disabled={sending()} onClick={() => void accept()}>
+        <button type="button" class="btn btn-sm accept-go" disabled={sending()} onClick={() => void accept()}>
           {sending() ? "Accepting…" : DOES[effect()]}
         </button>
       </div>

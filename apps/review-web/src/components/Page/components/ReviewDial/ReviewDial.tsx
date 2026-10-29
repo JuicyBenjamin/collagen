@@ -113,7 +113,7 @@ export function DialPanel(props: { head: ReviewPageHead; where: "bar" | "corner"
       {(verdict) => (
         <div class={["dial-panel", `in-${props.where}`]}>
           <Show when={props.head.ticket.mine && verdict() === "approve"} fallback={<Verdict verdict={verdict()} onDone={() => setOpen(null)} />}>
-            <Accept onDone={() => setOpen(null)} />
+            <Accept head={props.head} onDone={() => setOpen(null)} />
           </Show>
         </div>
       )}
