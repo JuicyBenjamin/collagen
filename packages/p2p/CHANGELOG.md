@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.24.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.23.0-alpha...p2p-v0.24.0-alpha) (2026-10-29)
+
+
+### Features
+
+* **cli:** collagen counts what its own courier runs spend, and runs it lean ([a84d941](https://github.com/JuicyBenjamin/collagen/commit/a84d9411e5150c3934d99e98400d14eb7dffc846))
+* **cli:** each AI conversation keeps its own place in a thread ([3186378](https://github.com/JuicyBenjamin/collagen/commit/3186378989d0a7ce3438543eb3c7b9b8b1eda983))
+* **cli:** jobs pick up again after a restart, and Codex jobs count their spend ([6542fb1](https://github.com/JuicyBenjamin/collagen/commit/6542fb1eb9d0de389cc1abd0e517338d238d4a00))
+* collagen acts outside itself only as the person's steering allows ([a8bfe9a](https://github.com/JuicyBenjamin/collagen/commit/a8bfe9a42f449011d05a417b3b96b716eff66445))
+* collagen runs your AI for jobs, one at a time, with the model you choose ([744fb35](https://github.com/JuicyBenjamin/collagen/commit/744fb3569950e177de3da3f51a36878d05bdd2bd))
+* every AI act names the conversation that did it ([5122dfc](https://github.com/JuicyBenjamin/collagen/commit/5122dfc4914a227319cd8ae9bae59d1a0778a12a))
+* news reaches the AI conversation you're in ([ac2eddd](https://github.com/JuicyBenjamin/collagen/commit/ac2eddd66b115c7f743b87f3a713b6d6318429a4))
+* what a ticket grew from is ticked to close with it, unless you say not ([b836e30](https://github.com/JuicyBenjamin/collagen/commit/b836e30e7882f681f77fed269face2d387d1356a))
+
+
+### Bug Fixes
+
+* approving a stacked review opens the next one to that reader ([acf3b28](https://github.com/JuicyBenjamin/collagen/commit/acf3b280c606171954b3c448ea3e023449908974))
+* **cli:** a message wakes a conversation once, and the courier sends only the line ([90b3a3d](https://github.com/JuicyBenjamin/collagen/commit/90b3a3df05f4544dff2ad5fb69a625b31e43a929))
+* **p2p:** rejoining a room in a running app no longer cuts you off ([6be893a](https://github.com/JuicyBenjamin/collagen/commit/6be893ab8ce1d30c418b53408bf035b87510a37c))
+
 ## [0.23.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.22.0-alpha...p2p-v0.23.0-alpha) (2026-10-25)
 
 
