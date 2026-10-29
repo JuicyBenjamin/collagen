@@ -550,6 +550,13 @@ export interface MergeView {
 
 export type HostWrite = { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
 
+/** A ticket named by id, with its headline and its kind. */
+export interface TicketRef {
+  readonly id: string;
+  readonly title: string;
+  readonly kind: MergeTicket["kind"];
+}
+
 /** A ticket a merge came from, or one that grew into it, as the merge
  *  history names it — one the reader may see. */
 export interface MergeTicket {

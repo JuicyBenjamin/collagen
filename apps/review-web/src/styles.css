@@ -305,7 +305,9 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 .pull-line { display: flex; align-items: center; min-width: 0; overflow: hidden; font-size: 13px; }
 .pull-line > .arrives.inline { min-width: 0; max-width: 100%; overflow: hidden; }
 .pull-line .host-note { max-width: none; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.host-bar { position: relative; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+/* no gap: the panel under the pill floats, and its wrapper, empty in the
+   flow, would push the page down by the gap each time it opens */
+.host-bar { position: relative; display: flex; flex-direction: column; align-items: flex-end; }
 .host-note { color: var(--faint); font-size: 12.5px; max-width: 36ch; text-align: right; }
 .pull-chip { color: var(--dim); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
 .pull-chip:hover { color: var(--accent); border-color: var(--accent); }
@@ -429,6 +431,33 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .line-comment.pending-review { border-left: 3px solid var(--warn); }
 .pending-badge { font-size: 11px; font-weight: 600; color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 0 7px; }
 .review-composer .composer-head { font-size: 13px; }
+/* the tickets a review grew from, a rail down into the review itself */
+.dial-panel:has(.accept-tree) { width: min(540px, calc(100vw - 36px)); }
+.accept-tree { display: grid; gap: 2px; }
+.accept-self, .accept-parent { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.accept-self { margin: 0; }
+.accept-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accept-slot { flex: none; width: 16px; display: flex; justify-content: center; }
+.accept-also { margin-right: auto; align-self: center; color: var(--dim); font-size: 12.5px; }
+/* the approve button's colour, as its outline and words on a faint tint of it */
+.btn.accept-go { background: color-mix(in srgb, var(--kind-review) 14%, var(--panel)); border-color: var(--kind-review); color: var(--kind-review); }
+.btn.accept-go:hover { background: color-mix(in srgb, var(--kind-review) 24%, var(--panel)); border-color: var(--kind-review); }
+.accept-all { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.accept-all:hover { text-decoration: underline; }
+/* branches from the review's icon down to each ticket it grew from */
+.accept-parents { list-style: none; margin: 0 0 0 7px; padding: 0; display: grid; }
+.accept-parents > li { position: relative; padding: 4px 0 0 18px; }
+.accept-parents > li::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; border-left: 2px solid var(--line); }
+.accept-parents > li:last-child::before { bottom: auto; height: calc(50% + 2px); width: 12px; border-bottom: 2px solid var(--line); border-bottom-left-radius: 6px; }
+.accept-parents > li:not(:last-child)::after { content: ""; position: absolute; left: 0; top: calc(50% + 2px); width: 12px; border-top: 2px solid var(--line); }
+.accept-parent { cursor: pointer; }
+.accept-is { color: var(--dim); font-size: 12.5px; white-space: nowrap; }
+.kind-icon.kind-proposal { color: var(--kind-proposal); }
+.kind-icon.kind-plan { color: var(--kind-plan); }
+.kind-icon.kind-task { color: var(--kind-task); }
+.kind-icon.kind-bug { color: var(--kind-bug); }
+.kind-icon.kind-review { color: var(--kind-review); }
+.kind-icon.kind-epic { color: var(--kind-epic); }
 .host-note.left { text-align: left; max-width: none; margin: 0; }
 .moved-note { margin: 6px 0 0; font-size: 12.5px; color: var(--warn); }
 /* the review held back: comments written on another commit, each to keep or delete before it is submitted */

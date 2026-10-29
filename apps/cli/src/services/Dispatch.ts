@@ -5,6 +5,7 @@ import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, i
 import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
+import { openParents } from "../lib/parents";
 import { ticketsOf, withWorked } from "../lib/worked";
 import { MAX_PACKED_BYTES, pack, sliceSince } from "../lib/transcripts";
 import { harnessFor, Harnesses, transcriptFile } from "./Harness";
@@ -285,9 +286,17 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // ticket was filed — handed over now, and not a settle earlier. One
           // instruction to the agent, not two: what to report, then what to do
           const fact = `closed "${merged.goal}" [ticket ${merged.id}] as ${out.outcome === "dropped" ? "dropped (out of its epic's progress)" : "done"}${out.reason ? ` — ${out.reason.replace(/\.$/, "")}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it.`;
+          // what it grew from, still open and theirs: whether to close it too is theirs to say
+          const parents = openParents(merged, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
+          const ask =
+            parents.length > 0
+              ? ` THEN ask them, in one line, whether to close what it grew from too — ${parents.map((parent) => `"${parent.title}" [ticket ${parent.id}]`).join(", ")}, still open — or keep it open; close it (close-ticket) only on their word.`
+              : "";
           const then = merged.whenClosed
-            ? `TELL YOUR USER that the ticket is closed, THEN carry out what it says to do when closed — "${merged.whenClosed}" — which they authorised when they filed it, and tell them what came of that.`
-            : `TELL YOUR USER ONLY THIS: "ticket closed".`;
+            ? `TELL YOUR USER that the ticket is closed, THEN carry out what it says to do when closed — "${merged.whenClosed}" — which they authorised when they filed it, and tell them what came of that.${ask}`
+            : parents.length > 0
+              ? `TELL YOUR USER that the ticket is closed,${ask.replace(/^ THEN/, " then")}`
+              : `TELL YOUR USER ONLY THIS: "ticket closed".`;
           return sent(`${fact} ${then}`);
         }
         case "post-review": {
