@@ -9,6 +9,7 @@ import { StateStore } from "../../services/StateStore";
 import { Updates } from "../../services/Updates";
 import { runtimeAtom } from "../../app/runtime";
 import { aiChoices } from "../../services/Adapters";
+import { Jobs } from "../../services/Jobs";
 
 // Read by the room layout and/or more than one of its sections. Everything
 // room-scoped follows the FOCUSED room — switch rooms and these re-subscribe.
@@ -36,6 +37,13 @@ export const updateStateAtom = runtimeAtom.fn(
     const store = yield* StateStore;
     yield* store.update(update);
   }),
+);
+
+/** The jobs collagen runs the person's AI for, as they change. */
+export const jobsAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return SubscriptionRef.changes((yield* Jobs).views);
+  })),
 );
 
 /** What a person can pick as their AI, in the order the `a` key goes round. */

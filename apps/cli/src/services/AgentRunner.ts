@@ -11,6 +11,7 @@ import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
 import { allow, DeliverAllowed, levelOf, MOCK_PERMIT, tagRouteOf, withDeliver, type Cause } from "../lib/steering";
+import { modelFor } from "../lib/jobs";
 import { listenerFor } from "../lib/worked";
 
 /** How many woken messages are remembered. */
@@ -152,7 +153,8 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
         return null;
       }
       const line = wakeLine({ cwd: homedir(), mcpUrl, serverName: mcpServerName(profile), message: news, sessionId: Option.some(listener.conversation.id), steering: levelOf(state, "work", cause) });
-      const woken = yield* withDeliver(gate.go, harness.wake(listener.conversation.id, listener.socket, line)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+      const model = modelFor(state, "wake", harness.defaultModels);
+      const woken = yield* withDeliver(gate.go, harness.wake(listener.conversation.id, listener.socket, line, model)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
       // what collagen itself spent to wake it, kept beside what its words cost the agents
       if (woken.spent) {
         const at = yield* Clock.currentTimeMillis;

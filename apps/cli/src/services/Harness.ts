@@ -2,9 +2,9 @@ import { homedir } from "node:os";
 import { Context, Layer, type Effect } from "effect";
 import type { FileSystem } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
-import type { Harness as HarnessId } from "@collagen/p2p";
+import type { Harness as HarnessId, JobKind } from "@collagen/p2p";
 import type { Turn } from "../lib/agents";
-import type { DeliverAllowed } from "../lib/steering";
+import type { DeliverAllowed, RunAllowed } from "../lib/steering";
 import type { SessionCost } from "../lib/tokenCost";
 import type { TranscriptLine } from "../lib/transcripts";
 import { claudeCode } from "./harnesses/claudeCode";
@@ -26,6 +26,22 @@ import { codex } from "./harnesses/codex";
 export interface CallRead {
   readonly turn: Turn | null;
   readonly conversation?: string;
+}
+
+/** A job collagen runs this harness for: what to do, with which model, where,
+ *  and the collagen MCP server it may call. */
+export interface Job {
+  readonly prompt: string;
+  readonly model?: string;
+  readonly cwd: string;
+  readonly server: { readonly name: string; readonly url: string };
+}
+
+/** How a job went: whether it finished, what it last said, what it spent. */
+export interface JobDone {
+  readonly ok: boolean;
+  readonly said?: string;
+  readonly spent?: Spent;
 }
 
 /** What a model run collagen made itself spent, as the harness reported it. */
@@ -61,8 +77,14 @@ export interface Harness {
   /** how a wake reaches it, for a person and an agent to read */
   readonly wakesBy: string;
   /** wake `conversation` (reached at `reach`) with one line, in the window the
-   *  person is in — only with steering's permit */
-  readonly wake: (conversation: string, reach: string | undefined, line: string) => Effect.Effect<Woken, never, DeliverAllowed | ChildProcessSpawner.ChildProcessSpawner>;
+   *  person is in, with `model` where waking runs one — only with steering's permit */
+  readonly wake: (conversation: string, reach: string | undefined, line: string, model?: string) => Effect.Effect<Woken, never, DeliverAllowed | ChildProcessSpawner.ChildProcessSpawner>;
+  /** the model each job uses when the person has not chosen one — an alias
+   *  where the harness has them, so it follows the newest */
+  readonly defaultModels: Partial<Record<JobKind, string>>;
+  /** run a job of collagen's: a fresh, headless run of this AI with the
+   *  collagen tools it needs — only with steering's permit */
+  readonly runJob: (job: Job) => Effect.Effect<JobDone, never, RunAllowed | ChildProcessSpawner.ChildProcessSpawner>;
   /** its CLI, and a cheap check (no model call) that it is installed and signed in */
   readonly signIn: { readonly cmd: string; readonly args: ReadonlyArray<string>; readonly loggedIn: (out: string, exitCode: number) => boolean };
   /** what an agent in this harness does to keep hearing the room (watch-room) */

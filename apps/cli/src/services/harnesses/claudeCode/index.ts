@@ -4,6 +4,7 @@ import { sessionFiles } from "../../../lib/tokenCost";
 import { walk } from "../../../lib/transcripts";
 import type { Harness } from "../../Harness";
 import { claudeCallOf, objectOf, text } from "./call";
+import { runJob } from "./job";
 import { callerSocket, courier } from "./reach";
 import { register } from "./register";
 import { readLine } from "./transcript";
@@ -11,8 +12,8 @@ import { readUsage } from "./usage";
 
 // Claude Code, in the terminal or the desktop app: how collagen tells its
 // calls and conversations (./call), reaches and wakes a session (./reach),
-// registers with it (./register), and reads its session logs (./transcript,
-// ./usage). Nothing outside this folder knows any of it.
+// runs a job (./job), registers with it (./register), and reads its session
+// logs (./transcript, ./usage). Nothing outside this folder knows any of it.
 
 /** How often, and how far apart, a call is looked for in the session log. */
 const LOOKS = 12;
@@ -40,6 +41,8 @@ export const claudeCode: Harness = {
   reachOf: callerSocket,
   wakesBy: "a courier tells this conversation in one line",
   wake: courier,
+  defaultModels: { wake: "haiku", research: "sonnet" },
+  runJob,
   signIn: {
     cmd: "claude",
     args: ["auth", "status"],
