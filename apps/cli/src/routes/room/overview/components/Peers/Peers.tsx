@@ -11,9 +11,10 @@ import { aiStatusAtom, identityAtom, membersAtom, rosterAtom, stateAtom } from "
 
 /** Who is in the room, in two lines that never grow: `●` everyone here now,
  *  you first; `○` everyone else — away in another room, or offline. A line
- *  too long for the pane ends in `…`. A name in the warning colour has a
- *  problem (its AI's CLI, its sign-in, another collagen version). enter
- *  opens the people page, where each is a row with the rest. */
+ *  too long for the pane ends in `…`. Names are plain text — the dots say
+ *  who is here — so no colour asks to be decoded; a problem (its AI's CLI,
+ *  its sign-in, another collagen version) is said on the people page, which
+ *  enter opens, each person a row with the rest. */
 export function Peers() {
   const { navigate } = useRouter();
   const people = useRoomPeople();
@@ -72,7 +73,7 @@ function NamesLine({ mark, markColor, people, width, cursor }: { mark: string; m
       <span fg={markColor}>{mark} </span>
       {people.length === 0 ? <span fg={theme.dim}>none</span> : null}
       {people.slice(0, fit.shown).map((person, index) => (
-        <span key={person.key} fg={person.problem ? theme.warn : person.online ? theme.fg : theme.dim}>
+        <span key={person.key} fg={person.online ? theme.fg : theme.dim}>
           {index > 0 ? ", " : ""}
           {names[index]}
         </span>
