@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 
 // What the review page's server functions (src/api.ts) ask of the collagen
@@ -58,7 +58,7 @@ export class ReviewBackend extends Context.Service<
     /** a review the reader filed, closed: accepted as done, or dropped */
     readonly close: (ticketId: string, outcome: "done" | "dropped") => Effect.Effect<HostWrite>;
     /** what a review the reader filed grew from, still open and theirs to close */
-    readonly parents: (ticketId: string) => Effect.Effect<ReadonlyArray<TicketRef>>;
+    readonly parents: (ticketId: string) => Effect.Effect<Parents>;
     /** close, as done, one of those, beside the reader's Accept */
     readonly closeParent: (ticketId: string, parentId: string) => Effect.Effect<HostWrite>;
     /** merging for a review the reader filed: its own setting, its room's, the one in effect */

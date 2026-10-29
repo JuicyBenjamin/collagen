@@ -550,6 +550,13 @@ export interface MergeView {
 
 export type HostWrite = { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
 
+/** What a review the reader filed grew from, still open and theirs, and
+ *  whether their setting has it ticked to close with the review. */
+export interface Parents {
+  readonly tickets: ReadonlyArray<TicketRef>;
+  readonly ticked: boolean;
+}
+
 /** A ticket named by id, with its headline and its kind. */
 export interface TicketRef {
   readonly id: string;

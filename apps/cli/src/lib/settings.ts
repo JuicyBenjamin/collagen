@@ -25,6 +25,13 @@ export const SETTINGS: ReadonlyArray<Setting> = [
     on: "when your agent starts reading a review, its page opens in your browser",
     off: "the review page opens only when you ask (o in the room, or tell your agent)",
   },
+  {
+    key: "alsoCloseParents",
+    default: true,
+    label: "close what a ticket grew from with it",
+    on: "accepting a review, what it grew from is ticked to close with it; your agent closes it too unless you say keep it",
+    off: "nothing is ticked: you tick what to close too, and your agent asks first",
+  },
 ];
 
 /** A switch's value: what was set, or its default. */
