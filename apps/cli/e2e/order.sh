@@ -53,15 +53,18 @@ THIRD_OUT=$(call $A "$SA" ask-review "$J")
 expect "the outcome names the review it may follow, and asks first" "$THIRD_OUT" "base feat/first is the branch of the open review .{1,3}review the first.*ask them first; nothing was set"
 wait_until "…and bob is shown it at once: nothing was set" "review the third" goals $B "$SB"
 
-echo "## the first is answered: the second opens to bob by itself"
+echo "## bob approves the first: the second opens to him at once, handed back as the next"
 J="{\"ticketId\":\"$FIRST\",\"findings\":\"fine\"}"
-expect "bob reviews the first" "$(call $B "$SB" post-review "$J")" "your review is on"
+REVIEWED=$(call $B "$SB" post-review "$J")
+expect "bob reviews the first" "$REVIEWED" "your review is on"
+expect "…and is handed the second as the next to read" "$REVIEWED" "NEXT IN THE STACK.*review the second"
+wait_until "bob is shown the second now, without waiting on alice" "review the second" goals $B "$SB"
+wait_until "…and his step on it arrives" "review the second" call $B "$SB" get-messages "$JT"
+
+echo "## alice addresses the first: her own copy no longer waits"
 wait_until "alice holds bob's review" "review-bob,bob,review,settled" rows $A "$SA" "$FIRST"
-expect "a reader's review alone does not open it: alice has not addressed the first" "$(call $B "$SB" get-tickets '{}' | grep -c 'review the second')" "^0$"
 J="{\"ticketId\":\"$FIRST\",\"stepId\":\"address\",\"result\":\"done\"}"
 expect "alice addresses the first" "$(call $A "$SA" settle-step "$J")" "Every step on this ticket is answered"
-wait_until "bob is shown the second now" "review the second" goals $B "$SB"
-wait_until "…and his step on it arrives" "review the second" call $B "$SB" get-messages "$JT"
 expect "alice's copy no longer waits" "$(rows $A "$SA" "$SECOND" | grep -c waitingOn)" "^0$"
 
 kill_all; summary
