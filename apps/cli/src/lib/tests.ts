@@ -7,8 +7,9 @@ import type { DiffLine, Hunk, TestCase, TestFile } from "@collagen/review-web/da
 // away, the whole test as one hunk. Pure: the diff's hunks of a test file
 // and the file's text at both ends (services/ReviewView reads those).
 
-/** A test file, by its name or its folder. */
-export const isTest = (file: string): boolean => /\.(test|spec)\.[a-z]+$/i.test(file) || /(^|\/)(tests?|__tests__)\//.test(file);
+/** A test file, by its name (`.test` or `.spec` as a part of it, also
+ *  before another: Foo.test.stories.tsx) or its folder. */
+export const isTest = (file: string): boolean => /\.(test|spec)\.[^/]+$/i.test(file) || /(^|\/)(tests?|__tests__)\//.test(file);
 
 /** A test as its file has it: the describes it sits in, its title, and the
  *  lines it spans (1-based, both ends in). */
