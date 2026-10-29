@@ -7,11 +7,11 @@ import { showTab, tab } from "~/testsNow";
  *  — the code's alone when there is nothing else — so what comes under them
  *  stands in the same place whatever the review holds. The second when the
  *  change has a machine drawn, the last when it has tests, counted. */
-export function Tabs(props: { tests: ReadonlyArray<TestFile>; machine: boolean }) {
+export function Tabs(props: { tests: ReadonlyArray<TestFile>; files: number; machine: boolean }) {
   return (
     <div class="tabs" role="tablist">
       <button type="button" role="tab" aria-selected={tab() === "code" ? "true" : "false"} class={{ on: tab() === "code" }} onClick={() => showTab("code")}>
-        Code
+        Code <span class="tab-count">{props.files}</span>
       </button>
       <Show when={props.machine}>
         <button type="button" role="tab" aria-selected={tab() === "machine" ? "true" : "false"} class={{ on: tab() === "machine" }} onClick={() => showTab("machine")}>
@@ -28,12 +28,12 @@ export function Tabs(props: { tests: ReadonlyArray<TestFile>; machine: boolean }
 }
 
 /** The tabs before the diff is read: the code's, how it works when the
- *  review has a machine, and the tests as many as last time. */
-Tabs.Skeleton = function Skeleton(props: { machine: boolean; tests: number }) {
+ *  review has a machine, and the tests — each counted as last time. */
+Tabs.Skeleton = function Skeleton(props: { machine: boolean; tests: number; files: number }) {
   return (
     <div class="tabs sk" aria-hidden="true">
       <button type="button" tabindex={-1} class="on">
-        <Masked>Code</Masked>
+        <Masked>{props.files > 0 ? `Code ${props.files}` : "Code"}</Masked>
       </button>
       <Show when={props.machine}>
         <button type="button" tabindex={-1}>
