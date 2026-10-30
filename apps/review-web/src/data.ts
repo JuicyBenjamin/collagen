@@ -798,9 +798,10 @@ export interface AuditPage {
     readonly collagenTokens: number;
     readonly allTokens: number;
     readonly compactions: number;
-    readonly jobs: number;
-    /** what the harness says the jobs cost, when it says */
-    readonly jobCost: number | null;
+    /** the AI sessions collagen started itself (wakes, research, investigations) */
+    readonly runs: number;
+    /** what those sessions read and wrote, counted exactly; never priced, as a price would be a guess */
+    readonly runTokens: number;
     readonly tickets: number;
     readonly openTickets: number;
   };
@@ -829,7 +830,8 @@ export interface AuditPage {
   readonly harnesses: ReadonlyArray<{ readonly name: string; readonly acts: number }>;
   /** the room's records, by the model of the agent that wrote them */
   readonly models: ReadonlyArray<{ readonly name: string; readonly acts: number }>;
-  readonly jobs: ReadonlyArray<{
+  /** collagen's own runs by kind and model */
+  readonly runs: ReadonlyArray<{
     readonly kind: string;
     readonly model: string;
     readonly runs: number;

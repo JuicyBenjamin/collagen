@@ -20,7 +20,7 @@ const WEEK = 7 * DAY;
 /** A tool counts as growing when its last week's calls are this much bigger. */
 const GROWTH = 1.15;
 
-const JOB_WORDS: Record<OwnRun["why"], string> = {
+const RUN_WORDS: Record<OwnRun["why"], string> = {
   wake: "Wakes",
   research: "Research",
   investigation: "Investigations",
@@ -97,13 +97,12 @@ export const auditPage = (input: AuditInput): AuditPage => {
     .filter((contextBreak) => !contextBreak.at || Date.parse(contextBreak.at) >= since);
   const read = input.sessions.reduce((sum, session) => sum + session.inputTokens, 0);
   const ours = input.sessions.reduce((sum, session) => sum + session.collagenInputTokens, 0);
-  const priced = input.ownRuns.filter((run) => run.costUsd !== undefined);
-  const jobs = [...new Set(input.ownRuns.map((run) => `${run.why} ${run.model ?? ""}`))].map(
+  const runs = [...new Set(input.ownRuns.map((run) => `${run.why} ${run.model ?? ""}`))].map(
     (key) => {
       const these = input.ownRuns.filter((run) => `${run.why} ${run.model ?? ""}` === key);
       const first = these[0]!;
       return {
-        kind: JOB_WORDS[first.why],
+        kind: RUN_WORDS[first.why],
         model: first.model ? (modelOfLabel(`(${modelName(first.model)})`) ?? first.model) : "",
         runs: these.length,
         tokensIn: these.reduce((sum, run) => sum + run.inputTokens, 0),
@@ -151,8 +150,8 @@ export const auditPage = (input: AuditInput): AuditPage => {
       collagenTokens: ours,
       allTokens: read,
       compactions: breaks.length,
-      jobs: input.ownRuns.length,
-      jobCost: priced.length > 0 ? priced.reduce((sum, run) => sum + (run.costUsd ?? 0), 0) : null,
+      runs: input.ownRuns.length,
+      runTokens: input.ownRuns.reduce((sum, run) => sum + run.inputTokens + run.outputTokens, 0),
       tickets: input.tickets.length,
       openTickets: input.tickets.filter((ticket) => closedAs(ticket) === null).length,
     },
@@ -172,7 +171,7 @@ export const auditPage = (input: AuditInput): AuditPage => {
     })),
     harnesses,
     models,
-    jobs,
+    runs,
     compactions: breaks
       .flatMap((contextBreak) =>
         contextBreak.at

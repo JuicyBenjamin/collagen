@@ -4,40 +4,44 @@ import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 import { Pending } from "./Pending";
 
-/** The runs collagen started with the person's AI, by kind and model. */
-export function Jobs(props: { jobs: AuditPage["jobs"]; cost: number | null }) {
-  const top = () => Math.max(1, ...props.jobs.map((job) => job.tokensIn));
+/** The AI sessions collagen started itself, by kind and model, and the
+ *  tokens they read and wrote — counted, never priced: a price would be a guess. */
+export function Runs(props: { runs: AuditPage["runs"]; tokens: number }) {
+  const tokensOf = (run: AuditPage["runs"][number]) => run.tokensIn + run.tokensOut;
+  const top = () => Math.max(1, ...props.runs.map(tokensOf));
   return (
     <section class="audit-panel">
-      <h2>Jobs</h2>
-      <Show when={props.cost !== null}>
-        <p class="audit-sub">${props.cost!.toFixed(2)}</p>
-      </Show>
-      <Show when={props.jobs.length > 0} fallback={<p class="audit-none">None</p>}>
-        <div class="audit-grid audit-jobs" role="table" aria-label="Jobs by kind and model">
+      <h2>Collagen's runs</h2>
+      <p class="audit-sub">Sessions it started itself, {compact(props.tokens)} tokens</p>
+      <Show when={props.runs.length > 0} fallback={<p class="audit-none">None</p>}>
+        <div
+          class="audit-grid audit-runs"
+          role="table"
+          aria-label="Collagen's runs by kind and model"
+        >
           <div class="audit-grid-head" role="row">
-            <span role="columnheader">Job</span>
+            <span role="columnheader">Kind</span>
             <span role="columnheader">Model</span>
-            <span role="columnheader">Tokens in</span>
+            <span role="columnheader">Tokens</span>
             <span role="columnheader" class="audit-number">
               Runs
             </span>
           </div>
-          <For each={props.jobs}>
-            {(job) => (
+          <For each={props.runs}>
+            {(run) => (
               <div class="audit-grid-row" role="row">
-                <span role="cell">{job.kind}</span>
+                <span role="cell">{run.kind}</span>
                 <span role="cell" class="audit-sub audit-flat">
-                  {job.model}
+                  {run.model}
                 </span>
                 <span role="cell" class="audit-share">
                   <span class="audit-track">
-                    <i style={{ width: `${Math.max(1, (job.tokensIn / top()) * 100)}%` }} />
+                    <i style={{ width: `${Math.max(1, (tokensOf(run) / top()) * 100)}%` }} />
                   </span>
-                  {compact(job.tokensIn)}
+                  {compact(tokensOf(run))}
                 </span>
                 <span role="cell" class="audit-number">
-                  {job.runs}
+                  {run.runs}
                 </span>
               </div>
             )}
@@ -48,13 +52,13 @@ export function Jobs(props: { jobs: AuditPage["jobs"]; cost: number | null }) {
   );
 }
 
-Jobs.Skeleton = () => (
-  <PanelSkeleton title="Jobs" pending="$2.12">
-    <div class="audit-grid audit-jobs">
+Runs.Skeleton = () => (
+  <PanelSkeleton title="Collagen's runs" pending="Sessions it started itself, 2.4M tokens">
+    <div class="audit-grid audit-runs">
       <div class="audit-grid-head">
-        <span>Job</span>
+        <span>Kind</span>
         <span>Model</span>
-        <span>Tokens in</span>
+        <span>Tokens</span>
         <span class="audit-number">Runs</span>
       </div>
       <For each={[0, 1, 2]}>
@@ -67,7 +71,7 @@ Jobs.Skeleton = () => (
               <Pending>Claude Sonnet 5.5</Pending>
             </span>
             <span>
-              <Pending>3.4M tokens</Pending>
+              <Pending>3.4M</Pending>
             </span>
             <span class="audit-number">
               <Pending>11</Pending>

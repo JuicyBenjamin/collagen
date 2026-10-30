@@ -56,19 +56,18 @@ function onTicket(sessions: ReadonlyArray<SessionCost>, ticketId: string, days: 
   return [head, toToon({ tools: toolRows(calls) }), toToon({ sessions: touched.map(({ session, calls }) => ({ ai: session.ai, session: name(session), calls: calls.length, tokens: tokensOf(chars(calls)) })) })].join("\n\n");
 }
 
-/** What collagen spent on model runs of its own (couriers waking a
- *  conversation), beside what its words cost the agents. */
+/** What collagen spent on model runs of its own (wakes, research,
+ *  investigations), beside what its words cost the agents: in tokens,
+ *  counted; never in money, which would only be the harness's guess. */
 function ownRunsPart(runs: ReadonlyArray<OwnRun>): string {
   const input = runs.reduce((sum, run) => sum + run.inputTokens, 0);
   const output = runs.reduce((sum, run) => sum + run.outputTokens, 0);
-  const priced = runs.filter((run) => run.costUsd !== undefined);
-  const cost = priced.reduce((sum, run) => sum + (run.costUsd ?? 0), 0);
   const byModel = [...new Set(runs.map((run) => run.model ?? "unknown"))].map((model) => {
     const these = runs.filter((run) => (run.model ?? "unknown") === model);
     return { model, runs: these.length, tokensIn: these.reduce((sum, run) => sum + run.inputTokens, 0), tokensOut: these.reduce((sum, run) => sum + run.outputTokens, 0) };
   });
   return (
-    `collagen's own runs: ${runs.length} wakes · ${compact(input)} tokens in · ${compact(output)} out${priced.length > 0 ? ` · $${cost.toFixed(2)} (the harness's estimate${priced.length < runs.length ? `, for ${priced.length} of them` : ""})` : ""}\n` +
+    `collagen's own runs: ${runs.length} · ${compact(input)} tokens in · ${compact(output)} out\n` +
     toToon({ ownRunsByModel: byModel })
   );
 }

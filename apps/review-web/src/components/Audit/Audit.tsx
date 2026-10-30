@@ -7,7 +7,7 @@ import { Compactions } from "./components/Compactions";
 import { Definitions } from "./components/Definitions";
 import { Growing } from "./components/Growing";
 import { Harnesses } from "./components/Harnesses";
-import { Jobs } from "./components/Jobs";
+import { Runs } from "./components/Runs";
 import { Kinds } from "./components/Kinds";
 import { Models } from "./components/Models";
 import { PerCall } from "./components/PerCall";
@@ -104,7 +104,7 @@ export function Audit(props: { roomId: string }) {
             </div>
             <Compactions compactions={page().compactions} />
             <div class="audit-pair">
-              <Jobs jobs={page().jobs} cost={page().totals.jobCost} />
+              <Runs runs={page().runs} tokens={page().totals.runTokens} />
               <Sessions sessions={page().sessions} />
             </div>
           </div>
@@ -145,7 +145,7 @@ Audit.Skeleton = () => (
     </div>
     <Compactions.Skeleton />
     <div class="audit-pair">
-      <Jobs.Skeleton />
+      <Runs.Skeleton />
       <Sessions.Skeleton />
     </div>
   </div>

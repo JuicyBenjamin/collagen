@@ -26,11 +26,9 @@ export function Stats(props: { totals: AuditPage["totals"] }) {
         <span class="audit-stat-value">{props.totals.compactions}</span>
       </div>
       <div class="audit-stat">
-        <span class="audit-stat-title">Jobs</span>
-        <span class="audit-stat-value">{props.totals.jobs}</span>
-        {props.totals.jobCost !== null && (
-          <span class="audit-stat-desc">${props.totals.jobCost.toFixed(2)}</span>
-        )}
+        <span class="audit-stat-title">Collagen's runs</span>
+        <span class="audit-stat-value">{props.totals.runs}</span>
+        <span class="audit-stat-desc">{compact(props.totals.runTokens)} tokens</span>
       </div>
       <div class="audit-stat">
         <span class="audit-stat-title">Tickets</span>
@@ -43,7 +41,7 @@ export function Stats(props: { totals: AuditPage["totals"] }) {
 
 Stats.Skeleton = () => (
   <div class="audit-stats">
-    <For each={["Tool calls", "Collagen tokens", "Compactions", "Jobs", "Tickets"]}>
+    <For each={["Tool calls", "Collagen tokens", "Compactions", "Collagen's runs", "Tickets"]}>
       {(title) => (
         <div class="audit-stat">
           <span class="audit-stat-title">{title}</span>
