@@ -134,7 +134,8 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       // still waiting again, and they are not news a second time
       const fresh = queued.filter((received) => !(state.woken ?? []).includes(received.message.id));
       if (fresh.length === 0) return null;
-      const news = fresh.at(-1)!.message;
+      const latest = fresh.at(-1)!;
+      const news = latest.message;
       const listener = listenerFor(state, news);
       if (!listener) {
         yield* Effect.log(`→ inbox · ${about} — no conversation of yours listens for it; it waits until your agent pulls it (watch-ticket or adopt-thread links one)`);
@@ -142,9 +143,11 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       }
       const cause: Cause = news.from === news.to ? "mine" : "others";
       // adopting a thread or watching a ticket is the person's yes to it; having worked on one is not
-      const gate = allow(state, "deliver", cause, listener.heard !== "worked");
+      // an investigation's findings come back to its author's conversation as their report steering says
+      const kind = latest.steeredBy ?? "deliver";
+      const gate = allow(state, kind, cause, listener.heard !== "worked");
       if ("held" in gate) {
-        yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: delivery steering is ${STEERING_LABEL[gate.held]}; it waits until your agent pulls it`);
+        yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: ${kind === "report" ? "report" : "delivery"} steering is ${STEERING_LABEL[gate.held]}; it waits until your agent pulls it`);
         return null;
       }
       const harness = harnessFor(harnesses, listener.conversation.ai);
