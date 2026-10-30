@@ -8,7 +8,7 @@ const TONE = {
 export function Verdict(props: { verdict: keyof typeof TONE; text: string }) {
   return (
     <p class="inv-verdict">
-      <span class={["badge badge-soft inv-mark", TONE[props.verdict].badge]}>{TONE[props.verdict].word}</span>
+      <span class={["badge badge-sm badge-soft inv-mark", TONE[props.verdict].badge]}>{TONE[props.verdict].word}</span>
       <strong>{props.text}</strong>
     </p>
   );
