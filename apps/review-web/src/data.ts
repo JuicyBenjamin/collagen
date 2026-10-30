@@ -167,17 +167,37 @@ export interface Show {
 export interface Machine {
   readonly title: string;
   readonly summary: string;
-  readonly sources: ReadonlyArray<{ readonly id: string; readonly name: string; readonly gives: string }>;
-  readonly actors: ReadonlyArray<{ readonly id: string; readonly name: string; readonly starts: string }>;
+  readonly sources: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly gives: string;
+  }>;
+  readonly actors: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly starts: string;
+  }>;
   readonly now: MachineVersion;
   readonly before?: MachineVersion;
 }
 
 /** The machine as one version of the code has it. */
 export interface MachineVersion {
-  readonly states: ReadonlyArray<{ readonly id: string; readonly name: string; readonly shows: string }>;
-  readonly moves: ReadonlyArray<{ readonly from: string; readonly to: string; readonly on: string }>;
-  readonly play: ReadonlyArray<{ readonly from?: string; readonly moves?: ReadonlyArray<{ readonly actor: string; readonly to: string }>; readonly says: string }>;
+  readonly states: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly shows: string;
+  }>;
+  readonly moves: ReadonlyArray<{
+    readonly from: string;
+    readonly to: string;
+    readonly on: string;
+  }>;
+  readonly play: ReadonlyArray<{
+    readonly from?: string;
+    readonly moves?: ReadonlyArray<{ readonly actor: string; readonly to: string }>;
+    readonly says: string;
+  }>;
 }
 
 /** How the reader last finished a review: their verdict, in the host's
@@ -199,7 +219,16 @@ export interface YourReview {
 export interface ReviewPageHead {
   /** `mine`: the reader filed it — theirs to accept or drop; `closed`: it is over;
    *  `yours`: the reader's own finish of it in the room, when there is one */
-  readonly ticket: { readonly id: string; readonly title?: string; readonly goal: string; readonly kind: string; readonly project: string; readonly mine: boolean; readonly closed: boolean; readonly yours?: YourReview };
+  readonly ticket: {
+    readonly id: string;
+    readonly title?: string;
+    readonly goal: string;
+    readonly kind: string;
+    readonly project: string;
+    readonly mine: boolean;
+    readonly closed: boolean;
+    readonly yours?: YourReview;
+  };
   readonly review: {
     readonly summary: string;
     readonly branch?: string;
@@ -213,7 +242,11 @@ export interface ReviewPageHead {
     /** present when the why was inferred, not told */
     readonly assumed?: Assumed;
     /** present once the code's author took it over: whose AI guessed it */
-    readonly claimed?: { readonly guessedBy: string; readonly guessedByName: string; readonly at: number };
+    readonly claimed?: {
+      readonly guessedBy: string;
+      readonly guessedByName: string;
+      readonly at: number;
+    };
     /** how the change works, drawn and played, when its author drew it */
     readonly machine?: Machine;
     /** where the change can be seen running */
@@ -237,7 +270,8 @@ export interface ReviewPageData extends ReviewPageHead {
 
 /** wholeFile(ticketId, file) — the whole file as the review's
  *  branch has it, from the reader's clone, line by line; or why not. */
-export type WholeFileResult = { readonly lines: ReadonlyArray<string> } | { readonly error: string };
+export type WholeFileResult =
+  { readonly lines: ReadonlyArray<string> } | { readonly error: string };
 
 /** sinceViewed(ticketId, file, from) — what changed in one file from
  *  the commit the reader viewed it at to the branch now, as hunks; or why
@@ -278,19 +312,25 @@ export interface Peek {
 }
 
 /** definitionAt(ticketId, file, line, col) */
-export type DefinitionResult = ({ readonly peeks: ReadonlyArray<Peek> } & Reading) | { readonly missing: true } | { readonly error: string };
+export type DefinitionResult =
+  | ({ readonly peeks: ReadonlyArray<Peek> } & Reading)
+  | { readonly missing: true }
+  | { readonly error: string };
 
 /** The server was still reading the project when it answered: what it said
  *  may be incomplete. Said on the page, never shown as if it were the whole
  *  answer, and asked again by the page until it is. */
-export const stillReading = (answer: HoverResult | DefinitionResult): boolean => "partial" in answer && answer.partial === true;
+export const stillReading = (answer: HoverResult | DefinitionResult): boolean =>
+  "partial" in answer && answer.partial === true;
 
 /** How far it had read, when it said — for "reading the project · 40%". */
-export const readSoFar = (answer: HoverResult | DefinitionResult): number | null => ("progress" in answer && typeof answer.progress === "number" ? answer.progress : null);
+export const readSoFar = (answer: HoverResult | DefinitionResult): number | null =>
+  "progress" in answer && typeof answer.progress === "number" ? answer.progress : null;
 
 /** An answer that may change if asked again — partial, or a failure — is
  *  not one to keep. */
-export const final = (answer: HoverResult | DefinitionResult): boolean => !("error" in answer) && !("missing" in answer) && !stillReading(answer);
+export const final = (answer: HoverResult | DefinitionResult): boolean =>
+  !("error" in answer) && !("missing" in answer) && !stillReading(answer);
 
 /** The languages the review page can ask a language server about, each
  *  answered by a tool collagen installs on the reader's click. */
@@ -300,11 +340,19 @@ export type ToolId = "typescript" | "php";
  *  instance (which files it may be asked about) and the page (which words
  *  answer to the pointer, which offer to show). */
 const TOOL_OF_EXTENSION: Readonly<Record<string, ToolId>> = {
-  ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
-  js: "typescript", jsx: "typescript", mjs: "typescript", cjs: "typescript",
-  php: "php", phtml: "php",
+  ts: "typescript",
+  tsx: "typescript",
+  mts: "typescript",
+  cts: "typescript",
+  js: "typescript",
+  jsx: "typescript",
+  mjs: "typescript",
+  cjs: "typescript",
+  php: "php",
+  phtml: "php",
 };
-export const toolOf = (file: string): ToolId | null => TOOL_OF_EXTENSION[file.split(".").pop()?.toLowerCase() ?? ""] ?? null;
+export const toolOf = (file: string): ToolId | null =>
+  TOOL_OF_EXTENSION[file.split(".").pop()?.toLowerCase() ?? ""] ?? null;
 export const toolIds = (): ReadonlyArray<ToolId> => [...new Set(Object.values(TOOL_OF_EXTENSION))];
 
 /** toolState(tool) — a pinned language server the hints need: not
@@ -548,7 +596,8 @@ export interface MergeView {
   readonly effect: MergeFor;
 }
 
-export type HostWrite = { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
+export type HostWrite =
+  { readonly ok: true; readonly comment?: LineComment } | { readonly error: string };
 
 /** What a review the reader filed grew from, still open and theirs, and
  *  whether their setting has it ticked to close with the review. */
@@ -604,7 +653,11 @@ export interface MergeEntry {
 
 /** A project's merges, the latest first — or why they cannot be read. */
 export type ProjectHistory = { readonly project: string } & (
-  | { readonly base: string; readonly merges: ReadonlyArray<MergeEntry>; /** more past these */ readonly more: boolean }
+  | {
+      readonly base: string;
+      readonly merges: ReadonlyArray<MergeEntry>;
+      /** more past these */ readonly more: boolean;
+    }
   | { readonly none: string }
 );
 
@@ -632,10 +685,36 @@ export interface MergeProjects {
 export type AnswerBlockView =
   | { readonly kind: "verdict"; readonly verdict: "yes" | "no" | "partly"; readonly text: string }
   | { readonly kind: "points"; readonly items: ReadonlyArray<string> }
-  | { readonly kind: "facts"; readonly rows: ReadonlyArray<{ readonly label: string; readonly value: string }> }
-  | { readonly kind: "compare"; readonly left: string; readonly right: string; readonly rows: ReadonlyArray<{ readonly what: string; readonly left: boolean; readonly right: boolean }> }
-  | { readonly kind: "ranking"; readonly options: ReadonlyArray<{ readonly name: string; readonly fit: "best" | "good" | "partial" | "poor"; readonly why?: string }> }
-  | { readonly kind: "choices"; readonly options: ReadonlyArray<{ readonly name: string; readonly call: "adopt" | "maybe" | "skip"; readonly why?: string }> };
+  | {
+      readonly kind: "facts";
+      readonly rows: ReadonlyArray<{ readonly label: string; readonly value: string }>;
+    }
+  | {
+      readonly kind: "compare";
+      readonly left: string;
+      readonly right: string;
+      readonly rows: ReadonlyArray<{
+        readonly what: string;
+        readonly left: boolean;
+        readonly right: boolean;
+      }>;
+    }
+  | {
+      readonly kind: "ranking";
+      readonly options: ReadonlyArray<{
+        readonly name: string;
+        readonly fit: "best" | "good" | "partial" | "poor";
+        readonly why?: string;
+      }>;
+    }
+  | {
+      readonly kind: "choices";
+      readonly options: ReadonlyArray<{
+        readonly name: string;
+        readonly call: "adopt" | "maybe" | "skip";
+        readonly why?: string;
+      }>;
+    };
 
 /** How an answer ended, when it is not simply answered. */
 export type AnswerOutcome = "answered" | "not-answerable" | "wrong-question";
@@ -699,7 +778,10 @@ export interface InvestigationPage {
   /** each model that answered, and in how many runs */
   readonly models: ReadonlyArray<{ readonly name: string; readonly runs: number }>;
   /** its goals in their groups, in goal order; a goal in no group stands under none */
-  readonly groups: ReadonlyArray<{ readonly name: string | null; readonly goals: ReadonlyArray<GoalView> }>;
+  readonly groups: ReadonlyArray<{
+    readonly name: string | null;
+    readonly goals: ReadonlyArray<GoalView>;
+  }>;
   /** what only the reader can decide, from every answer */
   readonly questions: ReadonlyArray<QuestionView>;
 }
@@ -722,19 +804,63 @@ export interface AuditPage {
     readonly tickets: number;
     readonly openTickets: number;
   };
-  /** every call of the busiest tools: when, and the tokens it put in the window */
-  readonly perCall: ReadonlyArray<{ readonly tool: string; readonly calls: ReadonlyArray<{ readonly at: string; readonly tokens: number }> }>;
+  /** every collagen call in the period: when, which tool and kind, and the tokens it put in the window */
+  readonly calls: ReadonlyArray<{
+    readonly at: string;
+    readonly tool: string;
+    readonly kind: string;
+    readonly tokens: number;
+  }>;
   /** tools whose calls got bigger: the week before against the last, with weekly averages */
-  readonly growing: ReadonlyArray<{ readonly tool: string; readonly from: number; readonly to: number; readonly weeks: ReadonlyArray<number> }>;
-  readonly tools: ReadonlyArray<{ readonly tool: string; readonly kind: string; readonly calls: number; readonly tokensIn: number; readonly tokensOut: number }>;
+  readonly growing: ReadonlyArray<{
+    readonly tool: string;
+    readonly from: number;
+    readonly to: number;
+    readonly weeks: ReadonlyArray<number>;
+  }>;
+  readonly tools: ReadonlyArray<{
+    readonly tool: string;
+    readonly kind: string;
+    readonly calls: number;
+    readonly tokensIn: number;
+    readonly tokensOut: number;
+  }>;
   /** the room's records, by the harness of the agent that wrote them */
   readonly harnesses: ReadonlyArray<{ readonly name: string; readonly acts: number }>;
   /** the room's records, by the model of the agent that wrote them */
   readonly models: ReadonlyArray<{ readonly name: string; readonly acts: number }>;
-  readonly jobs: ReadonlyArray<{ readonly kind: string; readonly model: string; readonly runs: number; readonly tokensIn: number; readonly tokensOut: number }>;
+  readonly jobs: ReadonlyArray<{
+    readonly kind: string;
+    readonly model: string;
+    readonly runs: number;
+    readonly tokensIn: number;
+    readonly tokensOut: number;
+  }>;
   readonly compactions: ReadonlyArray<{ readonly at: string; readonly collagenTokens: number }>;
-  readonly tickets: ReadonlyArray<{ readonly kind: string; readonly open: number; readonly closed: number }>;
-  readonly steering: ReadonlyArray<{ readonly kind: string; readonly mine: string; readonly others: string }>;
-  readonly sessions: ReadonlyArray<{ readonly id: string; readonly title?: string; readonly harness: string; readonly calls: number; readonly share: number; readonly compactions: number }>;
-  readonly definitions: { readonly tools: number; readonly tokens: number; readonly largest: ReadonlyArray<{ readonly tool: string; readonly tokens: number }> };
+  /** the room's tickets by kind and how each stands: open, done, or dropped */
+  readonly tickets: ReadonlyArray<{
+    readonly kind: string;
+    readonly open: number;
+    readonly done: number;
+    readonly dropped: number;
+  }>;
+  readonly steering: ReadonlyArray<{
+    readonly kind: string;
+    readonly mine: string;
+    readonly others: string;
+  }>;
+  readonly sessions: ReadonlyArray<{
+    readonly id: string;
+    readonly title?: string;
+    readonly harness: string;
+    readonly calls: number;
+    readonly share: number;
+    readonly compactions: number;
+  }>;
+  /** every tool's definition, by kind: what it puts in every session */
+  readonly definitions: ReadonlyArray<{
+    readonly tool: string;
+    readonly kind: string;
+    readonly tokens: number;
+  }>;
 }

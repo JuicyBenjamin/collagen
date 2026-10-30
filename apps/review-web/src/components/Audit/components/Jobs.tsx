@@ -19,20 +19,26 @@ export function Jobs(props: { jobs: AuditPage["jobs"]; cost: number | null }) {
             <span role="columnheader">Job</span>
             <span role="columnheader">Model</span>
             <span role="columnheader">Tokens in</span>
-            <span role="columnheader" class="audit-number">Runs</span>
+            <span role="columnheader" class="audit-number">
+              Runs
+            </span>
           </div>
           <For each={props.jobs}>
             {(job) => (
               <div class="audit-grid-row" role="row">
                 <span role="cell">{job.kind}</span>
-                <span role="cell" class="audit-sub audit-flat">{job.model}</span>
+                <span role="cell" class="audit-sub audit-flat">
+                  {job.model}
+                </span>
                 <span role="cell" class="audit-share">
                   <span class="audit-track">
                     <i style={{ width: `${Math.max(1, (job.tokensIn / top()) * 100)}%` }} />
                   </span>
                   {compact(job.tokensIn)}
                 </span>
-                <span role="cell" class="audit-number">{job.runs}</span>
+                <span role="cell" class="audit-number">
+                  {job.runs}
+                </span>
               </div>
             )}
           </For>

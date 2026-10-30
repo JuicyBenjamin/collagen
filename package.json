@@ -23,6 +23,7 @@
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@effect/tsgo": "catalog:",
+    "@tanstack/intent": "0.5.6",
     "oxlint": "1.76.0",
     "prettier": "catalog:",
     "release-please": "^17.11.2",

@@ -10,20 +10,37 @@ import { PanelSkeleton } from "./PanelSkeleton";
 
 /** Each compaction over time, at the height of collagen's tokens in the session then. */
 export function Compactions(props: { compactions: AuditPage["compactions"] }) {
-  const rows = createMemo(() => props.compactions.map((compaction, index) => ({ id: `${index}`, time: Date.parse(compaction.at), tokens: compaction.collagenTokens })));
+  const rows = createMemo(() =>
+    props.compactions.map((compaction, index) => ({
+      id: `${index}`,
+      time: Date.parse(compaction.at),
+      tokens: compaction.collagenTokens,
+    })),
+  );
   const definition = createMemo(() =>
     defineChart({
-      marks: [ruleY([0], { strokeOpacity: 0.4 }), dot(rows(), { x: "time", y: "tokens", r: 5, fill: "var(--color-secondary)" })],
+      marks: [
+        ruleY([0], { strokeOpacity: 0.4 }),
+        dot(rows(), { x: "time", y: "tokens", r: 5, fill: "var(--color-secondary)" }),
+      ],
       scales: {
         x: { scale: scaleLinear, axis: { ticks: { format: (value: number) => dateOf(value) } } },
-        y: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(value) } } },
+        y: {
+          scale: scaleLinear,
+          nice: true,
+          grid: true,
+          axis: { ticks: { format: (value: number) => compact(value) } },
+        },
       },
       tooltip: {
         use: tooltip,
-        items: [
-          { id: "when", label: "When", text: (point) => dateTimeOf(point.datum.time) },
-          { id: "tokens", label: "Collagen tokens", text: (point) => point.datum.tokens.toLocaleString() },
-        ],
+        content: ([point]) =>
+          point
+            ? {
+                title: dateTimeOf(point.datum.time),
+                rows: [{ label: "", value: `${point.datum.tokens.toLocaleString()} tokens` }],
+              }
+            : { rows: [] },
       },
     }),
   );
@@ -38,4 +55,10 @@ export function Compactions(props: { compactions: AuditPage["compactions"] }) {
   );
 }
 
-Compactions.Skeleton = () => <PanelSkeleton title="Compactions" sub="Collagen's tokens in the session when it compacted" height={240} />;
+Compactions.Skeleton = () => (
+  <PanelSkeleton
+    title="Compactions"
+    sub="Collagen's tokens in the session when it compacted"
+    height={240}
+  />
+);

@@ -11,13 +11,37 @@ import { PanelSkeleton } from "./PanelSkeleton";
 import { Pending } from "./Pending";
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
+/** The tools worth a pick: the ones with the most tokens, called often enough to have a trend. */
+const PICKS = 5;
+const ENOUGH = 5;
 
 /** Every call of one tool as a dot, its weekly average as a line: a tool
  *  that starts putting more into the window shows as the line climbing. */
-export function PerCall(props: { perCall: AuditPage["perCall"] }) {
+export function PerCall(props: { calls: AuditPage["calls"] }) {
+  const tools = createMemo(() => {
+    const totals = new Map<string, { calls: number; tokens: number }>();
+    for (const call of props.calls) {
+      const total = totals.get(call.tool) ?? { calls: 0, tokens: 0 };
+      totals.set(call.tool, { calls: total.calls + 1, tokens: total.tokens + call.tokens });
+    }
+    return [...totals]
+      .filter(([, total]) => total.calls >= ENOUGH)
+      .sort((a, b) => b[1].tokens - a[1].tokens)
+      .slice(0, PICKS)
+      .map(([tool]) => tool);
+  });
   const [picked, setPicked] = createSignal<string | null>(null);
-  const shown = createMemo(() => props.perCall.find((tool) => tool.tool === picked()) ?? props.perCall.find((tool) => tool.tool === "get-tickets") ?? props.perCall[0]);
-  const calls = createMemo(() => (shown()?.calls ?? []).map((call, index) => ({ id: `${index}`, time: Date.parse(call.at), tokens: call.tokens })));
+  const shown = createMemo(
+    () =>
+      tools().find((tool) => tool === picked()) ??
+      tools().find((tool) => tool === "get-tickets") ??
+      tools()[0],
+  );
+  const calls = createMemo(() =>
+    props.calls
+      .filter((call) => call.tool === shown())
+      .map((call, index) => ({ id: `${index}`, time: Date.parse(call.at), tokens: call.tokens })),
+  );
   const weeks = createMemo(() => {
     const all = calls();
     if (all.length === 0) return [];
@@ -27,30 +51,59 @@ export function PerCall(props: { perCall: AuditPage["perCall"] }) {
       const week = Math.floor((call.time - start) / WEEK);
       buckets.set(week, [...(buckets.get(week) ?? []), call.tokens]);
     }
-    return [...buckets].sort(([a], [b]) => a - b).map(([week, tokens]) => ({ id: `w${week}`, time: start + week * WEEK + WEEK / 2, tokens: Math.round(tokens.reduce((sum, value) => sum + value, 0) / tokens.length) }));
+    return [...buckets]
+      .sort(([a], [b]) => a - b)
+      .map(([week, tokens]) => ({
+        id: `w${week}`,
+        time: start + week * WEEK + WEEK / 2,
+        tokens: Math.round(tokens.reduce((sum, value) => sum + value, 0) / tokens.length),
+      }));
   });
   const average = (from: number, to: number) => {
     const these = calls().filter((call) => call.time >= from && call.time < to);
-    return these.length === 0 ? null : Math.round(these.reduce((sum, call) => sum + call.tokens, 0) / these.length);
+    return these.length === 0
+      ? null
+      : Math.round(these.reduce((sum, call) => sum + call.tokens, 0) / these.length);
   };
   const lastWeek = () => average(Date.now() - WEEK, Infinity);
   const before = () => average(0, Date.now() - WEEK);
   const definition = createMemo(() =>
     defineChart({
       marks: [
-        dot(calls(), { x: "time", y: "tokens", r: 3.5, fill: "var(--color-primary)", fillOpacity: 0.4 }),
-        decorative(lineY(weeks(), { x: "time", y: "tokens", stroke: "var(--color-primary)", strokeWidth: 2.5 })),
+        dot(calls(), {
+          x: "time",
+          y: "tokens",
+          r: 3.5,
+          fill: "var(--color-primary)",
+          fillOpacity: 0.4,
+        }),
+        decorative(
+          lineY(weeks(), {
+            x: "time",
+            y: "tokens",
+            stroke: "var(--color-primary)",
+            strokeWidth: 2.5,
+          }),
+        ),
       ],
       scales: {
         x: { scale: scaleLinear, axis: { ticks: { format: (value: number) => dateOf(value) } } },
-        y: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(value) } } },
+        y: {
+          scale: scaleLinear,
+          nice: true,
+          grid: true,
+          axis: { ticks: { format: (value: number) => compact(value) } },
+        },
       },
       tooltip: {
         use: tooltip,
-        items: [
-          { id: "when", label: "When", text: (point) => dateTimeOf(point.datum.time) },
-          { id: "tokens", label: "Tokens", text: (point) => point.datum.tokens.toLocaleString() },
-        ],
+        content: ([point]) =>
+          point
+            ? {
+                title: dateTimeOf(point.datum.time),
+                rows: [{ label: "", value: `${point.datum.tokens.toLocaleString()} tokens` }],
+              }
+            : { rows: [] },
       },
     }),
   );
@@ -59,10 +112,14 @@ export function PerCall(props: { perCall: AuditPage["perCall"] }) {
       <div class="audit-panel-head">
         <h2>Tokens per call</h2>
         <div class="join">
-          <For each={props.perCall}>
+          <For each={tools()}>
             {(tool) => (
-              <button type="button" class={["btn btn-xs join-item", { "btn-primary": tool.tool === shown()?.tool }]} onClick={() => setPicked(tool.tool)}>
-                {tool.tool}
+              <button
+                type="button"
+                class={["btn btn-xs join-item", { "btn-primary": tool === shown() }]}
+                onClick={() => setPicked(tool)}
+              >
+                {tool}
               </button>
             )}
           </For>
@@ -78,7 +135,11 @@ export function PerCall(props: { perCall: AuditPage["perCall"] }) {
           <dd>{lastWeek() === null ? "none" : `${compact(lastWeek()!)} tokens a call`}</dd>
         </div>
       </dl>
-      <Chart definition={definition()} ariaLabel={`${shown()?.tool ?? ""} tokens per call over time`} height={280} />
+      <Chart
+        definition={definition()}
+        ariaLabel={`${shown() ?? ""} tokens per call over time`}
+        height={280}
+      />
     </section>
   );
 }

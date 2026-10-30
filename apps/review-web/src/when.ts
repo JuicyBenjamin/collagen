@@ -14,12 +14,20 @@ const TIME: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
 const shown = (instant: number, withTime: boolean): string => {
   if (typeof Temporal === "undefined") {
     const thisYear = new Date(instant).getFullYear() === new Date().getFullYear();
-    return new Intl.DateTimeFormat(undefined, { ...DAY, ...(thisYear ? {} : { year: "numeric" }), ...(withTime ? TIME : {}) }).format(instant);
+    return new Intl.DateTimeFormat(undefined, {
+      ...DAY,
+      ...(thisYear ? {} : { year: "numeric" }),
+      ...(withTime ? TIME : {}),
+    }).format(instant);
   }
   const zone = Temporal.Now.timeZoneId();
   const at = Temporal.Instant.fromEpochMilliseconds(instant).toZonedDateTimeISO(zone);
   const thisYear = at.year === Temporal.Now.zonedDateTimeISO(zone).year;
-  return at.toLocaleString(undefined, { ...DAY, ...(thisYear ? {} : { year: "numeric" }), ...(withTime ? TIME : {}) });
+  return at.toLocaleString(undefined, {
+    ...DAY,
+    ...(thisYear ? {} : { year: "numeric" }),
+    ...(withTime ? TIME : {}),
+  });
 };
 
 /** The reader's date for an instant: "3 Oct", "3 Oct 2025". */
@@ -35,4 +43,18 @@ export const ago = (instant: number, now: number): string => {
   if (mins < 60) return `${mins} min ago`;
   if (mins < 24 * 60) return `${Math.round(mins / 60)} h ago`;
   return dateOf(instant);
+};
+
+/** The reader's own calendar day for an instant, in their zone: its key
+ *  ("2026-10-31", for grouping) and its weekday (1 Monday … 7 Sunday). */
+export const dayOf = (instant: number): { readonly key: string; readonly weekday: number } => {
+  if (typeof Temporal === "undefined") {
+    const local = new Date(instant);
+    const key = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, "0")}-${String(local.getDate()).padStart(2, "0")}`;
+    return { key, weekday: ((local.getDay() + 6) % 7) + 1 };
+  }
+  const at = Temporal.Instant.fromEpochMilliseconds(instant).toZonedDateTimeISO(
+    Temporal.Now.timeZoneId(),
+  );
+  return { key: at.toPlainDate().toString(), weekday: at.dayOfWeek };
 };

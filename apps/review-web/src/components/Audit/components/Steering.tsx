@@ -1,78 +1,136 @@
-import { For } from "solid-js";
+import { createMemo } from "solid-js";
+import { curveLinearClosed } from "d3-shape";
+import { defineChart } from "@tanstack/charts";
+import { angleGrid, polar, radialArea, radialGrid } from "@tanstack/charts/polar";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { scalePoint } from "@tanstack/charts/scales/point";
+import { tooltip } from "@tanstack/charts/tooltip";
+import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
-import { Pending } from "./Pending";
+import { PanelSkeleton } from "./PanelSkeleton";
 
-const KIND_WORDS: Record<string, string> = { work: "Work", host: "Repo host", deliver: "Delivery", run: "Jobs", investigate: "Starting investigations", report: "Reporting findings" };
-/** How far collagen may go on its own, as filled steps of three: none for
- *  not chosen or never, then ask first, act then tell, just do it. */
-const STEPS: Record<string, number> = { "not chosen": 0, never: 0, "ask first": 1, "act, then tell": 2, "just do it": 3 };
+const KIND_WORDS: Record<string, string> = {
+  work: "Work",
+  host: "Repo host",
+  deliver: "Delivery",
+  run: "Jobs",
+  investigate: "Investigating",
+  report: "Reporting",
+};
+/** How far collagen may go on its own, from nothing to all the way. */
+const STEPS: Record<string, number> = {
+  "not chosen": 0,
+  never: 0,
+  "ask first": 1,
+  "act, then tell": 2,
+  "just do it": 3,
+};
+const RINGS: Record<number, string> = { 1: "Ask first", 2: "Act, then tell", 3: "Just do it" };
+const WHO = { Yours: "var(--color-primary)", "Others'": "var(--color-warning)" } as const;
 const word = (level: string) => level[0]!.toUpperCase() + level.slice(1);
 
-/** One level: its steps of autonomy, then its words — quiet when nothing is allowed. */
-function Level(props: { level: string }) {
-  const steps = () => STEPS[props.level] ?? 0;
-  return (
-    <span class={["audit-level", { quiet: steps() === 0 }]}>
-      <span class="audit-steps" aria-hidden="true">
-        <For each={[1, 2, 3]}>{(step) => <i class={{ on: step <= steps() }} />}</For>
-      </span>
-      {word(props.level)}
-    </span>
-  );
-}
-
-/** The person's steering: how far collagen may go on its own, for their
- *  acts and for others', by kind. */
+/** The person's steering as two shapes on one radar: how far collagen may
+ *  go on its own for each kind, for their acts and for others'. The further
+ *  out, the more it does without asking. */
 export function Steering(props: { steering: AuditPage["steering"] }) {
+  const kinds = () => props.steering.map((row) => KIND_WORDS[row.kind] ?? row.kind);
+  const points = createMemo(() =>
+    props.steering.flatMap((row) => [
+      {
+        id: `${row.kind} yours`,
+        kind: KIND_WORDS[row.kind] ?? row.kind,
+        who: "Yours" as const,
+        level: row.mine,
+        step: STEPS[row.mine] ?? 0,
+      },
+      {
+        id: `${row.kind} others`,
+        kind: KIND_WORDS[row.kind] ?? row.kind,
+        who: "Others'" as const,
+        level: row.others,
+        step: STEPS[row.others] ?? 0,
+      },
+    ]),
+  );
+  const definition = createMemo(() =>
+    defineChart({
+      marks: [
+        polar({
+          radiusRatio: 0.75,
+          scales: {
+            angle: { scale: scalePoint<string>().domain(kinds()), wrap: true },
+            radius: { scale: scaleLinear().domain([0, 3]) },
+          },
+          guides: [
+            radialGrid({
+              values: [1, 2, 3],
+              shape: "polygon",
+              labels: true,
+              format: (value) => RINGS[value as number] ?? "",
+              labelFontSize: 10,
+              labelAngle: Math.PI / 6,
+            }),
+            angleGrid({ labels: true, labelFontSize: 12 }),
+          ],
+          marks: [
+            radialArea(points(), {
+              angle: "kind",
+              radius: "step",
+              z: "who",
+              color: "who",
+              key: "id",
+              curve: curveLinearClosed,
+              fillOpacity: 0.18,
+              stroke: (point) => WHO[point.who],
+              strokeWidth: 2,
+            }),
+          ],
+        }),
+      ],
+      scales: { x: null, y: null },
+      color: { domain: Object.keys(WHO), range: Object.values(WHO) },
+      tooltip: {
+        use: tooltip,
+        content: ([point]) => {
+          const row = point?.datum as { kind?: string; who?: string; level?: string } | undefined;
+          return row?.kind
+            ? { title: row.kind, rows: [{ label: "", value: word(row.level!) }] }
+            : { rows: [] };
+        },
+      },
+    }),
+  );
   return (
-    <section class="audit-panel audit-steering-panel">
+    <section class="audit-panel">
       <h2>Steering</h2>
-      <div class="audit-grid audit-steering" role="table" aria-label="Steering by kind">
-        <div class="audit-grid-head" role="row">
-          <span role="columnheader" />
-          <span role="columnheader">Your acts</span>
-          <span role="columnheader">Others' acts</span>
-        </div>
-        <For each={props.steering}>
-          {(row) => (
-            <div class="audit-grid-row" role="row">
-              <span role="cell">{KIND_WORDS[row.kind] ?? row.kind}</span>
-              <span role="cell">
-                <Level level={row.mine} />
-              </span>
-              <span role="cell">
-                <Level level={row.others} />
-              </span>
-            </div>
-          )}
-        </For>
+      <p class="audit-sub">How far collagen goes on its own</p>
+      <div class="audit-legend">
+        <span>
+          <i style={{ background: WHO.Yours }} />
+          Your acts
+        </span>
+        <span>
+          <i style={{ background: WHO["Others'"] }} />
+          Others' acts
+        </span>
       </div>
+      <Chart
+        definition={definition()}
+        ariaLabel="How far collagen goes on its own for each kind, for your acts and others'"
+        height={340}
+      />
     </section>
   );
 }
 
 Steering.Skeleton = () => (
-  <section class="audit-panel audit-steering-panel">
-    <h2>Steering</h2>
-    <div class="audit-grid audit-steering">
-      <div class="audit-grid-head">
-        <span />
-        <span>Your acts</span>
-        <span>Others' acts</span>
-      </div>
-      <For each={Object.values(KIND_WORDS)}>
-        {(kind) => (
-          <div class="audit-grid-row">
-            <span>{kind}</span>
-            <span>
-              <Pending>Act, then tell</Pending>
-            </span>
-            <span>
-              <Pending>Not chosen</Pending>
-            </span>
-          </div>
-        )}
-      </For>
-    </div>
-  </section>
+  <PanelSkeleton
+    title="Steering"
+    sub="How far collagen goes on its own"
+    legend={[
+      { label: "Your acts", colour: WHO.Yours },
+      { label: "Others' acts", colour: WHO["Others'"] },
+    ]}
+    height={340}
+  />
 );
