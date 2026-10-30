@@ -33,8 +33,22 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
   );
   const ends = createMemo(() =>
     rows().flatMap((row) => [
-      { id: `${row.tool} before`, tool: row.tool, when: "Three weeks before", tokens: row.from },
-      { id: `${row.tool} last`, tool: row.tool, when: "Last week", tokens: row.to },
+      {
+        id: `${row.tool} before`,
+        tool: row.tool,
+        from: row.from,
+        to: row.to,
+        when: "Three weeks before",
+        tokens: row.from,
+      },
+      {
+        id: `${row.tool} last`,
+        tool: row.tool,
+        from: row.from,
+        to: row.to,
+        when: "Last week",
+        tokens: row.to,
+      },
     ]),
   );
   const top = () => Math.max(1, ...rows().map((row) => row.to));
@@ -90,9 +104,11 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
         content: ([point]) =>
           point
             ? {
-                title: point.datum.when,
                 rows: [
-                  { label: "", value: `${point.datum.tokens.toLocaleString()} tokens a call` },
+                  {
+                    label: "",
+                    value: `${point.datum.from.toLocaleString()} to ${point.datum.to.toLocaleString()} tokens a call`,
+                  },
                 ],
               }
             : { rows: [] },

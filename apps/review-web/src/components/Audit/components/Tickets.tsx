@@ -41,6 +41,17 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
       }),
     ),
   ]);
+  /** How one kind's tickets ended up, the parts that have any. */
+  const splitOf = (kind: string): ReadonlyArray<string> =>
+    flows()
+      .filter((flow) => flow.kind === kind)
+      .map((flow) => `${flow.tickets} ${flow.outcome.toLowerCase()}`);
+  /** Which kinds make up an outcome, the most first. */
+  const kindsOf = (outcome: string): ReadonlyArray<string> =>
+    flows()
+      .filter((flow) => flow.outcome === outcome)
+      .sort((a, b) => b.tickets - a.tickets)
+      .map((flow) => `${flow.kind} ${flow.tickets}`);
   const definition = createMemo(() =>
     defineChart({
       marks: [
@@ -100,22 +111,26 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
         content: ([point]) => {
           const shown = point?.datum as
             | {
-                value?: number;
-                data?: { kind?: string; outcome?: string; tickets?: number; label?: string };
+                data?: {
+                  kind?: string;
+                  outcome?: string;
+                  tickets?: number;
+                  id?: string;
+                  side?: string;
+                };
               }
             | undefined;
-          if (shown?.data?.outcome)
+          const data = shown?.data;
+          // a band: its count is drawn only as its width
+          if (data?.outcome && data.kind)
             return {
-              title: shown.data.kind,
-              rows: [
-                { label: "", value: `${shown.data.tickets} ${shown.data.outcome.toLowerCase()}` },
-              ],
+              title: data.kind,
+              rows: [{ label: "", value: `${data.tickets} ${data.outcome.toLowerCase()}` }],
             };
-          if (shown?.data?.label)
-            return {
-              title: shown.data.label,
-              rows: [{ label: "", value: `${shown.value} tickets` }],
-            };
+          if (data?.side === "kind" && data.id)
+            return { rows: splitOf(data.id).map((line) => ({ label: "", value: line })) };
+          if (data?.side === "outcome" && data.id)
+            return { rows: kindsOf(data.id).map((line) => ({ label: "", value: line })) };
           return { rows: [] };
         },
       },

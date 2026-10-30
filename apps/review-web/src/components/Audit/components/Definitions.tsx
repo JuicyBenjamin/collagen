@@ -7,14 +7,26 @@ import { Ranked } from "./Ranked";
 const SHOWN = 10;
 
 /** What collagen's tool definitions put into every session's window, loaded
- *  when it starts and read again with each reply, used or not: the largest. */
-export function Definitions(props: { definitions: AuditPage["definitions"] }) {
+ *  when it starts and read again with each reply, used or not: the largest.
+ *  Hovering one says how often it was called, so a large one seldom used stands out. */
+export function Definitions(props: {
+  definitions: AuditPage["definitions"];
+  tools: AuditPage["tools"];
+}) {
   const rows = createMemo(() =>
     props.definitions
       .slice(0, SHOWN)
       .map((definition) => ({ name: definition.tool, value: definition.tokens })),
   );
   const total = () => props.definitions.reduce((sum, definition) => sum + definition.tokens, 0);
+  const called = (name: string) => {
+    const calls = props.tools.find((tool) => tool.tool === name)?.calls ?? 0;
+    return [
+      calls === 0
+        ? "Not called in this period"
+        : `Called ${calls.toLocaleString()} ${calls === 1 ? "time" : "times"}`,
+    ];
+  };
   return (
     <section class="audit-panel">
       <h2>Tool definitions</h2>
@@ -24,7 +36,7 @@ export function Definitions(props: { definitions: AuditPage["definitions"] }) {
       <Ranked
         rows={rows()}
         label={compact}
-        says={(value) => `${value.toLocaleString()} tokens`}
+        details={called}
         ariaLabel="The largest tool definitions, in tokens"
       />
     </section>
