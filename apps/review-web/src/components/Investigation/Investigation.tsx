@@ -66,7 +66,7 @@ export function Investigation(props: { ticketId: string }) {
 
 /** The page before its read is in: its header and two goals, words masked. */
 Investigation.Skeleton = () => (
-  <div class="wrap">
+  <div class="wrap sk" role="status" aria-busy="true" aria-label="Reading the investigation">
     <nav />
     <main class="inv-main">
       <header class="inv-header">
