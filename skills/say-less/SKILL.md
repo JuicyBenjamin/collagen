@@ -26,6 +26,16 @@ explaining is the goal, not a risk.
   subtitle at most. The title is "Collagen as a shell around Delta".
 - **Plain words for how tickets relate.** Never "grew into", "grew from" or
   "grown": say "follow-up", "came from", "relations".
+- **A title names what is measured, in the reader's words.** "Tool calls",
+  "Tokens in and out", "Harnesses", "Compactions" — never a metaphor ("who
+  does the work", "what the tools cost to carry") or a sentence about the
+  app ("what collagen did in Collagen").
+- **No subtitle that repeats what is already there.** Not the chart ("which
+  tools agents call most" over a bar of tool calls), not the legend ("open
+  and closed" over an Open/Closed legend), not the title in more words. A
+  subtitle only adds a fact the chart lacks ("15 runs, $2.12").
+- **Plain nouns over invented phrases.** Sessions, not "conversations that
+  acted in this room"; jobs, not "what collagen ran itself".
 - **No dot separators on the web.** " · " between things is for the TUI,
   where space is short. On a page, layout separates them: columns, labels,
   lines of their own. A row of dots reads as AI-made.
@@ -56,3 +66,4 @@ need instructions — but what an agent is told to tell the person is a line.
 - [ ] Does it explain something the reader did not ask about?
 - [ ] Does it claim something about a person that is only a guess?
 - [ ] On the web: any " · "? Any title that is really the question?
+- [ ] Does every title name what is measured? Does any subtitle say what the chart or legend already says?
