@@ -6,8 +6,11 @@ import { sankeyDiagram } from "@tanstack/charts/network/sankey";
 import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
-import { OUTCOME_COLOUR, OUTCOMES, ticketColour } from "../kinds";
+import { OUTCOME_COLOUR, OUTCOMES } from "../kinds";
 import { PanelSkeleton } from "./PanelSkeleton";
+
+/** The room for the names either side of the flow; the kinds' start on the panel's edge. */
+const LABELS = 112;
 
 /** The room's tickets flowing from their kind to how they ended up: each
  *  band as wide as its tickets, so where the work goes reads at a glance. */
@@ -26,7 +29,7 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
     ...props.tickets.map((row) => ({
       id: row.kind,
       label: row.kind,
-      colour: ticketColour(row.kind),
+      colour: "var(--viz-context)",
       side: "kind" as const,
     })),
     ...OUTCOMES.filter((outcome) => flows().some((flow) => flow.outcome === outcome)).map(
@@ -52,7 +55,7 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
           align: "justify",
           nodeWidth: 10,
           nodePadding: 10,
-          inset: { left: 96, right: 96, top: 4, bottom: 4 },
+          inset: { left: LABELS, right: LABELS, top: 4, bottom: 4 },
           marks: ({ nodes: placed, links: bands }) =>
             [
               link(bands, {
@@ -77,10 +80,10 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
                 color: "key",
               }),
               text(placed, {
-                x: (node) => (node.data.side === "kind" ? node.x0 - 8 : node.x1 + 8),
+                x: (node) => (node.data.side === "kind" ? node.x0 - LABELS : node.x1 + 8),
                 y: "y",
                 text: (node) => `${node.data.label} ${node.value}`,
-                anchor: (node) => (node.data.side === "kind" ? "end" : "start"),
+                anchor: "start",
                 key: "key",
                 fill: "currentColor",
                 fontSize: 12,

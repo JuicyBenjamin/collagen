@@ -5,49 +5,41 @@ import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
-import { KIND_COLOUR, kindWord } from "../kinds";
 import { PanelSkeleton } from "./PanelSkeleton";
 
-/** Where collagen's tokens go: every tool a tile the size of its tokens in
- *  and out, grouped and coloured by what kind of tool it is. */
+/** A tool smaller than this share of all the tokens joins "Other", so every
+ *  tile shown is big enough to name. */
+const SMALLEST = 0.02;
+
+/** Where collagen's tokens go: every tool a tile the size of its tokens in and out. */
 export function Tokens(props: { tools: AuditPage["tools"] }) {
-  const rows = createMemo(() =>
-    props.tools
-      .filter((tool) => tool.tokensIn + tool.tokensOut > 0)
-      .map((tool) => ({
-        name: `${kindWord(tool.kind)}/${tool.tool}`,
-        tool: tool.tool,
-        kind: tool.kind,
-        tokens: tool.tokensIn + tool.tokensOut,
-      })),
-  );
-  const kindOf = createMemo(
-    () =>
-      new Map(
-        props.tools.flatMap((tool) => [
-          [tool.tool, tool.kind] as const,
-          [kindWord(tool.kind), tool.kind] as const,
-        ]),
-      ),
-  );
-  const kinds = createMemo(() => [...new Set(rows().map((row) => row.kind))]);
+  const total = () => props.tools.reduce((sum, tool) => sum + tool.tokensIn + tool.tokensOut, 0);
+  const rows = createMemo(() => {
+    const all = props.tools
+      .map((tool) => ({ name: tool.tool, tokens: tool.tokensIn + tool.tokensOut }))
+      .filter((row) => row.tokens > 0);
+    const big = all.filter((row) => row.tokens >= total() * SMALLEST);
+    const rest = all
+      .filter((row) => row.tokens < total() * SMALLEST)
+      .reduce((sum, row) => sum + row.tokens, 0);
+    return [...big, ...(rest > 0 ? [{ name: "Other", tokens: rest }] : [])];
+  });
   const definition = createMemo(() =>
     defineChart({
       marks: [
         treemap(rows(), {
           path: "name",
-          delimiter: "/",
           value: "tokens",
-          color: (node) => kindOf().get(node.name) ?? "other",
-          label: (node) => node.id.split("/").at(-1) ?? "",
-          inset: 1,
-          labelFill: "var(--panel)",
+          fill: (node) => (node.name === "Other" ? "var(--viz-context)" : "var(--viz-1)"),
+          label: (node) => `${node.name} ${compact(node.value)}`,
+          labelFill: "#ffffff",
           labelFontWeight: 600,
+          inset: 1,
           stroke: "var(--panel)",
+          strokeWidth: 2,
         }),
       ],
       scales: { x: null, y: null },
-      color: { domain: kinds(), range: kinds().map((kind) => KIND_COLOUR[kind] ?? "var(--dim)") },
       tooltip: {
         use: tooltip,
         content: ([point]) => {
@@ -65,15 +57,8 @@ export function Tokens(props: { tools: AuditPage["tools"] }) {
   return (
     <section class="audit-panel">
       <h2>Where the tokens go</h2>
-      <p class="audit-sub">
-        {compact(props.tools.reduce((sum, tool) => sum + tool.tokensIn + tool.tokensOut, 0))} tokens
-        in and out, by tool
-      </p>
-      <Chart
-        definition={definition()}
-        ariaLabel="Tokens in and out by tool, grouped by kind"
-        height={360}
-      />
+      <p class="audit-sub">{compact(total())} tokens in and out, by tool</p>
+      <Chart definition={definition()} ariaLabel="Tokens in and out by tool" height={320} />
     </section>
   );
 }
@@ -81,7 +66,7 @@ export function Tokens(props: { tools: AuditPage["tools"] }) {
 Tokens.Skeleton = () => (
   <PanelSkeleton
     title="Where the tokens go"
-    pending="1.2M tokens in and out, by tool"
-    height={360}
+    pending="1.0M tokens in and out, by tool"
+    height={320}
   />
 );

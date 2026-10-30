@@ -9,6 +9,7 @@ import { Growing } from "./components/Growing";
 import { Harnesses } from "./components/Harnesses";
 import { Jobs } from "./components/Jobs";
 import { Kinds } from "./components/Kinds";
+import { Models } from "./components/Models";
 import { PerCall } from "./components/PerCall";
 import { Sessions } from "./components/Sessions";
 import { Share } from "./components/Share";
@@ -85,18 +86,21 @@ export function Audit(props: { roomId: string }) {
               <PerCall calls={page().calls} />
               <Growing growing={page().growing} />
             </div>
-            <Spread calls={page().calls} />
             <div class="audit-pair">
               <Tokens tools={page().tools} />
+              <Spread calls={page().calls} />
+            </div>
+            <div class="audit-pair">
               <Kinds tools={page().tools} />
-            </div>
-            <div class="audit-pair">
-              <Harnesses harnesses={page().harnesses} models={page().models} />
-              <Steering steering={page().steering} />
-            </div>
-            <div class="audit-pair">
-              <Tickets tickets={page().tickets} />
               <Definitions definitions={page().definitions} />
+            </div>
+            <div class="audit-pair">
+              <Harnesses harnesses={page().harnesses} />
+              <Models models={page().models} />
+            </div>
+            <div class="audit-pair">
+              <Steering steering={page().steering} />
+              <Tickets tickets={page().tickets} />
             </div>
             <Compactions compactions={page().compactions} />
             <div class="audit-pair">
@@ -123,18 +127,21 @@ Audit.Skeleton = () => (
       <PerCall.Skeleton />
       <Growing.Skeleton />
     </div>
-    <Spread.Skeleton />
     <div class="audit-pair">
       <Tokens.Skeleton />
+      <Spread.Skeleton />
+    </div>
+    <div class="audit-pair">
       <Kinds.Skeleton />
+      <Definitions.Skeleton />
     </div>
     <div class="audit-pair">
       <Harnesses.Skeleton />
-      <Steering.Skeleton />
+      <Models.Skeleton />
     </div>
     <div class="audit-pair">
+      <Steering.Skeleton />
       <Tickets.Skeleton />
-      <Definitions.Skeleton />
     </div>
     <Compactions.Skeleton />
     <div class="audit-pair">

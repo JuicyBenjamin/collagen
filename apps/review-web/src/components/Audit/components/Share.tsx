@@ -47,7 +47,7 @@ export function Share(props: { totals: AuditPage["totals"] }) {
         }),
       ],
       scales: { x: null, y: null },
-      color: { domain: ["collagen", "rest"], range: ["var(--color-primary)", "var(--line)"] },
+      color: { domain: ["collagen", "rest"], range: ["var(--viz-1)", "var(--viz-empty)"] },
     });
   });
   return (
