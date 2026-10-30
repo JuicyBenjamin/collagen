@@ -1,4 +1,5 @@
-import { closedAs, IMPORTANCE, isTake, type Assumed, type BugReport, type InvestigationBrief, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork, type Ticket } from "@collagen/p2p";
+import type { InvestigationBrief, ReviewDelta } from "@collagen/p2p";
+import { closedAs, IMPORTANCE, isTake, type Assumed, type BugReport, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork, type Ticket } from "@collagen/p2p";
 import type { YourReview } from "@collagen/review-web/data";
 import { actedBy } from "./agents";
 
@@ -82,8 +83,9 @@ export interface ReviewInput {
   /** A bug report, whole or in part, and the optional fields withdrawn. */
   readonly bug?: Partial<BugReport>;
   readonly retireBug?: ReadonlyArray<string>;
-  /** An investigation's brief, whole or in part. */
-  readonly investigation?: Partial<InvestigationBrief>;
+  /** An investigation's brief, whole or in part, and the goals withdrawn. */
+  readonly investigation?: ReviewDelta["investigation"];
+  readonly retireGoals?: ReadonlyArray<string>;
   /** A review's units, and the ids withdrawn — how its code reads. */
   readonly units?: ReadonlyArray<unknown>;
   readonly retireUnits?: ReadonlyArray<string>;
@@ -128,7 +130,11 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
     const brief = input.investigation ?? {};
     if (!amending && blank(brief.question)) return "failed: pass the question — what is to be found out, in your user's words. It is the one thing an investigation always has.";
     if (brief.outcome !== undefined && blank(brief.findings)) return "failed: an outcome needs its findings — the answer, or why there is none (not answerable, the wrong question)";
-    const moved = Object.keys(brief).length > 0 || decisions.length > 0 || forks.length > 0 || !blank(input.summary);
+    for (const goal of brief.goals ?? []) {
+      if (blank(goal.ask)) return "failed: every goal needs its 'ask' — what is to be found out";
+      if ((goal.then ?? []).some((follow) => blank(follow.if) || blank(follow.ask))) return `failed: a follow-up on the goal "${goal.ask}" needs both 'if' (what would have to be found) and 'ask' (the question to file then)`;
+    }
+    const moved = Object.keys(brief).length > 0 || (input.retireGoals?.length ?? 0) > 0 || decisions.length > 0 || forks.length > 0 || !blank(input.summary);
     if (amending && !moved) return "failed: nothing to amend — pass what changed: the question, what is known or ruled out, or the findings";
   }
   if (!amending && kind !== "proposal" && kind !== "bug" && kind !== "investigation" && blank(input.summary)) {
@@ -266,11 +272,16 @@ export const OUTCOME_WORDS = {
 } as const;
 
 /** An investigation as a reader gets it: the question, then what narrows
- *  it, then, once it is over, how it ended and what was found. */
+ *  it and the goals it splits into, then, once it is over, how it ended and
+ *  what was found. */
 export const investigationRows = (brief: InvestigationBrief) => ({
   question: brief.question,
   ...(brief.known ? { known: brief.known } : {}),
   ...(brief.ruledOut ? { ruledOut: brief.ruledOut } : {}),
+  ...(brief.goals && brief.goals.some((goal) => !goal.withdrawn)
+    ? { goals: brief.goals.filter((goal) => !goal.withdrawn).map((goal) => `${goal.id}: ${goal.ask}${goal.group ? ` [group ${goal.group}]` : ""}${(goal.then ?? []).map((follow) => ` — if ${follow.if}, investigate: ${follow.ask}`).join("")}`).join("\n") }
+    : {}),
+  ...(brief.pace ? { pace: brief.pace } : {}),
   ...(brief.outcome ? { outcome: OUTCOME_WORDS[brief.outcome] } : {}),
   ...(brief.findings ? { findings: brief.findings } : {}),
   ...(brief.evidence && brief.evidence.length > 0 ? { evidence: brief.evidence.join("; ") } : {}),

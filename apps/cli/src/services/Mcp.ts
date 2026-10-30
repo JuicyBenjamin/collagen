@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { statSync } from "node:fs";
 import { createServer } from "node:http";
 import { basename, resolve } from "node:path";
@@ -10,7 +11,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, InvestigationPace, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -45,7 +46,7 @@ import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
-import { JOB_KINDS, JOB_LABEL, jobLimitOf, modelFor, withModel } from "../lib/jobs";
+import { investigationOf, JOB_KINDS, JOB_LABEL, jobLimitOf, modelFor, withModel, type InvestigationRun } from "../lib/jobs";
 import { allow, KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
 import { actingWith } from "../lib/agents";
@@ -424,6 +425,7 @@ export const Investigate = Tool.make("investigate", {
     "File an INVESTIGATION: a question nobody can answer yet — what is possible, which of these, why does this happen — put to the room before anyone plans or proposes anything. Only when your user says so (\"investigate this\", \"file it as an investigation\") — never on your own initiative. It can grow out of any ticket: pass 'from' with the ticket the question came up on (a plan that hit an unknown, a bug nobody can explain), and when it is answered the findings reach that ticket's people.",
     KIND_RULE,
     "'question' is the one required field: what is to be found out, in your user's words. 'title' is the headline every list shows — a few words, 60 characters at most, the question itself (\"Why peers stay apart after a restart\"); required when filing. 'goal' is the line beneath it; it defaults to the question's first sentence. 'known' is what is known already, 'ruledOut' what is ruled out and not to be looked into again. 'decisions' and 'forks' are optional; 'peers' 0 to many, exactly the names your user said; 'from', 'after' and 'whenClosed' as elsewhere.",
+    "GOALS (optional, only what your user lists): without them the question is the one goal. Each goal is an 'ask' — one thing to find out. Goals sharing a 'group' name are checked together by one AI run; a goal with no group gets a run of its own. 'then' on a goal is your user's own 'if this, then that': [{if, ask}] — when the answer bears out 'if', the run files a new investigation asking 'ask', from this one. 'pace': one-by-one (each run starts when the last is done and reads what it found) or all-at-once; left out, your user's setting investigationsAtOnce decides. Amending: repeating a goal's id corrects it, new goals are added (and start as steering allows), 'retireGoals' withdraws by id.",
     "Readers give a BLIND FIRST TAKE on the question alone: their agent hands them the question, they say what they think the answer is or how they would find out (post-review), and only then does what is known and ruled out open to them. 'research' sends your user's own AI to look into it; what it finds comes back as a take.",
     "WHETHER THEIR AI STARTS ON IT is your user's steering for investigations (set-steering investigate): not chosen, it does not; ask first, the answer tells you to ask them; act then tell, or just do it, it starts as the investigation is filed. One asked of someone else (peers) starts nothing here: their own steering decides on their side. 'run: false' files it without starting anything, whatever the steering says — when your user says to just file it.",
     "ANSWERING IT (investigate with 'ticketId'): when your user has the answer, pass 'outcome' — answered, not-answerable (there is no answer to be had) or wrong-question (what should be asked instead goes in the findings) — with 'findings', the answer or why there is none, and 'evidence': what it rests on (links, file:line, measurements). Then close-ticket. What follows (a proposal, a plan) is filed with 'from' this investigation, so its readers see the findings beside it.",
@@ -437,6 +439,9 @@ export const Investigate = Tool.make("investigate", {
     outcome: Schema.optional(InvestigationOutcome),
     findings: Schema.optional(Schema.String),
     evidence: Schema.optional(Schema.Array(Schema.String)),
+    goals: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String), ask: Schema.String, group: Schema.optional(Schema.String), then: Schema.optional(Schema.Array(GoalFollowUp)) }))),
+    retireGoals: Schema.optional(Schema.Array(Schema.String)),
+    pace: Schema.optional(InvestigationPace),
     run: Schema.optional(Schema.Boolean),
   }),
   success: Schema.String,
@@ -521,12 +526,14 @@ export const PostReview = Tool.make("post-review", {
   description: [
     "Put your user's review of a review ticket on that ticket — what they think of the change, in their words. For a review they were asked for AND for one they were not: anyone in the room may read a review ticket, and each reader's review lands on a step of their own, so nobody takes anything from anyone. Posting again revises your user's own review.",
     "Only when your user has said what they think — never your own reading of the code, and never a summary you produced on your own initiative. Read the why first (review-context) so the review answers the reasons and not just the diff. It goes out as you call it, like everything else that leaves this machine, and shows in your user's outbox; set 'failed' when they are rejecting the change, 'comment' when they only say something about it and approve nothing (left out, a review that is not failed approves it).",
+    "On an INVESTIGATION, 'answers' says what was found goal by goal (goal ids from review-context; 'q' when it has no goals of its own): each an 'outcome' (answered, not-answerable, wrong-question), 'findings', 'evidence', and 'spawned' — the ids of investigations filed from it. A later take keeps the goals it does not answer.",
   ].join("\n"),
   parameters: Schema.Struct({
     ticketId: Schema.String,
     findings: Schema.String,
     failed: Schema.optional(Schema.Boolean),
     comment: Schema.optional(Schema.Boolean),
+    answers: Schema.optional(Schema.Array(GoalAnswer)),
   }),
   success: Schema.String,
 });
@@ -1114,6 +1121,9 @@ const makeHandlers = Effect.gen(function* () {
         outcome?: InvestigationOutcome;
         findings?: string;
         evidence?: ReadonlyArray<string>;
+        goals?: ReadonlyArray<{ readonly id?: string; readonly ask: string; readonly group?: string; readonly then?: ReadonlyArray<GoalFollowUp> }>;
+        retireGoals?: ReadonlyArray<string>;
+        pace?: InvestigationPace;
         /** investigate: false files it without starting the person's AI, whatever their steering says */
         run?: boolean;
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string>; readonly usesOf?: string }>;
@@ -1162,9 +1172,21 @@ const makeHandlers = Effect.gen(function* () {
                 ...(input.outcome ? { outcome: input.outcome } : {}),
                 ...(input.findings?.trim() ? { findings: input.findings.trim() } : {}),
                 ...(input.evidence && input.evidence.length > 0 ? { evidence: input.evidence.map((item) => item.trim()).filter((item) => item.length > 0) } : {}),
+                ...(input.goals && input.goals.length > 0
+                  ? {
+                      goals: input.goals.map((goal) => ({
+                        ...(goal.id ? { id: goal.id } : {}),
+                        ask: goal.ask.trim(),
+                        ...(goal.group?.trim() ? { group: goal.group.trim() } : {}),
+                        ...(goal.then && goal.then.length > 0 ? { then: goal.then.map((follow) => ({ if: follow.if.trim(), ask: follow.ask.trim() })) } : {}),
+                      })),
+                    }
+                  : {}),
+                ...(input.pace ? { pace: input.pace } : {}),
               }
             : undefined;
-        const bugMoves = (bug !== undefined && Object.keys(bug).length > 0) || retireBug !== undefined || (investigation !== undefined && Object.keys(investigation).length > 0);
+        const retireGoals = kind === "investigation" && input.retireGoals && input.retireGoals.length > 0 ? input.retireGoals : undefined;
+        const bugMoves = (bug !== undefined && Object.keys(bug).length > 0) || retireBug !== undefined || (investigation !== undefined && Object.keys(investigation).length > 0) || retireGoals !== undefined;
         // a review's units: how its code reads, one thing at a time
         const units = kind === "review" && input.units && input.units.length > 0 ? input.units.map((unit) => ({ ...(unit.id ? { id: unit.id } : {}), title: unit.title.trim(), what: (unit.what ?? "").trim(), where: unit.where.map((location) => location.trim()).filter((location) => location.length > 0), ...(unit.usesOf?.trim() ? { usesOf: unit.usesOf.trim() } : {}) })) : undefined;
         const retireUnits = kind === "review" && input.retireUnits && input.retireUnits.length > 0 ? input.retireUnits : undefined;
@@ -1197,6 +1219,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(bug !== undefined && Object.keys(bug).length > 0 ? { bug } : {}),
           ...(retireBug ? { retireBug } : {}),
           ...(investigation !== undefined && Object.keys(investigation).length > 0 ? { investigation } : {}),
+          ...(retireGoals ? { retireGoals } : {}),
           ...(units ? { units } : {}),
           ...(retireUnits ? { retireUnits } : {}),
           ...(machine !== undefined ? { machine } : {}),
@@ -1324,7 +1347,13 @@ const makeHandlers = Effect.gen(function* () {
           // the merge override is the author's own, kept on their machine
           if (kind === "review" && input.merge !== undefined && !told.startsWith("failed")) yield* store.update((state) => withMergeFor(state, { ticket: input.ticketId! }, input.merge ?? null));
           const clone = unitsMove && !told.startsWith("failed") ? roomProjects(yield* store.get, roomId).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase()) : undefined;
-          return clone ? told + (yield* unitCoverageNote(clone.path, review)) : told;
+          // goals added to an investigation start as filing one does
+          const before = new Set((existing?.investigation?.goals ?? []).map((goal) => goal.id));
+          const added = kind === "investigation" && !told.startsWith("failed") ? (review.investigation?.goals ?? []).filter((goal) => !before.has(goal.id)).map((goal) => goal.id) : [];
+          const project = roomProjects(yield* store.get, roomId).find((candidate) => sameName(candidate.name, ticket.project));
+          const started =
+            added.length > 0 ? yield* startOnFiling(roomId, revised, investigationOf(revised, [review], yield* SubscriptionRef.get(room.tickets)), project?.path ?? homedir(), named, input.run, added) : "";
+          return (clone ? told + (yield* unitCoverageNote(clone.path, review)) : told) + started;
         }
 
         // a new review: who is asked (0 to many), which project, and the why
@@ -1474,7 +1503,8 @@ const makeHandlers = Effect.gen(function* () {
         if (kind === "review" && input.merge && !filed.startsWith("failed")) yield* store.update((state) => withMergeFor(state, { ticket: ticketId }, input.merge ?? null));
         const coverage = units && !filed.startsWith("failed") ? yield* unitCoverageNote(projectPath, review) : "";
         // an investigation filed: whether the person's AI starts on it is their steering's call
-        const started = kind === "investigation" && !filed.startsWith("failed") ? yield* startOnFiling(roomId, inEpic, projectPath, asked, input.run) : "";
+        const started =
+          kind === "investigation" && !filed.startsWith("failed") ? yield* startOnFiling(roomId, inEpic, investigationOf(inEpic, [review], new Map([...tickets, [inEpic.id, inEpic]])), projectPath, asked, input.run) : "";
         return under.length > 0 && !filed.startsWith("failed")
           ? `${filed}${coverage}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
           : filed + coverage + started;
@@ -1483,7 +1513,7 @@ const makeHandlers = Effect.gen(function* () {
     /** An investigation the person filed, and their AI: started now, offered,
      *  or left, as their steering for investigations says — never when it
      *  is asked of someone else, or when they said to just file it. */
-    const startOnFiling = (roomId: string, ticket: Ticket, projectPath: string, asked: ReadonlyArray<string>, run: boolean | undefined) =>
+    const startOnFiling = (roomId: string, ticket: Ticket, investigation: InvestigationRun, projectPath: string, asked: ReadonlyArray<string>, run: boolean | undefined, goals?: ReadonlyArray<string>) =>
       Effect.gen(function* () {
         if (run === false) return `\nFiled without starting your user's AI (run: false). research starts it whenever they ask.`;
         if (asked.length > 0) return `\nAsked of ${asked.join(", ")}: whether their AI looks into it is their own steering's call. Your user's AI was not started; research starts it if they want their own answer too.`;
@@ -1492,7 +1522,7 @@ const makeHandlers = Effect.gen(function* () {
           return `\nYour user's steering for starting their AI on an investigation is not chosen, so nothing was started. Ask them once, in a line, how far collagen may go (set-steering kind investigate: never, ask first, act then tell, just do it).`;
         if (level === "never") return `\nNothing was started: your user's steering for investigations is never. research starts their AI whenever they ask.`;
         if (level === "ask") return `\nASK YOUR USER, in one line, whether to send their AI to find out now: their steering for investigations is ask first. On their yes, call research with this ticketId.`;
-        const said = yield* jobs.research({ roomId, ticket, cwd: projectPath });
+        const said = yield* jobs.research({ roomId, ticket, cwd: projectPath, investigation, ...(goals ? { goals } : {}) });
         if (said.startsWith("failed")) return `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`;
         return level === "act" ? `\nTheir steering for investigations is act, then tell: ${said} Tell your user, in one line, that their AI is on it.` : `\n${said} (their steering for investigations: just do it).`;
       });
@@ -1903,7 +1933,7 @@ const makeHandlers = Effect.gen(function* () {
       propose: (input: Parameters<typeof fileJudged>[1]) => fileJudged("proposal", input),
       "report-bug": (input: Parameters<typeof fileJudged>[1]) => fileJudged("bug", input),
       investigate: (input: Parameters<typeof fileJudged>[1]) => fileJudged("investigation", input),
-      "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean; comment?: boolean }) {
+      "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean; comment?: boolean; answers?: ReadonlyArray<GoalAnswer> }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ticket = all.get(input.ticketId);
@@ -1914,6 +1944,13 @@ const makeHandlers = Effect.gen(function* () {
           return `failed: "${ticket.goal}" is a task, not a review, plan or proposal — settle a step your user owns with settle-step, or weigh in with send-to-peer (pass ticketId)`;
         }
         if (input.findings.trim().length === 0) return "failed: pass what your user actually said about the change";
+        if (input.answers && input.answers.length > 0) {
+          if (ticket.kind !== "investigation") return "failed: 'answers' are an investigation's — on this ticket, say it in 'findings'";
+          const brief = (yield* SubscriptionRef.get(room.reviews)).find((review) => review.ticketId === input.ticketId)?.investigation;
+          const known = new Set(goalsOf(brief ?? { question: ticket.goal }).map((goal) => goal.id));
+          const stray = input.answers.find((answer) => !known.has(answer.goal));
+          if (stray) return `failed: this investigation has no goal "${stray.goal}" — its goals are ${[...known].join(", ")} (review-context)`;
+        }
         const peers = yield* SubscriptionRef.get(room.roster);
         const members = yield* SubscriptionRef.get(room.members);
         const author =
@@ -1924,7 +1961,7 @@ const makeHandlers = Effect.gen(function* () {
           roomId,
           to: author,
           title: `${ticket.goal} · your ${ticket.kind === "review" ? "review" : "take"}`,
-          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}) },
+          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}), ...(input.answers && input.answers.length > 0 ? { answers: input.answers } : {}) },
         });
         if (input.failed || input.comment || told.startsWith("failed")) return told;
         // an approval opens what was stacked on this ticket to your user: the
