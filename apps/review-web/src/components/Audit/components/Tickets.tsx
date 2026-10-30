@@ -6,6 +6,7 @@ import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
 import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** The room's tickets by kind, open and closed stacked. */
 export function Tickets(props: { tickets: AuditPage["tickets"] }) {
@@ -38,3 +39,5 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
     </section>
   );
 }
+
+Tickets.Skeleton = () => <PanelSkeleton title="Tickets" height={175} />;

@@ -1,4 +1,6 @@
+import { For } from "solid-js";
 import type { AuditPage } from "~/data";
+import { Masked } from "~/components/Masked";
 import { compact } from "../numbers";
 
 /** The headline numbers, a word each and their figure. */
@@ -33,3 +35,23 @@ export function Stats(props: { totals: AuditPage["totals"] }) {
     </div>
   );
 }
+
+Stats.Skeleton = () => (
+  <div class="audit-stats">
+    <For each={["Tool calls", "Collagen tokens", "Compactions", "Jobs", "Tickets"]}>
+      {(title) => (
+        <div class="audit-stat">
+          <span class="audit-stat-title">
+            <Masked>{title}</Masked>
+          </span>
+          <span class="audit-stat-value">
+            <Masked>1,000</Masked>
+          </span>
+          <span class="audit-stat-desc">
+            <Masked>37 sessions</Masked>
+          </span>
+        </div>
+      )}
+    </For>
+  </div>
+);

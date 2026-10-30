@@ -5,6 +5,7 @@ import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact, day } from "../numbers";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** Each compaction over time, at the height of collagen's tokens in the session then. */
 export function Compactions(props: { compactions: AuditPage["compactions"] }) {
@@ -29,3 +30,5 @@ export function Compactions(props: { compactions: AuditPage["compactions"] }) {
     </section>
   );
 }
+
+Compactions.Skeleton = () => <PanelSkeleton title="Compactions" height={372} lines={1} />;

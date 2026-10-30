@@ -1,5 +1,6 @@
 import { For } from "solid-js";
 import type { AuditPage } from "~/data";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** The busiest sessions: their calls, collagen's share of their tokens, their compactions. */
 export function Sessions(props: { sessions: AuditPage["sessions"] }) {
@@ -42,3 +43,5 @@ export function Sessions(props: { sessions: AuditPage["sessions"] }) {
     </section>
   );
 }
+
+Sessions.Skeleton = () => <PanelSkeleton title="Sessions" height={427} />;

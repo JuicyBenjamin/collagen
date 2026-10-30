@@ -6,6 +6,7 @@ import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** How many tokens each tool's definition takes, the largest first. */
 export function Definitions(props: { definitions: AuditPage["definitions"] }) {
@@ -30,3 +31,5 @@ export function Definitions(props: { definitions: AuditPage["definitions"] }) {
     </section>
   );
 }
+
+Definitions.Skeleton = () => <PanelSkeleton title="Tool definition size" height={393} lines={1} />;

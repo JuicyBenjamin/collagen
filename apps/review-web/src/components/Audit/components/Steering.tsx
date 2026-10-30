@@ -1,5 +1,6 @@
 import { For } from "solid-js";
 import type { AuditPage } from "~/data";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 const KIND_WORDS: Record<string, string> = { work: "Work", host: "Repo host", deliver: "Delivering to your sessions", run: "Jobs", investigate: "Starting investigations", report: "Reporting findings" };
 const TONE: Record<string, string> = { "not chosen": "badge-ghost", never: "badge-ghost", "ask first": "badge-info", "act, then tell": "badge-warning", "just do it": "badge-success" };
@@ -37,3 +38,5 @@ export function Steering(props: { steering: AuditPage["steering"] }) {
     </section>
   );
 }
+
+Steering.Skeleton = () => <PanelSkeleton title="Steering" height={207} />;

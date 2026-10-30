@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** Tools whose calls got bigger last week, most first, each with its weekly trend. */
 export function Growing(props: { growing: AuditPage["growing"] }) {
@@ -36,3 +37,5 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
     </section>
   );
 }
+
+Growing.Skeleton = () => <PanelSkeleton title="Growing" height={396} lines={1} />;

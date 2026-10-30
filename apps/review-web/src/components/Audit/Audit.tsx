@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, Errored, For } from "solid-js";
 import { lasting } from "~/lasting";
 import { overSocket } from "~/liveSocket";
 import { Arrives } from "~/components/Arrives";
-import { Masked } from "~/components/Masked";
 import { Compactions } from "./components/Compactions";
 import { Definitions } from "./components/Definitions";
 import { Growing } from "./components/Growing";
@@ -63,6 +62,7 @@ export function Audit(props: { roomId: string }) {
       </header>
       <Errored fallback={(error) => <p class="failed">{error() instanceof Error ? (error() as Error).message : String(error())}</p>}>
         <Arrives skeleton={() => <Audit.Skeleton />}>
+          <div class="audit-body">
           <Stats totals={page().totals} />
           <div class="audit-pair audit-pair-wide">
             <PerCall perCall={page().perCall} />
@@ -85,40 +85,38 @@ export function Audit(props: { roomId: string }) {
             <Sessions sessions={page().sessions} />
             <Definitions definitions={page().definitions} />
           </div>
+          </div>
         </Arrives>
       </Errored>
     </main>
   );
 }
 
-/** The page before its first read: the numbers' row and two panels, masked. */
+/** The page before its first read: every panel's own skeleton, where and
+ *  as tall as the panel will be. */
 Audit.Skeleton = () => (
-  <>
-    <div class="audit-stats">
-      <For each={[0, 1, 2, 3, 4]}>
-        {() => (
-          <div class="audit-stat">
-            <span class="audit-stat-title">
-              <Masked>Tool calls</Masked>
-            </span>
-            <span class="audit-stat-value">
-              <Masked>1,426</Masked>
-            </span>
-          </div>
-        )}
-      </For>
+  <div class="audit-body sk" role="status" aria-busy="true" aria-label="Counting">
+    <Stats.Skeleton />
+    <div class="audit-pair audit-pair-wide">
+      <PerCall.Skeleton />
+      <Growing.Skeleton />
     </div>
     <div class="audit-pair">
-      <section class="audit-panel">
-        <h2>
-          <Masked>Tool calls</Masked>
-        </h2>
-      </section>
-      <section class="audit-panel">
-        <h2>
-          <Masked>Tokens in and out</Masked>
-        </h2>
-      </section>
+      <ToolCalls.Skeleton />
+      <InOut.Skeleton />
     </div>
-  </>
+    <div class="audit-pair">
+      <Harnesses.Skeleton />
+      <Jobs.Skeleton />
+    </div>
+    <Compactions.Skeleton />
+    <div class="audit-pair">
+      <Tickets.Skeleton />
+      <Steering.Skeleton />
+    </div>
+    <div class="audit-pair">
+      <Sessions.Skeleton />
+      <Definitions.Skeleton />
+    </div>
+  </div>
 );

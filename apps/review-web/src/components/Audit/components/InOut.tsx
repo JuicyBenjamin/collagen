@@ -7,6 +7,7 @@ import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** Tokens in and out per tool, in to the left and out to the right of one line. */
 export function InOut(props: { tools: AuditPage["tools"] }) {
@@ -40,3 +41,5 @@ export function InOut(props: { tools: AuditPage["tools"] }) {
     </section>
   );
 }
+
+InOut.Skeleton = () => <PanelSkeleton title="Tokens in and out" height={258} />;

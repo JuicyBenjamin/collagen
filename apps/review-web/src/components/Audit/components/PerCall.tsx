@@ -6,6 +6,7 @@ import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact, day } from "../numbers";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
@@ -73,3 +74,5 @@ export function PerCall(props: { perCall: AuditPage["perCall"] }) {
     </section>
   );
 }
+
+PerCall.Skeleton = () => <PanelSkeleton title="Tokens per call" height={430} />;
