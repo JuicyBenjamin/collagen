@@ -11,7 +11,8 @@ const SUB = "A usual call of each tool";
 
 /** How much one call of each tool usually puts in the window: the middle
  *  call of each, so one huge call does not make a tool look heavy. Hovering
- *  a tool gives how many calls and the smallest and largest of them. */
+ *  a tool gives how many calls, where the middle half of them falls around
+ *  that usual one, and the largest. */
 export function Spread(props: { calls: AuditPage["calls"] }) {
   const byTool = createMemo(() => {
     const tokens = new Map<string, Array<number>>();
@@ -26,11 +27,15 @@ export function Spread(props: { calls: AuditPage["calls"] }) {
       .sort((a, b) => b.value - a.value)
       .slice(0, SHOWN),
   );
-  const range = (name: string) => {
+  // the row shows the middle call; its hover says how far the calls around it spread
+  const spread = (name: string) => {
     const sizes = byTool().get(name) ?? [];
+    const at = (fraction: number) =>
+      sizes[Math.min(sizes.length - 1, Math.floor(sizes.length * fraction))] ?? 0;
     return [
       `${sizes.length.toLocaleString()} calls`,
-      `${compact(sizes[0] ?? 0)} to ${compact(sizes.at(-1) ?? 0)} tokens`,
+      `Half between ${compact(at(0.25))} and ${compact(at(0.75))}`,
+      `Largest ${compact(sizes.at(-1) ?? 0)}`,
     ];
   };
   return (
@@ -40,7 +45,7 @@ export function Spread(props: { calls: AuditPage["calls"] }) {
       <Ranked
         rows={rows()}
         label={compact}
-        details={range}
+        details={spread}
         ariaLabel="Tokens in a usual call of each tool"
       />
     </section>
