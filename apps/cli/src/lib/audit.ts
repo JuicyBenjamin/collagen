@@ -111,11 +111,11 @@ export const auditPage = (input: AuditInput): AuditPage => {
     sessions: [...input.sessions]
       .sort((a, b) => b.calls.length - a.calls.length)
       .slice(0, 10)
-      .map((session) => ({ id: session.file.replace(/^.*\//, "").replace(/\.jsonl$/, "").slice(0, 8), harness: input.harnessName(session.ai), calls: session.calls.length, share: session.inputTokens === 0 ? 0 : session.collagenInputTokens / session.inputTokens, compactions: session.breaks.length })),
+      .map((session) => ({ id: session.file.replace(/^.*\//, "").replace(/\.jsonl$/, "").slice(0, 8), ...(session.title ? { title: session.title } : {}), harness: input.harnessName(session.ai), calls: session.calls.length, share: session.inputTokens === 0 ? 0 : session.collagenInputTokens / session.inputTokens, compactions: session.breaks.length })),
     definitions: {
       tools: input.definitions.length,
       tokens: tokensOf(definitionChars),
-      largest: [...input.definitions].sort((a, b) => b.chars - a.chars).slice(0, 10).map((definition) => ({ tool: definition.name, tokens: tokensOf(definition.chars) })),
+      largest: [...input.definitions].sort((a, b) => b.chars - a.chars).slice(0, 12).map((definition) => ({ tool: definition.name, tokens: tokensOf(definition.chars) })),
     },
   };
 };

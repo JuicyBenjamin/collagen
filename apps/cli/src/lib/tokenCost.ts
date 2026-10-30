@@ -128,6 +128,8 @@ export interface SessionCost {
   /** the harness whose session it is (services/Harness) */
   readonly ai: string;
   readonly file: string;
+  /** what the person calls it, when its log says: its title, else its first ask */
+  readonly title?: string;
   readonly calls: ReadonlyArray<Call>;
   /** Model replies (Claude) or steps (Codex) whose usage the log records. */
   readonly replies: number;
@@ -171,6 +173,8 @@ export class Reader {
   private inWindow = 0; // collagen chars in the window now
   private activity = false; // anything since the last break
   replies = 0;
+  /** the session's name as its harness keeps it */
+  title: string | null = null;
   inputTokens = 0;
   outputTokens = 0;
   collagenInputTokens = 0;
@@ -258,6 +262,7 @@ export const lines = function* (jsonl: string): Generator<Json> {
 export const sessionCost = (ai: SessionCost["ai"], file: string, reader: Reader): SessionCost => ({
   ai,
   file,
+  ...(reader.title ? { title: reader.title } : {}),
   calls: reader.calls,
   replies: reader.replies,
   inputTokens: reader.inputTokens,
