@@ -93,9 +93,9 @@ export function Audit(props: { roomId: string }) {
 }
 
 /** The page before its first read: every panel's own skeleton, where and
- *  as tall as the panel will be. */
+ *  as tall as the panel will be — what is known already shown, the numbers masked. */
 Audit.Skeleton = () => (
-  <div class="audit-body sk" role="status" aria-busy="true" aria-label="Counting">
+  <div class="audit-body" role="status" aria-busy="true" aria-label="Counting">
     <Stats.Skeleton />
     <div class="audit-pair audit-pair-wide">
       <PerCall.Skeleton />

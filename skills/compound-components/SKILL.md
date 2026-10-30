@@ -14,7 +14,10 @@ different, split it into parts instead of adding the prop.
   `Foo.Skeleton`, `Foo.Head`, `Foo.Body`. Callers compose
   `<Foo.Head>…</Foo.Head>`; they import `Foo` alone.
 - **Every part that loads has `.Skeleton`.** It is the part's own markup
-  with its words masked, so it is the size of what replaces it. A page's
+  with the words that wait on data masked, so it is the size of what
+  replaces it. What is known up front — titles, labels, legends, table
+  headers, a fixed subtitle — shows as it will be; only numbers, names and
+  chart areas are masked (inside a `.sk`). A page's
   placeholder is its parts' skeletons composed (`Page.Skeleton`), never a
   separate drawing of the page.
 - **The component regulates design; the caller owns arrangement.** Parts

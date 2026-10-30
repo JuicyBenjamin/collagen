@@ -38,4 +38,4 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
   );
 }
 
-Growing.Skeleton = () => <PanelSkeleton title="Growing" height={396} lines={1} />;
+Growing.Skeleton = () => <PanelSkeleton title="Growing" sub="Last week against the three before" height={403} />;

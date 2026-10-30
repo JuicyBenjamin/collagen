@@ -1,6 +1,7 @@
 import { For } from "solid-js";
 import type { AuditPage } from "~/data";
 import { PanelSkeleton } from "./PanelSkeleton";
+import { Pending } from "./Pending";
 
 /** The busiest sessions: their calls, collagen's share of their tokens, their compactions. */
 export function Sessions(props: { sessions: AuditPage["sessions"] }) {
@@ -44,4 +45,42 @@ export function Sessions(props: { sessions: AuditPage["sessions"] }) {
   );
 }
 
-Sessions.Skeleton = () => <PanelSkeleton title="Sessions" height={427} />;
+Sessions.Skeleton = () => (
+  <PanelSkeleton title="Sessions">
+    <div class="audit-scroll">
+      <table class="table table-sm audit-table">
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th class="audit-number">Tool calls</th>
+            <th>Share of tokens</th>
+            <th class="audit-number">Compactions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <For each={[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}>
+            {() => (
+              <tr>
+                <td>
+                  <Pending>e981172a</Pending>
+                  <span class="audit-sub audit-block">
+                    <Pending>Claude Code</Pending>
+                  </span>
+                </td>
+                <td class="audit-number">
+                  <Pending>367</Pending>
+                </td>
+                <td>
+                  <Pending>5.4% of tokens</Pending>
+                </td>
+                <td class="audit-number">
+                  <Pending>3</Pending>
+                </td>
+              </tr>
+            )}
+          </For>
+        </tbody>
+      </table>
+    </div>
+  </PanelSkeleton>
+);

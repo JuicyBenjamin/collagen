@@ -42,4 +42,13 @@ export function InOut(props: { tools: AuditPage["tools"] }) {
   );
 }
 
-InOut.Skeleton = () => <PanelSkeleton title="Tokens in and out" height={258} />;
+InOut.Skeleton = () => (
+  <PanelSkeleton
+    title="Tokens in and out"
+    legend={[
+      { label: "In", colour: "var(--color-primary)" },
+      { label: "Out", colour: "var(--color-warning)" },
+    ]}
+    height={258}
+  />
+);
