@@ -12,9 +12,11 @@ import type { LocalState, Steering, SteeringKind, SteeringLevels, SteeringPair, 
  *  writes is untrusted, and drives nothing they did not allow for it.
  *
  *  The other kinds are acts OUTSIDE collagen — the repo host, delivering
- *  into the person's AI conversations, running their AI for a job, and
+ *  into the person's AI conversations, running their AI for a job,
  *  starting it on an investigation (as one is filed, or reaches them from
- *  someone else). Not chosen, they do not happen, and the agent asks the
+ *  someone else), and telling the conversation that filed an investigation
+ *  what was found (a delivery of its own, so findings can come back while
+ *  other news waits). Not chosen, they do not happen, and the agent asks the
  *  person to choose. "never" is the person's own no: not done on its own,
  *  and nobody asks — only their own word does it. "ask first"
  *  hands the question back to the agent whose call would have done it; the
@@ -38,7 +40,7 @@ export type Cause = "mine" | "others";
 export type SteeringAt = "master" | SteeringKind;
 
 export const STEERING_ORDER: ReadonlyArray<Steering> = ["never", "ask", "act", "auto"];
-export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate"];
+export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate", "report"];
 export const TAG_ROUTES: ReadonlyArray<TagRoute> = ["none", "existing", "existing-or-new", "new"];
 
 /** The level in effect: the kind's own, else the master's, for that cause. */
@@ -54,7 +56,7 @@ export const tagRouteOf = (state: Pick<LocalState, "steering">): TagRoute => sta
 /** Nothing chosen for acting outside collagen, for the person's own acts:
  *  no master, no repo-host level, no delivery level. */
 export const unchosen = (state: Pick<LocalState, "steering">): boolean =>
-  masterOf(state) === "unset" && state.steering?.kinds?.host?.mine === undefined && state.steering?.kinds?.deliver?.mine === undefined && state.steering?.kinds?.run?.mine === undefined && state.steering?.kinds?.investigate?.mine === undefined;
+  masterOf(state) === "unset" && state.steering?.kinds?.host?.mine === undefined && state.steering?.kinds?.deliver?.mine === undefined && state.steering?.kinds?.run?.mine === undefined && state.steering?.kinds?.investigate?.mine === undefined && state.steering?.kinds?.report?.mine === undefined;
 
 const pairWith = (pair: SteeringPair | undefined, whose: Cause | "both", level: Steering | null): SteeringPair | undefined => {
   const causes: ReadonlyArray<Cause> = whose === "both" ? ["mine", "others"] : [whose];
@@ -104,6 +106,7 @@ export const KIND_LABEL: Record<SteeringKind, string> = {
   deliver: "delivering into your AI conversations",
   run: "running your AI for a job (researching a ticket)",
   investigate: "starting your AI on an investigation (as one is filed, or asked of you)",
+  report: "telling the conversation that filed an investigation what was found",
 };
 
 export const TAG_LABEL: Record<TagRoute, string> = {
@@ -152,7 +155,7 @@ export const UNCHOSEN_LINE =
 declare const minted: unique symbol;
 /** Proof that steering let an act outside through: who caused it, at which
  *  level. Only `allow` makes one. */
-export interface Permit<K extends "host" | "deliver" | "run" | "investigate"> {
+export interface Permit<K extends "host" | "deliver" | "report" | "run" | "investigate"> {
   readonly [minted]: K;
   readonly cause: Cause;
   readonly level: Steering;
@@ -160,22 +163,23 @@ export interface Permit<K extends "host" | "deliver" | "run" | "investigate"> {
 
 /** Writing on the repo host in the person's name (a review, a comment, a merge) requires it. */
 export class HostAllowed extends Context.Service<HostAllowed, Permit<"host">>()("cli/HostAllowed") {}
-/** Delivering into the person's AI conversations requires it. */
-export class DeliverAllowed extends Context.Service<DeliverAllowed, Permit<"deliver">>()("cli/DeliverAllowed") {}
+/** Delivering into the person's AI conversations requires it: its deliver
+ *  level's permit, or for an investigation's findings, its report level's. */
+export class DeliverAllowed extends Context.Service<DeliverAllowed, Permit<"deliver" | "report">>()("cli/DeliverAllowed") {}
 /** Running the person's AI for a job of collagen's requires it: its run
  *  level's permit, or for an investigation, its investigate level's. */
 export class RunAllowed extends Context.Service<RunAllowed, Permit<"run" | "investigate">>()("cli/RunAllowed") {}
 
 /** What steering says to an act outside: go (with the permit to provide), or
  *  held — not chosen, never, or waiting on the person's yes. */
-export type Gate<K extends "host" | "deliver" | "run" | "investigate"> =
+export type Gate<K extends "host" | "deliver" | "report" | "run" | "investigate"> =
   | { readonly go: Permit<K> }
   | { readonly held: "unset" | "never" | "ask"; readonly why: string };
 
 /** Whether an act of `kind` caused by `cause` may happen now. `yes` is the
  *  person's own word for this one act, relayed by their agent: it lets "ask
  *  first" and "never" through, never "not chosen". */
-export const allow = <K extends "host" | "deliver" | "run" | "investigate">(state: Pick<LocalState, "steering">, kind: K, cause: Cause, yes = false): Gate<K> => {
+export const allow = <K extends "host" | "deliver" | "report" | "run" | "investigate">(state: Pick<LocalState, "steering">, kind: K, cause: Cause, yes = false): Gate<K> => {
   const level = levelOf(state, kind, cause);
   const whose = cause === "mine" ? "your user's own" : "another person's";
   if (level === "unset")
@@ -191,7 +195,7 @@ export const MOCK_PERMIT = { level: "auto", cause: "mine" } as unknown as Permit
 
 /** Run an act outside with its permit provided. */
 export const withHost = <A, E, R>(permit: Permit<"host">, act: Effect.Effect<A, E, R>) => Effect.provideService(act, HostAllowed, permit);
-export const withDeliver = <A, E, R>(permit: Permit<"deliver">, act: Effect.Effect<A, E, R>) => Effect.provideService(act, DeliverAllowed, permit);
+export const withDeliver = <A, E, R>(permit: Permit<"deliver" | "report">, act: Effect.Effect<A, E, R>) => Effect.provideService(act, DeliverAllowed, permit);
 export const withRun = <A, E, R>(permit: Permit<"run" | "investigate">, act: Effect.Effect<A, E, R>) => Effect.provideService(act, RunAllowed, permit);
 
 /** Whose account an act on the repo host went through, and why it was let

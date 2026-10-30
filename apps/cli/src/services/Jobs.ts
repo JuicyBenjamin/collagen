@@ -111,7 +111,9 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
       yield* Effect.forkIn(
         Effect.gen(function* () {
           const url = yield* mcpInfo.awaitUrl;
-          const job: Job = { prompt: next.prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
+          // an investigation's run is told its goals as they are now
+          const prompt = next.kind === "investigation" && next.goals ? investigationPrompt({ id: next.ticketId, title: next.title }, next.goals, next.depth ?? 1, next.ask, yield* SubscriptionRef.get(nameRef), name) : next.prompt;
+          const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
           const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           yield* letGo(next.id);
           const at = yield* Clock.currentTimeMillis;
@@ -164,10 +166,11 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
             harness: harness.id,
             ...(model ? { model } : {}),
             queuedAt,
-            prompt: kind === "investigation" ? investigationPrompt(asked.ticket, run, goals, asked.ask, person, name) : researchPrompt(asked.ticket, asked.ask, person, name),
+            prompt: kind === "investigation" ? investigationPrompt({ id: asked.ticket.id, title }, goals.map((goal) => goal.id), run.depth, asked.ask, person, name) : researchPrompt(asked.ticket, asked.ask, person, name),
             cwd: asked.cwd,
             ...(asked.cause === "others" ? { cause: "others" as const } : {}),
-            ...(kind === "investigation" ? { goals: goals.map((goal) => goal.id) } : {}),
+            ...(kind === "investigation" ? { goals: goals.map((goal) => goal.id), depth: run.depth } : {}),
+            ...(asked.ask?.trim() ? { ask: asked.ask.trim() } : {}),
             ...(before ? { after: before } : {}),
           });
         }
