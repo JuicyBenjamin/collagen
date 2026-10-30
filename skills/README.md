@@ -37,6 +37,7 @@ skill into an agent's folder — edit it here.
 | [folder-structure](folder-structure/SKILL.md)         | creating, moving or splitting a component: a folder with `index.ts` and `components/`, children under their parent                                                  |
 | [names-say-what](names-say-what/SKILL.md)             | writing any code: every parameter and variable named for what it holds, never `t`, `p`, `res`; `pnpm lint` checks                                                   |
 | [alignment](alignment/SKILL.md)                       | building anything a person sees: stacked text on one edge, panels in a row the same height, library defaults overridden, edges measured before it is done           |
+| [charts](charts/SKILL.md)                             | adding or changing a chart: one question in its subtitle, a hover that adds, one palette, no estimates as facts                                                     |
 | [review](review/SKILL.md)                             | reviewing a diff, branch or pull request: leaky abstractions, and more as reviews find it                                                                           |
 
 When a review finds something none of these cover, and it could come back,
