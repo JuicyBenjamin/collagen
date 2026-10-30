@@ -425,6 +425,7 @@ export const Investigate = Tool.make("investigate", {
     KIND_RULE,
     "'question' is the one required field: what is to be found out, in your user's words. 'title' is the headline every list shows — a few words, 60 characters at most, the question itself (\"Why peers stay apart after a restart\"); required when filing. 'goal' is the line beneath it; it defaults to the question's first sentence. 'known' is what is known already, 'ruledOut' what is ruled out and not to be looked into again. 'decisions' and 'forks' are optional; 'peers' 0 to many, exactly the names your user said; 'from', 'after' and 'whenClosed' as elsewhere.",
     "Readers give a BLIND FIRST TAKE on the question alone: their agent hands them the question, they say what they think the answer is or how they would find out (post-review), and only then does what is known and ruled out open to them. 'research' sends your user's own AI to look into it; what it finds comes back as a take.",
+    "WHETHER THEIR AI STARTS ON IT is your user's steering for investigations (set-steering investigate): not chosen, it does not; ask first, the answer tells you to ask them; act then tell, or just do it, it starts as the investigation is filed. One asked of someone else (peers) starts nothing here: their own steering decides on their side. 'run: false' files it without starting anything, whatever the steering says — when your user says to just file it.",
     "ANSWERING IT (investigate with 'ticketId'): when your user has the answer, pass 'outcome' — answered, not-answerable (there is no answer to be had) or wrong-question (what should be asked instead goes in the findings) — with 'findings', the answer or why there is none, and 'evidence': what it rests on (links, file:line, measurements). Then close-ticket. What follows (a proposal, a plan) is filed with 'from' this investigation, so its readers see the findings beside it.",
     "WHAT TO TELL YOUR USER: that the investigation has been filed (or updated), nothing more.",
   ].join("\n"),
@@ -436,6 +437,7 @@ export const Investigate = Tool.make("investigate", {
     outcome: Schema.optional(InvestigationOutcome),
     findings: Schema.optional(Schema.String),
     evidence: Schema.optional(Schema.Array(Schema.String)),
+    run: Schema.optional(Schema.Boolean),
   }),
   success: Schema.String,
 });
@@ -961,6 +963,7 @@ const makeHandlers = Effect.gen(function* () {
     const { profile } = yield* CliArgs;
     const inbox = yield* Inbox;
     const outbox = yield* Outbox;
+    const jobs = yield* Jobs;
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
@@ -1111,6 +1114,8 @@ const makeHandlers = Effect.gen(function* () {
         outcome?: InvestigationOutcome;
         findings?: string;
         evidence?: ReadonlyArray<string>;
+        /** investigate: false files it without starting the person's AI, whatever their steering says */
+        run?: boolean;
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string>; readonly usesOf?: string }>;
         retireUnits?: ReadonlyArray<string>;
         /** how the change works, drawn and played; null withdraws it */
@@ -1468,10 +1473,28 @@ const makeHandlers = Effect.gen(function* () {
             : [];
         if (kind === "review" && input.merge && !filed.startsWith("failed")) yield* store.update((state) => withMergeFor(state, { ticket: ticketId }, input.merge ?? null));
         const coverage = units && !filed.startsWith("failed") ? yield* unitCoverageNote(projectPath, review) : "";
+        // an investigation filed: whether the person's AI starts on it is their steering's call
+        const started = kind === "investigation" && !filed.startsWith("failed") ? yield* startOnFiling(roomId, inEpic, projectPath, asked, input.run) : "";
         return under.length > 0 && !filed.startsWith("failed")
           ? `${filed}${coverage}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
-          : filed + coverage;
+          : filed + coverage + started;
     });
+
+    /** An investigation the person filed, and their AI: started now, offered,
+     *  or left, as their steering for investigations says — never when it
+     *  is asked of someone else, or when they said to just file it. */
+    const startOnFiling = (roomId: string, ticket: Ticket, projectPath: string, asked: ReadonlyArray<string>, run: boolean | undefined) =>
+      Effect.gen(function* () {
+        if (run === false) return `\nFiled without starting your user's AI (run: false). research starts it whenever they ask.`;
+        if (asked.length > 0) return `\nAsked of ${asked.join(", ")}: whether their AI looks into it is their own steering's call. Your user's AI was not started; research starts it if they want their own answer too.`;
+        const level = levelOf(yield* store.get, "investigate", "mine");
+        if (level === "unset")
+          return `\nYour user's steering for starting their AI on an investigation is not chosen, so nothing was started. Ask them once, in a line, how far collagen may go (set-steering investigate: ask first, act then tell, just do it); research starts it now on their word.`;
+        if (level === "ask") return `\nASK YOUR USER, in one line, whether to send their AI to find out now: their steering for investigations is ask first. On their yes, call research with this ticketId.`;
+        const said = yield* jobs.research({ roomId, ticket, cwd: projectPath });
+        if (said.startsWith("failed")) return `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`;
+        return level === "act" ? `\nTheir steering for investigations is act, then tell: ${said} Tell your user, in one line, that their AI is on it.` : `\n${said} (their steering for investigations: just do it).`;
+      });
 
     // While nothing is chosen, each conversation is told once, on its first
     // call, to have its person choose: collagen knows which one is calling.

@@ -534,6 +534,9 @@ export const QueuedJob = Schema.Struct({
   queuedAt: Schema.Finite,
   prompt: Schema.String,
   cwd: Schema.String,
+  /** whose doing started it: the person's, or another's investigation that
+   *  reached them (their steering for others' then let it run) */
+  cause: Schema.optional(Schema.Literals(["mine", "others"])),
 });
 export type QueuedJob = typeof QueuedJob.Type;
 
@@ -551,7 +554,7 @@ export type Steering = typeof Steering.Type;
  *  host in their name (reviews, comments, merges — one level for every
  *  host), delivering into their AI conversations, and running their AI for
  *  a job of collagen's (researching a ticket). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run"]);
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -570,7 +573,7 @@ export type TagRoute = typeof TagRoute.Type;
  *  person's own choice, never broadcast. */
 export const SteeringLevels = Schema.Struct({
   master: Schema.optional(SteeringPair),
-  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair) })),
+  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair) })),
   tag: Schema.optional(TagRoute),
 });
 export type SteeringLevels = typeof SteeringLevels.Type;

@@ -42,6 +42,7 @@ follows the master until you set it:
 | `host` | acting on the repo host in your name: your review and comments posted on the pull request, merging it — through your own `gh`, one level for every host |
 | `deliver` | collagen waking your AI conversations when something comes for them (a courier into Claude Code, a Codex queue) |
 | `run` | collagen running your AI for a job of its own (researching a ticket) |
+| `investigate` | collagen starting your AI on an investigation: as you file one (unless it is asked of someone else, or you say `run: false`), and, for others', as one asked of you arrives — the orchestrator's switch |
 
 Each level is one of:
 
