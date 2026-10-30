@@ -114,7 +114,7 @@ what's natural there. Number keys work from anywhere.
 | `space` on an epic | Fold its tickets away on the overview, or show them again (they show by default) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
-| `g` | Cycle your master [steering](./conversations#steering-how-much-your-agent-does-on-its-own) level: ask first → act, then tell → just do it (every level, yours and other people's, is on the settings page) |
+| `g` | Cycle your master [steering](./conversations#steering-how-much-your-agent-does-on-its-own) level: ask first → act, then tell → just do it → never (every level, yours and other people's, is on the settings page) |
 | `c` | Copy the room's invite id |
 | `s` | Settings: your name, the room's shared name, and your switches (`space` flips one) |
 | `u` | Install the newer collagen the status line announces, then restart into it |
