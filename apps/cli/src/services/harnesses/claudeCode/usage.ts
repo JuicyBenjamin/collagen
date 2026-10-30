@@ -35,7 +35,7 @@ export function readUsage(jsonl: string, file = ""): SessionCost {
         const part = asObject(entry);
         if (part?.type !== "tool_use" || typeof part.name !== "string" || typeof part.id !== "string") continue;
         const tool = collagenTool(part.name);
-        if (tool) reader.call(part.id, tool, JSON.stringify(part.input ?? {}));
+        if (tool) reader.call(part.id, tool, JSON.stringify(part.input ?? {}), at);
       }
     } else if (line.type === "user") {
       for (const entry of content) {

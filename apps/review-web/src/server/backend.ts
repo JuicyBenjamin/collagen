@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { AuditPage, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 
 // What the review page's server functions (src/api.ts) ask of the collagen
@@ -73,6 +73,8 @@ export class ReviewBackend extends Context.Service<
     /** the author's yes or no to a run's question on their investigation: a yes to one
      *  that leads somewhere adds that follow-up as a goal and starts it */
     readonly answerQuestion: (ticketId: string, questionId: string, answer: "yes" | "no") => Effect.Effect<HostWrite>;
+    /** a room's audit over `days`, now, then as it moves (over the page's socket); null for a room not here */
+    readonly audit: (roomId: string, days: number) => Stream.Stream<AuditPage | null>;
     /** a room's projects held here, in the reader's order; null for a room not here */
     readonly mergeProjects: (roomId: string) => Effect.Effect<MergeProjects | null>;
     /** the page's themes as collagen keeps them — now, then on every change, whoever made it

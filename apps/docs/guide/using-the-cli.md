@@ -114,6 +114,7 @@ what's natural there. Number keys work from anywhere.
 | `space` on an epic | Fold its tickets away on the overview, or show them again (they show by default) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
+| `A` | The audit page in your browser: tool calls, tokens per call over time and the tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and steering. Your agent opens it with `open-audit`. |
 | `g` | Cycle your master [steering](./conversations#steering-how-much-your-agent-does-on-its-own) level: ask first → act, then tell → just do it → never (every level, yours and other people's, is on the settings page) |
 | `c` | Copy the room's invite id |
 | `s` | Settings: your name, the room's shared name, and your switches (`space` flips one) |
