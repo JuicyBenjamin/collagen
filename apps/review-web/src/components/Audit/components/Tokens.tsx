@@ -45,6 +45,7 @@ export function Tokens(props: { tools: AuditPage["tools"] }) {
   };
   const definition = createMemo(() =>
     defineChart({
+      focusRing: false,
       marks: [
         treemap(rows(), {
           path: "name",
