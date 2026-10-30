@@ -38,13 +38,15 @@ export const runJob = (job: Job): Effect.Effect<JobDone, never, RunAllowed | Chi
     const exit = yield* proc.exitCode;
     const spent = courierSpent(out);
     let said: string | undefined;
+    let session: string | undefined;
     try {
-      const result = JSON.parse(out.trim().split("\n").at(-1) ?? "") as { result?: unknown };
+      const result = JSON.parse(out.trim().split("\n").at(-1) ?? "") as { result?: unknown; session_id?: unknown };
       said = typeof result.result === "string" ? result.result : undefined;
+      session = typeof result.session_id === "string" ? result.session_id : undefined;
     } catch {
       said = undefined;
     }
-    return { ok: exit === 0, ...(said ? { said } : {}), ...(spent ? { spent } : {}) };
+    return { ok: exit === 0, ...(said ? { said } : {}), ...(spent ? { spent } : {}), ...(session ? { conversation: { ai: "claude-code" as const, id: session } } : {}) };
   }).pipe(
     Effect.scoped,
     Effect.timeout("15 minutes"),

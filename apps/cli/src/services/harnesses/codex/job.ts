@@ -11,15 +11,16 @@ import type { Job, JobDone, Spent } from "../../Harness";
 
 /** What a `codex exec --json` run said last, whether its turn failed, and
  *  what its turns spent. */
-export const readExec = (out: string, model?: string): { readonly said?: string; readonly failed?: string; readonly spent?: Spent } => {
+export const readExec = (out: string, model?: string): { readonly said?: string; readonly failed?: string; readonly spent?: Spent; readonly thread?: string } => {
   let said: string | undefined;
+  let thread: string | undefined;
   let failed: string | undefined;
   let inputTokens = 0;
   let outputTokens = 0;
   let turns = 0;
   for (const line of out.split("\n")) {
     if (!line.startsWith("{")) continue;
-    let event: { type?: string; item?: { type?: string; text?: string }; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string }; message?: string };
+    let event: { type?: string; thread_id?: string; item?: { type?: string; text?: string }; usage?: { input_tokens?: number; output_tokens?: number }; error?: { message?: string }; message?: string };
     try {
       event = JSON.parse(line);
     } catch {
@@ -32,10 +33,12 @@ export const readExec = (out: string, model?: string): { readonly said?: string;
       outputTokens += event.usage.output_tokens ?? 0;
     }
     if (event.type === "turn.failed") failed = event.error?.message ?? "its turn failed";
+    if (event.type === "thread.started" && event.thread_id) thread = event.thread_id;
   }
   return {
     ...(said ? { said } : {}),
     ...(failed ? { failed } : {}),
+    ...(thread ? { thread } : {}),
     ...(turns > 0 ? { spent: { ...(model ? { model } : {}), inputTokens, outputTokens } } : {}),
   };
 };
@@ -62,7 +65,7 @@ export const runJob = (job: Job): Effect.Effect<JobDone, never, RunAllowed | Chi
     const exit = yield* proc.exitCode;
     const read = readExec(out, job.model);
     const said = read.failed ?? read.said;
-    return { ok: exit === 0 && !read.failed, ...(said ? { said } : {}), ...(read.spent ? { spent: read.spent } : {}) };
+    return { ok: exit === 0 && !read.failed, ...(said ? { said } : {}), ...(read.spent ? { spent: read.spent } : {}), ...(read.thread ? { conversation: { ai: "codex" as const, id: read.thread } } : {}) };
   }).pipe(
     Effect.scoped,
     Effect.timeout("15 minutes"),
