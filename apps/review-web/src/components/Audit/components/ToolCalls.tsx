@@ -6,6 +6,7 @@ import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
 import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** What each kind of tool is for, and its colour — the ticket kinds' own. */
 export const KINDS = ["filing", "review", "tickets", "messages", "room", "setup", "diagnostics", "other"] as const;
@@ -32,3 +33,5 @@ export function ToolCalls(props: { tools: AuditPage["tools"] }) {
     </section>
   );
 }
+
+ToolCalls.Skeleton = () => <PanelSkeleton title="Tool calls" height={290} />;

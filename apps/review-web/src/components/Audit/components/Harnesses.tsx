@@ -5,6 +5,7 @@ import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** Sessions by harness, and the room's records by model. */
 export function Harnesses(props: { harnesses: AuditPage["harnesses"]; models: AuditPage["models"] }) {
@@ -41,3 +42,5 @@ export function Harnesses(props: { harnesses: AuditPage["harnesses"]; models: Au
     </section>
   );
 }
+
+Harnesses.Skeleton = () => <PanelSkeleton title="Harnesses" height={180} />;
