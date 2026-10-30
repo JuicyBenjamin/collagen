@@ -5,6 +5,10 @@ import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type R
 import { answeredInvestigations, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
+import { Jobs } from "./Jobs";
+import { levelOf } from "../lib/steering";
+import { sameName } from "../lib/names";
+import { homedir } from "node:os";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
@@ -53,6 +57,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     const aiStatus = yield* AiStatus;
     const inbox = yield* Inbox;
     const runner = yield* AgentRunner;
+    const jobs = yield* Jobs;
     const swarm = yield* Swarm;
 
     const focused = yield* SubscriptionRef.make(initial.id);
@@ -131,6 +136,23 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 // the person's steering, said on the step itself: the turn
                 // the agent reads it is the turn it is about to act
                 const steer = workLine(yield* store.get, ticket.createdBy === identity.pubkey ? "mine" : "others");
+                // an investigation asked of the person by someone else: their
+                // steering for others' investigations says whether their AI
+                // starts on it now, is offered, or is left alone
+                const investigating =
+                  ticket.kind === "investigation" && ticket.createdBy !== identity.pubkey && mine.some((step) => step.status === "pending")
+                    ? yield* Effect.gen(function* () {
+                        const state = yield* store.get;
+                        const level = levelOf(state, "investigate", "others");
+                        if (level === "unset") return "\nYour user's steering for others' investigations is not chosen, so their AI was not started; research starts it on their word.";
+                        if (level === "ask") return "\nASK YOUR USER, in one line, whether to send their AI to find out (research with this ticketId): their steering for others' investigations is ask first.";
+                        const project = (state.rooms[handle.id] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
+                        const said = yield* jobs.research({ roomId: handle.id, ticket, cwd: project?.path ?? homedir(), cause: "others" });
+                        return said.startsWith("failed")
+                          ? `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`
+                          : `\nTheir steering for others' investigations started their AI on it: ${said}${level === "act" ? " Tell them, in one line." : ""}`;
+                      })
+                    : "";
                 for (const step of mine) {
                   const settled = ticket.steps
                     .filter((other) => other.status === "settled" && step.needs.includes(other.id))
@@ -147,7 +169,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     intent: `ticket-step:${step.intent}`,
                     findings: `${creatorName} asks your user to "${step.intent}" for the ticket "${ticket.goal}" (${ticket.id}, step ${step.id}).\nThe step, in full: ${step.description}${
                       settled ? `\nSettled inputs from earlier steps:\n${settled}` : ""
-                    }\n${steer} When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${step.id}", and the result they want to send — it goes out as you call it.`,
+                    }\n${steer} When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${step.id}", and the result they want to send — it goes out as you call it.${investigating}`,
                     ts: now,
                   };
                   yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${step.id} actionable`);
