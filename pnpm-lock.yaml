@@ -53,6 +53,9 @@ importers:
       '@effect/tsgo':
         specifier: 'catalog:'
         version: 0.39.0
+      '@tanstack/intent':
+        specifier: 0.5.6
+        version: 0.5.6
       oxlint:
         specifier: 1.76.0
         version: 1.76.0
@@ -189,6 +192,9 @@ importers:
       '@tanstack/highlight':
         specifier: 1.0.0
         version: 1.0.0
+      d3-shape:
+        specifier: 3.2.0
+        version: 3.2.0
       daisyui:
         specifier: 5.7.47
         version: 5.7.47
@@ -217,6 +223,9 @@ importers:
       '@solidjs/vite-plugin':
         specifier: 3.0.0-next.47
         version: 3.0.0-next.47(@solidjs/web@2.0.0-rc.13(solid-js@2.0.0-rc.13))(solid-js@2.0.0-rc.13)(vite@8.3.2(@types/node@26.4.0)(esbuild@0.28.2)(jiti@2.6.1)(tsx@4.23.13)(yaml@2.9.0))
+      '@types/d3-shape':
+        specifier: 3.1.8
+        version: 3.1.8
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -1774,6 +1783,11 @@ packages:
   '@tanstack/highlight@1.0.0':
     resolution: {integrity: sha512-nrg2iZSQUZlDZGTPKh/CNlg6Orm3vFHIaIi/9DqPC1rUpfe/M6rD2iokrckWTc2Z5jYDz185BK76GUh9VIjQRw==}
     engines: {node: '>=18'}
+
+  '@tanstack/intent@0.5.6':
+    resolution: {integrity: sha512-9Ta/GMGPcqBIqlbrqeYyqBVKEP7XyAXy6nn90bPiE2oHB6KPgjEweUbHNXLQ6Pim01VtMMNf0dmUFMGKKHXmlw==}
+    engines: {node: '>=20.12.0'}
+    hasBin: true
 
   '@toon-format/toon@4.1.1':
     resolution: {integrity: sha512-SGCkS7IjVpwRmGPgnY8ENKpAf0EdAnZDOQkvFW0d2cgOpdn9FEFl7sTgryESyypXrWr0YajHGpwsAUX4zw9ZvA==}
@@ -5672,6 +5686,8 @@ snapshots:
       vue: 3.5.39(typescript@7.0.2)
 
   '@tanstack/highlight@1.0.0': {}
+
+  '@tanstack/intent@0.5.6': {}
 
   '@toon-format/toon@4.1.1': {}
 
