@@ -14,7 +14,9 @@ import type { LocalState, Steering, SteeringKind, SteeringLevels, SteeringPair, 
  *  The other kinds are acts OUTSIDE collagen — the repo host, delivering
  *  into the person's AI conversations, running their AI for a job, and
  *  starting it on an investigation (as one is filed, or reaches them from
- *  someone else). Not chosen, they do not happen. "ask first"
+ *  someone else). Not chosen, they do not happen, and the agent asks the
+ *  person to choose. "never" is the person's own no: not done on its own,
+ *  and nobody asks — only their own word does it. "ask first"
  *  hands the question back to the agent whose call would have done it; the
  *  agent asks its person and calls again with their yes. "act, then tell"
  *  does it and says so; "just do it" does it. Every write outside needs a
@@ -35,7 +37,7 @@ export type Cause = "mine" | "others";
 /** Where a level is set: the master, or one kind. */
 export type SteeringAt = "master" | SteeringKind;
 
-export const STEERING_ORDER: ReadonlyArray<Steering> = ["ask", "act", "auto"];
+export const STEERING_ORDER: ReadonlyArray<Steering> = ["never", "ask", "act", "auto"];
 export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate"];
 export const TAG_ROUTES: ReadonlyArray<TagRoute> = ["none", "existing", "existing-or-new", "new"];
 
@@ -83,13 +85,14 @@ export const withTagRoute = <S extends Pick<LocalState, "steering">>(state: S, r
   return { ...state, steering: { ...rest, ...(route ? { tag: route } : {}) } };
 };
 
-/** The next level round, from the TUI's key: not chosen starts at the asking end. */
+/** The next level round, from the TUI's key: not chosen starts at the asking end, and never comes after just do it. */
 export const nextSteering = (level: Level): Steering =>
   level === "unset" ? "ask" : STEERING_ORDER[(STEERING_ORDER.indexOf(level) + 1) % STEERING_ORDER.length]!;
 
 /** For the person: the status line, the ? panel, tool answers. */
 export const STEERING_LABEL: Record<Level, string> = {
   unset: "not chosen",
+  never: "never",
   ask: "ask first",
   act: "act, then tell",
   auto: "just do it",
@@ -112,6 +115,7 @@ export const TAG_LABEL: Record<TagRoute, string> = {
 
 export const STEERING_HELP: Record<Level, string> = {
   unset: "nothing is done outside collagen in your name, and your agent asks first",
+  never: "not done on its own, and nobody asks: only your own word does it",
   ask: "your agent asks you before anything is done",
   act: "it is done, and you are told",
   auto: "it is done",
@@ -125,6 +129,8 @@ export function steeringLine(level: Level): string {
   switch (level) {
     case "unset":
       return "STEERING — not chosen yet, so ask first: do not start on this. Tell your user what it asks and what you would do, and wait for their word.";
+    case "never":
+      return "STEERING — never (your user's own setting): do not start on this, and do not offer to. Tell your user it came, in one line, and leave it to them.";
     case "ask":
       return "STEERING — ask first (your user's own setting): do not start on this. Tell your user what it asks and what you would do, and wait for their word.";
     case "act":
@@ -139,7 +145,7 @@ export const workLine = (state: Pick<LocalState, "steering">, cause: Cause): str
 
 /** Said once to each conversation while nothing is chosen. */
 export const UNCHOSEN_LINE =
-  "STEERING NOT CHOSEN — your user has not said how far collagen may act outside itself in their name: on the repo host (reviews, comments, merges through their own gh) and in their AI conversations (delivering messages). Until they choose, it does none of it. Ask them once, in a line, and set it with set-steering (a master level, or one per kind: ask first, act then tell, just do it).";
+  "STEERING NOT CHOSEN — your user has not said how far collagen may act outside itself in their name: on the repo host (reviews, comments, merges through their own gh) and in their AI conversations (delivering messages). Until they choose, it does none of it. Ask them once, in a line, and set it with set-steering (a master level, or one per kind: never, ask first, act then tell, just do it).";
 
 // --- the permissions an act outside needs -------------------------------
 
@@ -161,19 +167,20 @@ export class DeliverAllowed extends Context.Service<DeliverAllowed, Permit<"deli
 export class RunAllowed extends Context.Service<RunAllowed, Permit<"run" | "investigate">>()("cli/RunAllowed") {}
 
 /** What steering says to an act outside: go (with the permit to provide), or
- *  held — not chosen, or waiting on the person's yes. */
+ *  held — not chosen, never, or waiting on the person's yes. */
 export type Gate<K extends "host" | "deliver" | "run" | "investigate"> =
   | { readonly go: Permit<K> }
-  | { readonly held: "unset" | "ask"; readonly why: string };
+  | { readonly held: "unset" | "never" | "ask"; readonly why: string };
 
 /** Whether an act of `kind` caused by `cause` may happen now. `yes` is the
- *  person's own yes to this one act, relayed by their agent after it asked:
- *  it lets "ask first" through, never "not chosen". */
+ *  person's own word for this one act, relayed by their agent: it lets "ask
+ *  first" and "never" through, never "not chosen". */
 export const allow = <K extends "host" | "deliver" | "run" | "investigate">(state: Pick<LocalState, "steering">, kind: K, cause: Cause, yes = false): Gate<K> => {
   const level = levelOf(state, kind, cause);
   const whose = cause === "mine" ? "your user's own" : "another person's";
   if (level === "unset")
     return { held: "unset", why: `steering for ${KIND_LABEL[kind]} is not chosen for ${whose} acts, so collagen does not do it in their name — have them choose one with set-steering` };
+  if (level === "never" && !yes) return { held: "never", why: `steering for ${KIND_LABEL[kind]} is never for ${whose} acts: collagen does it only on their own word` };
   if (level === "ask" && !yes) return { held: "ask", why: `steering for ${KIND_LABEL[kind]} is ask first for ${whose} acts` };
   return { go: { level, cause } as unknown as Permit<K> };
 };
@@ -190,4 +197,4 @@ export const withRun = <A, E, R>(permit: Permit<"run" | "investigate">, act: Eff
 /** Whose account an act on the repo host went through, and why it was let
  *  through — said wherever it is done. */
 export const asYou = (permit: Permit<"host">, tool: string): string =>
-  `as your user, through their own ${tool} (repo host: ${permit.level === "ask" ? "they said yes" : STEERING_LABEL[permit.level]})`;
+  `as your user, through their own ${tool} (repo host: ${permit.level === "ask" || permit.level === "never" ? "they said yes" : STEERING_LABEL[permit.level]})`;

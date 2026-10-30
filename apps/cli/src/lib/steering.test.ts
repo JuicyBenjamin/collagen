@@ -45,8 +45,15 @@ describe("steering", () => {
     expect(salvaged.dropped.join(" ")).toMatch(/steering/);
   });
 
-  it("the dial starts at the asking end and goes round ask → act → auto", () => {
-    expect([nextSteering("unset"), nextSteering("ask"), nextSteering("act"), nextSteering("auto")]).toEqual(["ask", "act", "auto", "ask"]);
+  it("never does nothing on its own and asks nothing, but the person's own word goes through", () => {
+    const never = withLevel({}, "investigate", "mine", "never");
+    expect(allow(never, "investigate", "mine")).toMatchObject({ held: "never" });
+    expect(allow(never, "investigate", "mine", true)).toHaveProperty("go");
+    expect(steeringLine("never")).toMatch(/do not start on this, and do not offer to/);
+  });
+
+  it("the dial starts at the asking end and goes round ask → act → auto → never", () => {
+    expect([nextSteering("unset"), nextSteering("ask"), nextSteering("act"), nextSteering("auto"), nextSteering("never")]).toEqual(["ask", "act", "auto", "never", "ask"]);
   });
 
   it("no level speaks for the person in the room", () => {

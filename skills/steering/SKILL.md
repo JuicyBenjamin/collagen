@@ -34,7 +34,9 @@ setting, the same way every person action comes with an MCP tool (AGENTS.md).
 4. **Not chosen means not done.** Until the person picks a level, the act
    does not happen outside, and each conversation is told once to ask them.
    "ask first" hands the question back to the agent whose call would have
-   done it; the agent asks and calls again with their yes. Never ask through
+   done it; the agent asks and calls again with their yes. "never" is the
+   person's own no: held without asking, and only their own word (`yes`)
+   lets it through. Never ask through
    the TUI or the review page: questions go through the agent.
 5. **Mine and others' apart.** Pass the right `Cause`: what the person or
    their own agents caused is `mine`; what another person caused (their
