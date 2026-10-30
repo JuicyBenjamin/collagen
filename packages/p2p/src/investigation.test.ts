@@ -55,13 +55,13 @@ describe("a take's answers", () => {
     const first = postReview(investigation(), BOB, "Findings: storage", false, 2, undefined, true, [{ goal: "g1", outcome: "answered", findings: "a content-addressed log" }]).ticket;
     const second = postReview(first, BOB, "Findings: sync", false, 3, undefined, true, [
       { goal: "g2", outcome: "not-answerable", findings: "no docs on it" },
-      { goal: "g1", outcome: "answered", findings: "a content-addressed log, packed daily", spawned: ["t2"] },
+      { goal: "g1", outcome: "answered", findings: "a content-addressed log, packed daily", followUps: [{ if: "it packs history", ask: "How big do packs get?", held: true, outcome: "answered", findings: "a few MB a day" }] },
     ]).ticket;
     const take = second.steps.find((step) => step.owner === "bob");
     expect(take?.result).toBe("Findings: sync");
     expect(take?.answers).toEqual([
       { goal: "g2", outcome: "not-answerable", findings: "no docs on it" },
-      { goal: "g1", outcome: "answered", findings: "a content-addressed log, packed daily", spawned: ["t2"] },
+      { goal: "g1", outcome: "answered", findings: "a content-addressed log, packed daily", followUps: [{ if: "it packs history", ask: "How big do packs get?", held: true, outcome: "answered", findings: "a few MB a day" }] },
     ]);
   });
 

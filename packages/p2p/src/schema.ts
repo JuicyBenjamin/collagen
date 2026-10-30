@@ -543,8 +543,6 @@ export const QueuedJob = Schema.Struct({
   goals: Schema.optional(Schema.Array(Schema.String)),
   /** one by one: the run that must finish before this one starts */
   after: Schema.optional(Schema.String),
-  /** an investigation's place in a chain of follow-ups (1: grew from none) */
-  depth: Schema.optional(Schema.Finite),
   /** what the person wants to know, in their words */
   ask: Schema.optional(Schema.String),
 });

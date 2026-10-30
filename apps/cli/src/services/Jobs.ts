@@ -45,7 +45,7 @@ export interface ResearchAsk {
   /** whose doing it is: the person's own ask (the default), or another's
    *  investigation that reached them */
   readonly cause?: Cause;
-  /** an investigation's brief and depth (its question alone when absent) */
+  /** an investigation's brief (its question alone when absent) */
   readonly investigation?: InvestigationRun;
   /** only these of its goals (absent: all of them) */
   readonly goals?: ReadonlyArray<string>;
@@ -112,7 +112,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         Effect.gen(function* () {
           const url = yield* mcpInfo.awaitUrl;
           // an investigation's run is told its goals as they are now
-          const prompt = next.kind === "investigation" && next.goals ? investigationPrompt({ id: next.ticketId, title: next.title }, next.goals, next.depth ?? 1, next.ask, yield* SubscriptionRef.get(nameRef), name) : next.prompt;
+          const prompt = next.kind === "investigation" && next.goals ? investigationPrompt({ id: next.ticketId, title: next.title }, next.goals, next.ask, yield* SubscriptionRef.get(nameRef), name) : next.prompt;
           const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
           const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           yield* letGo(next.id);
@@ -150,7 +150,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         // an investigation: a run per group of the goals asked for, in goal
         // order; one by one, each after the one before — after any of this
         // ticket's runs still to finish, too
-        const run: InvestigationRun = asked.investigation ?? { brief: { question: title }, depth: 1 };
+        const run: InvestigationRun = asked.investigation ?? { brief: { question: title } };
         const runs = kind === "investigation" ? runsOf(goalsOf(run.brief).filter((goal) => asked.goals === undefined || asked.goals.includes(goal.id))) : [[]];
         if (runs.length === 0) return `failed: "${title}" has no goal ${asked.goals?.join(", ")} — its goals are on review-context`;
         const pace = paceOf(run.brief, state);
@@ -166,10 +166,10 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
             harness: harness.id,
             ...(model ? { model } : {}),
             queuedAt,
-            prompt: kind === "investigation" ? investigationPrompt({ id: asked.ticket.id, title }, goals.map((goal) => goal.id), run.depth, asked.ask, person, name) : researchPrompt(asked.ticket, asked.ask, person, name),
+            prompt: kind === "investigation" ? investigationPrompt({ id: asked.ticket.id, title }, goals.map((goal) => goal.id), asked.ask, person, name) : researchPrompt(asked.ticket, asked.ask, person, name),
             cwd: asked.cwd,
             ...(asked.cause === "others" ? { cause: "others" as const } : {}),
-            ...(kind === "investigation" ? { goals: goals.map((goal) => goal.id), depth: run.depth } : {}),
+            ...(kind === "investigation" ? { goals: goals.map((goal) => goal.id) } : {}),
             ...(asked.ask?.trim() ? { ask: asked.ask.trim() } : {}),
             ...(before ? { after: before } : {}),
           });

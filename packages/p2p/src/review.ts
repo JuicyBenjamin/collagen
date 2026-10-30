@@ -198,8 +198,8 @@ export type BugReport = typeof BugReport.Type;
 export const InvestigationOutcome = Schema.Literals(["answered", "not-answerable", "wrong-question"]);
 export type InvestigationOutcome = typeof InvestigationOutcome.Type;
 
-/** Written on a goal: if what is found bears this out, a new investigation
- *  is filed with this question, from this one. */
+/** Written on a goal: if what is found bears this out, the run looks into
+ *  this question too, there and then, and answers it under the goal. */
 export const GoalFollowUp = Schema.Struct({ if: Schema.String, ask: Schema.String });
 export type GoalFollowUp = typeof GoalFollowUp.Type;
 
