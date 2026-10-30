@@ -838,7 +838,14 @@ export interface AuditPage {
     readonly tokensIn: number;
     readonly tokensOut: number;
   }>;
-  readonly compactions: ReadonlyArray<{ readonly at: string; readonly collagenTokens: number }>;
+  /** each time a session's window filled and was compacted: collagen's tokens in it then,
+   *  the window's own size then when the log says, and collagen's largest answer in it */
+  readonly compactions: ReadonlyArray<{
+    readonly at: string;
+    readonly collagenTokens: number;
+    readonly windowTokens: number | null;
+    readonly largest: string | null;
+  }>;
   /** the room's tickets by kind and how each stands: open, done, or dropped */
   readonly tickets: ReadonlyArray<{
     readonly kind: string;

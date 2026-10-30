@@ -1016,6 +1016,10 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .audit .ts-chart-tooltip__row > span { text-align: left !important; }
 .audit-donut { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: center; gap: 32px; }
 .audit-calendar { display: flex; flex-direction: column; gap: 20px; }
+/* facts in a column on the left, their chart beside them */
+.audit-split { display: grid; grid-template-columns: minmax(200px, 280px) minmax(0, 1fr); align-items: center; gap: 32px; }
+.audit-split .audit-facts { flex-direction: column; gap: 14px; }
+@media (max-width: 900px) { .audit-split { grid-template-columns: minmax(0, 1fr); } }
 .audit-calendar-grid { display: flex; flex-direction: column; gap: 10px; }
 .audit-calendar-grid .audit-scale { padding-left: 34px; }
 .audit-scale { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--dim); }
