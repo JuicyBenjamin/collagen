@@ -74,11 +74,11 @@ export function Audit(props: { roomId: string }) {
           </div>
           <div class="audit-pair">
             <Harnesses harnesses={page().harnesses} models={page().models} />
-            <Jobs jobs={page().jobs} cost={page().totals.jobCost} />
+            <Tickets tickets={page().tickets} />
           </div>
           <Compactions compactions={page().compactions} />
           <div class="audit-pair">
-            <Tickets tickets={page().tickets} />
+            <Jobs jobs={page().jobs} cost={page().totals.jobCost} />
             <Steering steering={page().steering} />
           </div>
           <div class="audit-pair">
@@ -107,11 +107,11 @@ Audit.Skeleton = () => (
     </div>
     <div class="audit-pair">
       <Harnesses.Skeleton />
-      <Jobs.Skeleton />
+      <Tickets.Skeleton />
     </div>
     <Compactions.Skeleton />
     <div class="audit-pair">
-      <Tickets.Skeleton />
+      <Jobs.Skeleton />
       <Steering.Skeleton />
     </div>
     <div class="audit-pair">

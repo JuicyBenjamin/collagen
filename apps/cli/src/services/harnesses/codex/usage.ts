@@ -27,6 +27,8 @@ export function readUsage(jsonl: string, file = ""): SessionCost {
       continue;
     }
     if (line.type !== "event_msg") continue;
+    // its name: Codex keeps none in the log, so its first ask
+    if (payload.type === "user_message" && reader.title === null && typeof payload.message === "string" && payload.message.trim()) reader.title = payload.message.trim().slice(0, 80);
     if (payload.type === "token_count") {
       const info = asObject(payload.info);
       if (!info) continue;
