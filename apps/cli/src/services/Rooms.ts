@@ -2,7 +2,7 @@ import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTake, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
-import { answeredInvestigations, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
+import { answeredInvestigations, findingsText, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
 import { Jobs } from "./Jobs";
@@ -244,7 +244,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 // the step delivery covers it — but not findings: the author's own address step is up while they come in
                 if (!findings && actionableSteps(change.ticket, identity.pubkey).length > 0) continue;
                 const actorName = yield* nameOf(change.step.owner);
-                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent, own ? change.step.conversation : undefined, findings ? "report" : undefined);
+                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, findings ? "findings are in" : stepUpdateWhat(change), findings ? findingsText(change, actedBy(actorName, change.step.agent)) : stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent, own ? change.step.conversation : undefined, findings ? "report" : undefined);
               }
               // an investigation is over: what it found reaches whoever is on
               // the tickets it grew from, so a plan that stopped on a question

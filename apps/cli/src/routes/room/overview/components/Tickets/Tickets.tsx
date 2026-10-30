@@ -15,7 +15,7 @@ import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
 import { closedLine, endedMark, fitTabs, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
-import { openReviewPageAtom } from "../../../review/atoms";
+import { openInvestigationPageAtom, openReviewPageAtom } from "../../../review/atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
  *  closed, whoever made it and whoever it is for — or, on a kind's tab, the
@@ -44,6 +44,7 @@ export function Tickets() {
   const unseenOther = unseen.length - unknownTickets.length;
   const { navigate } = useRouter();
   const openReviewPage = useAtomSet(openReviewPageAtom);
+  const openInvestigationPage = useAtomSet(openInvestigationPageAtom);
   const [cursor, setCursor] = useState(0);
   // an epic shows its tickets until someone folds it, for this session
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
@@ -163,7 +164,7 @@ export function Tickets() {
     <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(nextTab) => (setTab(nextTab), setCursor(0))} />
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
+      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
       flexDirection="column"
       flexShrink={1}
       minHeight={0}
@@ -187,6 +188,7 @@ export function Tickets() {
         }
         // straight from the list to the diff read by intent, in the browser
         if (key.name === "o" && current?.ticket.kind === "review") return openReviewPage({ ticketId: current.ticket.id }), true;
+        if (key.name === "o" && current?.ticket.kind === "investigation") return openInvestigationPage({ ticketId: current.ticket.id }), true;
         // the closed ones, shown or not
         if (key.name === "h") return setShowClosed(!showClosed), true;
         // one key to what a ticket hangs from

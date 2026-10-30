@@ -425,7 +425,7 @@ export const Investigate = Tool.make("investigate", {
     "File an INVESTIGATION: a question nobody can answer yet — what is possible, which of these, why does this happen — put to the room before anyone plans or proposes anything. Only when your user says so (\"investigate this\", \"file it as an investigation\") — never on your own initiative. It can come from any other kind of ticket: pass 'from' with the ticket the question came up on (a plan that hit an unknown, a bug nobody can explain), and when it is answered the findings reach that ticket's people. A question that comes up ON an investigation — from its findings, or something more to find out about it — stays inside it: a new goal (investigate with its ticketId and 'goals'), or a follow-up on the goal it hangs on ('then'). Never a new investigation 'from' it, unless your user names it a new investigation.",
     KIND_RULE,
     "'question' is the one required field: what is to be found out, in your user's words. 'title' is the headline every list shows — a few words, 60 characters at most, the question itself (\"Why peers stay apart after a restart\"); required when filing. 'goal' is the line beneath it; it defaults to the question's first sentence. 'known' is what is known already, 'ruledOut' what is ruled out and not to be looked into again. 'decisions' and 'forks' are optional; 'peers' 0 to many, exactly the names your user said; 'from', 'after' and 'whenClosed' as elsewhere.",
-    "GOALS (optional, only what your user lists): without them the question is the one goal. Each goal is an 'ask' — one thing to find out. Goals sharing a 'group' name are checked together by one AI run; a goal with no group gets a run of its own. 'then' on a goal is your user's own 'if this, then that': [{if, ask}] — when the answer bears out 'if', the run looks into 'ask' too, there and then, and answers it under the goal: it stays on this investigation. 'pace': one-by-one (each run starts when the last is done and reads what it found) or all-at-once; left out, your user's setting investigationsAtOnce decides. Amending: repeating a goal's id corrects it, new goals are added (and start as steering allows), 'retireGoals' withdraws by id.",
+    "GOALS (optional, only what your user lists): without them the question is the one goal. Each goal is an 'ask' — one thing to find out, in your user's words — and a 'title', a few words that head it on the investigation's page (\"Delta and collagen compared\", \"Collagen as a shell around Delta\"): the ask is read beneath it, so the title never repeats it. Goals sharing a 'group' name are checked together by one AI run; a goal with no group gets a run of its own. 'then' on a goal is your user's own 'if this, then that': [{if, ask, title}] — when the answer bears out 'if', the run looks into 'ask' too, there and then, and answers it under the goal: it stays on this investigation. 'pace': one-by-one (each run starts when the last is done and reads what it found) or all-at-once; left out, your user's setting investigationsAtOnce decides. Amending: repeating a goal's id corrects it, new goals are added (and start as steering allows), 'retireGoals' withdraws by id.",
     "Readers give a BLIND FIRST TAKE on the question alone: their agent hands them the question, they say what they think the answer is or how they would find out (post-review), and only then does what is known and ruled out open to them. 'research' sends your user's own AI to look into it; what it finds comes back as a take.",
     "WHETHER THEIR AI STARTS ON IT is your user's steering for investigations (set-steering investigate): not chosen, it does not; ask first, the answer tells you to ask them; act then tell, or just do it, it starts as the investigation is filed. One asked of someone else (peers) starts nothing here: their own steering decides on their side. 'run: false' files it without starting anything, whatever the steering says — when your user says to just file it.",
     "ANSWERING IT (investigate with 'ticketId'): when your user has the answer, pass 'outcome' — answered, not-answerable (there is no answer to be had) or wrong-question (what should be asked instead goes in the findings) — with 'findings', the answer or why there is none, and 'evidence': what it rests on (links, file:line, measurements). Then close-ticket. What follows (a proposal, a plan) is filed with 'from' this investigation, so its readers see the findings beside it.",
@@ -439,7 +439,7 @@ export const Investigate = Tool.make("investigate", {
     outcome: Schema.optional(InvestigationOutcome),
     findings: Schema.optional(Schema.String),
     evidence: Schema.optional(Schema.Array(Schema.String)),
-    goals: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String), ask: Schema.String, group: Schema.optional(Schema.String), then: Schema.optional(Schema.Array(GoalFollowUp)) }))),
+    goals: Schema.optional(Schema.Array(Schema.Struct({ id: Schema.optional(Schema.String), ask: Schema.String, title: Schema.optional(Schema.String), group: Schema.optional(Schema.String), then: Schema.optional(Schema.Array(GoalFollowUp)) }))),
     retireGoals: Schema.optional(Schema.Array(Schema.String)),
     pace: Schema.optional(InvestigationPace),
     run: Schema.optional(Schema.Boolean),
@@ -526,7 +526,7 @@ export const PostReview = Tool.make("post-review", {
   description: [
     "Put your user's review of a review ticket on that ticket — what they think of the change, in their words. For a review they were asked for AND for one they were not: anyone in the room may read a review ticket, and each reader's review lands on a step of their own, so nobody takes anything from anyone. Posting again revises your user's own review.",
     "Only when your user has said what they think — never your own reading of the code, and never a summary you produced on your own initiative. Read the why first (review-context) so the review answers the reasons and not just the diff. It goes out as you call it, like everything else that leaves this machine, and shows in your user's outbox; set 'failed' when they are rejecting the change, 'comment' when they only say something about it and approve nothing (left out, a review that is not failed approves it).",
-    "On an INVESTIGATION, 'answers' says what was found goal by goal (goal ids from review-context; 'q' when it has no goals of its own): each an 'outcome' (answered, not-answerable, wrong-question), 'findings', 'evidence', and 'followUps' — for each follow-up written on the goal, its 'if' and 'ask', whether it 'held', and where it did, its own outcome, findings and evidence. A later take keeps the goals it does not answer.",
+    "On an INVESTIGATION, 'answers' says what was found goal by goal (goal ids from review-context; 'q' when it has no goals of its own): each an 'outcome' (answered, not-answerable, wrong-question), 'blocks' — the answer as the page shows it at a glance, a few words each: verdict {verdict: yes|no|partly, text}, points {items}, facts {rows: [{label, value}]}, compare {left, right, rows: [{what, left, right}]} (who has what, plainly named), ranking {options: [{name, fit: best|good|partial|poor, why}]}, choices {options: [{name, call: adopt|maybe|skip, why}]} — then 'findings', everything found in full, 'evidence', 'questions' (what only your user can decide), and 'followUps' — for each follow-up written on the goal, its 'if' and 'ask', whether it 'held', and where it did, its own outcome, blocks, findings and evidence. A later take keeps the goals it does not answer.",
   ].join("\n"),
   parameters: Schema.Struct({
     ticketId: Schema.String,
@@ -725,6 +725,13 @@ export const OpenReview = Tool.make("open-review", {
   success: Schema.String,
 });
 
+export const OpenInvestigation = Tool.make("open-investigation", {
+  description:
+    "Open an investigation's page in your user's browser — what was found, goal by goal, read at a glance, the full findings a click away, and the questions only they can decide — the same as pressing o on it in the TUI. When your user asks to see an investigation or its findings. The page updates itself as runs post. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Schema.Struct({ ticketId: Schema.String }),
+  success: Schema.String,
+});
+
 export const OpenMerges = Tool.make("open-merges", {
   description:
     "Open a project's merges page in your user's browser — what was merged into its default branch, the latest first, each linked to its pull request with the collagen tickets it came from and their why, tabs for the room's other projects — the same as pressing o on their merges tab. 'project' is one of the current room's projects on this machine (any case); left out, their first in the order they keep (order-projects). 'number' opens it at that pull request's merge, its why unfolded. When your user asks to see a project's merges or history. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -878,6 +885,7 @@ export const CollagenToolkit = Toolkit.make(
   RemoveTheme,
   SetSettings,
   OpenReview,
+  OpenInvestigation,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -934,6 +942,7 @@ export const DevCollagenToolkit = Toolkit.make(
   RemoveTheme,
   SetSettings,
   OpenReview,
+  OpenInvestigation,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -1121,7 +1130,7 @@ const makeHandlers = Effect.gen(function* () {
         outcome?: InvestigationOutcome;
         findings?: string;
         evidence?: ReadonlyArray<string>;
-        goals?: ReadonlyArray<{ readonly id?: string; readonly ask: string; readonly group?: string; readonly then?: ReadonlyArray<GoalFollowUp> }>;
+        goals?: ReadonlyArray<{ readonly id?: string; readonly ask: string; readonly title?: string; readonly group?: string; readonly then?: ReadonlyArray<GoalFollowUp> }>;
         retireGoals?: ReadonlyArray<string>;
         pace?: InvestigationPace;
         /** investigate: false files it without starting the person's AI, whatever their steering says */
@@ -1177,8 +1186,9 @@ const makeHandlers = Effect.gen(function* () {
                       goals: input.goals.map((goal) => ({
                         ...(goal.id ? { id: goal.id } : {}),
                         ask: goal.ask.trim(),
+                        ...(goal.title?.trim() ? { title: goal.title.trim() } : {}),
                         ...(goal.group?.trim() ? { group: goal.group.trim() } : {}),
-                        ...(goal.then && goal.then.length > 0 ? { then: goal.then.map((follow) => ({ if: follow.if.trim(), ask: follow.ask.trim() })) } : {}),
+                        ...(goal.then && goal.then.length > 0 ? { then: goal.then.map((follow) => ({ if: follow.if.trim(), ask: follow.ask.trim(), ...(follow.title?.trim() ? { title: follow.title.trim() } : {}) })) } : {}),
                       })),
                     }
                   : {}),
@@ -1968,7 +1978,8 @@ const makeHandlers = Effect.gen(function* () {
           roomId,
           to: author,
           title: `${ticket.goal} · your ${ticket.kind === "review" ? "review" : "take"}`,
-          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}), ...(input.answers && input.answers.length > 0 ? { answers: input.answers } : {}) },
+          // who wrote an answer is stamped as it is posted, never taken from the call
+          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}), ...(input.answers && input.answers.length > 0 ? { answers: input.answers.map(({ agent: _agent, conversation: _conversation, ...answer }) => answer) } : {}) },
         });
         if (input.failed || input.comment || told.startsWith("failed")) return told;
         // an approval opens what was stacked on this ticket to your user: the
@@ -2326,6 +2337,14 @@ const makeHandlers = Effect.gen(function* () {
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review has a page (its why is in review-context)`;
         return yield* pages.show(ticketId);
+      }),
+      "open-investigation": Effect.fn("Mcp.openInvestigation")(function* ({ ticketId }: { ticketId: string }) {
+        const { room } = yield* focusedRoom;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ticket = all.get(ticketId);
+        if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${ticketId} — check get-tickets`;
+        if (ticket.kind !== "investigation") return `failed: "${ticket.goal}" is a ${ticket.kind}, not an investigation${ticket.kind === "review" ? " — open-review opens a review's page" : ""}`;
+        return yield* pages.showInvestigation(ticketId);
       }),
       "open-merges": Effect.fn("Mcp.openMerges")(function* (input: { project?: string; number?: number }) {
         const { id: roomId } = yield* focusedRoom;

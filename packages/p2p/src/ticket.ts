@@ -27,6 +27,24 @@ export const STATUS_RANK: Record<StepStatus, number> = {
   retired: 2,
 };
 
+/** How a finding is shown: the run picks the kind that fits it, and the
+ *  investigation page draws each kind its own way. A few words each — the
+ *  page is read at a glance, the full findings hold the rest. */
+export const AnswerBlock = Schema.Union([
+  /** the answer in a line: yes, no or partly */
+  Schema.Struct({ kind: Schema.Literal("verdict"), verdict: Schema.Literals(["yes", "no", "partly"]), text: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("points"), items: Schema.Array(Schema.String) }),
+  /** label and value */
+  Schema.Struct({ kind: Schema.Literal("facts"), rows: Schema.Array(Schema.Struct({ label: Schema.String, value: Schema.String })) }),
+  /** two sides, and per row which of them has it */
+  Schema.Struct({ kind: Schema.Literal("compare"), left: Schema.String, right: Schema.String, rows: Schema.Array(Schema.Struct({ what: Schema.String, left: Schema.Boolean, right: Schema.Boolean })) }),
+  /** options best first, each with how well it fits */
+  Schema.Struct({ kind: Schema.Literal("ranking"), options: Schema.Array(Schema.Struct({ name: Schema.String, fit: Schema.Literals(["best", "good", "partial", "poor"]), why: Schema.optional(Schema.String) })) }),
+  /** options, each with what to do about it */
+  Schema.Struct({ kind: Schema.Literal("choices"), options: Schema.Array(Schema.Struct({ name: Schema.String, call: Schema.Literals(["adopt", "maybe", "skip"]), why: Schema.optional(Schema.String) })) }),
+]);
+export type AnswerBlock = typeof AnswerBlock.Type;
+
 /** A follow-up written on a goal, as a take met it: whether its 'if' held,
  *  and, where it did, what looking into its 'ask' found — in the same run,
  *  on the same investigation. */
@@ -37,17 +55,24 @@ export const FollowUpAnswer = Schema.Struct({
   outcome: Schema.optional(InvestigationOutcome),
   findings: Schema.optional(Schema.String),
   evidence: Schema.optional(Schema.Array(Schema.String)),
+  blocks: Schema.optional(Schema.Array(AnswerBlock)),
 });
 export type FollowUpAnswer = typeof FollowUpAnswer.Type;
 
 /** What a take found for one of an investigation's goals, and for the
- *  follow-ups written on it. */
+ *  follow-ups written on it: blocks to read at a glance, the full findings
+ *  beneath, its questions for the person, and which agent and conversation
+ *  wrote it (stamped as it is posted, so runs are told apart). */
 export const GoalAnswer = Schema.Struct({
   goal: Schema.String,
   outcome: InvestigationOutcome,
   findings: Schema.String,
   evidence: Schema.optional(Schema.Array(Schema.String)),
+  blocks: Schema.optional(Schema.Array(AnswerBlock)),
+  questions: Schema.optional(Schema.Array(Schema.String)),
   followUps: Schema.optional(Schema.Array(FollowUpAnswer)),
+  agent: Schema.optional(Schema.String),
+  conversation: Schema.optional(Conversation),
 });
 export type GoalAnswer = typeof GoalAnswer.Type;
 
@@ -743,7 +768,8 @@ export function postReview(
   const existing = ticket.steps.find((ticketStep) => ticketStep.id === id);
   // goals this take does not answer keep what the last one said
   const given = new Set(answers.map((answer) => answer.goal));
-  const kept = [...(existing?.answers ?? []).filter((answer) => !given.has(answer.goal)), ...answers];
+  const stamped = answers.map((answer) => ({ ...answer, ...actingFields(acting) }));
+  const kept = [...(existing?.answers ?? []).filter((answer) => !given.has(answer.goal)), ...stamped];
   const step: TicketStep = {
     id,
     owner: by.key,
