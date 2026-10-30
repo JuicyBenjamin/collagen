@@ -7,6 +7,7 @@ import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact, day } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
+import { Pending } from "./Pending";
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
@@ -75,4 +76,25 @@ export function PerCall(props: { perCall: AuditPage["perCall"] }) {
   );
 }
 
-PerCall.Skeleton = () => <PanelSkeleton title="Tokens per call" height={430} />;
+PerCall.Skeleton = () => (
+  <PanelSkeleton title="Tokens per call">
+    <p>
+      <Pending>ask-review close-ticket propose review-context get-tickets</Pending>
+    </p>
+    <dl class="audit-facts">
+      <div>
+        <dt>Before the last week</dt>
+        <dd>
+          <Pending>2.6k tokens a call</Pending>
+        </dd>
+      </div>
+      <div>
+        <dt>Last week</dt>
+        <dd>
+          <Pending>1.4k tokens a call</Pending>
+        </dd>
+      </div>
+    </dl>
+    <div class="audit-sk-body" style={{ height: "287px" }} />
+  </PanelSkeleton>
+);

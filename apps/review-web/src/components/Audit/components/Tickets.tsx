@@ -40,4 +40,13 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
   );
 }
 
-Tickets.Skeleton = () => <PanelSkeleton title="Tickets" height={175} />;
+Tickets.Skeleton = () => (
+  <PanelSkeleton
+    title="Tickets"
+    legend={[
+      { label: "Open", colour: "var(--color-success)" },
+      { label: "Closed", colour: "var(--color-neutral)" },
+    ]}
+    height={180}
+  />
+);
