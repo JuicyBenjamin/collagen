@@ -102,6 +102,6 @@ PerCall.Skeleton = () => (
         </dd>
       </div>
     </dl>
-    <div class="audit-sk-body" style={{ height: "287px" }} />
+    <div class="audit-sk-body" style={{ height: "278px" }} />
   </PanelSkeleton>
 );

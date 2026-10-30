@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js";
+import { createMemo, For } from "solid-js";
 import { barX, defineChart } from "@tanstack/charts";
 import { scaleBand } from "@tanstack/charts/scales/band";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
@@ -32,12 +32,23 @@ export function ToolCalls(props: { tools: AuditPage["tools"] }) {
       },
     }),
   );
+  const shown = createMemo(() => KINDS.filter((kind) => rows().some((row) => row.kind === kind)));
   return (
     <section class="audit-panel">
       <h2>Tool calls</h2>
+      <div class="audit-legend">
+        <For each={shown()}>
+          {(kind) => (
+            <span>
+              <i style={{ background: KIND_COLOUR[KINDS.indexOf(kind)] }} />
+              {kind[0]!.toUpperCase() + kind.slice(1)}
+            </span>
+          )}
+        </For>
+      </div>
       <Chart definition={definition()} ariaLabel="Tool calls by tool" height={rows().length * 26 + 40} />
     </section>
   );
 }
 
-ToolCalls.Skeleton = () => <PanelSkeleton title="Tool calls" height={290} />;
+ToolCalls.Skeleton = () => <PanelSkeleton title="Tool calls" height={475} />;

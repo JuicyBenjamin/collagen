@@ -53,6 +53,6 @@ Tickets.Skeleton = () => (
       { label: "Open", colour: "var(--color-success)" },
       { label: "Closed", colour: "var(--color-neutral)" },
     ]}
-    height={180}
+    height={250}
   />
 );

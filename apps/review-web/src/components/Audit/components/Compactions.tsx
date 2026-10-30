@@ -38,4 +38,4 @@ export function Compactions(props: { compactions: AuditPage["compactions"] }) {
   );
 }
 
-Compactions.Skeleton = () => <PanelSkeleton title="Compactions" sub="Collagen's tokens in the session when it compacted" height={372} />;
+Compactions.Skeleton = () => <PanelSkeleton title="Compactions" sub="Collagen's tokens in the session when it compacted" height={240} />;
