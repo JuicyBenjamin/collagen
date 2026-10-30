@@ -56,7 +56,7 @@ export function Investigation(props: { ticketId: string }) {
                 </section>
               )}
             </For>
-            <Questions questions={page().questions} />
+            <Questions ticketId={props.ticketId} questions={page().questions} />
           </main>
         </div>
       </Arrives>

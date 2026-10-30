@@ -34,7 +34,7 @@ const moreThan = (blocks: ReadonlyArray<AnswerBlock>, findings: string | undefin
 };
 
 /** Build the page's view of an investigation. `nameOf` names a person by key. */
-export const investigationPage = (ticket: Ticket, brief: InvestigationBrief | undefined, nameOf: (key: string) => string): InvestigationPage => {
+export const investigationPage = (ticket: Ticket, brief: InvestigationBrief | undefined, nameOf: (key: string) => string, me: string): InvestigationPage => {
   const question = brief?.question ?? ticket.goal;
   const goals = goalsOf(brief ?? { question });
   const answered = ticket.steps.flatMap((step) => (step.owner === undefined ? [] : (step.answers ?? []).map((answer) => ({ answer, owner: step.owner! }))));
@@ -88,6 +88,20 @@ export const investigationPage = (ticket: Ticket, brief: InvestigationBrief | un
     people: [...new Set(answered.map(({ owner }) => owner))].map(nameOf),
     models: [...runs].map(([name, conversations]) => ({ name, runs: conversations.size })),
     groups,
-    questions: answered.flatMap(({ answer, owner }) => (answer.questions ?? []).map((text) => ({ by: nameOf(owner), text }))),
+    questions: answered.flatMap(({ answer, owner }) =>
+      (answer.questions ?? []).map((asked) => {
+        // a question from before ids is its words alone, and cannot be answered here
+        const question = typeof asked === "string" ? { id: "", text: asked } : asked;
+        const decided = question.id ? brief?.decided?.find((had) => had.question === question.id) : undefined;
+        return {
+          id: question.id,
+          by: nameOf(owner),
+          text: question.text,
+          ...(question.then ? { then: question.then.title ?? question.then.ask } : {}),
+          ...(decided ? { answer: decided.answer } : {}),
+          canAnswer: question.id !== "" && ticket.createdBy === me && closedAs(ticket) === null && decided === undefined,
+        };
+      }),
+    ),
   };
 };

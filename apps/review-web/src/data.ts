@@ -672,6 +672,18 @@ export interface GoalView {
   readonly answers: ReadonlyArray<AnswerView>;
 }
 
+/** A run's question for the reader: what a yes would look into next, and
+ *  how it was answered. Only the investigation's author answers, while it is open. */
+export interface QuestionView {
+  readonly id: string;
+  readonly by: string;
+  readonly text: string;
+  /** what a yes looks into next */
+  readonly then?: string;
+  readonly answer?: "yes" | "no";
+  readonly canAnswer: boolean;
+}
+
 /** investigationPage(ticketId) — an investigation as its page reads it. */
 export interface InvestigationPage {
   readonly id: string;
@@ -689,5 +701,5 @@ export interface InvestigationPage {
   /** its goals in their groups, in goal order; a goal in no group stands under none */
   readonly groups: ReadonlyArray<{ readonly name: string | null; readonly goals: ReadonlyArray<GoalView> }>;
   /** what only the reader can decide, from every answer */
-  readonly questions: ReadonlyArray<{ readonly by: string; readonly text: string }>;
+  readonly questions: ReadonlyArray<QuestionView>;
 }
