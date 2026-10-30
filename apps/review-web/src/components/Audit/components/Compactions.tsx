@@ -56,6 +56,7 @@ export function Compactions(props: { compactions: AuditPage["compactions"] }) {
   const top = () => Math.max(1, ...bins().map((bin) => bin.compactions));
   const definition = createMemo(() =>
     defineChart({
+      focusRing: false,
       marks: [
         barY(bins(), { x: "name", y: "compactions", fill: "var(--viz-1)", inset: 6, radius: 4 }),
         decorative(
