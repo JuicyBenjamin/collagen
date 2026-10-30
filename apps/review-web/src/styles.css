@@ -29,6 +29,7 @@
   --kind-bug: var(--collagen-kind-bug, var(--color-error));
   --kind-review: var(--collagen-kind-review, var(--color-success));
   --kind-epic: var(--collagen-kind-epic, var(--color-secondary));
+  --kind-investigation: var(--collagen-kind-investigation, var(--color-primary));
   /* the review's buttons: comment blue, request changes yellow, approve green, whatever the theme's accent */
   --tone-say: var(--collagen-tone-say, var(--color-info));
   /* placeholders: words, and the box they sit in */
@@ -459,6 +460,7 @@ a.stack-step:hover { color: var(--accent); text-decoration: underline; }
 .kind-icon.kind-bug { color: var(--kind-bug); }
 .kind-icon.kind-review { color: var(--kind-review); }
 .kind-icon.kind-epic { color: var(--kind-epic); }
+.kind-icon.kind-investigation { color: var(--kind-investigation); }
 .host-note.left { text-align: left; max-width: none; margin: 0; }
 .moved-note { margin: 6px 0 0; font-size: 12.5px; color: var(--warn); }
 /* the review held back: comments written on another commit, each to keep or delete before it is submitted */
@@ -649,6 +651,7 @@ body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 
 .lineage-item.bug .kind-icon { color: var(--kind-bug); }
 .lineage-item.review .kind-icon { color: var(--kind-review); }
 .lineage-item.epic .kind-icon { color: var(--kind-epic); }
+.lineage-item.investigation .kind-icon { color: var(--kind-investigation); }
 .merge-epics { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; color: var(--dim); font-size: 13px; }
 .merge-epics .kind-icon { color: var(--kind-epic); }
 .lineage-name { flex: 1; min-width: 0; color: var(--fg); overflow-wrap: anywhere; text-decoration: none; }

@@ -2,7 +2,7 @@ import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
-import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
+import { answeredInvestigations, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
 import { AiStatus } from "./AiStatus";
@@ -217,6 +217,20 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (actionableSteps(change.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
                 const actorName = yield* nameOf(change.step.owner);
                 yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent, own ? change.step.conversation : undefined);
+              }
+              // an investigation is over: what it found reaches whoever is on
+              // the tickets it grew from, so a plan that stopped on a question
+              // goes on with the answer
+              const answered = answeredInvestigations(prev, all);
+              const reviews = answered.length > 0 ? yield* SubscriptionRef.get(room.reviews) : [];
+              for (const { investigation, parents } of answered) {
+                const brief = reviews.find((review) => review.ticketId === investigation.id)?.investigation;
+                const closer = investigation.closed!.by;
+                const closerName = yield* nameOf(closer);
+                for (const parent of parents) {
+                  if (!visibleTo(parent, all, identity.pubkey) || !isParticipant(parent, trace, identity.pubkey)) continue;
+                  yield* notify(myThreadFor(parent, trace, identity.pubkey, closer), closer, closerName, parent, "an investigation is answered", investigationAnsweredText(investigation, parent, brief, closerName));
+                }
               }
             }),
           ),

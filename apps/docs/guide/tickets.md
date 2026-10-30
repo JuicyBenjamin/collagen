@@ -19,7 +19,7 @@ anything.
 | title | its headline, required: a few words, 60 characters at most, what it is for — what every list shows (the author's, like the goal; an old ticket from before titles says so) |
 | goal | the line beneath the title: the ask, in full |
 | createdBy | peer key — authoritative for the ticket's structure |
-| kind | `task` (the plain one), one of the four that ask for judgment: `proposal`, `plan`, `bug`, `review`, or an `epic`, a folder of the others — see [the kinds at a glance](#the-kinds-at-a-glance) |
+| kind | `task` (the plain one), one of the five that ask for judgment: `investigation`, `proposal`, `plan`, `bug`, `review`, or an `epic`, a folder of the others — see [the kinds at a glance](#the-kinds-at-a-glance) |
 | steps | see below |
 
 A **step**:
@@ -48,6 +48,7 @@ guide and the screen cannot say two different things (a test holds this table to
 | kind | what it is | what it asks of a reader | who closes it |
 | --- | --- | --- | --- |
 | `epic` | a folder of tickets that together make one body of work | nothing of its own — its parts ask; anyone may add, move or take them out | anyone — once everything in it is resolved; reopened with a reason |
+| `investigation` | a question nobody can answer yet, with what is known and what is ruled out | what is the answer — your findings before its author's thinking | its author — answered, not answerable, or the wrong question, with the findings |
 | `proposal` | an idea, written down; owed to no one | is it worth doing — and would you do it, or should I | its author — when a plan grew out of it, or it was dropped |
 | `bug` | a symptom, with its reporter's reading of cause, importance and fix | what do you make of the symptom — your diagnosis before theirs | its reporter — fixed, planned, or let be |
 | `plan` | something its author intends to do, and how | do you agree, what would you change, what am I missing | its author — having folded the takes in and decided |
@@ -195,16 +196,26 @@ line included.
 
 ## Plans and proposals: judgment before the code exists <Badge type="tip" text="alpha" />
 
-A review asks a colleague to judge code that exists. Two more kinds ask for judgment
-before it does — advice, input, direction. Neither is a question: a question is what your
-own agent is for. These are for the input that is not AI: a colleague's take on your
+A review asks a colleague to judge code that exists. The other kinds ask for judgment
+before it does — advice, input, direction, an answer. A quick question is what your own
+agent is for. These are for the input that is not AI: a colleague's take on your
 thinking, given before your thinking has coloured theirs — or your own take, a day later.
+An investigation is the one for a question that takes finding out: what is possible,
+which of these, why does this happen.
 
 | kind | what it says | the reader is asked | work steps | it ends when |
 | --- | --- | --- | --- | --- |
 | `proposal` | an idea, written down; owed to no one | is it worth doing — and, if someone is named, would you do it, or should I | none — the work is an outline; willingness goes in the take | you close it — a plan grew out of it, or it is dropped |
 | `plan` | something I intend to do, and how — decided, or put up for input | do you agree, what would you change, what am I missing | yours, or none yet | you close it, having folded the takes in and decided |
 | `bug` | a symptom, and my reading of it: cause, importance, suggestion, remedy | what do you make of the symptom — your diagnosis before mine | none — a plan or the fix's review follows, naming the bug in `from` | you close it — fixed, planned, or let be |
+| `investigation` | a question, what is known and what is ruled out | what do you think the answer is, or how would you find out — before my thinking | none — your AI can be sent to find out (research); what follows names it in `from` | you close it — answered, not answerable, or the wrong question, with the findings |
+
+An investigation can grow out of any ticket: a plan that hits an unknown, a bug nobody can
+explain. File it with `from` naming that ticket; the ticket shows its open investigations,
+and when one closes, its findings reach the people on it and their agents, so the plan goes
+on with the answer. `research` on an investigation sends your own AI to answer it, with the
+model you chose for investigations; what it finds comes back as a take, and closing it with
+an outcome is still yours.
 
 A proposal is the **cheap** kind: alone on your own project you get ideas and want them
 kept without committing to them. It goes in with a goal and one thought; a summary, a

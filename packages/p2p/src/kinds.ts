@@ -41,6 +41,12 @@ export const KINDS: Record<TicketKind, KindInfo> = {
     closes: "its author — having folded the takes in and decided",
     agent: "an intention put up for judgment: your user's blind first take goes on it with post-review, and only then does review-context open the author's thoughts",
   },
+  investigation: {
+    what: "a question nobody can answer yet, with what is known and what is ruled out",
+    asks: "what is the answer — your findings before its author's thinking",
+    closes: "its author — answered, not answerable, or the wrong question, with the findings",
+    agent: "a question: your user's own answer first, posted with post-review; review-context then opens what is known and ruled out; research sends their AI to find out (its findings come back as a take); what follows is filed with from this ticket",
+  },
   bug: {
     what: "a symptom, with its reporter's reading of cause, importance and fix",
     asks: "what do you make of the symptom — your diagnosis before theirs",
@@ -62,10 +68,10 @@ export const KINDS: Record<TicketKind, KindInfo> = {
 };
 
 /** The kinds in the order work moves through them: the body of work that
- *  holds it all; where work starts, an idea or a symptom; how it gets done;
- *  the work; the check on it. The tabs, the overview's groups and the help
- *  list them this way, so reading along is reading the pipeline. */
-export const KIND_ORDER: ReadonlyArray<TicketKind> = (["epic", "proposal", "bug", "plan", "task", "review"] as const satisfies ReadonlyArray<TicketKind>);
+ *  holds it all; where work starts, a question, an idea or a symptom; how it
+ *  gets done; the work; the check on it. The tabs, the overview's groups and
+ *  the help list them this way, so reading along is reading the pipeline. */
+export const KIND_ORDER: ReadonlyArray<TicketKind> = (["epic", "investigation", "proposal", "bug", "plan", "task", "review"] as const satisfies ReadonlyArray<TicketKind>);
 
 /** Every kind's agent line, one per row — for a tool description. */
 export const kindsForAgents = (): string => KIND_ORDER.map((kind) => `${kind}: ${KINDS[kind].agent}`).join("; ");

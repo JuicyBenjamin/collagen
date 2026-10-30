@@ -62,15 +62,16 @@ export type OwnedStep = TicketStep & { readonly owner: string };
 export const isOwned = (step: TicketStep): step is OwnedStep => step.owner !== undefined;
 
 /** What kind of work the ticket is. "task" is the plain one: a goal and its
- *  steps. Four ask for JUDGMENT and carry a why record (review.ts): a
- *  "proposal" — an idea written down, owed to no one, is it worth doing; a
+ *  steps. Five ask for JUDGMENT and carry a why record (review.ts): an
+ *  "investigation" — a question nobody can answer yet, closed with findings;
+ *  a "proposal" — an idea written down, owed to no one, is it worth doing; a
  *  "plan" — how the author means to do something, do you agree; a "bug" — a
  *  symptom, with the reporter's reading of cause, importance and remedy, what
  *  do you make of it; a "review" of code that exists. Readers answer on steps
  *  of their own (`postReview`). An "epic" is neither: a folder of tickets
  *  that together make one body of work — no steps of its own, its state its
  *  parts' state, shaped by anyone in the room (see `PartMove`, `EpicTurn`). */
-export const TicketKind = Schema.Literals(["task", "review", "plan", "proposal", "bug", "epic"]);
+export const TicketKind = Schema.Literals(["task", "review", "plan", "proposal", "bug", "investigation", "epic"]);
 export type TicketKind = typeof TicketKind.Type;
 
 /** The kinds that ask for judgment and carry a why. */

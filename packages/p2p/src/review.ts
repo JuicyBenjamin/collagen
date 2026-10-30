@@ -193,6 +193,30 @@ export const BugReport = Schema.Struct({
 });
 export type BugReport = typeof BugReport.Type;
 
+/** How an investigation ended: the question answered, found to have no
+ *  answer to be had, or found to be the wrong question. */
+export const InvestigationOutcome = Schema.Literals(["answered", "not-answerable", "wrong-question"]);
+export type InvestigationOutcome = typeof InvestigationOutcome.Type;
+
+/** An investigation as asked, and, once it is over, as answered: the
+ *  question is the one fact and the only required field; what is known and
+ *  ruled out narrow it; the outcome, findings and evidence arrive when it is
+ *  done. */
+export const InvestigationBrief = Schema.Struct({
+  /** What is to be found out, in the asker's words. */
+  question: Schema.String,
+  /** What is known already. */
+  known: Schema.optional(Schema.String),
+  /** What is ruled out, and so not to be looked into again. */
+  ruledOut: Schema.optional(Schema.String),
+  outcome: Schema.optional(InvestigationOutcome),
+  /** The answer, or why there is none. */
+  findings: Schema.optional(Schema.String),
+  /** What it rests on: links, file:line, measurements. */
+  evidence: Schema.optional(Schema.Array(Schema.String)),
+});
+export type InvestigationBrief = typeof InvestigationBrief.Type;
+
 /** Everything the reviewer needs that a diff does not carry. One per ticket. */
 export const ReviewContext = Schema.Struct({
   ticketId: Schema.String,
@@ -221,6 +245,8 @@ export const ReviewContext = Schema.Struct({
   outline: Schema.optional(Schema.Array(OutlineItem)),
   /** A bug ticket's report (see BugReport). */
   bug: Schema.optional(BugReport),
+  /** An investigation's question, and its findings once it has them (see InvestigationBrief). */
+  investigation: Schema.optional(InvestigationBrief),
   /** How the change works, drawn and played (see ReviewMachine). */
   machine: Schema.optional(ReviewMachine),
   /** Present when the why was inferred, not told (see Assumed). */
@@ -279,6 +305,8 @@ export interface ReviewDelta {
   readonly bug?: Partial<BugReport>;
   /** Optional report fields withdrawn — a disproven cause, a score that no longer holds. */
   readonly retireBug?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
+  /** An investigation's brief, whole or in part: fields given replace, fields left out keep. */
+  readonly investigation?: Partial<InvestigationBrief>;
   /** The machine, whole: given replaces it, null withdraws it. */
   readonly machine?: ReviewMachine | null;
   /** The why is inferred: who wrote the code, and what was read (see Assumed). */
@@ -390,6 +418,10 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
           ...(merged.suggestion && !gone.has("suggestion") ? { suggestion: merged.suggestion } : {}),
           ...(merged.remedy && !gone.has("remedy") ? { remedy: merged.remedy } : {}),
         };
+  // an investigation's brief merges field by field, like a bug report: the
+  // question is corrected by giving it again, the findings arrive at the end
+  const investigation: InvestigationBrief | undefined =
+    delta.investigation === undefined ? base.investigation : { question: "", ...base.investigation, ...delta.investigation };
   const machine = delta.machine === null ? undefined : (delta.machine ?? base.machine);
   const { machine: _machine, ...kept } = base;
   return {
@@ -404,6 +436,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
     ...(shows !== undefined ? { shows } : {}),
     ...(outline !== undefined ? { outline } : {}),
     ...(bug !== undefined ? { bug } : {}),
+    ...(investigation !== undefined ? { investigation } : {}),
     ...(machine !== undefined ? { machine } : {}),
     ...(delta.assumed ?? base.assumed ? { assumed: delta.assumed ?? base.assumed! } : {}),
     ...(retired.length > 0 ? { retired } : {}),

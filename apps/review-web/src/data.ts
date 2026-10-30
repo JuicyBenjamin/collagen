@@ -573,7 +573,7 @@ export interface MergeTicket {
   readonly author: string;
   readonly mine: boolean;
   readonly closed: boolean;
-  readonly kind: "task" | "review" | "plan" | "proposal" | "bug" | "epic";
+  readonly kind: "task" | "review" | "plan" | "proposal" | "bug" | "investigation" | "epic";
   /** what was decided on it, and why — on someone else's plan, proposal or
    *  bug, not before the reader's own take */
   readonly decisions: ReadonlyArray<MergeDecision>;

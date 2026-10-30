@@ -11,7 +11,7 @@ export const research = diagnostic<{ readonly ticketId: string; readonly ask?: s
   id: "research",
   title: "need more info",
   summary:
-    "Start a research job on a ticket (a plan, a proposal or a bug) that needs more info: collagen runs your user's preferred AI, with the model they chose for research, in the background — it reads the ticket and the thinking behind it, looks into it (the project's code, read only, and the web) and posts what it found, and its questions for your user, as one take on the ticket. Jobs run one at a time unless your user allows more; the rest wait in line (jobs lists them). It runs their AI in their name, so it follows their steering for running their AI. 'ask' is what they want to know, in their words.",
+    "Start a research job on a ticket (a plan, a proposal, a bug or an investigation) that needs more info: collagen runs your user's preferred AI, with the model they chose for research (for an investigation, the one they chose for investigations), in the background — it reads the ticket and the thinking behind it, looks into it (the project's code, read only, and the web) and posts what it found, and its questions for your user, as one take on the ticket. Jobs run one at a time unless your user allows more; the rest wait in line (jobs lists them). It runs their AI in their name, so it follows their steering for running their AI. 'ask' is what they want to know, in their words.",
   params: Schema.Struct({ ticketId: Schema.String, ask: Schema.optional(Schema.String) }),
   fromContext: (context) => (context.ticketId ? { ticketId: context.ticketId } : null),
   run: ({ ticketId, ask }, context, { rooms, jobs, state, me }) =>
@@ -21,7 +21,7 @@ export const research = diagnostic<{ readonly ticketId: string; readonly ask?: s
       const all = yield* SubscriptionRef.get(handle.room.tickets);
       const ticket = all.get(ticketId);
       if (!ticket || !visibleTo(ticket, all, me)) return `failed: no ticket ${ticketId} — check get-tickets`;
-      if (ticket.kind !== "plan" && ticket.kind !== "proposal" && ticket.kind !== "bug") return `failed: research is for a plan, a proposal or a bug; this is a ${ticket.kind}`;
+      if (ticket.kind !== "plan" && ticket.kind !== "proposal" && ticket.kind !== "bug" && ticket.kind !== "investigation") return `failed: research is for a plan, a proposal, a bug or an investigation; this is a ${ticket.kind}`;
       // it looks at the project's own code, where this machine has it
       const project = ((yield* state).rooms[context.roomId] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
       return yield* jobs.research({ roomId: context.roomId, ticket, cwd: project?.path ?? homedir(), ...(ask ? { ask } : {}) });
