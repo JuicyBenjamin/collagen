@@ -543,6 +543,10 @@ export const QueuedJob = Schema.Struct({
   goals: Schema.optional(Schema.Array(Schema.String)),
   /** one by one: the run that must finish before this one starts */
   after: Schema.optional(Schema.String),
+  /** an investigation's place in a chain of follow-ups (1: grew from none) */
+  depth: Schema.optional(Schema.Finite),
+  /** what the person wants to know, in their words */
+  ask: Schema.optional(Schema.String),
 });
 export type QueuedJob = typeof QueuedJob.Type;
 
@@ -559,9 +563,11 @@ export type Steering = typeof Steering.Type;
 /** The kinds of thing steered, each with a level of its own under the
  *  master: the work collagen hands the person's agent, acting on the repo
  *  host in their name (reviews, comments, merges — one level for every
- *  host), delivering into their AI conversations, and running their AI for
- *  a job of collagen's (researching a ticket). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate"]);
+ *  host), delivering into their AI conversations, running their AI for a job
+ *  of collagen's (researching a ticket), starting it on an investigation,
+ *  and reporting an investigation's findings back to the conversation that
+ *  filed it. */
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -580,7 +586,7 @@ export type TagRoute = typeof TagRoute.Type;
  *  person's own choice, never broadcast. */
 export const SteeringLevels = Schema.Struct({
   master: Schema.optional(SteeringPair),
-  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair) })),
+  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair) })),
   tag: Schema.optional(TagRoute),
 });
 export type SteeringLevels = typeof SteeringLevels.Type;

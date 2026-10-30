@@ -10,6 +10,9 @@ export interface Received {
   readonly roomId: string;
   readonly message: RoomMessage;
   readonly seq?: number;
+  /** the steering that decides whether it wakes a conversation: delivery,
+   *  or, for an investigation's findings to its author, report */
+  readonly steeredBy?: "deliver" | "report";
 }
 
 export interface PendingThread {
@@ -78,7 +81,7 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
       store.get.pipe(Effect.map((state) => state.consumed?.[roomId]?.[threadId] ?? -1));
 
     /** Offer a message; already-pulled (by cursor) or already-buffered ones are dropped. */
-    const push = (roomId: string, message: RoomMessage, seq?: number) =>
+    const push = (roomId: string, message: RoomMessage, seq?: number, steeredBy?: "deliver" | "report") =>
       Effect.gen(function* () {
         yield* SubscriptionRef.update(history, (kept) => {
           const thread = kept.get(at(roomId, message.threadId)) ?? [];
@@ -87,7 +90,7 @@ export class Inbox extends Context.Service<Inbox>()("cli/Inbox", {
         });
         if (seq !== undefined && seq <= (yield* cursor(roomId, message.threadId))) return;
         yield* SubscriptionRef.update(buffer, (waiting) =>
-          waiting.some((received) => received.message.id === message.id) ? waiting : [...waiting, { roomId, message, seq }],
+          waiting.some((received) => received.message.id === message.id) ? waiting : [...waiting, { roomId, message, seq, ...(steeredBy ? { steeredBy } : {}) }],
         );
       });
 

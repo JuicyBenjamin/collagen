@@ -633,7 +633,7 @@ export const SetAi = Tool.make("set-ai", {
 
 export const SetSteering = Tool.make("set-steering", {
   description:
-    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. Called with nothing, it says how things stand. Kept on their machine; applies live.",
+    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. Called with nothing, it says how things stand. Kept on their machine; applies live.",
   parameters: Schema.Struct({
     level: Schema.optional(Schema.NullOr(Steering)),
     kind: Schema.optional(Schema.Union([Schema.Literal("master"), SteeringKind])),
@@ -1524,7 +1524,9 @@ const makeHandlers = Effect.gen(function* () {
         if (level === "ask") return `\nASK YOUR USER, in one line, whether to send their AI to find out now: their steering for investigations is ask first. On their yes, call research with this ticketId.`;
         const said = yield* jobs.research({ roomId, ticket, cwd: projectPath, investigation, ...(goals ? { goals } : {}) });
         if (said.startsWith("failed")) return `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`;
-        return level === "act" ? `\nTheir steering for investigations is act, then tell: ${said} Tell your user, in one line, that their AI is on it.` : `\n${said} (their steering for investigations: just do it).`;
+        const report = levelOf(yield* store.get, "report", "mine");
+        const back = report === "act" || report === "auto" ? " What it finds comes back to this conversation as it arrives (their report steering), so nobody needs to watch for it." : "";
+        return level === "act" ? `\nTheir steering for investigations is act, then tell: ${said}${back} Tell your user, in one line, that their AI is on it.` : `\n${said}${back} (their steering for investigations: just do it).`;
       });
 
     // While nothing is chosen, each conversation is told once, on its first
@@ -1540,15 +1542,16 @@ const makeHandlers = Effect.gen(function* () {
       Effect.gen(function* () {
         if (tool === "set-steering" || tool === "watch-ticket") return null;
         const state = yield* store.get;
-        const held = (yield* SubscriptionRef.get(inbox.buffer)).filter(({ message }) => {
+        const held = (yield* SubscriptionRef.get(inbox.buffer)).filter(({ message, steeredBy }) => {
           if (heldTold.has(message.id)) return false;
           const listener = listenerFor(state, message);
           if (!listener) return false;
-          const gate = allow(state, "deliver", message.from === message.to ? "mine" : "others", listener.heard !== "worked");
+          const gate = allow(state, steeredBy ?? "deliver", message.from === message.to ? "mine" : "others", listener.heard !== "worked");
           return "held" in gate && gate.held === "ask";
         });
         const asking = unchosen(state);
-        const offerOn = OFFERS_WATCH.has(tool) && !answer.startsWith("failed") && levelOf(state, "deliver", "others") === "ask" ? ticketIn(input, answer) : undefined;
+        // an investigation's findings follow the report level; other news, delivery's for others
+        const offerOn = OFFERS_WATCH.has(tool) && !answer.startsWith("failed") && (tool === "investigate" ? levelOf(state, "report", "mine") : levelOf(state, "deliver", "others")) === "ask" ? ticketIn(input, answer) : undefined;
         if (!asking && held.length === 0 && offerOn === undefined) return null;
         const conversation = (yield* actingNow)?.conversation;
         if (!conversation) return null;
@@ -1570,7 +1573,11 @@ const makeHandlers = Effect.gen(function* () {
           );
         if (offerOn !== undefined && !offered.has(`${key} ${offerOn}`) && !state.worked?.[key]?.watching?.includes(offerOn)) {
           offered.add(`${key} ${offerOn}`);
-          lines.push(`WATCH? — this conversation can hear when ticket ${offerOn} moves (a colleague's take, a reply), woken in the window your user is in. Ask them once, in a line; on their yes, call watch-ticket {ticketId: "${offerOn}"}.`);
+          lines.push(
+            tool === "investigate"
+              ? `TELL THEM WHAT IS FOUND? — their report steering is ask first: this conversation can be told the findings of ticket ${offerOn} as they come back, woken in the window your user is in. Ask them once, in a line; on their yes, call watch-ticket {ticketId: "${offerOn}"}.`
+              : `WATCH? — this conversation can hear when ticket ${offerOn} moves (a colleague's take, a reply), woken in the window your user is in. Ask them once, in a line; on their yes, call watch-ticket {ticketId: "${offerOn}"}.`,
+          );
         }
         return lines.length > 0 ? lines.join("\n\n") : null;
       });
