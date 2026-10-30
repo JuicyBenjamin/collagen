@@ -54,6 +54,7 @@ export function Steering(props: { steering: AuditPage["steering"] }) {
   );
   const definition = createMemo(() =>
     defineChart({
+      focusRing: { fill: "var(--panel)", strokeWidth: 2 },
       marks: [
         polar({
           radiusRatio: 0.75,

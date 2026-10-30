@@ -1017,7 +1017,7 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
    the library's row keeps a swatch and a label column even when both are empty */
 .audit .ts-chart-tooltip__row { display: block !important; }
 .audit .ts-chart-tooltip__row > span:empty { display: none; }
-.audit .ts-chart-tooltip__row > span { text-align: left !important; }
+.audit .ts-chart-tooltip__row > span { text-align: left !important; white-space: normal !important; }
 .audit-donut { display: grid; grid-template-columns: 200px minmax(0, 1fr); align-items: center; gap: 32px; }
 .audit-calendar { display: flex; flex-direction: column; gap: 12px; }
 /* facts in a column on the left, their chart beside them */
@@ -1027,7 +1027,8 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .audit-calendar .audit-scale { padding-left: 34px; }
 .audit-scale { display: flex; align-items: center; gap: 3px; font-size: 12px; color: var(--dim); }
 .audit-scale i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-.audit-scale span { margin: 0 4px; }
+.audit-scale > span:not(.tooltip) { margin: 0 4px; }
+.audit-scale .tooltip { display: inline-flex; }
 .audit-grid { display: grid; font-size: 13px; }
 .audit-grid-head, .audit-grid-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; align-items: center; column-gap: 16px; padding: 7px 0; }
 .audit-grid-head { color: var(--dim); font-size: 12px; padding-top: 0; }

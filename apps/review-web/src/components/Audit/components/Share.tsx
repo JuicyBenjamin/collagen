@@ -59,6 +59,7 @@ export function Share(props: { totals: AuditPage["totals"] }) {
       endAngle: Math.PI * 0.75,
     });
     return defineChart({
+      focusRing: false,
       marks: [
         polar({
           radiusRatio: 0.9,

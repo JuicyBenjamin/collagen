@@ -69,6 +69,7 @@ export function PerCall(props: { calls: AuditPage["calls"] }) {
   const before = () => average(0, Date.now() - WEEK);
   const definition = createMemo(() =>
     defineChart({
+      focusRing: { fill: "var(--panel)", strokeWidth: 2 },
       marks: [
         dot(calls(), {
           x: "time",

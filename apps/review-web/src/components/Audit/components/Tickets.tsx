@@ -54,6 +54,7 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
       .map((flow) => `${flow.kind} ${flow.tickets}`);
   const definition = createMemo(() =>
     defineChart({
+      focusRing: false,
       marks: [
         sankeyDiagram({
           nodes: nodes(),

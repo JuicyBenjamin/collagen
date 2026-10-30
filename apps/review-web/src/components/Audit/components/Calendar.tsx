@@ -8,7 +8,6 @@ import { dateOf, dayOf } from "~/when";
 import { namesAxis } from "../names";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
-import { Pending } from "./Pending";
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -28,7 +27,7 @@ const STEPS = [
 
 /** Every day of the period in the reader's own calendar, a week a column
  *  dated by its Monday, shaded by the tokens collagen's calls put in that
- *  day; the scale under it runs from none to the busiest day's tokens. */
+ *  day; the scale under it goes from less to more, each step's range on hover. */
 export function Calendar(props: { calls: AuditPage["calls"]; days: number }) {
   const grid = createMemo(() => {
     const totals = new Map<string, number>();
@@ -71,6 +70,7 @@ export function Calendar(props: { calls: AuditPage["calls"]; days: number }) {
   const size = () => cellFor(grid().weeks.length);
   const definition = createMemo(() =>
     defineChart({
+      focusRing: false,
       marks: [cell(grid().cells, { x: "week", y: "weekday", color: "level", inset: 2, radius: 3 })],
       margin: { top: DATES, right: 0, bottom: 0, left: NAMES },
       scales: {
@@ -126,19 +126,33 @@ export function Calendar(props: { calls: AuditPage["calls"]; days: number }) {
             height={DATES + WEEKDAYS.length * size()}
           />
         </div>
-        <Scale top={compact(grid().top)} />
+        <Scale top={grid().top} />
       </div>
     </section>
   );
 }
 
-/** What the shades mean: none on the left, the busiest day's tokens on the right. */
-function Scale(props: { top: string | undefined }) {
+/** What the shades mean: less to more, each step saying its range on hover. */
+function Scale(props: { top: number | undefined }) {
+  const rangeOf = (step: number): string | undefined => {
+    const top = props.top;
+    if (top === undefined) return undefined;
+    if (step === 0) return "No calls";
+    const from = (top * (step - 1)) / 4;
+    const to = (top * step) / 4;
+    return step === 1 ? `Up to ${compact(to)} tokens` : `${compact(from)} to ${compact(to)} tokens`;
+  };
   return (
     <div class="audit-scale">
-      <span>0</span>
-      <For each={STEPS}>{(step) => <i style={{ background: step }} />}</For>
-      <span>{props.top ?? <Pending>149k</Pending>} tokens</span>
+      <span>Less</span>
+      <For each={STEPS}>
+        {(step, index) => (
+          <span class="tooltip" data-tip={rangeOf(index())}>
+            <i style={{ background: step }} />
+          </span>
+        )}
+      </For>
+      <span>More</span>
     </div>
   );
 }

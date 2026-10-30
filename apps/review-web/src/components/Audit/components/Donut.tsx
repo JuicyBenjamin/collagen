@@ -31,6 +31,7 @@ export function Donut(props: {
   };
   const definition = createMemo(() =>
     defineChart({
+      focusRing: false,
       marks: [
         polar({
           inset: 0,

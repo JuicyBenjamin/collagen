@@ -26,6 +26,9 @@ export function Ranked(props: {
   const definition = createMemo(() => {
     const details = props.details;
     return defineChart({
+      focusRing: false,
+      // a row is one thing: hovering anywhere along it is that row
+      focus: "nearest-y",
       marks: [
         barX(rows(), { x: "value", y: "name", fill: "var(--viz-1)", inset: 3, radius: 4 }),
         decorative(

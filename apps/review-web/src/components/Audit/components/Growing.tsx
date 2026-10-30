@@ -54,6 +54,9 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
   const top = () => Math.max(1, ...rows().map((row) => row.to));
   const definition = createMemo(() =>
     defineChart({
+      focusRing: { fill: "var(--panel)", strokeWidth: 2 },
+      // a row is one thing: hovering anywhere along it is that row
+      focus: "nearest-y",
       marks: [
         decorative(
           link(rows(), {
