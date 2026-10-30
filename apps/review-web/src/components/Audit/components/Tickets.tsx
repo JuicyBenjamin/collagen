@@ -19,7 +19,13 @@ export function Tickets(props: { tickets: AuditPage["tickets"] }) {
         x: { scale: scaleLinear, nice: true, grid: true },
       },
       color: { scale: scaleOrdinal<string, string>().domain(["Open", "Closed"]).range(["var(--color-success)", "var(--color-neutral)"]) },
-      tooltip,
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "kind", label: "Kind", text: (point) => point.datum.kind },
+          { id: "count", label: "Tickets", text: (point) => `${point.datum.count} ${point.datum.status.toLowerCase()}` },
+        ],
+      },
     }),
   );
   return (

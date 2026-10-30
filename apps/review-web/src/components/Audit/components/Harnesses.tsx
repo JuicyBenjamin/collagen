@@ -17,7 +17,13 @@ export function Harnesses(props: { harnesses: AuditPage["harnesses"]; models: Au
         y: { scale: () => scaleBand<string>().domain(rows().map((row) => row.name)).padding(0.25) },
         x: { scale: scaleLinear, nice: true, grid: true },
       },
-      tooltip,
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "harness", label: "Harness", text: (point) => point.datum.name },
+          { id: "sessions", label: "Sessions", text: (point) => point.datum.sessions.toLocaleString() },
+        ],
+      },
     }),
   );
   return (

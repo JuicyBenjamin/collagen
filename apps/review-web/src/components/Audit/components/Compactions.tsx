@@ -4,7 +4,8 @@ import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
-import { compact, day } from "../numbers";
+import { dateOf, dateTimeOf } from "~/when";
+import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 
 /** Each compaction over time, at the height of collagen's tokens in the session then. */
@@ -14,10 +15,16 @@ export function Compactions(props: { compactions: AuditPage["compactions"] }) {
     defineChart({
       marks: [ruleY([0], { strokeOpacity: 0.4 }), dot(rows(), { x: "time", y: "tokens", r: 5, fill: "var(--color-secondary)" })],
       scales: {
-        x: { scale: scaleLinear, axis: { ticks: { format: (value: number) => day(value) } } },
+        x: { scale: scaleLinear, axis: { ticks: { format: (value: number) => dateOf(value) } } },
         y: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(value) } } },
       },
-      tooltip,
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "when", label: "When", text: (point) => dateTimeOf(point.datum.time) },
+          { id: "tokens", label: "Collagen tokens", text: (point) => point.datum.tokens.toLocaleString() },
+        ],
+      },
     }),
   );
   return (

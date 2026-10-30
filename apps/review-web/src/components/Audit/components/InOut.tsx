@@ -21,7 +21,13 @@ export function InOut(props: { tools: AuditPage["tools"] }) {
         x: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(Math.abs(value)) } } },
       },
       color: { scale: scaleOrdinal<string, string>().domain(["In", "Out"]).range(["var(--color-primary)", "var(--color-warning)"]) },
-      tooltip,
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "tool", label: "Tool", text: (point) => point.datum.tool },
+          { id: "tokens", label: "Tokens", text: (point) => `${Math.abs(point.datum.tokens).toLocaleString()} ${point.datum.side === "In" ? "in" : "out"}` },
+        ],
+      },
     }),
   );
   return (

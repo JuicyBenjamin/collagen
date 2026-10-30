@@ -5,7 +5,8 @@ import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
-import { compact, day } from "../numbers";
+import { dateOf, dateTimeOf } from "~/when";
+import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 import { Pending } from "./Pending";
 
@@ -41,10 +42,16 @@ export function PerCall(props: { perCall: AuditPage["perCall"] }) {
         decorative(lineY(weeks(), { x: "time", y: "tokens", stroke: "var(--color-primary)", strokeWidth: 2.5 })),
       ],
       scales: {
-        x: { scale: scaleLinear, axis: { ticks: { format: (value: number) => day(value) } } },
+        x: { scale: scaleLinear, axis: { ticks: { format: (value: number) => dateOf(value) } } },
         y: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(value) } } },
       },
-      tooltip,
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "when", label: "When", text: (point) => dateTimeOf(point.datum.time) },
+          { id: "tokens", label: "Tokens", text: (point) => point.datum.tokens.toLocaleString() },
+        ],
+      },
     }),
   );
   return (
