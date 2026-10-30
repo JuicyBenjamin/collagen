@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { Conversation } from "./acting";
 import { DraftComment, ReviewComment, ReviewContext } from "./review";
-import { Ticket } from "./ticket";
+import { GoalAnswer, Ticket } from "./ticket";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
 // (swarm frames, state files) is Schema-validated at the edge.
@@ -371,6 +371,8 @@ export const Outgoing = Schema.Union([
     failed: Schema.Boolean,
     /** words with no verdict: neither approves nor asks for changes */
     comment: Schema.optional(Schema.Boolean),
+    /** an investigation's take: what it found, goal by goal */
+    answers: Schema.optional(Schema.Array(GoalAnswer)),
   }),
   Schema.Struct({
     kind: Schema.Literal("settle"),
@@ -537,6 +539,10 @@ export const QueuedJob = Schema.Struct({
   /** whose doing started it: the person's, or another's investigation that
    *  reached them (their steering for others' then let it run) */
   cause: Schema.optional(Schema.Literals(["mine", "others"])),
+  /** an investigation's goals this run answers (absent: the whole of it) */
+  goals: Schema.optional(Schema.Array(Schema.String)),
+  /** one by one: the run that must finish before this one starts */
+  after: Schema.optional(Schema.String),
 });
 export type QueuedJob = typeof QueuedJob.Type;
 
@@ -587,6 +593,9 @@ export const Settings = Schema.Struct({
   /** absent = on: closing a ticket, what it grew from (open, the person's
    *  own) is offered ticked to close with it */
   alsoCloseParents: Schema.optional(Schema.Boolean),
+  /** absent = off: an investigation that names no pace runs its goals one
+   *  by one; on, all at once */
+  investigationsAtOnce: Schema.optional(Schema.Boolean),
 });
 export type Settings = typeof Settings.Type;
 

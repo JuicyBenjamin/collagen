@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { conversationKey, Conversation, withActing, actingFields, type Acting } from "./acting";
 import { deriveThreadId } from "./topic";
+import { InvestigationOutcome, type InvestigationBrief, type InvestigationGoal } from "./review";
 
 // The CallScript-inspired intermediate state for cross-peer work: a ticket is
 // one inert, serializable record — the goal, every step, each step's owner and
@@ -26,6 +27,27 @@ export const STATUS_RANK: Record<StepStatus, number> = {
   retired: 2,
 };
 
+/** What a take found for one of an investigation's goals, and what it filed
+ *  from it (a follow-up the goal named). */
+export const GoalAnswer = Schema.Struct({
+  goal: Schema.String,
+  outcome: InvestigationOutcome,
+  findings: Schema.String,
+  evidence: Schema.optional(Schema.Array(Schema.String)),
+  spawned: Schema.optional(Schema.Array(Schema.String)),
+});
+export type GoalAnswer = typeof GoalAnswer.Type;
+
+/** The goal an investigation with no goals of its own has: its question. */
+export const QUESTION_GOAL = "q";
+
+/** An investigation's goals: the ones it lists and has not withdrawn, or
+ *  its question as the one. */
+export const goalsOf = (brief: Pick<InvestigationBrief, "question" | "goals">): ReadonlyArray<InvestigationGoal> => {
+  const open = (brief.goals ?? []).filter((goal) => !goal.withdrawn);
+  return open.length > 0 ? open : [{ id: QUESTION_GOAL, ask: brief.question }];
+};
+
 export const TicketStep = Schema.Struct({
   id: Schema.String,
   /** Pubkey (hex) of the peer expected to settle this step. Absent on a
@@ -45,6 +67,9 @@ export const TicketStep = Schema.Struct({
   /** A take that says something without a verdict: it answers the ticket,
    *  but approves nothing. Absent on every other step (and on older takes). */
   comment: Schema.optional(Schema.Boolean),
+  /** On an investigation's take: what it found, goal by goal. A later take
+   *  of the same person's keeps the goals it does not answer. */
+  answers: Schema.optional(Schema.Array(GoalAnswer)),
   /** Which of the owner's agents wrote this state (Claude Code, Codex …) —
    *  attribution, never ownership: the step stays the person's. Absent when
    *  the person acted themselves, or nobody knows. Set by every write to the
@@ -584,7 +609,7 @@ function mergeStep(first: TicketStep, second: TicketStep): TicketStep {
 
 /** A whole step as one comparable string, its fields in one order. */
 const stepKey = (step: TicketStep): string =>
-  JSON.stringify([step.status, step.owner ?? null, step.comment ?? null, step.intent, step.description, step.needs]);
+  JSON.stringify([step.status, step.owner ?? null, step.comment ?? null, step.intent, step.description, step.needs, step.answers ?? null]);
 
 /** The conversation a step belongs to. A ticket has no thread of its own:
  *  its steps ride the same threads messages use, so a step landing on your
@@ -699,9 +724,13 @@ export function postReview(
   now: number,
   acting?: Acting,
   comment = false,
+  answers: ReadonlyArray<GoalAnswer> = [],
 ): { readonly ticket: Ticket; readonly stepId: string } {
   const id = reviewStepId(by.name, by.key, new Map(ticket.steps.filter(isOwned).map((ticketStep) => [ticketStep.id, ticketStep.owner])));
   const existing = ticket.steps.find((ticketStep) => ticketStep.id === id);
+  // goals this take does not answer keep what the last one said
+  const given = new Set(answers.map((answer) => answer.goal));
+  const kept = [...(existing?.answers ?? []).filter((answer) => !given.has(answer.goal)), ...answers];
   const step: TicketStep = {
     id,
     owner: by.key,
@@ -712,6 +741,7 @@ export function postReview(
     result: findings,
     ...actingFields(acting),
     ...(comment && !failed ? { comment: true } : {}),
+    ...(kept.length > 0 ? { answers: kept } : {}),
     updatedAt: now,
   };
   return {

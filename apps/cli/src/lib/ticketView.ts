@@ -1,4 +1,4 @@
-import { closedAs, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, goalsOf, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { finishLine, reviewHeadline, yourFinish } from "./review";
 import { rowTitle } from "./ticketSummary";
 
@@ -45,6 +45,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   ...(ticket.from && ticket.from.length > 0 ? { from: ticket.from.join(" ") } : {}),
   /** questions that grew out of this one: what is still being found out, and what was */
   ...investigationsLine(ticket, all, me),
+  /** an investigation: each goal, and what each take found for it */
+  ...(ticket.kind === "investigation" ? goalsLines(ticket, review, nameFor) : {}),
   /** the tickets this one waits on (read after them) */
   ...(ticket.after && ticket.after.length > 0 ? { after: ticket.after.join(" ") } : {}),
   /** still waiting: only its author is shown it, nobody is nudged, until these are answered */
@@ -94,6 +96,27 @@ const investigationsLine = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me
   if (grown.length === 0) return {};
   const line = (other: Ticket) => `${other.id} "${other.title ?? other.goal}" (${isClosed(other, all) ? "closed — its findings: review-context on it" : "still open"})`;
   return { investigations: [...grown.filter((other) => !isClosed(other, all)), ...grown.filter((other) => isClosed(other, all))].map(line).join("; ") };
+};
+
+/** An investigation's goals as rows: what each asks, its group, and every
+ *  take's answer to it — who, how it ended, what they found, what they filed. */
+const goalsLines = (ticket: Ticket, review: ReviewContext | undefined, nameFor: (key: string) => string) => {
+  const goals = goalsOf(review?.investigation ?? { question: ticket.title ?? ticket.goal });
+  const answered = ticket.steps.flatMap((step) => (step.answers ?? []).map((answer) => ({ answer, by: step.owner === undefined ? "someone" : nameFor(step.owner) })));
+  return {
+    goals: goals.map((goal) => {
+      const answers = answered.filter(({ answer }) => answer.goal === goal.id);
+      return {
+        id: goal.id,
+        ask: goal.ask,
+        group: goal.group ?? "",
+        answers:
+          answers.length === 0
+            ? "none yet"
+            : answers.map(({ answer, by }) => `${by}: ${answer.outcome} — ${answer.findings}${answer.spawned && answer.spawned.length > 0 ? ` (filed ${answer.spawned.join(" ")})` : ""}`).join(" | "),
+      };
+    }),
+  };
 };
 
 /** Your user's own finish of a review, as a line — from the room: one given only on the host is on the review page. */

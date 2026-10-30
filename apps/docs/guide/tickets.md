@@ -217,6 +217,21 @@ on with the answer. `research` on an investigation sends your own AI to answer i
 model you chose for investigations; what it finds comes back as a take, and closing it with
 an outcome is still yours.
 
+An investigation is its question until you say more. List **goals** — the things you want
+found — and it splits into them:
+
+- goals that share a **group** are checked by one AI run, together; any other goal gets a
+  run of its own;
+- a goal can say **if this, then that**: when its answer bears the "if" out, the run files a
+  new investigation asking "that", from this one. Only what you wrote is filed — anything
+  else the run would ask comes back as a question for you — and a chain stops three deep;
+- the **pace** is one by one (each run starts when the last is done and builds on what it
+  found) or all at once, still within your job limit. An investigation can set its own;
+  otherwise your setting `investigationsAtOnce` decides, off (one by one) to begin with.
+
+Each run's take says what it found goal by goal, so `get-ticket` shows every goal with who
+answered it, how, and what it filed. Goals added later start as filing one does.
+
 A proposal is the **cheap** kind: alone on your own project you get ideas and want them
 kept without committing to them. It goes in with a goal and one thought; a summary, a
 non-binding **outline** of the work (what it might involve, who might do it) and named
