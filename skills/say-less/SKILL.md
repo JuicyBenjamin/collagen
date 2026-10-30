@@ -21,6 +21,17 @@ explaining is the goal, not a risk.
   an agent's review-context) — not in what everyone sees.
 - **Numbers that mean "you have something to do" stay**; counts that only
   describe go.
+- **A title is a few words; the question goes beneath it.** What someone
+  asked ("Does it make sense to build Delta into collagen as is…") is a
+  subtitle at most. The title is "Collagen as a shell around Delta".
+- **Plain words for how tickets relate.** Never "grew into", "grew from" or
+  "grown": say "follow-up", "came from", "relations".
+- **No dot separators on the web.** " · " between things is for the TUI,
+  where space is short. On a page, layout separates them: columns, labels,
+  lines of their own. A row of dots reads as AI-made.
+- **Nothing shown because the data has it.** Ids, queue order, "answered" on
+  something that is plainly answered, the same model on every card: say it
+  once where it helps, or not at all.
 - **The terminal has no room.** A label there is a word or two: a count and
   a noun ("2 relations"), never a phrase ("2 grew from it", "in ♛ epic"). A
   glyph that the tabs already teach needs no word beside it.
@@ -35,9 +46,13 @@ need instructions — but what an agent is told to tell the person is a line.
   about the person. It is now "Assumption-based review by Juicy · 0 of 5 checked".
 - A ticket row said "in ♛ Better Review Experience" and "4 grew from it".
   Now "♛ Better Review Experience" and "4 relations".
+- The investigation page's first draft showed goal ids, an "Answered" pill
+  on every answered goal, "one run after the first", the model on every
+  card, "Grew into", and joined everything with dots.
 
 ## Checklist
 
 - [ ] Can this text lose half its words and say the same?
 - [ ] Does it explain something the reader did not ask about?
 - [ ] Does it claim something about a person that is only a guess?
+- [ ] On the web: any " · "? Any title that is really the question?

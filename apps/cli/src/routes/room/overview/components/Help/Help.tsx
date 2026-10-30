@@ -130,7 +130,8 @@ const LIST_KEYS: ReadonlyArray<readonly [string, string]> = [
   ["←→", "on the tabs above the list: every ticket, or one kind at a time, by project"],
   ["h", "the closed tickets too, below the open ones, each saying how it ended"],
   ["e", "open the epic the ticket is in"],
-  ["p", "open the ticket it grew out of"],
+  ["p", "open the ticket it came from"],
+  ["o", "a review's diff, or an investigation's findings, in your browser"],
 ];
 
 /** What the overview's words and glyphs mean, on demand (`?`): the kinds of
