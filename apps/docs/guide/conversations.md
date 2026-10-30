@@ -49,6 +49,7 @@ Each level is one of:
 | level | it is… |
 | --- | --- |
 | not chosen | not done outside collagen at all; your agent asks you first |
+| `never` | not done on its own, and nobody asks: only your own word does it (you say "research it", it runs) |
 | `ask` — ask first | not done until you say yes: the tool your agent called answers with the question instead ("also on the pull request?"), and your agent asks you |
 | `act` — act, then tell | done, and you are told |
 | `auto` — just do it | done |

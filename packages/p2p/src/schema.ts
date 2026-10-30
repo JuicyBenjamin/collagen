@@ -544,9 +544,10 @@ export type QueuedJob = typeof QueuedJob.Type;
  *  belongs to the room it was added in (Keet-style) — the same repo shared
  *  into two rooms is two entries. */
 /** How much the person's agent may do on its own with what collagen hands
- *  it: ask first, act then tell, or just do it (cli lib/steering). Local —
- *  the person's own setting, never broadcast. */
-export const Steering = Schema.Literals(["ask", "act", "auto"]);
+ *  it: never (only on their own word, and nobody asks), ask first, act then
+ *  tell, or just do it (cli lib/steering). Local — the person's own setting,
+ *  never broadcast. */
+export const Steering = Schema.Literals(["never", "ask", "act", "auto"]);
 export type Steering = typeof Steering.Type;
 
 /** The kinds of thing steered, each with a level of its own under the

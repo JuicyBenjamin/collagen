@@ -10,7 +10,7 @@ import { CliArgs } from "./CliArgs";
 import { Inbox } from "./Inbox";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
-import { allow, DeliverAllowed, levelOf, MOCK_PERMIT, tagRouteOf, withDeliver, type Cause } from "../lib/steering";
+import { allow, DeliverAllowed, levelOf, MOCK_PERMIT, STEERING_LABEL, tagRouteOf, withDeliver, type Cause } from "../lib/steering";
 import { modelFor } from "../lib/jobs";
 import { listenerFor } from "../lib/worked";
 
@@ -144,7 +144,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       // adopting a thread or watching a ticket is the person's yes to it; having worked on one is not
       const gate = allow(state, "deliver", cause, listener.heard !== "worked");
       if ("held" in gate) {
-        yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: ${gate.held === "unset" ? "delivery steering is not chosen" : "delivery steering is ask first"}; it waits until your agent pulls it`);
+        yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: delivery steering is ${STEERING_LABEL[gate.held]}; it waits until your agent pulls it`);
         return null;
       }
       const harness = harnessFor(harnesses, listener.conversation.ai);
