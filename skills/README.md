@@ -9,34 +9,35 @@ The format is the open Agent Skills one, so the same files serve every agent.
 They live here and nowhere else; each agent reads them through a symlink in
 the place it looks:
 
-| Agent | Looks in | Link |
-| --- | --- | --- |
+| Agent       | Looks in          | Link                          |
+| ----------- | ----------------- | ----------------------------- |
 | Claude Code | `.claude/skills/` | `.claude/skills -> ../skills` |
-| Codex | `.agents/skills/` | `.agents/skills -> ../skills` |
+| Codex       | `.agents/skills/` | `.agents/skills -> ../skills` |
 
 Another agent: add its link beside these, pointing at `skills/`. Never copy a
 skill into an agent's folder — edit it here.
 
-| Skill | Use it when |
-| --- | --- |
-| [releasing](releasing/SKILL.md) | starting, merging or shipping work: branches off `release`, each merged into `release` on its person's OK, `release` into `main` as one pull request |
-| [replicated-merges](replicated-merges/SKILL.md) | changing anything peers write and merge: tickets, reviews, epics, ids, clocks |
-| [one-moment](one-moment/SKILL.md) | a screen or call reads state that can move while it is shown: a branch, a live list, an index |
-| [dates-and-times](dates-and-times/SKILL.md) | storing, sending, comparing or showing a time: UTC everywhere, the reader's date and time only on screen, through Temporal |
-| [offline-and-delivery](offline-and-delivery/SKILL.md) | sending, receiving or waking anyone: outbox, transcripts, steps, readiness |
-| [who-sees-what](who-sees-what/SKILL.md) | showing or explaining tickets to a person or an agent; filtering anything out |
-| [tui-layout](tui-layout/SKILL.md) | laying out, sizing or scrolling anything in the OpenTUI app |
-| [repo-hosts](repo-hosts/SKILL.md) | anything touching where code is hosted: pull requests, sign-in, links, refs, who wrote it |
-| [harnesses](harnesses/SKILL.md) | anything touching an AI tool a person works in — Claude Code, Codex, the next one: everything harness-specific behind `Harness`, so a new one is one implementation |
-| [steering](steering/SKILL.md) | collagen acting outside itself in the person's name — the repo host, their AI conversations, any service: a steering setting, off until they allow it |
-| [say-less](say-less/SKILL.md) | writing any text a person sees: say the fact, not the explanation |
-| [types-not-checks](types-not-checks/SKILL.md) | a value from a known set (a language, a kind, a mode): a union type, passed as is; outside text read once where it comes in |
-| [open-and-close](open-and-close/SKILL.md) | anything on the review page opening, closing, appearing or going away: animated in and out |
-| [component-design](component-design/SKILL.md) | building or changing UI: more components, parents pass data, each part owns its rendering, its placeholder and its arrival |
-| [compound-components](compound-components/SKILL.md) | a component growing props for one caller's look, or getting its placeholder: parts as one namespace (`Foo.Skeleton`) |
-| [folder-structure](folder-structure/SKILL.md) | creating, moving or splitting a component: a folder with `index.ts` and `components/`, children under their parent |
-| [names-say-what](names-say-what/SKILL.md) | writing any code: every parameter and variable named for what it holds, never `t`, `p`, `res`; `pnpm lint` checks |
-| [review](review/SKILL.md) | reviewing a diff, branch or pull request: leaky abstractions, and more as reviews find it |
+| Skill                                                 | Use it when                                                                                                                                                         |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [releasing](releasing/SKILL.md)                       | starting, merging or shipping work: branches off `release`, each merged into `release` on its person's OK, `release` into `main` as one pull request                |
+| [replicated-merges](replicated-merges/SKILL.md)       | changing anything peers write and merge: tickets, reviews, epics, ids, clocks                                                                                       |
+| [one-moment](one-moment/SKILL.md)                     | a screen or call reads state that can move while it is shown: a branch, a live list, an index                                                                       |
+| [dates-and-times](dates-and-times/SKILL.md)           | storing, sending, comparing or showing a time: UTC everywhere, the reader's date and time only on screen, through Temporal                                          |
+| [offline-and-delivery](offline-and-delivery/SKILL.md) | sending, receiving or waking anyone: outbox, transcripts, steps, readiness                                                                                          |
+| [who-sees-what](who-sees-what/SKILL.md)               | showing or explaining tickets to a person or an agent; filtering anything out                                                                                       |
+| [tui-layout](tui-layout/SKILL.md)                     | laying out, sizing or scrolling anything in the OpenTUI app                                                                                                         |
+| [repo-hosts](repo-hosts/SKILL.md)                     | anything touching where code is hosted: pull requests, sign-in, links, refs, who wrote it                                                                           |
+| [harnesses](harnesses/SKILL.md)                       | anything touching an AI tool a person works in — Claude Code, Codex, the next one: everything harness-specific behind `Harness`, so a new one is one implementation |
+| [steering](steering/SKILL.md)                         | collagen acting outside itself in the person's name — the repo host, their AI conversations, any service: a steering setting, off until they allow it               |
+| [say-less](say-less/SKILL.md)                         | writing any text a person sees: say the fact, not the explanation                                                                                                   |
+| [types-not-checks](types-not-checks/SKILL.md)         | a value from a known set (a language, a kind, a mode): a union type, passed as is; outside text read once where it comes in                                         |
+| [open-and-close](open-and-close/SKILL.md)             | anything on the review page opening, closing, appearing or going away: animated in and out                                                                          |
+| [component-design](component-design/SKILL.md)         | building or changing UI: more components, parents pass data, each part owns its rendering, its placeholder and its arrival                                          |
+| [compound-components](compound-components/SKILL.md)   | a component growing props for one caller's look, or getting its placeholder: parts as one namespace (`Foo.Skeleton`)                                                |
+| [folder-structure](folder-structure/SKILL.md)         | creating, moving or splitting a component: a folder with `index.ts` and `components/`, children under their parent                                                  |
+| [names-say-what](names-say-what/SKILL.md)             | writing any code: every parameter and variable named for what it holds, never `t`, `p`, `res`; `pnpm lint` checks                                                   |
+| [alignment](alignment/SKILL.md)                       | building anything a person sees: stacked text on one edge, panels in a row the same height, library defaults overridden, edges measured before it is done           |
+| [review](review/SKILL.md)                             | reviewing a diff, branch or pull request: leaky abstractions, and more as reviews find it                                                                           |
 
 When a review finds something none of these cover, and it could come back,
 add it to the skill it belongs to (or a new one) in the same change.
