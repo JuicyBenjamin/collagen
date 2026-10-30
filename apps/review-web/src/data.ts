@@ -735,6 +735,6 @@ export interface AuditPage {
   readonly compactions: ReadonlyArray<{ readonly at: string; readonly collagenTokens: number }>;
   readonly tickets: ReadonlyArray<{ readonly kind: string; readonly open: number; readonly closed: number }>;
   readonly steering: ReadonlyArray<{ readonly kind: string; readonly mine: string; readonly others: string }>;
-  readonly sessions: ReadonlyArray<{ readonly id: string; readonly harness: string; readonly calls: number; readonly share: number; readonly compactions: number }>;
+  readonly sessions: ReadonlyArray<{ readonly id: string; readonly title?: string; readonly harness: string; readonly calls: number; readonly share: number; readonly compactions: number }>;
   readonly definitions: { readonly tools: number; readonly tokens: number; readonly largest: ReadonlyArray<{ readonly tool: string; readonly tokens: number }> };
 }

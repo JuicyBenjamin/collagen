@@ -8,7 +8,9 @@ import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 
-/** How many tokens each tool's definition takes, the largest first. */
+/** What collagen's tool definitions put into every session's window, loaded
+ *  once when the session starts and read again with each reply, used or not:
+ *  the largest first. */
 export function Definitions(props: { definitions: AuditPage["definitions"] }) {
   const rows = createMemo(() => props.definitions.largest.map((definition) => ({ id: definition.tool, tool: definition.tool, tokens: definition.tokens })));
   const definition = createMemo(() =>
@@ -29,13 +31,13 @@ export function Definitions(props: { definitions: AuditPage["definitions"] }) {
   );
   return (
     <section class="audit-panel">
-      <h2>Tool definition size</h2>
+      <h2>Tool definitions</h2>
       <p class="audit-sub">
-        {props.definitions.tools} tools, {compact(props.definitions.tokens)} tokens
+        Loaded into every session: {props.definitions.tools} tools, {compact(props.definitions.tokens)} tokens
       </p>
       <Chart definition={definition()} ariaLabel="Tool definition size by tool" height={rows().length * 26 + 40} />
     </section>
   );
 }
 
-Definitions.Skeleton = () => <PanelSkeleton title="Tool definition size" pending="64 tools, 25k tokens" height={400} />;
+Definitions.Skeleton = () => <PanelSkeleton title="Tool definitions" pending="Loaded into every session: 64 tools, 25k tokens" height={357} />;
