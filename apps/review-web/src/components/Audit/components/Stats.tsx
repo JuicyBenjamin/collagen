@@ -1,6 +1,6 @@
 import { For } from "solid-js";
 import type { AuditPage } from "~/data";
-import { Masked } from "~/components/Masked";
+import { Pending } from "./Pending";
 import { compact } from "../numbers";
 
 /** The headline numbers, a word each and their figure. */
@@ -41,14 +41,12 @@ Stats.Skeleton = () => (
     <For each={["Tool calls", "Collagen tokens", "Compactions", "Jobs", "Tickets"]}>
       {(title) => (
         <div class="audit-stat">
-          <span class="audit-stat-title">
-            <Masked>{title}</Masked>
-          </span>
+          <span class="audit-stat-title">{title}</span>
           <span class="audit-stat-value">
-            <Masked>1,000</Masked>
+            <Pending>1,000</Pending>
           </span>
           <span class="audit-stat-desc">
-            <Masked>37 sessions</Masked>
+            <Pending>37 sessions</Pending>
           </span>
         </div>
       )}

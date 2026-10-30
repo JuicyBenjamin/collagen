@@ -2,6 +2,7 @@ import { For, Show } from "solid-js";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
+import { Pending } from "./Pending";
 
 /** The runs collagen started with the person's AI, by kind and model. */
 export function Jobs(props: { jobs: AuditPage["jobs"]; cost: number | null }) {
@@ -46,4 +47,36 @@ export function Jobs(props: { jobs: AuditPage["jobs"]; cost: number | null }) {
   );
 }
 
-Jobs.Skeleton = () => <PanelSkeleton title="Jobs" height={146} lines={1} />;
+Jobs.Skeleton = () => (
+  <PanelSkeleton title="Jobs" pending="$2.12">
+    <table class="table table-sm audit-table">
+      <thead>
+        <tr>
+          <th />
+          <th>Tokens in</th>
+          <th class="audit-number">Runs</th>
+        </tr>
+      </thead>
+      <tbody>
+        <For each={[0, 1, 2]}>
+          {() => (
+            <tr>
+              <td>
+                <Pending>Investigations</Pending>
+                <span class="audit-sub audit-block">
+                  <Pending>Claude Sonnet 5.5</Pending>
+                </span>
+              </td>
+              <td>
+                <Pending>3.4M tokens</Pending>
+              </td>
+              <td class="audit-number">
+                <Pending>11</Pending>
+              </td>
+            </tr>
+          )}
+        </For>
+      </tbody>
+    </table>
+  </PanelSkeleton>
+);

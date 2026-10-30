@@ -994,4 +994,4 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .audit-scroll { overflow-x: auto; }
 .audit .ts-chart-host { color: var(--fg); }
 .audit-body { display: flex; flex-direction: column; gap: 24px; }
-.audit-sk-body { border-radius: 6px; background: var(--sk-block); }
+.audit-sk-body { border-radius: 6px; background: color-mix(in oklab, var(--sk-word) 55%, var(--panel)); animation: sk-breathe 1.6s ease-in-out infinite; }

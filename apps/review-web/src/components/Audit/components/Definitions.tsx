@@ -32,4 +32,4 @@ export function Definitions(props: { definitions: AuditPage["definitions"] }) {
   );
 }
 
-Definitions.Skeleton = () => <PanelSkeleton title="Tool definition size" height={393} lines={1} />;
+Definitions.Skeleton = () => <PanelSkeleton title="Tool definition size" pending="64 tools, 25k tokens" height={400} />;
