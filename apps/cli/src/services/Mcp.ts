@@ -10,7 +10,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, SteeringKind, type JobKind, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, SteeringKind, JobKind, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -419,6 +419,27 @@ export const ReportBug = Tool.make("report-bug", {
   success: Schema.String,
 });
 
+export const Investigate = Tool.make("investigate", {
+  description: [
+    "File an INVESTIGATION: a question nobody can answer yet — what is possible, which of these, why does this happen — put to the room before anyone plans or proposes anything. Only when your user says so (\"investigate this\", \"file it as an investigation\") — never on your own initiative. It can grow out of any ticket: pass 'from' with the ticket the question came up on (a plan that hit an unknown, a bug nobody can explain), and when it is answered the findings reach that ticket's people.",
+    KIND_RULE,
+    "'question' is the one required field: what is to be found out, in your user's words. 'title' is the headline every list shows — a few words, 60 characters at most, the question itself (\"Why peers stay apart after a restart\"); required when filing. 'goal' is the line beneath it; it defaults to the question's first sentence. 'known' is what is known already, 'ruledOut' what is ruled out and not to be looked into again. 'decisions' and 'forks' are optional; 'peers' 0 to many, exactly the names your user said; 'from', 'after' and 'whenClosed' as elsewhere.",
+    "Readers give a BLIND FIRST TAKE on the question alone: their agent hands them the question, they say what they think the answer is or how they would find out (post-review), and only then does what is known and ruled out open to them. 'research' sends your user's own AI to look into it; what it finds comes back as a take.",
+    "ANSWERING IT (investigate with 'ticketId'): when your user has the answer, pass 'outcome' — answered, not-answerable (there is no answer to be had) or wrong-question (what should be asked instead goes in the findings) — with 'findings', the answer or why there is none, and 'evidence': what it rests on (links, file:line, measurements). Then close-ticket. What follows (a proposal, a plan) is filed with 'from' this investigation, so its readers see the findings beside it.",
+    "WHAT TO TELL YOUR USER: that the investigation has been filed (or updated), nothing more.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    ...judgedParameters,
+    question: Schema.optional(Schema.String),
+    known: Schema.optional(Schema.String),
+    ruledOut: Schema.optional(Schema.String),
+    outcome: Schema.optional(InvestigationOutcome),
+    findings: Schema.optional(Schema.String),
+    evidence: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  success: Schema.String,
+});
+
 export const AskReview = Tool.make("ask-review", {
   description: [
     "Ask for a review of your user's code, with the WHY attached — the thing a diff cannot show. Only when your user asks for a review (\"ask <peer> for a review\", \"put it up for review\") — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went, in full.",
@@ -615,10 +636,11 @@ export const SetSteering = Tool.make("set-steering", {
 
 export const SetJobs = Tool.make("set-jobs", {
   description:
-    "Your user's jobs: what collagen runs their preferred AI for (waking a conversation, researching a ticket). 'limit' is how many run at once (1 unless they say more; the rest wait in line). 'job' with 'model' sets the model that job uses — any name their AI takes, an alias like 'haiku' or 'sonnet' follows the newest; null gives it back to the default. Only when your user says so. Called with nothing, it says how things stand.",
+    "Your user's jobs: what collagen runs their preferred AI for (waking a conversation, researching a ticket, answering an investigation). 'limit' is how many run at once (1 unless they say more; the rest wait in line). 'job' with 'model' sets the model that job uses — any name their AI takes, an alias like 'haiku' or 'sonnet' follows the newest; null gives it back to the default. Only when your user says so. Called with nothing, it says how things stand.",
   parameters: Schema.Struct({
     limit: Schema.optional(Schema.Number),
-    job: Schema.optional(Schema.Literals(["wake", "research"])),
+    // every job kind there is, so a new one is settable as it lands
+    job: Schema.optional(JobKind),
     model: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   success: Schema.String,
@@ -823,6 +845,7 @@ export const CollagenToolkit = Toolkit.make(
   AskPlan,
   Propose,
   ReportBug,
+  Investigate,
   PostReview,
   SettleStep,
   TakeStep,
@@ -878,6 +901,7 @@ export const DevCollagenToolkit = Toolkit.make(
   AskPlan,
   Propose,
   ReportBug,
+  Investigate,
   PostReview,
   SettleStep,
   TakeStep,
@@ -918,7 +942,7 @@ export const DevCollagenToolkit = Toolkit.make(
 const ASKED = 200;
 
 /** The tools after which a conversation is offered to watch the ticket it just acted on. */
-const OFFERS_WATCH: ReadonlySet<string> = new Set(["ask-review", "post-review", "take-step", "create-ticket", "propose", "ask-plan", "report-bug"]);
+const OFFERS_WATCH: ReadonlySet<string> = new Set(["ask-review", "post-review", "take-step", "create-ticket", "propose", "ask-plan", "report-bug", "investigate"]);
 
 /** The ticket a call acted on: the one it named, else the first a filing answered with. */
 const ticketIn = (input: unknown, answer: string): string | undefined => {
@@ -1055,7 +1079,7 @@ const makeHandlers = Effect.gen(function* () {
         return epic ? moveToEpic(ticket, epic, identity.pubkey, now) : ticket;
       });
 
-    const fileJudged = Effect.fn("Mcp.fileJudged")(function* (kind: "review" | "plan" | "proposal" | "bug", input: {
+    const fileJudged = Effect.fn("Mcp.fileJudged")(function* (kind: "review" | "plan" | "proposal" | "bug" | "investigation", input: {
         peers?: ReadonlyArray<string>;
         project?: string;
         ticketId?: string;
@@ -1081,6 +1105,12 @@ const makeHandlers = Effect.gen(function* () {
         suggestion?: { readonly what: string; readonly requirements?: ReadonlyArray<string> };
         remedy?: Remedy;
         retire?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
+        question?: string;
+        known?: string;
+        ruledOut?: string;
+        outcome?: InvestigationOutcome;
+        findings?: string;
+        evidence?: ReadonlyArray<string>;
         units?: ReadonlyArray<{ readonly id?: string; readonly title: string; readonly what: string; readonly where: ReadonlyArray<string>; readonly usesOf?: string }>;
         retireUnits?: ReadonlyArray<string>;
         /** how the change works, drawn and played; null withdraws it */
@@ -1117,7 +1147,19 @@ const makeHandlers = Effect.gen(function* () {
               }
             : undefined;
         const retireBug = kind === "bug" && input.retire && input.retire.length > 0 ? input.retire : undefined;
-        const bugMoves = (bug !== undefined && Object.keys(bug).length > 0) || retireBug !== undefined;
+        // an investigation's brief: only the fields given travel, as a bug's do
+        const investigation =
+          kind === "investigation"
+            ? {
+                ...(input.question?.trim() ? { question: input.question.trim() } : {}),
+                ...(input.known?.trim() ? { known: input.known.trim() } : {}),
+                ...(input.ruledOut?.trim() ? { ruledOut: input.ruledOut.trim() } : {}),
+                ...(input.outcome ? { outcome: input.outcome } : {}),
+                ...(input.findings?.trim() ? { findings: input.findings.trim() } : {}),
+                ...(input.evidence && input.evidence.length > 0 ? { evidence: input.evidence.map((item) => item.trim()).filter((item) => item.length > 0) } : {}),
+              }
+            : undefined;
+        const bugMoves = (bug !== undefined && Object.keys(bug).length > 0) || retireBug !== undefined || (investigation !== undefined && Object.keys(investigation).length > 0);
         // a review's units: how its code reads, one thing at a time
         const units = kind === "review" && input.units && input.units.length > 0 ? input.units.map((unit) => ({ ...(unit.id ? { id: unit.id } : {}), title: unit.title.trim(), what: (unit.what ?? "").trim(), where: unit.where.map((location) => location.trim()).filter((location) => location.length > 0), ...(unit.usesOf?.trim() ? { usesOf: unit.usesOf.trim() } : {}) })) : undefined;
         const retireUnits = kind === "review" && input.retireUnits && input.retireUnits.length > 0 ? input.retireUnits : undefined;
@@ -1149,6 +1191,7 @@ const makeHandlers = Effect.gen(function* () {
           ...(retireOutline ? { retireOutline } : {}),
           ...(bug !== undefined && Object.keys(bug).length > 0 ? { bug } : {}),
           ...(retireBug ? { retireBug } : {}),
+          ...(investigation !== undefined && Object.keys(investigation).length > 0 ? { investigation } : {}),
           ...(units ? { units } : {}),
           ...(retireUnits ? { retireUnits } : {}),
           ...(machine !== undefined ? { machine } : {}),
@@ -1297,7 +1340,7 @@ const makeHandlers = Effect.gen(function* () {
         }
         const dupWork = duplicateWorkId(input.work ?? []);
         if (dupWork) return `failed: two work items would share the id "${dupWork}" — give each its own 'id' (they default to the intent)`;
-        if (kind !== "review" && kind !== "bug" && !input.goal) return `failed: pass 'goal' — the line beneath the title: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
+        if (kind !== "review" && kind !== "bug" && kind !== "investigation" && !input.goal) return `failed: pass 'goal' — the line beneath the title: ${kind === "plan" ? "what your user intends to do" : "the idea, as your user would say it"}`;
         const project = resolveName(input.project, [roomProjects(yield* store.get, roomId)]);
         if (project._tag !== "found") {
           const mine = roomProjects(yield* store.get, roomId).map((candidate) => candidate.name).join(", ");
@@ -1320,7 +1363,7 @@ const makeHandlers = Effect.gen(function* () {
         const branch = kind === "review" ? (input.branch ?? branchOf(projectPath) ?? undefined) : input.branch;
         const link = kind === "review" ? (input.link ?? (branch ? (branchLink(projectPath, branch) ?? undefined) : undefined)) : input.link;
         const ticketId = crypto.randomUUID();
-        const goal = input.goal ?? (kind === "bug" && bug?.symptom ? headline(bug.symptom) : `review ${branch ?? projectName}`);
+        const goal = input.goal ?? (kind === "bug" && bug?.symptom ? headline(bug.symptom) : kind === "investigation" && investigation?.question ? headline(investigation.question) : `review ${branch ?? projectName}`);
         const where = [branch ? `branch ${branch}${input.base ? ` off ${input.base}` : ""}` : "", link ?? ""].filter((part) => part.length > 0).join(" · ");
         // A step per person asked — and only people: a review nobody was asked
         // for has no placeholder step, it is simply a ticket with the why on
@@ -1338,7 +1381,9 @@ const makeHandlers = Effect.gen(function* () {
               ? `the why behind it is on this ticket: ${delta.decisions.length} decision(s) and ${delta.forks.length} fork(s), with what steered each one. Read it with review-context {ticketId} when your person asks why something is the way it is — and review nothing on your own.`
               : kind === "bug"
                 ? `symptom: ${bug?.symptom ?? goal}\nThe reporter's reading of it (cause, importance, suggestion, remedy) is on this ticket. Ask your person for THEIR OWN diagnosis FIRST — what is happening, how bad, what would fix it — and post it with post-review (failed: true asks the reporter for changes); only then read the reporter's reading with review-context {ticketId}. A second independent diagnosis is the point. Never take a position on your own.`
-                : `${delta.decisions.length} thought(s) and ${delta.forks.length} fork(s) are on this ticket. Ask your person for THEIR OWN take FIRST — post it with post-review (failed: true asks for changes) — and only then read the author's thoughts with review-context {ticketId}. The blind first take is the point: their view before the author's has coloured it. Never take a position on your own.`,
+                : kind === "investigation"
+                  ? `question: ${investigation?.question ?? goal}\nWhat is known and ruled out is on this ticket. Ask your person for THEIR OWN answer FIRST — what they think it is, or how they would find out — and post it with post-review; only then read the rest with review-context {ticketId}. Never take a position on your own.`
+                  : `${delta.decisions.length} thought(s) and ${delta.forks.length} fork(s) are on this ticket. Ask your person for THEIR OWN take FIRST — post it with post-review (failed: true asks for changes) — and only then read the author's thoughts with review-context {ticketId}. The blind first take is the point: their view before the author's has coloured it. Never take a position on your own.`,
           ]
             .filter((part) => part.length > 0)
             .join("\n");
@@ -1833,6 +1878,7 @@ const makeHandlers = Effect.gen(function* () {
       "ask-plan": (input: Parameters<typeof fileJudged>[1]) => fileJudged("plan", input),
       propose: (input: Parameters<typeof fileJudged>[1]) => fileJudged("proposal", input),
       "report-bug": (input: Parameters<typeof fileJudged>[1]) => fileJudged("bug", input),
+      investigate: (input: Parameters<typeof fileJudged>[1]) => fileJudged("investigation", input),
       "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean; comment?: boolean }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
@@ -2119,7 +2165,7 @@ const makeHandlers = Effect.gen(function* () {
           yield* store.update((state) => ({ ...state, jobLimit: input.limit! }));
         }
         if (input.model !== undefined) {
-          if (!input.job) return "failed: say which job the model is for: wake or research";
+          if (!input.job) return `failed: say which job the model is for: ${JOB_KINDS.join(", ")}`;
           yield* store.update((state) => withModel(state, input.job!, input.model ?? null));
         }
         const state = yield* store.get;

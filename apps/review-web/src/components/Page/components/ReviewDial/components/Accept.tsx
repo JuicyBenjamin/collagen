@@ -24,6 +24,7 @@ const IS_TO: Record<TicketRef["kind"], string> = {
   task: "does",
   review: "follows",
   epic: "is part of",
+  investigation: "acts on",
 };
 
 /** A review the reader filed, accepted. Whether collagen merges it is set

@@ -36,6 +36,13 @@ export function KindIcon(props: { kind: MergeTicket["kind"] }) {
                 <circle cx="12" cy="12" r="3" />
               </>
             );
+          case "investigation":
+            return (
+              <>
+                <circle cx="11" cy="11" r="7" />
+                <path d="M21 21l-4.3-4.3" />
+              </>
+            );
           case "epic":
             return <path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" />;
         }

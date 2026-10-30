@@ -23,7 +23,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "12";
+export const PROTOCOL_VERSION = "13";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -501,7 +501,7 @@ export const Worked = Schema.Struct({
 export type Worked = typeof Worked.Type;
 
 /** The jobs collagen runs an AI for, each with a model the person may choose. */
-export const JobKind = Schema.Literals(["wake", "research"]);
+export const JobKind = Schema.Literals(["wake", "research", "investigation"]);
 export type JobKind = typeof JobKind.Type;
 
 /** A model run collagen made itself, in the person's name (cli AgentRunner,
@@ -512,7 +512,7 @@ export const OwnRun = Schema.Struct({
   /** the harness that ran it */
   harness: Schema.String,
   /** what it was for */
-  why: Schema.Literals(["wake", "research"]),
+  why: Schema.Literals(["wake", "research", "investigation"]),
   model: Schema.optional(Schema.String),
   inputTokens: Schema.Finite,
   outputTokens: Schema.Finite,

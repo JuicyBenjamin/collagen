@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveThreadId, stepThreadId, type RoomMessage, type Ticket } from "@collagen/p2p";
-import { isParticipant, myThreadFor, stepChanges, stepUpdateText } from "./ticketUpdates";
+import { answeredInvestigations, isParticipant, myThreadFor, stepChanges, stepUpdateText } from "./ticketUpdates";
 
 const ALICE = "a".repeat(64);
 const BOB = "b".repeat(64);
@@ -73,5 +73,24 @@ describe("stepChanges", () => {
   it("a ticket seen for the first time with settled steps counts (the view caught up)", () => {
     const settled = { ...ticket, steps: [{ ...ticket.steps[0]!, status: "failed" as const, result: "no repo" }, ticket.steps[1]!] };
     expect(stepChanges(new Map(), new Map([["t1", settled]])).map((change) => change.to)).toEqual(["failed"]);
+  });
+});
+
+describe("an investigation answered", () => {
+  const plan: Ticket = { ...ticket, id: "plan", kind: "plan", steps: [] };
+  const question: Ticket = { ...ticket, id: "q", kind: "investigation", steps: [], from: ["plan"] };
+  const closed: Ticket = { ...question, closed: { by: ALICE, ts: 2, outcome: "done" } };
+  const room = (...tickets: Ticket[]) => new Map(tickets.map((one) => [one.id, one]));
+
+  it("reaches the open ticket it grew from when it closes", () => {
+    const answered = answeredInvestigations(room(plan, question), room(plan, closed));
+    expect(answered.map(({ investigation, parents }) => [investigation.id, parents.map((parent) => parent.id)])).toEqual([["q", ["plan"]]]);
+  });
+
+  it("is not news again, nor news to a ticket already closed", () => {
+    expect(answeredInvestigations(room(plan, closed), room(plan, closed))).toEqual([]);
+    expect(answeredInvestigations(new Map(), room(plan, closed))).toEqual([]);
+    const done: Ticket = { ...plan, closed: { by: ALICE, ts: 3 } };
+    expect(answeredInvestigations(room(done, question), room(done, closed))).toEqual([]);
   });
 });
