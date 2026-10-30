@@ -43,6 +43,8 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   ...(ticket.conversation ? { conversation: conversationLine(ticket.conversation) } : {}),
   /** the tickets this one follows; walk them with review-context when your user asks why */
   ...(ticket.from && ticket.from.length > 0 ? { from: ticket.from.join(" ") } : {}),
+  /** questions that grew out of this one: what is still being found out, and what was */
+  ...investigationsLine(ticket, all, me),
   /** the tickets this one waits on (read after them) */
   ...(ticket.after && ticket.after.length > 0 ? { after: ticket.after.join(" ") } : {}),
   /** still waiting: only its author is shown it, nobody is nudged, until these are answered */
@@ -84,6 +86,15 @@ const conversationLine = (conversation: Conversation): string => `${conversation
 
 /** Who has a step, by name — or, for one nobody has, that anyone may take it. */
 const ownerName = (owner: string | undefined, nameFor: (key: string) => string): string => (owner === undefined ? "anyone (nobody has taken it: take-step)" : nameFor(owner));
+
+/** The investigations grown from a ticket, open first, each with its id and
+ *  where it stands — only those `me` may see. */
+const investigationsLine = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string) => {
+  const grown = [...all.values()].filter((other) => other.kind === "investigation" && other.id !== ticket.id && (other.from ?? []).includes(ticket.id) && visibleTo(other, all, me));
+  if (grown.length === 0) return {};
+  const line = (other: Ticket) => `${other.id} "${other.title ?? other.goal}" (${isClosed(other, all) ? "closed — its findings: review-context on it" : "still open"})`;
+  return { investigations: [...grown.filter((other) => !isClosed(other, all)), ...grown.filter((other) => isClosed(other, all))].map(line).join("; ") };
+};
 
 /** Your user's own finish of a review, as a line — from the room: one given only on the host is on the review page. */
 function yoursLine(ticket: Ticket, review: ReviewContext | undefined, me: string): { yourUserReviewed?: string } {

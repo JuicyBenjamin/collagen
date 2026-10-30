@@ -1,7 +1,7 @@
 import { Clock, Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import type { JobKind, OwnRun, QueuedJob, Ticket } from "@collagen/p2p";
-import { jobLimitOf, modelFor, researchPrompt } from "../lib/jobs";
+import { jobLimitOf, modelFor, researchKind, researchPrompt } from "../lib/jobs";
 import { allow, withRun } from "../lib/steering";
 import { CliArgs } from "./CliArgs";
 import { harnessFor, Harnesses, type Job } from "./Harness";
@@ -120,12 +120,14 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         if (!harness) return `failed: collagen runs jobs with your preferred AI, and ${state.preferredAi ? `"${state.preferredAi}" is not one it can run` : "none is set"} — choose one with set-ai (or a in the TUI)`;
         const gate = allow(state, "run", "mine", true);
         if ("held" in gate && gate.held === "unset") return `failed: ${gate.why}`;
-        const model = modelFor(state, "research", harness.defaultModels);
+        // an investigation is answered with the model the person chose for those
+        const kind = researchKind(asked.ticket);
+        const model = modelFor(state, kind, harness.defaultModels);
         const id = crypto.randomUUID();
         const title = asked.ticket.title ?? asked.ticket.goal;
         const queuedAt = yield* Clock.currentTimeMillis;
-        const job: QueuedJob = { id, kind: "research", ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: researchPrompt(asked.ticket, asked.ask, yield* SubscriptionRef.get(nameRef), name), cwd: asked.cwd };
-        const queued: JobView = { id, kind: "research", ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
+        const job: QueuedJob = { id, kind, ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: researchPrompt(asked.ticket, asked.ask, yield* SubscriptionRef.get(nameRef), name), cwd: asked.cwd };
+        const queued: JobView = { id, kind, ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
         yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
         yield* SubscriptionRef.update(views, (all) => [...all, queued]);
         yield* Ref.update(waiting, (queue) => [...queue, job]);
