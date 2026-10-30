@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
+import { PanelSkeleton } from "./PanelSkeleton";
 
 /** The runs collagen started with the person's AI, by kind and model. */
 export function Jobs(props: { jobs: AuditPage["jobs"]; cost: number | null }) {
@@ -44,3 +45,5 @@ export function Jobs(props: { jobs: AuditPage["jobs"]; cost: number | null }) {
     </section>
   );
 }
+
+Jobs.Skeleton = () => <PanelSkeleton title="Jobs" height={146} lines={1} />;
