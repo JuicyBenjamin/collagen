@@ -1,18 +1,52 @@
-import { createMemo } from "solid-js";
+import { createMemo, For } from "solid-js";
 import { defineChart } from "@tanstack/charts";
 import { pie, polar, radialArc, radialText } from "@tanstack/charts/polar";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
+import { Pending } from "./Pending";
 
 /** What the AIs read in every session that called collagen, counted reply by
  *  reply (each reply reads the whole window again), and how much of it was
  *  collagen's own calls and answers while they stayed in the window. Tool
  *  definitions are not in it. The whole arc is all they read, the filled
  *  part collagen's. */
-const SUB = "Its calls and answers, of all the AIs read in sessions that used it";
+const PARTS = [
+  {
+    id: "collagen",
+    label: "Collagen",
+    colour: "var(--viz-1)",
+    says: "Its calls and answers, read again with every reply",
+  },
+  {
+    id: "rest",
+    label: "Session total",
+    colour: "var(--viz-empty)",
+    says: "All the AIs read in sessions that called collagen",
+  },
+] as const;
+
+/** The gauge's two parts as a legend, each with its tokens. */
+function Legend(props: { tokens: (id: string) => string | undefined }) {
+  return (
+    <div class="audit-legend audit-legend-key">
+      <For each={PARTS}>
+        {(part) => (
+          <>
+            <span>
+              <i style={{ background: part.colour }} />
+              {part.label}
+            </span>
+            <b class="audit-legend-value">{props.tokens(part.id) ?? <Pending>186M</Pending>}</b>
+          </>
+        )}
+      </For>
+    </div>
+  );
+}
 
 export function Share(props: { totals: AuditPage["totals"] }) {
   const share = () =>
@@ -52,16 +86,27 @@ export function Share(props: { totals: AuditPage["totals"] }) {
         }),
       ],
       scales: { x: null, y: null },
-      color: { domain: ["collagen", "rest"], range: ["var(--viz-1)", "var(--viz-empty)"] },
+      color: { domain: PARTS.map((part) => part.id), range: PARTS.map((part) => part.colour) },
+      // the legend gives the names and numbers; the hover says what each counts
+      tooltip: {
+        use: tooltip,
+        content: ([point]) => {
+          const part = PARTS.find(
+            (each) => each.id === (point?.datum as { id?: string } | undefined)?.id,
+          );
+          return part ? { rows: [{ label: "", value: part.says }] } : { rows: [] };
+        },
+      },
     });
   });
   return (
     <section class="audit-panel">
       <h2>Collagen's share</h2>
-      <p class="audit-sub">{SUB}</p>
-      <p class="audit-sub">
-        {compact(props.totals.collagenTokens)} of {compact(props.totals.allTokens)} tokens
-      </p>
+      <Legend
+        tokens={(id) =>
+          compact(id === "collagen" ? props.totals.collagenTokens : props.totals.allTokens)
+        }
+      />
       <Chart
         definition={definition()}
         ariaLabel={`Collagen put ${(share() * 100).toFixed(1)}% of the tokens its sessions read`}
@@ -72,5 +117,7 @@ export function Share(props: { totals: AuditPage["totals"] }) {
 }
 
 Share.Skeleton = () => (
-  <PanelSkeleton title="Collagen's share" sub={SUB} pending="183M of 10.0B tokens" height={200} />
+  <PanelSkeleton title="Collagen's share" height={200}>
+    <Legend tokens={() => undefined} />
+  </PanelSkeleton>
 );
