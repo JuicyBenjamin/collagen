@@ -1,41 +1,72 @@
-import { For, Show } from "solid-js";
+import { createMemo, Show } from "solid-js";
+import { defineChart, dot, link } from "@tanstack/charts";
+import { decorative } from "@tanstack/charts/mark/decorative";
+import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
+import { scaleBand } from "@tanstack/charts/scales/band";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { tooltip } from "@tanstack/charts/tooltip";
+import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 
-/** Tools whose calls got bigger last week, most first, each with its weekly trend. */
+/** Tools whose calls got bigger: each a dumbbell from the three weeks
+ *  before to last week, so how far and which way reads at once. */
 export function Growing(props: { growing: AuditPage["growing"] }) {
-  const line = (weeks: ReadonlyArray<number>) => {
-    const top = Math.max(1, ...weeks);
-    return weeks.map((value, index) => `${index * 80},${(34 - (value / top) * 30).toFixed(1)}`).join(" ");
-  };
-  const change = (row: AuditPage["growing"][number]) => (row.to >= row.from * 2 ? `×${(row.to / row.from).toFixed(1)}` : `+${Math.round((row.to / row.from - 1) * 100)}%`);
+  const rows = createMemo(() => props.growing.map((row) => ({ id: row.tool, tool: row.tool, from: row.from, to: row.to })));
+  const ends = createMemo(() => rows().flatMap((row) => [{ id: `${row.tool} before`, tool: row.tool, when: "Before", tokens: row.from, change: row.to / row.from }, { id: `${row.tool} last`, tool: row.tool, when: "Last week", tokens: row.to, change: row.to / row.from }]));
+  const change = (ratio: number) => (ratio >= 2 ? `×${ratio.toFixed(1)}` : `+${Math.round((ratio - 1) * 100)}%`);
+  const definition = createMemo(() =>
+    defineChart({
+      marks: [
+        decorative(link(rows(), { x1: "from", x2: "to", y1: "tool", y2: "tool", stroke: "var(--color-warning)", strokeWidth: 2 })),
+        dot(ends(), { x: "tokens", y: "tool", r: 5, color: "when" }),
+      ],
+      color: { scale: scaleOrdinal<string, string>().domain(["Before", "Last week"]).range(["var(--faint)", "var(--color-warning)"]) },
+      scales: {
+        y: { scale: () => scaleBand<string>().domain(rows().map((row) => row.tool)).padding(0.3) },
+        x: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(value) } } },
+      },
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "tool", label: "Tool", text: (point) => point.datum.tool },
+          { id: "when", label: "When", text: (point) => point.datum.when },
+          { id: "tokens", label: "Tokens a call", text: (point) => point.datum.tokens.toLocaleString() },
+          { id: "change", label: "Change", text: (point) => change(point.datum.change) },
+        ],
+      },
+    }),
+  );
   return (
     <section class="audit-panel">
       <h2>Growing</h2>
-      <p class="audit-sub">Last week against the three before</p>
-      <Show when={props.growing.length > 0} fallback={<p class="audit-none">Nothing grew</p>}>
-        <ul class="audit-growing">
-          <For each={props.growing}>
-            {(row) => (
-              <li>
-                <span class="audit-growing-head">
-                  <strong>{row.tool}</strong>
-                  <span class={["badge badge-sm badge-soft", row.to >= row.from * 2 ? "badge-error" : "badge-warning"]}>{change(row)}</span>
-                </span>
-                <svg viewBox="0 0 240 36" class="audit-spark" role="img" aria-label={`${row.tool} weekly average`}>
-                  <polyline points={line(row.weeks)} fill="none" stroke={row.to >= row.from * 2 ? "var(--color-error)" : "var(--color-warning)"} stroke-width="2" stroke-linejoin="round" />
-                </svg>
-                <span class="audit-sub">
-                  {compact(row.from)} to {compact(row.to)} tokens a call
-                </span>
-              </li>
-            )}
-          </For>
-        </ul>
+      <p class="audit-sub">Tokens a call, the three weeks before against last week</p>
+      <div class="audit-legend">
+        <span>
+          <i style={{ background: "var(--faint)" }} />
+          Before
+        </span>
+        <span>
+          <i style={{ background: "var(--color-warning)" }} />
+          Last week
+        </span>
+      </div>
+      <Show when={rows().length > 0} fallback={<p class="audit-none">Nothing grew</p>}>
+        <Chart definition={definition()} ariaLabel="Tokens a call before and last week, for the tools that grew" height={rows().length * 44 + 40} />
       </Show>
     </section>
   );
 }
 
-Growing.Skeleton = () => <PanelSkeleton title="Growing" sub="Last week against the three before" height={403} />;
+Growing.Skeleton = () => (
+  <PanelSkeleton
+    title="Growing"
+    sub="Tokens a call, the three weeks before against last week"
+    legend={[
+      { label: "Before", colour: "var(--faint)" },
+      { label: "Last week", colour: "var(--color-warning)" },
+    ]}
+    height={207}
+  />
+);

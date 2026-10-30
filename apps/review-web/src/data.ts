@@ -706,7 +706,7 @@ export interface InvestigationPage {
 
 /** audit(roomId, days) — what collagen did and what it cost, as the audit
  *  page draws it. Token figures are this machine's sessions, every room;
- *  tickets, models and steering are the room's. */
+ *  tickets, harnesses, models and steering are the room's. */
 export interface AuditPage {
   readonly room: string;
   readonly days: number;
@@ -727,7 +727,8 @@ export interface AuditPage {
   /** tools whose calls got bigger: the week before against the last, with weekly averages */
   readonly growing: ReadonlyArray<{ readonly tool: string; readonly from: number; readonly to: number; readonly weeks: ReadonlyArray<number> }>;
   readonly tools: ReadonlyArray<{ readonly tool: string; readonly kind: string; readonly calls: number; readonly tokensIn: number; readonly tokensOut: number }>;
-  readonly harnesses: ReadonlyArray<{ readonly name: string; readonly sessions: number }>;
+  /** the room's records, by the harness of the agent that wrote them */
+  readonly harnesses: ReadonlyArray<{ readonly name: string; readonly acts: number }>;
   /** the room's records, by the model of the agent that wrote them */
   readonly models: ReadonlyArray<{ readonly name: string; readonly acts: number }>;
   readonly jobs: ReadonlyArray<{ readonly kind: string; readonly model: string; readonly runs: number; readonly tokensIn: number; readonly tokensOut: number }>;
