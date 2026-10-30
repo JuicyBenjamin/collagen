@@ -23,7 +23,13 @@ export function ToolCalls(props: { tools: AuditPage["tools"] }) {
         x: { scale: scaleLinear, nice: true, grid: true },
       },
       color: { scale: scaleOrdinal<string, string>().domain([...KINDS]).range(KIND_COLOUR) },
-      tooltip,
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "tool", label: "Tool", text: (point) => point.datum.tool },
+          { id: "calls", label: "Calls", text: (point) => point.datum.calls.toLocaleString() },
+        ],
+      },
     }),
   );
   return (

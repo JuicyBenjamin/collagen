@@ -18,7 +18,13 @@ export function Definitions(props: { definitions: AuditPage["definitions"] }) {
         y: { scale: () => scaleBand<string>().domain(rows().map((row) => row.tool)).padding(0.2) },
         x: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(value) } } },
       },
-      tooltip,
+      tooltip: {
+        use: tooltip,
+        items: [
+          { id: "tool", label: "Tool", text: (point) => point.datum.tool },
+          { id: "tokens", label: "Tokens", text: (point) => point.datum.tokens.toLocaleString() },
+        ],
+      },
     }),
   );
   return (
