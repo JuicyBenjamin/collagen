@@ -175,7 +175,14 @@ export const auditPage = (input: AuditInput): AuditPage => {
     compactions: breaks
       .flatMap((contextBreak) =>
         contextBreak.at
-          ? [{ at: contextBreak.at, collagenTokens: tokensOf(contextBreak.collagenChars) }]
+          ? [
+              {
+                at: contextBreak.at,
+                collagenTokens: tokensOf(contextBreak.collagenChars),
+                windowTokens: contextBreak.windowBefore,
+                largest: contextBreak.largest?.tool ?? null,
+              },
+            ]
           : [],
       )
       .sort((a, b) => a.at.localeCompare(b.at)),
