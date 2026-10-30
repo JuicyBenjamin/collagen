@@ -11,6 +11,14 @@ export const openReviewPageAtom = runtimeAtom.fn(
   }),
 );
 
+/** A in a room: open its audit page in the person's browser
+ *  (ReviewPages.showAudit). What happened goes to the activity log. */
+export const openAuditPageAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ roomId }: { roomId: string }) {
+    yield* Effect.log(yield* (yield* ReviewPages).showAudit(roomId));
+  }),
+);
+
 /** o on an investigation: open its page in the person's browser
  *  (ReviewPages.showInvestigation). What happened goes to the activity log. */
 export const openInvestigationPageAtom = runtimeAtom.fn(

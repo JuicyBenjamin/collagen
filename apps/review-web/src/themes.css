@@ -16,6 +16,8 @@
 @import "daisyui/components/progress.css";
 @import "daisyui/components/list.css";
 @import "daisyui/components/link.css";
+@import "daisyui/utilities/join.css";
+@import "daisyui/components/table.css";
 @import "daisyui/theme/light.css" layer(daisyui-themes);
 @import "daisyui/theme/cupcake.css" layer(daisyui-themes);
 @import "daisyui/theme/nord.css" layer(daisyui-themes);
