@@ -1,41 +1,43 @@
 import { createMemo, Show } from "solid-js";
-import { defineChart, dot, link } from "@tanstack/charts";
+import { defineChart, dot, link, text } from "@tanstack/charts";
 import { decorative } from "@tanstack/charts/mark/decorative";
-import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
 import { scaleBand } from "@tanstack/charts/scales/band";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
 import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
+import { NAME_COLUMN, namesAxis } from "../names";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 
-/** Tools whose calls got bigger: each a dumbbell from the three weeks
- *  before to last week, so how far and which way reads at once. */
+const SUB = "Tokens in an average call, the three weeks before and last week";
+const LEGEND = [
+  { label: "Three weeks before", colour: "var(--viz-context)" },
+  { label: "Last week", colour: "var(--viz-1)" },
+];
+const change = (ratio: number) =>
+  ratio >= 2 ? `×${ratio.toFixed(1)}` : `+${Math.round((ratio - 1) * 100)}%`;
+
+/** Tools whose every call got bigger — not called more, each call sending
+ *  more: a line from the average call before to last week's, and how much. */
 export function Growing(props: { growing: AuditPage["growing"] }) {
   const rows = createMemo(() =>
-    props.growing.map((row) => ({ id: row.tool, tool: row.tool, from: row.from, to: row.to })),
+    props.growing.map((row) => ({
+      id: row.tool,
+      tool: row.tool,
+      from: row.from,
+      to: row.to,
+      change: change(row.to / row.from),
+    })),
   );
   const ends = createMemo(() =>
     rows().flatMap((row) => [
-      {
-        id: `${row.tool} before`,
-        tool: row.tool,
-        when: "Before",
-        tokens: row.from,
-        change: row.to / row.from,
-      },
-      {
-        id: `${row.tool} last`,
-        tool: row.tool,
-        when: "Last week",
-        tokens: row.to,
-        change: row.to / row.from,
-      },
+      { id: `${row.tool} before`, tool: row.tool, when: "Three weeks before", tokens: row.from },
+      { id: `${row.tool} last`, tool: row.tool, when: "Last week", tokens: row.to },
     ]),
   );
-  const change = (ratio: number) =>
-    ratio >= 2 ? `×${ratio.toFixed(1)}` : `+${Math.round((ratio - 1) * 100)}%`;
+  const top = () => Math.max(1, ...rows().map((row) => row.to));
   const definition = createMemo(() =>
     defineChart({
       marks: [
@@ -45,26 +47,39 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
             x2: "to",
             y1: "tool",
             y2: "tool",
-            stroke: "var(--color-warning)",
+            stroke: "var(--viz-1)",
             strokeWidth: 2,
           }),
         ),
         dot(ends(), { x: "tokens", y: "tool", r: 5, color: "when" }),
+        decorative(
+          text(rows(), {
+            x: "to",
+            y: "tool",
+            text: "change",
+            anchor: "start",
+            dx: 10,
+            fill: "currentColor",
+            fontSize: 12,
+            fontWeight: 600,
+          }),
+        ),
       ],
       color: {
         scale: scaleOrdinal<string, string>()
-          .domain(["Before", "Last week"])
-          .range(["var(--faint)", "var(--color-warning)"]),
+          .domain(LEGEND.map((entry) => entry.label))
+          .range(LEGEND.map((entry) => entry.colour)),
       },
+      margin: { left: NAME_COLUMN },
       scales: {
         y: {
-          scale: () =>
-            scaleBand<string>()
-              .domain(rows().map((row) => row.tool))
-              .padding(0.3),
+          scale: scaleBand<string>()
+            .domain(rows().map((row) => row.tool))
+            .padding(0.3),
+          axis: namesAxis(),
         },
         x: {
-          scale: scaleLinear,
+          scale: scaleLinear().domain([0, top() * 1.3]),
           nice: true,
           grid: true,
           axis: { ticks: { format: (value: number) => compact(value) } },
@@ -75,15 +90,9 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
         content: ([point]) =>
           point
             ? {
-                title: point.datum.tool,
+                title: point.datum.when,
                 rows: [
-                  {
-                    label: "",
-                    value:
-                      point.datum.when === "Before"
-                        ? `${point.datum.tokens.toLocaleString()} tokens a call`
-                        : `${point.datum.tokens.toLocaleString()} tokens a call, ${change(point.datum.change)}`,
-                  },
+                  { label: "", value: `${point.datum.tokens.toLocaleString()} tokens a call` },
                 ],
               }
             : { rows: [] },
@@ -92,22 +101,23 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
   );
   return (
     <section class="audit-panel">
-      <h2>Growing</h2>
-      <p class="audit-sub">Tokens a call, the three weeks before against last week</p>
+      <h2>Bigger calls</h2>
+      <p class="audit-sub">{SUB}</p>
       <div class="audit-legend">
-        <span>
-          <i style={{ background: "var(--faint)" }} />
-          Before
-        </span>
-        <span>
-          <i style={{ background: "var(--color-warning)" }} />
-          Last week
-        </span>
+        {LEGEND.map((entry) => (
+          <span>
+            <i style={{ background: entry.colour }} />
+            {entry.label}
+          </span>
+        ))}
       </div>
-      <Show when={rows().length > 0} fallback={<p class="audit-none">Nothing grew</p>}>
+      <Show
+        when={rows().length > 0}
+        fallback={<p class="audit-none">No tool's calls got bigger</p>}
+      >
         <Chart
           definition={definition()}
-          ariaLabel="Tokens a call before and last week, for the tools that grew"
+          ariaLabel="Tokens in an average call before and last week, for the tools whose calls got bigger"
           height={rows().length * 44 + 40}
         />
       </Show>
@@ -116,13 +126,5 @@ export function Growing(props: { growing: AuditPage["growing"] }) {
 }
 
 Growing.Skeleton = () => (
-  <PanelSkeleton
-    title="Growing"
-    sub="Tokens a call, the three weeks before against last week"
-    legend={[
-      { label: "Before", colour: "var(--faint)" },
-      { label: "Last week", colour: "var(--color-warning)" },
-    ]}
-    height={207}
-  />
+  <PanelSkeleton title="Bigger calls" sub={SUB} legend={LEGEND} height={216} />
 );

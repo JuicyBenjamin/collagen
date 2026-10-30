@@ -74,14 +74,14 @@ export function PerCall(props: { calls: AuditPage["calls"] }) {
           x: "time",
           y: "tokens",
           r: 3.5,
-          fill: "var(--color-primary)",
+          fill: "var(--viz-1)",
           fillOpacity: 0.4,
         }),
         decorative(
           lineY(weeks(), {
             x: "time",
             y: "tokens",
-            stroke: "var(--color-primary)",
+            stroke: "var(--viz-1)",
             strokeWidth: 2.5,
           }),
         ),

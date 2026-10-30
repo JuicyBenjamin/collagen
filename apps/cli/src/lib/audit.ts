@@ -92,7 +92,9 @@ export const auditPage = (input: AuditInput): AuditPage => {
     })
     .sort((a, b) => b.to / b.from - a.to / a.from)
     .slice(0, 4);
-  const breaks = input.sessions.flatMap((session) => session.breaks);
+  const breaks = input.sessions
+    .flatMap((session) => session.breaks)
+    .filter((contextBreak) => !contextBreak.at || Date.parse(contextBreak.at) >= since);
   const read = input.sessions.reduce((sum, session) => sum + session.inputTokens, 0);
   const ours = input.sessions.reduce((sum, session) => sum + session.collagenInputTokens, 0);
   const priced = input.ownRuns.filter((run) => run.costUsd !== undefined);

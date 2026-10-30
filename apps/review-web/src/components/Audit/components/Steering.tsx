@@ -25,8 +25,8 @@ const STEPS: Record<string, number> = {
   "act, then tell": 2,
   "just do it": 3,
 };
-const RINGS: Record<number, string> = { 1: "Ask first", 2: "Act, then tell", 3: "Just do it" };
-const WHO = { Yours: "var(--color-primary)", "Others'": "var(--color-warning)" } as const;
+const SUB = "Ask first, act then tell, just do it: from the middle out";
+const WHO = { Yours: "var(--viz-1)", "Others'": "var(--viz-2)" } as const;
 const word = (level: string) => level[0]!.toUpperCase() + level.slice(1);
 
 /** The person's steering as two shapes on one radar: how far collagen may
@@ -62,14 +62,7 @@ export function Steering(props: { steering: AuditPage["steering"] }) {
             radius: { scale: scaleLinear().domain([0, 3]) },
           },
           guides: [
-            radialGrid({
-              values: [1, 2, 3],
-              shape: "polygon",
-              labels: true,
-              format: (value) => RINGS[value as number] ?? "",
-              labelFontSize: 10,
-              labelAngle: Math.PI / 6,
-            }),
+            radialGrid({ values: [1, 2, 3], shape: "polygon", labels: false }),
             angleGrid({ labels: true, labelFontSize: 12 }),
           ],
           marks: [
@@ -103,7 +96,7 @@ export function Steering(props: { steering: AuditPage["steering"] }) {
   return (
     <section class="audit-panel">
       <h2>Steering</h2>
-      <p class="audit-sub">How far collagen goes on its own</p>
+      <p class="audit-sub">{SUB}</p>
       <div class="audit-legend">
         <span>
           <i style={{ background: WHO.Yours }} />
@@ -126,7 +119,7 @@ export function Steering(props: { steering: AuditPage["steering"] }) {
 Steering.Skeleton = () => (
   <PanelSkeleton
     title="Steering"
-    sub="How far collagen goes on its own"
+    sub={SUB}
     legend={[
       { label: "Your acts", colour: WHO.Yours },
       { label: "Others' acts", colour: WHO["Others'"] },

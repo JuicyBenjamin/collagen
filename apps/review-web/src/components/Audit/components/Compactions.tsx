@@ -21,7 +21,7 @@ export function Compactions(props: { compactions: AuditPage["compactions"] }) {
     defineChart({
       marks: [
         ruleY([0], { strokeOpacity: 0.4 }),
-        dot(rows(), { x: "time", y: "tokens", r: 5, fill: "var(--color-secondary)" }),
+        dot(rows(), { x: "time", y: "tokens", r: 5, fill: "var(--viz-1)" }),
       ],
       scales: {
         x: { scale: scaleLinear, axis: { ticks: { format: (value: number) => dateOf(value) } } },
