@@ -740,6 +740,13 @@ export const AnswerQuestion = Tool.make("answer-question", {
   success: Schema.String,
 });
 
+export const OpenAudit = Tool.make("open-audit", {
+  description:
+    "Open the audit page in your user's browser: what collagen did and what it cost — tool calls, tokens per call over time, tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and their steering — the same as pressing A in the room. When your user asks to see collagen's numbers, its cost, or the audit. It updates itself while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
 export const OpenMerges = Tool.make("open-merges", {
   description:
     "Open a project's merges page in your user's browser — what was merged into its default branch, the latest first, each linked to its pull request with the collagen tickets it came from and their why, tabs for the room's other projects — the same as pressing o on their merges tab. 'project' is one of the current room's projects on this machine (any case); left out, their first in the order they keep (order-projects). 'number' opens it at that pull request's merge, its why unfolded. When your user asks to see a project's merges or history. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -895,6 +902,7 @@ export const CollagenToolkit = Toolkit.make(
   OpenReview,
   OpenInvestigation,
   AnswerQuestion,
+  OpenAudit,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -953,6 +961,7 @@ export const DevCollagenToolkit = Toolkit.make(
   OpenReview,
   OpenInvestigation,
   AnswerQuestion,
+  OpenAudit,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -2370,6 +2379,10 @@ const makeHandlers = Effect.gen(function* () {
         const done = yield* answerQuestion(input.ticketId, input.questionId, input.answer).pipe(Effect.provideContext(answerContext));
         return "error" in done ? `failed: ${done.error}` : input.answer === "yes" ? "answered yes: where it leads, it is a goal now, and started as their steering allows; open-investigation shows it" : "answered no";
       }),
+      "open-audit": Effect.fn("Mcp.openAudit")(function* () {
+        const { id: roomId } = yield* focusedRoom;
+        return yield* pages.showAudit(roomId);
+      }),
       "open-merges": Effect.fn("Mcp.openMerges")(function* (input: { project?: string; number?: number }) {
         const { id: roomId } = yield* focusedRoom;
         const state = yield* store.get;
@@ -2646,7 +2659,7 @@ export const McpLive = Layer.unwrap(
           announce,
           InboxRoutes,
           ReviewRoutes,
-          ReviewServerRoutes,
+          ReviewServerRoutes(definitionSizes({ ...(isDevRun() ? DevCollagenToolkit : CollagenToolkit).tools, ...DiagnosticToolkit.tools })),
         ).pipe(
           Layer.provideMerge(
             McpServer.layerHttp({

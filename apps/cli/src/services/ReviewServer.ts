@@ -13,6 +13,7 @@ import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayCommen
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
 import { answerQuestion, investigationView } from "./InvestigationView";
+import { auditView } from "./AuditView";
 import { Jobs } from "./Jobs";
 import { closeParent, closeReview, mergeView, parentsView, setMerge, takeReview } from "./ReviewFinish";
 import { Outbox } from "./Outbox";
@@ -82,8 +83,9 @@ const finishOk = (finish: unknown): finish is { readonly id: string; readonly pe
 /** How many merges the page shows: a whole count. */
 const mergesShownOk = (count: unknown): count is number => Number.isInteger(count) && (count as number) >= 1 && (count as number) <= 100_000;
 
-/** The backend, on this instance's services. */
-const backend = Effect.gen(function* () {
+/** The backend, on this instance's services. `definitions`: what each of
+ *  collagen's tool definitions weighs, for the audit. */
+const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly chars: number }>) => Effect.gen(function* () {
   const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox | Harnesses | Jobs>();
   const types = yield* ReviewTypes;
   const history = yield* MergeHistory;
@@ -132,6 +134,7 @@ const backend = Effect.gen(function* () {
     merges: (roomId, project, shown, fresh) => (ticketIdOk(roomId) && projectNameOk(project) && mergesShownOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, project, shown, fresh)) : Effect.succeed(null)),
     answerQuestion: (ticketId, questionId, answer) =>
       ticketIdOk(ticketId) && typeof questionId === "string" && /^[\w-]{1,64}$/.test(questionId) && (answer === "yes" || answer === "no") ? on(answerQuestion(ticketId, questionId, answer)) : Effect.succeed(bad),
+    audit: (roomId, days) => auditView(roomId, days, definitions).pipe(Stream.provideContext(context)),
     investigation: (ticketId) => (ticketIdOk(ticketId) ? investigationView(ticketId).pipe(Stream.provideContext(context)) : Stream.make(null)),
     mergeProjects: (roomId) => (ticketIdOk(roomId) ? on(history.projects(roomId)) : Effect.succeed(null)),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
@@ -169,13 +172,19 @@ const handle = (load: Effect.Effect<ServerEntry | null>) => (request: HttpServer
 
 /** What a page asks its live socket for: a stream opened under its own id,
  *  or one it no longer needs. */
-type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "themes" | "investigation"; readonly subject: string } | { readonly close: string };
+type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "themes" | "investigation" | "audit"; readonly subject: string } | { readonly close: string };
+/** An audit's subject, "<roomId>:<days>", read once: a room, and 1 to 365 days. */
+const auditOf = (impl: ReviewBackend["Service"], subject: string): Stream.Stream<unknown> => {
+  const [roomId, days] = subject.split(":");
+  const count = Number(days);
+  return ticketIdOk(roomId) && Number.isInteger(count) && count >= 1 && count <= 365 ? impl.audit(roomId!, count) : Stream.make(null);
+};
 const liveIdOk = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,32}$/.test(id);
 const liveAskOf = (text: string): LiveAsk | null => {
   try {
     const ask = JSON.parse(text) as Record<string, unknown>;
     if (liveIdOk(ask["close"])) return { close: ask["close"] };
-    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "themes" || ask["topic"] === "investigation") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
+    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "themes" || ask["topic"] === "investigation" || ask["topic"] === "audit") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
   } catch {
     // not one: ignored
   }
@@ -213,7 +222,7 @@ const liveSocket = (impl: ReviewBackend["Service"]) => (request: HttpServerReque
           }
           yield* stop(ask.open);
           const values: Stream.Stream<unknown> =
-            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "investigation" ? impl.investigation(ask.subject) : ask.topic === "themes" ? impl.themes : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
+            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "investigation" ? impl.investigation(ask.subject) : ask.topic === "audit" ? auditOf(impl, ask.subject) : ask.topic === "themes" ? impl.themes : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
           const fiber = yield* values.pipe(
             Stream.runForEach((value) => write(JSON.stringify({ id: ask.open, value }))),
             // its stream ended: the page is told, to open it again
@@ -232,9 +241,9 @@ const liveSocket = (impl: ReviewBackend["Service"]) => (request: HttpServerReque
     Effect.catch(() => Effect.succeed(HttpServerResponse.text("bad request", { status: 400 }))),
   );
 
-export const ReviewServerRoutes = Layer.unwrap(
+export const ReviewServerRoutes = (definitions: ReadonlyArray<{ readonly name: string; readonly chars: number }>) => Layer.unwrap(
   Effect.gen(function* () {
-    const impl = yield* backend;
+    const impl = yield* backend(definitions);
     const load = bundle(impl);
     // the wildcard takes the endpoint itself too (POSTed calls) and what
     // is under it (a GET's /<id>, a live call's /live/<id>)

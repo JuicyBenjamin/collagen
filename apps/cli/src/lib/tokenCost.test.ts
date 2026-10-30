@@ -46,7 +46,7 @@ describe("readClaude", () => {
         claudeReply("m3", 1300),
       ),
     );
-    expect(session.calls).toEqual([{ tool: "review-context", kind: "review", argChars: JSON.stringify({ ticketId: TICKET }).length, resultChars: 400, text: JSON.stringify({ ticketId: TICKET }) }]);
+    expect(session.calls).toEqual([{ tool: "review-context", kind: "review", argChars: JSON.stringify({ ticketId: TICKET }).length, resultChars: 400, text: JSON.stringify({ ticketId: TICKET }), at: "2026-10-01T10:00:00Z" }]);
     expect(session.replies).toBe(3);
     expect(session.inputTokens).toBe(3500);
     expect(session.outputTokens).toBe(15);

@@ -1,4 +1,4 @@
-import type { InvestigationPage, ToolId, ToolState } from "./data";
+import type { AuditPage, InvestigationPage, ToolId, ToolState } from "./data";
 import type { PageThemes } from "./themeData";
 
 // The page's live updates — the review moving, a language server's state —
@@ -61,7 +61,9 @@ export function overSocket(topic: "changes", subject: string): AsyncIterable<str
 export function overSocket(topic: "tool", subject: ToolId): AsyncIterable<ToolState>;
 export function overSocket(topic: "themes", subject: ""): AsyncIterable<PageThemes | null>;
 export function overSocket(topic: "investigation", subject: string): AsyncIterable<InvestigationPage | null>;
-export function overSocket(topic: "changes" | "tool" | "themes" | "investigation", subject: string): AsyncIterable<unknown> {
+/** a room's audit: subject "<roomId>:<days>" */
+export function overSocket(topic: "audit", subject: string): AsyncIterable<AuditPage | null>;
+export function overSocket(topic: "changes" | "tool" | "themes" | "investigation" | "audit", subject: string): AsyncIterable<unknown> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<unknown> {
       const id = `s${++nextId}`;

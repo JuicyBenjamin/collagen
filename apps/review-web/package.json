@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@solidjs/web": "2.0.0-rc.13",
+    "@tanstack/charts": "1.1.0",
     "@tanstack/highlight": "1.0.0",
     "daisyui": "5.7.47",
     "effect": "4.0.0",

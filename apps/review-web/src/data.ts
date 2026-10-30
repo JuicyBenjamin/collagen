@@ -703,3 +703,37 @@ export interface InvestigationPage {
   /** what only the reader can decide, from every answer */
   readonly questions: ReadonlyArray<QuestionView>;
 }
+
+/** audit(roomId, days) — what collagen did and what it cost, as the audit
+ *  page draws it. Token figures are this machine's sessions, every room;
+ *  tickets, models and steering are the room's. */
+export interface AuditPage {
+  readonly room: string;
+  readonly days: number;
+  readonly totals: {
+    readonly calls: number;
+    readonly sessions: number;
+    readonly collagenTokens: number;
+    readonly allTokens: number;
+    readonly compactions: number;
+    readonly jobs: number;
+    /** what the harness says the jobs cost, when it says */
+    readonly jobCost: number | null;
+    readonly tickets: number;
+    readonly openTickets: number;
+  };
+  /** every call of the busiest tools: when, and the tokens it put in the window */
+  readonly perCall: ReadonlyArray<{ readonly tool: string; readonly calls: ReadonlyArray<{ readonly at: string; readonly tokens: number }> }>;
+  /** tools whose calls got bigger: the week before against the last, with weekly averages */
+  readonly growing: ReadonlyArray<{ readonly tool: string; readonly from: number; readonly to: number; readonly weeks: ReadonlyArray<number> }>;
+  readonly tools: ReadonlyArray<{ readonly tool: string; readonly kind: string; readonly calls: number; readonly tokensIn: number; readonly tokensOut: number }>;
+  readonly harnesses: ReadonlyArray<{ readonly name: string; readonly sessions: number }>;
+  /** the room's records, by the model of the agent that wrote them */
+  readonly models: ReadonlyArray<{ readonly name: string; readonly acts: number }>;
+  readonly jobs: ReadonlyArray<{ readonly kind: string; readonly model: string; readonly runs: number; readonly tokensIn: number; readonly tokensOut: number }>;
+  readonly compactions: ReadonlyArray<{ readonly at: string; readonly collagenTokens: number }>;
+  readonly tickets: ReadonlyArray<{ readonly kind: string; readonly open: number; readonly closed: number }>;
+  readonly steering: ReadonlyArray<{ readonly kind: string; readonly mine: string; readonly others: string }>;
+  readonly sessions: ReadonlyArray<{ readonly id: string; readonly harness: string; readonly calls: number; readonly share: number; readonly compactions: number }>;
+  readonly definitions: { readonly tools: number; readonly tokens: number; readonly largest: ReadonlyArray<{ readonly tool: string; readonly tokens: number }> };
+}

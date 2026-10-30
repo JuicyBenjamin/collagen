@@ -9,6 +9,7 @@ import { captureAtom, focusAtom, leftEdgeAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
 import { useRouter, type Route } from "../../app/router";
 import { roomAtom } from "../atoms";
+import { openAuditPageAtom } from "./review/atoms";
 import { aiChoicesAtom, installAppUpdateAtom, updateStateAtom } from "./atoms";
 import { ticketsAtom } from "./overview/components/Tickets/atoms";
 import { Crumb } from "./components/Crumb/Crumb";
@@ -87,7 +88,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   const { jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const captured = useAtomValue(captureAtom) !== null;
-  const roomName = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "…" })).name;
+  const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "…" }));
+  const roomName = room.name;
+  const openAudit = useAtomSet(openAuditPageAtom);
   const updateState = useAtomSet(updateStateAtom);
   const installUpdate = useAtomSet(installAppUpdateAtom);
   const installed = useAtomValue(installAppUpdateAtom);
@@ -110,6 +113,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     keyDebug("room", key, captured ? "captured" : undefined);
     if (captured) return;
     if (key.name === "q") return onExit();
+    // shift: the audit page, in the browser; a alone cycles the AI
+    if (key.name === "a" && key.shift) return room.id ? openAudit({ roomId: room.id }) : undefined;
     if (key.name === "a") return updateState({ update: (state) => ({ ...state, preferredAi: nextAi(aiChoices, state.preferredAi) }) });
     // the master steering level: ask first → act, then tell → just do it — the person's own dial
     if (key.name === "g") return updateState({ update: (state) => withLevel(state, "master", "mine", nextSteering(masterOf(state))) });

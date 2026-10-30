@@ -5,6 +5,7 @@ import { oneDarkProTheme } from "@tanstack/highlight/themes/one-dark-pro";
 import { App } from "./App";
 import { MergesApp, mergesPlace, MergesRoom } from "./Merges";
 import { Investigation, investigationPlace } from "./components/Investigation";
+import { Audit, auditPlace } from "./components/Audit";
 import { startHandoff } from "./handoff";
 import { themeNow } from "./themeNow";
 import "./themes.css";
@@ -24,16 +25,19 @@ document.head.append(theme);
 // every page wears the theme chosen, and follows it as it changes
 themeNow.start();
 
-// one document for every page: /review/<ticketId>, /investigation/<ticketId>,
+// one document for every page: /review/<ticketId>, /investigation/<ticketId>, /audit/<roomId>,
 // /merges/<roomId>/<project>, and a room's /merges/<roomId>, which goes on
 // to a project's
 const merges = mergesPlace;
 const investigation = investigationPlace;
-if (merges === null && investigation === null) startHandoff();
+const audit = auditPlace;
+if (merges === null && investigation === null && audit === null) startHandoff();
 render(
   () =>
     investigation !== null ? (
       <Investigation ticketId={investigation} />
+    ) : audit !== null ? (
+      <Audit roomId={audit} />
     ) : merges === null ? (
       <App />
     ) : merges.project === null ? (
