@@ -39,7 +39,9 @@ export function PanelSkeleton(props: {
         )}
       </Show>
       {props.children}
-      <Show when={props.height}>{(height) => <div class="audit-sk-body" style={{ height: `${height()}px` }} />}</Show>
+      <Show when={props.height}>
+        {(height) => <div class="audit-sk-body" style={{ height: `${height()}px` }} />}
+      </Show>
     </section>
   );
 }
