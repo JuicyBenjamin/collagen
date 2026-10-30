@@ -981,9 +981,13 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .audit-sub { margin: -8px 0 0; font-size: 13px; color: var(--dim); }
 .audit-block { display: block; margin: 0; }
 .audit-none { color: var(--dim); }
-.audit-legend { display: flex; gap: 16px; font-size: 12px; color: var(--dim); margin-top: -6px; }
-.audit-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.audit-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--dim); margin-top: -6px; }
+.audit-legend span { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
 .audit-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.audit-legend-value { font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+/* a legend whose parts carry numbers: names in one column, numbers right-aligned in the next */
+.audit-legend-key { display: grid; grid-template-columns: max-content max-content; gap: 6px 16px; }
+.audit-legend-key .audit-legend-value { text-align: right; }
 .audit-facts { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 32px; }
 .audit-facts dt { font-size: 12px; color: var(--dim); }
 .audit-facts dd { margin: 0; font-size: 17px; font-weight: 600; }
