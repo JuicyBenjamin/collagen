@@ -1037,6 +1037,6 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .audit-steps { display: inline-flex; gap: 2px; }
 .audit-steps i { width: 6px; height: 10px; border-radius: 1px; background: var(--line); }
 .audit-steps i.on { background: var(--color-primary); }
-.audit-jobs { grid-template-columns: auto minmax(0, 1fr) 150px auto; }
+.audit-runs { grid-template-columns: auto minmax(0, 1fr) 150px auto; }
 .audit-flat { margin: 0; }
 .audit-steering .audit-grid-row { min-height: 37px; }
