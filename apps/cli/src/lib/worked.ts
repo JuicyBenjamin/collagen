@@ -51,6 +51,15 @@ export interface Noted {
   readonly watch?: { readonly ticket: string; readonly on: boolean };
 }
 
+/** State with `conversation` forgotten: a job's own run, over once it ends,
+ *  is never a conversation to hear news. */
+export const withoutWorked = (state: LocalState, conversation: Conversation): LocalState => {
+  const key = conversationKey(conversation);
+  if (!state.worked?.[key]) return state;
+  const { [key]: _gone, ...rest } = state.worked;
+  return { ...state, worked: rest };
+};
+
 /** State with `conversation` remembered as `noted` at `now`. */
 export const withWorked = (state: LocalState, conversation: Conversation, noted: Noted, now: number): LocalState => {
   const threads = noted.threads ?? [];
