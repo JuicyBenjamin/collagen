@@ -15,7 +15,7 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 /** Days named down the side, as a contribution grid does: every other one. */
 const NAMED = new Set(["Mon", "Wed", "Fri"]);
 /** One day's square, gap included, and the room the day names take. */
-const CELL = 20;
+const CELL = 22;
 const NAMES = 34;
 /** Five steps of how much, from none to the most: one blue, lighter to stronger. */
 const STEPS = [
@@ -119,7 +119,7 @@ export function Calendar(props: { calls: AuditPage["calls"]; days: number }) {
             <span>More</span>
           </div>
         </div>
-        <dl class="audit-facts audit-facts-stacked">
+        <dl class="audit-facts">
           <div>
             <dt>Days with calls</dt>
             <dd>
@@ -154,7 +154,7 @@ Calendar.Skeleton = () => (
           <span>More</span>
         </div>
       </div>
-      <dl class="audit-facts audit-facts-stacked">
+      <dl class="audit-facts">
         <div>
           <dt>Days with calls</dt>
           <dd>

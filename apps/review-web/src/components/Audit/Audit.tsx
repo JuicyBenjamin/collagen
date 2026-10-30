@@ -78,14 +78,12 @@ export function Audit(props: { roomId: string }) {
         <Arrives skeleton={() => <Audit.Skeleton />}>
           <div class="audit-body">
             <Stats totals={page().totals} />
-            <div class="audit-pair audit-pair-narrow">
+            <div class="audit-pair audit-trio">
               <Share totals={page().totals} />
               <Calendar calls={page().calls} days={page().days} />
-            </div>
-            <div class="audit-pair audit-pair-wide">
-              <PerCall calls={page().calls} />
               <Growing growing={page().growing} />
             </div>
+            <PerCall calls={page().calls} />
             <div class="audit-pair">
               <Tokens tools={page().tools} />
               <Spread calls={page().calls} />
@@ -119,14 +117,12 @@ export function Audit(props: { roomId: string }) {
 Audit.Skeleton = () => (
   <div class="audit-body" role="status" aria-busy="true" aria-label="Counting">
     <Stats.Skeleton />
-    <div class="audit-pair audit-pair-narrow">
+    <div class="audit-pair audit-trio">
       <Share.Skeleton />
       <Calendar.Skeleton />
-    </div>
-    <div class="audit-pair audit-pair-wide">
-      <PerCall.Skeleton />
       <Growing.Skeleton />
     </div>
+    <PerCall.Skeleton />
     <div class="audit-pair">
       <Tokens.Skeleton />
       <Spread.Skeleton />
