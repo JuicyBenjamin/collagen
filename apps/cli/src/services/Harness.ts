@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { Context, Layer, type Effect } from "effect";
 import type { FileSystem } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
-import type { Harness as HarnessId, JobKind } from "@collagen/p2p";
+import type { Conversation, Harness as HarnessId, JobKind } from "@collagen/p2p";
 import type { Turn } from "../lib/agents";
 import type { DeliverAllowed, RunAllowed } from "../lib/steering";
 import type { SessionCost } from "../lib/tokenCost";
@@ -37,11 +37,13 @@ export interface Job {
   readonly server: { readonly name: string; readonly url: string };
 }
 
-/** How a job went: whether it finished, what it last said, what it spent. */
+/** How a job went: whether it finished, what it last said, what it spent,
+ *  and the conversation it ran as, when the harness says. */
 export interface JobDone {
   readonly ok: boolean;
   readonly said?: string;
   readonly spent?: Spent;
+  readonly conversation?: Conversation;
 }
 
 /** What a model run collagen made itself spent, as the harness reported it. */

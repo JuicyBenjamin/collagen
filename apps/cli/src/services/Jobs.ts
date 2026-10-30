@@ -3,6 +3,7 @@ import { ChildProcessSpawner } from "effect/process";
 import { goalsOf, type JobKind, type OwnRun, type QueuedJob, type Ticket } from "@collagen/p2p";
 import { investigationPrompt, jobLimitOf, modelFor, paceOf, researchKind, researchPrompt, runsOf, type InvestigationRun } from "../lib/jobs";
 import { allow, withRun, type Cause } from "../lib/steering";
+import { withoutWorked } from "../lib/worked";
 import { CliArgs } from "./CliArgs";
 import { harnessFor, Harnesses, type Job } from "./Harness";
 import { IdentityService } from "./Identity";
@@ -116,6 +117,11 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
           const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
           const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           yield* letGo(next.id);
+          // the job's own conversation is over: it never hears news of the ticket
+          if (done.conversation) {
+            const ran = done.conversation;
+            yield* store.update((now) => withoutWorked(now, ran));
+          }
           const at = yield* Clock.currentTimeMillis;
           if (done.spent) {
             const run: OwnRun = { at, harness: harness.id, why: view.kind, ...done.spent };
