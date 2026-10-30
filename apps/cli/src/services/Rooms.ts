@@ -7,6 +7,7 @@ import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
 import { Jobs } from "./Jobs";
 import { levelOf } from "../lib/steering";
+import { investigationOf } from "../lib/jobs";
 import { sameName } from "../lib/names";
 import { homedir } from "node:os";
 import { AiStatus } from "./AiStatus";
@@ -148,7 +149,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                         if (level === "never") return "\nTheir steering for others' investigations is never, so their AI was not started; research starts it on their word.";
                         if (level === "ask") return "\nASK YOUR USER, in one line, whether to send their AI to find out (research with this ticketId): their steering for others' investigations is ask first.";
                         const project = (state.rooms[handle.id] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
-                        const said = yield* jobs.research({ roomId: handle.id, ticket, cwd: project?.path ?? homedir(), cause: "others" });
+                        const investigation = investigationOf(ticket, yield* SubscriptionRef.get(room.reviews), all);
+                        const said = yield* jobs.research({ roomId: handle.id, ticket, cwd: project?.path ?? homedir(), cause: "others", investigation });
                         return said.startsWith("failed")
                           ? `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`
                           : `\nTheir steering for others' investigations started their AI on it: ${said}${level === "act" ? " Tell them, in one line." : ""}`;

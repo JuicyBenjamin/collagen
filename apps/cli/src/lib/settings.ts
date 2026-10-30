@@ -32,6 +32,13 @@ export const SETTINGS: ReadonlyArray<Setting> = [
     on: "accepting a review, what it grew from is ticked to close with it; your agent closes it too unless you say keep it",
     off: "nothing is ticked: you tick what to close too, and your agent asks first",
   },
+  {
+    key: "investigationsAtOnce",
+    default: false,
+    label: "run an investigation's goals all at once",
+    on: "an investigation that sets no pace queues all its runs together, as many running as your job limit allows",
+    off: "an investigation that sets no pace runs its goals one by one, each run reading what the last found",
+  },
 ];
 
 /** A switch's value: what was set, or its default. */
