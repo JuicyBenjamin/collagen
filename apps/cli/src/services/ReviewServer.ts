@@ -12,7 +12,8 @@ import { commitOk, hostView, localHost, projectNameOk, reviewData, reviewHead, s
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
-import { investigationView } from "./InvestigationView";
+import { answerQuestion, investigationView } from "./InvestigationView";
+import { Jobs } from "./Jobs";
 import { closeParent, closeReview, mergeView, parentsView, setMerge, takeReview } from "./ReviewFinish";
 import { Outbox } from "./Outbox";
 import { Rooms } from "./Rooms";
@@ -83,11 +84,11 @@ const mergesShownOk = (count: unknown): count is number => Number.isInteger(coun
 
 /** The backend, on this instance's services. */
 const backend = Effect.gen(function* () {
-  const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox | Harnesses>();
+  const context = yield* Effect.context<Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox | Harnesses | Jobs>();
   const types = yield* ReviewTypes;
   const history = yield* MergeHistory;
   const store = yield* StateStore;
-  const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox | Harnesses>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
+  const on = <A, E>(effect: Effect.Effect<A, E, Rooms | StateStore | ReviewTypes | ReviewPages | IdentityService | Outbox | Harnesses | Jobs>) => effect.pipe(Effect.provideContext(context), Effect.orDie);
   return {
     head: (ticketId) => (ticketIdOk(ticketId) ? on(reviewHead(ticketId)) : Effect.succeed(null)),
     data: (ticketId) => (ticketIdOk(ticketId) ? on(reviewData(ticketId)) : Effect.succeed(null)),
@@ -129,6 +130,8 @@ const backend = Effect.gen(function* () {
     setMerge: (ticketId, level) => (ticketIdOk(ticketId) && (level === null || level === "off" || level === "theirs" || level === "mine" || level === "both") ? on(setMerge(ticketId, level)) : Effect.succeed(null)),
     close: (ticketId, outcome) => (ticketIdOk(ticketId) && (outcome === "done" || outcome === "dropped") ? on(closeReview(ticketId, outcome)) : Effect.succeed(bad)),
     merges: (roomId, project, shown, fresh) => (ticketIdOk(roomId) && projectNameOk(project) && mergesShownOk(shown) && typeof fresh === "boolean" ? on(history.page(roomId, project, shown, fresh)) : Effect.succeed(null)),
+    answerQuestion: (ticketId, questionId, answer) =>
+      ticketIdOk(ticketId) && typeof questionId === "string" && /^[\w-]{1,64}$/.test(questionId) && (answer === "yes" || answer === "no") ? on(answerQuestion(ticketId, questionId, answer)) : Effect.succeed(bad),
     investigation: (ticketId) => (ticketIdOk(ticketId) ? investigationView(ticketId).pipe(Stream.provideContext(context)) : Stream.make(null)),
     mergeProjects: (roomId) => (ticketIdOk(roomId) ? on(history.projects(roomId)) : Effect.succeed(null)),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),

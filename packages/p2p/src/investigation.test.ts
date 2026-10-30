@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { emptyReview, mergeReview, ReviewContext } from "./review";
-import { goalsOf, mergeTicket, postReview, type Ticket } from "./ticket";
+import { goalsOf, mergeTicket, postReview, Ticket as TicketSchema, type Ticket } from "./ticket";
 
 const BOB = { key: "bob", name: "Bob" };
 
@@ -42,6 +42,12 @@ describe("an investigation's goals", () => {
     ]);
     // a withdrawn goal's id is never given out again
     expect(goalsOf(mergeReview(amended, { investigation: { goals: [{ ask: "Who maintains it?" }] } }, 3).investigation!).at(-1)?.id).toBe("g5");
+  });
+
+  it("a take whose questions are plain words, from before they had ids, still decodes", () => {
+    const take = postReview(investigation(), BOB, "Findings", false, 2, undefined, true, [{ goal: "q", outcome: "answered", findings: "yes" }]).ticket;
+    const older = { ...take, steps: take.steps.map((step) => ({ ...step, answers: [{ goal: "q", outcome: "answered", findings: "yes", questions: ["Should I read the handlers?"] }] })) };
+    expect(Schema.decodeUnknownSync(TicketSchema)(older).steps[0]?.answers?.[0]?.questions).toEqual(["Should I read the handlers?"]);
   });
 
   it("a brief written before goals existed still decodes", () => {

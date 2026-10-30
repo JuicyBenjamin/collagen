@@ -45,6 +45,17 @@ export const AnswerBlock = Schema.Union([
 ]);
 export type AnswerBlock = typeof AnswerBlock.Type;
 
+/** What only the person can decide, asked by a run — and, where their yes
+ *  would lead to more looking-into, that follow-up, prepared: answering yes
+ *  adds it as a goal and starts it. */
+export const InvestigationQuestion = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  /** what a yes looks into next */
+  then: Schema.optional(Schema.Struct({ title: Schema.optional(Schema.String), ask: Schema.String })),
+});
+export type InvestigationQuestion = typeof InvestigationQuestion.Type;
+
 /** A follow-up written on a goal, as a take met it: whether its 'if' held,
  *  and, where it did, what looking into its 'ask' found — in the same run,
  *  on the same investigation. */
@@ -69,7 +80,8 @@ export const GoalAnswer = Schema.Struct({
   findings: Schema.String,
   evidence: Schema.optional(Schema.Array(Schema.String)),
   blocks: Schema.optional(Schema.Array(AnswerBlock)),
-  questions: Schema.optional(Schema.Array(Schema.String)),
+  /** a question from before they carried an id and a follow-up is its words alone */
+  questions: Schema.optional(Schema.Array(Schema.Union([InvestigationQuestion, Schema.String]))),
   followUps: Schema.optional(Schema.Array(FollowUpAnswer)),
   agent: Schema.optional(Schema.String),
   conversation: Schema.optional(Conversation),
