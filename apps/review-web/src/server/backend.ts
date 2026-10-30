@@ -70,6 +70,9 @@ export class ReviewBackend extends Context.Service<
     /** an investigation as its page reads it — now, then each time it moves
      *  (over the page's socket); null for one not here, or not shown to the reader */
     readonly investigation: (ticketId: string) => Stream.Stream<InvestigationPage | null>;
+    /** the author's yes or no to a run's question on their investigation: a yes to one
+     *  that leads somewhere adds that follow-up as a goal and starts it */
+    readonly answerQuestion: (ticketId: string, questionId: string, answer: "yes" | "no") => Effect.Effect<HostWrite>;
     /** a room's projects held here, in the reader's order; null for a room not here */
     readonly mergeProjects: (roomId: string) => Effect.Effect<MergeProjects | null>;
     /** the page's themes as collagen keeps them — now, then on every change, whoever made it

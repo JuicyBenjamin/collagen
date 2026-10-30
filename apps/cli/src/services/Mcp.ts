@@ -11,7 +11,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, InvestigationPace, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -46,6 +46,7 @@ import { Transcripts } from "./Transcripts";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
+import { answerQuestion } from "./InvestigationView";
 import { investigationOf, JOB_KINDS, JOB_LABEL, jobLimitOf, modelFor, withModel, type InvestigationRun } from "../lib/jobs";
 import { allow, KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
@@ -533,7 +534,7 @@ export const PostReview = Tool.make("post-review", {
     findings: Schema.String,
     failed: Schema.optional(Schema.Boolean),
     comment: Schema.optional(Schema.Boolean),
-    answers: Schema.optional(Schema.Array(GoalAnswer)),
+    answers: Schema.optional(Schema.Array(Schema.Struct({ ...GoalAnswer.fields, questions: Schema.optional(Schema.Array(Schema.Struct({ text: Schema.String, then: Schema.optional(Schema.Struct({ title: Schema.optional(Schema.String), ask: Schema.String })) }))) }))),
   }),
   success: Schema.String,
 });
@@ -732,6 +733,13 @@ export const OpenInvestigation = Tool.make("open-investigation", {
   success: Schema.String,
 });
 
+export const AnswerQuestion = Tool.make("answer-question", {
+  description:
+    "Answer a run's question on your user's own investigation, yes or no — only with their word, never on your own. The questions and their ids are in get-ticket, under each goal. A yes to a question that says what it would look into next adds that as a goal and starts their AI on it (the yes is their word for it); a no only records the answer. The same as the Yes and No on the investigation's page.",
+  parameters: Schema.Struct({ ticketId: Schema.String, questionId: Schema.String, answer: Schema.Literals(["yes", "no"]) }),
+  success: Schema.String,
+});
+
 export const OpenMerges = Tool.make("open-merges", {
   description:
     "Open a project's merges page in your user's browser — what was merged into its default branch, the latest first, each linked to its pull request with the collagen tickets it came from and their why, tabs for the room's other projects — the same as pressing o on their merges tab. 'project' is one of the current room's projects on this machine (any case); left out, their first in the order they keep (order-projects). 'number' opens it at that pull request's merge, its why unfolded. When your user asks to see a project's merges or history. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -886,6 +894,7 @@ export const CollagenToolkit = Toolkit.make(
   SetSettings,
   OpenReview,
   OpenInvestigation,
+  AnswerQuestion,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -943,6 +952,7 @@ export const DevCollagenToolkit = Toolkit.make(
   SetSettings,
   OpenReview,
   OpenInvestigation,
+  AnswerQuestion,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -984,6 +994,8 @@ const makeHandlers = Effect.gen(function* () {
     const { identity, nameRef, setName } = yield* IdentityService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
     const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore | MergeHistory | Harnesses>();
+    // what answering an investigation's question runs on, as the page's buttons do
+    const answerContext = yield* Effect.context<IdentityService | Rooms | StateStore | Outbox | Jobs>();
     const harnesses = yield* Harnesses;
     const adapters = yield* Adapters;
     const actingNow = actingWith(harnesses);
@@ -1950,7 +1962,7 @@ const makeHandlers = Effect.gen(function* () {
       propose: (input: Parameters<typeof fileJudged>[1]) => fileJudged("proposal", input),
       "report-bug": (input: Parameters<typeof fileJudged>[1]) => fileJudged("bug", input),
       investigate: (input: Parameters<typeof fileJudged>[1]) => fileJudged("investigation", input),
-      "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean; comment?: boolean; answers?: ReadonlyArray<GoalAnswer> }) {
+      "post-review": Effect.fn("Mcp.postReview")(function* (input: { ticketId: string; findings: string; failed?: boolean; comment?: boolean; answers?: ReadonlyArray<Omit<GoalAnswer, "questions"> & { readonly questions?: ReadonlyArray<Omit<InvestigationQuestion, "id">> }> }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
         const ticket = all.get(input.ticketId);
@@ -1979,7 +1991,15 @@ const makeHandlers = Effect.gen(function* () {
           to: author,
           title: `${ticket.goal} · your ${ticket.kind === "review" ? "review" : "take"}`,
           // who wrote an answer is stamped as it is posted, never taken from the call
-          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}), ...(input.answers && input.answers.length > 0 ? { answers: input.answers.map(({ agent: _agent, conversation: _conversation, ...answer }) => answer) } : {}) },
+          outgoing: { kind: "post-review", ticketId: input.ticketId, findings: input.findings, failed: input.failed ?? false, ...(input.comment ? { comment: true } : {}), ...(input.answers && input.answers.length > 0
+              ? {
+                  answers: input.answers.map(({ agent: _agent, conversation: _conversation, questions, ...answer }) => ({
+                    ...answer,
+                    // each question its own id, so its answer can name it
+                    ...(questions && questions.length > 0 ? { questions: questions.map((question) => ({ id: crypto.randomUUID().slice(0, 8), ...question })) } : {}),
+                  })),
+                }
+              : {}) },
         });
         if (input.failed || input.comment || told.startsWith("failed")) return told;
         // an approval opens what was stacked on this ticket to your user: the
@@ -2345,6 +2365,10 @@ const makeHandlers = Effect.gen(function* () {
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${ticketId} — check get-tickets`;
         if (ticket.kind !== "investigation") return `failed: "${ticket.goal}" is a ${ticket.kind}, not an investigation${ticket.kind === "review" ? " — open-review opens a review's page" : ""}`;
         return yield* pages.showInvestigation(ticketId);
+      }),
+      "answer-question": Effect.fn("Mcp.answerQuestion")(function* (input: { ticketId: string; questionId: string; answer: "yes" | "no" }) {
+        const done = yield* answerQuestion(input.ticketId, input.questionId, input.answer).pipe(Effect.provideContext(answerContext));
+        return "error" in done ? `failed: ${done.error}` : input.answer === "yes" ? "answered yes: where it leads, it is a goal now, and started as their steering allows; open-investigation shows it" : "answered no";
       }),
       "open-merges": Effect.fn("Mcp.openMerges")(function* (input: { project?: string; number?: number }) {
         const { id: roomId } = yield* focusedRoom;

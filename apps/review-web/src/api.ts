@@ -20,6 +20,13 @@ export const reviewData = GET(async (ticketId: string): Promise<ReviewPageData |
   return run((backend) => backend.data(ticketId));
 });
 
+/** The reader's yes or no to a run's question — only ever on their click. Not
+ *  a read: Solid refuses it from any page but this one. */
+export const answerQuestion = async (ticketId: string, questionId: string, answer: "yes" | "no"): Promise<HostWrite> => {
+  "use server";
+  return run((backend) => backend.answerQuestion(ticketId, questionId, answer));
+};
+
 /** Types and peeks are of the code at the commit the page shows — the same
  *  code the reader is pointing at, even after the branch has moved on. */
 export const hoverAt = GET(async (ticketId: string, file: string, line: number, col: number, commit: string): Promise<HoverResult> => {

@@ -241,7 +241,9 @@ beneath it, and the answer as its run chose to show it: a verdict, points, facts
 comparison with ticks and crosses, a ranking, or choices — a few words each. The full
 findings fold open beneath where they say more. Above: whether it is open, how many goals
 are complete, whose answers are on it, and which models ran it. Below: the questions only
-you can decide. It updates itself as runs post. Goals added later start as filing one does.
+you can decide. A question that would lead to more looking-into says what ("Yes looks into:
+…"): answer Yes and it becomes a goal and your AI starts on it; No only records the answer.
+Your agent can answer for you too (`answer-question`). It updates itself as runs post. Goals added later start as filing one does.
 
 A proposal is the **cheap** kind: alone on your own project you get ideas and want them
 kept without committing to them. It goes in with a goal and one thought; a summary, a
