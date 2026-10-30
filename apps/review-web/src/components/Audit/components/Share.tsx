@@ -7,8 +7,13 @@ import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 
-/** Collagen's share of every token its sessions read, as a gauge: the whole
- *  arc is everything the AIs read, the filled part what collagen put there. */
+/** What the AIs read in every session that called collagen, counted reply by
+ *  reply (each reply reads the whole window again), and how much of it was
+ *  collagen's own calls and answers while they stayed in the window. Tool
+ *  definitions are not in it. The whole arc is all they read, the filled
+ *  part collagen's. */
+const SUB = "Its calls and answers, of all the AIs read in sessions that used it";
+
 export function Share(props: { totals: AuditPage["totals"] }) {
   const share = () =>
     props.totals.allTokens === 0 ? 0 : props.totals.collagenTokens / props.totals.allTokens;
@@ -53,6 +58,7 @@ export function Share(props: { totals: AuditPage["totals"] }) {
   return (
     <section class="audit-panel">
       <h2>Collagen's share</h2>
+      <p class="audit-sub">{SUB}</p>
       <p class="audit-sub">
         {compact(props.totals.collagenTokens)} of {compact(props.totals.allTokens)} tokens
       </p>
@@ -66,5 +72,5 @@ export function Share(props: { totals: AuditPage["totals"] }) {
 }
 
 Share.Skeleton = () => (
-  <PanelSkeleton title="Collagen's share" pending="183M of 10.0B tokens" height={200} />
+  <PanelSkeleton title="Collagen's share" sub={SUB} pending="183M of 10.0B tokens" height={200} />
 );
