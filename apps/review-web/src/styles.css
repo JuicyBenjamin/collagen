@@ -995,3 +995,8 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .audit .ts-chart-host { color: var(--fg); }
 .audit-body { display: flex; flex-direction: column; gap: 24px; }
 .audit-sk-body { border-radius: 6px; background: color-mix(in oklab, var(--sk-word) 55%, var(--panel)); animation: sk-breathe 1.6s ease-in-out infinite; }
+.audit-keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 24px; }
+.audit-key { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.audit-key li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.audit-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.audit .chart { width: 100%; }

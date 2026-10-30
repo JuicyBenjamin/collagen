@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js";
-import { barX, defineChart } from "@tanstack/charts";
+import { barX, defineChart, group } from "@tanstack/charts";
 import { scaleBand } from "@tanstack/charts/scales/band";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
 import { scaleOrdinal } from "@tanstack/charts/scales/ordinal";
@@ -9,23 +9,24 @@ import type { AuditPage } from "~/data";
 import { compact } from "../numbers";
 import { PanelSkeleton } from "./PanelSkeleton";
 
-/** Tokens in and out per tool, in to the left and out to the right of one line. */
+/** Tokens in and out per tool, side by side from zero: how much an agent
+ *  sends a tool against how much the tool sends back. */
 export function InOut(props: { tools: AuditPage["tools"] }) {
   const tools = createMemo(() => [...props.tools].sort((a, b) => b.tokensIn + b.tokensOut - (a.tokensIn + a.tokensOut)).slice(0, 12));
-  const rows = createMemo(() => tools().flatMap((tool) => [{ id: `${tool.tool} in`, tool: tool.tool, side: "In", tokens: -tool.tokensIn }, { id: `${tool.tool} out`, tool: tool.tool, side: "Out", tokens: tool.tokensOut }]));
+  const rows = createMemo(() => tools().flatMap((tool) => [{ id: `${tool.tool} in`, tool: tool.tool, side: "In", tokens: tool.tokensIn }, { id: `${tool.tool} out`, tool: tool.tool, side: "Out", tokens: tool.tokensOut }]));
   const definition = createMemo(() =>
     defineChart({
-      marks: [barX(rows(), { x: "tokens", y: "tool", color: "side", inset: 3 })],
+      marks: [barX(rows(), { x: "tokens", y: "tool", color: "side", layout: group({ padding: 0.1 }), inset: 2 })],
       scales: {
         y: { scale: () => scaleBand<string>().domain(tools().map((tool) => tool.tool)).padding(0.2) },
-        x: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(Math.abs(value)) } } },
+        x: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { format: (value: number) => compact(value) } } },
       },
       color: { scale: scaleOrdinal<string, string>().domain(["In", "Out"]).range(["var(--color-primary)", "var(--color-warning)"]) },
       tooltip: {
         use: tooltip,
         items: [
           { id: "tool", label: "Tool", text: (point) => point.datum.tool },
-          { id: "tokens", label: "Tokens", text: (point) => `${Math.abs(point.datum.tokens).toLocaleString()} ${point.datum.side === "In" ? "in" : "out"}` },
+          { id: "tokens", label: "Tokens", text: (point) => `${point.datum.tokens.toLocaleString()} ${point.datum.side === "In" ? "in" : "out"}` },
         ],
       },
     }),
@@ -43,7 +44,7 @@ export function InOut(props: { tools: AuditPage["tools"] }) {
           Out
         </span>
       </div>
-      <Chart definition={definition()} ariaLabel="Tokens in and out by tool" height={tools().length * 26 + 40} />
+      <Chart definition={definition()} ariaLabel="Tokens in and out by tool" height={tools().length * 34 + 40} />
     </section>
   );
 }
@@ -55,6 +56,6 @@ InOut.Skeleton = () => (
       { label: "In", colour: "var(--color-primary)" },
       { label: "Out", colour: "var(--color-warning)" },
     ]}
-    height={258}
+    height={443}
   />
 );

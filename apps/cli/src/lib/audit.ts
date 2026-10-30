@@ -71,13 +71,11 @@ export const auditPage = (input: AuditInput): AuditPage => {
       tokensOut: these.reduce((sum, run) => sum + run.outputTokens, 0),
     };
   });
-  const harnesses = [...new Set(input.sessions.map((session) => session.ai))].map((ai) => ({ name: input.harnessName(ai), sessions: input.sessions.filter((session) => session.ai === ai).length }));
-  // the room's records, by the model of the agent that wrote each
-  const labels = [
-    ...input.tickets.flatMap((ticket) => [ticket.agent, ...ticket.steps.map((step) => step.agent)]),
-    ...input.reviews.map((review) => review.agent),
-  ].flatMap((label) => (label ? [modelOfLabel(label)] : [])).filter((model): model is string => model !== undefined);
-  const models = [...new Set(labels)].map((name) => ({ name, acts: labels.filter((label) => label === name).length })).sort((a, b) => b.acts - a.acts);
+  // the room's records, by the harness and the model of the agent that wrote each
+  const agents = [...input.tickets.flatMap((ticket) => [ticket.agent, ...ticket.steps.map((step) => step.agent)]), ...input.reviews.map((review) => review.agent)].filter((label): label is string => !!label);
+  const counted = (names: ReadonlyArray<string>) => [...new Set(names)].map((name) => ({ name, acts: names.filter((each) => each === name).length })).sort((a, b) => b.acts - a.acts);
+  const harnesses = counted(agents.map((label) => label.replace(/\s*\(.*$/, "").trim()).filter((name) => name.length > 0));
+  const models = counted(agents.map((label) => modelOfLabel(label)).filter((model): model is string => model !== undefined));
   const kinds = [...new Set(input.tickets.map((ticket) => ticket.kind))];
   const tickets = kinds
     .map((kind) => {
