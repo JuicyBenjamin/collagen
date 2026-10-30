@@ -113,7 +113,11 @@ const goalsLines = (ticket: Ticket, review: ReviewContext | undefined, nameFor: 
         answers:
           answers.length === 0
             ? "none yet"
-            : answers.map(({ answer, by }) => `${by}: ${answer.outcome} — ${answer.findings}${answer.spawned && answer.spawned.length > 0 ? ` (filed ${answer.spawned.join(" ")})` : ""}`).join(" | "),
+            : answers
+                .map(({ answer, by }) =>
+                  [`${by}: ${answer.outcome} — ${answer.findings}`, ...(answer.followUps ?? []).map((follow) => (follow.held ? `  since ${follow.if}: ${follow.ask} — ${follow.outcome ?? "answered"}: ${follow.findings ?? ""}` : `  not followed (${follow.if} did not hold): ${follow.ask}`))].join("\n"),
+                )
+                .join(" | "),
       };
     }),
   };

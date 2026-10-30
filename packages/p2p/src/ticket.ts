@@ -27,14 +27,27 @@ export const STATUS_RANK: Record<StepStatus, number> = {
   retired: 2,
 };
 
-/** What a take found for one of an investigation's goals, and what it filed
- *  from it (a follow-up the goal named). */
+/** A follow-up written on a goal, as a take met it: whether its 'if' held,
+ *  and, where it did, what looking into its 'ask' found — in the same run,
+ *  on the same investigation. */
+export const FollowUpAnswer = Schema.Struct({
+  if: Schema.String,
+  ask: Schema.String,
+  held: Schema.Boolean,
+  outcome: Schema.optional(InvestigationOutcome),
+  findings: Schema.optional(Schema.String),
+  evidence: Schema.optional(Schema.Array(Schema.String)),
+});
+export type FollowUpAnswer = typeof FollowUpAnswer.Type;
+
+/** What a take found for one of an investigation's goals, and for the
+ *  follow-ups written on it. */
 export const GoalAnswer = Schema.Struct({
   goal: Schema.String,
   outcome: InvestigationOutcome,
   findings: Schema.String,
   evidence: Schema.optional(Schema.Array(Schema.String)),
-  spawned: Schema.optional(Schema.Array(Schema.String)),
+  followUps: Schema.optional(Schema.Array(FollowUpAnswer)),
 });
 export type GoalAnswer = typeof GoalAnswer.Type;
 
