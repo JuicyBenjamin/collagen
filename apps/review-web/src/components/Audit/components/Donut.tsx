@@ -2,7 +2,6 @@ import { createMemo, For } from "solid-js";
 import { defineChart } from "@tanstack/charts";
 import { pie, polar, radialArc, radialText } from "@tanstack/charts/polar";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
-import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 
 /** The series colours in their order; past them the rest is one grey "Other". */
@@ -64,23 +63,6 @@ export function Donut(props: {
       color: {
         domain: parts().map((part) => part.name),
         range: parts().map((part) => part.colour),
-      },
-      tooltip: {
-        use: tooltip,
-        content: ([point]) => {
-          const part = point?.datum as { name?: string; value?: number } | undefined;
-          return part?.name
-            ? {
-                title: part.name,
-                rows: [
-                  {
-                    label: "",
-                    value: `${part.value!.toLocaleString()} ${props.unit}, ${share(part.value!)}`,
-                  },
-                ],
-              }
-            : { rows: [] };
-        },
       },
     }),
   );

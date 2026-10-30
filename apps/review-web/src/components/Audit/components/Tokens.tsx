@@ -24,6 +24,25 @@ export function Tokens(props: { tools: AuditPage["tools"] }) {
       .reduce((sum, row) => sum + row.tokens, 0);
     return [...big, ...(rest > 0 ? [{ name: "Other", tokens: rest }] : [])];
   });
+  // the tile shows the name and tokens already: its hover gives what it does not
+  const detailsOf = (name: string): ReadonlyArray<string> => {
+    if (name === "Other") {
+      const small = props.tools.filter(
+        (tool) =>
+          tool.tokensIn + tool.tokensOut > 0 && tool.tokensIn + tool.tokensOut < total() * SMALLEST,
+      );
+      return [
+        `${small.length} smaller tools`,
+        `${small.reduce((sum, tool) => sum + tool.calls, 0).toLocaleString()} calls`,
+      ];
+    }
+    const tool = props.tools.find((each) => each.tool === name);
+    if (!tool) return [];
+    return [
+      `${tool.calls.toLocaleString()} calls`,
+      `${compact(Math.round((tool.tokensIn + tool.tokensOut) / Math.max(1, tool.calls)))} tokens a call`,
+    ];
+  };
   const definition = createMemo(() =>
     defineChart({
       marks: [
@@ -43,12 +62,9 @@ export function Tokens(props: { tools: AuditPage["tools"] }) {
       tooltip: {
         use: tooltip,
         content: ([point]) => {
-          const node = point?.datum as { name?: string; value?: number } | undefined;
-          return node?.name
-            ? {
-                title: node.name,
-                rows: [{ label: "", value: `${node.value!.toLocaleString()} tokens` }],
-              }
+          const name = (point?.datum as { name?: string } | undefined)?.name;
+          return name
+            ? { rows: detailsOf(name).map((line) => ({ label: "", value: line })) }
             : { rows: [] };
         },
       },

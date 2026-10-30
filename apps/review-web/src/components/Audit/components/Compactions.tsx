@@ -3,7 +3,6 @@ import { barY, defineChart, text } from "@tanstack/charts";
 import { decorative } from "@tanstack/charts/mark/decorative";
 import { scaleBand } from "@tanstack/charts/scales/band";
 import { scaleLinear } from "@tanstack/charts/scales/linear";
-import { tooltip } from "@tanstack/charts/tooltip";
 import { Chart } from "~/components/Chart";
 import type { AuditPage } from "~/data";
 import { PanelSkeleton } from "./PanelSkeleton";
@@ -78,16 +77,6 @@ export function Compactions(props: { compactions: AuditPage["compactions"] }) {
           axis: { ticks: { size: 0 } },
         },
         y: { scale: scaleLinear().domain([0, top() * 1.2]), axis: false },
-      },
-      tooltip: {
-        use: tooltip,
-        content: ([point]) =>
-          point
-            ? {
-                title: point.datum.name,
-                rows: [{ label: "", value: `${point.datum.compactions} compactions` }],
-              }
-            : { rows: [] },
       },
     }),
   );

@@ -90,7 +90,7 @@ export function Audit(props: { roomId: string }) {
             </div>
             <div class="audit-pair">
               <Kinds tools={page().tools} />
-              <Definitions definitions={page().definitions} />
+              <Definitions definitions={page().definitions} tools={page().tools} />
             </div>
             <div class="audit-pair">
               <Harnesses harnesses={page().harnesses} />
