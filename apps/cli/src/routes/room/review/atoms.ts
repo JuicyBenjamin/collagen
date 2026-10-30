@@ -10,3 +10,11 @@ export const openReviewPageAtom = runtimeAtom.fn(
     yield* Effect.log(yield* (yield* ReviewPages).show(ticketId));
   }),
 );
+
+/** o on an investigation: open its page in the person's browser
+ *  (ReviewPages.showInvestigation). What happened goes to the activity log. */
+export const openInvestigationPageAtom = runtimeAtom.fn(
+  Effect.fnUntraced(function* ({ ticketId }: { ticketId: string }) {
+    yield* Effect.log(yield* (yield* ReviewPages).showInvestigation(ticketId));
+  }),
+);

@@ -454,6 +454,17 @@ export const ReviewRoutes = Layer.mergeAll(
       return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
     }),
   ),
+  // an investigation: the same document, for one investigation ticket
+  HttpRouter.add("GET", "/investigation/:ticketId", (request) =>
+    Effect.gen(function* () {
+      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
+      const { ticketId } = yield* HttpRouter.params;
+      if (!ticketIdOk(ticketId)) return notFound("no ticket");
+      const root = webRoot();
+      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
+      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
+    }),
+  ),
   // a project's merges: the same document, for one of a room's projects
   HttpRouter.add("GET", "/merges/:roomId/:project", (request) =>
     Effect.gen(function* () {

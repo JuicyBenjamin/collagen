@@ -32,6 +32,13 @@ Nothing outside a part coordinates it.
 - **Hooks and shared modules earn their place** only for real lifecycle
   (a subscription, a live server read, coordination two siblings both
   read). Colocate them with the components they serve.
+- **DaisyUI on the review page's pages.** Its components (card, badge,
+  list, progress, button…) on collagen's theme, each imported in
+  `themes.css`; where the review page already has a pattern (its outline,
+  its headings), reuse that rather than a DaisyUI default.
+- **Colour carries meaning, or it is not there.** A verdict, a fit, a
+  ticket's kind: yes. A grey box around text, a coloured bullet, a dot in an
+  outline: no — if a reader cannot say why it is coloured, it goes.
 - **Narrow props.** `count`, `pull`, `viewer`, not the parent's whole state.
   Missing data stays missing; the component that renders it handles
   `undefined`.
@@ -52,3 +59,4 @@ Nothing outside a part coordinates it.
 - [ ] Does a part that waits on data carry its own placeholder and `Arrives`?
 - [ ] Does it show the moment its own data is in?
 - [ ] Is each toggled element in an `Appear`?
+- [ ] Is it DaisyUI, and does every colour on it mean something?

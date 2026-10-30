@@ -91,6 +91,13 @@ export const stepUpdateText = (change: StepChange, actorName: string): string =>
   return `${actorName} ${did} ${change.step.id} (${change.step.intent}) on the ticket "${ticketName(change.ticket)}" (${change.ticket.id}): ${firstLine(change.step.result ?? "")}`;
 };
 
+/** What the author of an investigation is told when findings come in on it:
+ *  whose, on how many goals, and where to read them. */
+export const findingsText = (change: StepChange, actorName: string): string => {
+  const goals = change.step.answers?.length ?? 0;
+  return `${actorName} posted findings${goals > 0 ? ` on ${goals === 1 ? "1 goal" : `${goals} goals`}` : ""} of the investigation "${ticketName(change.ticket)}" (${change.ticket.id}). open-investigation shows them, read at a glance; get-ticket has them as text.`;
+};
+
 /** What a participant is told when someone weighs in. */
 /** Investigations closed between two snapshots, each with the open tickets
  *  it grew from: their people hear what it found. One already closed when

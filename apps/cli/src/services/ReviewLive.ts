@@ -34,8 +34,8 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
      *  otherwise a new tab (marked to take over from an open one, which
      *  hands it the reader's place). Says what happened, url included, for a
      *  machine with no browser to open. */
-    /** One of this instance's pages: /review/<ticketId> or /merges/<roomId>. */
-    const pageUrl = (page: "review" | "merges", id: string) =>
+    /** One of this instance's pages: /review/<ticketId>, /investigation/<ticketId> or /merges/<roomId>. */
+    const pageUrl = (page: "review" | "investigation" | "merges", id: string) =>
       Effect.map(mcp.awaitUrl, (mcpUrl) => `${mcpUrl.replace(/\/mcp$/, "")}/${page}/${encodeURIComponent(id)}`);
     const launch = (url: string) => openInBrowser(url).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
     const show = Effect.fn("ReviewPages.show")(function* (ticketId: string) {
@@ -55,6 +55,12 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
       /** Is a page for this review open in a browser right now? */
       isOpen,
       show,
+      /** Open an investigation's page (review-web, /investigation/<id>) in
+       *  the person's browser. Says what happened, url included. */
+      showInvestigation: Effect.fn("ReviewPages.showInvestigation")(function* (ticketId: string) {
+        const url = yield* pageUrl("investigation", ticketId);
+        return (yield* launch(url)) ? `investigation page opened: ${url}` : `investigation page: ${url} (could not open a browser — paste it into one)`;
+      }),
       /** Open a project's merges page (review-web,
        *  /merges/<roomId>/<project>) in the person's browser — at one of
        *  its merges, its decisions open, when `at` names it; with no

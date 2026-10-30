@@ -200,7 +200,7 @@ export type InvestigationOutcome = typeof InvestigationOutcome.Type;
 
 /** Written on a goal: if what is found bears this out, the run looks into
  *  this question too, there and then, and answers it under the goal. */
-export const GoalFollowUp = Schema.Struct({ if: Schema.String, ask: Schema.String });
+export const GoalFollowUp = Schema.Struct({ if: Schema.String, ask: Schema.String, title: Schema.optional(Schema.String) });
 export type GoalFollowUp = typeof GoalFollowUp.Type;
 
 /** One thing an investigation sets out to find. Goals of one group are
@@ -209,6 +209,8 @@ export const InvestigationGoal = Schema.Struct({
   id: Schema.String,
   /** What is to be found out, in the asker's words. */
   ask: Schema.String,
+  /** A few words to head it; the ask is read beneath. */
+  title: Schema.optional(Schema.String),
   group: Schema.optional(Schema.String),
   then: Schema.optional(Schema.Array(GoalFollowUp)),
   /** Withdrawn: kept, so its id is never given to another goal. */
@@ -461,7 +463,7 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
             for (const given of givenGoals ?? []) {
               const id = given.id ?? nextId("g", goals.map((goal) => goal.id));
               const at = goals.findIndex((goal) => goal.id === id);
-              const entry: InvestigationGoal = { id, ask: given.ask, ...(given.group ? { group: given.group } : {}), ...(given.then && given.then.length > 0 ? { then: given.then } : {}) };
+              const entry: InvestigationGoal = { id, ask: given.ask, ...(given.title ? { title: given.title } : {}), ...(given.group ? { group: given.group } : {}), ...(given.then && given.then.length > 0 ? { then: given.then } : {}) };
               if (at === -1) goals.push(entry);
               else goals[at] = entry;
             }
