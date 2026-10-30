@@ -149,7 +149,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                         if (level === "never") return "\nTheir steering for others' investigations is never, so their AI was not started; research starts it on their word.";
                         if (level === "ask") return "\nASK YOUR USER, in one line, whether to send their AI to find out (research with this ticketId): their steering for others' investigations is ask first.";
                         const project = (state.rooms[handle.id] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
-                        const investigation = investigationOf(ticket, yield* SubscriptionRef.get(room.reviews), all);
+                        const investigation = investigationOf(ticket, yield* SubscriptionRef.get(room.reviews));
                         const said = yield* jobs.research({ roomId: handle.id, ticket, cwd: project?.path ?? homedir(), cause: "others", investigation });
                         return said.startsWith("failed")
                           ? `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`

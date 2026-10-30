@@ -24,7 +24,7 @@ export const research = diagnostic<{ readonly ticketId: string; readonly ask?: s
       if (ticket.kind !== "plan" && ticket.kind !== "proposal" && ticket.kind !== "bug" && ticket.kind !== "investigation") return `failed: research is for a plan, a proposal, a bug or an investigation; this is a ${ticket.kind}`;
       // it looks at the project's own code, where this machine has it
       const project = ((yield* state).rooms[context.roomId] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
-      const investigation = ticket.kind === "investigation" ? investigationOf(ticket, yield* SubscriptionRef.get(handle.room.reviews), all) : undefined;
+      const investigation = ticket.kind === "investigation" ? investigationOf(ticket, yield* SubscriptionRef.get(handle.room.reviews)) : undefined;
       return yield* jobs.research({ roomId: context.roomId, ticket, cwd: project?.path ?? homedir(), ...(ask ? { ask } : {}), ...(investigation ? { investigation } : {}), ...(goals && goals.length > 0 ? { goals } : {}) });
     }),
 });
