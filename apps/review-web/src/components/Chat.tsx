@@ -1,5 +1,6 @@
-import { createEffect, createMemo, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { Appear } from "./Appear";
+import { rise, sink } from "../fold";
 import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
 import { answerParts, selectionLabel } from "../chatText";
@@ -20,6 +21,27 @@ export function Chat() {
   });
   chatNow.watch();
   const turns = () => chatNow.view()?.turns ?? [];
+  // the panel rises from its corner and sinks back into it: placed until it
+  // has sunk, and only taken away then if it was not opened again meanwhile.
+  // A comment box flying in is its entrance (chatNow.handOver): no rise then.
+  const [placed, setPlaced] = createSignal(chatNow.open());
+  let panel: HTMLElement | undefined;
+  let sinking = false;
+  createEffect(chatNow.open, (open) => {
+    if (open) {
+      if (sinking && panel) rise(panel);
+      sinking = false;
+      return void setPlaced(true);
+    }
+    if (!panel) return void setPlaced(false);
+    sinking = true;
+    void sink(panel).then(() => {
+      if (!sinking) return;
+      sinking = false;
+      panel = undefined;
+      setPlaced(false);
+    });
+  });
   return (
     <>
       <Appear when={chatNow.offer()}>
@@ -44,12 +66,19 @@ export function Chat() {
           </button>
         )}
       </Appear>
-      <Appear when={chatNow.open()}>{() => <Panel />}</Appear>
+      <Show when={placed()}>
+        <Panel
+          placed={(element) => {
+            panel = element;
+            if (!chatNow.flying()) rise(element);
+          }}
+        />
+      </Show>
     </>
   );
 }
 
-function Panel() {
+function Panel(props: { placed: (element: HTMLElement) => void }) {
   const question = chatNow.draft;
   const setQuestion = chatNow.setDraft;
   let log: HTMLDivElement | undefined;
@@ -74,7 +103,13 @@ function Panel() {
   };
   const cannot = () => chatNow.view()?.cannot ?? null;
   return (
-    <aside class="chat" aria-label="Chat with your AI">
+    <aside
+      class="chat"
+      aria-label="Chat with your AI"
+      ref={props.placed}
+      // a comment form flying in becomes this panel (chatNow.handOver)
+      style={{ "view-transition-name": chatNow.flying() ? "ask-panel" : undefined }}
+    >
       <div class="chat-head">
         <span class="chat-ai">{chatNow.view()?.ai ?? "Your AI"}</span>
         <Show when={(chatNow.view()?.turns.length ?? 0) > 0}>

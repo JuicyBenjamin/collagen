@@ -284,12 +284,13 @@ export function LineComposer(props: {
   const block = () => props.from.line !== props.to.line || props.from.side !== props.to.side;
   const spot = (): CommentSpot => ({ file: props.file, line: props.to.line, side: props.to.side, ...(block() ? { startLine: props.from.line, startSide: props.from.side } : {}) });
   let thread: HTMLDivElement | undefined;
+  let form: HTMLFormElement | undefined;
   // folds shut, then the pick is let go
   const close = () => void leave(thread).then(() => hostNow.clearPick());
   /** the picked lines, and the words begun here, become a question to the reader's AI: the box flies into the chat */
   const askAi = () => {
-    if (!box) return;
-    chatNow.handOver({ file: props.file, from: props.from, to: props.to, text: props.code }, body(), box, close);
+    if (!box || !form) return;
+    chatNow.handOver({ file: props.file, from: props.from, to: props.to, text: props.code }, body(), { form, box }, close);
   };
   const suggest = () => {
     if (!box || !props.suggestable) return;
@@ -332,6 +333,7 @@ export function LineComposer(props: {
           }}
         >
           <form
+            ref={(element) => (form = element)}
             class="line-composer"
             onSubmit={(event) => {
               event.preventDefault();
