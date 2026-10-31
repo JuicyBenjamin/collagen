@@ -188,6 +188,28 @@ export async function leaveSideways(element: HTMLElement | undefined): Promise<v
   await ended(animate(element, { width: [element.offsetWidth, 0], opacity: [1, 0], [side]: [0, -gap] }, { duration: 0.2, ease: EASE }), 0.2);
 }
 
+/** Where a panel in a corner rests while closed: a little lower and smaller, out of sight. */
+const SUNK = { y: 14, scale: 0.97 } as const;
+
+/** A panel in a corner opening: it rises from its corner as it fades in.
+ *  Call it on the panel as it is placed (a ref); it starts out of sight. */
+export function rise(element: HTMLElement): void {
+  if (still.matches) return;
+  element.style.opacity = "0";
+  queueMicrotask(() => {
+    void ended(animate(element, { opacity: [0, 1], y: [SUNK.y, 0], scale: [SUNK.scale, 1] }, { duration: 0.22, ease: EASE }), 0.22).then(() => {
+      for (const property of ["opacity", "transform"]) element.style.removeProperty(property);
+    });
+  });
+}
+
+/** A panel in a corner closing: it sinks into its corner, fading out —
+ *  resolves once it is gone, for the caller to take it away then. */
+export async function sink(element: HTMLElement | undefined): Promise<void> {
+  if (!element || still.matches) return;
+  await ended(animate(element, { opacity: [1, 0], y: [0, SUNK.y], scale: [1, SUNK.scale] }, { duration: 0.18, ease: EASE }), 0.18);
+}
+
 /** Something closing: to nothing, fading out — resolves once it is gone, for
  *  the caller to take it away then. */
 export async function leave(element: HTMLElement | undefined): Promise<void> {

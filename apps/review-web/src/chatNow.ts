@@ -120,20 +120,22 @@ export const chatNow = {
     setOpen(true);
     setAsking((count) => count + 1);
   },
-  /** A comment box turns into the question: its lines and words go to the
-   *  chat, and the box flies into the chat's input (one view transition,
-   *  styles.css: ask-box), so one box is open at a time. `away` takes the
-   *  comment form away, folding shut as the box flies. */
-  handOver(selection: ChatSelection, words: string, box: HTMLElement, away: () => void): void {
+  /** A comment form turns into the question: its lines and words go to the
+   *  chat, and the form becomes the chat's panel, its box the panel's input
+   *  (one view transition, styles.css: ask-panel, ask-box), so one box is
+   *  open at a time and the flight is the panel's entrance. `away` takes the
+   *  comment form's place away, folding shut as it flies. */
+  handOver(selection: ChatSelection, words: string, from: { readonly form: HTMLElement; readonly box: HTMLElement }, away: () => void): void {
     if (!canFly()) {
       away();
       return chatNow.askAbout(selection, words);
     }
-    box.style.viewTransitionName = "ask-box";
+    from.form.style.viewTransitionName = "ask-panel";
+    from.box.style.viewTransitionName = "ask-box";
     const flight = document.startViewTransition(() => {
-      // the name passes to the chat's input: one holder at a time
-      box.style.viewTransitionName = "";
-      box.style.visibility = "hidden";
+      // the names pass to the chat: one holder at a time
+      for (const element of [from.form, from.box]) element.style.viewTransitionName = "";
+      from.form.style.visibility = "hidden";
       setFlying(true);
       chatNow.askAbout(selection, words);
       flush();
