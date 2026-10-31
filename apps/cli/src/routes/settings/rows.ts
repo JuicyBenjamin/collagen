@@ -42,19 +42,21 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   report: "reports",
   host: "repo host",
   close: "closing",
+  review: "review asks",
 };
 
 /** Whose doing a steering row is about: yours, or another person's. */
 export const CAUSE_WORDS: Record<Cause, string> = { mine: "You", others: "Others" };
 
 /** Each job's row name. */
-export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations" };
+export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks" };
 
 /** What each kind of run does, a line under its name. */
 export const JOB_ABOUT: Record<JobKind, string> = {
   wake: "Wakes the conversation that worked on a ticket when something new comes on it.",
   research: "Looks into a ticket when you ask for more info, and posts what it found.",
   investigation: "Works through an investigation's goals, and posts what it found.",
+  filing: "Reads the conversation your work was done in, and files the review someone asked for.",
 };
 
 /** Where a message for you goes, short. */
@@ -106,6 +108,8 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       ...AI_KINDS.filter((kind) => kind !== "work").map(steer),
       // only your own tickets close: nobody else's doing closes them, so one row
       [{ id: "steer:close:mine", kind: "steer", at: "close", cause: "mine" }],
+      // a review of your work is asked by someone else: one row
+      [{ id: "steer:review:others", kind: "steer", at: "review", cause: "others" }],
       [
         { id: "label:tag", kind: "label", text: "messages for you" },
         { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
@@ -119,6 +123,7 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       job("wake"),
       job("research"),
       [...job("investigation"), { id: "switch:investigationsAtOnce", kind: "switch", key: "investigationsAtOnce", name: "  goals", says: { on: "all together", off: "one by one" } }],
+      job("filing"),
     ),
   ),
   tools: sections(
@@ -137,6 +142,12 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
     ]),
   ),
 };
+
+/** Kinds with a row for your own doing: theirs names the kind; a kind
+ *  that is only others' names it on its one row. */
+const WITH_MINE = new Set(Object.values(ROWS).flatMap((rows) => rows.flatMap((row) => (row.kind === "steer" && row.cause === "mine" ? [row.at] : []))));
+/** Whether a steering row says which kind it is: the first row of its kind. */
+export const namesKind = (row: Extract<Row, { kind: "steer" }>): boolean => row.cause === "mine" || !WITH_MINE.has(row.at);
 
 /** Rows with an everywhere and a this-room column. */
 export const twoColumns = (row: Row): boolean => row.kind === "steer" || row.kind === "merge";
