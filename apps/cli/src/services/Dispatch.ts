@@ -81,7 +81,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (who._tag === "refused") return refused(who.text);
           const target = who.person;
           const online = peers.some((peer) => peer.key === target.key);
-          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}), ...(out.reviewAsk ? { reviewAsk: out.reviewAsk } : {}), ...(out.reviewQuestion ? { reviewQuestion: out.reviewQuestion } : {}), ...actingFields(acting) }).pipe(
+          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}), ...(out.reviewAsk ? { reviewAsk: out.reviewAsk } : {}), ...(out.reviewQuestion ? { reviewQuestion: out.reviewQuestion } : {}), ...(out.reviewGuess ? { reviewGuess: out.reviewGuess } : {}), ...actingFields(acting) }).pipe(
             Effect.tap((message) => Effect.sync(() => wroteOn.push(message.threadId))),
             Effect.map(() => sent(online ? `sent to ${target.name}` : `sent to ${target.name} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),

@@ -123,6 +123,20 @@ export const ReviewAnswer = Schema.Struct({
 });
 export type ReviewAnswer = typeof ReviewAnswer.Type;
 
+/** A reader's AI's guess at why the code is the way it is, when the author
+ *  could not answer: the author's collagen adds it to their review's why as
+ *  a guess, for them (or their AI) to confirm, correct or reject. `id` is the
+ *  question it guesses at. */
+export const ReviewGuess = Schema.Struct({
+  id: Schema.String,
+  ticketId: Schema.String,
+  what: Schema.String,
+  /** what in the code or the why points there */
+  basis: Schema.String,
+  confidence: Schema.Literals(["high", "medium", "low"]),
+});
+export type ReviewGuess = typeof ReviewGuess.Type;
+
 /** A directed message from one peer to another within a room. */
 export const RoomMessage = Schema.Struct({
   id: Schema.String,
@@ -157,6 +171,8 @@ export const RoomMessage = Schema.Struct({
   reviewQuestion: Schema.optional(ReviewQuestion),
   /** How a question the recipient asked has come (see ReviewAnswer). */
   reviewAnswer: Schema.optional(ReviewAnswer),
+  /** A reader's AI's guess at a reason the recipient's review does not give (see ReviewGuess). */
+  reviewGuess: Schema.optional(ReviewGuess),
 });
 export type RoomMessage = typeof RoomMessage.Type;
 
@@ -486,6 +502,8 @@ export const Outgoing = Schema.Union([
     reviewAsk: Schema.optional(ReviewAsk),
     /** a question about the peer's review (ask-author) */
     reviewQuestion: Schema.optional(ReviewQuestion),
+    /** a guess at a reason the peer's review does not give */
+    reviewGuess: Schema.optional(ReviewGuess),
   }),
   Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
   /** A review ticket: the record and the why behind the change, together —
@@ -754,6 +772,8 @@ export const ReviewQuestionHeld = Schema.Struct({
   stage: Schema.Literals(["new", "waiting", "asking", "answering", "answered", "declined", "addressing"]),
   /** the conversations the work was found in, the one at the top first */
   conversations: Schema.optional(Schema.Array(Conversation)),
+  /** the reader's AI's guess at it, as added to the review's why: its decision id and what it says */
+  guess: Schema.optional(Schema.Struct({ decision: Schema.String, what: Schema.String })),
   ts: Schema.Finite,
 });
 export type ReviewQuestionHeld = typeof ReviewQuestionHeld.Type;

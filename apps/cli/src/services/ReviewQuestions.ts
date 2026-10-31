@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { roomProjects, type Conversation, type QuestionLines, type ReviewAnswer, type ReviewQuestionHeld, type ReviewQuestionStage, type RoomMessage } from "@collagen/p2p";
+import { roomProjects, type Conversation, type QuestionLines, type ReviewAnswer, type ReviewContext, type ReviewGuess, type ReviewQuestionHeld, type ReviewQuestionStage, type RoomMessage, type Verdict } from "@collagen/p2p";
 import { readable } from "../lib/reviewRequests";
 import { allow, levelOf, type Cause } from "../lib/steering";
 import { sameName } from "../lib/names";
@@ -67,6 +67,7 @@ const answeringPrompt = (held: ReviewQuestionHeld, title: string, files: Readonl
     `Read: ${files.join(", ")}${diff ? `, and the change itself, ${diff}` : ""}. The review's why is in the ${server} review-context tool, ticketId "${held.ticketId}".`,
     held.lines ? `The question is about ${held.lines.file}, lines ${held.lines.from.line}–${held.lines.to.line}${held.commit ? ` at commit ${held.commit}` : ""}:\n\`\`\`diff\n${held.lines.text}\n\`\`\`` : "",
     `The question: ${held.question}`,
+    held.guess ? `${held.fromName}'s AI could not wait for an answer and assumed: "${held.guess.what}". Say whether that holds, with verdict: "confirmed" (it does), "corrected" (partly: reply with the real reason) or "wrong" (reply with the real reason).` : "",
     `Answer with the ${server} review-question tool: {questionId: "${held.id}", reply: what the conversation says, briefly, in plain words}. If the conversation does not say, reply that it does not, and what it does say nearby. If answering shows something wrong with the change — a case it misses, a reason that no longer holds — add flaw: what is wrong, in a line. Read only: you change nothing.`,
   ]
     .filter((part) => part.length > 0)
@@ -81,6 +82,8 @@ export interface Respond {
   /** the answer itself — from the answering job, or written with them */
   readonly reply?: string;
   readonly flaw?: string;
+  /** on a reader's AI's guess at it: whether it holds */
+  readonly verdict?: Verdict;
 }
 
 /** A question the person asks of a review's author (ask-author). */
@@ -303,6 +306,49 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         return "raised with your user";
       });
 
+    /** One decision on the review's why changed, as the author's collagen writes it. */
+    const changeDecision = (held: ReviewQuestionHeld, id: string, update: (decision: ReviewContext["decisions"][number]) => ReviewContext["decisions"][number]) =>
+      Effect.gen(function* () {
+        const found = yield* reviewOf(held.roomId, held.ticketId);
+        if (!found || !found.review.decisions.some((decision) => decision.id === id)) return;
+        yield* outbox.tell({
+          roomId: held.roomId,
+          to: "the room",
+          title: `${found.ticket.title ?? found.ticket.goal} · a guess settled`,
+          outgoing: { kind: "review", review: { ...found.review, decisions: found.review.decisions.map((decision) => (decision.id === id ? update(decision) : decision)), ts: yield* Clock.currentTimeMillis } },
+        });
+      });
+
+    /** A reader's AI guessed at a reason the review does not give: added to
+     *  the why at once, plainly a guess, for the author to settle. */
+    const guessed = (handle: RoomHandle, message: RoomMessage, seq: number | undefined) =>
+      Effect.gen(function* () {
+        const guess = message.reviewGuess!;
+        const held = yield* heldOf(handle.id, guess.id);
+        const found = yield* reviewOf(handle.id, guess.ticketId);
+        if (!held || !found || found.ticket.createdBy !== identity.pubkey || held.guess) return yield* inbox.push(handle.id, message, seq);
+        const ids = new Set(found.review.decisions.map((decision) => decision.id));
+        let next = found.review.decisions.length + 1;
+        while (ids.has(`d${next}`)) next++;
+        const id = `d${next}`;
+        const title = held.question.length > 60 ? `${held.question.slice(0, 57).trimEnd()}…` : held.question;
+        const decision = { id, title, what: guess.what, agentWhy: guess.what, where: held.lines ? [`${held.lines.file}:${held.lines.from.line}`] : [], basis: `${message.fromName}'s AI assumes this, as ${yield* SubscriptionRef.get(nameRef)} could not answer: ${guess.basis}`, confidence: guess.confidence };
+        yield* outbox.tell({ roomId: handle.id, to: "the room", title: `${found.ticket.title ?? found.ticket.goal} · a guess at its why`, outgoing: { kind: "review", review: { ...found.review, decisions: [...found.review.decisions, decision], ts: yield* Clock.currentTimeMillis } } });
+        yield* keep({ ...held, guess: { decision: id, what: guess.what } });
+        const line = `\n${message.fromName}'s AI assumed why, as your user could not answer: "${guess.what}". It is on your user's review's why as a guess (${id}). When they say whether it holds: review-question {questionId: "${held.id}", verdict: confirmed | corrected | wrong, reply: the real reason when it is not}.`;
+        yield* inbox.push(handle.id, { ...message, findings: `${message.findings}${line}` }, seq);
+        yield* Effect.forkChild(runner.runThread(message.threadId));
+      });
+
+    /** The guess settled: confirmed as it is, corrected (the real reason in
+     *  its place, the guess kept beside it), or wrong. */
+    const settleGuess = (held: ReviewQuestionHeld, verdict: Verdict, reply: string | undefined) =>
+      changeDecision(held, held.guess!.decision, (decision) =>
+        verdict === "corrected" && reply
+          ? { ...decision, what: reply, agentWhy: reply, verdict, guess: { what: decision.what, ...(decision.basis ? { basis: decision.basis } : {}) } }
+          : { ...decision, verdict },
+      );
+
     /** The author's word on a question, or the answering job's answer. */
     const respond = (roomId: string, input: Respond) =>
       Effect.gen(function* () {
@@ -319,13 +365,26 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           yield* tellAsker(held, "declined", input.decline.trim());
           return `declined; ${held.fromName} is told.`;
         }
+        if (input.verdict !== undefined && input.reply === undefined) {
+          if (!held.guess) return "failed: nobody has guessed at it — there is no guess to settle; reply with the answer instead";
+          if (input.verdict !== "confirmed") return "failed: a guess that does not hold needs the real reason: reply with it";
+          yield* settleGuess(held, "confirmed", undefined);
+          yield* keep({ ...held, stage: "answered" });
+          yield* tellAsker(held, "answered", "", { answer: `${yield* SubscriptionRef.get(nameRef)} confirms the reason your AI assumed: ${held.guess.what}` });
+          return `confirmed; ${held.fromName} is told, and the guess on the review's why is marked confirmed.`;
+        }
         if (input.reply !== undefined) {
           const reply = input.reply.trim();
           if (!reply) return "failed: reply with what the conversation says";
           const flaw = input.flaw?.trim() || undefined;
           yield* keep({ ...held, stage: "answered" });
           yield* tellAsker(held, "answered", "", { answer: reply, ...(flaw ? { flaw } : {}) });
-          yield* intoTheWhy(held, reply);
+          // a guess already on the why is settled by the answer; with none, the answer goes on as read from the author's AI
+          if (held.guess) {
+            const verdict = input.verdict ?? "corrected";
+            yield* settleGuess(held, verdict, reply);
+            if (verdict === "wrong") yield* intoTheWhy(held, reply);
+          } else yield* intoTheWhy(held, reply);
           const then = flaw ? ` It found a flaw: ${yield* flawed(held, flaw)}.` : "";
           return `answered; ${held.fromName} has it, and the review's why has it, marked as read from your user's AI.${then}`;
         }
@@ -394,6 +453,22 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         return `${done.text}: asked ${author}'s AI. Their collagen answers from the conversation the work was done in, as their steering allows; the answer comes back to the review page's chat and onto the review's why. TELL YOUR USER ONLY THIS: "asked ${author}'s AI".`;
       });
 
+    /** A guess at a reason the author could not give, sent to their review's
+     *  why, as the reader's AI made it on the reader's word. */
+    const assume = (roomId: string, guess: ReviewGuess) =>
+      Effect.gen(function* () {
+        const found = yield* reviewOf(roomId, guess.ticketId);
+        if (!found) return `failed: no review ticket ${guess.ticketId} in this room`;
+        const author = found.review.authorName;
+        const done = yield* outbox.send({
+          roomId,
+          to: author,
+          title: `${found.ticket.project} · a guess at "${found.ticket.title ?? found.ticket.goal}"`,
+          outgoing: { kind: "message", peer: author, project: found.ticket.project, intent: "review-guess", findings: `${yield* SubscriptionRef.get(nameRef)}'s AI assumes why: ${guess.what}`, ticketId: guess.ticketId, reviewGuess: guess },
+        });
+        return done._tag === "refused" ? done.text : `sent: it goes on ${author}'s review's why as a guess, for them to confirm, correct or reject.`;
+      });
+
     /** How a question the person asked stands: kept for the chat, and on
      *  their inbox for their agent — with, when the author cannot answer for
      *  now, what to offer instead of a guess. */
@@ -411,8 +486,8 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
     const attached = new Set<string>();
     const attach = (handle: RoomHandle) =>
       handle.room.messages.pipe(
-        Stream.filter(({ message }) => message.to === identity.pubkey && (message.reviewQuestion !== undefined || message.reviewAnswer !== undefined)),
-        Stream.tap(({ message, seq }) => (message.reviewQuestion ? asked(handle, message, seq) : answered(handle, message, seq))),
+        Stream.filter(({ message }) => message.to === identity.pubkey && (message.reviewQuestion !== undefined || message.reviewAnswer !== undefined || message.reviewGuess !== undefined)),
+        Stream.tap(({ message, seq }) => (message.reviewQuestion ? asked(handle, message, seq) : message.reviewGuess ? guessed(handle, message, seq) : answered(handle, message, seq))),
         Stream.runDrain,
         Effect.forkScoped,
       );
@@ -431,7 +506,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
       Effect.forkScoped,
     );
 
-    return { ask, respond, heard } as const;
+    return { ask, respond, heard, assume } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

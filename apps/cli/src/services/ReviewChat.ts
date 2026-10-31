@@ -11,6 +11,7 @@ import { McpInfo } from "./McpInfo";
 import { mcpServerName } from "./mcpAddress";
 import { StateStore } from "./StateStore";
 import { commitIn, reviewNamed, reviewTree } from "./ReviewView";
+import { draftComments } from "./ReviewTalk";
 import { harnessFor, Harnesses, transcriptFile } from "./Harness";
 import { shownAi } from "../lib/jobs";
 import { readLine, type TranscriptLine } from "../lib/transcripts";
@@ -112,6 +113,50 @@ const heardText = (stage: ReviewQuestionStage, author: string, flaw?: string): s
     case "addressing":
       return `${author}'s AI is fixing it${flaw ? `: ${flaw}` : ""}.`;
   }
+};
+
+const ASSUMED = "ASSUMED:";
+const DRAFT = "DRAFT:";
+
+/** What the reader's AI is told when it answers in the author's place: its
+ *  guess in one line collagen reads (and, critiquing, each change it would
+ *  ask for, as a draft comment). */
+const insteadOf = (mode: "assume" | "critique", author: string): string =>
+  [
+    `${author} cannot answer this for now. Answer in their place, from the code and the review's why: your best reading of why it is this way — plainly an assumption, never their word.`,
+    mode === "critique" ? `Then look at that reason critically: is it a good enough reason? If not, say what should have been done instead.` : "",
+    `End with one line: \`${ASSUMED} <the reason you assume, one sentence> || RESTS ON: <what in the code or the why points there> || SURE: high|medium|low\`.`,
+    mode === "critique" ? `Then, for each change you would ask ${author} for, one line: \`${DRAFT} <file>:<line> || <nit|suggest|wish|must> || <the comment, a sentence or two, as a colleague would say it>\`.` : "",
+  ]
+    .filter((part) => part.length > 0)
+    .join("\n");
+
+/** An answer in the author's place, read: the words the reader sees, the
+ *  guess to put on the author's why, and the draft comments to make. */
+export const insteadAnswer = (
+  answer: string,
+): { readonly answer: string; readonly assumed: { readonly what: string; readonly basis: string; readonly confidence: "high" | "medium" | "low" } | null; readonly drafts: ReadonlyArray<{ readonly file: string; readonly line: number; readonly strength: "nit" | "suggest" | "wish" | "must"; readonly body: string }> } => {
+  const kept: Array<string> = [];
+  let assumed: { what: string; basis: string; confidence: "high" | "medium" | "low" } | null = null;
+  const drafts: Array<{ file: string; line: number; strength: "nit" | "suggest" | "wish" | "must"; body: string }> = [];
+  for (const raw of answer.split("\n")) {
+    const line = raw.trim().replace(/^`+|`+$/g, "").trim();
+    if (line.startsWith(ASSUMED)) {
+      const [what, basis, sure] = line.slice(ASSUMED.length).split("||").map((part) => part.trim());
+      const confidence = /(high|medium|low)/.exec(sure ?? "")?.[1] as "high" | "medium" | "low" | undefined;
+      if (what) assumed = { what, basis: (basis ?? "").replace(/^RESTS ON:\s*/, "") || "the code", confidence: confidence ?? "low" };
+      continue;
+    }
+    if (line.startsWith(DRAFT)) {
+      const [where, strength, body] = line.slice(DRAFT.length).split("||").map((part) => part.trim());
+      const at = /^(.+):(\d+)$/.exec(where ?? "");
+      const level = /(nit|suggest|wish|must)/.exec(strength ?? "")?.[1] as "nit" | "suggest" | "wish" | "must" | undefined;
+      if (at && body) drafts.push({ file: at[1]!, line: Number(at[2]), strength: level ?? "suggest", body });
+      continue;
+    }
+    kept.push(raw);
+  }
+  return { answer: kept.join("\n").trim(), assumed, drafts };
 };
 
 /** A turn as kept, and back: what the page shows at once after a restart. */
@@ -240,6 +285,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               : { ...turn, state: "done", doing: null },
         );
         yield* forwarded(ticketId, turnId);
+        yield* actedInstead(ticketId, turnId);
         yield* keepTurns(ticketId);
       },
       (effect, ticketId, turnId, ai) =>
@@ -255,7 +301,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
     /** Ask the reader's AI about the review — about lines they selected, or
      *  not — at the commit the page shows. Refused while it is still
      *  answering, or when there is no AI to ask. */
-    const ask = Effect.fn("ReviewChat.ask")(function* (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null) {
+    const ask = Effect.fn("ReviewChat.ask")(function* (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null, about?: { readonly questionId: string; readonly mode: "assume" | "critique"; readonly author: string; readonly asked: string }) {
       const ai = shownAi(yield* store.get);
       const no = cannot(ai);
       if (no || ai === null) return { error: no ?? "No AI set in collagen" } satisfies ChatAsked;
@@ -266,7 +312,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       const clone = typeof tree !== "string";
       // the page's moment, never the branch's now: a commit the clone lacks is refused
       if (clone && commit !== null && !(yield* commitIn(tree.projectPath, commit))) return { error: `${commit.slice(0, 7)} is not in your clone` } satisfies ChatAsked;
-      const turn: ChatTurn = { id: randomUUID(), question, selection, commit, answer: "", doing: null, state: "answering" };
+      const turn: ChatTurn = { id: randomUUID(), question, selection, commit, answer: "", doing: null, state: "answering", ...(about ? { about: { questionId: about.questionId, mode: about.mode } } : {}) };
       // checked and taken in one step: two tabs asking at once get one answer under way
       const taken = yield* SubscriptionRef.modify(chats, (byTicket) => {
         const before = byTicket.get(ticketId) ?? EMPTY;
@@ -283,7 +329,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
           ? preamble({ title: found.ticket.title ?? found.ticket.goal, branch: found.review.branch, base: found.review.base, commit, ticketId, serverName: mcpServerName(profile), clone })
           : null,
         moved: clone && commit !== null && commit !== lastCommit ? commit : null,
-        now: asked(selection, question),
+        now: about ? `${asked(selection, about.asked)}\n\n${insteadOf(about.mode, about.author)}` : asked(selection, question),
       });
       const fiber = yield* answer(ticketId, turn.id, ai, clone ? tree.projectPath : homedir(), prompt, session).pipe(Effect.forkIn(scope));
       // set only while that turn still runs — a quick one may be done already
@@ -352,6 +398,36 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
         const state = own || level === "never" ? "off" : id ? "asked" : "offered";
         yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: handed.answer, forward: { ...(id ? { id } : {}), question: handed.question, state } }));
       });
+
+    /** An answer in the author's place: its guess goes onto their review's
+     *  why, its critique becomes the reader's draft comments, and the reader
+     *  reads what went where. */
+    const actedInstead = (ticketId: string, turnId: string) =>
+      Effect.gen(function* () {
+        const turn = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
+        if (!turn?.about || turn.state !== "done") return;
+        const read = insteadAnswer(turn.answer);
+        const found = yield* reviewNamed(ticketId);
+        const said: Array<string> = [];
+        if (read.assumed && found) {
+          const sent = yield* questions.assume(found.roomId, { id: turn.about.questionId, ticketId, ...read.assumed });
+          said.push(sent.startsWith("failed") ? `The guess could not be sent: ${sent.replace(/^failed: /, "")}` : `Your AI's guess goes on ${found.review.authorName}'s review's why, for them to confirm, correct or reject.`);
+        }
+        if (read.drafts.length > 0) {
+          const result = yield* draftComments(ticketId, read.drafts.map((draft) => ({ spot: { file: draft.file, line: draft.line, side: "RIGHT" as const }, body: draft.body, strength: draft.strength })));
+          said.push("error" in result ? `The comments could not be drafted: ${result.error}` : `${result.drafted.length} draft comment${result.drafted.length === 1 ? "" : "s"} on the page, under the lines they are about: yours to accept, edit or decline.`);
+        }
+        yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: [read.answer, ...said].filter((part) => part.length > 0).join("\n\n") }));
+      });
+
+    /** In the author's place: the reader's AI assumes the reason (or assumes
+     *  and critiques it), for the question the author could not answer. */
+    const instead = Effect.fn("ReviewChat.instead")(function* (ticketId: string, turnId: string, mode: "assume" | "critique") {
+      const theirs = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
+      if (!theirs?.from || !theirs.fallback) return { error: "nothing to answer in the author's place there" } satisfies ChatAsked;
+      const questionId = theirs.id.replace(/^author-/, "");
+      return yield* ask(ticketId, mode === "assume" ? `Assume why: ${theirs.question}` : `Assume why, and critique it: ${theirs.question}`, theirs.selection, theirs.commit, { questionId, mode, author: theirs.from, asked: theirs.question });
+    });
 
     /** The reader's word: ask the author what the why could not say. */
     const forward = Effect.fn("ReviewChat.forward")(function* (ticketId: string, turnId: string) {
@@ -436,7 +512,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
         Stream.map((json) => JSON.parse(json) as ChatView),
       );
 
-    return { ask, stop, clear, view, forward } as const;
+    return { ask, stop, clear, view, forward, instead } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

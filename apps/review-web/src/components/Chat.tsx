@@ -185,26 +185,14 @@ function Turn(props: { turn: ChatTurn }) {
         </Show>
         {/* the author cannot answer for now: the reader's own AI, instead of a guess passed off as theirs */}
         <Show when={props.turn.fallback && props.turn.from}>
-          {(author) => (
-            <div class="chat-fallback">
-              <button
-                type="button"
-                class="quiet small"
-                disabled={chatNow.answering()}
-                onClick={() => void chatNow.askAbout(`${author()} can't answer this for now: "${props.turn.question}". From the code and the review's why, give your best reading of why it is this way — say plainly that it is an assumption, not ${author()}'s word.`, props.turn.selection)}
-              >
-                Assume the reason
-              </button>
-              <button
-                type="button"
-                class="quiet small"
-                disabled={chatNow.answering()}
-                onClick={() => void chatNow.askAbout(`${author()} can't answer this for now: "${props.turn.question}". Look at it critically: what may be wrong with it, and what would you ask ${author()} to change?`, props.turn.selection)}
-              >
-                Critique it
-              </button>
-            </div>
-          )}
+          <div class="chat-fallback">
+            <button type="button" class="quiet small" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "assume")} title="Your AI's best reading of why, sent to their review's why as a guess for them to settle">
+              Assume the reason
+            </button>
+            <button type="button" class="quiet small" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "critique")} title="The same guess, then whether it is good enough: what it asks to change becomes your draft comments">
+              Critique it
+            </button>
+          </div>
         </Show>
         <Show when={props.turn.forward}>
           {(forward) => (

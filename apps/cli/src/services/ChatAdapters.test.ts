@@ -4,7 +4,7 @@ import type { ChatTurn } from "@collagen/review-web/data";
 import type { ChatEvent } from "./ChatAdapters";
 import { claudeChat } from "./harnesses/claudeCode/chat";
 import { codexChat } from "./harnesses/codex/chat";
-import { applyEvents, forwardOf, promptFor, turnsFromLog } from "./ReviewChat";
+import { applyEvents, forwardOf, insteadAnswer, promptFor, turnsFromLog } from "./ReviewChat";
 
 const lines = (...objects: ReadonlyArray<unknown>) => objects.map((object) => JSON.stringify(object));
 const read = (adapter: typeof claudeChat, stdout: ReadonlyArray<string>): ReadonlyArray<ChatEvent> => stdout.flatMap(adapter.read);
@@ -108,5 +108,21 @@ describe("an answer that only the author can settle", () => {
     expect(forwardOf("The why does not say.\n\nASK THE AUTHOR: why double inside thing()?")).toEqual({ answer: "The why does not say.", question: "why double inside thing()?" });
     expect(forwardOf("It doubles because the export reads it too.")).toBeNull();
     expect(forwardOf("Nothing says.\n`ASK THE AUTHOR: why?`")).toEqual({ answer: "Nothing says.", question: "why?" });
+  });
+});
+
+describe("an answer in the author's place", () => {
+  it("reads the guess and the draft comments out of it, and leaves the reader the words", () => {
+    const read = insteadAnswer(
+      [
+        "It looks done so the export gets it too. That is not reason enough: the export should double on its own.",
+        "ASSUMED: doubled inside thing() so every caller, the export too, gets it || RESTS ON: thing() is read by the dashboard and the export || SURE: medium",
+        "`DRAFT: thing.js:1 || wish || Double in the dashboard instead: the export wants raw counts.`",
+        "DRAFT: nowhere || must || dropped: no line",
+      ].join("\n"),
+    );
+    expect(read.answer).toBe("It looks done so the export gets it too. That is not reason enough: the export should double on its own.");
+    expect(read.assumed).toEqual({ what: "doubled inside thing() so every caller, the export too, gets it", basis: "thing() is read by the dashboard and the export", confidence: "medium" });
+    expect(read.drafts).toEqual([{ file: "thing.js", line: 1, strength: "wish", body: "Double in the dashboard instead: the export wants raw counts." }]);
   });
 });

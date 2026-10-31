@@ -216,6 +216,13 @@ export const forwardQuestion = async (ticketId: string, turnId: string): Promise
   return run((backend) => backend.forward(ticketId, turnId));
 };
 
+/** In the author's place: the reader's AI assumes why (or assumes and
+ *  critiques it), its guess sent to the author's why, its critique drafted. */
+export const answerInstead = async (ticketId: string, turnId: string, mode: "assume" | "critique"): Promise<ChatAsked> => {
+  "use server";
+  return run((backend) => backend.instead(ticketId, turnId, mode));
+};
+
 /** Stop the answer under way; what it said so far stays. */
 export const stopAnswer = async (ticketId: string): Promise<void> => {
   "use server";

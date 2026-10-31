@@ -916,6 +916,8 @@ export interface ChatTurn {
   readonly forward?: { readonly id?: string; readonly question: string; readonly state: "offered" | "asked" | "off" };
   /** the author cannot answer for now: offer the reader their own AI's reading instead (assume the reason, or look at it critically) */
   readonly fallback?: boolean;
+  /** this turn is the reader's AI's own reading in the author's place: of which question, assumed or critiqued */
+  readonly about?: { readonly questionId: string; readonly mode: "assume" | "critique" };
 }
 
 /** chat(ticketId) — the reader's conversation with their AI on this review,
