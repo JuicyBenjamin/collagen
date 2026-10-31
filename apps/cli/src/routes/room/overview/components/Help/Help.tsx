@@ -3,7 +3,7 @@ import type { BoxRenderable } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { KIND_ORDER, KINDS } from "@collagen/p2p";
 import { theme } from "../../../../../app/theme";
-import { ENDED, ENDED_HELP, EPIC_HELP, EPIC_MARK, GLYPH, KIND_GLYPH, MARK_HELP, MARK_ORDER, STACK, STACK_HELP } from "../../../../../lib/glyphs";
+import { BRANCH_STACK, BRANCH_STACK_HELP, ENDED, ENDED_HELP, EPIC_HELP, EPIC_MARK, GLYPH, KIND_GLYPH, MARK_HELP, MARK_ORDER, STACK, STACK_HELP } from "../../../../../lib/glyphs";
 import { clamp } from "../../../../../lib/math";
 import { STATE_LABEL, STATE_ORDER, STATE_WORDS } from "../../../../../lib/ticketSummary";
 
@@ -72,6 +72,16 @@ function helpLines(): ReadonlyArray<{ readonly key: string; readonly node: React
       ),
     });
   }
+  out.push({
+    key: "branch-stack",
+    node: (
+      <>
+        {"  "}
+        <span fg={theme.fg}>{BRANCH_STACK.padEnd(COL)}</span>
+        <span fg={theme.dim}>{BRANCH_STACK_HELP}</span>
+      </>
+    ),
+  });
   for (const ended of ["done", "dropped"] as const) {
     out.push({
       key: `ended-${ended}`,

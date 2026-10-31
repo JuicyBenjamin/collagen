@@ -5,6 +5,7 @@ import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, finishe
 import { whereOf } from "../lib/comments";
 import { whyOpen } from "../lib/mergeTickets";
 import { reviewRows } from "../lib/review";
+import { roomEdges, stackOf, stackPlace } from "../lib/stack";
 import { diagnostic } from "./registry";
 
 /** The why behind a review ticket's change: what was decided, how the author's
@@ -109,6 +110,13 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
         review.assumed && !review.claimed && review.author !== me
           ? `\n\nIF YOUR USER WROTE THIS CODE (${review.assumed.author}'s pull request): they can take this review over — claim-review, with their answer to each guess (confirmed, corrected, wrong) and their own decisions. Ask them first.`
           : "";
-      return toToon({ ...rows, ...comments }) + opened + drafting + answer;
+      // a review whose branch is one in a stack of the room's reviews: where, and what is below and above
+      const stack = ticket?.kind === "review" && review.branch ? stackOf(review.branch, review.base ?? "main", roomEdges(all, yield* SubscriptionRef.get(handle.room.reviews), me, ticket.project)) : null;
+      const place = stack ? stackPlace(stack) : null;
+      const inStack =
+        stack && place
+          ? { stack: `${place.at} of ${place.of} — built on ${stack.below.map((step) => step.label).join(" › ") || "the trunk"}${stack.above.length > 0 ? `; built on it: ${stack.above.map((step) => step.label).join(" › ")}` : ""}${stack.split.length > 0 ? `; then split into ${stack.split.map((step) => step.label).join(" / ")}` : ""}` }
+          : {};
+      return toToon({ ...inStack, ...rows, ...comments }) + opened + drafting + answer;
     }),
 });

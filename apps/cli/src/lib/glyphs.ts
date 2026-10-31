@@ -42,6 +42,13 @@ export const STACK_HELP: Record<keyof typeof STACK, string> = {
   waits: "yours, waiting on a ticket not yet answered: nobody else is shown it until then",
 };
 
+/** A review that is one branch in a stack of branches, each built on the
+ *  one below: not ticket order (↳), so a mark of its own, with its place
+ *  and the stack's size ("⧉ 2 of 4"). */
+export const BRANCH_STACK = "⧉";
+
+export const BRANCH_STACK_HELP = "a review whose branch is one in a stack, each built on the one below: its place from the bottom, of how many the room's reviews make (its page adds the host's pull requests)";
+
 /** How a closed ticket ended, on its dim row: the row's dimness says it is
  *  over, the mark says how. */
 export const ENDED = { done: "✓", dropped: "⊗" } as const;

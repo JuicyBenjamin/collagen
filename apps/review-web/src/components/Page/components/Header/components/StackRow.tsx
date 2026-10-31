@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import type { ReviewPageHead, StackStep } from "~/data";
+import type { ReviewPageHead, Stack, StackStep } from "~/data";
 import { Appear } from "~/components/Appear";
 import { hostNow } from "~/hostNow";
 
@@ -18,6 +18,13 @@ function Step(props: { step: StackStep }) {
   );
 }
 
+/** The branch's place from the bottom, and how many the stack holds — the
+ *  trunk not one of them, a split counted once — as the TUI's list says it. */
+const placeOf = (stack: Stack): { readonly at: number; readonly of: number } => {
+  const at = stack.below.filter((step) => step.kind !== "trunk").length + 1;
+  return { at, of: at + stack.above.length + (stack.split.length > 0 ? 1 : 0) };
+};
+
 /** Where the review's branch sits when it is part of a stack: what it is
  *  built on, from the trunk up, then this one, then what builds on it — read
  *  from the host's open pull requests and the room's own reviews. Nothing
@@ -28,7 +35,9 @@ export function StackRow(props: { head: ReviewPageHead }) {
     <Appear when={hostNow.view() ? hostNow.stack() : (props.head.stack ?? null)}>
       {(stack) => (
         <div class="stack-row" role="navigation" aria-label="The stack this branch sits in">
-          <span class="who">Stack</span>
+          <span class="who" title="This branch's place in the stack, from the bottom, of how many branches it holds">
+            ⧉ Stack {placeOf(stack()).at} of {placeOf(stack()).of}
+          </span>
           <For each={stack().below}>
             {(step) => (
               <>
