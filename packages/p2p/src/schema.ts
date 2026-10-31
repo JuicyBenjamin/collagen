@@ -116,6 +116,10 @@ export const ReviewAnswer = Schema.Struct({
   answer: Schema.optional(Schema.String),
   /** what the answer found wrong, when it found something */
   flaw: Schema.optional(Schema.String),
+  /** why it waits, when it cannot be answered for now: the author has not
+   *  chosen their answering steering, it is never, or no conversation of
+   *  theirs did the work — the asker's AI then offers its own reading */
+  why: Schema.optional(Schema.Literals(["not-chosen", "never", "no-conversation"])),
 });
 export type ReviewAnswer = typeof ReviewAnswer.Type;
 
@@ -722,6 +726,8 @@ export const ChatTurnKept = Schema.Struct({
   from: Schema.optional(Schema.String),
   /** a question the why could not answer: offered to the author, or asked of them (with its id) */
   forward: Schema.optional(Schema.Struct({ id: Schema.optional(Schema.String), question: Schema.String, state: Schema.Literals(["offered", "asked", "off"]) })),
+  /** the author cannot answer for now: the reader is offered their own AI's reading instead */
+  fallback: Schema.optional(Schema.Boolean),
 });
 export type ChatTurnKept = typeof ChatTurnKept.Type;
 

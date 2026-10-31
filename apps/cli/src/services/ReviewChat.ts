@@ -18,7 +18,7 @@ import { levelOf } from "../lib/steering";
 import { IdentityService } from "./Identity";
 import { ReviewQuestions } from "./ReviewQuestions";
 import type { Rooms } from "./Rooms";
-import type { ChatTurnKept, ReviewQuestionStage } from "@collagen/p2p";
+import type { ChatTurnKept, ReviewAnswer, ReviewQuestionStage } from "@collagen/p2p";
 
 // The reader's conversation with their own AI on the review page: they
 // select code, ask, and the answer streams into the page as it is written —
@@ -89,6 +89,13 @@ export const forwardOf = (answer: string): { readonly answer: string; readonly q
   return question ? { answer: answer.slice(0, at).replace(/`?\s*$/, "").trim(), question } : null;
 };
 
+/** Why an author cannot answer for now, as the reader reads it. */
+const CANNOT: Record<NonNullable<ReviewAnswer["why"]>, (author: string) => string> = {
+  "not-chosen": (author) => `${author} hasn't turned on answering questions yet, so it waits until they do.`,
+  never: (author) => `${author} answers no questions on their own, so it waits on their word.`,
+  "no-conversation": (author) => `No conversation of ${author}'s holds this work, so their AI has nothing to answer from.`,
+};
+
 /** What the reader reads of how a forwarded question stands, in the author's name. */
 const heardText = (stage: ReviewQuestionStage, author: string, flaw?: string): string => {
   switch (stage) {
@@ -121,6 +128,7 @@ const kept = (turn: ChatTurn): ChatTurnKept | null =>
         ...(turn.error !== undefined ? { error: turn.error } : {}),
         ...(turn.from ? { from: turn.from } : {}),
         ...(turn.forward ? { forward: turn.forward } : {}),
+        ...(turn.fallback ? { fallback: true } : {}),
       };
 const fromKept = (turn: ChatTurnKept): ChatTurn => ({ ...turn, selection: turn.selection ?? null, commit: turn.commit ?? null, doing: null });
 
@@ -367,12 +375,14 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               const conversation = (yield* SubscriptionRef.get(chats)).get(back.ticketId);
               const asked = conversation?.turns.find((turn) => turn.forward?.id === back.id);
               if (!conversation || !asked) return;
-              const done = back.stage === "answered" || back.stage === "declined" || back.stage === "addressing";
-              const text = back.stage === "answered" ? `${back.answer ?? ""}${back.flaw ? `\n\nFound wrong: ${back.flaw}` : ""}` : heardText(back.stage, fromName, back.flaw);
-              const theirs: ChatTurn = { id: `author-${back.id}`, question: asked.forward!.question, selection: asked.selection, commit: asked.commit, answer: done ? text : "", doing: done ? null : text, state: done ? "done" : "answering", from: fromName };
+              // it cannot be answered for now: said why, and the reader is offered their own AI's reading instead
+              const stuck = back.stage === "waiting" && back.why !== undefined;
+              const done = back.stage === "answered" || back.stage === "declined" || back.stage === "addressing" || stuck;
+              const text = back.stage === "answered" ? `${back.answer ?? ""}${back.flaw ? `\n\nFound wrong: ${back.flaw}` : ""}` : stuck ? CANNOT[back.why!](fromName) : heardText(back.stage, fromName, back.flaw);
+              const theirs: ChatTurn = { id: `author-${back.id}`, question: asked.forward!.question, selection: asked.selection, commit: asked.commit, answer: done ? text : "", doing: done ? null : text, state: done ? "done" : "answering", from: fromName, ...(stuck || back.stage === "declined" ? { fallback: true } : {}) };
               const had = conversation.turns.find((turn) => turn.id === theirs.id);
-              // an answer once in stays: a later stage (being fixed) is said under it
-              if (had && had.state === "done" && back.stage !== "addressing") return;
+              // an answer once in stays: a later stage (being fixed) is said under it; one that could not be answered yet gives way to the answer
+              if (had && had.state === "done" && !had.fallback && back.stage !== "addressing") return;
               const next = had ? { ...theirs, answer: had.state === "done" && back.stage === "addressing" ? `${had.answer}\n\n${text}` : theirs.answer } : theirs;
               yield* change(back.ticketId, (each) => {
                 const without = each.turns.filter((turn) => turn.id !== theirs.id);

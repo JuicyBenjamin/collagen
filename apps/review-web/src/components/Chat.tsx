@@ -183,6 +183,29 @@ function Turn(props: { turn: ChatTurn }) {
         <Show when={props.turn.state === "failed"}>
           <p class="host-error">{props.turn.error ?? "Failed"}</p>
         </Show>
+        {/* the author cannot answer for now: the reader's own AI, instead of a guess passed off as theirs */}
+        <Show when={props.turn.fallback && props.turn.from}>
+          {(author) => (
+            <div class="chat-fallback">
+              <button
+                type="button"
+                class="quiet small"
+                disabled={chatNow.answering()}
+                onClick={() => void chatNow.askAbout(`${author()} can't answer this for now: "${props.turn.question}". From the code and the review's why, give your best reading of why it is this way — say plainly that it is an assumption, not ${author()}'s word.`, props.turn.selection)}
+              >
+                Assume the reason
+              </button>
+              <button
+                type="button"
+                class="quiet small"
+                disabled={chatNow.answering()}
+                onClick={() => void chatNow.askAbout(`${author()} can't answer this for now: "${props.turn.question}". Look at it critically: what may be wrong with it, and what would you ask ${author()} to change?`, props.turn.selection)}
+              >
+                Critique it
+              </button>
+            </div>
+          )}
+        </Show>
         <Show when={props.turn.forward}>
           {(forward) => (
             <Show

@@ -133,6 +133,11 @@ export const chatNow = {
     }
   },
   stop: () => void stopAnswer(ticketId).catch((error) => setRefused(String(error))),
+  /** ask the reader's own AI, about lines of an earlier turn: when the author cannot answer */
+  askAbout: async (question: string, selection: ChatSelection | null) => {
+    setAttached(selection);
+    return chatNow.ask(question);
+  },
   /** the reader's word: ask the review's author's AI what the why did not say */
   forward: async (turnId: string) => {
     setRefused(null);
