@@ -4,7 +4,7 @@ import { arrive, flyIn, grow, rise, shrink, sink } from "../fold";
 import { floating } from "../floating";
 import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
-import { answerParts, selectionLabel } from "../chatText";
+import { answerParts, selectionLabel, selectionShort } from "../chatText";
 import type { ChatTurn } from "../data";
 import { lasting } from "../lasting";
 import { ticketId } from "../ticket";
@@ -197,9 +197,9 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
         >
           <Show when={chatNow.attached()}>
             {(selection) => (
-              <span class="chat-attached">
-                <code>{selectionLabel(selection())}</code>
-                <button type="button" class="chat-detach" aria-label="Don't ask about these lines" onClick={() => chatNow.detach()}>
+              <span class="chat-attached badge badge-sm badge-soft badge-primary" title={selectionLabel(selection())}>
+                {selectionShort(selection())}
+                <button type="button" class="btn btn-ghost btn-xs btn-circle" aria-label="Don't ask about these lines" onClick={() => chatNow.detach()}>
                   ×
                 </button>
               </span>
@@ -255,7 +255,9 @@ function Turn(props: { turn: ChatTurn }) {
           <Show when={props.turn.selection}>
             {(selection) => (
               <div class="chat-header">
-                <code class="chat-about">{selectionLabel(selection())}</code>
+                <span class="badge badge-sm badge-soft badge-primary" title={selectionLabel(selection())}>
+                  {selectionShort(selection())}
+                </span>
               </div>
             )}
           </Show>
