@@ -49,7 +49,7 @@ export function SettingsPage() {
   const updateState = useAtomSet(updateStateAtom);
   const [tab, setTab] = useState<Tab>("ai");
   const rows = ROWS[tab];
-  const [cursor, setCursor] = useState(1);
+  const [cursor, setCursor] = useState(() => ROWS.ai.findIndex(pickable));
   const [column, setColumn] = useState<0 | 1>(0);
   const [models, setModels] = useState<Partial<Record<JobKind, string>>>({});
   const row = rows[Math.min(cursor, rows.length - 1)]!;
@@ -115,6 +115,20 @@ export function SettingsPage() {
     const words = (text: string) => <span fg={on ? theme.accent : theme.fg}>{`${on ? "› " : "  "}${text}`.padEnd(WORDS).slice(0, WORDS)}</span>;
     switch (each.kind) {
       case "heading":
+        return (
+          <text key={each.id} id={each.id} fg={theme.dim}>
+            {each.text}
+          </text>
+        );
+      case "columns":
+        return (
+          <text key={each.id} id={each.id} fg={theme.dim} wrapMode="none">
+            {"".padEnd(WORDS)}
+            {cell("everywhere")}
+            {cell("this room")}
+          </text>
+        );
+      case "note":
         return (
           <text key={each.id} id={each.id} fg={theme.dim}>
             {each.text}
@@ -219,13 +233,6 @@ export function SettingsPage() {
         ))}
         <span fg={theme.dim}>{`   this room: ${room.name}`}</span>
       </text>
-      {rows.some(twoColumns) ? (
-        <text fg={theme.dim} wrapMode="none">
-          {"".padEnd(WORDS)}
-          {cell("everywhere")}
-          {cell("this room")}
-        </text>
-      ) : null}
       <FollowScroll follow={{ id: row.id }} flexGrow={1}>
         {rows.map(line)}
       </FollowScroll>
