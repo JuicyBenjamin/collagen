@@ -1,11 +1,12 @@
 import { closedAs, goalsOf, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
+import type { StackPlace } from "./stack";
 import { finishLine, reviewHeadline, yourFinish } from "./review";
 import { rowTitle } from "./ticketSummary";
 
 /** A ticket as a list row: what it is, the line beneath its title, where it
  *  stands and whose move it is — enough to pick one; its steps, results and
  *  why are a get-ticket away. An epic's status says how far along it is. */
-export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, heldBy: ReadonlyArray<string>, all: ReadonlyMap<string, Ticket>, review?: ReviewContext) => {
+export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, heldBy: ReadonlyArray<string>, all: ReadonlyMap<string, Ticket>, review?: ReviewContext, place?: StackPlace) => {
   const closed = isClosed(ticket, all);
   const progress = () => {
     const { counted, done } = epicParts(ticket, all);
@@ -18,7 +19,8 @@ export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, held
     title: rowTitle(ticket),
     /** a review's summary is the line beneath its title (its goal is most often just its branch) */
     subtitle: ticket.kind === "review" && review?.summary.trim() ? review.summary.trim() : ticket.goal,
-    status: ticket.kind === "epic" ? `${status} · ${progress()}` : status,
+    /** a review whose branch is one in a stack of the room's reviews also says where: "open · stack 2 of 4" */
+    status: ticket.kind === "epic" ? `${status} · ${progress()}` : place ? `${status} · stack ${place.at} of ${place.of}` : status,
     /** whose move it is: the owners of the steps that are up now — "anyone" for one nobody has taken */
     waitingOn: closed ? "" : [...new Set(readySteps(ticket).map((step) => ownerName(step.owner, nameFor)))].join(", "),
     epic: epicOf(ticket) ?? "",

@@ -12,7 +12,7 @@ import { yourFinish } from "../lib/review";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isTest } from "../lib/tests";
-import { stackOf, type Edge } from "../lib/stack";
+import { roomEdges, stackOf, type Edge } from "../lib/stack";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type RepoHost } from "./RepoHost";
 import { Rooms } from "./Rooms";
@@ -367,12 +367,7 @@ const shown = ({ branch: _branch, base: _base, merged: _merged, ...pull }: HostP
 const reviewEdges = (found: { readonly room: { readonly tickets: SubscriptionRef.SubscriptionRef<ReadonlyMap<string, Ticket>>; readonly reviews: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewContext>> }; readonly ticket: Ticket }) =>
   Effect.gen(function* () {
     const { identity } = yield* IdentityService;
-    const all = yield* SubscriptionRef.get(found.room.tickets);
-    return (yield* SubscriptionRef.get(found.room.reviews)).flatMap((review): ReadonlyArray<Edge> => {
-      const ticket = all.get(review.ticketId);
-      if (!ticket || ticket.kind !== "review" || isClosed(ticket) || !review.branch || ticket.project.trim().toLowerCase() !== found.ticket.project.trim().toLowerCase() || !visibleTo(ticket, all, identity.pubkey)) return [];
-      return [{ branch: review.branch, base: review.base ?? "main", label: ticket.title ?? ticket.goal, url: `/review/${ticket.id}`, kind: "review" }];
-    });
+    return roomEdges(yield* SubscriptionRef.get(found.room.tickets), yield* SubscriptionRef.get(found.room.reviews), identity.pubkey, found.ticket.project);
   });
 
 /** The review on its host, for the page: who is signed in, its pull request

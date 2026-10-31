@@ -18,6 +18,7 @@ import { branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
+import { roomStackPlaces } from "../lib/stack";
 import type { PageThemes } from "@collagen/p2p";
 import { describeThemes, nameTaken, NO_THEMES, ownNamed, themeFromText, valueNamed, withEdit, withoutTheme, withTheme } from "../lib/pageThemes";
 import { MERGE_HELP, mergeForOf, withMergeFor } from "../lib/merging";
@@ -2585,11 +2586,12 @@ const makeHandlers = Effect.gen(function* () {
           const all = yield* SubscriptionRef.get(room.tickets);
           const lookup = yield* nameLookup;
           const reviews = yield* SubscriptionRef.get(room.reviews);
+          const places = roomStackPlaces(all, reviews, identity.pubkey);
           // a ticket waiting on another is its author's alone until it opens;
           // the open ones by default, the closed ones when asked for history
           const rows = [...all.values()]
             .filter((ticket) => visibleTo(ticket, all, identity.pubkey) && isClosed(ticket, all) === (input?.closed === true) && (input?.kind === undefined || ticket.kind === input.kind))
-            .map((ticket) => ticketRow(ticket, lookup, heldBy(ticket, all, identity.pubkey), all, reviews.find((review) => review.ticketId === ticket.id)));
+            .map((ticket) => ticketRow(ticket, lookup, heldBy(ticket, all, identity.pubkey), all, reviews.find((review) => review.ticketId === ticket.id), places.get(ticket.id)));
           return toToon({ note: "get-ticket {id} shows a ticket's steps and results; review-context reads a review's why when your user asks", tickets: rows });
         }).pipe(Effect.withSpan("Mcp.getTickets")),
       "get-ticket": (input: { ticketId: string }) =>

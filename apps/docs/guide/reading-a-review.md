@@ -295,7 +295,8 @@ login**. collagen keeps no token; whatever `gh` is signed in as is who the page 
 - **The stack**: when the branch is built on another branch that is itself under review — a
   pull request whose base is another's head, or a review in the room naming that base — a
   row under the branch line shows the chain from the trunk up, this one, and what builds on
-  it, each linked to its pull request or its review page.
+  it, each linked to its pull request or its review page. It starts with this branch's place:
+  `⧉ Stack 2 of 4`, counted from the bottom.
 
 - **What was said on GitHub**: everyone's line comments sit under their lines, a reply a
   step in under the comment it answers. Above the code, **On GitHub** lists the rest, oldest
