@@ -27,7 +27,7 @@ export type Row =
   | { readonly id: string; readonly kind: "merge" }
   | { readonly id: string; readonly kind: "heading"; readonly text: string }
   /** a dim line under a heading: what the rows below are about, in a sentence */
-  | { readonly id: string; readonly kind: "note"; readonly text: string }
+  | { readonly id: string; readonly kind: "note"; readonly text: string; readonly indent?: number }
   /** the two columns' names, right above the rows that have them */
   | { readonly id: string; readonly kind: "columns" }
   | { readonly id: string; readonly kind: "space" };
@@ -49,6 +49,13 @@ export const CAUSE_WORDS: Record<Cause, string> = { mine: "you", others: "others
 /** Each job's row name. */
 export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations" };
 
+/** What each kind of run does, a line under its name. */
+export const JOB_ABOUT: Record<JobKind, string> = {
+  wake: "Tells one of your conversations that something came for it.",
+  research: "Looks into a ticket when you ask for more info, and posts what it found.",
+  investigation: "Works through an investigation's goals, and posts what it found.",
+};
+
 /** Where a message for you goes, short. */
 export const TAG_WORDS: Record<TagRoute, string> = {
   none: "nowhere",
@@ -63,6 +70,7 @@ const steer = (at: SteeringAt): ReadonlyArray<Row> => [
 ];
 const job = (kind: JobKind): ReadonlyArray<Row> => [
   { id: `label:${kind}`, kind: "label", text: JOB_WORDS[kind] },
+  { id: `about:${kind}`, kind: "note", text: JOB_ABOUT[kind], indent: 4 },
   { id: `harness:${kind}`, kind: "harness", job: kind },
   { id: `model:${kind}`, kind: "model", job: kind },
 ];
