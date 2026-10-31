@@ -281,6 +281,12 @@ export const hostNow = {
    *  comment or a draft — a file holding one is never folded out of sight. */
   talkIn: (file: string): boolean => ready(comments, []).some((comment) => comment.file === file) || ready(pending, []).some((draft) => draft.file === file) || ready(drafts, []).some((draft) => draft.file === file),
 
+  /** Whether comments wait on the reader in a file — the AI's drafts or the
+   *  ones pending in their review. Such a file shows its lines with their
+   *  threads: not folded away, not narrowed to what changed since it was
+   *  viewed, not read as a document, so every one of them can be found. */
+  waitingIn: (file: string): boolean => ready(pending, []).some((draft) => draft.file === file) || ready(drafts, []).some((draft) => draft.file === file),
+
   /** The lines picked for a comment, and whether the pointer is still dragging them out. */
   pick,
   dragging,
