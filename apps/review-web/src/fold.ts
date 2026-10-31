@@ -43,8 +43,8 @@ export async function foldAway(card: Element | null): Promise<() => void> {
   card.style.boxSizing = "border-box";
   card.style.height = `${from}px`;
   await Promise.all([
-    ended(animate(card, { height: [from, head?.offsetHeight ?? 0] }, { duration: FOLDS, ease: EASE }).finished, FOLDS),
-    ...parts.map((element) => ended(animate(element, { opacity: [1, 0] }, { duration: FOLDS, ease: EASE }).finished, FOLDS)),
+    ended(animate(card, { height: [from, head?.offsetHeight ?? 0] }, { duration: FOLDS, ease: EASE }), FOLDS),
+    ...parts.map((element) => ended(animate(element, { opacity: [1, 0] }, { duration: FOLDS, ease: EASE }), FOLDS)),
   ]);
   return () => {
     for (const property of ["height", "box-sizing"]) card.style.removeProperty(property);
@@ -131,9 +131,12 @@ export function glideToTop(section: Element | undefined): Promise<void> {
 }
 
 /** An animation's end — or, where no frames come to run it (a tab out of
- *  sight), soon after it should have ended, so nothing is left half open. */
-const ended = (run: PromiseLike<unknown>, seconds: number): Promise<unknown> =>
-  Promise.race([run, new Promise((done) => setTimeout(done, seconds * 1000 + 100))]);
+ *  sight, a main thread busy drawing a long file), soon after it should have
+ *  ended, so nothing is left half open. Then it is cancelled: a finish that
+ *  comes after the cleanup would write its last frame back onto the element
+ *  (motion commits it), freezing a thread at the height it was measured at. */
+const ended = (run: ReturnType<typeof animate>, seconds: number): Promise<unknown> =>
+  Promise.race([run.finished, new Promise((done) => setTimeout(done, seconds * 1000 + 100))]).then(() => run.cancel());
 
 /** Something opening, as it comes in: from nothing to its own height, fading
  *  in. Call it on the element as it is placed (a ref); it starts closed. */
@@ -144,7 +147,7 @@ export function enter(element: HTMLElement): void {
   element.style.opacity = "0";
   // placed by the time the code that made it is done; measured then
   queueMicrotask(() => {
-    void ended(animate(element, { height: [0, element.scrollHeight], opacity: [0, 1] }, { duration: 0.22, ease: EASE }).finished, 0.22).then(() => {
+    void ended(animate(element, { height: [0, element.scrollHeight], opacity: [0, 1] }, { duration: 0.22, ease: EASE }), 0.22).then(() => {
       for (const property of ["height", "opacity", "overflow"]) element.style.removeProperty(property);
     });
   });
@@ -171,7 +174,7 @@ export function enterSideways(element: HTMLElement): void {
     const width = element.offsetWidth;
     element.style.width = "0px";
     const { side, gap } = gapBeside(element);
-    void ended(animate(element, { width: [0, width], opacity: [0, 1], [side]: [-gap, 0] }, { duration: 0.22, ease: EASE }).finished, 0.22).then(() => {
+    void ended(animate(element, { width: [0, width], opacity: [0, 1], [side]: [-gap, 0] }, { duration: 0.22, ease: EASE }), 0.22).then(() => {
       for (const property of ["width", "opacity", "overflow", "margin-left", "margin-right"]) element.style.removeProperty(property);
     });
   });
@@ -182,7 +185,7 @@ export async function leaveSideways(element: HTMLElement | undefined): Promise<v
   if (!element || still.matches) return;
   element.style.overflow = "hidden";
   const { side, gap } = gapBeside(element);
-  await ended(animate(element, { width: [element.offsetWidth, 0], opacity: [1, 0], [side]: [0, -gap] }, { duration: 0.2, ease: EASE }).finished, 0.2);
+  await ended(animate(element, { width: [element.offsetWidth, 0], opacity: [1, 0], [side]: [0, -gap] }, { duration: 0.2, ease: EASE }), 0.2);
 }
 
 /** Something closing: to nothing, fading out — resolves once it is gone, for
@@ -190,7 +193,7 @@ export async function leaveSideways(element: HTMLElement | undefined): Promise<v
 export async function leave(element: HTMLElement | undefined): Promise<void> {
   if (!element || still.matches) return;
   element.style.overflow = "hidden";
-  await ended(animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0] }, { duration: 0.2, ease: EASE }).finished, 0.2);
+  await ended(animate(element, { height: [element.offsetHeight, 0], opacity: [1, 0] }, { duration: 0.2, ease: EASE }), 0.2);
 }
 
 /** A `<details>` whose body opens and closes animated: its summary's click
