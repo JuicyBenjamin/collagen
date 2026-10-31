@@ -42,6 +42,9 @@
 /* the scrollbar's place is kept from the start: a page too short to scroll
    while it loads does not move sideways when it grows long enough to */
 html { scrollbar-gutter: stable; }
+/* how far down the review: fills from the left, never moves the page */
+.reading-bar { position: fixed; inset: 0 0 auto 0; height: 2px; background: var(--accent); transform-origin: left; z-index: 50; pointer-events: none; transition: transform 80ms linear; }
+@media (prefers-reduced-motion: reduce) { .reading-bar { transition: none; } }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 a { color: var(--accent); }
 p { margin: 0; }

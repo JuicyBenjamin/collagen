@@ -214,6 +214,11 @@ export interface YourReview {
   readonly comments?: number;
 }
 
+/** The person's switches a page wears, as collagen keeps them. */
+export interface PageSettings {
+  readonly progressBar: boolean;
+}
+
 /** The review's own part of the page: its ticket, its why and its links,
  *  known as soon as the room is read — the diff comes after. */
 export interface ReviewPageHead {

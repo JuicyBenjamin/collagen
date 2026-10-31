@@ -39,6 +39,13 @@ export const SETTINGS: ReadonlyArray<Setting> = [
     on: "an investigation that sets no pace queues all its runs together, as many running as your job limit allows",
     off: "an investigation that sets no pace runs its goals one by one, each run reading what the last found",
   },
+  {
+    key: "progressBar",
+    default: true,
+    label: "progress bar",
+    on: "a thin bar atop the review page fills as you scroll through it",
+    off: "the review page shows no progress bar",
+  },
 ];
 
 /** A switch's value: what was set, or its default. */
