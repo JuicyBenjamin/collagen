@@ -35,7 +35,10 @@ const nextMerge = (level: MergeFor | undefined, allowNone: boolean): MergeFor | 
   const order: ReadonlyArray<MergeFor | null> = allowNone ? [null, ...MERGE_LEVELS] : MERGE_LEVELS;
   return order[(order.indexOf(level ?? (allowNone ? null : "off")) + 1) % order.length]!;
 };
-const cell = (text: string) => text.padEnd(COLUMN).slice(0, COLUMN);
+/** Every label, value and line on the page starts with a capital, whatever
+ *  shared words it is built from — one rule, so none reads as a slip. */
+const capital = (text: string): string => text.replace(/[A-Za-z]/, (letter) => letter.toUpperCase());
+const cell = (text: string) => capital(text).padEnd(COLUMN).slice(0, COLUMN);
 
 /** Settings: what collagen may do in your name, everywhere and in the room
  *  you are in, by who acts — your AI, or tools collagen calls itself with no
@@ -126,7 +129,7 @@ export function SettingsPage() {
   const line = (each: Row, index: number) => {
     const on = !onBar && index === cursor;
     const mark = (col: 0 | 1, set = true) => (on && column === col ? theme.accent : set ? theme.fg : theme.dim);
-    const words = (text: string) => <span fg={on ? theme.accent : theme.fg}>{`${on ? "› " : "  "}${text}`.padEnd(WORDS).slice(0, WORDS)}</span>;
+    const words = (text: string) => <span fg={on ? theme.accent : theme.fg}>{`${on ? "› " : "  "}${capital(text)}`.padEnd(WORDS).slice(0, WORDS)}</span>;
     switch (each.kind) {
       case "heading":
         return (
@@ -137,7 +140,7 @@ export function SettingsPage() {
       case "label":
         return (
           <text key={each.id} id={each.id} fg={theme.fg} wrapMode="none">
-            {`  ${each.text}`}
+            {`  ${capital(each.text)}`}
           </text>
         );
       case "space":
@@ -148,7 +151,7 @@ export function SettingsPage() {
             {"".padEnd(WORDS)}
             {cell("everywhere")}
             {/* the room the second column is for, by its name: the last column, so it may run long */}
-            {room.name ? `in ${clip(room.name, 40)}` : "this room"}
+            {room.name ? `In ${clip(room.name, 40)}` : "This room"}
           </text>
         );
       case "note":
@@ -162,7 +165,7 @@ export function SettingsPage() {
         const here = steerCell(each.at, each.cause, true);
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(`${(each.cause === "mine" ? STEER_WORDS[each.at] : "").padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
+            {words(`${(each.cause === "mine" ? capital(STEER_WORDS[each.at]) : "").padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
             <span fg={mark(0, everywhere.set)}>{cell(everywhere.text)}</span>
             <span fg={mark(1, here.set)}>{cell(here.text)}</span>
           </text>
@@ -182,7 +185,7 @@ export function SettingsPage() {
         return (
           <text key={each.id} id={each.id} wrapMode="none">
             {words("  go to")}
-            <span fg={mark(0)}>{TAG_WORDS[state ? tagRouteOf(state) : "existing"]}</span>
+            <span fg={mark(0)}>{capital(TAG_WORDS[state ? tagRouteOf(state) : "existing"])}</span>
           </text>
         );
       case "switch": {
@@ -190,7 +193,7 @@ export function SettingsPage() {
         return (
           <text key={each.id} id={each.id} wrapMode="none">
             {words(each.name ?? setting.label)}
-            <span fg={mark(0)}>{state && settingOf(state, each.key) ? (each.says?.on ?? "on") : (each.says?.off ?? "off")}</span>
+            <span fg={mark(0)}>{capital(state && settingOf(state, each.key) ? (each.says?.on ?? "on") : (each.says?.off ?? "off"))}</span>
           </text>
         );
       }
@@ -205,7 +208,7 @@ export function SettingsPage() {
         return (
           <text key={each.id} id={each.id} wrapMode="none">
             {words("  harness")}
-            <span fg={mark(0)}>{state?.harnesses?.[each.job] ?? (used ? `${used} (most used)` : "most used")}</span>
+            <span fg={mark(0)}>{capital(state?.harnesses?.[each.job] ?? (used ? `${used} (most used)` : "most used"))}</span>
           </text>
         );
       case "model":
@@ -217,7 +220,7 @@ export function SettingsPage() {
               value={models[each.job] ?? state?.models?.[each.job] ?? ""}
               onInput={(typed) => setModels((previous) => ({ ...previous, [each.job]: typed }))}
               onSubmit={() => change((previous) => withModel(previous, each.job, models[each.job] ?? previous.models?.[each.job] ?? null))}
-              placeholder="default"
+              placeholder="Default"
             />
           </box>
         );
@@ -267,7 +270,7 @@ export function SettingsPage() {
       <FollowScroll follow={{ id: row.id }} flexGrow={1}>
         {rows.map(line)}
       </FollowScroll>
-      <text fg={theme.dim}>{onBar ? "" : help()}</text>
+      <text fg={theme.dim}>{onBar ? "" : capital(help())}</text>
       <text fg={theme.dim}>{onBar ? "←→ switch tab · 1-3 jump · ↓ into the settings · esc back" : "↑↓ row (↑ at the top: the tabs) · 1-3 tab · ←→ everywhere / this room · space changes it · esc back"}</text>
     </box>
   );

@@ -44,7 +44,7 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
 };
 
 /** Whose doing a steering row is about: yours, or another person's. */
-export const CAUSE_WORDS: Record<Cause, string> = { mine: "you", others: "others" };
+export const CAUSE_WORDS: Record<Cause, string> = { mine: "You", others: "Others" };
 
 /** Each job's row name. */
 export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations" };
@@ -99,8 +99,8 @@ const COLUMNS: Row = { id: "columns", kind: "columns" };
 export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
   ai: sections(
     section(
-      "steering: your AI acts for you",
-      ["How far collagen goes with your AI before asking you.", "you: you or your AI started it, like a ticket you filed.", "others: someone else did, like their ticket naming you, or their message."],
+      "Steering",
+      ["Your AI acting for you: how far collagen goes with it before asking you.", "You: started by you or your AI, like a ticket you filed.", "Others: started by someone else, like their ticket naming you, or their message."],
       [COLUMNS, ...steer("work")],
       ...AI_KINDS.filter((kind) => kind !== "work").map(steer),
       [
@@ -120,19 +120,19 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
   ),
   tools: sections(
     section(
-      "steering: tools act for you, no AI",
-      ["What collagen does with your accounts on its own, like posting a review or merging.", "you: your own doing, like your approval.", "others: a colleague's, like their approval merging your pull request."],
+      "Steering",
+      ["What collagen does with your accounts itself, with no AI, like posting a review or merging.", "You: your own doing, like your approval.", "Others: a colleague's doing, like their approval merging your pull request."],
       [COLUMNS, ...steer("host")],
       [{ id: "merge", kind: "merge" }],
     ),
   ),
   general: sections(
-    section("steering: anything not set", ["The level every row on AI and Tools follows until you set it."], [COLUMNS, ...steer("master")]),
-    section("reviews", [], [
+    section("Steering", ["The level every row on AI and Tools follows until you set it."], [COLUMNS, ...steer("master")]),
+    section("Reviews", [], [
       { id: "switch:openReviewPage", kind: "switch", key: "openReviewPage" },
       { id: "switch:progressBar", kind: "switch", key: "progressBar" },
     ]),
-    section("tickets", [], [{ id: "switch:alsoCloseParents", kind: "switch", key: "alsoCloseParents" }]),
+    section("Tickets", [], [{ id: "switch:alsoCloseParents", kind: "switch", key: "alsoCloseParents" }]),
   ),
 };
 
