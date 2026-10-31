@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, DraftComment, LocalState, Merging, OwnRun, Project, Proposal, QueuedJob, Settings, Steering, SteeringLevels, TranscriptAsk, ViewedMark, Worked, ChatKept } from "@collagen/p2p";
+import { AdoptedThread, DraftComment, LocalState, Merging, OwnRun, Project, Proposal, QueuedJob, Settings, Steering, SteeringLevels, TranscriptAsk, ViewedMark, Worked, ChatKept, Conversation } from "@collagen/p2p";
 import { checkedThemes } from "@collagen/review-web/themeData";
 
 /** Reading the user's own state file must never cost them their rooms.
@@ -171,6 +171,8 @@ export const salvageState = (text: string): Salvaged => {
 
   // unreadable, a review's chat starts a new conversation next time
   const chats = decode(Schema.Record(Schema.String, ChatKept), src.chats);
+  // unreadable, a review's chat starts without what opened it
+  const chatOpeners = decode(Schema.Record(Schema.String, Conversation), src.chatOpeners);
 
   // unreadable, every review reads unviewed again
   const viewed = decode(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark)), src.viewed);
@@ -206,6 +208,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(themes ? { themes } : {}),
       ...(viewed ? { viewed } : {}),
       ...(chats ? { chats } : {}),
+      ...(chatOpeners ? { chatOpeners } : {}),
       rooms,
       ...(projectOrder ? { projectOrder } : {}),
       ...(threads ? { threads } : {}),

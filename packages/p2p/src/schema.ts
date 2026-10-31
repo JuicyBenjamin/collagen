@@ -931,6 +931,10 @@ export const LocalState = Schema.Struct({
    *  (review page chat): which AI, and its own conversation id. The AI keeps
    *  the conversation; this is only where to find it again. Never broadcast. */
   chats: Schema.optional(Schema.Record(Schema.String, ChatKept)),
+  /** ticketId → the AI conversation that opened the review's page
+   *  (open-review): the page's chat starts as a fork of it, or reads its log,
+   *  so it knows what the person was discussing. Never broadcast. */
+  chatOpeners: Schema.optional(Schema.Record(Schema.String, Conversation)),
   /** ticketId → file → the person's viewed mark (the review page's, and
    *  their agent's through review-progress). Theirs alone, never broadcast. */
   viewed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark))),

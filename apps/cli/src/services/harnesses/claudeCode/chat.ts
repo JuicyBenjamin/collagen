@@ -10,6 +10,7 @@ const CLAUDE_TOOLS = ["Read", "Grep", "Glob", "Bash(git show:*)", "Bash(git log:
 // review (review-context) and the tickets.
 export const claudeChat: ChatAdapter = {
   cmd: "claude",
+  forks: true,
   args: (context) => {
     const mcp = JSON.stringify({ mcpServers: { [context.serverName]: { type: "http", url: context.mcpUrl } } });
     const base = [
@@ -28,7 +29,7 @@ export const claudeChat: ChatAdapter = {
       "--include-partial-messages",
       ...(Option.isSome(context.model) ? ["--model", context.model.value] : []),
     ];
-    return Option.isSome(context.sessionId) ? ["--resume", context.sessionId.value, ...base] : base;
+    return Option.isSome(context.sessionId) ? ["--resume", context.sessionId.value, ...(context.fork ? ["--fork-session"] : []), ...base] : base;
   },
   read: (line) => {
     const record = json(line);
