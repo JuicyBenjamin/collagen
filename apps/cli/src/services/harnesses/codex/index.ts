@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { codexChat } from "./chat";
 import { Effect } from "effect";
 import { ChildProcess } from "effect/process";
 import { DeliverAllowed } from "../../../lib/steering";
@@ -19,6 +20,7 @@ import { readUsage } from "./usage";
 
 export const codex: Harness = {
   id: "codex",
+  chat: codexChat,
   name: "Codex",
   matches: (clientName) => /^codex/i.test(clientName),
   home: (env, home) => env.CODEX_HOME ?? join(home, ".codex"),
