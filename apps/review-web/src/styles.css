@@ -48,7 +48,7 @@ html { scrollbar-gutter: stable; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 a { color: var(--accent); }
 p { margin: 0; }
-.loading, .failed { padding: 32px 24px; color: var(--dim); }
+.page-loading, .failed { padding: 32px 24px; color: var(--dim); }
 .failed { color: var(--warn); }
 
 .wrap { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; max-width: 1640px; margin: 0 auto; padding: 32px 24px 80px; }

@@ -92,7 +92,7 @@ export function MergesRoom(props: { roomId: string }) {
         <p class="failed">{error() instanceof Error ? (error() as Error).message : String(error())}</p>
       )}
     >
-      <Loading fallback={<p class="loading">Loading the merges…</p>}>
+      <Loading fallback={<p class="page-loading">Loading the merges…</p>}>
         <Show when={data().projects.length === 0}>
           <main class="merges-page">
             <header>
@@ -144,7 +144,7 @@ export function MergesApp(props: { roomId: string; project: string }) {
         <p class="failed">{error() instanceof Error ? (error() as Error).message : String(error())}</p>
       )}
     >
-      <Loading fallback={<p class="loading">Loading the merges…</p>}>
+      <Loading fallback={<p class="page-loading">Loading the merges…</p>}>
         <Page roomId={props.roomId} data={data()} refreshing={refreshing() && reading()} refresh={refresh} more={more} />
       </Loading>
     </Errored>

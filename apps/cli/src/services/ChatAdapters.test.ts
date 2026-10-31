@@ -39,7 +39,7 @@ describe("claudeChat", () => {
     expect(mid.answer).toBe("Let me look.\n\nIt maps rows.");
     const done = applyEvents(mid, blocks, read(claudeChat, lines({ type: "result", subtype: "success", is_error: false, result: "It maps rows.", session_id: "s1" })));
     expect(done.answer).toBe("It maps rows.");
-    expect(events).toContainEqual({ kind: "doing", what: "Read src/a.ts" });
+    expect(events).toContainEqual({ kind: "doing", what: "Reading a.ts" });
     expect(events[0]).toEqual({ kind: "session", id: "s1" });
   });
 
@@ -63,7 +63,7 @@ describe("codexChat", () => {
     );
     expect(events).toEqual([
       { kind: "session", id: "th1" },
-      { kind: "doing", what: "git show abc:src/a.ts" },
+      { kind: "doing", what: "Reading a.ts at abc" },
       { kind: "text", text: "It maps rows.", block: true },
     ]);
     expect(read(codexChat, lines({ type: "turn.failed", error: { message: "no auth" } }))).toEqual([{ kind: "failed", error: "no auth" }]);
