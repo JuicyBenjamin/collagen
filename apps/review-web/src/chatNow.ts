@@ -1,8 +1,7 @@
-import { createSignal, flush } from "solid-js";
+import { createSignal } from "solid-js";
 import { answerInstead, askAi, forwardQuestion, newChat, stopAnswer } from "./api";
 import type { ChatSelection, ChatView, SideLine } from "./data";
 import { diffNow } from "./diffNow";
-import { canFly } from "./floating";
 import { ticketId } from "./ticket";
 
 // The reader's conversation with their own AI, as the page holds it: the
@@ -20,40 +19,13 @@ const [refused, setRefused] = createSignal<string | null>(null);
 const [sending, setSending] = createSignal(false);
 /** The question being written: words a comment box handed over come in it. */
 const [draft, setDraft] = createSignal("");
-/** A comment form is flying into the panel (one view transition,
- *  styles.css: ask-panel, ask-box): the panel and its input hold the names,
- *  and the panel does not rise — the flight is its way in. */
-const [flying, setFlying] = createSignal(false);
 /** The chat's panel and its pill, while placed: what one grows from and shrinks into. */
 const corner: { panel?: HTMLElement; pill?: HTMLElement } = {};
-/** The pill and the panel turning into each other (fold.ts: grow, shrink):
- *  where the panel grows from, when it opens from the pill, and whether it
- *  is shrinking into the pill as it closes. */
-const turn: { from: DOMRect | null; intoPill: boolean } = { from: null, intoPill: false };
+/** How the panel comes and goes, besides rising and sinking (fold.ts): the
+ *  pill it grows from as it opens, the comment form it flies from, and
+ *  whether it is shrinking into the pill as it closes. */
+const turn: { from: DOMRect | null; flyFrom: DOMRect | null; intoPill: boolean } = { from: null, flyFrom: null, intoPill: false };
 
-/** One view transition: each of `from` lends its element the name it has
- *  there, and gives it up as `change` runs, while the panel takes it — so
- *  what was there becomes the panel. Resolves once the change is made (at
- *  once when nothing can fly), and `finished` once the flight lands. */
-function morph(from: ReadonlyArray<readonly [HTMLElement, string]>, change: () => void): { readonly made: Promise<void>; readonly finished: Promise<void> } {
-  if (!canFly()) {
-    change();
-    return { made: Promise.resolve(), finished: Promise.resolve() };
-  }
-  for (const [element, name] of from) element.style.viewTransitionName = name;
-  const flight = document.startViewTransition(() => {
-    // one holder of a name at a time
-    for (const [element] of from) element.style.viewTransitionName = "";
-    setFlying(true);
-    change();
-    flush();
-  });
-  const landed = () => {
-    setFlying(false);
-  };
-  const finished = flight.finished.then(landed, landed);
-  return { made: flight.updateCallbackDone.catch(() => undefined), finished };
-}
 /** Moves each time the reader picks lines to ask about: the panel's input takes the focus. */
 const [asking, setAsking] = createSignal(0);
 
@@ -115,7 +87,6 @@ export const chatNow = {
   asking,
   draft,
   setDraft,
-  flying,
   corner,
   turn,
   setView,
@@ -163,22 +134,14 @@ export const chatNow = {
     setAsking((count) => count + 1);
   },
   /** A comment form turns into the question: its lines and words go to the
-   *  chat, and the form becomes the chat's panel, its box the panel's input
-   *  (one view transition, styles.css: ask-panel, ask-box), so one box is
-   *  open at a time and the flight is the panel's entrance. `away` takes the
-   *  comment form's place away, folding shut as it flies. */
-  handOver(selection: ChatSelection, words: string, from: { readonly form: HTMLElement; readonly box: HTMLElement }, away: () => void): void {
-    const flight = morph(
-      [
-        [from.form, "ask-panel"],
-        [from.box, "ask-box"],
-      ],
-      () => {
-        from.form.style.visibility = "hidden";
-        chatNow.askAbout(selection, words);
-      },
-    );
-    void flight.made.then(away);
+   *  chat, and the panel flies in from where the form stood, so one box is
+   *  open at a time (fold.ts: flyIn). `away` takes the form's place away,
+   *  folding shut as the panel flies. An open panel just takes the words. */
+  handOver(selection: ChatSelection, words: string, form: HTMLElement, away: () => void): void {
+    if (!open()) turn.flyFrom = form.getBoundingClientRect();
+    form.style.visibility = "hidden";
+    away();
+    chatNow.askAbout(selection, words);
   },
   /** Ask the reader's AI — with the lines attached, if any. True when it is under way. */
   async ask(question: string): Promise<boolean> {

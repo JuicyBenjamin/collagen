@@ -289,8 +289,8 @@ export function LineComposer(props: {
   const close = () => void leave(thread).then(() => hostNow.clearPick());
   /** the picked lines, and the words begun here, become a question to the reader's AI: the box flies into the chat */
   const askAi = () => {
-    if (!box || !form) return;
-    chatNow.handOver({ file: props.file, from: props.from, to: props.to, text: props.code }, body(), { form, box }, close);
+    if (!form) return;
+    chatNow.handOver({ file: props.file, from: props.from, to: props.to, text: props.code }, body(), form, close);
   };
   const suggest = () => {
     if (!box || !props.suggestable) return;

@@ -330,10 +330,6 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 /* the pill flying between the header and the corner (floating.ts) */
 ::view-transition-group(review-pill) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
 :root { view-transition-name: none; }
-/* a comment box flying into the chat's input (chatNow.handOver) */
-::view-transition-group(ask-panel), ::view-transition-group(ask-box) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
-/* the form and the panel are not the same shape: each fills the box as it moves, not stretched by its width */
-::view-transition-old(ask-panel), ::view-transition-new(ask-panel) { height: 100%; object-fit: cover; object-position: top; }
 .dial-buttons { display: flex; gap: 8px; }
 .dial { --tone: var(--tone-say); position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1.5px solid var(--tone); border-radius: 50%; background: var(--panel); color: var(--tone); cursor: pointer; transition: background 0.15s; }
 .dial svg { width: 16px; height: 16px; }

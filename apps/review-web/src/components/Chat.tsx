@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Show, type Element } from "solid-js";
 import { Appear } from "./Appear";
-import { arrive, grow, rise, shrink, sink } from "../fold";
+import { arrive, flyIn, grow, rise, shrink, sink } from "../fold";
 import { floating } from "../floating";
 import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
@@ -58,11 +58,11 @@ export function Chat() {
       <InCorner
         when={chatNow.open()}
         enter={(element) => {
-          // a comment form flying in is its way in (chatNow.handOver)
-          if (chatNow.flying()) return;
-          const from = chatNow.turn.from;
-          chatNow.turn.from = null;
+          const { from, flyFrom } = chatNow.turn;
+          chatNow.turn.from = chatNow.turn.flyFrom = null;
+          // from the pill, from a comment form (chatNow.handOver), or out of its corner
           if (from) grow(element, from);
+          else if (flyFrom) flyIn(element, flyFrom);
           else rise(element);
         }}
         leave={async (element) => {
@@ -160,8 +160,6 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
       class={["chat", { lifted: floating() }]}
       aria-label="Chat with your AI"
       ref={props.placed}
-      // a comment form flying in becomes this panel (chatNow.handOver)
-      style={{ "view-transition-name": chatNow.flying() ? "ask-panel" : undefined }}
     >
       <div class="chat-head">
         <span class="chat-ai">{chatNow.view()?.ai ?? "Your AI"}</span>
@@ -209,8 +207,6 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
           </Show>
           <textarea
             ref={(element) => (input = element)}
-            // a comment box flying in lands here (chatNow.handOver)
-            style={{ "view-transition-name": chatNow.flying() ? "ask-box" : undefined }}
             rows={2}
             placeholder={chatNow.attached() ? "Ask about these lines" : "Ask about this review"}
             value={question()}
