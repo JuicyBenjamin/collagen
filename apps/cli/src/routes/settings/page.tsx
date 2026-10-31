@@ -8,14 +8,16 @@ import { theme } from "../../app/theme";
 import { FollowScroll } from "../../components/FollowScroll";
 import { SETTINGS, settingOf, withSetting } from "../../lib/settings";
 import { MERGE_HELP, MERGE_LEVELS, withMergeFor } from "../../lib/merging";
-import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING_ORDER, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
+import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING_ORDER, KIND_LABEL, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
 import { JOB_LABEL, jobLimitOf, mostUsedHarness, withHarness, withModel } from "../../lib/jobs";
 import { roomAtom } from "../atoms";
 import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
-import { pickable, ROWS, STEER_WORDS, TABS, twoColumns, type Row, type Tab } from "./rows";
+import { CAUSE_WORDS, JOB_WORDS, pickable, ROWS, STEER_WORDS, TABS, TAG_WORDS, twoColumns, type Row, type Tab } from "./rows";
 
 /** The width of a row's words, and of each column after them. */
-const WORDS = 48;
+const WORDS = 28;
+/** A steering row's name, before whose doing it is. */
+const KIND = 16;
 const COLUMN = 16;
 /** The job limit round: 1 → 4 and back. */
 const JOB_LIMITS = [1, 2, 3, 4];
@@ -122,7 +124,7 @@ export function SettingsPage() {
         const here = steerCell(each.at, each.cause, true);
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(`${STEER_WORDS[each.at]} — ${each.cause === "mine" ? "yours" : "others'"}`)}
+            {words(`${(each.cause === "mine" ? STEER_WORDS[each.at] : "").padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
             <span fg={mark(0, everywhere.set)}>{cell(everywhere.text)}</span>
             <span fg={mark(1, here.set)}>{cell(here.text)}</span>
           </text>
@@ -132,7 +134,7 @@ export function SettingsPage() {
         const mergeRoom = state?.merging?.rooms?.[room.id];
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words("merge for me")}
+            {words("auto-merge")}
             <span fg={mark(0)}>{cell(state?.merging?.default ?? "off")}</span>
             <span fg={mark(1, mergeRoom !== undefined)}>{cell(mergeRoom ?? state?.merging?.default ?? "off")}</span>
           </text>
@@ -141,8 +143,8 @@ export function SettingsPage() {
       case "tag":
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words("a message for you goes to")}
-            <span fg={mark(0)}>{TAG_LABEL[state ? tagRouteOf(state) : "existing"]}</span>
+            {words("messages go to")}
+            <span fg={mark(0)}>{TAG_WORDS[state ? tagRouteOf(state) : "existing"]}</span>
           </text>
         );
       case "switch": {
@@ -157,28 +159,27 @@ export function SettingsPage() {
       case "jobLimit":
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words("jobs at a time")}
+            {words("at once")}
             <span fg={mark(0)}>{String(state ? jobLimitOf(state) : 1)}</span>
-            <span fg={theme.dim}>{"  the rest wait in line"}</span>
           </text>
         );
       case "harness":
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(`${JOB_LABEL[each.job]}: with`)}
-            <span fg={mark(0)}>{state?.harnesses?.[each.job] ?? `the one you use most${used ? ` (${used})` : ""}`}</span>
+            {words(JOB_WORDS[each.job])}
+            <span fg={mark(0)}>{state?.harnesses?.[each.job] ?? `most used${used ? ` (${used})` : ""}`}</span>
           </text>
         );
       case "model":
         return (
           <box key={each.id} id={each.id} flexDirection="row">
-            <text wrapMode="none">{words("  its model")}</text>
+            <text wrapMode="none">{words("  model")}</text>
             <input
               focused={on}
               value={models[each.job] ?? state?.models?.[each.job] ?? ""}
               onInput={(typed) => setModels((previous) => ({ ...previous, [each.job]: typed }))}
               onSubmit={() => change((previous) => withModel(previous, each.job, models[each.job] ?? previous.models?.[each.job] ?? null))}
-              placeholder="the harness's default"
+              placeholder="default"
             />
           </box>
         );
@@ -188,19 +189,23 @@ export function SettingsPage() {
   /** What the cell under the cursor means, under the list. */
   const help = (): string => {
     if (row.kind === "steer") {
+      // what the row is about, what its level does, and where an unset one comes from
+      const about = row.at === "master" ? "every row not set" : KIND_LABEL[row.at];
       const level = column === 1 ? roomLevelOf(state ?? { steering: undefined }, room.id, row.at, row.cause) : everywhereOf(state, row.at, row.cause);
-      if (level) return STEERING_HELP[level];
+      if (level) return `${about}: ${STEERING_HELP[level]}`;
       const known = state ?? { steering: undefined };
       const roomId = column === 1 ? room.id : undefined;
       const applies = STEERING_HELP[row.at === "master" ? masterOf(known, row.cause, roomId) : levelOf(known, row.at, row.cause, roomId)];
-      return column === 1 ? `${applies} (not set for this room: as everywhere)` : row.at === "master" ? applies : `${applies} (not set: as the General tab)`;
+      return `${about}: ${applies}${column === 1 ? " (as everywhere)" : row.at === "master" ? "" : " (as General)"}`;
     }
+    if (row.kind === "tag") return `a message for you goes to ${TAG_LABEL[state ? tagRouteOf(state) : "existing"]}`;
+    if (row.kind === "jobLimit") return "how many of collagen's jobs run at once; the rest wait in line";
     if (row.kind === "merge") return MERGE_HELP[(column === 1 ? state?.merging?.rooms?.[room.id] : undefined) ?? state?.merging?.default ?? "off"];
     if (row.kind === "switch") {
       const setting = SETTINGS.find((candidate) => candidate.key === row.key)!;
       return state && settingOf(state, row.key) ? setting.on : setting.off;
     }
-    if (row.kind === "harness") return "a harness collagen knows, or the one your conversations work in most";
+    if (row.kind === "harness") return `the AI collagen runs for ${JOB_LABEL[row.job]}: one you pick, or the one your conversations use most`;
     if (row.kind === "model") return "a model name the harness takes; an alias (haiku, sonnet) follows the newest · enter saves";
     return "";
   };
