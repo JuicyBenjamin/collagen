@@ -36,10 +36,11 @@ const nextMerge = (level: MergeFor | undefined, allowNone: boolean): MergeFor | 
 };
 const cell = (text: string) => text.padEnd(COLUMN).slice(0, COLUMN);
 
-/** Settings: what collagen and your AI may do in your name, everywhere and
- *  in the room you are in, in three tabs — AI, the repo host, and the
- *  general level the rest follow. Each change applies the moment it is made
- *  (your agent can make them too: set-steering, set-jobs, set-settings, set-merging). */
+/** Settings: what collagen may do in your name, everywhere and in the room
+ *  you are in, by who acts — your AI, or tools collagen calls itself with no
+ *  AI — and the general level the rest follow. Each change applies the moment
+ *  it is made (your agent can make them too: set-steering, set-jobs,
+ *  set-settings, set-merging). */
 export function SettingsPage() {
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { navigate } = useRouter();
