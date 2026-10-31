@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, type Element } from "solid-js";
 import { Appear } from "./Appear";
 import { rise, sink } from "../fold";
 import { floating } from "../floating";
@@ -22,27 +22,8 @@ export function Chat() {
   });
   chatNow.watch();
   const turns = () => chatNow.view()?.turns ?? [];
-  // the panel rises from its corner and sinks back into it: placed until it
-  // has sunk, and only taken away then if it was not opened again meanwhile.
-  // A comment box flying in is its entrance (chatNow.handOver): no rise then.
-  const [placed, setPlaced] = createSignal(chatNow.open());
-  let panel: HTMLElement | undefined;
-  let sinking = false;
-  createEffect(chatNow.open, (open) => {
-    if (open) {
-      if (sinking && panel) rise(panel);
-      sinking = false;
-      return void setPlaced(true);
-    }
-    if (!panel) return void setPlaced(false);
-    sinking = true;
-    void sink(panel).then(() => {
-      if (!sinking) return;
-      sinking = false;
-      panel = undefined;
-      setPlaced(false);
-    });
-  });
+  // the pill and the panel turn into each other (chatNow.openUp, close)
+  const landing = () => chatNow.landing() !== null;
   return (
     <>
       <Appear when={chatNow.offer()}>
@@ -60,22 +41,70 @@ export function Chat() {
           </button>
         )}
       </Appear>
-      <Appear when={!chatNow.open() && turns().length > 0}>
-        {() => (
-          <button type="button" class={["chat-pill", { lifted: floating() }]} onClick={() => chatNow.toggle()}>
+      <InCorner when={!chatNow.open() && turns().length > 0} landing={landing()} held={(element) => (chatNow.corner.pill = element)}>
+        {(placed) => (
+          <button
+            ref={placed}
+            type="button"
+            class={["chat-pill", { lifted: floating() }]}
+            style={{ "view-transition-name": chatNow.landing() === "pill" ? "ask-panel" : undefined }}
+            onClick={() => chatNow.openUp()}
+          >
             {chatNow.answering() ? "AI answering…" : "AI chat"}
           </button>
         )}
-      </Appear>
-      <Show when={placed()}>
-        <Panel
-          placed={(element) => {
-            panel = element;
-            if (!chatNow.flying()) rise(element);
-          }}
-        />
-      </Show>
+      </InCorner>
+      <InCorner when={chatNow.open()} landing={landing()} held={(element) => (chatNow.corner.panel = element)}>
+        {(placed) => <Panel placed={placed} />}
+      </InCorner>
     </>
+  );
+}
+
+/** Something in the window's corner, the chat's pill or its panel: it rises
+ *  as it opens and sinks as it closes, placed until it has sunk and taken
+ *  away then only if it was not opened again meanwhile. While a view
+ *  transition turns one into the other (`landing`) it does neither: the
+ *  transition is its way in and out, so it is placed and taken away at once.
+ *  `held` is told the element while it is placed, and undefined after. */
+function InCorner(props: {
+  when: boolean;
+  landing: boolean;
+  held: (element: HTMLElement | undefined) => void;
+  children: (placed: (element: HTMLElement) => void) => Element;
+}) {
+  const [placed, setPlaced] = createSignal(props.when);
+  let element: HTMLElement | undefined;
+  let sinking = false;
+  const gone = () => {
+    sinking = false;
+    element = undefined;
+    props.held(undefined);
+    setPlaced(false);
+  };
+  createEffect(
+    () => props.when,
+    (when) => {
+      if (when) {
+        if (sinking && element) rise(element);
+        sinking = false;
+        return void setPlaced(true);
+      }
+      if (!element || props.landing) return gone();
+      sinking = true;
+      void sink(element).then(() => {
+        if (sinking) gone();
+      });
+    },
+  );
+  return (
+    <Show when={placed()}>
+      {props.children((placedElement) => {
+        element = placedElement;
+        props.held(placedElement);
+        if (!props.landing) rise(placedElement);
+      })}
+    </Show>
   );
 }
 
@@ -109,8 +138,8 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
       class={["chat", { lifted: floating() }]}
       aria-label="Chat with your AI"
       ref={props.placed}
-      // a comment form flying in becomes this panel (chatNow.handOver)
-      style={{ "view-transition-name": chatNow.flying() ? "ask-panel" : undefined }}
+      // the pill, or a comment form, turning into this panel (chatNow.openUp, handOver)
+      style={{ "view-transition-name": chatNow.landing() === "panel" ? "ask-panel" : undefined }}
     >
       <div class="chat-head">
         <span class="chat-ai">{chatNow.view()?.ai ?? "Your AI"}</span>
@@ -159,7 +188,7 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
           <textarea
             ref={(element) => (input = element)}
             // a comment box flying in lands here (chatNow.handOver)
-            style={{ "view-transition-name": chatNow.flying() ? "ask-box" : undefined }}
+            style={{ "view-transition-name": chatNow.landing() === "panel" && chatNow.carrying() ? "ask-box" : undefined }}
             rows={2}
             placeholder={chatNow.attached() ? "Ask about these lines" : "Ask about this review"}
             value={question()}

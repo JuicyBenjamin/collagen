@@ -20,8 +20,48 @@ const [refused, setRefused] = createSignal<string | null>(null);
 const [sending, setSending] = createSignal(false);
 /** The question being written: words a comment box handed over come in it. */
 const [draft, setDraft] = createSignal("");
-/** A comment box is flying into the chat's input: the input holds the transition's name. */
-const [flying, setFlying] = createSignal(false);
+/** What a view transition is turning into the chat's panel or its pill
+ *  (styles.css: ask-panel), and which of the two takes the name meanwhile:
+ *  neither rises nor sinks then, the transition is its way in and out. */
+export type Landing = "panel" | "pill";
+const [landing, setLanding] = createSignal<Landing | null>(null);
+/** A comment box is flying into the panel's input: the input holds its name (ask-box). */
+const [carrying, setCarrying] = createSignal(false);
+/** The chat's panel and its pill, while placed: what one becomes the other from. */
+const corner: { panel?: HTMLElement; pill?: HTMLElement } = {};
+
+/** One view transition: each of `from` lends its element the name it has
+ *  there, and gives it up as `change` runs, while `into` takes it — so what
+ *  was there becomes the panel or the pill. Resolves once the change is made
+ *  (at once when nothing can fly), and `finished` once the flight lands. */
+function morph(into: Landing, from: ReadonlyArray<readonly [HTMLElement, string]>, change: () => void): { readonly made: Promise<void>; readonly finished: Promise<void> } {
+  if (!canFly()) {
+    change();
+    return { made: Promise.resolve(), finished: Promise.resolve() };
+  }
+  for (const [element, name] of from) element.style.viewTransitionName = name;
+  const flight = document.startViewTransition(() => {
+    // one holder of a name at a time
+    for (const [element] of from) element.style.viewTransitionName = "";
+    setLanding(into);
+    change();
+    flush();
+  });
+  const landed = () => {
+    setLanding(null);
+  };
+  const finished = flight.finished.then(landed, landed);
+  return { made: flight.updateCallbackDone.catch(() => undefined), finished };
+}
+
+/** The pill and the panel turning into each other, in their corner: marked
+ *  on the page while it runs, so neither is drawn stretched to the other's
+ *  shape (styles.css: data-corner-morph). */
+function inCorner(into: Landing, from: HTMLElement, change: () => void): void {
+  const page = document.documentElement;
+  page.toggleAttribute("data-corner-morph", true);
+  void morph(into, [[from, "ask-panel"]], change).finished.then(() => page.toggleAttribute("data-corner-morph", false));
+}
 /** Moves each time the reader picks lines to ask about: the panel's input takes the focus. */
 const [asking, setAsking] = createSignal(0);
 
@@ -83,10 +123,22 @@ export const chatNow = {
   asking,
   draft,
   setDraft,
-  flying,
+  landing,
+  carrying,
+  corner,
   setView,
-  toggle: () => setOpen(!open()),
-  close: () => setOpen(false),
+  /** The pill grows into the panel. */
+  openUp(): void {
+    const pill = corner.pill;
+    if (pill) inCorner("panel", pill, () => setOpen(true));
+    else setOpen(true);
+  },
+  /** The panel shrinks into the pill — when there is one to come: a chat with nothing in it has none, and sinks. */
+  close(): void {
+    const panel = corner.panel;
+    if (panel && (view()?.turns.length ?? 0) > 0) inCorner("pill", panel, () => setOpen(false));
+    else setOpen(false);
+  },
   detach: () => setAttached(null),
   /** Is an answer under way? */
   /** the reader's own AI is answering — an author's AI answering is not in the way */
@@ -126,22 +178,20 @@ export const chatNow = {
    *  open at a time and the flight is the panel's entrance. `away` takes the
    *  comment form's place away, folding shut as it flies. */
   handOver(selection: ChatSelection, words: string, from: { readonly form: HTMLElement; readonly box: HTMLElement }, away: () => void): void {
-    if (!canFly()) {
-      away();
-      return chatNow.askAbout(selection, words);
-    }
-    from.form.style.viewTransitionName = "ask-panel";
-    from.box.style.viewTransitionName = "ask-box";
-    const flight = document.startViewTransition(() => {
-      // the names pass to the chat: one holder at a time
-      for (const element of [from.form, from.box]) element.style.viewTransitionName = "";
-      from.form.style.visibility = "hidden";
-      setFlying(true);
-      chatNow.askAbout(selection, words);
-      flush();
-    });
-    void flight.updateCallbackDone.then(away, away);
-    void flight.finished.finally(() => setFlying(false));
+    setCarrying(true);
+    const flight = morph(
+      "panel",
+      [
+        [from.form, "ask-panel"],
+        [from.box, "ask-box"],
+      ],
+      () => {
+        from.form.style.visibility = "hidden";
+        chatNow.askAbout(selection, words);
+      },
+    );
+    void flight.made.then(away);
+    void flight.finished.then(() => setCarrying(false));
   },
   /** Ask the reader's AI — with the lines attached, if any. True when it is under way. */
   async ask(question: string): Promise<boolean> {
