@@ -53,7 +53,6 @@ bob_saw() { said $B "$SB" >> "$BOBSAW"; cat "$BOBSAW"; }
 why() { call $A "$SA" review-context "{\"ticketId\":\"$TICKET\"}"; }
 
 echo "## not chosen: bob asks; nothing runs until alice chooses"
-expect "her own review is not hers to ask about" "$(call $A "$SA" ask-author "{\"ticketId\":\"$TICKET\",\"question\":\"why?\"}")" "failed: it is your user's own review"
 ASKED=$(call $B "$SB" ask-author "{\"ticketId\":\"$TICKET\",\"question\":\"Why double inside thing() and not in the dashboard?\",\"lines\":{\"file\":\"thing.js\",\"from\":{\"line\":1,\"side\":\"RIGHT\"},\"to\":{\"line\":1,\"side\":\"RIGHT\"},\"text\":\"+export const thing = (n) => n * 2;\"}}")
 expect "bob asked her AI" "$ASKED" "asked alice's AI"
 wait_until "bob hears why it waits: she has not turned on answering" "Waits on alice: alice has not turned on answering questions yet" bob_saw
@@ -83,6 +82,13 @@ call $A "$SA" set-steering '{"kind":"work","whose":"others","level":"auto"}' > /
 call $B "$SB" ask-author "{\"ticketId\":\"$TICKET\",\"question\":\"What about a negative count?\"}" > /dev/null
 wait_until "bob hears it is being fixed, and what" "fixing it in the conversation the work was done in.*negative" bob_saw
 expect "…her thread with bob now wakes the conversation that built the work" "$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print(json.dumps(s.get("threads",{})))' "$CFG/state-alice-$SCN.json")" "$SESSION"
+
+echo "## single player: alice asks about her own review; the conversation that did the work answers, and nothing goes to the room"
+call $A "$SA" set-steering '{"kind":"answer","whose":"mine","level":"auto"}' > /dev/null
+OWNSAID=$(call $A "$SA" ask-author "{\"ticketId\":\"$TICKET\",\"question\":\"Is thing() the right place, asked alone?\"}")
+expect "her own review: the conversation that did the work is asked" "$OWNSAID" "asked the conversation that did the work"
+wait_until "…and its answer goes on her why, read from her AI" "Is thing\(\) the right place, asked alone" why
+expect "…nothing of it reached bob" "$(bob_saw | grep -c 'asked alone')" "^0$"
 
 kill_all
 summary

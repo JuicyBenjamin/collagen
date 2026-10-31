@@ -154,11 +154,13 @@ function Panel() {
 
 function Turn(props: { turn: ChatTurn }) {
   const parts = createMemo(() => answerParts(props.turn.answer));
+  // the person's own review ("you"): the conversation of theirs that did the work answers
   const author = () => chatNow.view()?.author ?? "the author";
+  const whose = (name: string) => (name === "you" ? "the conversation that did the work" : `${name}'s AI`);
   return (
     <div class={["chat-turn", { theirs: props.turn.from !== undefined }]}>
       {/* an author's AI answers under the question it was asked: no question of its own */}
-      <Show when={props.turn.from === undefined} fallback={<p class="chat-from">{props.turn.from}'s AI</p>}>
+      <Show when={props.turn.from === undefined} fallback={<p class="chat-from">{props.turn.from === "you" ? "The conversation that did the work" : `${props.turn.from}'s AI`}</p>}>
         <div class="chat-q">
           <Show when={props.turn.selection}>{(selection) => <code class="chat-about">{selectionLabel(selection())}</code>}</Show>
           <p>{props.turn.question}</p>
@@ -200,12 +202,12 @@ function Turn(props: { turn: ChatTurn }) {
               when={forward().state === "offered"}
               fallback={
                 <Show when={forward().state === "asked"}>
-                  <p class="chat-doing">Asked {author()}'s AI</p>
+                  <p class="chat-doing">Asked {whose(author())}</p>
                 </Show>
               }
             >
               <button type="button" class="banner-go small" onClick={() => void chatNow.forward(props.turn.id)} title={forward().question}>
-                Ask {author()}'s AI
+                Ask {whose(author())}
               </button>
             </Show>
           )}

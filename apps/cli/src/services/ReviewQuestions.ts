@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
-import { roomProjects, type Conversation, type QuestionLines, type ReviewAnswer, type ReviewContext, type ReviewGuess, type ReviewQuestionHeld, type ReviewQuestionStage, type RoomMessage, type Verdict } from "@collagen/p2p";
+import { deriveThreadId, roomProjects, type Conversation, type QuestionLines, type ReviewAnswer, type ReviewContext, type ReviewGuess, type ReviewQuestionHeld, type ReviewQuestionStage, type RoomMessage, type Verdict } from "@collagen/p2p";
 import { readable } from "../lib/reviewRequests";
 import { allow, levelOf, type Cause } from "../lib/steering";
 import { sameName } from "../lib/names";
@@ -96,6 +96,10 @@ export interface AskAuthor {
   readonly commit?: string;
 }
 
+/** Who answers a question about the person's own review: the conversation
+ *  of theirs that did the work. The chat names it so. */
+export const OWN = "you";
+
 /** An answer, or a stage, come back to a question the person asked. */
 export interface Heard {
   readonly roomId: string;
@@ -126,9 +130,15 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
     const causeOf = (held: ReviewQuestionHeld): Cause => (held.from === identity.pubkey ? "mine" : "others");
 
     /** Tell the asker how their question stands: collagen's record of it on
-     *  the thread between them, and the answer once there is one. */
+     *  the thread between them, and the answer once there is one. Asked about
+     *  the person's own review (single player), it never leaves this machine. */
     const tellAsker = (held: ReviewQuestionHeld, stage: ReviewQuestionStage, extra = "", said: { readonly answer?: string; readonly flaw?: string; readonly why?: ReviewAnswer["why"] } = {}) =>
       Effect.gen(function* () {
+        const answer: ReviewAnswer = { id: held.id, ticketId: held.ticketId, stage, ...(said.answer ? { answer: said.answer } : {}), ...(said.flaw ? { flaw: said.flaw } : {}), ...(said.why ? { why: said.why } : {}) };
+        if (held.from === identity.pubkey) {
+          yield* Effect.log(`review question ${held.id.slice(0, 8)} (your own review): ${stage}`);
+          return yield* SubscriptionRef.update(heard, (all) => [...all, { roomId: held.roomId, fromName: OWN, answer }].slice(-200));
+        }
         const handle = yield* handleOf(held.roomId);
         if (!handle) return yield* Effect.logWarning(`review question ${held.id.slice(0, 8)}: its room is gone, so ${held.fromName} is not told it is ${stage}`);
         const author = yield* SubscriptionRef.get(nameRef);
@@ -139,7 +149,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
             intent: `review-question:${stage}`,
             findings: stageText(stage, author, extra),
             ticketId: held.ticketId,
-            reviewAnswer: { id: held.id, ticketId: held.ticketId, stage, ...(said.answer ? { answer: said.answer } : {}), ...(said.flaw ? { flaw: said.flaw } : {}), ...(said.why ? { why: said.why } : {}) },
+            reviewAnswer: answer,
           })
           .pipe(Effect.catchTag("NotWritable", () => Effect.logWarning("cannot tell the asker how their question stands: not admitted to the room log")));
       });
@@ -430,9 +440,16 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
       Effect.gen(function* () {
         const found = yield* reviewOf(roomId, input.ticketId);
         if (!found) return `failed: no review ticket ${input.ticketId} in this room`;
-        if (found.ticket.createdBy === identity.pubkey) return `failed: it is your user's own review — the conversation that did the work can say`;
         const author = found.review.authorName;
         const id = input.id ?? crypto.randomUUID();
+        const question = { id, ticketId: input.ticketId, question: input.question, ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) };
+        // single player: the person's own review — the conversation of theirs that did the work answers, as their own answering steering says, and nothing goes to the room
+        if (found.ticket.createdBy === identity.pubkey) {
+          const me = yield* SubscriptionRef.get(nameRef);
+          const message: RoomMessage = { id: crypto.randomUUID(), threadId: deriveThreadId(identity.pubkey, identity.pubkey, found.ticket.project), from: identity.pubkey, fromName: me, to: identity.pubkey, project: found.ticket.project, intent: "review-question", findings: `Your user asks about their own review "${found.ticket.title ?? found.ticket.goal}"${input.lines ? `, ${input.lines.file} line ${input.lines.from.line}` : ""}: ${input.question}`, ts: yield* Clock.currentTimeMillis, ticketId: input.ticketId, reviewQuestion: question };
+          yield* asked(found.handle, message, undefined);
+          return `asked the conversation that did the work, on this machine: it answers as your user's answering steering for their own questions says, and the answer comes back to the review page's chat and onto the review's why. TELL YOUR USER ONLY THIS: "asked the conversation that did the work".`;
+        }
         const done = yield* outbox.send({
           roomId,
           to: author,
@@ -444,7 +461,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
             intent: "review-question",
             findings: `${yield* SubscriptionRef.get(nameRef)} asks about your user's review "${found.ticket.title ?? found.ticket.goal}"${input.lines ? `, ${input.lines.file} line ${input.lines.from.line}` : ""}: ${input.question}`,
             ticketId: input.ticketId,
-            reviewQuestion: { id, ticketId: input.ticketId, question: input.question, ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) },
+            reviewQuestion: question,
           },
         });
         if (done._tag === "refused") return done.text;
@@ -460,6 +477,11 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         const found = yield* reviewOf(roomId, guess.ticketId);
         if (!found) return `failed: no review ticket ${guess.ticketId} in this room`;
         const author = found.review.authorName;
+        if (found.ticket.createdBy === identity.pubkey) {
+          const message: RoomMessage = { id: crypto.randomUUID(), threadId: deriveThreadId(identity.pubkey, identity.pubkey, found.ticket.project), from: identity.pubkey, fromName: yield* SubscriptionRef.get(nameRef), to: identity.pubkey, project: found.ticket.project, intent: "review-guess", findings: `Your AI assumes why: ${guess.what}`, ts: yield* Clock.currentTimeMillis, ticketId: guess.ticketId, reviewGuess: guess };
+          yield* guessed(found.handle, message, undefined);
+          return "sent: it goes on your user's review's why as a guess, for the conversation that did the work to confirm, correct or reject.";
+        }
         const done = yield* outbox.send({
           roomId,
           to: author,
