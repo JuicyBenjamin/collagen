@@ -14,11 +14,15 @@ import { TicketPage } from "./room/ticket/page";
 import { TranscriptPage } from "./room/transcript/page";
 import { TranscriptsPage } from "./room/transcripts/page";
 import { SettingsPage } from "./settings/page";
+import { YouPage } from "./you/page";
+import { RenameRoomPage } from "./rename-room/page";
 
 /** The route table: one page per route. Adding a route = a folder with a
  *  `page.tsx`, a `Route` member, and a line here. */
 const pages: { readonly [N in RouteName]: (route: Extract<Route, N | { readonly name: N }>) => ReactNode } = {
   settings: () => <SettingsPage />,
+  you: () => <YouPage />,
+  "rename-room": () => <RenameRoomPage />,
   "new-room": () => <NewRoomPage />,
   "room/overview": () => <OverviewPage />,
   "room/messages": () => <MessagesPage />,

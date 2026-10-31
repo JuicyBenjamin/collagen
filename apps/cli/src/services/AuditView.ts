@@ -33,6 +33,7 @@ export const auditView = (roomId: string, days: number, definitions: ReadonlyArr
         const state = yield* store.get;
         const all = yield* SubscriptionRef.get(room.tickets);
         return auditPage({
+          roomId,
           room: (yield* SubscriptionRef.get(room.meta))?.name ?? roomId.slice(0, 8),
           days,
           now,

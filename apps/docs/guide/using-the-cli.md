@@ -113,19 +113,19 @@ what's natural there. Number keys work from anywhere.
 | `enter` on a ticket | Open it: steps, the conversation on its threads, diagnostics (`enter` runs one; `esc` back to the list) — on an [epic](./tickets#epics-a-folder-of-work), its aim and every ticket in it |
 | `space` on an epic | Fold its tickets away on the overview, or show them again (they show by default) |
 | `d` | Projects: remove one of yours · rail: leave the room under the cursor |
-| `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
+| `r` | Rail: rename the room under the cursor; everyone in it sees the new name (your agent: `rename-room`) |
 | `A` | The audit page in your browser: tool calls, tokens per call over time and the tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and steering. Your agent opens it with `open-audit`. |
-| `g` | Cycle your master [steering](./conversations#steering-how-much-your-agent-does-on-its-own) level: ask first → act, then tell → just do it → never (every level, yours and other people's, is on the settings page) |
 | `c` | Copy a new invite to the room: it lets one person in, within a week (your agent: `invite-to-room`) |
-| `s` | Settings: your name, the room's shared name, and your switches (`space` flips one) |
+| `s` | Settings, in three tabs (`tab` switches): AI, Repo host and General. Each [steering](./conversations#steering-how-much-your-agent-does-on-its-own) row has two columns, everywhere and this room (`←` `→`); `space` changes the one under the cursor |
+| `i` | You: your name, your key, and the AI the rooms see you use |
 | `u` | Install the newer collagen the status line announces, then restart into it |
 | `esc` | Back to the tab bar |
 | `q` | Quit |
 
 ### Switches
 
-The settings page (`s`) ends with your switches, each on or off, applied the moment you
-flip one. Your agent can list and set them for you too (`set-settings`) — say you find one
+The settings page (`s`) holds your switches too, each on or off under the tab it belongs to,
+applied the moment you flip one. Your agent can list and set them for you too (`set-settings`) — say you find one
 in the way.
 
 | Switch | Default | What it does |
@@ -143,7 +143,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-ticket` — this conversation hears when a ticket moves, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `take-step` — a task step nobody has, made your user's; `get-tickets` and `get-ticket`, `ask-review` — a review with the why behind the change; `assume-review` — a review of someone else's pull request, its why inferred and marked as guesses; `claim-review` — the code's author answers those guesses and makes the review theirs; `open-review` — a review's page in your browser, as `o` does; `open-investigation` — an investigation's page, as `o` does on one; `open-merges` — a project's merges page in your browser; `epic` — folders of tickets, shaped by anyone, only when asked |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks; `token-cost` — what collagen costs your AI in tokens, read from its own session logs ([how](../internals/token-cost)) |
-| Settings | `add-project`, `remove-project`, `order-projects` — the order you keep the projects in, listed or set, on your machine only; `set-ai`, `set-steering` — how far collagen and your agent go in your name, the master and each kind, yours and other people's; `set-name`, `set-settings` — your switches, listed or set; `set-merging` — whether collagen merges your reviewed pull requests for you, and `merge-review` — your yes to one, when your repo-host steering is ask first; `themes`, `set-theme`, `add-theme`, `edit-theme`, `remove-theme` — the theme every page wears (a review, the merges): listed, put on, added from a daisyUI theme generator link, edited (renamed, a colour at a time) or removed |
+| Settings | `add-project`, `remove-project`, `order-projects` — the order you keep the projects in, listed or set, on your machine only; `set-steering` — how far collagen and your agent go in your name, the master and each kind, yours and other people's, everywhere or in this room; `set-jobs` — how many jobs run at once, and each job's harness and model; `set-name`, `set-settings` — your switches, listed or set; `set-merging` — whether collagen merges your reviewed pull requests for you, and `merge-review` — your yes to one, when your repo-host steering is ask first; `themes`, `set-theme`, `add-theme`, `edit-theme`, `remove-theme` — the theme every page wears (a review, the merges): listed, put on, added from a daisyUI theme generator link, edited (renamed, a colour at a time) or removed |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 
 You use it by just asking your agent, e.g. *"check who's in my collagen room and ask

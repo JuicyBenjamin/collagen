@@ -592,6 +592,8 @@ export const QueuedJob = Schema.Struct({
   after: Schema.optional(Schema.String),
   /** what the person wants to know, in their words */
   ask: Schema.optional(Schema.String),
+  /** the room it was asked in — its steering is that room's */
+  roomId: Schema.optional(Schema.String),
 });
 export type QueuedJob = typeof QueuedJob.Type;
 
@@ -626,13 +628,24 @@ export type SteeringPair = typeof SteeringPair.Type;
 export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
 export type TagRoute = typeof TagRoute.Type;
 
+const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair) });
+
+/** One room's own levels: a general level and per kind, each absent where
+ *  the room follows the person's levels everywhere. */
+export const RoomSteering = Schema.Struct({
+  master: Schema.optional(SteeringPair),
+  kinds: Schema.optional(SteeringKinds),
+});
+export type RoomSteering = typeof RoomSteering.Type;
+
 /** The person's steering (cli lib/steering): a master level every kind
- *  follows until set, a level per kind, and where a tag goes. Local — the
- *  person's own choice, never broadcast. */
+ *  follows until set, a level per kind, where a tag goes, and rooms that set
+ *  their own. Local — the person's own choice, never broadcast. */
 export const SteeringLevels = Schema.Struct({
   master: Schema.optional(SteeringPair),
-  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair) })),
+  kinds: Schema.optional(SteeringKinds),
   tag: Schema.optional(TagRoute),
+  rooms: Schema.optional(Schema.Record(Schema.String, RoomSteering)),
 });
 export type SteeringLevels = typeof SteeringLevels.Type;
 
@@ -680,6 +693,8 @@ export const PageThemes = Schema.Struct({ chosen: Schema.String, saved: Schema.A
 export type PageThemes = typeof PageThemes.Type;
 
 export const LocalState = Schema.Struct({
+  /** the harness jobs ran with before each job named its own (still the
+   *  fallback, and how a test drives a mock); no longer chosen in the app */
   preferredAi: Schema.NullOr(Schema.String),
   /** absent = nothing chosen: collagen does nothing outside itself in the
    *  person's name (an older build's bare level is read as the work level) */
@@ -694,6 +709,8 @@ export const LocalState = Schema.Struct({
   woken: Schema.optional(Schema.Array(Schema.String)),
   /** job kind → the model the person chose for it (cli lib/jobs); absent = the harness's default */
   models: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** job kind → the harness that runs it (cli lib/jobs); absent = the one the person uses most */
+  harnesses: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   /** how many jobs collagen runs at once; absent = one */
   jobLimit: Schema.optional(Schema.Finite),
   /** jobs asked for and not yet finished, oldest first (see QueuedJob) */

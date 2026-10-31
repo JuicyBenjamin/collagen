@@ -7,6 +7,7 @@ import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
 import { Jobs } from "./Jobs";
 import { levelOf } from "../lib/steering";
+import { shownAi } from "../lib/jobs";
 import { investigationOf } from "../lib/jobs";
 import { sameName } from "../lib/names";
 import { homedir } from "node:os";
@@ -70,7 +71,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         const state = yield* store.get;
         return {
           name: yield* SubscriptionRef.get(nameRef),
-          ai: state.preferredAi,
+          ai: shownAi(state),
           aiStatus: yield* SubscriptionRef.get(aiStatus.current),
           protocol: PROTOCOL_VERSION,
           projects: roomProjects(state, roomId).map((project) => ({ name: project.name, path: project.path })),
@@ -136,7 +137,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                       ticket.createdBy.slice(0, 8));
                 // the person's steering, said on the step itself: the turn
                 // the agent reads it is the turn it is about to act
-                const steer = workLine(yield* store.get, ticket.createdBy === identity.pubkey ? "mine" : "others");
+                const steer = workLine(yield* store.get, ticket.createdBy === identity.pubkey ? "mine" : "others", handle.id);
                 // an investigation asked of the person by someone else: their
                 // steering for others' investigations says whether their AI
                 // starts on it now, is offered, or is left alone
@@ -144,7 +145,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   ticket.kind === "investigation" && ticket.createdBy !== identity.pubkey && mine.some((step) => step.status === "pending")
                     ? yield* Effect.gen(function* () {
                         const state = yield* store.get;
-                        const level = levelOf(state, "investigate", "others");
+                        const level = levelOf(state, "investigate", "others", handle.id);
                         if (level === "unset") return "\nYour user's steering for others' investigations is not chosen, so their AI was not started. Ask them once, in a line, to choose one (set-steering kind investigate, whose others).";
                         if (level === "never") return "\nTheir steering for others' investigations is never, so their AI was not started; research starts it on their word.";
                         if (level === "ask") return "\nASK YOUR USER, in one line, whether to send their AI to find out (research with this ticketId): their steering for others' investigations is ask first.";
@@ -315,7 +316,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   continue;
                 }
                 yield* store.update((state) => ({ ...state, toldGuessed: [...(state.toldGuessed ?? []), review.ticketId] }));
-                const steer = workLine(yield* store.get, "others");
+                const steer = workLine(yield* store.get, "others", handle.id);
                 const trace = yield* SubscriptionRef.get(room.trace);
                 yield* notify(
                   myThreadFor(ticket, trace, identity.pubkey, review.author),

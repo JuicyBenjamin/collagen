@@ -204,7 +204,7 @@ const hostFor = (found: Found, shownAs: string | null, from: SaidFrom): Effect.E
     if (viewer.user.login === named.pull.author) return { roomOnly: "it is your own pull request, where you would be its only reader" };
     // the reader's own act on the host, in their name: as their steering says
     if ("agent" in from && from.onHost === false) return { roomOnly: "your user chose the room only" };
-    const gate = allow(yield* (yield* StateStore).get, "host", "mine", "agent" in from && from.onHost === true);
+    const gate = allow(yield* (yield* StateStore).get, "host", "mine", "agent" in from && from.onHost === true, found.roomId);
     if ("held" in gate && gate.held === "unset") return { roomOnly: `collagen posts nothing on ${host.name} in your name until you choose a repo-host steering level` };
     if ("held" in gate && gate.held === "never") return { roomOnly: `your repo-host steering is never, so collagen posts nothing on ${host.name} in your name` };
     if ("held" in gate)

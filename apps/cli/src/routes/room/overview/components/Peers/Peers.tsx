@@ -7,6 +7,7 @@ import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { fitNames, roomPeople, type Person } from "../../../../../lib/people";
 import { myNameAtom, roomAtom } from "../../../../atoms";
+import { shownAi } from "../../../../../lib/jobs";
 import { aiStatusAtom, identityAtom, membersAtom, rosterAtom, stateAtom } from "../../../atoms";
 
 /** Who is in the room, in two lines that never grow: `●` everyone here now,
@@ -53,13 +54,13 @@ export function useRoomPeople(): ReadonlyArray<Person> {
   const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => "…");
   const me = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null)?.pubkey ?? "";
   const state = useAtomValue(stateAtom);
-  const preferredAi = AsyncResult.getOrElse(state, () => ({ preferredAi: null })).preferredAi;
+  const myAi = AsyncResult.isSuccess(state) ? shownAi(state.value) : null;
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const projects = AsyncResult.isSuccess(state) ? (state.value.rooms[roomId] ?? []).length : 0;
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
   const roster = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
-  return roomPeople({ key: me, name: myName, ai: preferredAi, aiStatus, projects }, roster, members);
+  return roomPeople({ key: me, name: myName, ai: myAi, aiStatus, projects }, roster, members);
 }
 
 /** One line of names after its mark, as many as fit, then `…`. */
