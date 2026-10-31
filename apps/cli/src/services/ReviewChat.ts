@@ -17,7 +17,7 @@ import { shownAi } from "../lib/jobs";
 import { readLine, type TranscriptLine } from "../lib/transcripts";
 import { levelOf } from "../lib/steering";
 import { IdentityService } from "./Identity";
-import { ReviewQuestions } from "./ReviewQuestions";
+import { OWN, ReviewQuestions } from "./ReviewQuestions";
 import type { Rooms } from "./Rooms";
 import type { ChatTurnKept, ReviewAnswer, ReviewQuestionStage } from "@collagen/p2p";
 
@@ -97,8 +97,30 @@ const CANNOT: Record<NonNullable<ReviewAnswer["why"]>, (author: string) => strin
   "no-conversation": (author) => `No conversation of ${author}'s holds this work, so their AI has nothing to answer from.`,
 };
 
+/** The same, about the person's own review. */
+const CANNOT_OWN: Record<NonNullable<ReviewAnswer["why"]>, string> = {
+  "not-chosen": "You haven't turned on answering your own questions yet (Answers, You), so it waits until you do.",
+  never: "Your own questions are never answered on their own (Answers, You), so it waits on your word.",
+  "no-conversation": "No conversation of yours on this machine holds this work, so there is nothing to answer from.",
+};
+
 /** What the reader reads of how a forwarded question stands, in the author's name. */
 const heardText = (stage: ReviewQuestionStage, author: string, flaw?: string): string => {
+  if (author === OWN)
+    switch (stage) {
+      case "waiting":
+        return "Waits on you.";
+      case "asking":
+        return "You're asked whether the conversation that did the work may answer.";
+      case "answering":
+        return "Reading the conversation that did the work.";
+      case "answered":
+        return "";
+      case "declined":
+        return "Not answered.";
+      case "addressing":
+        return `The conversation that did the work is fixing it${flaw ? `: ${flaw}` : ""}.`;
+    }
   switch (stage) {
     case "waiting":
       return `Waits on ${author}.`;
@@ -123,7 +145,7 @@ const DRAFT = "DRAFT:";
  *  ask for, as a draft comment). */
 const insteadOf = (mode: "assume" | "critique", author: string): string =>
   [
-    `${author} cannot answer this for now. Answer in their place, from the code and the review's why: your best reading of why it is this way — plainly an assumption, never their word.`,
+    `${author === OWN ? "The conversation that did the work" : author} cannot answer this for now. Answer in their place, from the code and the review's why: your best reading of why it is this way — plainly an assumption, never their word.`,
     mode === "critique" ? `Then look at that reason critically: is it a good enough reason? If not, say what should have been done instead.` : "",
     `End with one line: \`${ASSUMED} <the reason you assume, one sentence> || RESTS ON: <what in the code or the why points there> || SURE: high|medium|low\`.`,
     mode === "critique" ? `Then, for each change you would ask ${author} for, one line: \`${DRAFT} <file>:<line> || <nit|suggest|wish|must> || <the comment, a sentence or two, as a colleague would say it>\`.` : "",
@@ -391,11 +413,11 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
         const handed = turn && turn.state === "done" ? forwardOf(turn.answer) : null;
         if (!turn || !handed) return;
         const found = yield* reviewNamed(ticketId);
-        const own = !found || found.ticket.createdBy === me;
+        // the person's own review too (single player): the conversation that did the work is asked
         const level = levelOf(yield* store.get, "forward", "mine", found?.roomId);
-        const auto = !own && (level === "act" || level === "auto");
+        const auto = found !== null && (level === "act" || level === "auto");
         const id = auto ? yield* askAuthor(ticketId, turn, handed.question) : null;
-        const state = own || level === "never" ? "off" : id ? "asked" : "offered";
+        const state = !found || level === "never" ? "off" : id ? "asked" : "offered";
         yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: handed.answer, forward: { ...(id ? { id } : {}), question: handed.question, state } }));
       });
 
@@ -454,7 +476,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               // it cannot be answered for now: said why, and the reader is offered their own AI's reading instead
               const stuck = back.stage === "waiting" && back.why !== undefined;
               const done = back.stage === "answered" || back.stage === "declined" || back.stage === "addressing" || stuck;
-              const text = back.stage === "answered" ? `${back.answer ?? ""}${back.flaw ? `\n\nFound wrong: ${back.flaw}` : ""}` : stuck ? CANNOT[back.why!](fromName) : heardText(back.stage, fromName, back.flaw);
+              const text = back.stage === "answered" ? `${back.answer ?? ""}${back.flaw ? `\n\nFound wrong: ${back.flaw}` : ""}` : stuck ? (fromName === OWN ? CANNOT_OWN[back.why!] : CANNOT[back.why!](fromName)) : heardText(back.stage, fromName, back.flaw);
               const theirs: ChatTurn = { id: `author-${back.id}`, question: asked.forward!.question, selection: asked.selection, commit: asked.commit, answer: done ? text : "", doing: done ? null : text, state: done ? "done" : "answering", from: fromName, ...(stuck || back.stage === "declined" ? { fallback: true } : {}) };
               const had = conversation.turns.find((turn) => turn.id === theirs.id);
               // an answer once in stays: a later stage (being fixed) is said under it; one that could not be answered yet gives way to the answer
@@ -504,7 +526,8 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
             const ai = shownAi(yield* store.get);
             const turns = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns ?? [];
             const found = yield* reviewNamed(ticketId).pipe(Effect.provideContext(roomContext));
-            const author = found && found.ticket.createdBy !== me ? found.review.authorName : null;
+            // the person's own review: "you", answered by the conversation of theirs that did the work
+            const author = found ? (found.ticket.createdBy === me ? OWN : found.review.authorName) : null;
             return JSON.stringify({ ai, cannot: cannot(ai), author, turns } satisfies ChatView);
           }),
         ),

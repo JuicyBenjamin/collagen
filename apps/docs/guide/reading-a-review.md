@@ -413,7 +413,9 @@ conversation the work was done in, without interrupting it. Your forwarding
 [steering](./conversations#steering-how-much-your-agent-does-on-its-own) decides whether that
 takes a click (**Ask Christian's AI**) or happens on its own; the author's answering steering
 decides whether their AI answers at once or asks them first. The answer comes back into your
-chat, and onto the review's why, marked **Read from their AI**. When answering shows something
+chat, and onto the review's why, marked **Read from their AI**. On your own review (working
+alone), the same question goes to your own conversation that did the work, as your answering
+steering for your own questions says, and nothing of it reaches the room. When answering shows something
 wrong with the change, the author's work steering raises it with them, or hands it to the
 conversation that built the work to fix, and your chat says it is being fixed. When the author can't answer for now (they haven't turned answering on, or no
 conversation of theirs holds the work), your chat says why, and offers your own AI's reading
