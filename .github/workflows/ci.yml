@@ -1,12 +1,17 @@
 name: ci
 
+# Pull requests only. A push to main is a pull request that already passed
+# here (rebase merges land each commit as it was checked), so checking it
+# again only adds a run. The release PR is skipped: it only bumps versions
+# and changelogs, and the publish job runs typecheck and tests before it
+# ships — waiting on a full run there only holds the release up. A skipped
+# job counts as passed for the branch's required checks.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 jobs:
   check:
+    if: github.head_ref != 'release-please--branches--main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
