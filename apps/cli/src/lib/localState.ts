@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, DraftComment, LocalState, Merging, OwnRun, Project, Proposal, QueuedJob, Settings, Steering, SteeringLevels, TranscriptAsk, Worked } from "@collagen/p2p";
+import { AdoptedThread, DraftComment, LocalState, Merging, OwnRun, Project, Proposal, QueuedJob, Settings, Steering, SteeringLevels, TranscriptAsk, ViewedMark, Worked } from "@collagen/p2p";
 import { checkedThemes } from "@collagen/review-web/themeData";
 
 /** Reading the user's own state file must never cost them their rooms.
@@ -169,6 +169,9 @@ export const salvageState = (text: string): Salvaged => {
   // unreadable, the conversations are simply told again
   const worked = salvageRecord(src.worked, Worked, () => {});
 
+  // unreadable, every review reads unviewed again
+  const viewed = decode(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark)), src.viewed);
+
   // unreadable switches go back to their defaults
   const settings = decode(Settings, src.settings);
   if (src.settings !== undefined && settings === null) dropped.push("unreadable settings (back to their defaults)");
@@ -198,6 +201,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(settings ? { settings } : {}),
       ...(merging ? { merging } : {}),
       ...(themes ? { themes } : {}),
+      ...(viewed ? { viewed } : {}),
       rooms,
       ...(projectOrder ? { projectOrder } : {}),
       ...(threads ? { threads } : {}),

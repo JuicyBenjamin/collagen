@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Hunk } from "./data";
-import { fingerprint, fingerprints, readMarks, viewedState } from "./viewed";
+import { fingerprint, fingerprints, readMarks, viewedState } from "./marks";
 
 const hunk = (file: string, position: number, text: string): Hunk => ({
   id: `${file}#${position}`,

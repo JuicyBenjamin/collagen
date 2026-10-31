@@ -109,8 +109,9 @@ folded, "unchanged since you viewed it". So three changed lines in an 800-line f
 lines to read, not eight hundred. "Whole change" switches back to the diff against the base;
 ticking Viewed again marks it as it is now. After a rebase the changes since include what the
 new base brought in; if the branch was rewritten and that commit is gone, the page says so and
-shows the whole change. It works when the diff came from your clone. Marks stay in your
-browser, per review.
+shows the whole change. It works when the diff came from your clone. Marks are kept by your
+own collagen, per review: they outlast the browser, every open page follows them, and your
+agent reads and makes the same marks (`review-progress`). They never go to the room.
 
 The plumbing stays out of the way: no decision ids, no pointer lists (each hunk names its
 file), and where the diff came from is one line at the foot of the page.
