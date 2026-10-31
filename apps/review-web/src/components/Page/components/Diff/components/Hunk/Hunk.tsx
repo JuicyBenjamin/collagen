@@ -229,13 +229,15 @@ export function Hunk(props: {
     const group = card();
     void props.whole.show(props.hunk.id, group, row ? { line: Number(row.dataset.new), y: row.getBoundingClientRect().top } : group && placeIn(group));
   };
+  // comments waiting on the reader here: the lines stay in sight, threads and all
+  const waiting = () => hostNow.waitingIn(props.hunk.file);
   // a Markdown file reads rendered, unless the reader turned it to raw
-  const asDocument = () => isMarkdown(props.hunk.file) && diffNow.canReadWhole() && props.whole.readable && !mdView.raw(props.hunk.file);
+  const asDocument = () => isMarkdown(props.hunk.file) && diffNow.canReadWhole() && props.whole.readable && !mdView.raw(props.hunk.file) && !waiting();
   const canWhole = () => diffNow.canReadWhole() && props.whole.readable && !folded() && !asDocument();
   // read already: the file folds to its header here and wherever else it shows
   const state = () => viewed.state(props.hunk.file);
   // folded: viewed and not opened again to read
-  const folded = () => reading.folded(props.hunk.file);
+  const folded = () => reading.folded(props.hunk.file) && !waiting();
 
   // moved since it was viewed: what changed from the commit it was viewed at
   // to the branch now, the part of it that falls in this hunk
@@ -255,7 +257,7 @@ export function Hunk(props: {
   const [full, setFull] = createSignal(false);
   // a comment on the file itself being written, under its header
   const [writing, setWriting] = createSignal(false);
-  const sinceMode = () => props.whole.shown() === null && !full() && mine() !== null;
+  const sinceMode = () => props.whole.shown() === null && !full() && mine() !== null && !waiting();
   const counts = () => moved(mine() ?? []);
 
   return (
@@ -273,7 +275,7 @@ export function Hunk(props: {
           fallback={
             <Show when={state() === "viewed"} fallback={<span class="head path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>}>
               {/* viewed: the chevron opens it again to read, the mark stays */}
-              <button type="button" class="head reread-toggle" onClick={async () => {
+              <button type="button" class="head reread-toggle" disabled={waiting()} onClick={async () => {
                   // folding it again closes smoothly, the header held where the reader clicked it; opening it is at once
                   void holdInPlace(head);
                   const settle = folded() ? () => undefined : await foldAway(card());
@@ -281,7 +283,7 @@ export function Hunk(props: {
                   // drawn folded: the card is its header's size of itself again
                   flush();
                   settle();
-                }} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
+                }} aria-expanded={folded() ? "false" : "true"} title={waiting() ? "Comments wait on you here: it stays open until they are added or declined" : folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
                 <Chevron open={!folded()} /><span class="path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>
               </button>
             </Show>
