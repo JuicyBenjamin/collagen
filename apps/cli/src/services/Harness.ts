@@ -56,6 +56,12 @@ export interface Spent {
 
 /** Whether a wake reached the conversation (or there was no way to reach it
  *  yet), and what it spent when collagen ran a model to do it. */
+/** An image a person pasted into a conversation, as its log keeps it. */
+export interface PastedImage {
+  readonly mime: string;
+  readonly base64: string;
+}
+
 export interface Woken {
   readonly reached: boolean;
   readonly spent?: Spent;
@@ -101,6 +107,9 @@ export interface Harness {
   readonly readLine: (record: Readonly<Record<string, unknown>>, stamp: string | null) => TranscriptLine | null | undefined;
   /** a line a handed-over slice always keeps, whatever its time (a header that gives the rest its shape) */
   readonly keepsWhole: (record: Readonly<Record<string, unknown>>) => boolean;
+  /** the images a person pasted into one line of its session log — their own
+   *  turn only, never what a tool returned */
+  readonly pastedImages: (record: Readonly<Record<string, unknown>>) => ReadonlyArray<PastedImage>;
   /** its sessions changed since `since`, and what each says of collagen's token use */
   readonly usage: {
     readonly sessions: (home: string, since: number) => Promise<ReadonlyArray<string>>;

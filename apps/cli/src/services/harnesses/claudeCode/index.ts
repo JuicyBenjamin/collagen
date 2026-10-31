@@ -7,7 +7,7 @@ import { claudeCallOf, objectOf, text } from "./call";
 import { runJob } from "./job";
 import { callerSocket, courier } from "./reach";
 import { register } from "./register";
-import { readLine } from "./transcript";
+import { pastedImages, readLine } from "./transcript";
 import { readUsage } from "./usage";
 
 // Claude Code, in the terminal or the desktop app: how collagen tells its
@@ -71,6 +71,7 @@ export const claudeCode: Harness = {
   transcriptOf: (conversation, home) => walk(join(home, "projects"), 2).find((file) => file.endsWith(`/${conversation}.jsonl`)) ?? null,
   readLine,
   keepsWhole: () => false,
+  pastedImages,
   usage: {
     // sub-agents' sessions sit beside their parent's
     sessions: (home, since) => sessionFiles(join(home, "projects"), since, 4),

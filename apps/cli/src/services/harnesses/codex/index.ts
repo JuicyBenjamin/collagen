@@ -8,7 +8,7 @@ import type { Harness } from "../../Harness";
 import { codexCall } from "./call";
 import { runJob } from "./job";
 import { register } from "./register";
-import { keepsWhole, readLine } from "./transcript";
+import { keepsWhole, pastedImages, readLine } from "./transcript";
 import { readUsage } from "./usage";
 
 // Codex, in the terminal or the Codex app: how collagen tells its calls and
@@ -55,6 +55,7 @@ export const codex: Harness = {
   transcriptOf: (conversation, home) => walk(join(home, "sessions")).find((file) => file.endsWith(".jsonl") && file.includes(conversation)) ?? null,
   readLine,
   keepsWhole,
+  pastedImages,
   usage: {
     sessions: (home, since) => sessionFiles(join(home, "sessions"), since, 5),
     read: readUsage,

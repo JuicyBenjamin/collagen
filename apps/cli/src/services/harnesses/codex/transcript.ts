@@ -1,4 +1,5 @@
 import { textOf, type TranscriptLine } from "../../../lib/transcripts";
+import type { PastedImage } from "../../Harness";
 
 // A Codex rollout's lines, as a person reads them in the app.
 
@@ -21,3 +22,15 @@ export const readLine = (record: Readonly<Record<string, unknown>>, stamp: strin
 
 /** The session header gives a handed-over slice its shape: always kept. */
 export const keepsWhole = (record: Readonly<Record<string, unknown>>): boolean => record.type === "session_meta";
+
+/** The images a person pasted into a turn: the user message's input_image
+ *  parts, each a data URL. */
+export const pastedImages = (record: Readonly<Record<string, unknown>>): ReadonlyArray<PastedImage> => {
+  const payload = record.type === "response_item" && record.payload && typeof record.payload === "object" ? (record.payload as { type?: unknown; role?: unknown; content?: unknown }) : null;
+  if (!payload || payload.type !== "message" || payload.role !== "user" || !Array.isArray(payload.content)) return [];
+  return payload.content.flatMap((part) => {
+    const url = part && typeof part === "object" && (part as { type?: unknown }).type === "input_image" ? (part as { image_url?: unknown }).image_url : undefined;
+    const found = typeof url === "string" ? /^data:([^;]+);base64,(.+)$/s.exec(url) : null;
+    return found ? [{ mime: found[1]!, base64: found[2]! }] : [];
+  });
+};

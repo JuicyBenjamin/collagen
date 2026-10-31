@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { statSync } from "node:fs";
 import { createServer } from "node:http";
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
@@ -43,7 +43,8 @@ import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
 import { MergeHistory } from "./MergeHistory";
 import { Transcripts } from "./Transcripts";
-import { Attachments } from "./Attachments";
+import { Attachments, attachmentsDir } from "./Attachments";
+import { pastedImages } from "../lib/pastedImages";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { answerQuestion } from "./InvestigationView";
@@ -51,7 +52,7 @@ import { investigationOf, JOB_KINDS, JOB_LABEL, jobLimitOf, modelFor, withModel,
 import { allow, KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
 import { actingWith } from "../lib/agents";
-import { harnessFor, Harnesses } from "./Harness";
+import { harnessFor, Harnesses, transcriptFile } from "./Harness";
 import { listenerFor, withWorked } from "../lib/worked";
 
 // NOTE: tool results must be OBJECT-rooted — the MCP spec types
@@ -189,6 +190,8 @@ export const CreateTicket = Tool.make("create-ticket", {
  *  it is closed. */
 const judgedParameters = {
   peers: Schema.optional(Schema.Array(Schema.String)),
+  /** how many of the images the person last pasted into the calling conversation to attach */
+  images: Schema.optional(Schema.Int),
   project: Schema.optional(Schema.String),
   ticketId: Schema.optional(Schema.String),
   title: Schema.optional(Schema.String),
@@ -373,10 +376,14 @@ export const ClaimReview = Tool.make("claim-review", {
 const KIND_RULE =
   "WHEN YOUR USER NAMES THE KIND (\"as a plan\", \"file it as a proposal\", \"report it as a bug\"), that kind wins: plan is ask-plan, proposal is propose, bug is report-bug, review is ask-review, task is create-ticket. Never substitute a near one, however the work is phrased, and load that tool's schema first if you have not.";
 
+const IMAGES_RULE =
+  "IMAGES: when your user showed you what this is about with images pasted into this conversation (a screenshot of the bug, a sketch of the idea), pass 'images' with how many of their latest pasted images belong to it — 1 for the one they just sent. Collagen reads them from this conversation itself and attaches them to the ticket, so everyone sees what they saw; you never need a file path for it. Leave it out when they showed none.";
+
 export const AskPlan = Tool.make("ask-plan", {
   description: [
     "File a PLAN: something your user intends to do — work they have already decided on, or want input on first. Asking for input is optional: a plan can sit in the room as the written-down decision, or be put to it for judgment — do you agree, what would you change, what am I missing (\"ask kristian what he thinks of this plan\", \"put this up for input\"). Only when your user asks for a plan (\"make this a plan\", \"open a ticket as a plan\") — never on your own initiative. It reaches the room at once and the outbox shows what went. A question your user could have asked YOU is not a plan; the input asked for is a colleague's, not AI's. It names no owners: steps with owners are a task (create-ticket).",
     KIND_RULE,
+    IMAGES_RULE,
     "'title' is the headline every list shows — a few words, 60 characters at most (\"Streamed export\"); required when filing. It names what is to be done, not the reason or the mechanism. 'goal' is the line beneath it — what your user intends (\"stream the export, don't buffer it\"). 'summary' is their thinking in a paragraph. 'decisions' are the thoughts behind it, one per point: a 'title' (a few words, 60 characters at most — the headline a reader sees first: what the point is for, never how), 'what' they mean to do in one line, 'userWhy' in their words, 'agentWhy' what you found, checked or would add — marked as yours. 'forks' are the roads not taken so far, with 'at' as a pointer where there is code, or the area if there is none yet. 'peers' is 0 to many, exactly the names your user said; nobody named means the plan sits in the room for whoever has a take — including your user's own second agent.",
     "Readers give a BLIND FIRST TAKE: their agent hands them the goal alone, they say what they think (post-review; failed: true asks for changes), and only then do your user's thoughts open to them. A ↻ hands the plan back to your user to revise this same ticket (ask-plan with 'ticketId'), never to reply in prose. 'from' names tickets this plan follows (a proposal it answers); 'after' names tickets it WAITS on — phase two after phase one: until they are answered nobody but your user is shown it, and 'after: []' withdraws the order; 'whenClosed' is your user's own instruction for the moment they close it (\"open the Jira tickets\"), handed back to you then.",
     "WHAT TO TELL YOUR USER: that the plan ticket has been filed (or updated), nothing more. KEEP IT CURRENT: when their thinking moves, call ask-plan again with 'ticketId' — re-send the summary if it no longer holds, repeat the id of a changed decision, pass a new 'goal' if the question moved; 'from: []' withdraws the lineage and 'whenClosed: \"\"' the close instruction, leaving either out keeps it. When the takes are in and your user has decided, close-ticket with the conclusion as the reason.",
@@ -390,6 +397,7 @@ export const Propose = Tool.make("propose", {
     "File a PROPOSAL: an idea your user wants written down, owed to no one — is it worth doing, what might it involve, who might do it. The cheap kind: alone on their own project they get ideas and want them kept without committing to them, so it goes in with a 'goal' and at least one thought and nothing more is demanded. Only when your user says so (\"file that as a proposal\", \"propose to kristian that…\") — never on your own initiative. Not a plan: a plan is work your user has decided on; a proposal asks first, and nobody owes anything for it.",
     "'peers' is 0 to many, exactly the names your user said — nobody named means the idea sits in the room for whoever has a take, including your user's own second agent, or your user later. A named peer may be asked any of the three questions: is the idea good, would you do it, should I. 'title' is the headline every list shows (a few words, 60 at most; required when filing): the idea in plain words, not how it would be built. 'goal' the line beneath it. 'summary' (optional here), 'decisions' (the why: each with a short 'title' — a few words, the headline — 'what' in one line, 'userWhy' in your user's words, 'agentWhy' yours) and 'forks' as for ask-plan. 'work' is optional and NON-BINDING: an outline of what the work might be — items with an 'id' (stable; defaults to the intent), an intent, a description and, if your user has one in mind, a suggested 'owner' by name. It is kept on the ticket's why for a plan to lift from — no step is ever made from it, named peers included: a peer says in their take whether they would do it. 'from' names tickets this follows; 'whenClosed' is your user's instruction for the moment they close it.",
     KIND_RULE,
+    IMAGES_RULE,
     "REVISING (propose with 'ticketId'): 'work' corrects an outline item by id and adds new ids; nothing is ever removed by omission. To withdraw an item, pass 'retireWork' with its ids — an outline is intent, not history, so it goes. 'from: []' withdraws the lineage and 'whenClosed: \"\"' the close instruction; leaving either out leaves it as it was.",
     "Readers give a BLIND FIRST TAKE (see ask-plan). Your user may take their own idea too — post-review on their own proposal is allowed and shows on the row as theirs, so others see it was self-approved and can still add a take. Accepting is judgment, not work: when the idea is accepted the obvious next step is a plan filed with 'from' this ticket (ask-plan), with the outline and suggested owners as prefills — your user confirms that plan, nothing is assigned by accepting. WHAT TO TELL YOUR USER: that the proposal has been filed (or updated), nothing more. KEEP IT CURRENT with propose and 'ticketId'. When your user is done with the idea — a plan grew out of it, or it is dropped — close-ticket with the conclusion as the reason.",
   ].join("\n"),
@@ -405,6 +413,7 @@ export const ReportBug = Tool.make("report-bug", {
   description: [
     "File a BUG: a symptom, with your user's reading of it — what is happening, how bad, what could fix it — put to the room for judgment before anyone decides how to go about it. Only when your user says so (\"file that as a bug\", \"report this\") — never on your own initiative. Everyone involved then decides: usually someone opens a Jira ticket, fixes it, and files the fix's review with 'from' this bug, so the reviewers read the report beside the why.",
     KIND_RULE,
+    IMAGES_RULE,
     "'symptom' is the one required field: what is wrong, as experienced, in your user's words. 'title' is the headline every list shows — a few words, 60 characters at most; required when filing. It states the problem as someone using the product meets it (\"Export freezes on large files\"), not a code fact (\"export buffers in memory\") and not the fix; a reader must tell what is broken from the title alone. 'goal' is the line beneath it: why it matters, or the fix, goes here; it defaults to the symptom's first sentence. Everything else is the reporter's reading and arrives as it is known: 'cause' {what is actually happening, where: project and file:line}; 'importance' {score 1–5, effect in words} — the scale is anchored: 1 cosmetic (nobody blocked), 2 annoying (a workaround exists), 3 wrong (a feature fails for some), 4 blocking (a feature fails for everyone), 5 breaking (data loss, a security hole, nothing works); 'suggestion' {what could fix it, requirements: loose — a bug carries no formal requirements, a plan lifts these into real ones}; 'remedy' — how big the fix is, the reporter's coarse guess, apart from where the symptom lives: line (a local fix), system (an existing system does the wrong thing), refactor (right in intent, wrong in shape), new (the system that should handle this does not exist). 'decisions' and 'forks' are optional here; 'peers' 0 to many, exactly the names your user said; 'from' and 'whenClosed' as elsewhere.",
     "Readers give a BLIND FIRST TAKE on the symptom alone: their agent hands them the symptom, they say what they make of it (post-review; failed: true asks the reporter for changes), and only then does the reporter's cause, importance, suggestion and remedy open to them — a second, independent diagnosis is the most valuable thing a bug report collects. REVISING (report-bug with 'ticketId'): pass the part of the report that changed — a cause once found, a new score — fields left out keep their value; to withdraw a field that no longer holds (a disproven cause, a score that was wrong) pass 'retire' with its names: cause, importance, suggestion, remedy; 'from: []' and 'whenClosed: \"\"' withdraw those.",
     "WHAT TO TELL YOUR USER: that the bug ticket has been filed (or updated), nothing more. KEEP IT CURRENT with report-bug and 'ticketId'. When the takes are in and your user has decided what happens to it — a plan, a fix and its review, or nothing — close-ticket with the conclusion as the reason.",
@@ -425,6 +434,7 @@ export const Investigate = Tool.make("investigate", {
   description: [
     "File an INVESTIGATION: a question nobody can answer yet — what is possible, which of these, why does this happen — put to the room before anyone plans or proposes anything. Only when your user says so (\"investigate this\", \"file it as an investigation\") — never on your own initiative. It can come from any other kind of ticket: pass 'from' with the ticket the question came up on (a plan that hit an unknown, a bug nobody can explain), and when it is answered the findings reach that ticket's people. A question that comes up ON an investigation — from its findings, or something more to find out about it — stays inside it: a new goal (investigate with its ticketId and 'goals'), or a follow-up on the goal it hangs on ('then'). Never a new investigation 'from' it, unless your user names it a new investigation.",
     KIND_RULE,
+    IMAGES_RULE,
     "'question' is the one required field: what is to be found out, in your user's words. 'title' is the headline every list shows — a few words, 60 characters at most, the question itself (\"Why peers stay apart after a restart\"); required when filing. 'goal' is the line beneath it; it defaults to the question's first sentence. 'known' is what is known already, 'ruledOut' what is ruled out and not to be looked into again. 'decisions' and 'forks' are optional; 'peers' 0 to many, exactly the names your user said; 'from', 'after' and 'whenClosed' as elsewhere.",
     "GOALS (optional, only what your user lists): without them the question is the one goal. Each goal is an 'ask' — one thing to find out, in your user's words — and a 'title', a few words that head it on the investigation's page (\"Delta and collagen compared\", \"Collagen as a shell around Delta\"): the ask is read beneath it, so the title never repeats it. Goals sharing a 'group' name are checked together by one AI run; a goal with no group gets a run of its own. 'then' on a goal is your user's own 'if this, then that': [{if, ask, title}] — when the answer bears out 'if', the run looks into 'ask' too, there and then, and answers it under the goal: it stays on this investigation. 'pace': one-by-one (each run starts when the last is done and reads what it found) or all-at-once; left out, your user's setting investigationsAtOnce decides. Amending: repeating a goal's id corrects it, new goals are added (and start as steering allows), 'retireGoals' withdraws by id.",
     "Readers give a BLIND FIRST TAKE on the question alone: their agent hands them the question, they say what they think the answer is or how they would find out (post-review), and only then does what is known and ruled out open to them. 'research' sends your user's own AI to look into it; what it finds comes back as a take.",
@@ -1007,7 +1017,24 @@ const makeHandlers = Effect.gen(function* () {
     const answerContext = yield* Effect.context<IdentityService | Rooms | StateStore | Outbox | Jobs>();
     const harnesses = yield* Harnesses;
     const adapters = yield* Adapters;
+    const attachments = yield* Attachments;
     const actingNow = actingWith(harnesses);
+    /** The images the person last pasted into the calling conversation, `count`
+     *  of them, attached to a ticket — read from the conversation's own log,
+     *  where they are data no agent could hand over as a file. A line for the
+     *  outcome: what was attached, or why nothing was. */
+    const attachPasted = Effect.fn("Mcp.attachPasted")(function* (roomId: string, ticketId: string, goal: string, count: number) {
+      const conversation = (yield* actingNow)?.conversation;
+      const harness = conversation ? harnessFor(harnesses, conversation.ai) : undefined;
+      if (!conversation || !harness) return `\nIMAGES NOT ATTACHED: collagen cannot tell which conversation is calling, so it cannot read what your user pasted — attach-files takes an image's path instead`;
+      const transcript = transcriptFile(harnesses, conversation.ai, conversation.id);
+      if (!transcript) return `\nIMAGES NOT ATTACHED: this conversation's log is not on this machine`;
+      const files = yield* Effect.sync(() => pastedImages(harness, transcript, count, join(attachmentsDir, "pasted")));
+      if (files.length === 0) return `\nIMAGES NOT ATTACHED: your user pasted no image in this conversation`;
+      const attached = yield* attachments.attach(roomId, ticketId, goal, files, files.length === 1 ? "the image the reporter showed" : "the images the reporter showed");
+      if (attached.startsWith("failed")) return `\nIMAGES NOT ATTACHED: ${attached}`;
+      return `\n${files.length === 1 ? "1 image" : `${files.length} images`} your user pasted attached to it${files.length < count ? ` (only ${files.length} in this conversation)` : ""}`;
+    });
     /** Whose place in the inbox a call reads from: the calling conversation's
      *  own, or — for a client no harness names — the one everyone shares. */
     const readerNow = actingNow.pipe(Effect.map((acting) => (acting?.conversation ? conversationKey(acting.conversation) : undefined)));
@@ -1145,6 +1172,8 @@ const makeHandlers = Effect.gen(function* () {
         suggestion?: { readonly what: string; readonly requirements?: ReadonlyArray<string> };
         remedy?: Remedy;
         retire?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
+        /** how many of the person's latest pasted images to attach */
+        images?: number;
         question?: string;
         known?: string;
         ruledOut?: string;
@@ -1536,9 +1565,10 @@ const makeHandlers = Effect.gen(function* () {
         // an investigation filed: whether the person's AI starts on it is their steering's call
         const started =
           kind === "investigation" && !filed.startsWith("failed") ? yield* startOnFiling(roomId, inEpic, investigationOf(inEpic, [review]), projectPath, asked, input.run) : "";
+        const shown = input.images && input.images > 0 && !filed.startsWith("failed") ? yield* attachPasted(roomId, ticketId, goal, input.images) : "";
         return under.length > 0 && !filed.startsWith("failed")
-          ? `${filed}${coverage}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
-          : filed + coverage + started;
+          ? `${filed}${coverage}${shown}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
+          : filed + coverage + started + shown;
     });
 
     /** An investigation the person filed, and their AI: started now, offered,
