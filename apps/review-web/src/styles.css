@@ -1073,8 +1073,6 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .chat-empty, .chat-cannot { margin: 0; color: var(--dim); font-style: italic; }
 .chat-cannot { padding: 10px 14px; border-top: 1px solid var(--line); }
 .chat-fallback { display: flex; gap: 8px; margin-top: 6px; }
-.chat-about, .chat-attached code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dim); }
 .chat-doing { color: var(--faint); font-style: italic; }
 .chat-ask { display: grid; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--line); }
-.chat-attached { display: inline-flex; align-items: center; gap: 4px; justify-self: start; padding: 1px 4px 1px 8px; border: 1px solid var(--line); border-radius: 6px; }
-.chat-detach { border: 0; background: none; color: var(--dim); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
+.chat-attached { justify-self: start; }
