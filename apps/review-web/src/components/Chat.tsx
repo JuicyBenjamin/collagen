@@ -157,7 +157,7 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
   return (
     <aside
       // above the review's pill once it floats in the corner
-      class={["chat", { lifted: floating() }]}
+      class={["chat-panel", { lifted: floating() }]}
       aria-label="Chat with your AI"
       ref={props.placed}
     >
@@ -206,6 +206,7 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
             )}
           </Show>
           <textarea
+            class="textarea"
             ref={(element) => (input = element)}
             rows={2}
             placeholder={chatNow.attached() ? "Ask about these lines" : "Ask about this review"}
@@ -244,52 +245,75 @@ function Turn(props: { turn: ChatTurn }) {
   // the person's own review ("you"): the conversation of theirs that did the work answers
   const author = () => chatNow.view()?.author ?? "the author";
   const whose = (name: string) => (name === "you" ? "the conversation that did the work" : `${name}'s AI`);
+  /** who answers: the reader's own AI, or the review's author's */
+  const answerer = () => (props.turn.from === undefined ? (chatNow.view()?.ai ?? "Your AI") : props.turn.from === "you" ? "The conversation that did the work" : `${props.turn.from}'s AI`);
   return (
-    <div class={["chat-turn", { theirs: props.turn.from !== undefined }]}>
+    <div class="chat-turn">
       {/* an author's AI answers under the question it was asked: no question of its own */}
-      <Show when={props.turn.from === undefined} fallback={<p class="chat-from">{props.turn.from === "you" ? "The conversation that did the work" : `${props.turn.from}'s AI`}</p>}>
-        <div class="chat-q">
-          <Show when={props.turn.selection}>{(selection) => <code class="chat-about">{selectionLabel(selection())}</code>}</Show>
-          <p>{props.turn.question}</p>
+      <Show when={props.turn.from === undefined}>
+        <div class="chat chat-end">
+          <Show when={props.turn.selection}>
+            {(selection) => (
+              <div class="chat-header">
+                <code class="chat-about">{selectionLabel(selection())}</code>
+              </div>
+            )}
+          </Show>
+          <div class="chat-bubble chat-bubble-primary chat-q">
+            <p>{props.turn.question}</p>
+          </div>
         </div>
       </Show>
-      <div class={["chat-a", { failed: props.turn.state === "failed" }]}>
-        <For each={parts()}>
-          {(part) => (
-            <Show when={part.kind === "code"} fallback={<p>{part.text}</p>}>
-              <pre>
-                <code>{part.text}</code>
-              </pre>
+      <div class="chat chat-start">
+        <div class="chat-header">{answerer()}</div>
+        <div class="chat-bubble chat-a">
+          <For each={parts()}>
+            {(part) => (
+              <Show when={part.kind === "code"} fallback={<p>{part.text}</p>}>
+                <pre>
+                  <code>{part.text}</code>
+                </pre>
+              </Show>
+            )}
+          </For>
+          {/* nothing said yet: it is thinking */}
+          <Show when={props.turn.state === "answering" && !props.turn.answer}>
+            <span class="loading loading-dots loading-sm" aria-label="Thinking" />
+          </Show>
+        </div>
+        <Show when={(props.turn.state === "answering" && props.turn.doing) || props.turn.state === "stopped" || props.turn.state === "failed"}>
+          <div class="chat-footer">
+            <Show when={props.turn.state === "answering"}>
+              <span class="chat-doing">{props.turn.doing}</span>
             </Show>
-          )}
-        </For>
-        <Show when={props.turn.state === "answering"}>
-          <p class="chat-doing">{props.turn.doing ?? (props.turn.answer ? "" : "Thinking…")}</p>
-        </Show>
-        <Show when={props.turn.state === "stopped"}>
-          <p class="chat-doing">Stopped</p>
-        </Show>
-        <Show when={props.turn.state === "failed"}>
-          <p class="host-error">{props.turn.error ?? "Failed"}</p>
-        </Show>
-        {/* the author cannot answer for now: the reader's own AI, instead of a guess passed off as theirs */}
-        <Show when={props.turn.fallback && props.turn.from}>
-          <div class="chat-fallback">
-            <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "assume")} title="Your AI's best reading of why, sent to their review's why as a guess for them to settle">
-              Assume the reason
-            </button>
-            <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "critique")} title="The same guess, then whether it is good enough: what it asks to change becomes your draft comments">
-              Critique it
-            </button>
+            <Show when={props.turn.state === "stopped"}>
+              <span class="chat-doing">Stopped</span>
+            </Show>
+            <Show when={props.turn.state === "failed"}>
+              <span class="host-error">{props.turn.error ?? "Failed"}</span>
+            </Show>
           </div>
         </Show>
-        <Show when={props.turn.forward}>
-          {(forward) => (
+      </div>
+      {/* the author cannot answer for now: the reader's own AI, instead of a guess passed off as theirs */}
+      <Show when={props.turn.fallback && props.turn.from}>
+        <div class="chat-fallback">
+          <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "assume")} title="Your AI's best reading of why, sent to their review's why as a guess for them to settle">
+            Assume the reason
+          </button>
+          <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "critique")} title="The same guess, then whether it is good enough: what it asks to change becomes your draft comments">
+            Critique it
+          </button>
+        </div>
+      </Show>
+      <Show when={props.turn.forward}>
+        {(forward) => (
+          <div class="chat-fallback">
             <Show
               when={forward().state === "offered"}
               fallback={
                 <Show when={forward().state === "asked"}>
-                  <p class="chat-doing">Asked {whose(author())}</p>
+                  <span class="chat-doing">Asked {whose(author())}</span>
                 </Show>
               }
             >
@@ -297,9 +321,9 @@ function Turn(props: { turn: ChatTurn }) {
                 Ask {whose(author())}
               </button>
             </Show>
-          )}
-        </Show>
-      </div>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }
