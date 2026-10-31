@@ -10,6 +10,14 @@ import { ticketId } from "./ticket";
 /** This page's calls on its tests. */
 export const testMarks = testMarksStore(ticketId);
 
+/** What a tab of cases is: tests, judged by what they protect, or stories,
+ *  judged by their names — the state each names, and whether it makes sense. */
+export type CaseKind = "test" | "story";
+export const CASE_WORDS: Record<CaseKind, { readonly title: string; readonly one: string; readonly many: string; readonly keep: string }> = {
+  test: { title: "Tests", one: "test", many: "tests", keep: "Worth testing" },
+  story: { title: "Stories", one: "story", many: "stories", keep: "Makes sense" },
+};
+
 /** Where a test file's section is, for the outline. */
 export const testFileId = (file: string) => `tests-${file.replace(/[^\w-]/g, "-")}`;
 
@@ -23,11 +31,11 @@ export const testsJudged = (files: ReadonlyArray<TestFile>) => {
   };
 };
 
-/** What the page shows under its header: the code, how the change works, or
- *  its tests — the code, unless the url says otherwise. */
-type Tab = "code" | "machine" | "tests";
-const hashes: Record<Tab, string> = { code: "", machine: "#how-it-works", tests: "#tests" };
-const [tabNow, setTab] = createSignal<Tab>(location.hash.startsWith("#tests") ? "tests" : location.hash.startsWith("#how-it-works") ? "machine" : "code");
+/** What the page shows under its header: the code, how the change works, its
+ *  tests or its stories — the code, unless the url says otherwise. */
+type Tab = "code" | "machine" | "tests" | "stories";
+const hashes: Record<Tab, string> = { code: "", machine: "#how-it-works", tests: "#tests", stories: "#stories" };
+const [tabNow, setTab] = createSignal<Tab>(location.hash.startsWith("#tests") ? "tests" : location.hash.startsWith("#stories") ? "stories" : location.hash.startsWith("#how-it-works") ? "machine" : "code");
 export const tab = tabNow;
 export const showTab = (shown: Tab) => {
   setTab(shown);

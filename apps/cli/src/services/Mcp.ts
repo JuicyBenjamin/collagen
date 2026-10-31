@@ -2389,8 +2389,8 @@ const makeHandlers = Effect.gen(function* () {
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review's files are viewed`;
         const data = yield* reviewData(input.ticketId).pipe(Effect.provideContext(talkContext));
-        // the files a mark can be for, as the page counts them: every changed file but the tests
-        const tests = new Set((data?.grouped?.tests ?? []).map((file) => file.file));
+        // the files a mark can be for, as the page counts them: every changed file but the tests and stories
+        const tests = new Set([...(data?.grouped?.tests ?? []), ...(data?.grouped?.stories ?? [])].map((file) => file.file));
         const now = fingerprints((data?.grouped?.hunks ?? []).filter((hunk) => !tests.has(hunk.file)));
         if (now.size === 0) return `failed: this review's diff cannot be read here${data ? ` — ${data.source.detail}` : ""}, so there is nothing to mark or count`;
         const unknown = [...(input.mark ?? []), ...(input.unmark ?? [])].filter((file) => !now.has(file));

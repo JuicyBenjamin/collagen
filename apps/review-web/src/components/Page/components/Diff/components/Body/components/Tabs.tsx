@@ -3,11 +3,12 @@ import type { TestFile } from "~/data";
 import { Masked } from "~/components/Masked";
 import { showTab, tab } from "~/testsNow";
 
-/** The code, how it works and the tests: tabs under the header, always there
- *  — the code's alone when there is nothing else — so what comes under them
- *  stands in the same place whatever the review holds. The second when the
- *  change has a machine drawn, the last when it has tests, counted. */
-export function Tabs(props: { tests: ReadonlyArray<TestFile>; files: number; machine: boolean }) {
+/** The code, how it works, the tests and the stories: tabs under the header,
+ *  always there — the code's alone when there is nothing else — so what comes
+ *  under them stands in the same place whatever the review holds. How it
+ *  works when the change has a machine drawn; tests and stories, counted,
+ *  when it has them. */
+export function Tabs(props: { tests: ReadonlyArray<TestFile>; stories: ReadonlyArray<TestFile>; files: number; machine: boolean }) {
   return (
     <div class="tabs" role="tablist">
       <button type="button" role="tab" aria-selected={tab() === "code" ? "true" : "false"} class={{ on: tab() === "code" }} onClick={() => showTab("code")}>
@@ -21,6 +22,11 @@ export function Tabs(props: { tests: ReadonlyArray<TestFile>; files: number; mac
       <Show when={props.tests.length > 0}>
         <button type="button" role="tab" aria-selected={tab() === "tests" ? "true" : "false"} class={{ on: tab() === "tests" }} onClick={() => showTab("tests")}>
           Tests <span class="tab-count">{props.tests.reduce((count, file) => count + file.tests.length, 0)}</span>
+        </button>
+      </Show>
+      <Show when={props.stories.length > 0}>
+        <button type="button" role="tab" aria-selected={tab() === "stories" ? "true" : "false"} class={{ on: tab() === "stories" }} onClick={() => showTab("stories")}>
+          Stories <span class="tab-count">{props.stories.reduce((count, file) => count + file.tests.length, 0)}</span>
         </button>
       </Show>
     </div>

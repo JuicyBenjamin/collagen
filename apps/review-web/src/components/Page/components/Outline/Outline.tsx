@@ -7,13 +7,15 @@ import { Tests } from "./components/Tests";
 import { Units } from "./components/Units";
 
 /** The outline, once the diff is read: the units of the code, or the tests
- *  when their tab is open. */
+ *  or stories when their tab is open. */
 export function Outline(props: { data: ReviewPageData }) {
   const tests = () => props.data.grouped?.tests ?? [];
+  const stories = () => props.data.grouped?.stories ?? [];
+  const cases = () => (tab() === "tests" ? tests() : tab() === "stories" ? stories() : []);
   return (
     <Arrives skeleton={Outline.Skeleton}>
-      <Show when={tab() === "tests" && tests().length > 0} fallback={<Units data={props.data} />}>
-        <Tests files={tests()} />
+      <Show when={cases().length > 0} fallback={<Units data={props.data} />}>
+        <Tests files={cases()} kind={tab() === "stories" ? "story" : "test"} />
       </Show>
     </Arrives>
   );

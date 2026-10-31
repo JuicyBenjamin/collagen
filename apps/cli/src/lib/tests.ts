@@ -7,9 +7,13 @@ import type { DiffLine, Hunk, TestCase, TestFile } from "@collagen/review-web/da
 // away, the whole test as one hunk. Pure: the diff's hunks of a test file
 // and the file's text at both ends (services/ReviewView reads those).
 
-/** A test file, by its name (`.test` or `.spec` as a part of it, also
- *  before another: Foo.test.stories.tsx) or its folder. */
-export const isTest = (file: string): boolean => /\.(test|spec)\.[^/]+$/i.test(file) || /(^|\/)(tests?|__tests__)\//.test(file);
+/** A Storybook file: its stories are read by their names, apart from the
+ *  code and from the tests (lib/stories) — Foo.test.stories.tsx too. */
+export const isStory = (file: string): boolean => /\.stories\.(tsx?|jsx?|mdx|svelte|vue)$/i.test(file);
+
+/** A test file, by its name (`.test` or `.spec` as a part of it) or its
+ *  folder — and not a story file, which is a kind of its own. */
+export const isTest = (file: string): boolean => !isStory(file) && (/\.(test|spec)\.[^/]+$/i.test(file) || /(^|\/)(tests?|__tests__)\//.test(file));
 
 /** A test as its file has it: the describes it sits in, its title, and the
  *  lines it spans (1-based, both ends in). */
@@ -32,12 +36,15 @@ const MODIFIERS = new Set(["only", "skip", "todo", "each", "concurrent", "sequen
 export const testsIn = (lines: ReadonlyArray<string>): ReadonlyArray<Found> => scan(lines).tests;
 
 /** The lines a describe spans (1-based, both ends in). */
-interface Group {
+export interface Group {
   readonly start: number;
   readonly end: number;
 }
 
 /** The tests, and the describes that frame them. */
+/** How a kind of file is read into its cases: tests by their calls, stories by their exports. */
+export type Scan = (lines: ReadonlyArray<string>) => { readonly tests: ReadonlyArray<Found>; readonly groups: ReadonlyArray<Group> };
+
 function scan(lines: ReadonlyArray<string>): { readonly tests: ReadonlyArray<Found>; readonly groups: ReadonlyArray<Group> } {
   const calls = callTests(lines);
   return calls.tests.length > 0 ? calls : { tests: namedTests(lines), groups: [] };
@@ -269,7 +276,7 @@ export function span(file: string, hunks: ReadonlyArray<Hunk>, side: "old" | "ne
  *  helpers, setup). `after` is the file at the branch, `before` at the base
  *  it forked from; either is null where it cannot be read (or is not there):
  *  then the tests are read from the hunks' own lines, as far as they go. */
-export function testsOfFile(file: string, hunks: ReadonlyArray<Hunk>, after: ReadonlyArray<string> | null, before: ReadonlyArray<string> | null): TestFile {
+export function testsOfFile(file: string, hunks: ReadonlyArray<Hunk>, after: ReadonlyArray<string> | null, before: ReadonlyArray<string> | null, read: Scan = scan): TestFile {
   const mine = hunks.filter((hunk) => hunk.file === file);
   // with no text, the hunks' new side is all of the file there is
   const fromHunks = (side: "old" | "new") => {
@@ -280,8 +287,8 @@ export function testsOfFile(file: string, hunks: ReadonlyArray<Hunk>, after: Rea
   const deleted = mine.length > 0 && mine.every((hunk) => hunk.lines.every((line) => line.new === undefined));
   const newText = after ?? (deleted ? [] : fromHunks("new"));
   const oldText = before ?? (after === null ? fromHunks("old") : []);
-  const now = scan(newText);
-  const was = scan(oldText);
+  const now = read(newText);
+  const was = read(oldText);
   const nowTests = now.tests;
   const wasTests = was.tests;
   // where each changed line falls on each side: an added line at its new

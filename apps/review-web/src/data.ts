@@ -140,6 +140,9 @@ export interface Grouped {
   readonly units: ReadonlyArray<Unit>;
   /** the diff's test files, apart from the code */
   readonly tests: ReadonlyArray<TestFile>;
+  /** the diff's Storybook files, apart from the code and the tests: each
+   *  story a case, by its name (a story's picture is not in a review) */
+  readonly stories?: ReadonlyArray<TestFile>;
   readonly hunks: ReadonlyArray<Hunk>;
   /** per decision id, its pointers that matched no change: the code there
    *  did not move, or the why is older than the branch */

@@ -1,14 +1,14 @@
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { NO_TITLE, type Decision, type Hunk as HunkData, type TestCase, type TestFile } from "~/data";
 import { Appear } from "~/components/Appear";
-import { testFileId } from "~/testsNow";
+import { testFileId, type CaseKind } from "~/testsNow";
 import { Fork } from "~/components/Page/components/Diff/components/Fork";
 import { Lines } from "~/components/Page/components/Diff/components/Hunk";
 import { Row } from "./components/Row";
 
 /** A test file: the decisions and forks pointing into it, its tests under
  *  their describes, and what changed outside any test (imports, helpers). */
-export function File(props: { file: TestFile; hunks: ReadonlyMap<string, HunkData>; decisions: ReadonlyMap<string, Decision> }) {
+export function File(props: { file: TestFile; kind: CaseKind; hunks: ReadonlyMap<string, HunkData>; decisions: ReadonlyMap<string, Decision> }) {
   // the file's tests under their describes, in the file's order
   const groups = createMemo(() => {
     const byDescribe = new Map<string, Array<TestCase>>();
@@ -45,7 +45,7 @@ export function File(props: { file: TestFile; hunks: ReadonlyMap<string, HunkDat
               <p class="tests-describe">{under}</p>
             </Show>
             <ul class="tests-list">
-              <For each={tests}>{(test) => <Row test={test} />}</For>
+              <For each={tests}>{(test) => <Row test={test} kind={props.kind} />}</For>
             </ul>
           </div>
         )}
