@@ -217,6 +217,26 @@ export function arrive(element: Element | null, delay: number): void {
   void ended(animate(element, { opacity: [0, 1] }, { duration: 0.16, delay, ease: EASE }), delay + 0.16).then(() => element.style.removeProperty("opacity"));
 }
 
+/** A panel flying in from somewhere else on the page — the comment form it
+ *  takes the place of: it starts over that form, its size and place, and
+ *  moves and settles into its own, its contents coming in as it lands (they
+ *  would be drawn stretched on the way). Call it on the panel as it is placed. */
+export function flyIn(element: HTMLElement, from: DOMRect): void {
+  if (still.matches) return;
+  const contents = [...element.children].filter((child) => child instanceof HTMLElement);
+  for (const child of contents) child.style.opacity = "0";
+  queueMicrotask(() => {
+    const to = element.getBoundingClientRect();
+    element.style.transformOrigin = "top left";
+    const flight = { x: [from.left - to.left, 0], y: [from.top - to.top, 0], scaleX: [from.width / to.width, 1], scaleY: [from.height / to.height, 1] };
+    void ended(animate(element, flight, { duration: 0.42, ease: EASE }), 0.42).then(() => {
+      for (const property of ["transform", "transform-origin"]) element.style.removeProperty(property);
+    });
+    for (const child of contents)
+      void ended(animate(child, { opacity: [0, 1] }, { duration: 0.2, delay: 0.26, ease: EASE }), 0.46).then(() => child.style.removeProperty("opacity"));
+  });
+}
+
 /** A panel's clip as the shape of a button within it, round at its ends: what it grows from and shrinks into. */
 const clipTo = (panel: DOMRect, button: DOMRect): string =>
   `inset(${button.top - panel.top}px ${panel.right - button.right}px ${panel.bottom - button.bottom}px ${button.left - panel.left}px round ${button.height / 2}px)`;
