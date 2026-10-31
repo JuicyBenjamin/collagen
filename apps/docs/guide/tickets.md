@@ -419,6 +419,12 @@ waiting on two sits once, under the one drawn last — never duplicated. A waiti
 `⧗ waiting` when what it waits on is the row it sits under, and `⧗ after "…"` when it is
 elsewhere.
 
+A review whose **branch** is one in a stack of branches, each built on the one below, says
+so with a mark of its own: `⧉ 2 of 4`, its place from the bottom of the stack the room's
+reviews make. That is the code's order, not the tickets': a stacked review need not wait on
+the one below it. `get-tickets` says the same in its status, `review-context` names what is
+below and above, and the review page adds the host's pull requests.
+
 Everyone can weigh in at every step, so this is a product-management flow with the
 product manager, the backender and the reviewer each speaking through their own agent.
 Because nobody has to be named, it is the same flow alone: you plan, your second agent

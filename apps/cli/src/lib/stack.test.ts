@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stackOf, type Edge } from "./stack";
+import { stackOf, stackPlace, type Edge } from "./stack";
 
 const pull = (branch: string, base: string, number: number): Edge => ({ branch, base, label: `PR ${branch}`, number: number, url: `https://github.com/o/r/pull/${number}`, kind: "pull" });
 const review = (branch: string, base: string): Edge => ({ branch, base, label: `review ${branch}`, url: `/review/${branch}`, kind: "review" });
@@ -11,6 +11,12 @@ describe("the stack a branch sits in", () => {
     const edges = [pull("a", "main", 1), pull("b", "a", 2), pull("c", "b", 3), pull("d", "c", 4)];
     expect(line(stackOf("b", "a", edges))).toBe("main ‹ a ‹ [b] ‹ c ‹ d");
     expect(stackOf("b", "a", edges)?.below[0]).toEqual({ branch: "main", label: "main", kind: "trunk" });
+  });
+
+  it("says where a branch is from the bottom, of how many: the trunk is not one, a split is one more", () => {
+    const edges = [pull("a", "main", 1), pull("b", "a", 2), pull("c", "b", 3), pull("d", "c", 4)];
+    expect(stackPlace(stackOf("b", "a", edges)!)).toEqual({ at: 2, of: 4 });
+    expect(stackPlace(stackOf("a", "main", [pull("a", "main", 1), pull("b1", "a", 2), pull("b2", "a", 3)])!)).toEqual({ at: 1, of: 2 });
   });
 
   it("on the trunk with nothing above: no stack", () => {

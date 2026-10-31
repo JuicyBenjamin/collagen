@@ -1,3 +1,4 @@
+import { isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
 import type { Stack, StackStep } from "@collagen/review-web/data";
 
 // The stack a branch sits in: each branch built on another's head, down to
@@ -60,4 +61,44 @@ export const stackOf = (branch: string, base: string | undefined, edges: Readonl
   // the trunk heads it: what the bottom of the stack is built on
   if (down !== undefined && !looped) below.unshift({ branch: down, label: down, kind: "trunk" });
   return { below, here: self ? step(self) : { branch, label: branch, kind: "review" }, above, split };
+};
+
+/** Where a branch sits in its stack: its place from the bottom, and how
+ *  many branches the stack holds — below it, it, the chain on top, and a
+ *  split counted once (several tops are one more level). The trunk is not one. */
+export interface StackPlace {
+  readonly at: number;
+  readonly of: number;
+}
+
+export const stackPlace = (stack: Stack): StackPlace => {
+  const at = stack.below.filter((step) => step.kind !== "trunk").length + 1;
+  return { at, of: at + stack.above.length + (stack.split.length > 0 ? 1 : 0) };
+};
+
+/** The room's open review tickets in `project` the reader may see, as
+ *  branches built on their bases: the stack the room's own reviews make. */
+export const roomEdges = (all: ReadonlyMap<string, Ticket>, reviews: ReadonlyArray<ReviewContext>, me: string, project: string): ReadonlyArray<Edge> =>
+  reviews.flatMap((review): ReadonlyArray<Edge> => {
+    const ticket = all.get(review.ticketId);
+    if (!ticket || ticket.kind !== "review" || isClosed(ticket) || !review.branch || ticket.project.trim().toLowerCase() !== project.trim().toLowerCase() || !visibleTo(ticket, all, me)) return [];
+    return [{ branch: review.branch, base: review.base ?? "main", label: ticket.title ?? ticket.goal, url: `/review/${ticket.id}`, kind: "review" }];
+  });
+
+/** Each open review the reader sees that sits in a stack of the room's own
+ *  reviews, by ticket id: its place and the stack's size. Pull requests on
+ *  the host are not counted here (the review page adds them). */
+export const roomStackPlaces = (all: ReadonlyMap<string, Ticket>, reviews: ReadonlyArray<ReviewContext>, me: string): ReadonlyMap<string, StackPlace> => {
+  const places = new Map<string, StackPlace>();
+  const byProject = new Map<string, ReadonlyArray<Edge>>();
+  for (const review of reviews) {
+    const ticket = all.get(review.ticketId);
+    if (!ticket || ticket.kind !== "review" || !review.branch || isClosed(ticket) || !visibleTo(ticket, all, me)) continue;
+    const key = ticket.project.trim().toLowerCase();
+    const edges = byProject.get(key) ?? roomEdges(all, reviews, me, ticket.project);
+    byProject.set(key, edges);
+    const stack = stackOf(review.branch, review.base ?? "main", edges);
+    if (stack) places.set(ticket.id, stackPlace(stack));
+  }
+  return places;
 };

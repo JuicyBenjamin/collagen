@@ -9,10 +9,11 @@ import { theme } from "../../../../../app/theme";
 import { to, useRouter } from "../../../../../app/router";
 import { clamp } from "../../../../../lib/math";
 import { cells, clip, fitColumns } from "../../../../../lib/columns";
-import { EPIC_MARK, GLYPH, KIND_GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
+import { BRANCH_STACK, EPIC_MARK, GLYPH, KIND_GLYPH, LEGEND, STACK } from "../../../../../lib/glyphs";
+import { roomStackPlaces, type StackPlace } from "../../../../../lib/stack";
 import { atRest, epicProgress, marksLabel, progressShort, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
-import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
+import { identityAtom, membersAtom, reviewsAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
 import { closedLine, endedMark, fitTabs, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
 import { openInvestigationPageAtom, openReviewPageAtom } from "../../../review/atoms";
@@ -37,6 +38,7 @@ export function Tickets() {
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
+  const reviews = AsyncResult.getOrElse(useAtomValue(reviewsAtom), () => [] as const);
   // what a newer collagen wrote here that this build cannot read: a ticket
   // among them gets a row of its own, the rest a count — both say to update
   const unseen = AsyncResult.getOrElse(useAtomValue(unseenAtom), () => [] as const);
@@ -67,6 +69,8 @@ export function Tickets() {
     const ticket = byId.get(id);
     return ticket ? ticketName(ticket) : undefined;
   };
+  // a review that is one branch in a stack of the room's reviews: where, of how many
+  const places = roomStackPlaces(byId, reviews, me);
   const visible = tickets.filter((ticket) => visibleTo(ticket, byId, me)).map((ticket) => ({ ticket, summary: summarize(ticket, trace, me, heldBy(ticket, byId, me), byId) }));
   const open = visible.filter((row) => row.summary.state !== "closed");
   const inTab = (row: Row) => tab === "all" || row.ticket.kind === tab;
@@ -129,9 +133,9 @@ export function Tickets() {
     0,
     ...epics.flatMap((block) => [
       cells(progressShort(epicProgress(block.epic.ticket, byId))),
-      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket)))) : []),
+      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket), places.get(row.ticket.id)))) : []),
     ]),
-    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined))))),
+    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined, places.get(row.ticket.id)))))),
     ...closedGroups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(closedInfo(row.ticket))))),
     ...[...groups, ...closedGroups].flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket)))))),
     ...epics.flatMap((block) => block.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket))))),
@@ -226,6 +230,7 @@ export function Tickets() {
                 nameFor={nameFor}
                 projects={projects.size > 1}
                 goalOf={nameOf}
+                places={places}
                 related={(ticket) => related(ticket, true, block.grew.has(ticket.id))}
                 ghosts={(ticket) => ghosts(ticket, epicHere.get(block.epic.ticket.id)!)}
               />
@@ -253,6 +258,7 @@ export function Tickets() {
                         <TicketRow
                           ticket={row.ticket}
                           summary={row.summary}
+                          place={places.get(row.ticket.id)}
                           selected={focused && on(row.ticket.id)}
                           nameFor={nameFor}
                           indent={indent}
@@ -291,6 +297,7 @@ export function Tickets() {
                         <TicketRow
                           ticket={row.ticket}
                           summary={row.summary}
+                          place={places.get(row.ticket.id)}
                           selected={focused && on(row.ticket.id)}
                           nameFor={nameFor}
                           indent={indent}
@@ -394,6 +401,7 @@ function EpicView({
   relationWidth,
   related,
   ghosts,
+  places,
 }: {
   block: EpicBlock<Row>;
   open: boolean;
@@ -415,6 +423,8 @@ function EpicView({
   related: (t: Ticket) => ReadonlyArray<Part>;
   /** a row's relatives not in this epic, drawn dim under it */
   ghosts: (t: Ticket) => ReadonlyArray<Relative>;
+  /** each stacked review's place in its stack */
+  places: ReadonlyMap<string, StackPlace>;
 }) {
   const selected = selectedKey === block.epic.ticket.id;
   return (
@@ -446,6 +456,7 @@ function EpicView({
                 <TicketRow
                   ticket={row.ticket}
                   summary={row.summary}
+                  place={places.get(row.ticket.id)}
                   selected={selectedKey === row.ticket.id}
                   nameFor={nameFor}
                   indent={indent}
@@ -507,6 +518,7 @@ const rowInfo = (
   under: string | undefined,
   goalOf: (ticketId: string) => string | undefined,
   excluded: boolean | undefined,
+  place: StackPlace | undefined,
 ): ReadonlyArray<Part> => {
   // waiting on the row it is drawn under says so in one word; waiting on one
   // elsewhere (another group, or a second of two) names it
@@ -514,6 +526,7 @@ const rowInfo = (
   const on = elsewhere.length > 0 ? clip(goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8), AFTER_MAX) : "";
   const people = marksLabel(summary);
   return [
+    ...(place ? [{ text: `${BRANCH_STACK} ${place.at} of ${place.of}` }] : []),
     ...(excluded ? [{ text: "excluded" }] : []),
     ...(summary.held.length > 0 ? [{ text: `${on ? `${STACK.waits} after "${on}"` : `${STACK.waits} waiting`}${elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}` }] : []),
     ...(people.length > 0 ? [{ text: people, warn: summary.state === "needs-you" }] : []),
@@ -636,6 +649,7 @@ const rowId = (ticketId: string): string => `row-${ticketId}`;
 function TicketRow({
   ticket,
   summary,
+  place,
   selected,
   nameFor,
   indent,
@@ -653,6 +667,8 @@ function TicketRow({
 }: {
   ticket: Ticket;
   summary: TicketSummary;
+  /** a review in a stack of the room's reviews: its place, of how many */
+  place?: StackPlace | undefined;
   selected: boolean;
   nameFor: (key: string) => string;
   /** columns before the cursor, so a row sits under its header */
@@ -708,7 +724,7 @@ function TicketRow({
         {project ? <span fg={theme.dim}>{project} · </span> : null}
         {ticket.title ? ticket.title : <span fg={theme.dim}>{rowTitle(ticket)}</span>}
       </text>
-      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded)} width={infoWidth} />
+      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded, place)} width={infoWidth} />
       <Info parts={related} width={relationWidth} />
     </box>
   );
