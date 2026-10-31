@@ -2,12 +2,14 @@ import type { JobKind, SteeringKind, TagRoute } from "@collagen/p2p";
 import type { SettingKey } from "../../lib/settings";
 import type { Cause, SteeringAt } from "../../lib/steering";
 
-/** The settings page's tabs: what collagen and your AI do, what goes on the
- *  repo host in your name, and the general level the rest follow. */
-export type Tab = "ai" | "host" | "general";
+/** The settings page's tabs, by who acts in your name: your AI, which
+ *  collagen starts, wakes and hands work to; tools, which collagen calls
+ *  itself with no AI (the repo host now, more to come); and the general
+ *  level every row not set follows, with the page's own switches. */
+export type Tab = "ai" | "tools" | "general";
 export const TABS: ReadonlyArray<{ readonly id: Tab; readonly label: string }> = [
   { id: "ai", label: "AI" },
-  { id: "host", label: "Repo host" },
+  { id: "tools", label: "Tools" },
   { id: "general", label: "General" },
 ];
 
@@ -60,7 +62,7 @@ const AI_KINDS: ReadonlyArray<SteeringKind> = ["work", "deliver", "run", "invest
 
 export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
   ai: [
-    { id: "h:steer", kind: "heading", text: "steering" },
+    { id: "h:steer", kind: "heading", text: "steering: your AI acts for you" },
     ...AI_KINDS.flatMap(steer),
     { id: "tag", kind: "tag" },
     { id: "h:jobs", kind: "heading", text: "jobs" },
@@ -70,18 +72,18 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
     ...job("investigation"),
     { id: "switch:investigationsAtOnce", kind: "switch", key: "investigationsAtOnce" },
   ],
-  host: [
-    { id: "h:steer", kind: "heading", text: "steering" },
+  tools: [
+    { id: "h:steer", kind: "heading", text: "steering: tools act for you, no AI" },
     ...steer("host"),
     { id: "merge", kind: "merge" },
-    { id: "h:switches", kind: "heading", text: "reviews" },
-    { id: "switch:openReviewPage", kind: "switch", key: "openReviewPage" },
-    { id: "switch:progressBar", kind: "switch", key: "progressBar" },
   ],
   general: [
-    { id: "h:steer", kind: "heading", text: "steering" },
+    { id: "h:steer", kind: "heading", text: "steering: anything not set" },
     ...steer("master"),
-    { id: "h:switches", kind: "heading", text: "tickets" },
+    { id: "h:reviews", kind: "heading", text: "reviews" },
+    { id: "switch:openReviewPage", kind: "switch", key: "openReviewPage" },
+    { id: "switch:progressBar", kind: "switch", key: "progressBar" },
+    { id: "h:tickets", kind: "heading", text: "tickets" },
     { id: "switch:alsoCloseParents", kind: "switch", key: "alsoCloseParents" },
   ],
 };
