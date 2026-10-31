@@ -132,6 +132,7 @@ in the way.
 | --- | --- | --- |
 | Open the review page when a review starts | on | When your agent starts reading a review it was asked for (its first `review-context`), the review's page opens in your browser — once per run, and not on your own reviews. Off: it opens when you press `o` or ask your agent. |
 | Run an investigation's goals all at once | off | An investigation that sets no pace of its own queues all its runs together, as many running as your job limit allows. Off: one by one, each run starting when the last is done and building on what it found. |
+| A reading progress bar on the review page | on | A thin bar atop the review page fills as you scroll through it. Off: no bar. |
 
 ## Your agent's side
 
