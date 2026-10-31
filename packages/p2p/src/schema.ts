@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { Conversation } from "./acting";
 import { DraftComment, ReviewComment, ReviewContext } from "./review";
-import { Ticket } from "./ticket";
+import { GoalAnswer, Ticket } from "./ticket";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
 // (swarm frames, state files) is Schema-validated at the edge.
@@ -371,6 +371,8 @@ export const Outgoing = Schema.Union([
     failed: Schema.Boolean,
     /** words with no verdict: neither approves nor asks for changes */
     comment: Schema.optional(Schema.Boolean),
+    /** an investigation's take: what it found, goal by goal */
+    answers: Schema.optional(Schema.Array(GoalAnswer)),
   }),
   Schema.Struct({
     kind: Schema.Literal("settle"),
@@ -537,6 +539,12 @@ export const QueuedJob = Schema.Struct({
   /** whose doing started it: the person's, or another's investigation that
    *  reached them (their steering for others' then let it run) */
   cause: Schema.optional(Schema.Literals(["mine", "others"])),
+  /** an investigation's goals this run answers (absent: the whole of it) */
+  goals: Schema.optional(Schema.Array(Schema.String)),
+  /** one by one: the run that must finish before this one starts */
+  after: Schema.optional(Schema.String),
+  /** what the person wants to know, in their words */
+  ask: Schema.optional(Schema.String),
 });
 export type QueuedJob = typeof QueuedJob.Type;
 
@@ -553,9 +561,11 @@ export type Steering = typeof Steering.Type;
 /** The kinds of thing steered, each with a level of its own under the
  *  master: the work collagen hands the person's agent, acting on the repo
  *  host in their name (reviews, comments, merges — one level for every
- *  host), delivering into their AI conversations, and running their AI for
- *  a job of collagen's (researching a ticket). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate"]);
+ *  host), delivering into their AI conversations, running their AI for a job
+ *  of collagen's (researching a ticket), starting it on an investigation,
+ *  and reporting an investigation's findings back to the conversation that
+ *  filed it. */
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -574,7 +584,7 @@ export type TagRoute = typeof TagRoute.Type;
  *  person's own choice, never broadcast. */
 export const SteeringLevels = Schema.Struct({
   master: Schema.optional(SteeringPair),
-  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair) })),
+  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair) })),
   tag: Schema.optional(TagRoute),
 });
 export type SteeringLevels = typeof SteeringLevels.Type;
@@ -587,6 +597,9 @@ export const Settings = Schema.Struct({
   /** absent = on: closing a ticket, what it grew from (open, the person's
    *  own) is offered ticked to close with it */
   alsoCloseParents: Schema.optional(Schema.Boolean),
+  /** absent = off: an investigation that names no pace runs its goals one
+   *  by one; on, all at once */
+  investigationsAtOnce: Schema.optional(Schema.Boolean),
 });
 export type Settings = typeof Settings.Type;
 

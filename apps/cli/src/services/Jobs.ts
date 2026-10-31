@@ -1,8 +1,9 @@
 import { Clock, Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect";
 import { ChildProcessSpawner } from "effect/process";
-import type { JobKind, OwnRun, QueuedJob, Ticket } from "@collagen/p2p";
-import { jobLimitOf, modelFor, researchKind, researchPrompt } from "../lib/jobs";
+import { goalsOf, type JobKind, type OwnRun, type QueuedJob, type Ticket } from "@collagen/p2p";
+import { investigationPrompt, jobLimitOf, modelFor, paceOf, researchKind, researchPrompt, runsOf, type InvestigationRun } from "../lib/jobs";
 import { allow, withRun, type Cause } from "../lib/steering";
+import { withoutWorked } from "../lib/worked";
 import { CliArgs } from "./CliArgs";
 import { harnessFor, Harnesses, type Job } from "./Harness";
 import { IdentityService } from "./Identity";
@@ -17,6 +18,8 @@ import { StateStore } from "./StateStore";
 // Every job shows while it waits and runs, and stays shown a while after,
 // so what collagen does in their name is never out of sight. What is asked
 // for and not yet finished is kept, so a restart picks the queue up again.
+// An investigation is one run per group of its goals; one by one, each run
+// waits for the one before it, so it reads what that one found.
 
 /** A job as the person (and their agent) sees it. */
 export interface JobView {
@@ -43,6 +46,10 @@ export interface ResearchAsk {
   /** whose doing it is: the person's own ask (the default), or another's
    *  investigation that reached them */
   readonly cause?: Cause;
+  /** an investigation's brief (its question alone when absent) */
+  readonly investigation?: InvestigationRun;
+  /** only these of its goals (absent: all of them) */
+  readonly goals?: ReadonlyArray<string>;
 }
 
 /** The steering a job answers to: an investigation's its own kind, any
@@ -86,7 +93,12 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
       const state = yield* store.get;
       const running = (yield* SubscriptionRef.get(views)).filter((view) => view.state === "running").length;
       if (running >= jobLimitOf(state)) return;
-      const next = yield* Ref.modify(waiting, (queue) => [queue[0], queue.slice(1)] as const);
+      // the first in line that waits on no run still to finish
+      const unfinished = new Set([...(yield* Ref.get(waiting)).map((job) => job.id), ...(yield* SubscriptionRef.get(views)).filter((view) => view.state === "running").map((view) => view.id)]);
+      const next = yield* Ref.modify(waiting, (queue) => {
+        const at = queue.findIndex((job) => job.after === undefined || !unfinished.has(job.after));
+        return at === -1 ? ([undefined, queue] as const) : ([queue[at], [...queue.slice(0, at), ...queue.slice(at + 1)]] as const);
+      });
       if (!next) return;
       const view = (yield* SubscriptionRef.get(views)).find((candidate) => candidate.id === next.id);
       const harness = view ? harnessFor(harnesses, view.harness) : undefined;
@@ -100,9 +112,16 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
       yield* Effect.forkIn(
         Effect.gen(function* () {
           const url = yield* mcpInfo.awaitUrl;
-          const job: Job = { prompt: next.prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
+          // an investigation's run is told its goals as they are now
+          const prompt = next.kind === "investigation" && next.goals ? investigationPrompt({ id: next.ticketId, title: next.title }, next.goals, next.ask, yield* SubscriptionRef.get(nameRef), name) : next.prompt;
+          const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
           const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           yield* letGo(next.id);
+          // the job's own conversation is over: it never hears news of the ticket
+          if (done.conversation) {
+            const ran = done.conversation;
+            yield* store.update((now) => withoutWorked(now, ran));
+          }
           const at = yield* Clock.currentTimeMillis;
           if (done.spent) {
             const run: OwnRun = { at, harness: harness.id, why: view.kind, ...done.spent };
@@ -131,20 +150,50 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         const gate = allow(state, steeredBy(kind), asked.cause ?? "mine", true);
         if ("held" in gate && gate.held === "unset") return `failed: ${gate.why}`;
         const model = modelFor(state, kind, harness.defaultModels);
-        const id = crypto.randomUUID();
         const title = asked.ticket.title ?? asked.ticket.goal;
         const queuedAt = yield* Clock.currentTimeMillis;
-        const job: QueuedJob = { id, kind, ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: researchPrompt(asked.ticket, asked.ask, yield* SubscriptionRef.get(nameRef), name), cwd: asked.cwd, ...(asked.cause === "others" ? { cause: "others" as const } : {}) };
-        const queued: JobView = { id, kind, ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
-        yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
-        yield* SubscriptionRef.update(views, (all) => [...all, queued]);
-        yield* Ref.update(waiting, (queue) => [...queue, job]);
+        const person = yield* SubscriptionRef.get(nameRef);
+        // an investigation: a run per group of the goals asked for, in goal
+        // order; one by one, each after the one before — after any of this
+        // ticket's runs still to finish, too
+        const run: InvestigationRun = asked.investigation ?? { brief: { question: title } };
+        const runs = kind === "investigation" ? runsOf(goalsOf(run.brief).filter((goal) => asked.goals === undefined || asked.goals.includes(goal.id))) : [[]];
+        if (runs.length === 0) return `failed: "${title}" has no goal ${asked.goals?.join(", ")} — its goals are on review-context`;
+        const pace = paceOf(run.brief, state);
+        const pending = [...(yield* Ref.get(waiting)).filter((job) => job.ticketId === asked.ticket.id).map((job) => job.id), ...(yield* SubscriptionRef.get(views)).filter((view) => view.ticketId === asked.ticket.id && view.state === "running").map((view) => view.id)];
+        const jobs: Array<QueuedJob> = [];
+        for (const goals of runs) {
+          const before = pace === "one-by-one" ? (jobs.at(-1)?.id ?? pending.at(-1)) : undefined;
+          jobs.push({
+            id: crypto.randomUUID(),
+            kind,
+            ticketId: asked.ticket.id,
+            title,
+            harness: harness.id,
+            ...(model ? { model } : {}),
+            queuedAt,
+            prompt: kind === "investigation" ? investigationPrompt({ id: asked.ticket.id, title }, goals.map((goal) => goal.id), asked.ask, person, name) : researchPrompt(asked.ticket, asked.ask, person, name),
+            cwd: asked.cwd,
+            ...(asked.cause === "others" ? { cause: "others" as const } : {}),
+            ...(kind === "investigation" ? { goals: goals.map((goal) => goal.id) } : {}),
+            ...(asked.ask?.trim() ? { ask: asked.ask.trim() } : {}),
+            ...(before ? { after: before } : {}),
+          });
+        }
+        const queued = jobs.map((job): JobView => ({ id: job.id, kind, ticketId: job.ticketId, title: job.goals && runs.length > 1 ? `${title} · ${job.goals.join(", ")}` : title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt }));
+        yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), ...jobs] }));
+        yield* SubscriptionRef.update(views, (all) => [...all, ...queued]);
+        yield* Ref.update(waiting, (queue) => [...queue, ...jobs]);
         yield* pump;
-        const shown = (yield* SubscriptionRef.get(views)).find((view) => view.id === id);
-        const ahead = (yield* Ref.get(waiting)).findIndex((queued) => queued.id === id);
-        return shown?.state === "running"
-          ? `research started on "${title}": ${harness.name}${model ? ` (${model})` : ""} reads it, looks into it, and posts what it found and what it needs from your user as a take on the ticket. It shows in the jobs list while it runs.`
-          : `research on "${title}" is queued${ahead >= 0 ? `, ${ahead + 1} in line` : ""}: collagen runs ${jobLimitOf(state)} job${jobLimitOf(state) === 1 ? "" : "s"} at a time.`;
+        const shown = yield* SubscriptionRef.get(views);
+        const started = jobs.filter((job) => shown.find((view) => view.id === job.id)?.state === "running").length;
+        const limit = `collagen runs ${jobLimitOf(state)} job${jobLimitOf(state) === 1 ? "" : "s"} at a time`;
+        if (jobs.length > 1)
+          return `${jobs.length} runs queued on "${title}", one per group of goals, ${pace === "one-by-one" ? "one by one: each starts when the one before is done and reads what it found" : `all at once, as far as the limit allows (${limit})`}; ${started} running now. ${harness.name}${model ? ` (${model})` : ""} posts what each finds as your user's take, goal by goal. They show in the jobs list.`;
+        if (started > 0)
+          return `${kind === "investigation" ? "investigation run" : "research"} started on "${title}": ${harness.name}${model ? ` (${model})` : ""} reads it, looks into it, and posts what it found and what it needs from your user as a take on the ticket. It shows in the jobs list while it runs.`;
+        const ahead = (yield* Ref.get(waiting)).findIndex((job) => job.id === jobs[0]!.id);
+        return `${kind === "investigation" ? "investigation run" : "research"} on "${title}" is queued${ahead >= 0 ? `, ${ahead + 1} in line` : ""}${jobs[0]!.after ? ", after this ticket's run before it" : ""}: ${limit}.`;
       });
 
     // the queue a restart left goes on, once collagen is up

@@ -198,10 +198,34 @@ export type BugReport = typeof BugReport.Type;
 export const InvestigationOutcome = Schema.Literals(["answered", "not-answerable", "wrong-question"]);
 export type InvestigationOutcome = typeof InvestigationOutcome.Type;
 
+/** Written on a goal: if what is found bears this out, the run looks into
+ *  this question too, there and then, and answers it under the goal. */
+export const GoalFollowUp = Schema.Struct({ if: Schema.String, ask: Schema.String });
+export type GoalFollowUp = typeof GoalFollowUp.Type;
+
+/** One thing an investigation sets out to find. Goals of one group are
+ *  checked by one AI run; a goal with none gets a run of its own. */
+export const InvestigationGoal = Schema.Struct({
+  id: Schema.String,
+  /** What is to be found out, in the asker's words. */
+  ask: Schema.String,
+  group: Schema.optional(Schema.String),
+  then: Schema.optional(Schema.Array(GoalFollowUp)),
+  /** Withdrawn: kept, so its id is never given to another goal. */
+  withdrawn: Schema.optional(Schema.Boolean),
+});
+export type InvestigationGoal = typeof InvestigationGoal.Type;
+
+/** How an investigation's runs go: one at a time in goal order, each
+ *  reading what the last found, or all queued together. */
+export const InvestigationPace = Schema.Literals(["one-by-one", "all-at-once"]);
+export type InvestigationPace = typeof InvestigationPace.Type;
+
 /** An investigation as asked, and, once it is over, as answered: the
  *  question is the one fact and the only required field; what is known and
- *  ruled out narrow it; the outcome, findings and evidence arrive when it is
- *  done. */
+ *  ruled out narrow it; goals split it into what is to be found, and the
+ *  pace says how their runs go (the runner's own setting when absent); the
+ *  outcome, findings and evidence arrive when it is done. */
 export const InvestigationBrief = Schema.Struct({
   /** What is to be found out, in the asker's words. */
   question: Schema.String,
@@ -209,6 +233,9 @@ export const InvestigationBrief = Schema.Struct({
   known: Schema.optional(Schema.String),
   /** What is ruled out, and so not to be looked into again. */
   ruledOut: Schema.optional(Schema.String),
+  /** Absent: the question is the one goal. */
+  goals: Schema.optional(Schema.Array(InvestigationGoal)),
+  pace: Schema.optional(InvestigationPace),
   outcome: Schema.optional(InvestigationOutcome),
   /** The answer, or why there is none. */
   findings: Schema.optional(Schema.String),
@@ -305,8 +332,11 @@ export interface ReviewDelta {
   readonly bug?: Partial<BugReport>;
   /** Optional report fields withdrawn — a disproven cause, a score that no longer holds. */
   readonly retireBug?: ReadonlyArray<"cause" | "importance" | "suggestion" | "remedy">;
-  /** An investigation's brief, whole or in part: fields given replace, fields left out keep. */
-  readonly investigation?: Partial<InvestigationBrief>;
+  /** An investigation's brief, whole or in part: fields given replace, fields
+   *  left out keep; goals merge by id like units, a repeated id correcting one. */
+  readonly investigation?: Partial<Omit<InvestigationBrief, "goals">> & { readonly goals?: ReadonlyArray<Omit<InvestigationGoal, "id" | "withdrawn"> & { readonly id?: string }> };
+  /** Goal ids withdrawn. */
+  readonly retireGoals?: ReadonlyArray<string>;
   /** The machine, whole: given replaces it, null withdraws it. */
   readonly machine?: ReviewMachine | null;
   /** The why is inferred: who wrote the code, and what was read (see Assumed). */
@@ -420,8 +450,27 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
         };
   // an investigation's brief merges field by field, like a bug report: the
   // question is corrected by giving it again, the findings arrive at the end
+  // its goals merge by id, in the order given: the order one-by-one runs them
   const investigation: InvestigationBrief | undefined =
-    delta.investigation === undefined ? base.investigation : { question: "", ...base.investigation, ...delta.investigation };
+    delta.investigation === undefined && (delta.retireGoals ?? []).length === 0
+      ? base.investigation
+      : (() => {
+          const { goals: givenGoals, ...fields } = delta.investigation ?? {};
+          let goals = base.investigation?.goals === undefined && givenGoals === undefined ? undefined : [...(base.investigation?.goals ?? [])];
+          if (goals !== undefined) {
+            for (const given of givenGoals ?? []) {
+              const id = given.id ?? nextId("g", goals.map((goal) => goal.id));
+              const at = goals.findIndex((goal) => goal.id === id);
+              const entry: InvestigationGoal = { id, ask: given.ask, ...(given.group ? { group: given.group } : {}), ...(given.then && given.then.length > 0 ? { then: given.then } : {}) };
+              if (at === -1) goals.push(entry);
+              else goals[at] = entry;
+            }
+            // withdrawn, not removed: an answer that names it never meets another goal
+            if (delta.retireGoals && delta.retireGoals.length > 0) goals = goals.map((goal) => (delta.retireGoals!.includes(goal.id) ? { ...goal, withdrawn: true } : goal));
+          }
+          const { goals: _was, ...kept } = base.investigation ?? { question: "" };
+          return { ...kept, ...fields, ...(goals !== undefined && goals.length > 0 ? { goals } : {}) };
+        })();
   const machine = delta.machine === null ? undefined : (delta.machine ?? base.machine);
   const { machine: _machine, ...kept } = base;
   return {

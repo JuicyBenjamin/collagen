@@ -1,12 +1,13 @@
 import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTake, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { answeredInvestigations, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
 import { Jobs } from "./Jobs";
 import { levelOf } from "../lib/steering";
+import { investigationOf } from "../lib/jobs";
 import { sameName } from "../lib/names";
 import { homedir } from "node:os";
 import { AiStatus } from "./AiStatus";
@@ -148,7 +149,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                         if (level === "never") return "\nTheir steering for others' investigations is never, so their AI was not started; research starts it on their word.";
                         if (level === "ask") return "\nASK YOUR USER, in one line, whether to send their AI to find out (research with this ticketId): their steering for others' investigations is ask first.";
                         const project = (state.rooms[handle.id] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
-                        const said = yield* jobs.research({ roomId: handle.id, ticket, cwd: project?.path ?? homedir(), cause: "others" });
+                        const investigation = investigationOf(ticket, yield* SubscriptionRef.get(room.reviews));
+                        const said = yield* jobs.research({ roomId: handle.id, ticket, cwd: project?.path ?? homedir(), cause: "others", investigation });
                         return said.startsWith("failed")
                           ? `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`
                           : `\nTheir steering for others' investigations started their AI on it: ${said}${level === "act" ? " Tell them, in one line." : ""}`;
@@ -200,7 +202,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         // person's own word from another agent's
         // `conversation`: on an act of the person's own, the conversation that
         // did it — told to their other conversations, never back to itself
-        const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string, agent?: string, conversation?: Conversation) =>
+        const notify = (threadId: string, from: string, fromName: string, ticket: Ticket, what: string, findings: string, agent?: string, conversation?: Conversation, steeredBy?: "report") =>
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis;
             const message: RoomMessage = {
@@ -219,7 +221,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
             };
             // where it goes next is the runner's line: inbox, or woken in a conversation by its harness
             yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)}: ${fromName} ${what}`);
-            yield* inbox.push(handle.id, message);
+            yield* inbox.push(handle.id, message, undefined, steeredBy);
             yield* Effect.forkChild(runner.runThread(threadId));
           });
         let prevTickets: ReadonlyMap<string, Ticket> | null = null;
@@ -237,9 +239,12 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (own && !change.step.conversation) continue;
                 if (!visibleTo(change.ticket, all, identity.pubkey)) continue; // not shown to us yet
                 if (!isParticipant(change.ticket, trace, identity.pubkey)) continue;
-                if (actionableSteps(change.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
+                // a take on the person's own investigation is its findings: their report steering decides
+                const findings = change.ticket.kind === "investigation" && change.ticket.createdBy === identity.pubkey && isTake(change.step);
+                // the step delivery covers it — but not findings: the author's own address step is up while they come in
+                if (!findings && actionableSteps(change.ticket, identity.pubkey).length > 0) continue;
                 const actorName = yield* nameOf(change.step.owner);
-                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent, own ? change.step.conversation : undefined);
+                yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent, own ? change.step.conversation : undefined, findings ? "report" : undefined);
               }
               // an investigation is over: what it found reaches whoever is on
               // the tickets it grew from, so a plan that stopped on a question

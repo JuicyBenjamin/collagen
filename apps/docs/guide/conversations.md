@@ -43,6 +43,7 @@ follows the master until you set it:
 | `deliver` | collagen waking your AI conversations when something comes for them (a courier into Claude Code, a Codex queue) |
 | `run` | collagen running your AI for a job of its own (researching a ticket) |
 | `investigate` | collagen starting your AI on an investigation: as you file one (unless it is asked of someone else, or you say `run: false`), and, for others', as one asked of you arrives — the orchestrator's switch |
+| `report` | collagen telling the conversation that filed an investigation what was found, as each take comes back — yours: your own AI's findings; others': a colleague's. Act or just do it, and nobody has to watch for it; ask first, your agent offers to; never, findings wait on the ticket |
 
 Each level is one of:
 

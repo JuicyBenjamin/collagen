@@ -2,19 +2,19 @@ import { homedir } from "node:os";
 import { Effect, Schema, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { visibleTo } from "@collagen/p2p";
-import { JOB_LABEL } from "../lib/jobs";
+import { investigationOf, JOB_LABEL } from "../lib/jobs";
 import { sameName } from "../lib/names";
 import { diagnostic } from "./registry";
 
 /** Need more info: a research job on a ticket, run by the person's AI. */
-export const research = diagnostic<{ readonly ticketId: string; readonly ask?: string }>({
+export const research = diagnostic<{ readonly ticketId: string; readonly ask?: string; readonly goals?: ReadonlyArray<string> }>({
   id: "research",
   title: "need more info",
   summary:
-    "Start a research job on a ticket (a plan, a proposal, a bug or an investigation) that needs more info: collagen runs your user's preferred AI, with the model they chose for research (for an investigation, the one they chose for investigations), in the background — it reads the ticket and the thinking behind it, looks into it (the project's code, read only, and the web) and posts what it found, and its questions for your user, as one take on the ticket. Jobs run one at a time unless your user allows more; the rest wait in line (jobs lists them). It runs their AI in their name, so it follows their steering for running their AI. 'ask' is what they want to know, in their words.",
-  params: Schema.Struct({ ticketId: Schema.String, ask: Schema.optional(Schema.String) }),
+    "Start a research job on a ticket (a plan, a proposal, a bug or an investigation) that needs more info: collagen runs your user's preferred AI, with the model they chose for research (for an investigation, the one they chose for investigations), in the background — it reads the ticket and the thinking behind it, looks into it (the project's code, read only, and the web) and posts what it found, and its questions for your user, as one take on the ticket. Jobs run one at a time unless your user allows more; the rest wait in line (jobs lists them). It runs their AI in their name, so it follows their steering for running their AI. 'ask' is what they want to know, in their words. On an investigation it is a run per group of its goals, one by one or all at once as its pace (or your user's setting) says; 'goals' (ids from review-context) runs only those.",
+  params: Schema.Struct({ ticketId: Schema.String, ask: Schema.optional(Schema.String), goals: Schema.optional(Schema.Array(Schema.String)) }),
   fromContext: (context) => (context.ticketId ? { ticketId: context.ticketId } : null),
-  run: ({ ticketId, ask }, context, { rooms, jobs, state, me }) =>
+  run: ({ ticketId, ask, goals }, context, { rooms, jobs, state, me }) =>
     Effect.gen(function* () {
       const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === context.roomId);
       if (!handle) return "failed: that room is gone";
@@ -24,7 +24,8 @@ export const research = diagnostic<{ readonly ticketId: string; readonly ask?: s
       if (ticket.kind !== "plan" && ticket.kind !== "proposal" && ticket.kind !== "bug" && ticket.kind !== "investigation") return `failed: research is for a plan, a proposal, a bug or an investigation; this is a ${ticket.kind}`;
       // it looks at the project's own code, where this machine has it
       const project = ((yield* state).rooms[context.roomId] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
-      return yield* jobs.research({ roomId: context.roomId, ticket, cwd: project?.path ?? homedir(), ...(ask ? { ask } : {}) });
+      const investigation = ticket.kind === "investigation" ? investigationOf(ticket, yield* SubscriptionRef.get(handle.room.reviews)) : undefined;
+      return yield* jobs.research({ roomId: context.roomId, ticket, cwd: project?.path ?? homedir(), ...(ask ? { ask } : {}), ...(investigation ? { investigation } : {}), ...(goals && goals.length > 0 ? { goals } : {}) });
     }),
 });
 
