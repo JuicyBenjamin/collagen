@@ -1068,9 +1068,6 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
    and a scroll that reaches its end stays in it, never running on into the page */
 .chat-log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px; }
 .chat-q p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.chat-a p { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.chat-a > :last-child { margin-bottom: 0; }
-.chat-a pre { margin: 0 0 6px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
 .chat-empty, .chat-cannot { margin: 0; color: var(--dim); font-style: italic; }
 .chat-cannot { padding: 10px 14px; border-top: 1px solid var(--line); }
 .chat-fallback { display: flex; gap: 8px; margin-top: 6px; }
