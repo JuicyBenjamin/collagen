@@ -8,6 +8,7 @@ import { conversationKey, roomProjects, type AskedReview, type Conversation, typ
 import { firstRef, run } from "../lib/gitRun";
 import { defaultBranchOf } from "../lib/gitInfo";
 import { filingPrompt, readable, workConversations, type Found } from "../lib/reviewRequests";
+import { nextAsk, type AskEvent } from "../lib/askMachine";
 import { allow, levelOf } from "../lib/steering";
 import { readLine } from "../lib/transcripts";
 import { sameName } from "../lib/names";
@@ -100,6 +101,19 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
     const heldOf = (roomId: string, id: string) => store.get.pipe(Effect.map((state) => (state.reviewAsks ?? []).find((held) => held.roomId === roomId && held.id === id)));
     const keep = (held: ReviewAskHeld) =>
       store.update((state) => ({ ...state, reviewAsks: [...(state.reviewAsks ?? []).filter((had) => !(had.roomId === held.roomId && had.id === held.id)), held] }));
+    /** An ask moved by an event, as the machine's table says (lib/askMachine) — or refused, when its
+     *  state has no such move: it never lands somewhere the table does not say. */
+    const move = (held: ReviewAskHeld, on: AskEvent, also: Partial<ReviewAskHeld> = {}) =>
+      Effect.gen(function* () {
+        const to = nextAsk(held.stage, on);
+        if (to === null) {
+          yield* Effect.logWarning(`review ask ${held.id.slice(0, 8)}: "${on}" has no move from ${held.stage} — refused`);
+          return null;
+        }
+        const moved: ReviewAskHeld = { ...held, ...also, stage: to };
+        yield* keep(moved);
+        return moved;
+      });
 
     /** Tell the asker how far their ask has come: collagen's own record of
      *  it on the thread between them, not words said for the author. */
@@ -207,23 +221,27 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
     /** File the ask now: find the work's conversations (or use those the
      *  author named), copy them out, and queue the job that files it.
      *  Says what happened, for the agent who asked or the line on the thread. */
-    const fileNow = (held: ReviewAskHeld, named?: ReadonlyArray<string>) =>
+    const fileNow = (held: ReviewAskHeld, on: "allowed" | "yes", named?: ReadonlyArray<string>) =>
       Effect.gen(function* () {
+        // nothing to file from: it waits on the author, and the asker is told — never left where it was
+        const unreadable = (why: string, extra = "", also: Partial<ReviewAskHeld> = {}) =>
+          Effect.gen(function* () {
+            yield* move(held, "unreadable", also);
+            yield* tellAsker(held, "waiting", extra);
+            return `failed: ${why}`;
+          });
         const state = yield* store.get;
         const project = roomProjects(state, held.roomId).find((candidate) => sameName(candidate.name, held.project));
-        if (!project) return `failed: ${held.project} is not a project your user shares in this room, so collagen cannot find the work`;
+        if (!project) return yield* unreadable(`${held.project} is not a project your user shares in this room, so collagen cannot find the work`);
         const branch = yield* branchOfAsk(held);
-        if (!branch) return `failed: collagen cannot tell which branch ${held.link ?? "the ask"} is — file it yourself with ask-review {request: "${held.id}", …} from the conversation that did the work`;
+        if (!branch) return yield* unreadable(`collagen cannot tell which branch ${held.link ?? "the ask"} is — file it yourself with ask-review {request: "${held.id}", …} from the conversation that did the work`);
         const work = yield* findWork(project.path, branch);
         const chosen: ReadonlyArray<Conversation> =
           named && named.length > 0
             ? named.flatMap((id) => (held.conversations ?? work.conversations.map((found) => found.conversation)).filter((conversation) => conversation.id === id || conversation.id.startsWith(id)))
             : work.conversations.map((found) => found.conversation);
-        if (chosen.length === 0) {
-          yield* keep({ ...held, branch, stage: "waiting" });
-          yield* tellAsker(held, "waiting", "no conversation on their machine did this work.");
-          return `failed: no conversation of your user's on this machine worked on branch ${branch}. If this conversation did, file it with ask-review {request: "${held.id}", …}; otherwise tell your user, in one line.`;
-        }
+        if (chosen.length === 0)
+          return yield* unreadable(`no conversation of your user's on this machine worked on branch ${branch}. If this conversation did, file it with ask-review {request: "${held.id}", …}; otherwise tell your user, in one line.`, "no conversation on their machine did this work.", { branch });
         const dir = join(copies, held.id);
         const copied: Array<string> = [];
         for (const [index, conversation] of chosen.entries()) {
@@ -236,17 +254,18 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
           });
           copied.push(file);
         }
-        if (copied.length === 0) return `failed: the conversations that did the work are not readable on this machine`;
+        if (copied.length === 0) return yield* unreadable(`the conversations that did the work are not readable on this machine`, "", { branch });
         const diffFile = work.diff ? join(dir, "change.diff") : null;
         if (diffFile && work.diff) yield* Effect.sync(() => writeFileSync(diffFile, work.diff!));
         const person = yield* SubscriptionRef.get(nameRef);
         const prompt = filingPrompt({ id: held.id, fromName: held.fromName, branch, ...(held.link ? { link: held.link } : {}) }, copied, diffFile, person, server);
         // filing, and the asker told so, before the job can run: it may file at once
-        yield* keep({ ...held, branch, stage: "filing", conversations: chosen });
+        const filing = yield* move(held, on, { branch, conversations: chosen });
+        if (!filing) return `failed: it is ${held.stage} — it cannot be filed from there`;
         yield* tellAsker(held, "filing");
         const said = yield* jobs.file({ roomId: held.roomId, requestId: held.id, title: `review ${branch} for ${held.fromName}`, prompt, cwd: project.path ?? homedir(), reads: [dir] });
         if (said.startsWith("failed")) {
-          yield* keep({ ...held, branch, stage: "waiting", conversations: chosen });
+          yield* move(filing, "ended");
           yield* tellAsker(held, "waiting");
         }
         return said;
@@ -283,20 +302,20 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
           const level = levelOf(state, "review", "others", handle.id);
           const answer = `review-request {${id}, file: true} on their yes, {${id}, decline: their reason} on their no`;
           if (level === "unset") {
-            yield* keep({ ...held, stage: "waiting" });
+            yield* move(held, "held");
             yield* tellAsker(held, "waiting");
             line = `\nYour user's steering for review asks is not chosen, so nothing was filed. Ask them once, in a line, to choose one (set-steering kind review, whose others); then, for this one: ${answer}.`;
           } else if (level === "never") {
-            yield* keep({ ...held, stage: "waiting" });
+            yield* move(held, "held");
             yield* tellAsker(held, "waiting");
             line = `\nTheir steering for review asks is never, so nothing was filed. Tell them it came, in one line; ${answer}.`;
           } else if (level === "ask") {
-            yield* keep({ ...held, stage: "asking" });
+            yield* move(held, "asked");
             yield* tellAsker(held, "asking");
             line = `\nASK YOUR USER, in one line, whether to file the review ticket from the conversation the work was done in (their steering for review asks is ask first): ${answer}. If this conversation did the work, you may file it yourself instead with ask-review {request: "${ask.id}", …}.`;
           } else {
             const gate = allow(state, "review", "others", false, handle.id);
-            const said = "held" in gate ? `failed: ${gate.why}` : yield* fileNow(held);
+            const said = "held" in gate ? `failed: ${gate.why}` : yield* fileNow(held, "allowed");
             line = said.startsWith("failed")
               ? `\nTheir steering says to file it, but it could not be: ${said.replace(/^failed: /, "")}`
               : `\nTheir steering for review asks started filing it: ${said}${level === "act" ? " Tell them, in one line." : ""}`;
@@ -316,14 +335,16 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
         }
         const held = yield* heldOf(roomId, input.requestId);
         if (!held) return `failed: no review ask ${input.requestId} — call review-request with nothing to list them`;
-        if (held.stage === "filed") return `failed: it is filed already: ticket ${held.ticketId}`;
+        const refused = (on: AskEvent) => (nextAsk(held.stage, on) === null ? (held.stage === "filed" ? `failed: it is filed already: ticket ${held.ticketId}` : `failed: it is ${held.stage} — that cannot be done from there`) : null);
         if (input.decline !== undefined) {
-          yield* keep({ ...held, stage: "declined" });
+          if (refused("declined")) return refused("declined")!;
+          yield* move(held, "declined");
           yield* tellAsker(held, "declined", input.decline.trim());
           return `declined; ${held.fromName} is told.`;
         }
         if (input.unsure !== undefined) {
-          yield* keep({ ...held, stage: "unsure" });
+          if (refused("unsure")) return refused("unsure")!;
+          yield* move(held, "unsure");
           yield* tellAsker(held, "unsure");
           const candidates = yield* Effect.forEach(held.conversations ?? [], (conversation) =>
             copyOf(conversation).pipe(Effect.map((copy) => ({ conversation: conversation.id, ai: conversation.ai, started: copy?.lines[0]?.ts ?? "", opens: (copy?.lines.find((line) => line.who === "user")?.text ?? "").slice(0, 120) }))),
@@ -339,7 +360,8 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
         // their yes lets ask first and never through, never a level not chosen
         const gate = allow(yield* store.get, "review", "others", true, roomId);
         if ("held" in gate) return `failed: ${gate.why} (kind review, whose others)`;
-        return yield* fileNow(held, input.conversations);
+        if (refused("yes")) return refused("yes")!;
+        return yield* fileNow(held, "yes", input.conversations);
       });
 
     /** ask-review filed the ticket an ask asked for: the asker is told. */
@@ -347,7 +369,7 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
       Effect.gen(function* () {
         const held = yield* heldOf(roomId, requestId);
         if (!held) return;
-        yield* keep({ ...held, stage: "filed", ticketId });
+        if (!(yield* move(held, "filed", { ticketId }))) return;
         yield* tellAsker(held, "filed", `${title} [${ticketId}]`, ticketId);
       });
 
@@ -362,7 +384,7 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
             ended.add(view.id);
             const held = ((yield* store.get).reviewAsks ?? []).find((candidate) => candidate.id === view.ticketId);
             if (!held || held.stage !== "filing") return;
-            yield* keep({ ...held, stage: "waiting" });
+            yield* move(held, "ended");
             yield* tellAsker(held, "waiting");
             yield* tellHere(
               held,
