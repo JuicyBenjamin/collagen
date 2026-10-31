@@ -415,7 +415,10 @@ takes a click (**Ask Christian's AI**) or happens on its own; the author's answe
 decides whether their AI answers at once or asks them first. The answer comes back into your
 chat, and onto the review's why, marked **Read from their AI**. When answering shows something
 wrong with the change, the author's work steering raises it with them, or hands it to the
-conversation that built the work to fix, and your chat says it is being fixed.
+conversation that built the work to fix, and your chat says it is being fixed. When the author can't answer for now (they haven't turned answering on, or no
+conversation of theirs holds the work), your chat says why, and offers your own AI's reading
+instead: **Assume the reason**, plainly marked as an assumption, or **Critique it**. A later
+answer from them still lands in its place.
 
 ## A review built from assumptions
 

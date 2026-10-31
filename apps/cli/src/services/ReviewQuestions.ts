@@ -35,6 +35,13 @@ import { StateStore } from "./StateStore";
 // review page (ReviewChat follows `heard`).
 
 /** What the asker reads of each stage, in the author's name. */
+/** Why a question cannot be answered for now, as the asker reads it. */
+const WHY: Record<NonNullable<ReviewAnswer["why"]>, (author: string) => string> = {
+  "not-chosen": (author) => `${author} has not turned on answering questions yet, so it waits until they do`,
+  never: (author) => `${author} answers no questions on their own, so it waits on their word`,
+  "no-conversation": (author) => `no conversation of ${author}'s holds this work, so their AI has nothing to answer from`,
+};
+
 const stageText = (stage: ReviewQuestionStage, author: string, extra = ""): string => {
   switch (stage) {
     case "waiting":
@@ -117,7 +124,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
 
     /** Tell the asker how their question stands: collagen's record of it on
      *  the thread between them, and the answer once there is one. */
-    const tellAsker = (held: ReviewQuestionHeld, stage: ReviewQuestionStage, extra = "", said: { readonly answer?: string; readonly flaw?: string } = {}) =>
+    const tellAsker = (held: ReviewQuestionHeld, stage: ReviewQuestionStage, extra = "", said: { readonly answer?: string; readonly flaw?: string; readonly why?: ReviewAnswer["why"] } = {}) =>
       Effect.gen(function* () {
         const handle = yield* handleOf(held.roomId);
         if (!handle) return yield* Effect.logWarning(`review question ${held.id.slice(0, 8)}: its room is gone, so ${held.fromName} is not told it is ${stage}`);
@@ -129,7 +136,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
             intent: `review-question:${stage}`,
             findings: stageText(stage, author, extra),
             ticketId: held.ticketId,
-            reviewAnswer: { id: held.id, ticketId: held.ticketId, stage, ...(said.answer ? { answer: said.answer } : {}), ...(said.flaw ? { flaw: said.flaw } : {}) },
+            reviewAnswer: { id: held.id, ticketId: held.ticketId, stage, ...(said.answer ? { answer: said.answer } : {}), ...(said.flaw ? { flaw: said.flaw } : {}), ...(said.why ? { why: said.why } : {}) },
           })
           .pipe(Effect.catchTag("NotWritable", () => Effect.logWarning("cannot tell the asker how their question stands: not admitted to the room log")));
       });
@@ -169,7 +176,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         const chosen: ReadonlyArray<Conversation> = work.conversations.map((one) => one.conversation);
         if (chosen.length === 0) {
           yield* keep({ ...held, stage: "waiting" });
-          yield* tellAsker(held, "waiting", "no conversation on their machine did this work.");
+          yield* tellAsker(held, "waiting", `${WHY["no-conversation"](yield* SubscriptionRef.get(nameRef))}.`, { why: "no-conversation" });
           return `failed: no conversation of your user's on this machine worked on branch ${found.review.branch}. If this conversation did, answer it yourself with review-question {questionId: "${held.id}", reply: …}; otherwise tell your user, in one line.`;
         }
         const dir = join(copies, held.id);
@@ -230,7 +237,9 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           const reply = `review-question {${id}, answer: true} on their yes, {${id}, decline: their reason} on their no — or answer it yourself from this conversation, if it did the work: {${id}, reply: …}`;
           if (level === "unset" || level === "never" || level === "ask") {
             yield* keep({ ...held, stage: level === "ask" ? "asking" : "waiting" });
-            yield* tellAsker(held, level === "ask" ? "asking" : "waiting");
+            const author = yield* SubscriptionRef.get(nameRef);
+            if (level === "ask") yield* tellAsker(held, "asking");
+            else yield* tellAsker(held, "waiting", `${WHY[level === "never" ? "never" : "not-chosen"](author)}.`, { why: level === "never" ? "never" : "not-chosen" });
             line =
               level === "unset"
                 ? `\nYour user's steering for answers is not chosen, so nothing was answered. Ask them once, in a line, to choose one (set-steering kind answer, whose ${cause}); then, for this one: ${reply}.`
@@ -386,11 +395,16 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
       });
 
     /** How a question the person asked stands: kept for the chat, and on
-     *  their inbox for their agent. */
+     *  their inbox for their agent — with, when the author cannot answer for
+     *  now, what to offer instead of a guess. */
     const answered = (handle: RoomHandle, message: RoomMessage, seq: number | undefined) =>
       Effect.gen(function* () {
-        yield* SubscriptionRef.update(heard, (all) => [...all, { roomId: handle.id, fromName: message.fromName, answer: message.reviewAnswer! }].slice(-200));
-        yield* inbox.push(handle.id, message, seq);
+        const back = message.reviewAnswer!;
+        yield* SubscriptionRef.update(heard, (all) => [...all, { roomId: handle.id, fromName: message.fromName, answer: back }].slice(-200));
+        const offer = back.why
+          ? `\nTell your user, in one line, that ${message.fromName}'s AI cannot answer for now, and why; then offer, instead of a guess: your own reading of why it is this way, plainly marked as an assumption, or a critical look at it — what may be wrong, and what they would ask ${message.fromName} to change.`
+          : "";
+        yield* inbox.push(handle.id, { ...message, findings: `${message.findings}${offer}` }, seq);
       });
 
     // every room, as it appears: questions to the person and news of theirs

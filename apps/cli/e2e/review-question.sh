@@ -56,7 +56,8 @@ echo "## not chosen: bob asks; nothing runs until alice chooses"
 expect "her own review is not hers to ask about" "$(call $A "$SA" ask-author "{\"ticketId\":\"$TICKET\",\"question\":\"why?\"}")" "failed: it is your user's own review"
 ASKED=$(call $B "$SB" ask-author "{\"ticketId\":\"$TICKET\",\"question\":\"Why double inside thing() and not in the dashboard?\",\"lines\":{\"file\":\"thing.js\",\"from\":{\"line\":1,\"side\":\"RIGHT\"},\"to\":{\"line\":1,\"side\":\"RIGHT\"},\"text\":\"+export const thing = (n) => n * 2;\"}}")
 expect "bob asked her AI" "$ASKED" "asked alice's AI"
-wait_until "bob hears it waits on her" "Waits on alice" bob_saw
+wait_until "bob hears why it waits: she has not turned on answering" "Waits on alice: alice has not turned on answering questions yet" bob_saw
+expect "…and his AI is told to offer its own reading instead of a guess" "$(cat "$BOBSAW")" "offer, instead of a guess: your own reading.*or a critical look at it"
 QID=$(call $A "$SA" review-question '{}' | grep -oE "$UUID" | head -1)
 expect "alice's collagen keeps it, waiting" "$(call $A "$SA" review-question '{}')" "Why double inside thing\(\).*waiting"
 expect "…and no job ran" "$(cat "$OUT/claude.calls" 2>/dev/null | grep -c -- '-p')" "^0$"

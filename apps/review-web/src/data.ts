@@ -914,6 +914,8 @@ export interface ChatTurn {
   /** a question the why could not answer: offered to the author (a button,
    *  as the reader's forwarding steering asks), asked of them, or not sent */
   readonly forward?: { readonly id?: string; readonly question: string; readonly state: "offered" | "asked" | "off" };
+  /** the author cannot answer for now: offer the reader their own AI's reading instead (assume the reason, or look at it critically) */
+  readonly fallback?: boolean;
 }
 
 /** chat(ticketId) — the reader's conversation with their AI on this review,
