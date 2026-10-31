@@ -4,7 +4,8 @@ import { arrive, flyIn, grow, rise, shrink, sink } from "../fold";
 import { floating } from "../floating";
 import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
-import { answerParts, selectionLabel, selectionShort } from "../chatText";
+import { selectionLabel, selectionShort } from "../chatText";
+import { Markdown } from "./Markdown";
 import type { ChatTurn } from "../data";
 import { lasting } from "../lasting";
 import { ticketId } from "../ticket";
@@ -241,7 +242,6 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
 }
 
 function Turn(props: { turn: ChatTurn }) {
-  const parts = createMemo(() => answerParts(props.turn.answer));
   // the person's own review ("you"): the conversation of theirs that did the work answers
   const author = () => chatNow.view()?.author ?? "the author";
   const whose = (name: string) => (name === "you" ? "the conversation that did the work" : `${name}'s AI`);
@@ -268,16 +268,11 @@ function Turn(props: { turn: ChatTurn }) {
       </Show>
       <div class="chat chat-start">
         <div class="chat-header">{answerer()}</div>
-        <div class="chat-bubble chat-a">
-          <For each={parts()}>
-            {(part) => (
-              <Show when={part.kind === "code"} fallback={<p>{part.text}</p>}>
-                <pre>
-                  <code>{part.text}</code>
-                </pre>
-              </Show>
-            )}
-          </For>
+        <div class="chat-bubble">
+          {/* as the page reads any comment: markdown, never set as HTML */}
+          <Show when={props.turn.answer}>
+            <Markdown text={props.turn.answer} />
+          </Show>
           {/* nothing said yet: it is thinking */}
           <Show when={props.turn.state === "answering" && !props.turn.answer}>
             <span class="loading loading-dots loading-sm" aria-label="Thinking" />
