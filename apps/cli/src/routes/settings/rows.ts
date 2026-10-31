@@ -18,7 +18,9 @@ export const TABS: ReadonlyArray<{ readonly id: Tab; readonly label: string }> =
 export type Row =
   | { readonly id: string; readonly kind: "steer"; readonly at: SteeringAt; readonly cause: Cause }
   | { readonly id: string; readonly kind: "tag" }
-  | { readonly id: string; readonly kind: "switch"; readonly key: SettingKey }
+  | { readonly id: string; readonly kind: "switch"; readonly key: SettingKey; readonly name?: string; readonly says?: { readonly on: string; readonly off: string } }
+  /** a group's name, over the rows that set it */
+  | { readonly id: string; readonly kind: "label"; readonly text: string }
   | { readonly id: string; readonly kind: "jobLimit" }
   | { readonly id: string; readonly kind: "harness"; readonly job: JobKind }
   | { readonly id: string; readonly kind: "model"; readonly job: JobKind }
@@ -60,6 +62,7 @@ const steer = (at: SteeringAt): ReadonlyArray<Row> => [
   { id: `steer:${at}:others`, kind: "steer", at, cause: "others" },
 ];
 const job = (kind: JobKind): ReadonlyArray<Row> => [
+  { id: `label:${kind}`, kind: "label", text: JOB_WORDS[kind] },
   { id: `harness:${kind}`, kind: "harness", job: kind },
   { id: `model:${kind}`, kind: "model", job: kind },
 ];
@@ -92,11 +95,11 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
     ),
     section(
       "AI runs",
-      ["When collagen runs your AI itself: which AI and model each run uses, and how many at once."],
+      ["When collagen runs your AI itself: the harness and model each kind of run uses."],
       [{ id: "jobLimit", kind: "jobLimit" }],
       job("wake"),
       job("research"),
-      [...job("investigation"), { id: "switch:investigationsAtOnce", kind: "switch", key: "investigationsAtOnce" }],
+      [...job("investigation"), { id: "switch:investigationsAtOnce", kind: "switch", key: "investigationsAtOnce", name: "  goals", says: { on: "all together", off: "one by one" } }],
     ),
   ),
   tools: sections(

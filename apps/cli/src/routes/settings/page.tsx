@@ -12,7 +12,7 @@ import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING
 import { JOB_LABEL, jobLimitOf, mostUsedHarness, withHarness, withModel } from "../../lib/jobs";
 import { roomAtom } from "../atoms";
 import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
-import { CAUSE_WORDS, JOB_WORDS, pickable, ROWS, STEER_WORDS, TABS, TAG_WORDS, twoColumns, type Row, type Tab } from "./rows";
+import { CAUSE_WORDS, pickable, ROWS, STEER_WORDS, TABS, TAG_WORDS, twoColumns, type Row, type Tab } from "./rows";
 
 /** The width of a row's words, and of each column after them. */
 const WORDS = 28;
@@ -120,6 +120,12 @@ export function SettingsPage() {
             {each.text}
           </text>
         );
+      case "label":
+        return (
+          <text key={each.id} id={each.id} fg={theme.fg} wrapMode="none">
+            {`  ${each.text}`}
+          </text>
+        );
       case "space":
         return <text key={each.id} id={each.id}>{" "}</text>;
       case "columns":
@@ -168,23 +174,23 @@ export function SettingsPage() {
         const setting = SETTINGS.find((candidate) => candidate.key === each.key)!;
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(setting.label)}
-            <span fg={mark(0)}>{state && settingOf(state, each.key) ? "on" : "off"}</span>
+            {words(each.name ?? setting.label)}
+            <span fg={mark(0)}>{state && settingOf(state, each.key) ? (each.says?.on ?? "on") : (each.says?.off ?? "off")}</span>
           </text>
         );
       }
       case "jobLimit":
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words("at once")}
+            {words("concurrent runs")}
             <span fg={mark(0)}>{String(state ? jobLimitOf(state) : 1)}</span>
           </text>
         );
       case "harness":
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(JOB_WORDS[each.job])}
-            <span fg={mark(0)}>{state?.harnesses?.[each.job] ?? `most used${used ? ` (${used})` : ""}`}</span>
+            {words("  harness")}
+            <span fg={mark(0)}>{state?.harnesses?.[each.job] ?? (used ? `${used} (most used)` : "most used")}</span>
           </text>
         );
       case "model":
@@ -216,7 +222,7 @@ export function SettingsPage() {
       return `${about}: ${applies}${column === 1 ? " (as everywhere)" : row.at === "master" ? "" : " (as General)"}`;
     }
     if (row.kind === "tag") return `a message for you goes to ${TAG_LABEL[state ? tagRouteOf(state) : "existing"]}`;
-    if (row.kind === "jobLimit") return "how many of collagen's jobs run at once; the rest wait in line";
+    if (row.kind === "jobLimit") return "how many runs of your AI collagen keeps going at a time; the rest wait in line";
     if (row.kind === "merge") return MERGE_HELP[(column === 1 ? state?.merging?.rooms?.[room.id] : undefined) ?? state?.merging?.default ?? "off"];
     if (row.kind === "switch") {
       const setting = SETTINGS.find((candidate) => candidate.key === row.key)!;
