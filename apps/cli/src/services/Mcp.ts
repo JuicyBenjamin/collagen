@@ -34,7 +34,9 @@ import { Scripting } from "./Scripting";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
-import { ReviewRoutes, unitCoverageNote } from "./ReviewView";
+import { ReviewRoutes, reviewData, unitCoverageNote } from "./ReviewView";
+import { fingerprints, viewedState } from "@collagen/review-web/marks";
+import { marksOf, withViewed } from "../lib/viewedMarks";
 import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, submitReview, type DraftInput } from "./ReviewTalk";
 import { whereOf } from "../lib/comments";
 import { readStrength, type Strength } from "@collagen/review-web/strength";
@@ -714,6 +716,13 @@ export const SetSettings = Tool.make("set-settings", {
   success: Schema.String,
 });
 
+export const ReviewProgress = Tool.make("review-progress", {
+  description:
+    "Your user's place in a review: which of its files they marked viewed (on the review page, or you for them), which changed since they viewed them, and which are unread, with the count. When they ask how far they are, or what is left to read. Pass 'mark' (file paths, as listed) to mark files viewed for them, as ticking Viewed on the page does, or 'unmark' to take marks back — only when your user says so. The marks are theirs: kept on this machine, never sent to the room, and every open page follows them.",
+  parameters: Schema.Struct({ ticketId: Schema.String, mark: Schema.optional(Schema.Array(Schema.String)), unmark: Schema.optional(Schema.Array(Schema.String)) }),
+  success: Schema.String,
+});
+
 export const OpenReview = Tool.make("open-review", {
   description:
     "Open a review ticket's page — the diff grouped under the why, with type hints and peeks — in your user's browser, the same as pressing o on it in the TUI; a page already open there is brought forward instead (on macOS) or replaced by a new tab that keeps their place. When your user asks to see the review, or to read it in the browser. It opens on its own when you start on a review, unless they switched that off (set-settings). Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -900,6 +909,7 @@ export const CollagenToolkit = Toolkit.make(
   RemoveTheme,
   SetSettings,
   OpenReview,
+  ReviewProgress,
   OpenInvestigation,
   AnswerQuestion,
   OpenAudit,
@@ -959,6 +969,7 @@ export const DevCollagenToolkit = Toolkit.make(
   RemoveTheme,
   SetSettings,
   OpenReview,
+  ReviewProgress,
   OpenInvestigation,
   AnswerQuestion,
   OpenAudit,
@@ -2369,6 +2380,30 @@ const makeHandlers = Effect.gen(function* () {
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review has a page (its why is in review-context)`;
         return yield* pages.show(ticketId);
+      }),
+      "review-progress": Effect.fn("Mcp.reviewProgress")(function* (input: { ticketId: string; mark?: ReadonlyArray<string>; unmark?: ReadonlyArray<string> }) {
+        const { room } = yield* focusedRoom;
+        const all = yield* SubscriptionRef.get(room.tickets);
+        const ticket = all.get(input.ticketId);
+        if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
+        if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review's files are viewed`;
+        const data = yield* reviewData(input.ticketId).pipe(Effect.provideContext(talkContext));
+        // the files a mark can be for, as the page counts them: every changed file but the tests
+        const tests = new Set((data?.grouped?.tests ?? []).map((file) => file.file));
+        const now = fingerprints((data?.grouped?.hunks ?? []).filter((hunk) => !tests.has(hunk.file)));
+        if (now.size === 0) return `failed: this review's diff cannot be read here${data ? ` — ${data.source.detail}` : ""}, so there is nothing to mark or count`;
+        const unknown = [...(input.mark ?? []), ...(input.unmark ?? [])].filter((file) => !now.has(file));
+        if (unknown.length > 0) return `failed: ${unknown.join(", ")} ${unknown.length === 1 ? "is" : "are"} not among this review's files — call review-progress without mark or unmark for them`;
+        if ((input.mark?.length ?? 0) + (input.unmark?.length ?? 0) > 0)
+          yield* store.update((state) => {
+            let next = state;
+            for (const file of input.mark ?? []) next = withViewed(next, input.ticketId, file, { fp: now.get(file)!, ...(data?.commit ? { at: data.commit } : {}) });
+            for (const file of input.unmark ?? []) next = withViewed(next, input.ticketId, file, null);
+            return next;
+          });
+        const marks = marksOf(yield* store.get, input.ticketId);
+        const files = [...now].map(([file, fingerprintNow]) => ({ file, state: viewedState(marks, file, fingerprintNow) }));
+        return toToon({ viewed: `${files.filter((file) => file.state === "viewed").length} of ${files.length}`, files });
       }),
       "open-investigation": Effect.fn("Mcp.openInvestigation")(function* ({ ticketId }: { ticketId: string }) {
         const { room } = yield* focusedRoom;

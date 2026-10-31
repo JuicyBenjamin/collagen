@@ -1,5 +1,6 @@
 import type { AuditPage, InvestigationPage, PageSettings, ToolId, ToolState } from "./data";
 import type { PageThemes } from "./themeData";
+import type { Marks } from "./marks";
 
 // The page's live updates — the review moving, a language server's state —
 // all on one WebSocket to collagen (ReviewServer's /review/_live). A browser
@@ -61,10 +62,12 @@ export function overSocket(topic: "changes", subject: string): AsyncIterable<str
 export function overSocket(topic: "tool", subject: ToolId): AsyncIterable<ToolState>;
 export function overSocket(topic: "themes", subject: ""): AsyncIterable<PageThemes | null>;
 export function overSocket(topic: "settings", subject: ""): AsyncIterable<PageSettings>;
+/** a review's viewed marks: subject its ticket id */
+export function overSocket(topic: "viewed", subject: string): AsyncIterable<Marks>;
 export function overSocket(topic: "investigation", subject: string): AsyncIterable<InvestigationPage | null>;
 /** a room's audit: subject "<roomId>:<days>" */
 export function overSocket(topic: "audit", subject: string): AsyncIterable<AuditPage | null>;
-export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "investigation" | "audit", subject: string): AsyncIterable<unknown> {
+export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit", subject: string): AsyncIterable<unknown> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<unknown> {
       const id = `s${++nextId}`;
