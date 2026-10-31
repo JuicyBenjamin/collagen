@@ -1,4 +1,4 @@
-import type { JobKind, SteeringKind } from "@collagen/p2p";
+import type { JobKind, SteeringKind, TagRoute } from "@collagen/p2p";
 import type { SettingKey } from "../../lib/settings";
 import type { Cause, SteeringAt } from "../../lib/steering";
 
@@ -23,15 +23,29 @@ export type Row =
   | { readonly id: string; readonly kind: "merge" }
   | { readonly id: string; readonly kind: "heading"; readonly text: string };
 
-/** What each steering row is about, short enough for its column. */
+/** Each steering row's name, a word or two: the line under the list says the rest. */
 export const STEER_WORDS: Record<SteeringAt, string> = {
-  master: "general level",
-  work: "work handed to your agent",
-  deliver: "delivering into your conversations",
-  run: "running your AI for a job",
-  investigate: "starting on an investigation",
-  report: "reporting what was found",
-  host: "acting on the host in your name",
+  master: "general",
+  work: "work",
+  deliver: "delivery",
+  run: "research",
+  investigate: "investigations",
+  report: "reports",
+  host: "repo host",
+};
+
+/** Whose doing a steering row is about: yours, or another person's. */
+export const CAUSE_WORDS: Record<Cause, string> = { mine: "you", others: "others" };
+
+/** Each job's row name. */
+export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations" };
+
+/** Where a message for you goes, short. */
+export const TAG_WORDS: Record<TagRoute, string> = {
+  none: "nowhere",
+  existing: "its conversation",
+  "existing-or-new": "its conversation, else a new one",
+  new: "a new conversation",
 };
 
 const steer = (at: SteeringAt): ReadonlyArray<Row> => [
@@ -65,7 +79,7 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
     { id: "switch:progressBar", kind: "switch", key: "progressBar" },
   ],
   general: [
-    { id: "h:steer", kind: "heading", text: "steering — every row not chosen follows it" },
+    { id: "h:steer", kind: "heading", text: "steering" },
     ...steer("master"),
     { id: "h:switches", kind: "heading", text: "tickets" },
     { id: "switch:alsoCloseParents", kind: "switch", key: "alsoCloseParents" },
