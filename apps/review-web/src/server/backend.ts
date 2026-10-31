@@ -93,6 +93,8 @@ export class ReviewBackend extends Context.Service<
     readonly chat: (ticketId: string) => Stream.Stream<ChatView>;
     /** ask their AI — about lines they selected, or not — at `commit`, the one the page shows */
     readonly ask: (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null) => Effect.Effect<ChatAsked>;
+    /** ask the review's author's AI what an answer could not settle (the reader's word) */
+    readonly forward: (ticketId: string, turnId: string) => Effect.Effect<ChatAsked>;
     /** stop the answer under way */
     readonly stopAnswer: (ticketId: string) => Effect.Effect<void>;
     /** a new conversation: the old one gone */

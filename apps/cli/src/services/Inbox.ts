@@ -30,7 +30,7 @@ export interface PendingThread {
  *  agent (it resumes an adopted thread with it) and asks nothing of them;
  *  nor does news of a review they asked for.
  *  The rail's dot counts only the first kind: a mark means you must act. */
-export const wantsPerson = (message: RoomMessage): boolean => !message.intent.startsWith("ticket-update:") && message.reviewStatus === undefined;
+export const wantsPerson = (message: RoomMessage): boolean => !message.intent.startsWith("ticket-update:") && message.reviewStatus === undefined && message.reviewAnswer === undefined;
 
 /** One row per thread the messages are on, newest-first. */
 const rows = (messages: ReadonlyArray<RoomMessage>): ReadonlyArray<PendingThread> => {

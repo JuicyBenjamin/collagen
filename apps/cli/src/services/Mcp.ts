@@ -19,7 +19,7 @@ import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, s
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
 import { roomStackPlaces } from "../lib/stack";
-import type { PageThemes } from "@collagen/p2p";
+import type { PageThemes, QuestionLines } from "@collagen/p2p";
 import { describeThemes, nameTaken, NO_THEMES, ownNamed, themeFromText, valueNamed, withEdit, withoutTheme, withTheme } from "../lib/pageThemes";
 import { MERGE_HELP, mergeForOf, withMergeFor } from "../lib/merging";
 import { cleanShow, showGap, type ShowInput } from "../lib/shows";
@@ -44,6 +44,7 @@ import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
+import { ReviewQuestions } from "./ReviewQuestions";
 import { ReviewRequests } from "./ReviewRequests";
 import { MergeHistory } from "./MergeHistory";
 import { Transcripts } from "./Transcripts";
@@ -466,6 +467,37 @@ export const RequestReview = Tool.make("request-review", {
     link: Schema.optional(Schema.String),
     note: Schema.optional(Schema.String),
     review: Schema.optional(Schema.Struct({ findings: Schema.String, failed: Schema.optional(Schema.Boolean), comment: Schema.optional(Schema.Boolean) })),
+  }),
+  success: Schema.String,
+});
+
+const QuestionLinesInput = Schema.Struct({
+  file: Schema.String,
+  from: Schema.Struct({ line: Schema.Finite, side: Schema.Literals(["LEFT", "RIGHT"]) }),
+  to: Schema.Struct({ line: Schema.Finite, side: Schema.Literals(["LEFT", "RIGHT"]) }),
+  text: Schema.String,
+});
+
+export const AskAuthor = Tool.make("ask-author", {
+  description: [
+    "Ask the author's AI something about a review that its why does not answer (review-context said nothing on it): their collagen answers from the conversation the work was done in, as THEIR steering allows, and the answer comes back to your user's chat on the review page and onto the review's why, marked as read from their AI.",
+    "Only when your user's forwarding steering lets you (set-steering kind forward), or on their word. 'question' in their words, standalone; 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows, when it is about code.",
+  ].join("\n"),
+  parameters: Schema.Struct({ ticketId: Schema.String, question: Schema.String, lines: Schema.optional(QuestionLinesInput), commit: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
+export const ReviewQuestionTool = Tool.make("review-question", {
+  description: [
+    "Answer a question a reader asked about your user's review (ask-author): with nothing, it lists the questions waiting on them. 'answer: true' is your user's yes — collagen finds the conversation the work was done in, and a job of theirs reads it and answers. 'decline' is their no, with their reason. 'reply' IS the answer — from the answering job, or from THIS conversation if it did the work — in plain words; add 'flaw' when answering shows something wrong with the change: their work steering then raises it with them or hands it to the conversation that built it.",
+    "The reader is told, and the answer goes onto the review's why, marked as read from your user's AI.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    questionId: Schema.optional(Schema.String),
+    answer: Schema.optional(Schema.Boolean),
+    decline: Schema.optional(Schema.String),
+    reply: Schema.optional(Schema.String),
+    flaw: Schema.optional(Schema.String),
   }),
   success: Schema.String,
 });
@@ -921,6 +953,8 @@ export const CollagenToolkit = Toolkit.make(
   AskReview,
   RequestReview,
   ReviewRequest,
+  AskAuthor,
+  ReviewQuestionTool,
   AssumeReview,
   ClaimReview,
   AskPlan,
@@ -983,6 +1017,8 @@ export const DevCollagenToolkit = Toolkit.make(
   AskReview,
   RequestReview,
   ReviewRequest,
+  AskAuthor,
+  ReviewQuestionTool,
   AssumeReview,
   ClaimReview,
   AskPlan,
@@ -1054,6 +1090,7 @@ const makeHandlers = Effect.gen(function* () {
     const outbox = yield* Outbox;
     const jobs = yield* Jobs;
     const reviewRequests = yield* ReviewRequests;
+    const reviewQuestions = yield* ReviewQuestions;
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
@@ -1912,6 +1949,15 @@ const makeHandlers = Effect.gen(function* () {
             ? `failed: say which of ${who.person.name}'s projects it is in ('project'): ${theirs.map((shared) => shared.name).join(", ")}`
             : `failed: ${who.person.name} is not online, so collagen cannot see their projects — pass 'project'`;
         return yield* reviewRequests.ask(roomId, { peer: who.person, project, ...(branch ? { branch } : {}), ...(link ? { link } : {}), ...(input.note ? { note: input.note } : {}), ...(input.review ? { review: input.review } : {}) });
+      }),
+      "ask-author": Effect.fn("Mcp.askAuthor")(function* (input: { ticketId: string; question: string; lines?: QuestionLines; commit?: string }) {
+        if (!input.question.trim()) return "failed: 'question' in your user's words";
+        const { id: roomId } = yield* focusedRoom;
+        return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question: input.question.trim(), ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) });
+      }),
+      "review-question": Effect.fn("Mcp.reviewQuestion")(function* (input: { questionId?: string; answer?: boolean; decline?: string; reply?: string; flaw?: string }) {
+        const { id: roomId } = yield* focusedRoom;
+        return yield* reviewQuestions.respond(roomId, input);
       }),
       "review-request": Effect.fn("Mcp.reviewRequest")(function* (input: { requestId?: string; file?: boolean; conversations?: ReadonlyArray<string>; decline?: string; unsure?: string }) {
         const { id: roomId } = yield* focusedRoom;

@@ -43,13 +43,15 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   host: "repo host",
   close: "closing",
   review: "review asks",
+  forward: "forwarding",
+  answer: "answers",
 };
 
 /** Whose doing a steering row is about: yours, or another person's. */
 export const CAUSE_WORDS: Record<Cause, string> = { mine: "You", others: "Others" };
 
 /** Each job's row name. */
-export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks" };
+export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks", answering: "answers" };
 
 /** What each kind of run does, a line under its name. */
 export const JOB_ABOUT: Record<JobKind, string> = {
@@ -57,6 +59,7 @@ export const JOB_ABOUT: Record<JobKind, string> = {
   research: "Looks into a ticket when you ask for more info, and posts what it found.",
   investigation: "Works through an investigation's goals, and posts what it found.",
   filing: "Reads the conversation your work was done in, and files the review someone asked for.",
+  answering: "Reads the conversation your work was done in, and answers a question about your review.",
 };
 
 /** Where a message for you goes, short. */
@@ -110,6 +113,9 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       [{ id: "steer:close:mine", kind: "steer", at: "close", cause: "mine" }],
       // a review of your work is asked by someone else: one row
       [{ id: "steer:review:others", kind: "steer", at: "review", cause: "others" }],
+      // your chat asking a review's author's AI: only your own doing
+      [{ id: "steer:forward:mine", kind: "steer", at: "forward", cause: "mine" }],
+      steer("answer"),
       [
         { id: "label:tag", kind: "label", text: "messages for you" },
         { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
@@ -124,6 +130,7 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       job("research"),
       [...job("investigation"), { id: "switch:investigationsAtOnce", kind: "switch", key: "investigationsAtOnce", name: "  goals", says: { on: "all together", off: "one by one" } }],
       job("filing"),
+      job("answering"),
     ),
   ),
   tools: sections(

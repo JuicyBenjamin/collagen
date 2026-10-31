@@ -22,6 +22,8 @@ const KINDS: Record<string, CallKind> = {
   "assume-review": "filing",
   "request-review": "filing",
   "review-request": "filing",
+  "ask-author": "review",
+  "review-question": "review",
   "claim-review": "filing",
   "ask-plan": "filing",
   propose: "filing",

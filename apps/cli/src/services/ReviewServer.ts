@@ -182,6 +182,7 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
     ask: (ticketId, question, selection, commit) =>
       ticketIdOk(ticketId) && questionOk(question) && selectionOk(selection) && (commit === null || commitOk(commit)) ? on(chat.ask(ticketId, question.trim(), selection, commit)) : Effect.succeed({ error: "bad request" }),
     stopAnswer: (ticketId) => (ticketIdOk(ticketId) ? chat.stop(ticketId) : Effect.void),
+    forward: (ticketId, turnId) => (ticketIdOk(ticketId) && typeof turnId === "string" && /^[\w-]{1,64}$/.test(turnId) ? on(chat.forward(ticketId, turnId)) : Effect.succeed({ error: "bad request" })),
     newChat: (ticketId) => (ticketIdOk(ticketId) ? chat.clear(ticketId) : Effect.void),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];

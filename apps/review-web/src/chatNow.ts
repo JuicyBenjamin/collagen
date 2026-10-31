@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { askAi, newChat, stopAnswer } from "./api";
+import { askAi, forwardQuestion, newChat, stopAnswer } from "./api";
 import type { ChatSelection, ChatView, SideLine } from "./data";
 import { diffNow } from "./diffNow";
 import { ticketId } from "./ticket";
@@ -81,7 +81,8 @@ export const chatNow = {
   close: () => setOpen(false),
   detach: () => setAttached(null),
   /** Is an answer under way? */
-  answering: () => (view()?.turns ?? []).some((turn) => turn.state === "answering"),
+  /** the reader's own AI is answering — an author's AI answering is not in the way */
+  answering: () => (view()?.turns ?? []).some((turn) => turn.state === "answering" && turn.from === undefined),
   /** Follow the reader's selection: selected code is offered to ask about. Once per page. */
   watch(): void {
     if (watching || typeof document === "undefined") return;
@@ -132,6 +133,12 @@ export const chatNow = {
     }
   },
   stop: () => void stopAnswer(ticketId).catch((error) => setRefused(String(error))),
+  /** the reader's word: ask the review's author's AI what the why did not say */
+  forward: async (turnId: string) => {
+    setRefused(null);
+    const said = await forwardQuestion(ticketId, turnId).catch((error): { error: string } => ({ error: String(error) }));
+    if ("error" in said) setRefused(said.error);
+  },
   restart: () => {
     setRefused(null);
     void newChat(ticketId).catch((error) => setRefused(String(error)));

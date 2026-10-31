@@ -23,6 +23,7 @@ import { Rooms } from "./Rooms";
 import { Scripting } from "./Scripting";
 import { StateStore } from "./StateStore";
 import { Transcripts } from "./Transcripts";
+import { ReviewQuestions } from "./ReviewQuestions";
 import { ReviewRequests } from "./ReviewRequests";
 import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
@@ -74,6 +75,7 @@ export const AppLayer = Layer.mergeAll(Daemons, McpLive, MergerDaemon).pipe(
   Layer.provideMerge(MergeHistory.layer),
   Layer.provideMerge(Updates.layer),
   Layer.provideMerge(Attachments.layer),
+  Layer.provideMerge(ReviewQuestions.layer),
   Layer.provideMerge(ReviewRequests.layer),
   Layer.provideMerge(Transcripts.layer),
   Layer.provideMerge(Outbox.layer),

@@ -493,7 +493,7 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
       Effect.forkScoped,
     );
 
-    return { ask, answer, filed, heldOf } as const;
+    return { ask, answer, filed, heldOf, findWork, copyOf } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

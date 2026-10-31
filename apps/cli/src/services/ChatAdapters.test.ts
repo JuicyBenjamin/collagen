@@ -4,7 +4,7 @@ import type { ChatTurn } from "@collagen/review-web/data";
 import type { ChatEvent } from "./ChatAdapters";
 import { claudeChat } from "./harnesses/claudeCode/chat";
 import { codexChat } from "./harnesses/codex/chat";
-import { applyEvents, promptFor, turnsFromLog } from "./ReviewChat";
+import { applyEvents, forwardOf, promptFor, turnsFromLog } from "./ReviewChat";
 
 const lines = (...objects: ReadonlyArray<unknown>) => objects.map((object) => JSON.stringify(object));
 const read = (adapter: typeof claudeChat, stdout: ReadonlyArray<string>): ReadonlyArray<ChatEvent> => stdout.flatMap(adapter.read);
@@ -100,5 +100,13 @@ describe("a review's chat read back from the AI's own log", () => {
       ["why two?", "src/a.ts", 4, "abc1234def", "Because b is new."],
       ["and now?", null, null, "abc1234def", "Still two."],
     ]);
+  });
+});
+
+describe("an answer that only the author can settle", () => {
+  it("hands its last line's question over, and keeps the rest as the answer", () => {
+    expect(forwardOf("The why does not say.\n\nASK THE AUTHOR: why double inside thing()?")).toEqual({ answer: "The why does not say.", question: "why double inside thing()?" });
+    expect(forwardOf("It doubles because the export reads it too.")).toBeNull();
+    expect(forwardOf("Nothing says.\n`ASK THE AUTHOR: why?`")).toEqual({ answer: "Nothing says.", question: "why?" });
   });
 });
