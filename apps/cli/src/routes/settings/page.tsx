@@ -116,10 +116,12 @@ export function SettingsPage() {
     switch (each.kind) {
       case "heading":
         return (
-          <text key={each.id} id={each.id} fg={theme.dim}>
+          <text key={each.id} id={each.id} fg={theme.fg}>
             {each.text}
           </text>
         );
+      case "space":
+        return <text key={each.id} id={each.id}>{" "}</text>;
       case "columns":
         return (
           <text key={each.id} id={each.id} fg={theme.dim} wrapMode="none">
