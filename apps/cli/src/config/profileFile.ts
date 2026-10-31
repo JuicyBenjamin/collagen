@@ -9,7 +9,7 @@ import { configDir } from "../services/Identity";
  *  remains the runtime-side reader/writer of the same file. */
 export interface RoomEntry {
   /** The room's identity — an unguessable id (uuid v7); the topic derives
-   *  from this, so knowing the id IS the invite. */
+   *  from this. It no longer lets anyone in: an invite does, once. */
   id: string;
   /** The room's shared display name (broadcast, last-writer-wins). */
   name: string;
@@ -18,6 +18,11 @@ export interface RoomEntry {
   nameTs?: number;
   /** The room's Autobase log key, once known — lets the room reopen alone. */
   logKey?: string;
+  /** The key that reads the room's log; absent for a room from before rooms
+   *  were encrypted (it is moved to an encrypted log when it opens). */
+  encryptionKey?: string;
+  /** The invite we are joining with, until a member has let us in. */
+  invite?: string;
   /** We made this room: we bootstrap its log instead of waiting for a member. */
   creator?: boolean;
 }
@@ -36,11 +41,11 @@ export function newRoomEntry(name: string): RoomEntry {
   return { id: uuidv7(), name: name.trim(), nameTs: Date.now(), creator: true };
 }
 
-/** A room you were invited to: the invite IS the id; labeled by its short
- *  prefix (ts 0) until the room's shared name arrives from a peer. */
-export function invitedRoomEntry(inviteId: string): RoomEntry {
-  const id = inviteId.trim();
-  return { id, name: id.slice(0, 8) };
+/** A room you were invited to: its id from the invite, kept until a member
+ *  lets us in; labeled by its short prefix (ts 0) until the room's shared
+ *  name arrives from a peer. */
+export function invitedRoomEntry(roomName: string, invite: string): RoomEntry {
+  return { id: roomName, name: roomName.slice(0, 8), invite: invite.trim() };
 }
 
 export function storedRoom(file: ProfileFile): RoomEntry | undefined {

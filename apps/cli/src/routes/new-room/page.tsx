@@ -15,7 +15,7 @@ export function NewRoomPage() {
       <RoomChooser
         title="join or create a room"
         onDone={(choice) => {
-          joinRoom({ entry: choice.mode === "create" ? newRoomEntry(choice.name) : invitedRoomEntry(choice.inviteId) });
+          joinRoom({ entry: choice.mode === "create" ? newRoomEntry(choice.name) : invitedRoomEntry(choice.roomName, choice.invite) });
           navigate("room/overview");
         }}
         onCancel={() => navigate("room/overview")}

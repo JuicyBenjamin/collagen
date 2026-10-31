@@ -15,9 +15,9 @@ Pear.
 
 | | Today |
 | --- | --- |
-| Joining | The room id is the invite. Anyone holding it greets, hears the log key (`log-info`), asks `join-log`, and the first writable member admits them (`Room.admitPending`). No person decides. |
+| Joining | An invite: a one-time secret whose public half is on the log (`invite`). The newcomer proves it (`redeem`); a member checks it, records its one use (`redeemed`), hands over the log key and the encryption key over the connection (`keys`), and admits them (`Room.redeem`, `Room.admitPending`). Strangers on the topic hear nothing. |
 | Standing | Every member is a writer **and** an indexer (`add-writer` with `indexer: true`). One tier. |
-| Reading | A Hypercore key is a read capability. Whoever has the log key can replicate it from any member (`store.replicate(conn)` serves the whole Corestore on every connection). The log is not encrypted. |
+| Reading | The log is encrypted (Autobase `encryptionKey`): the log key lets a peer replicate and verify it, only members hold the key that reads it. |
 | Who may change what | `settleStep`, `postReview`, "only the author writes a review" — checked in `Dispatch` on the **writer's** machine. `apply` never looks at who wrote an entry. |
 | Identity on the log | `member { key, name }`, `msg.from`, `ticket.createdBy` are what the entry *says*. Nothing ties a writer core to an identity key. |
 | Leaving | Local (`Rooms.leave`). The others keep the room; nobody can be put out. |

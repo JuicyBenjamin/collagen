@@ -6,7 +6,7 @@ import { theme } from "../../../app/theme";
 
 /** What the chooser produces: a room to create (named by you) or one to
  *  join (its invite id). Turning that into a room entry is the caller's job. */
-export type RoomChoice = { mode: "create"; name: string } | { mode: "join"; inviteId: string };
+export type RoomChoice = { mode: "create"; name: string } | { mode: "join"; roomName: string; invite: string };
 
 type Step = "choice" | "create" | "join";
 
@@ -41,7 +41,7 @@ export function RoomChooser({
       setError(check.reason);
       return;
     }
-    onDone({ mode: "join", inviteId: check.id });
+    onDone({ mode: "join", roomName: check.invite.roomName, invite: inviteId });
   };
 
   useKeyboard((key) => {
