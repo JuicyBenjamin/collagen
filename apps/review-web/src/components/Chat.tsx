@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
 import { Appear } from "./Appear";
 import { rise, sink } from "../fold";
+import { floating } from "../floating";
 import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
 import { answerParts, selectionLabel } from "../chatText";
@@ -61,7 +62,7 @@ export function Chat() {
       </Appear>
       <Appear when={!chatNow.open() && turns().length > 0}>
         {() => (
-          <button type="button" class="chat-pill" onClick={() => chatNow.toggle()}>
+          <button type="button" class={["chat-pill", { lifted: floating() }]} onClick={() => chatNow.toggle()}>
             {chatNow.answering() ? "AI answering…" : "AI chat"}
           </button>
         )}
@@ -104,7 +105,8 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
   const cannot = () => chatNow.view()?.cannot ?? null;
   return (
     <aside
-      class="chat"
+      // above the review's pill once it floats in the corner
+      class={["chat", { lifted: floating() }]}
       aria-label="Chat with your AI"
       ref={props.placed}
       // a comment form flying in becomes this panel (chatNow.handOver)
@@ -113,7 +115,7 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
       <div class="chat-head">
         <span class="chat-ai">{chatNow.view()?.ai ?? "Your AI"}</span>
         <Show when={(chatNow.view()?.turns.length ?? 0) > 0}>
-          <button type="button" class="quiet small" onClick={() => chatNow.restart()} title="Start the conversation over">
+          <button type="button" class="btn btn-ghost btn-xs" onClick={() => chatNow.restart()} title="Start the conversation over">
             New chat
           </button>
         </Show>
@@ -174,12 +176,12 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
             <Show
               when={chatNow.answering()}
               fallback={
-                <button type="submit" class="banner-go" disabled={chatNow.sending() || question().trim().length === 0}>
+                <button type="submit" class="btn btn-primary btn-sm" disabled={chatNow.sending() || question().trim().length === 0}>
                   Ask
                 </button>
               }
             >
-              <button type="button" class="quiet" onClick={() => chatNow.stop()}>
+              <button type="button" class="btn btn-sm" onClick={() => chatNow.stop()}>
                 Stop
               </button>
             </Show>
@@ -226,10 +228,10 @@ function Turn(props: { turn: ChatTurn }) {
         {/* the author cannot answer for now: the reader's own AI, instead of a guess passed off as theirs */}
         <Show when={props.turn.fallback && props.turn.from}>
           <div class="chat-fallback">
-            <button type="button" class="quiet small" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "assume")} title="Your AI's best reading of why, sent to their review's why as a guess for them to settle">
+            <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "assume")} title="Your AI's best reading of why, sent to their review's why as a guess for them to settle">
               Assume the reason
             </button>
-            <button type="button" class="quiet small" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "critique")} title="The same guess, then whether it is good enough: what it asks to change becomes your draft comments">
+            <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "critique")} title="The same guess, then whether it is good enough: what it asks to change becomes your draft comments">
               Critique it
             </button>
           </div>
@@ -244,7 +246,7 @@ function Turn(props: { turn: ChatTurn }) {
                 </Show>
               }
             >
-              <button type="button" class="banner-go small" onClick={() => void chatNow.forward(props.turn.id)} title={forward().question}>
+              <button type="button" class="btn btn-primary btn-xs" onClick={() => void chatNow.forward(props.turn.id)} title={forward().question}>
                 Ask {whose(author())}
               </button>
             </Show>
