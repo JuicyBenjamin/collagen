@@ -13,7 +13,7 @@ import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING
 import { JOB_LABEL, jobLimitOf, mostUsedHarness, withHarness, withModel } from "../../lib/jobs";
 import { roomAtom } from "../atoms";
 import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
-import { CAUSE_WORDS, pickable, TAG_CHOICES, ROWS, STEER_WORDS, TABS, TAG_WORDS, twoColumns, type Row, type Tab } from "./rows";
+import { CAUSE_WORDS, namesKind, pickable, TAG_CHOICES, ROWS, STEER_WORDS, TABS, TAG_WORDS, twoColumns, type Row, type Tab } from "./rows";
 
 /** The width of a row's words, and of each column after them. */
 const WORDS = 28;
@@ -165,7 +165,7 @@ export function SettingsPage() {
         const here = steerCell(each.at, each.cause, true);
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(`${(each.cause === "mine" ? capital(STEER_WORDS[each.at]) : "").padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
+            {words(`${(namesKind(each) ? capital(STEER_WORDS[each.at]) : "").padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
             <span fg={mark(0, everywhere.set)}>{cell(everywhere.text)}</span>
             <span fg={mark(1, here.set)}>{cell(here.text)}</span>
           </text>

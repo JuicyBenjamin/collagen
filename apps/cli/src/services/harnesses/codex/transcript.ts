@@ -1,4 +1,6 @@
+import { lines } from "../../../lib/tokenCost";
 import { textOf, type TranscriptLine } from "../../../lib/transcripts";
+import type { Session } from "../../Harness";
 
 // A Codex rollout's lines, as a person reads them in the app.
 
@@ -21,3 +23,21 @@ export const readLine = (record: Readonly<Record<string, unknown>>, stamp: strin
 
 /** The session header gives a handed-over slice its shape: always kept. */
 export const keepsWhole = (record: Readonly<Record<string, unknown>>): boolean => record.type === "session_meta";
+
+/** What a Codex rollout records of its thread: its header names the folder,
+ *  the git branch and, for a thread another started, that thread. */
+export const readSession = (jsonl: string): Session | null => {
+  let session: Omit<Session, "endedAt"> | null = null;
+  let endedAt = 0;
+  for (const record of lines(jsonl)) {
+    const at = typeof record.timestamp === "string" ? Date.parse(record.timestamp) : Number.NaN;
+    if (Number.isFinite(at)) endedAt = Math.max(endedAt, at);
+    const payload = record.payload && typeof record.payload === "object" ? (record.payload as Record<string, unknown>) : null;
+    if (session || record.type !== "session_meta" || !payload || typeof payload.id !== "string" || typeof payload.cwd !== "string") continue;
+    const git = payload.git && typeof payload.git === "object" ? (payload.git as Record<string, unknown>) : null;
+    const parent = typeof payload.parent_thread_id === "string" && payload.parent_thread_id !== payload.id ? payload.parent_thread_id : undefined;
+    const started = typeof payload.timestamp === "string" ? Date.parse(payload.timestamp) : at;
+    session = { conversation: payload.id, cwd: payload.cwd, branches: typeof git?.branch === "string" ? [git.branch] : [], ...(parent ? { parent } : {}), startedAt: Number.isFinite(started) ? started : 0 };
+  }
+  return session ? { ...session, endedAt: Math.max(endedAt, session.startedAt) } : null;
+};

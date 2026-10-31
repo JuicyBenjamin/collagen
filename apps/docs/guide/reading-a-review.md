@@ -441,6 +441,36 @@ one shows what the AI had guessed beside it, a wrong one is struck through; one 
 answer is still a guess. On the room's log a review taken over always wins over the guesses,
 however the copies arrive.
 
+## A review asked for without a ticket
+
+When a colleague who uses collagen says their branch is ready, or you have already read it,
+ask your agent to ask them for a review (`request-review`), naming the branch or the pull
+request. It reaches them as an ask, not a message, and waits on the room's log while they
+are offline. If you have already written your review, send it with the ask.
+
+**The author files the ticket, never you.** Their collagen finds the conversation the work
+was done in, from their AI's own session logs on their machine: the folder and branch every
+Claude Code entry records, and the folder, branch and parent a Codex thread records. When
+every session runs on one branch, as in a GitButler workspace, the conversation that names
+the branch and the files it changed counts. When several conversations did the work, the
+one at the top of the orchestration is read. Conversations that worked on it side by side
+are read together and their why is stitched into one review. If they give different reasons
+for the same thing, the author is asked which conversation to use.
+
+Their steering for review asks (`review`, others') decides what happens:
+
+- **not chosen** or **never**: nothing runs, and their agent tells them it came;
+- **ask first**: their agent asks them (`review-request`, with their yes or their no);
+- **act, then tell** or **just do it**: a job of theirs (Sonnet on Claude Code, unless they
+  chose another model) reads a copy of that conversation and the change, read-only and without
+  interrupting the conversation, and files the review ticket with the why from it, in their
+  name. The conversation stays on their machine; only the why goes out.
+
+Each stage comes back to you on your thread with them: waiting on them, asking them,
+filing, filed, or declined with their reason. Once the ticket is filed, the review you sent
+goes on it as your take; without one, your review step arrives and your agent starts the
+review.
+
 ## Saying what you think
 
 The three round buttons beside the files viewed finish a review on the page, whatever its
