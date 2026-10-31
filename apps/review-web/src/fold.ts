@@ -210,6 +210,46 @@ export async function sink(element: HTMLElement | undefined): Promise<void> {
   await ended(animate(element, { opacity: [1, 0], y: [0, SUNK.y], scale: [1, SUNK.scale] }, { duration: 0.18, ease: EASE }), 0.18);
 }
 
+/** Something fading in after a wait: the words of a button a panel has just shrunk onto. */
+export function arrive(element: Element | null, delay: number): void {
+  if (!(element instanceof HTMLElement) || still.matches) return;
+  element.style.opacity = "0";
+  void ended(animate(element, { opacity: [0, 1] }, { duration: 0.16, delay, ease: EASE }), delay + 0.16).then(() => element.style.removeProperty("opacity"));
+}
+
+/** A panel's clip as the shape of a button within it, round at its ends: what it grows from and shrinks into. */
+const clipTo = (panel: DOMRect, button: DOMRect): string =>
+  `inset(${button.top - panel.top}px ${panel.right - button.right}px ${panel.bottom - button.bottom}px ${button.left - panel.left}px round ${button.height / 2}px)`;
+/** A panel's clip once open: out past its edges and its shadow, its corners
+ *  round with the panel's own, so taking it away changes nothing seen. */
+const OPEN_CLIP = "inset(-48px -48px -48px -48px round 58px)";
+
+/** A panel growing out of the button that opens it: cut to the button's
+ *  shape where the button stood, then opened out to its own, its contents
+ *  coming in once it has room. Call it on the panel as it is placed. */
+export function grow(element: HTMLElement, from: DOMRect): void {
+  if (still.matches) return;
+  const contents = [...element.children].filter((child) => child instanceof HTMLElement);
+  for (const child of contents) child.style.opacity = "0";
+  // placed by the time the code that made it is done; measured then, before it is drawn
+  queueMicrotask(() => {
+    const start = clipTo(element.getBoundingClientRect(), from);
+    element.style.clipPath = start;
+    void ended(animate(element, { clipPath: [start, OPEN_CLIP] }, { duration: 0.34, ease: EASE }), 0.34).then(() => element.style.removeProperty("clip-path"));
+    for (const child of contents)
+      void ended(animate(child, { opacity: [0, 1] }, { duration: 0.2, delay: 0.1, ease: EASE }), 0.3).then(() => child.style.removeProperty("opacity"));
+  });
+}
+
+/** A panel shrinking into the button that opens it: its contents go first,
+ *  then it closes down to the button's shape where the button stands —
+ *  resolves once it is that shape, for the caller to take it away then. */
+export async function shrink(element: HTMLElement | undefined, into: DOMRect): Promise<void> {
+  if (!element || still.matches) return;
+  for (const child of element.children) if (child instanceof HTMLElement) void animate(child, { opacity: [1, 0] }, { duration: 0.1, ease: EASE });
+  await ended(animate(element, { clipPath: [OPEN_CLIP, clipTo(element.getBoundingClientRect(), into)] }, { duration: 0.28, ease: [0.4, 0, 0.2, 1] }), 0.28);
+}
+
 /** Something closing: to nothing, fading out — resolves once it is gone, for
  *  the caller to take it away then. */
 export async function leave(element: HTMLElement | undefined): Promise<void> {
