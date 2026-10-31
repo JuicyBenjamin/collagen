@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { levelOf } from "../lib/steering";
 import { Clock, Context, Effect, Layer, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { closeTicket, epicOf, epicParts, excludedFromEpic, finished, isClosed, isJudged, isOwned, isTake, moveToEpic, orderEpic, postReview, settleStep, takeStep, ticketName, turnEpic, visibleTo, actingFields, withActing, type Acting, type Outgoing, type Ticket } from "@collagen/p2p";
@@ -6,7 +7,6 @@ import { relatedHint } from "../lib/epicHint";
 import { personNamed } from "../lib/names";
 import { ticketView } from "../lib/ticketView";
 import { openParents } from "../lib/parents";
-import { settingOf } from "../lib/settings";
 import { ticketsOf, withWorked } from "../lib/worked";
 import { MAX_PACKED_BYTES, pack, sliceSince } from "../lib/transcripts";
 import { harnessFor, Harnesses, transcriptFile } from "./Harness";
@@ -293,15 +293,19 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // own setting unless they keep it, or (setting off) only on their word
           const parents = openParents(merged, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
           const named = parents.map((parent) => `"${parent.title}" [ticket ${parent.id}]`).join(", ");
+          // as their closing steering says: never, leave it; ask first; act, then tell; or just do it
+          const closing = levelOf(yield* store.get, "close", "mine", roomId);
           const ask =
-            parents.length === 0
+            parents.length === 0 || closing === "never"
               ? ""
-              : settingOf(yield* store.get, "alsoCloseParents")
-                ? ` THEN tell them, in one line, that their setting closes what it grew from with it — ${named}, still open — and close it (close-ticket) unless they say to keep it open.`
-                : ` THEN ask them, in one line, whether to close what it grew from too — ${named}, still open — or keep it open; close it (close-ticket) only on their word.`;
+              : closing === "auto"
+                ? ` THEN close what it grew from too (close-ticket, as done) — ${named}, still open — without asking: their steering says just do it.`
+                : closing === "act"
+                  ? ` THEN tell them, in one line, that their steering closes what it grew from with it — ${named}, still open — and close it (close-ticket) unless they say to keep it open.`
+                  : ` THEN ask them, in one line, whether to close what it grew from too — ${named}, still open — or keep it open; close it (close-ticket) only on their word.`;
           const then = merged.whenClosed
             ? `TELL YOUR USER that the ticket is closed, THEN carry out what it says to do when closed — "${merged.whenClosed}" — which they authorised when they filed it, and tell them what came of that.${ask}`
-            : parents.length > 0
+            : ask
               ? `TELL YOUR USER that the ticket is closed,${ask.replace(/^ THEN/, " then")}`
               : `TELL YOUR USER ONLY THIS: "ticket closed".`;
           return sent(`${fact} ${then}`);

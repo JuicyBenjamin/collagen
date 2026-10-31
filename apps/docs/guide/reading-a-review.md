@@ -442,7 +442,9 @@ pull request:
   collagen merges it on your accept, approves it — and says which before you press it. Request
   changes puts a take asking for changes on it, for your agent to act on. Comments still
   pending are said first, whichever you send. Dropping a review is not done here: your agent
-  closes it as not done (`close-ticket`).
+  closes it as not done (`close-ticket`). What the review grew from, still open, is offered
+  beside Accept to close too, ticked when your closing [steering](./conversations#steering-how-much-your-agent-does-on-its-own)
+  acts on its own.
 
 Once you have finished one, what you gave and when stands in for the buttons — **You
 requested changes · 2 h ago** — whether you finished it here, through your agent or on

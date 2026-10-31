@@ -26,13 +26,6 @@ export const SETTINGS: ReadonlyArray<Setting> = [
     off: "the review page opens only when you ask (o in the room, or tell your agent)",
   },
   {
-    key: "alsoCloseParents",
-    default: true,
-    label: "close parents too",
-    on: "accepting a review, what it grew from is ticked to close with it; your agent closes it too unless you say keep it",
-    off: "nothing is ticked: you tick what to close too, and your agent asks first",
-  },
-  {
     key: "investigationsAtOnce",
     default: false,
     label: "goals at once",

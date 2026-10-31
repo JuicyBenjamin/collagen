@@ -43,7 +43,7 @@ export function Accept(props: { head: ReviewPageHead; onDone: () => void }) {
   const approves = () => effect() === "mine" || effect() === "both";
   const [parents, setParents] = createSignal<ReadonlyArray<TicketRef>>([]);
   const [alsoClose, setAlsoClose] = createSignal<ReadonlySet<string>>(new Set());
-  // ticked to begin with when the person's setting says so (alsoCloseParents)
+  // ticked to begin with when the person's closing steering acts on its own (act, or just do it)
   void reviewParents(ticketId).then(
     (offered) => {
       setParents(offered.tickets);

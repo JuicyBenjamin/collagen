@@ -29,7 +29,9 @@ approved.
    (`gh api -X POST repos/<owner>/<repo>/merges -f base=release -f head=<branch>`),
    then `but pull`: GitButler sees it landed, clears it, and moves the other
    branches onto the new `release`. A stack merges bottom branch first.
-   Then close the tickets it touched.
+   Then close the tickets it touched, as the person's `close` steering says
+   (`set-steering` lists it): just do it, close them; act, close them and say
+   so; ask first, ask; never, leave them open.
 4. **Never move `release` by hand.** No force push, no pointing its ref at
    a branch's tip, no fast-forward to a stack you built for the purpose.
 5. **Shipping is one pull request.** `release` into `main`
