@@ -488,7 +488,13 @@ export function Lines(props: {
     if (!from || !to) return null;
     // a changed row stands for its added line
     const lines = rows().slice(block.first, block.last + 1).map((row) => row.line);
-    return { from: { side: from.side, line: from.line }, to: { side: to.side, line: to.line }, suggestable: lines.every((line) => line.kind !== "-") ? lines.map((line) => line.text) : null };
+    return {
+      from: { side: from.side, line: from.line },
+      to: { side: to.side, line: to.line },
+      suggestable: lines.every((line) => line.kind !== "-") ? lines.map((line) => line.text) : null,
+      // as the diff shows them, each after its sign: what the reader's AI is asked about
+      code: lines.map((line) => (line.kind === "+" || line.kind === "-" ? line.kind : " ") + line.text).join("\n"),
+    };
   };
   /** The new file's lines from `from` to `to`, as this hunk shows them — what a suggestion replaces. */
   const codeOf = (from: number, to: number): ReadonlyArray<string> | null => {
@@ -574,7 +580,7 @@ export function Lines(props: {
               {/* the removed line's comments too: it is drawn in this row */}
               <Show when={threadOf(row.was?.line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().line} codeOf={codeOf} />}</Show>
               <Show when={threadOf(line)}>{(at) => <LineThread file={props.hunk.file} side={at().side} line={at().line} codeOf={codeOf} />}</Show>
-              <Show when={composerAt(index())}>{(composer) => <LineComposer file={props.hunk.file} from={composer().from} to={composer().to} suggestable={composer().suggestable} />}</Show>
+              <Show when={composerAt(index())}>{(composer) => <LineComposer file={props.hunk.file} from={composer().from} to={composer().to} suggestable={composer().suggestable} code={composer().code} />}</Show>
               <Show when={peek()?.hunk === props.hunk.id && peek()?.index === index() ? peek() : null}>
                 {(peeked) => (
                   <tr class="peek-row">

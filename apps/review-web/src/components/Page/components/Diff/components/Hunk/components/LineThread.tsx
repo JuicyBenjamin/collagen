@@ -1,6 +1,7 @@
 import { createSignal, For, Show } from "solid-js";
 import type { CommentSpot, DiffSide, DraftView, LineComment } from "~/data";
 import { enter } from "~/fold";
+import { chatNow } from "~/chatNow";
 import { hostNow } from "~/hostNow";
 import { bodyParts, suggestionBlock } from "~/suggest";
 import { Markdown } from "~/components/Markdown";
@@ -269,6 +270,8 @@ export function LineComposer(props: {
   to: { readonly side: DiffSide; readonly line: number };
   /** the picked lines' code, when every one is on the new side */
   suggestable: ReadonlyArray<string> | null;
+  /** the picked lines as the diff shows them, each after its sign */
+  code: string;
 }) {
   const [body, setBody] = createSignal("");
   const [strength, setStrength] = createSignal<Strength | null>(null);
@@ -281,6 +284,11 @@ export function LineComposer(props: {
   const block = () => props.from.line !== props.to.line || props.from.side !== props.to.side;
   const spot = (): CommentSpot => ({ file: props.file, line: props.to.line, side: props.to.side, ...(block() ? { startLine: props.from.line, startSide: props.from.side } : {}) });
   const close = () => hostNow.clearPick();
+  /** the picked lines go to the reader's AI instead; words begun here stay */
+  const askAi = () => {
+    chatNow.askAbout({ file: props.file, from: props.from, to: props.to, text: props.code });
+    if (body().trim().length === 0) close();
+  };
   const suggest = () => {
     if (!box || !props.suggestable) return;
     const at = box.selectionStart ?? body().length;
@@ -324,11 +332,16 @@ export function LineComposer(props: {
           >
             <div class="composer-head">
               <span>Comment on {whereOf(spot())}</span>
-              <Show when={props.suggestable}>
-                <button type="button" class="btn btn-xs" onClick={suggest} title="Put these lines in a suggestion to edit — the author can take it as it is">
-                  ± Suggest a change
+              <span class="composer-tools">
+                <button type="button" class="btn btn-xs" onClick={askAi} title="Ask your AI about these lines">
+                  Ask AI
                 </button>
-              </Show>
+                <Show when={props.suggestable}>
+                  <button type="button" class="btn btn-xs" onClick={suggest} title="Put these lines in a suggestion to edit — the author can take it as it is">
+                    ± Suggest a change
+                  </button>
+                </Show>
+              </span>
             </div>
             <textarea
               class="textarea"

@@ -99,12 +99,16 @@ export const chatNow = {
   take(): void {
     const offered = offer();
     if (!offered) return;
-    setAttached(offered.selection);
     setOffer(null);
+    getSelection()?.removeAllRanges();
+    chatNow.askAbout(offered.selection);
+  },
+  /** Ask about these lines (picked in the margin, or selected): they go with the next question. */
+  askAbout(selection: ChatSelection): void {
+    setAttached(selection);
     setRefused(null);
     setOpen(true);
     setAsking((count) => count + 1);
-    getSelection()?.removeAllRanges();
   },
   /** Ask the reader's AI — with the lines attached, if any. True when it is under way. */
   async ask(question: string): Promise<boolean> {
