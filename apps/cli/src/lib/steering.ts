@@ -40,7 +40,7 @@ export type Cause = "mine" | "others";
 export type SteeringAt = "master" | SteeringKind;
 
 export const STEERING_ORDER: ReadonlyArray<Steering> = ["never", "ask", "act", "auto"];
-export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate", "report"];
+export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate", "report", "close"];
 export const TAG_ROUTES: ReadonlyArray<TagRoute> = ["none", "existing", "existing-or-new", "new"];
 
 /** The level in effect, for that cause. In a room that sets its own: the
@@ -136,6 +136,7 @@ export const KIND_LABEL: Record<SteeringKind, string> = {
   run: "running your AI for a job (researching a ticket)",
   investigate: "starting your AI on an investigation (as one is filed, or asked of you)",
   report: "telling the conversation that filed an investigation what was found",
+  close: "closing what a finished ticket grew from (its plan, proposal or bug), when its review is accepted or merged",
 };
 
 export const TAG_LABEL: Record<TagRoute, string> = {

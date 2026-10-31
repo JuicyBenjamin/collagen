@@ -41,6 +41,7 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   investigate: "investigations",
   report: "reports",
   host: "repo host",
+  close: "closing",
 };
 
 /** Whose doing a steering row is about: yours, or another person's. */
@@ -103,6 +104,8 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       ["Your AI acting for you: how far collagen goes with it before asking you.", "You: started by you or your AI, like a ticket you filed.", "Others: started by someone else, like their ticket naming you, or their message."],
       [COLUMNS, ...steer("work")],
       ...AI_KINDS.filter((kind) => kind !== "work").map(steer),
+      // only your own tickets close: nobody else's doing closes them, so one row
+      [{ id: "steer:close:mine", kind: "steer", at: "close", cause: "mine" }],
       [
         { id: "label:tag", kind: "label", text: "messages for you" },
         { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
@@ -132,7 +135,6 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       { id: "switch:openReviewPage", kind: "switch", key: "openReviewPage" },
       { id: "switch:progressBar", kind: "switch", key: "progressBar" },
     ]),
-    section("Tickets", [], [{ id: "switch:alsoCloseParents", kind: "switch", key: "alsoCloseParents" }]),
   ),
 };
 
