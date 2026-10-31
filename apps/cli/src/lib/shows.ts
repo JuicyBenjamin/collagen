@@ -70,10 +70,14 @@ const isHttp = (raw: string): boolean => {
   }
 };
 
-/** A review's shows as the page has them, each marked when it runs on its
- *  author's machine. The page links their urls, and a record may come from
- *  any build: one that is not http(s) is left out. */
-export const shownShows = (shows: ReadonlyArray<ReviewShow> | undefined): ReadonlyArray<Show> | undefined => {
-  const out = (shows ?? []).flatMap((show): ReadonlyArray<Show> => (isHttp(show.url) ? [{ id: show.id, title: show.title, url: show.url, local: isLocalUrl(show.url) }] : []));
+/** A review's shows as its reader has them. A page that runs on its
+ *  author's machine is the author's alone: nobody else can open it, so to
+ *  anyone else it is not there at all. The page links their urls, and a
+ *  record may come from any build: one that is not http(s) is left out. */
+export const shownShows = (shows: ReadonlyArray<ReviewShow> | undefined, readerIsAuthor: boolean): ReadonlyArray<Show> | undefined => {
+  const out = (shows ?? []).flatMap((show): ReadonlyArray<Show> => {
+    const local = isLocalUrl(show.url);
+    return isHttp(show.url) && (readerIsAuthor || !local) ? [{ id: show.id, title: show.title, url: show.url, local }] : [];
+  });
   return out.length > 0 ? out : undefined;
 };

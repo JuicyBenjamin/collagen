@@ -85,7 +85,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       const reading = ticket?.kind === "review" && (ticket.createdBy !== me || review.assumed !== undefined);
       const page = reading && reviewStarted ? yield* reviewStarted(ticketId) : null;
       const opened = page === null ? "" : `\n\n${page} — the diff read by intent, in your user's browser. Tell them it is there. (Their openReviewPage setting; if they find it in the way, set-settings turns it off.)`;
-      const rows = reviewRows(review, about);
+      const rows = reviewRows(review, about, me);
       if (about && rows.decisions.length === 0 && rows.forks.length === 0 && (rows.outline?.length ?? 0) === 0 && !rows.bug && !rows.investigation) {
         return `nothing in the why mentions "${about}" — call review-context without 'about' for all ${review.decisions.length} decision(s) and ${review.forks.length} fork(s), or ask ${review.authorName} through their person (send-to-peer, with this ticketId)${opened}`;
       }
