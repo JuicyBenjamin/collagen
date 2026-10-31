@@ -44,6 +44,7 @@ follows the master until you set it:
 | `run` | collagen running your AI for a job of its own (researching a ticket) |
 | `investigate` | collagen starting your AI on an investigation: as you file one (unless it is asked of someone else, or you say `run: false`), and, for others', as one asked of you arrives — the orchestrator's switch |
 | `report` | collagen telling the conversation that filed an investigation what was found, as each take comes back — yours: your own AI's findings; others': a colleague's. Act or just do it, and nobody has to watch for it; ask first, your agent offers to; never, findings wait on the ticket |
+| `close` | closing what a finished ticket of yours grew from — its plan, proposal or bug — when its review is accepted or merged (collagen merging it closes the review itself). Never: it stays open; ask first: your agent asks; act, then tell: it is closed and you are told; just do it: it is closed. Yours only: nobody else's doing closes your tickets |
 
 Each level is one of:
 

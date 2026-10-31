@@ -1,10 +1,10 @@
 import { Effect, SubscriptionRef } from "effect";
+import { levelOf } from "../lib/steering";
 import { isJudged, visibleTo } from "@collagen/p2p";
 import type { HostWrite, MergeView } from "@collagen/review-web/data";
 import type { MergeFor } from "@collagen/p2p";
 import { mergeForOf, withMergeFor } from "../lib/merging";
 import { openParents } from "../lib/parents";
-import { settingOf } from "../lib/settings";
 import { StateStore } from "./StateStore";
 import { IdentityService } from "./Identity";
 import { Outbox } from "./Outbox";
@@ -65,7 +65,8 @@ export const parentsOf = Effect.fn("ReviewFinish.parents")(function* (ticketId: 
 /** What the review page offers beside Accept: the parents, and whether the
  *  person's setting has them ticked. */
 export const parentsView = Effect.fn("ReviewFinish.parentsView")(function* (ticketId: string) {
-  return { tickets: yield* parentsOf(ticketId), ticked: settingOf(yield* (yield* StateStore).get, "alsoCloseParents") };
+  const closing = levelOf(yield* (yield* StateStore).get, "close", "mine", (yield* reviewNamed(ticketId))?.roomId);
+  return { tickets: yield* parentsOf(ticketId), ticked: closing === "act" || closing === "auto" };
 });
 
 /** Close, as done, a ticket a review the reader filed grew from — the

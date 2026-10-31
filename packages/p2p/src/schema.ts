@@ -612,9 +612,10 @@ export type Steering = typeof Steering.Type;
  *  host in their name (reviews, comments, merges — one level for every
  *  host), delivering into their AI conversations, running their AI for a job
  *  of collagen's (researching a ticket), starting it on an investigation,
- *  and reporting an investigation's findings back to the conversation that
- *  filed it. */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report"]);
+ *  reporting an investigation's findings back to the conversation that
+ *  filed it, and closing what a finished ticket grew from (its plan,
+ *  proposal or bug, once its review is accepted or merged). */
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -628,7 +629,7 @@ export type SteeringPair = typeof SteeringPair.Type;
 export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
 export type TagRoute = typeof TagRoute.Type;
 
-const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair) });
+const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair) });
 
 /** One room's own levels: a general level and per kind, each absent where
  *  the room follows the person's levels everywhere. */
@@ -654,9 +655,6 @@ export type SteeringLevels = typeof SteeringLevels.Type;
 export const Settings = Schema.Struct({
   /** absent = on: a review's page opens in the browser when it is started */
   openReviewPage: Schema.optional(Schema.Boolean),
-  /** absent = on: closing a ticket, what it grew from (open, the person's
-   *  own) is offered ticked to close with it */
-  alsoCloseParents: Schema.optional(Schema.Boolean),
   /** absent = off: an investigation that names no pace runs its goals one
    *  by one; on, all at once */
   investigationsAtOnce: Schema.optional(Schema.Boolean),
