@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { harnessFor, Harnesses } from "./Harness";
-import { shownAi } from "../lib/jobs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { Context, Effect, Fiber, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -12,15 +11,21 @@ import { McpInfo } from "./McpInfo";
 import { mcpServerName } from "./mcpAddress";
 import { StateStore } from "./StateStore";
 import { commitIn, reviewNamed, reviewTree } from "./ReviewView";
+import { harnessFor, Harnesses, transcriptFile } from "./Harness";
+import { shownAi } from "../lib/jobs";
+import { readLine, type TranscriptLine } from "../lib/transcripts";
 
 // The reader's conversation with their own AI on the review page: they
 // select code, ask, and the answer streams into the page as it is written —
 // no going back to a terminal. Collagen brings no model: it runs the CLI the
 // reader uses (the one their conversations work in most, or a mock) through its harness's chat, in
 // their clone, read-only, and goes on with the same conversation for the
-// next question. One conversation per review, held by this instance — every
-// tab on the review shows it, a reload finds it again; it is not kept past
-// a restart, and nothing of it leaves the machine.
+// next question. One conversation per review: every tab on the review shows
+// it, and a reload finds it again. The AI keeps the conversation itself; the
+// person's state keeps only where it is (which AI, its conversation id), so
+// after a restart the next question re-enters the same conversation and
+// the earlier turns are read back from the AI's own log. Nothing of it
+// leaves the machine.
 
 interface Chat {
   readonly turns: ReadonlyArray<ChatTurn>;
@@ -51,9 +56,9 @@ const preamble = (review: { readonly title: string; readonly branch?: string; re
   ].join("\n");
 
 const asked = (selection: ChatSelection | null, question: string): string => {
-  if (!selection) return `Their question: ${question}`;
+  if (!selection) return `${QUESTION}${question}`;
   const lines = selection.from.line === selection.to.line && selection.from.side === selection.to.side ? `line ${selection.to.line}` : `lines ${selection.from.line}–${selection.to.line}`;
-  return [`They selected ${selection.file}, ${lines} of the diff:`, "```diff", selection.text, "```", `Their question: ${question}`].join("\n");
+  return [`They selected ${selection.file}, ${lines} of the diff:`, "```diff", selection.text, "```", `${QUESTION}${question}`].join("\n");
 };
 
 /** What the AI is sent for a question: the opening on a new conversation;
@@ -65,6 +70,33 @@ export const promptFor = (parts: { readonly opening: string | null; readonly mov
     : parts.moved !== null
       ? `The page now shows commit ${parts.moved}: read the review's code with \`git show ${parts.moved}:<path>\`.\n\n${parts.now}`
       : parts.now;
+
+const QUESTION = "Their question: ";
+
+/** A review's earlier turns, read back from the AI's own log of the
+ *  conversation: each question collagen sent it (its "Their question:" line,
+ *  with the lines selected and the commit the page showed), and the last
+ *  thing the AI wrote before the next one. A tool's result, its thinking and
+ *  its tool calls are not turns. */
+export const turnsFromLog = (lines: ReadonlyArray<TranscriptLine>): ReadonlyArray<ChatTurn> => {
+  const turns: Array<ChatTurn> = [];
+  for (const line of lines) {
+    if (line.who === "user") {
+      const at = line.text.lastIndexOf(QUESTION);
+      if (at < 0) continue;
+      const picked = /They selected (.+?), lines? (\d+)(?:–(\d+))? of the diff:\n```diff\n([\s\S]*?)\n```/.exec(line.text);
+      const commit = /(?:at commit|now shows commit) ([0-9a-f]{7,40})/.exec(line.text)?.[1] ?? turns.at(-1)?.commit ?? null;
+      const selection: ChatSelection | null = picked
+        ? { file: picked[1]!, from: { line: Number(picked[2]), side: "RIGHT" }, to: { line: Number(picked[3] ?? picked[2]), side: "RIGHT" }, text: picked[4]! }
+        : null;
+      turns.push({ id: `log-${turns.length}`, question: line.text.slice(at + QUESTION.length).trim(), selection, commit, answer: "", doing: null, state: "done" });
+    } else if (line.who === "assistant" && turns.length > 0) {
+      const text = line.text.trim();
+      if (text && !text.startsWith("⚙") && text !== "(thinking)") turns[turns.length - 1] = { ...turns[turns.length - 1]!, answer: text };
+    }
+  }
+  return turns.slice(-KEEP);
+};
 
 /** A turn with the answer's events applied: text grows, the final answer replaces it, a failure says why. */
 export const applyEvents = (turn: ChatTurn, blocks: Array<string>, events: ReadonlyArray<ChatEvent>): ChatTurn => {
@@ -126,7 +158,11 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
           Stream.runForEach((batch) =>
             Effect.gen(function* () {
               const events = batch.flat();
-              for (const event of events) if (event.kind === "session") yield* change(ticketId, (conversation) => ({ ...conversation, session: { ai, id: event.id } }));
+              for (const event of events)
+                if (event.kind === "session") {
+                  yield* change(ticketId, (conversation) => ({ ...conversation, session: { ai, id: event.id } }));
+                  yield* store.update((state) => ({ ...state, chats: { ...state.chats, [ticketId]: { ai, id: event.id } } }));
+                }
               yield* changeTurn(ticketId, turnId, (turn) => applyEvents(turn, blocks, events));
             }),
           ),
@@ -160,6 +196,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       if (no || ai === null) return { error: no ?? "No AI set in collagen" } satisfies ChatAsked;
       const found = yield* reviewNamed(ticketId);
       if (!found) return { error: `no review ticket ${ticketId} in your rooms` } satisfies ChatAsked;
+      yield* recall(ticketId);
       const tree = yield* reviewTree(ticketId);
       const clone = typeof tree !== "string";
       // the page's moment, never the branch's now: a commit the clone lacks is refused
@@ -189,6 +226,30 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       return { ok: true } satisfies ChatAsked;
     });
 
+    /** After a restart, a review's conversation as the person's state points
+     *  to it: re-entered by the next question, its earlier turns read back
+     *  from the AI's own log. Once per review per run. */
+    const recalled = new Set<string>();
+    const recall = (ticketId: string) =>
+      Effect.gen(function* () {
+        if (recalled.has(ticketId)) return;
+        recalled.add(ticketId);
+        if ((yield* SubscriptionRef.get(chats)).has(ticketId)) return;
+        const ref = (yield* store.get).chats?.[ticketId];
+        if (!ref) return;
+        const file = transcriptFile(harnesses, ref.ai, ref.id);
+        const turns = file
+          ? yield* Effect.sync(() => {
+              try {
+                return turnsFromLog(readFileSync(file, "utf8").split("\n").flatMap((raw) => readLine(harnesses, raw) ?? []));
+              } catch {
+                return [];
+              }
+            })
+          : [];
+        yield* SubscriptionRef.update(chats, (byTicket) => (byTicket.has(ticketId) ? byTicket : new Map(byTicket).set(ticketId, { ...EMPTY, turns, session: ref })));
+      });
+
     /** Stop the answer under way, keeping what it said so far. */
     const stop = Effect.fn("ReviewChat.stop")(function* (ticketId: string) {
       const running = (yield* SubscriptionRef.get(chats)).get(ticketId)?.running;
@@ -203,6 +264,10 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
         next.delete(ticketId);
         return next;
       });
+      yield* store.update((state) => {
+        const { [ticketId]: _gone, ...rest } = state.chats ?? {};
+        return { ...state, chats: rest };
+      });
     });
 
     /** The conversation on a review, whole: now, then on every change —
@@ -211,6 +276,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       Stream.merge(SubscriptionRef.changes(chats), SubscriptionRef.changes(store.state)).pipe(
         Stream.mapEffect(() =>
           Effect.gen(function* () {
+            yield* recall(ticketId);
             const ai = shownAi(yield* store.get);
             const turns = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns ?? [];
             return JSON.stringify({ ai, cannot: cannot(ai), turns } satisfies ChatView);
