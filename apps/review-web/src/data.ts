@@ -930,6 +930,19 @@ export interface ChatView {
   /** the review's author, by name: whose AI a forwarded question goes to */
   readonly author: string | null;
   readonly turns: ReadonlyArray<ChatTurn>;
+  /** the review's earlier chats, newest first: a new chat keeps the one before it */
+  readonly earlier: ReadonlyArray<ChatEarlier>;
+}
+
+/** An earlier chat on a review, as its menu lists it. */
+export interface ChatEarlier {
+  readonly id: string;
+  readonly ai: string;
+  /** its first question, to know it by; null: none kept */
+  readonly first: string | null;
+  readonly questions: number;
+  /** when a new chat took its place (ISO, UTC) */
+  readonly ended: string | null;
 }
 
 /** What asking said: under way, or refused in words. */

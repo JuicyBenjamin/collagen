@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { Context, Effect, Fiber, Layer, Option, Stream, SubscriptionRef } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import type { ChatAsked, ChatSelection, ChatTurn, ChatView } from "@collagen/review-web/data";
+import type { ChatAsked, ChatEarlier, ChatSelection, ChatTurn, ChatView } from "@collagen/review-web/data";
 import { Adapters } from "./Adapters";
 import type { ChatEvent } from "./ChatAdapters";
 import { CliArgs } from "./CliArgs";
@@ -19,7 +19,7 @@ import { levelOf } from "../lib/steering";
 import { IdentityService } from "./Identity";
 import { OWN, ReviewQuestions } from "./ReviewQuestions";
 import type { Rooms } from "./Rooms";
-import type { ChatTurnKept, ReviewAnswer, ReviewQuestionStage } from "@collagen/p2p";
+import type { ChatKept, ChatTurnKept, ReviewAnswer, ReviewQuestionStage } from "@collagen/p2p";
 
 // The reader's conversation with their own AI on the review page: they
 // select code, ask, and the answer streams into the page as it is written —
@@ -44,6 +44,10 @@ interface Chat {
 const EMPTY: Chat = { turns: [], session: null, running: null };
 /** The most turns a conversation keeps on the page. */
 const KEEP = 50;
+/** The most earlier chats a review keeps. */
+const PAST = 10;
+/** How long a closed review keeps its earlier chats. */
+const PAST_AFTER_CLOSE = 30 * 24 * 60 * 60 * 1000;
 /** Text streamed in is shown at most this often: a batch per beat, not a page update per word. */
 const BEAT = "60 millis";
 
@@ -245,7 +249,7 @@ export const applyEvents = (turn: ChatTurn, blocks: Array<string>, events: Reado
 /** A review's chat in words, for an agent: each question with the lines it
  *  was about, and its answer as it stands. */
 export const chatInWords = (view: ChatView): string => {
-  if (view.turns.length === 0) return `Your user's chat on this review is empty${view.cannot ? `, and cannot be asked: ${view.cannot}` : ""}.`;
+  if (view.turns.length === 0 && view.earlier.length === 0) return `Your user's chat on this review is empty${view.cannot ? `, and cannot be asked: ${view.cannot}` : ""}.`;
   const turns = view.turns.map((turn) => {
     const answer = turn.answer || (turn.state === "answering" ? "(still answering)" : "(no answer)");
     const end = turn.state === "stopped" ? " [stopped]" : turn.state === "failed" ? ` [failed: ${turn.error ?? "it stopped"}]` : "";
@@ -256,7 +260,12 @@ export const chatInWords = (view: ChatView): string => {
       : "";
     return `Your user asked${lines}: ${turn.question}\n${view.ai ?? "Their AI"} answered: ${answer}${end}`;
   });
-  return [`Your user's chat on this review, with ${view.ai ?? "no AI set"}:`, ...turns].join("\n\n");
+  const earlier = view.earlier.map((chat) => `- ${chat.id}: ${chat.questions} question${chat.questions === 1 ? "" : "s"}${chat.first ? `, starting "${chat.first.slice(0, 80)}"` : ""}${chat.ended ? `, set aside ${chat.ended.slice(0, 10)}` : ""}`);
+  return [
+    `Your user's chat on this review, with ${view.ai ?? "no AI set"}:`,
+    ...turns,
+    ...(earlier.length > 0 ? [`Earlier chats on this review (read one with 'chat', go back to it with 'reopen'):\n${earlier.join("\n")}`] : []),
+  ].join("\n\n");
 };
 
 export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", {
@@ -532,19 +541,69 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       if (running) yield* Fiber.interrupt(running.fiber);
     });
 
-    /** A new conversation: the answer under way stopped, the turns gone, the next question starts afresh. */
+    /** The review's chat set aside: the answer under way stopped, its place
+     *  and turns moved to the review's earlier chats (the newest first, PAST
+     *  of them), and the page's conversation empty. A closed review's
+     *  earlier chats go PAST_AFTER_CLOSE after it closed. */
+    const setAside = (ticketId: string) =>
+      Effect.gen(function* () {
+        yield* stop(ticketId);
+        yield* keepTurns(ticketId);
+        const ended = new Date().toISOString();
+        const closedLong = new Set<string>();
+        for (const id of Object.keys((yield* store.get).pastChats ?? {})) {
+          const closed = (yield* reviewNamed(id).pipe(Effect.provideContext(roomContext)))?.ticket.closed;
+          if (closed && Date.now() - closed.ts > PAST_AFTER_CLOSE) closedLong.add(id);
+        }
+        yield* SubscriptionRef.update(chats, (byTicket) => {
+          const next = new Map(byTicket);
+          next.delete(ticketId);
+          return next;
+        });
+        yield* store.update((state) => {
+          const { [ticketId]: current, ...rest } = state.chats ?? {};
+          const past = Object.fromEntries(Object.entries(state.pastChats ?? {}).filter(([id]) => !closedLong.has(id)));
+          if (current) past[ticketId] = [{ ...current, ended }, ...(past[ticketId] ?? []).filter((earlier) => earlier.id !== current.id)].slice(0, PAST);
+          return { ...state, chats: rest, pastChats: past };
+        });
+      });
+
+    /** A new conversation: the one before it kept among the review's earlier chats, the next question starts afresh. */
     const clear = Effect.fn("ReviewChat.clear")(function* (ticketId: string) {
-      yield* stop(ticketId);
-      yield* SubscriptionRef.update(chats, (byTicket) => {
-        const next = new Map(byTicket);
-        next.delete(ticketId);
-        return next;
-      });
-      yield* store.update((state) => {
-        const { [ticketId]: _gone, ...rest } = state.chats ?? {};
-        return { ...state, chats: rest };
-      });
+      yield* setAside(ticketId);
     });
+
+    /** Go back to an earlier chat: the one now set aside in its place, that
+     *  one the review's conversation again — the next question goes on with it. */
+    const reopen = Effect.fn("ReviewChat.reopen")(function* (ticketId: string, chatId: string) {
+      const chosen = (yield* store.get).pastChats?.[ticketId]?.find((earlier) => earlier.id === chatId);
+      if (!chosen) return `no earlier chat ${chatId} on this review`;
+      yield* setAside(ticketId);
+      yield* store.update((state) => {
+        const { ended: _ended, ...again } = chosen;
+        return {
+          ...state,
+          chats: { ...state.chats, [ticketId]: again },
+          pastChats: { ...state.pastChats, [ticketId]: (state.pastChats?.[ticketId] ?? []).filter((earlier) => earlier.id !== chatId) },
+        };
+      });
+      // read back as after a restart: its turns, and its conversation to go on with
+      recalled.delete(ticketId);
+      yield* recall(ticketId);
+      return "ok";
+    });
+
+    /** A review's earlier chats, as the menu lists them. */
+    const earlierOf = (state: { readonly pastChats?: { readonly [ticketId: string]: ReadonlyArray<ChatKept> } }, ticketId: string): ReadonlyArray<ChatEarlier> =>
+      (state.pastChats?.[ticketId] ?? []).map((earlier) => ({ id: earlier.id, ai: earlier.ai, first: earlier.turns?.[0]?.question ?? null, questions: earlier.turns?.length ?? 0, ended: earlier.ended ?? null }));
+
+    /** An earlier chat, whole, as the page's view of it: to read without going back to it. */
+    const earlierView = (ticketId: string, chatId: string) =>
+      Effect.gen(function* () {
+        const chosen = (yield* store.get).pastChats?.[ticketId]?.find((earlier) => earlier.id === chatId);
+        if (!chosen) return null;
+        return { ai: chosen.ai, cannot: null, author: null, turns: (chosen.turns ?? []).map(fromKept), earlier: [] } satisfies ChatView;
+      });
 
     /** The conversation on a review, whole: now, then on every change —
      *  a reconnect starts again from now. */
@@ -553,19 +612,20 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
         Stream.mapEffect(() =>
           Effect.gen(function* () {
             yield* recall(ticketId);
-            const ai = chatAi(yield* store.get);
+            const state = yield* store.get;
+            const ai = chatAi(state);
             const turns = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns ?? [];
             const found = yield* reviewNamed(ticketId).pipe(Effect.provideContext(roomContext));
             // the person's own review: "you", answered by the conversation of theirs that did the work
             const author = found ? (found.ticket.createdBy === me ? OWN : found.review.authorName) : null;
-            return JSON.stringify({ ai, cannot: cannot(ai), author, turns } satisfies ChatView);
+            return JSON.stringify({ ai, cannot: cannot(ai), author, turns, earlier: earlierOf(state, ticketId) } satisfies ChatView);
           }),
         ),
         Stream.changes,
         Stream.map((json) => JSON.parse(json) as ChatView),
       );
 
-    return { ask, stop, clear, view, forward, instead } as const;
+    return { ask, stop, clear, reopen, earlierView, view, forward, instead } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

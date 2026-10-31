@@ -491,7 +491,7 @@ export const AskAuthor = Tool.make("ask-author", {
 export const ReviewChatTool = Tool.make("review-chat", {
   description: [
     "Your user's chat on a review's page: their questions to their own AI about the review, and its answers — a conversation apart from this one. With only 'ticketId' it reads it: each question, the lines it was about and the answer, so you carry on from what they asked there instead of asking again.",
-    "'question' asks it, as your user would on the page: it answers read-only in their clone, the page shows it live, and this waits for the answer and gives it back. 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows. Usually you answer your user yourself; ask through it only when they want it kept on the review. 'stop' stops the answer under way; 'new' starts the conversation over. Asking, stopping and starting over only on your user's word.",
+    "'question' asks it, as your user would on the page: it answers read-only in their clone, the page shows it live, and this waits for the answer and gives it back. 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows. Usually you answer your user yourself; ask through it only when they want it kept on the review. 'stop' stops the answer under way; 'new' starts a new conversation, the one before it kept among the review's earlier chats (reading lists them). 'chat' with an earlier chat's id reads that one; 'reopen' with it goes back to it, the current one set aside in its place. Asking, stopping, starting over and going back only on your user's word.",
   ].join("\n"),
   parameters: Schema.Struct({
     ticketId: Schema.String,
@@ -500,6 +500,8 @@ export const ReviewChatTool = Tool.make("review-chat", {
     commit: Schema.optional(Schema.String),
     stop: Schema.optional(Schema.Boolean),
     new: Schema.optional(Schema.Boolean),
+    chat: Schema.optional(Schema.String),
+    reopen: Schema.optional(Schema.String),
   }),
   success: Schema.String,
 });
@@ -1987,11 +1989,21 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question: input.question.trim(), ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) });
       }),
-      "review-chat": Effect.fn("Mcp.reviewChat")(function* (input: { ticketId: string; question?: string; lines?: QuestionLines; commit?: string; stop?: boolean; new?: boolean }) {
+      "review-chat": Effect.fn("Mcp.reviewChat")(function* (input: { ticketId: string; question?: string; lines?: QuestionLines; commit?: string; stop?: boolean; new?: boolean; chat?: string; reopen?: string }) {
         const now = () => reviewChat.view(input.ticketId).pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
         if (input.new) {
           yield* reviewChat.clear(input.ticketId);
-          return "Started over: the next question on the review begins a new conversation.";
+          return "Started over: the next question on the review begins a new conversation; the one before is kept among its earlier chats.";
+        }
+        if (input.chat) {
+          const earlier = yield* reviewChat.earlierView(input.ticketId, input.chat);
+          return earlier ? chatInWords(earlier).replace("Your user's chat on this review", `Your user's earlier chat ${input.chat} on this review`) : `failed: no earlier chat ${input.chat} on this review — reading lists them`;
+        }
+        if (input.reopen) {
+          const said = yield* reviewChat.reopen(input.ticketId, input.reopen);
+          if (said !== "ok") return `failed: ${said}`;
+          const view = yield* now();
+          return view ? chatInWords(view) : "Went back to it.";
         }
         if (input.stop) {
           yield* reviewChat.stop(input.ticketId);
