@@ -20,21 +20,22 @@ const [refused, setRefused] = createSignal<string | null>(null);
 const [sending, setSending] = createSignal(false);
 /** The question being written: words a comment box handed over come in it. */
 const [draft, setDraft] = createSignal("");
-/** What a view transition is turning into the chat's panel or its pill
- *  (styles.css: ask-panel), and which of the two takes the name meanwhile:
- *  neither rises nor sinks then, the transition is its way in and out. */
-export type Landing = "panel" | "pill";
-const [landing, setLanding] = createSignal<Landing | null>(null);
-/** A comment box is flying into the panel's input: the input holds its name (ask-box). */
-const [carrying, setCarrying] = createSignal(false);
-/** The chat's panel and its pill, while placed: what one becomes the other from. */
+/** A comment form is flying into the panel (one view transition,
+ *  styles.css: ask-panel, ask-box): the panel and its input hold the names,
+ *  and the panel does not rise — the flight is its way in. */
+const [flying, setFlying] = createSignal(false);
+/** The chat's panel and its pill, while placed: what one grows from and shrinks into. */
 const corner: { panel?: HTMLElement; pill?: HTMLElement } = {};
+/** The pill and the panel turning into each other (fold.ts: grow, shrink):
+ *  where the panel grows from, when it opens from the pill, and whether it
+ *  is shrinking into the pill as it closes. */
+const turn: { from: DOMRect | null; intoPill: boolean } = { from: null, intoPill: false };
 
 /** One view transition: each of `from` lends its element the name it has
- *  there, and gives it up as `change` runs, while `into` takes it — so what
- *  was there becomes the panel or the pill. Resolves once the change is made
- *  (at once when nothing can fly), and `finished` once the flight lands. */
-function morph(into: Landing, from: ReadonlyArray<readonly [HTMLElement, string]>, change: () => void): { readonly made: Promise<void>; readonly finished: Promise<void> } {
+ *  there, and gives it up as `change` runs, while the panel takes it — so
+ *  what was there becomes the panel. Resolves once the change is made (at
+ *  once when nothing can fly), and `finished` once the flight lands. */
+function morph(from: ReadonlyArray<readonly [HTMLElement, string]>, change: () => void): { readonly made: Promise<void>; readonly finished: Promise<void> } {
   if (!canFly()) {
     change();
     return { made: Promise.resolve(), finished: Promise.resolve() };
@@ -43,25 +44,15 @@ function morph(into: Landing, from: ReadonlyArray<readonly [HTMLElement, string]
   const flight = document.startViewTransition(() => {
     // one holder of a name at a time
     for (const [element] of from) element.style.viewTransitionName = "";
-    setLanding(into);
+    setFlying(true);
     change();
     flush();
   });
   const landed = () => {
-    setLanding(null);
+    setFlying(false);
   };
   const finished = flight.finished.then(landed, landed);
   return { made: flight.updateCallbackDone.catch(() => undefined), finished };
-}
-
-/** The pill and the panel turning into each other, in their corner: marked
- *  on the page while it runs, so neither is drawn stretched to the other's
- *  shape (styles.css: data-corner-morph). */
-function inCorner(into: Landing, from: HTMLElement, change: () => void): void {
-  const page = document.documentElement;
-  // which way it goes: the panel opens on a spring, and closes into the pill on a softer one
-  page.dataset.cornerMorph = into;
-  void morph(into, [[from, "ask-panel"]], change).finished.then(() => delete page.dataset.cornerMorph);
 }
 /** Moves each time the reader picks lines to ask about: the panel's input takes the focus. */
 const [asking, setAsking] = createSignal(0);
@@ -124,21 +115,19 @@ export const chatNow = {
   asking,
   draft,
   setDraft,
-  landing,
-  carrying,
+  flying,
   corner,
+  turn,
   setView,
   /** The pill grows into the panel. */
   openUp(): void {
-    const pill = corner.pill;
-    if (pill) inCorner("panel", pill, () => setOpen(true));
-    else setOpen(true);
+    turn.from = corner.pill?.getBoundingClientRect() ?? null;
+    setOpen(true);
   },
   /** The panel shrinks into the pill — when there is one to come: a chat with nothing in it has none, and sinks. */
   close(): void {
-    const panel = corner.panel;
-    if (panel && (view()?.turns.length ?? 0) > 0) inCorner("pill", panel, () => setOpen(false));
-    else setOpen(false);
+    turn.intoPill = corner.panel !== undefined && (view()?.turns.length ?? 0) > 0;
+    setOpen(false);
   },
   detach: () => setAttached(null),
   /** Is an answer under way? */
@@ -179,9 +168,7 @@ export const chatNow = {
    *  open at a time and the flight is the panel's entrance. `away` takes the
    *  comment form's place away, folding shut as it flies. */
   handOver(selection: ChatSelection, words: string, from: { readonly form: HTMLElement; readonly box: HTMLElement }, away: () => void): void {
-    setCarrying(true);
     const flight = morph(
-      "panel",
       [
         [from.form, "ask-panel"],
         [from.box, "ask-box"],
@@ -192,7 +179,6 @@ export const chatNow = {
       },
     );
     void flight.made.then(away);
-    void flight.finished.then(() => setCarrying(false));
   },
   /** Ask the reader's AI — with the lines attached, if any. True when it is under way. */
   async ask(question: string): Promise<boolean> {
