@@ -8,6 +8,10 @@ const still = matchMedia("(prefers-reduced-motion: reduce)");
 /** Can the pill fly between the header and the corner (a view transition). */
 export const flies = typeof document !== "undefined" && "startViewTransition" in document;
 
+/** Can something fly now: the browser has view transitions, the tab is in
+ *  sight (one out of sight runs no frames), and more motion is not too much. */
+export const canFly = (): boolean => flies && !still.matches && !document.hidden;
+
 /** Where the pill is going while a transition's switch is yet to run. */
 let heading: boolean | null = null;
 
@@ -18,7 +22,7 @@ export function setFloating(next: boolean): void {
   // where it is going, while a transition's switch is yet to run: a fast
   // scroll asks again before then, and must not start it twice
   if (next === (heading ?? floating())) return;
-  if (!flies || still.matches || document.hidden) {
+  if (!canFly()) {
     heading = null;
     return void setFloatingNow(next);
   }

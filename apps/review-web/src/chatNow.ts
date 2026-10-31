@@ -1,7 +1,8 @@
-import { createSignal } from "solid-js";
+import { createSignal, flush } from "solid-js";
 import { answerInstead, askAi, forwardQuestion, newChat, stopAnswer } from "./api";
 import type { ChatSelection, ChatView, SideLine } from "./data";
 import { diffNow } from "./diffNow";
+import { canFly } from "./floating";
 import { ticketId } from "./ticket";
 
 // The reader's conversation with their own AI, as the page holds it: the
@@ -17,6 +18,10 @@ const [attached, setAttached] = createSignal<ChatSelection | null>(null);
 const [offer, setOffer] = createSignal<{ readonly selection: ChatSelection; readonly x: number; readonly y: number } | null>(null);
 const [refused, setRefused] = createSignal<string | null>(null);
 const [sending, setSending] = createSignal(false);
+/** The question being written: words a comment box handed over come in it. */
+const [draft, setDraft] = createSignal("");
+/** A comment box is flying into the chat's input: the input holds the transition's name. */
+const [flying, setFlying] = createSignal(false);
 /** Moves each time the reader picks lines to ask about: the panel's input takes the focus. */
 const [asking, setAsking] = createSignal(0);
 
@@ -76,6 +81,9 @@ export const chatNow = {
   refused,
   sending,
   asking,
+  draft,
+  setDraft,
+  flying,
   setView,
   toggle: () => setOpen(!open()),
   close: () => setOpen(false),
@@ -104,12 +112,34 @@ export const chatNow = {
     getSelection()?.removeAllRanges();
     chatNow.askAbout(offered.selection);
   },
-  /** Ask about these lines (picked in the margin, or selected): they go with the next question. */
-  askAbout(selection: ChatSelection): void {
+  /** Ask about these lines (picked in the margin, or selected): they go with the next question, after any words already begun. */
+  askAbout(selection: ChatSelection, words = ""): void {
     setAttached(selection);
+    if (words.trim()) setDraft(words);
     setRefused(null);
     setOpen(true);
     setAsking((count) => count + 1);
+  },
+  /** A comment box turns into the question: its lines and words go to the
+   *  chat, and the box flies into the chat's input (one view transition,
+   *  styles.css: ask-box), so one box is open at a time. `away` takes the
+   *  comment form away, folding shut as the box flies. */
+  handOver(selection: ChatSelection, words: string, box: HTMLElement, away: () => void): void {
+    if (!canFly()) {
+      away();
+      return chatNow.askAbout(selection, words);
+    }
+    box.style.viewTransitionName = "ask-box";
+    const flight = document.startViewTransition(() => {
+      // the name passes to the chat's input: one holder at a time
+      box.style.viewTransitionName = "";
+      box.style.visibility = "hidden";
+      setFlying(true);
+      chatNow.askAbout(selection, words);
+      flush();
+    });
+    void flight.updateCallbackDone.then(away, away);
+    void flight.finished.finally(() => setFlying(false));
   },
   /** Ask the reader's AI — with the lines attached, if any. True when it is under way. */
   async ask(question: string): Promise<boolean> {

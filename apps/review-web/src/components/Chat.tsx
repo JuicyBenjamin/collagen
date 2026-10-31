@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, For, Show } from "solid-js";
 import { Appear } from "./Appear";
 import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
@@ -50,7 +50,8 @@ export function Chat() {
 }
 
 function Panel() {
-  const [question, setQuestion] = createSignal("");
+  const question = chatNow.draft;
+  const setQuestion = chatNow.setDraft;
   let log: HTMLDivElement | undefined;
   let input: HTMLTextAreaElement | undefined;
   // follows the answer down as it grows — unless the reader scrolled up to read
@@ -120,6 +121,8 @@ function Panel() {
           </Show>
           <textarea
             ref={(element) => (input = element)}
+            // a comment box flying in lands here (chatNow.handOver)
+            style={{ "view-transition-name": chatNow.flying() ? "ask-box" : undefined }}
             rows={2}
             placeholder={chatNow.attached() ? "Ask about these lines" : "Ask about this review"}
             value={question()}
