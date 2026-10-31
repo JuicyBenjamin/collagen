@@ -242,6 +242,23 @@ export const applyEvents = (turn: ChatTurn, blocks: Array<string>, events: Reado
   return { ...turn, answer: blocks.filter((block) => block.trim().length > 0).join("\n\n").trim(), doing, ...(error !== undefined ? { error } : {}) };
 };
 
+/** A review's chat in words, for an agent: each question with the lines it
+ *  was about, and its answer as it stands. */
+export const chatInWords = (view: ChatView): string => {
+  if (view.turns.length === 0) return `Your user's chat on this review is empty${view.cannot ? `, and cannot be asked: ${view.cannot}` : ""}.`;
+  const turns = view.turns.map((turn) => {
+    const answer = turn.answer || (turn.state === "answering" ? "(still answering)" : "(no answer)");
+    const end = turn.state === "stopped" ? " [stopped]" : turn.state === "failed" ? ` [failed: ${turn.error ?? "it stopped"}]` : "";
+    // an author's AI answers under the question it was asked, with no question of its own
+    if (turn.from !== undefined) return `${turn.from === OWN ? "The conversation that did the work" : `${turn.from}'s AI`} answered:\n${answer}${end}`;
+    const lines = turn.selection
+      ? ` (about ${turn.selection.file}:${turn.selection.from.line === turn.selection.to.line ? turn.selection.to.line : `${turn.selection.from.line}-${turn.selection.to.line}`}${turn.commit ? ` at ${turn.commit.slice(0, 7)}` : ""})`
+      : "";
+    return `Your user asked${lines}: ${turn.question}\n${view.ai ?? "Their AI"} answered: ${answer}${end}`;
+  });
+  return [`Your user's chat on this review, with ${view.ai ?? "no AI set"}:`, ...turns].join("\n\n");
+};
+
 export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", {
   make: Effect.gen(function* () {
     const store = yield* StateStore;
@@ -269,11 +286,11 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
 
     /** One answer: the AI's CLI run on the prompt, its stdout read as it comes. */
     const answer = Effect.fn("ReviewChat.answer")(
-      function* (ticketId: string, turnId: string, ai: string, cwd: string, prompt: string, resume: Option.Option<string>) {
+      function* (ticketId: string, turnId: string, ai: string, cwd: string, prompt: string, resume: Option.Option<string>, fork = false) {
         const chat = chatOf(ai)!;
         // the model chosen for chats, else the harness's own default for them; a mock has none
         const model = Option.fromNullishOr(modelFor(yield* store.get, "chat", harnessFor(harnesses, ai)?.defaultModels ?? {}));
-        const context = { cwd, prompt, sessionId: resume, mcpUrl: yield* mcp.awaitUrl, serverName: mcpServerName(profile), model };
+        const context = { cwd, prompt, sessionId: resume, mcpUrl: yield* mcp.awaitUrl, serverName: mcpServerName(profile), model, fork };
         const proc = yield* ChildProcess.make(chat.cmd, [...chat.args(context)], { cwd, stdin: "ignore" });
         const blocks: Array<string> = [];
         const stderr: Array<string> = [];
@@ -348,14 +365,25 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       });
       if (!taken) return { error: "Still answering" } satisfies ChatAsked;
       const { session, lastCommit } = taken;
+      // a new conversation starts from the one that opened the page: a copy
+      // of it when this AI can make one headless, else a pointer to its log
+      const opener = Option.isNone(session) ? (yield* store.get).chatOpeners?.[ticketId] : undefined;
+      const fork = opener !== undefined && opener.ai === ai && chatOf(ai)?.forks === true;
+      const openerLog = opener && !fork ? transcriptFile(harnesses, opener.ai, opener.id) : null;
       const prompt = promptFor({
         opening: Option.isNone(session)
-          ? preamble({ title: found.ticket.title ?? found.ticket.goal, branch: found.review.branch, base: found.review.base, commit, ticketId, serverName: mcpServerName(profile), clone })
+          ? [
+              preamble({ title: found.ticket.title ?? found.ticket.goal, branch: found.review.branch, base: found.review.base, commit, ticketId, serverName: mcpServerName(profile), clone }),
+              fork ? "This conversation is a copy of the one your user opened the review from: what you discussed there, you know; from here on you answer on the review page, read-only." : "",
+              openerLog ? `Your user opened this review from a ${harnessFor(harnesses, opener!.ai)?.name ?? opener!.ai} conversation; its log is at ${openerLog}. Read it only when the question leans on what they discussed there.` : "",
+            ]
+              .filter(Boolean)
+              .join("\n\n")
           : null,
         moved: clone && commit !== null && commit !== lastCommit ? commit : null,
         now: about ? `${asked(selection, about.asked)}\n\n${insteadOf(about.mode, about.author)}` : asked(selection, question),
       });
-      const fiber = yield* answer(ticketId, turn.id, ai, clone ? tree.projectPath : homedir(), prompt, session).pipe(Effect.forkIn(scope));
+      const fiber = yield* answer(ticketId, turn.id, ai, clone ? tree.projectPath : homedir(), prompt, fork ? Option.some(opener!.id) : session, fork).pipe(Effect.forkIn(scope));
       // set only while that turn still runs — a quick one may be done already
       yield* change(ticketId, (conversation) => ({ ...conversation, running: conversation.turns.some((listed) => listed.id === turn.id && listed.state === "answering") ? { turn: turn.id, fiber } : conversation.running }));
       return { ok: true } satisfies ChatAsked;
