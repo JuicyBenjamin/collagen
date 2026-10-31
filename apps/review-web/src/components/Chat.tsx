@@ -154,12 +154,16 @@ function Panel() {
 
 function Turn(props: { turn: ChatTurn }) {
   const parts = createMemo(() => answerParts(props.turn.answer));
+  const author = () => chatNow.view()?.author ?? "the author";
   return (
-    <div class="chat-turn">
-      <div class="chat-q">
-        <Show when={props.turn.selection}>{(selection) => <code class="chat-about">{selectionLabel(selection())}</code>}</Show>
-        <p>{props.turn.question}</p>
-      </div>
+    <div class={["chat-turn", { theirs: props.turn.from !== undefined }]}>
+      {/* an author's AI answers under the question it was asked: no question of its own */}
+      <Show when={props.turn.from === undefined} fallback={<p class="chat-from">{props.turn.from}'s AI</p>}>
+        <div class="chat-q">
+          <Show when={props.turn.selection}>{(selection) => <code class="chat-about">{selectionLabel(selection())}</code>}</Show>
+          <p>{props.turn.question}</p>
+        </div>
+      </Show>
       <div class={["chat-a", { failed: props.turn.state === "failed" }]}>
         <For each={parts()}>
           {(part) => (
@@ -178,6 +182,22 @@ function Turn(props: { turn: ChatTurn }) {
         </Show>
         <Show when={props.turn.state === "failed"}>
           <p class="host-error">{props.turn.error ?? "Failed"}</p>
+        </Show>
+        <Show when={props.turn.forward}>
+          {(forward) => (
+            <Show
+              when={forward().state === "offered"}
+              fallback={
+                <Show when={forward().state === "asked"}>
+                  <p class="chat-doing">Asked {author()}'s AI</p>
+                </Show>
+              }
+            >
+              <button type="button" class="banner-go small" onClick={() => void chatNow.forward(props.turn.id)} title={forward().question}>
+                Ask {author()}'s AI
+              </button>
+            </Show>
+          )}
         </Show>
       </div>
     </div>

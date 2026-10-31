@@ -249,6 +249,8 @@ export const reviewRows = (review: ReviewContext, about?: string, reader?: strin
             agentWhy: decision.agentWhy ?? "",
             where: decision.where.join(" "),
             guidedBy: (decision.guidedBy ?? []).join(", "),
+            // a reason read from the author's AI (a reader's question answered), not told by them
+            basis: decision.basis ?? "",
           },
     ),
     forks: forks.map((fork) => (review.claimed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, verdict: fork.verdict ?? (fork.basis !== undefined ? "still a guess" : "told"), guessed: fork.guess ? fork.guess.what : "" } : review.assumed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, basis: fork.basis ?? "", confidence: fork.confidence ?? "" } : { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, by: fork.by ?? "" })),

@@ -93,7 +93,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           Stream.tap(({ message }) => Effect.log(`← ${message.fromName} [${message.project}/${message.intent}]`)),
           // a review ask and its news reach the agent through ReviewRequests,
           // with what was done about them
-          Stream.filter(({ message }) => message.reviewAsk === undefined && message.reviewStatus === undefined),
+          Stream.filter(({ message }) => message.reviewAsk === undefined && message.reviewStatus === undefined && message.reviewQuestion === undefined && message.reviewAnswer === undefined),
           Stream.tap(({ message, seq }) => inbox.push(handle.id, message, seq)),
           // fork: a running agent must not block message intake
           Stream.tap(({ message }) => Effect.forkChild(runner.runThread(message.threadId))),

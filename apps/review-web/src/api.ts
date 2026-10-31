@@ -209,6 +209,13 @@ export const askAi = async (ticketId: string, question: string, selection: ChatS
   return run((backend) => backend.ask(ticketId, question, selection, commit));
 };
 
+/** Ask the review's author's AI the question an answer could not settle —
+ *  the reader's word, as their forwarding steering asks. */
+export const forwardQuestion = async (ticketId: string, turnId: string): Promise<ChatAsked> => {
+  "use server";
+  return run((backend) => backend.forward(ticketId, turnId));
+};
+
 /** Stop the answer under way; what it said so far stays. */
 export const stopAnswer = async (ticketId: string): Promise<void> => {
   "use server";

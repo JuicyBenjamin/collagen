@@ -407,6 +407,16 @@ conversation is your AI's own: collagen keeps only which one it is, per review, 
 tab shows it, and after a restart the next question re-enters it, its earlier turns read back
 from your AI's log. Nothing of it reaches the room or the host.
 
+When the code and the review's why can't answer your question, your AI says so instead of
+guessing, and the question can go to the **author's AI**: their collagen answers it from the
+conversation the work was done in, without interrupting it. Your forwarding
+[steering](./conversations#steering-how-much-your-agent-does-on-its-own) decides whether that
+takes a click (**Ask Christian's AI**) or happens on its own; the author's answering steering
+decides whether their AI answers at once or asks them first. The answer comes back into your
+chat, and onto the review's why, marked **Read from their AI**. When answering shows something
+wrong with the change, the author's work steering raises it with them, or hands it to the
+conversation that built the work to fix, and your chat says it is being fixed.
+
 ## A review built from assumptions
 
 For a change its author did not file in collagen — a colleague's pull request, say — ask

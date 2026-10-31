@@ -1066,6 +1066,9 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .chat-empty, .chat-cannot { margin: 0; color: var(--dim); font-style: italic; }
 .chat-cannot { padding: 10px 14px; border-top: 1px solid var(--line); }
 .chat-q { justify-self: end; max-width: 88%; padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+/* an answer from the review's author's AI, under the question it was asked */
+.chat-turn.theirs { margin-top: -6px; padding-left: 10px; border-left: 2px solid var(--accent); }
+.chat-from { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--accent); }
 .chat-q p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-about, .chat-attached code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--dim); }
 .chat-a p { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; }

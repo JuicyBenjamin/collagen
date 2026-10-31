@@ -14,6 +14,11 @@ import { commitIn, reviewNamed, reviewTree } from "./ReviewView";
 import { harnessFor, Harnesses, transcriptFile } from "./Harness";
 import { shownAi } from "../lib/jobs";
 import { readLine, type TranscriptLine } from "../lib/transcripts";
+import { levelOf } from "../lib/steering";
+import { IdentityService } from "./Identity";
+import { ReviewQuestions } from "./ReviewQuestions";
+import type { Rooms } from "./Rooms";
+import type { ChatTurnKept, ReviewQuestionStage } from "@collagen/p2p";
 
 // The reader's conversation with their own AI on the review page: they
 // select code, ask, and the answer streams into the page as it is written —
@@ -53,6 +58,7 @@ const preamble = (review: { readonly title: string; readonly branch?: string; re
         ? `This folder is a clone of the project, but its working tree may be at another commit: read the review's code with \`git show ${review.commit}:<path>\`.`
         : `This folder is a clone of the project.`,
     `Answer what they ask, briefly, in plain text (code in fenced blocks). You read; you change nothing — no edits, no messages, nothing posted.`,
+    `If neither the code nor the review's why answers it — the reason is the author's, and nothing here says it — never guess: say so in a line, and end your answer with one last line \`${FORWARD} <the question, standalone, for the author>\`. Collagen may then ask the author's AI, which answers from the conversation the work was done in.`,
   ].join("\n");
 
 const asked = (selection: ChatSelection | null, question: string): string => {
@@ -72,6 +78,51 @@ export const promptFor = (parts: { readonly opening: string | null; readonly mov
       : parts.now;
 
 const QUESTION = "Their question: ";
+/** The line a chat answer ends with when only the author can answer it. */
+const FORWARD = "ASK THE AUTHOR:";
+
+/** An answer and the question it hands to the author, when it ends with one. */
+export const forwardOf = (answer: string): { readonly answer: string; readonly question: string } | null => {
+  const at = answer.lastIndexOf(FORWARD);
+  if (at < 0) return null;
+  const question = answer.slice(at + FORWARD.length).trim().replace(/`+$/, "").trim();
+  return question ? { answer: answer.slice(0, at).replace(/`?\s*$/, "").trim(), question } : null;
+};
+
+/** What the reader reads of how a forwarded question stands, in the author's name. */
+const heardText = (stage: ReviewQuestionStage, author: string, flaw?: string): string => {
+  switch (stage) {
+    case "waiting":
+      return `Waits on ${author}.`;
+    case "asking":
+      return `${author} is asked whether their AI may answer.`;
+    case "answering":
+      return `${author}'s AI is reading the conversation the work was done in.`;
+    case "answered":
+      return "";
+    case "declined":
+      return `${author} declined to answer.`;
+    case "addressing":
+      return `${author}'s AI is fixing it${flaw ? `: ${flaw}` : ""}.`;
+  }
+};
+
+/** A turn as kept, and back: what the page shows at once after a restart. */
+const kept = (turn: ChatTurn): ChatTurnKept | null =>
+  turn.state === "answering"
+    ? null
+    : {
+        id: turn.id,
+        question: turn.question,
+        ...(turn.selection ? { selection: turn.selection } : {}),
+        ...(turn.commit ? { commit: turn.commit } : {}),
+        answer: turn.answer,
+        state: turn.state,
+        ...(turn.error !== undefined ? { error: turn.error } : {}),
+        ...(turn.from ? { from: turn.from } : {}),
+        ...(turn.forward ? { forward: turn.forward } : {}),
+      };
+const fromKept = (turn: ChatTurnKept): ChatTurn => ({ ...turn, selection: turn.selection ?? null, commit: turn.commit ?? null, doing: null });
 
 /** A review's earlier turns, read back from the AI's own log of the
  *  conversation: each question collagen sent it (its "Their question:" line,
@@ -121,6 +172,10 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
     const store = yield* StateStore;
     const adapters = yield* Adapters;
     const harnesses = yield* Harnesses;
+    const questions = yield* ReviewQuestions;
+    const me = (yield* IdentityService).identity.pubkey;
+    // the page's live view reads the room: what it needs, held from here
+    const roomContext = yield* Effect.context<Rooms | StateStore>();
     const mcp = yield* McpInfo;
     const { profile } = yield* CliArgs;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -161,7 +216,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               for (const event of events)
                 if (event.kind === "session") {
                   yield* change(ticketId, (conversation) => ({ ...conversation, session: { ai, id: event.id } }));
-                  yield* store.update((state) => ({ ...state, chats: { ...state.chats, [ticketId]: { ai, id: event.id } } }));
+                  yield* store.update((state) => ({ ...state, chats: { ...state.chats, [ticketId]: { ...state.chats?.[ticketId], ai, id: event.id } } }));
                 }
               yield* changeTurn(ticketId, turnId, (turn) => applyEvents(turn, blocks, events));
             }),
@@ -176,6 +231,8 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               ? { ...turn, state: "failed", doing: null, error: stderr.filter((line) => line.trim()).slice(-1)[0]?.slice(0, 300) ?? `${chat.cmd} stopped (exit ${code})` }
               : { ...turn, state: "done", doing: null },
         );
+        yield* forwarded(ticketId, turnId);
+        yield* keepTurns(ticketId);
       },
       (effect, ticketId, turnId, ai) =>
         effect.pipe(
@@ -237,8 +294,10 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
         if ((yield* SubscriptionRef.get(chats)).has(ticketId)) return;
         const ref = (yield* store.get).chats?.[ticketId];
         if (!ref) return;
-        const file = transcriptFile(harnesses, ref.ai, ref.id);
-        const turns = file
+        const file = ref.turns ? null : transcriptFile(harnesses, ref.ai, ref.id);
+        const turns = ref.turns
+          ? ref.turns.map(fromKept)
+          : file
           ? yield* Effect.sync(() => {
               try {
                 return turnsFromLog(readFileSync(file, "utf8").split("\n").flatMap((raw) => readLine(harnesses, raw) ?? []));
@@ -247,8 +306,87 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               }
             })
           : [];
-        yield* SubscriptionRef.update(chats, (byTicket) => (byTicket.has(ticketId) ? byTicket : new Map(byTicket).set(ticketId, { ...EMPTY, turns, session: ref })));
+        yield* SubscriptionRef.update(chats, (byTicket) => (byTicket.has(ticketId) ? byTicket : new Map(byTicket).set(ticketId, { ...EMPTY, turns, session: { ai: ref.ai, id: ref.id } })));
       });
+
+    /** The turns kept with the conversation's place, so the page shows them at once. */
+    const keepTurns = (ticketId: string) =>
+      Effect.gen(function* () {
+        const conversation = (yield* SubscriptionRef.get(chats)).get(ticketId);
+        if (!conversation?.session) return;
+        const session = conversation.session;
+        const turns = conversation.turns.flatMap((turn) => kept(turn) ?? []).slice(-KEEP);
+        yield* store.update((state) => ({ ...state, chats: { ...state.chats, [ticketId]: { ai: session.ai, id: session.id, turns } } }));
+      });
+
+    /** Hand a question to the review's author's AI: refused for the reader's own review. */
+    const askAuthor = (ticketId: string, turn: ChatTurn, question: string) =>
+      Effect.gen(function* () {
+        const found = yield* reviewNamed(ticketId);
+        if (!found) return null;
+        const id = randomUUID();
+        const said = yield* questions.ask(found.roomId, { id, ticketId, question, ...(turn.selection ? { lines: turn.selection } : {}), ...(turn.commit ? { commit: turn.commit } : {}) });
+        return said.startsWith("failed") ? null : id;
+      });
+
+    /** An answer that says only the author can tell: offered, asked or left,
+     *  as the reader's forwarding steering says. */
+    const forwarded = (ticketId: string, turnId: string) =>
+      Effect.gen(function* () {
+        const turn = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
+        const handed = turn && turn.state === "done" ? forwardOf(turn.answer) : null;
+        if (!turn || !handed) return;
+        const found = yield* reviewNamed(ticketId);
+        const own = !found || found.ticket.createdBy === me;
+        const level = levelOf(yield* store.get, "forward", "mine", found?.roomId);
+        const auto = !own && (level === "act" || level === "auto");
+        const id = auto ? yield* askAuthor(ticketId, turn, handed.question) : null;
+        const state = own || level === "never" ? "off" : id ? "asked" : "offered";
+        yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: handed.answer, forward: { ...(id ? { id } : {}), question: handed.question, state } }));
+      });
+
+    /** The reader's word: ask the author what the why could not say. */
+    const forward = Effect.fn("ReviewChat.forward")(function* (ticketId: string, turnId: string) {
+      const turn = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
+      if (!turn?.forward || turn.forward.state !== "offered") return { error: "nothing to ask the author there" } satisfies ChatAsked;
+      const id = yield* askAuthor(ticketId, turn, turn.forward.question);
+      if (!id) return { error: "the question could not be sent" } satisfies ChatAsked;
+      yield* changeTurn(ticketId, turnId, (each) => ({ ...each, forward: { id, question: turn.forward!.question, state: "asked" } }));
+      yield* keepTurns(ticketId);
+      return { ok: true } satisfies ChatAsked;
+    });
+
+    // what comes back from the authors: their AI's answer as a turn of its own, under the question it answers
+    yield* SubscriptionRef.changes(questions.heard).pipe(
+      Stream.mapEffect((all) =>
+        Effect.forEach(
+          all,
+          ({ fromName, answer: back }) =>
+            Effect.gen(function* () {
+              yield* recall(back.ticketId);
+              const conversation = (yield* SubscriptionRef.get(chats)).get(back.ticketId);
+              const asked = conversation?.turns.find((turn) => turn.forward?.id === back.id);
+              if (!conversation || !asked) return;
+              const done = back.stage === "answered" || back.stage === "declined" || back.stage === "addressing";
+              const text = back.stage === "answered" ? `${back.answer ?? ""}${back.flaw ? `\n\nFound wrong: ${back.flaw}` : ""}` : heardText(back.stage, fromName, back.flaw);
+              const theirs: ChatTurn = { id: `author-${back.id}`, question: asked.forward!.question, selection: asked.selection, commit: asked.commit, answer: done ? text : "", doing: done ? null : text, state: done ? "done" : "answering", from: fromName };
+              const had = conversation.turns.find((turn) => turn.id === theirs.id);
+              // an answer once in stays: a later stage (being fixed) is said under it
+              if (had && had.state === "done" && back.stage !== "addressing") return;
+              const next = had ? { ...theirs, answer: had.state === "done" && back.stage === "addressing" ? `${had.answer}\n\n${text}` : theirs.answer } : theirs;
+              yield* change(back.ticketId, (each) => {
+                const without = each.turns.filter((turn) => turn.id !== theirs.id);
+                const at = without.findIndex((turn) => turn.id === asked.id);
+                return { ...each, turns: [...without.slice(0, at + 1), next, ...without.slice(at + 1)] };
+              });
+              if (done) yield* keepTurns(back.ticketId);
+            }),
+          { discard: true },
+        ),
+      ),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
 
     /** Stop the answer under way, keeping what it said so far. */
     const stop = Effect.fn("ReviewChat.stop")(function* (ticketId: string) {
@@ -279,14 +417,16 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
             yield* recall(ticketId);
             const ai = shownAi(yield* store.get);
             const turns = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns ?? [];
-            return JSON.stringify({ ai, cannot: cannot(ai), turns } satisfies ChatView);
+            const found = yield* reviewNamed(ticketId).pipe(Effect.provideContext(roomContext));
+            const author = found && found.ticket.createdBy !== me ? found.review.authorName : null;
+            return JSON.stringify({ ai, cannot: cannot(ai), author, turns } satisfies ChatView);
           }),
         ),
         Stream.changes,
         Stream.map((json) => JSON.parse(json) as ChatView),
       );
 
-    return { ask, stop, clear, view } as const;
+    return { ask, stop, clear, view, forward } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
