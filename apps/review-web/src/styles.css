@@ -330,14 +330,28 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 /* the pill flying between the header and the corner (floating.ts) */
 ::view-transition-group(review-pill) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
 :root { view-transition-name: none; }
+/* springs, sampled (a damped spring's position over its time): one that opens settles with the
+   slightest overshoot, one that closes glides in without any — motion that eases out like a thing
+   with weight, not a curve run start to end */
+:root {
+  --spring-open: linear(0, 0.041, 0.14, 0.268, 0.406, 0.54, 0.661, 0.764, 0.848, 0.914, 0.963, 0.997, 1.019, 1.032, 1.037, 1.038, 1.036, 1.032, 1.027, 1.021, 1.016, 1.012, 1.008, 1.005, 1.003, 1.001, 1, 0.999, 1);
+  --spring-close: linear(0, 0.046, 0.148, 0.271, 0.393, 0.506, 0.604, 0.686, 0.754, 0.809, 0.852, 0.887, 0.914, 0.934, 0.950, 0.962, 0.972, 0.979, 0.984, 0.988, 0.991, 0.993, 0.995, 0.996, 0.997, 0.998, 0.999, 0.999, 1);
+}
+/* what leaves a morph fades and softens first; what arrives comes in after it, so the two are never
+   seen laid over each other */
+@keyframes morph-leave { to { opacity: 0; filter: blur(4px); } }
+@keyframes morph-arrive { from { opacity: 0; filter: blur(4px); } }
 /* a comment box flying into the chat's input (chatNow.handOver) */
-::view-transition-group(ask-panel), ::view-transition-group(ask-box) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+::view-transition-group(ask-panel), ::view-transition-group(ask-box) { animation-duration: 0.5s; animation-timing-function: var(--spring-open); }
 /* the form and the panel are not the same shape: each fills the box as it moves, not stretched by its width */
 ::view-transition-old(ask-panel), ::view-transition-new(ask-panel) { height: 100%; object-fit: cover; object-position: top; }
 /* the pill and the panel turning into each other (chatNow.inCorner): each drawn at its own size, held to
    the corner they share and cut to the shape as it moves, one solid box as the two fade across */
 :root[data-corner-morph]::view-transition-image-pair(ask-panel) { overflow: hidden; box-sizing: border-box; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
-:root[data-corner-morph]::view-transition-old(ask-panel), :root[data-corner-morph]::view-transition-new(ask-panel) { width: 100%; height: 100%; object-fit: none; object-position: right bottom; }
+:root[data-corner-morph]::view-transition-old(ask-panel), :root[data-corner-morph]::view-transition-new(ask-panel) { width: 100%; height: 100%; object-fit: none; object-position: right bottom; mix-blend-mode: normal; }
+:root[data-corner-morph]::view-transition-old(ask-panel) { animation: morph-leave 0.14s ease-out both; }
+:root[data-corner-morph]::view-transition-new(ask-panel) { animation: morph-arrive 0.24s ease-out 0.1s both; }
+:root[data-corner-morph="pill"]::view-transition-group(ask-panel) { animation-duration: 0.36s; animation-timing-function: var(--spring-close); }
 .dial-buttons { display: flex; gap: 8px; }
 .dial { --tone: var(--tone-say); position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1.5px solid var(--tone); border-radius: 50%; background: var(--panel); color: var(--tone); cursor: pointer; transition: background 0.15s; }
 .dial svg { width: 16px; height: 16px; }
