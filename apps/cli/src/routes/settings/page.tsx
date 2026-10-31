@@ -139,7 +139,7 @@ export function SettingsPage() {
       case "note":
         return (
           <text key={each.id} id={each.id} fg={theme.dim}>
-            {each.text}
+            {`${" ".repeat(each.indent ?? 0)}${each.text}`}
           </text>
         );
       case "steer": {
