@@ -165,7 +165,8 @@ from, they are read from the diff alone, as far as it goes.
 A diff does not show whether the change works. When the author's agent knows where it ran,
 it says so on the review (`shows` on `ask-review`), and the page lists those pages under the
 header — localhost, a preview environment, a Storybook story — each opening in a new tab. A
-loopback address runs on the author's machine, and the page says "local to" them. A url
+loopback address runs on the author's machine, so only the author sees it ("on your
+machine"); nobody else can open it, so for anyone else it is not listed at all. A url
 carrying a password or a token is refused when the review is filed: the ticket reaches every
 peer.
 

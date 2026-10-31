@@ -1,4 +1,5 @@
 import type { InvestigationBrief, ReviewDelta } from "@collagen/p2p";
+import { isLocalUrl } from "./shows";
 import { closedAs, IMPORTANCE, isTake, type Assumed, type BugReport, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork, type Ticket } from "@collagen/p2p";
 import type { YourReview } from "@collagen/review-web/data";
 import { actedBy } from "./agents";
@@ -204,7 +205,7 @@ const hay = (item: ReviewDecision | ReviewFork | OutlineItem): string =>
 /** The whole why, or the part of it that is about something — a file, a
  *  symbol, a phrase the reader just used ("the retry loop"). Filtering keeps
  *  a big review answerable one question at a time. */
-export const reviewRows = (review: ReviewContext, about?: string) => {
+export const reviewRows = (review: ReviewContext, about?: string, reader?: string) => {
   const query = (about ?? "").trim().toLowerCase();
   const keep = <T extends ReviewDecision | ReviewFork | OutlineItem>(items: ReadonlyArray<T>): ReadonlyArray<T> =>
     query.length === 0 ? items : items.filter((item) => hay(item).includes(query));
@@ -213,6 +214,7 @@ export const reviewRows = (review: ReviewContext, about?: string) => {
   // a proposal's outline is searched like the rest: "bob" finds the item he
   // is suggested for, "mailer" the item about the mailer
   const outline = keep(review.outline ?? []);
+  const shown = (review.shows ?? []).filter((show) => reader === undefined || reader === review.author || !isLocalUrl(show.url));
   // the bug report is one block: it is in the answer when nothing is asked
   // about, or when the question touches any of its words
   const bug = review.bug && (query.length === 0 || hayBug(review.bug).includes(query)) ? review.bug : undefined;
@@ -252,8 +254,8 @@ export const reviewRows = (review: ReviewContext, about?: string) => {
     forks: forks.map((fork) => (review.claimed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, verdict: fork.verdict ?? (fork.basis !== undefined ? "still a guess" : "told"), guessed: fork.guess ? fork.guess.what : "" } : review.assumed ? { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, basis: fork.basis ?? "", confidence: fork.confidence ?? "" } : { id: fork.id, at: fork.at, chose: fork.chose, instead: fork.instead, why: fork.why, by: fork.by ?? "" })),
     // how the change reads, as its author's agent grouped it
     ...(review.units && review.units.length > 0 ? { units: review.units.map((unit) => ({ id: unit.id, title: unit.title, ...(unit.what ? { what: unit.what } : {}), where: unit.where.join(" "), ...(review.units!.some((other) => other.usesOf) ? { usesOf: unit.usesOf ?? "" } : {}) })) } : {}),
-    // where it can be seen running: a page to open
-    ...(review.shows && review.shows.length > 0 ? { shows: review.shows.map((show) => ({ id: show.id, title: show.title, url: show.url })) } : {}),
+    // where it can be seen running: a page to open — one on its author's machine only to its author
+    ...(shown.length > 0 ? { shows: shown.map((show) => ({ id: show.id, title: show.title, url: show.url })) } : {}),
     // a proposal's outline: what the work might be and who might do it — the
     // author's suggestion, binding on nobody; a plan lifts it into real steps
     ...(outline.length > 0 ? { outline: outline.map((item) => ({ id: item.id, intent: item.intent, description: item.description, owner: item.owner ?? "" })) } : {}),
