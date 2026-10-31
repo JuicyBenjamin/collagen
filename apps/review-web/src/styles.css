@@ -334,6 +334,10 @@ tr.peek-row td { padding: 0; white-space: normal; background: var(--bg); }
 ::view-transition-group(ask-panel), ::view-transition-group(ask-box) { animation-duration: 0.38s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
 /* the form and the panel are not the same shape: each fills the box as it moves, not stretched by its width */
 ::view-transition-old(ask-panel), ::view-transition-new(ask-panel) { height: 100%; object-fit: cover; object-position: top; }
+/* the pill and the panel turning into each other (chatNow.inCorner): each drawn at its own size, held to
+   the corner they share and cut to the shape as it moves, one solid box as the two fade across */
+:root[data-corner-morph]::view-transition-image-pair(ask-panel) { overflow: hidden; box-sizing: border-box; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); }
+:root[data-corner-morph]::view-transition-old(ask-panel), :root[data-corner-morph]::view-transition-new(ask-panel) { width: 100%; height: 100%; object-fit: none; object-position: right bottom; }
 .dial-buttons { display: flex; gap: 8px; }
 .dial { --tone: var(--tone-say); position: relative; flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1.5px solid var(--tone); border-radius: 50%; background: var(--panel); color: var(--tone); cursor: pointer; transition: background 0.15s; }
 .dial svg { width: 16px; height: 16px; }
