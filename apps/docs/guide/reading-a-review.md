@@ -157,6 +157,12 @@ touch are not listed. The decisions and forks pointing into the file sit above i
 - A change outside every test — a helper, setup — is a click away under the file's tests.
   Beside a changed test, imports and the lines of a describe added whole do not count.
 
+A **Stories** tab does the same for Storybook files (`*.stories.*`; one named as a test,
+`*.test.stories.*`, tests with its play steps and stays under **Tests**): each story the diff adds, changes or removes, by its name as Storybook shows it. A
+story's picture is not in a review, so the question is its name: does the state it names
+make sense, and should it be here? A name that does not is the finding. **Makes sense** or
+**Question** records your call; **Code** opens the story.
+
 Tests are found as `describe` / `it` / `test` calls (Vitest, Jest, Mocha, Pest), else as
 named test functions (`testFoo`, `TestFoo`, `test_foo`). With no clone to read the files
 from, they are read from the diff alone, as far as it goes.

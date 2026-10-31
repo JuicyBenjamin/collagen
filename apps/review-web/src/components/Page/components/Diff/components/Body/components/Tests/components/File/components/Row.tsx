@@ -2,7 +2,7 @@ import { createSignal } from "solid-js";
 import type { DiffLine, TestCase } from "~/data";
 import { Appear } from "~/components/Appear";
 import { diffNow } from "~/diffNow";
-import { testMarks } from "~/testsNow";
+import { CASE_WORDS, testMarks, type CaseKind } from "~/testsNow";
 import { Lines } from "~/components/Page/components/Diff/components/Hunk";
 
 const CHANGE: Record<TestCase["change"], string> = { added: "new", changed: "changed", removed: "removed" };
@@ -16,7 +16,7 @@ const inDiff = (file: string) => {
 
 /** A test by its title: new, changed or removed, the reader's call on it,
  *  and its code a click away. */
-export function Row(props: { test: TestCase }) {
+export function Row(props: { test: TestCase; kind: CaseKind }) {
   const [open, setOpen] = createSignal(false);
   const mark = () => testMarks.of(props.test.id);
   return (
@@ -26,7 +26,7 @@ export function Row(props: { test: TestCase }) {
         <span class="test-title">{props.test.title}</span>
         <span class="test-side">
           <button type="button" class={["test-mark", "keep", { on: mark() === "kept" }]} aria-pressed={mark() === "kept" ? "true" : "false"} onClick={() => testMarks.toggle(props.test.id, "kept")}>
-            Worth testing
+            {CASE_WORDS[props.kind].keep}
           </button>
           <button type="button" class={["test-mark", "question", { on: mark() === "questioned" }]} aria-pressed={mark() === "questioned" ? "true" : "false"} onClick={() => testMarks.toggle(props.test.id, "questioned")}>
             Question
