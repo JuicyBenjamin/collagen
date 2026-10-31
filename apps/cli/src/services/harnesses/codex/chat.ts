@@ -8,7 +8,7 @@ import { doingOf, json, rec, stringOf } from "../../ChatAdapters";
 export const codexChat: ChatAdapter = {
   cmd: "codex",
   args: (context) => {
-    const flags = ["--json", "-c", 'sandbox_mode="read-only"', "--skip-git-repo-check"];
+    const flags = ["--json", "-c", 'sandbox_mode="read-only"', "--skip-git-repo-check", ...(Option.isSome(context.model) ? ["--model", context.model.value] : [])];
     return Option.isSome(context.sessionId) ? ["exec", "resume", context.sessionId.value, ...flags, context.prompt] : ["exec", ...flags, context.prompt];
   },
   read: (line) => {
