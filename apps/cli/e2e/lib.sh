@@ -103,6 +103,27 @@ start() {
   HOME="$SHOME" COLLAGEN_DEV=1 COLLAGEN_LOG="$OUT/$who.log" COLLAGEN_OPENER="$OUT/$who.opener" \
     node --import tsx src/headless.ts --profile "$(profile "$who")" --name "$who" "$@" < /dev/null >> "$OUT/$who.out" 2>> "$OUT/$who.err" &
   disown # killed later by pattern; no "Killed: 9" job chatter in the output
+  # a room lets a peer in with an invite only: alice makes one, they join with it
+  [ "$who" != alice ] && [ "${NO_INVITE:-0}" != 1 ] && { let_in "$who" & disown; }
+  return 0
+}
+
+# let_in <who> — alice makes an invite to her room and <who> joins with it.
+# Runs in the background from start; harmless for a peer already in (a
+# creator, or a restart that kept its keys). Its answers land in <who>.invite.
+let_in() {
+  local who=$1 url SA SW INV="" i
+  case $who in bob) url=$B ;; carol) url=$C ;; *) return 0 ;; esac
+  SA=$(mcp "$A" 2>/dev/null) || return 0
+  # her log takes invites once it is open (and, for an old room, moved)
+  for i in $(seq 1 120); do
+    INV=$(call "$A" "$SA" invite-to-room '{}' | tail -1)
+    case $INV in *st-test3.*) break ;; esac
+    INV=""; sleep 0.5
+  done
+  [ -z "$INV" ] && { echo "!! alice made no invite for $who" >> "$OUT/$who.invite"; return 0; }
+  SW=$(mcp "$url" 2>/dev/null) || return 0
+  call "$url" "$SW" join-room "{\"invite\":\"$INV\"}" >> "$OUT/$who.invite" 2>&1
 }
 
 # fresh_logs — a clean island: no room logs, no profiles, no old output

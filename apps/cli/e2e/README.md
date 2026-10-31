@@ -29,10 +29,9 @@ assertion ("nothing reached bob") is the one place a short sleep stays.
 
 | Scenario | Proves |
 | --- | --- |
-| `connect.sh` | two peers started together greet within seconds; the joiner is admitted to the room log |
+| `connect.sh` | two peers started together greet within seconds; alice makes an invite, bob joins with it, is let in and admitted to the room's encrypted log (every scenario's joiners come in this way: `start` has alice make each one an invite) |
 | `ticket-thread.sh` | a ticket step is delivered on the same thread a plain message between those peers uses; with `set-steering act` the step and `get-messages` both say so |
 | `log.sh` | admission; a mock settling its step; a message to an **offline** member delivered on return; a solo restart keeping the ticket, re-delivering the pending step, keeping the unread ack |
-| `conflict.sh` | two self-appointed creators: the lonely log yields, the ticket completes on the survivor |
 | `three-members.sh` | three indexers: the view advances with 1 and 2 offline; the absent one catches up |
 | `leave.sh` | leaving a room forgets it locally and moves focus; the last room can't be left |
 | `outbox.sh` | no gate, and a receipt: an agent's `send-to-peer` / `create-ticket` reaches the peer at once (the tool answers with the outcome, not a promise), each is recorded in `LocalState.sent`, and the records survive a restart |

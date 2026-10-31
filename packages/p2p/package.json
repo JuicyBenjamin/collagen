@@ -22,7 +22,8 @@
     "hypercore-crypto": "^3.7.0",
     "hyperdht": "^6.32.0",
     "hyperswarm": "^4.17.0",
-    "protomux": "^3.11.0"
+    "protomux": "^3.11.0",
+    "sodium-universal": "5.0.1"
   },
   "devDependencies": {
     "@collagen/typescript-config": "workspace:*",

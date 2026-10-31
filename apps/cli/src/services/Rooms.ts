@@ -1,6 +1,6 @@
 import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTake, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTake, parseInvite, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { answeredInvestigations, findingsText, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
@@ -436,14 +436,18 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           Effect.forkScoped,
         );
 
-        // The log's key, once learned, is remembered: with it the room
-        // reopens on its own, without waiting for a member to be online.
+        // The log's keys, once learned, are remembered: with them the room
+        // reopens on its own, without waiting for a member to be online. The
+        // invite that let us in is done with then.
         yield* SubscriptionRef.changes(room.logKey).pipe(
           Stream.filter((key): key is string => key !== null),
-          Stream.tap((logKey) =>
+          Stream.mapEffect((logKey) => SubscriptionRef.get(room.encryptionKey).pipe(Effect.map((encryptionKey) => ({ logKey, encryptionKey })))),
+          Stream.tap(({ logKey, encryptionKey }) =>
             Effect.sync(() => {
               const entry = readProfileFile(profile).rooms?.find((roomEntry) => roomEntry.id === handle.id);
-              if (entry && entry.logKey !== logKey) upsertRoom(profile, { ...entry, logKey });
+              if (!entry || (entry.logKey === logKey && entry.encryptionKey === (encryptionKey ?? undefined) && entry.invite === undefined)) return;
+              const kept: RoomEntry = { id: entry.id, name: entry.name, ...(entry.nameTs !== undefined ? { nameTs: entry.nameTs } : {}), ...(entry.creator ? { creator: true } : {}) };
+              upsertRoom(profile, { ...kept, logKey, ...(encryptionKey ? { encryptionKey } : {}) });
             }),
           ),
           Stream.runDrain,
@@ -469,7 +473,10 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         getProfile: profileFor(entry.id),
         // only an explicit flag makes us the creator: `nameTs` is also set when a
         // name is RECEIVED, and two self-appointed creators means two logs
-        log: { key: entry.logKey ?? null, creator: entry.creator === true },
+        log: { key: entry.logKey ?? null, encryptionKey: entry.encryptionKey ?? null, creator: entry.creator === true },
+        invite: entry.invite ? parseInvite(entry.invite) : null,
+        // the end-to-end run that makes a room the old way, to move it
+        ...(process.env.COLLAGEN_E2E_PLAIN_ROOMS === "1" ? { plainLogs: true } : {}),
       };
       const room = yield* Room.make.pipe(
         Effect.provideService(RoomConfig, config),

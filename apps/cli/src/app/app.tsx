@@ -43,7 +43,7 @@ export function App({
         <SetupPage
           initialName={initialName}
           onDone={({ name, room }) => {
-            const entry = room.mode === "create" ? newRoomEntry(room.name) : invitedRoomEntry(room.inviteId);
+            const entry = room.mode === "create" ? newRoomEntry(room.name) : invitedRoomEntry(room.roomName, room.invite);
             writeProfileFile(profile, { name });
             upsertActiveRoom(profile, entry);
             setCliArgs({ profile, name: Option.some(name), room: Option.some(entry.id) });

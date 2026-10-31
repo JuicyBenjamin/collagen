@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatInvite, isRoomId, parseInvite, roomTopic, shortRoomId } from "./topic";
+import { isRoomId, roomTopic, shortRoomId } from "./topic";
 
 describe("isRoomId", () => {
   it("accepts uuids, rejects everything else", () => {
@@ -29,22 +29,5 @@ describe("roomTopic", () => {
   });
   it("puts the same invite on a different topic in the devnet", () => {
     expect(roomTopic(id, "devnet").equals(roomTopic(id, "mainnet"))).toBe(false);
-  });
-});
-
-describe("invites", () => {
-  const id = "0198a111-2222-7333-8444-555566667777";
-  it("a live invite is the bare id; a dev invite wears the net", () => {
-    expect(formatInvite(id, "mainnet")).toBe(id);
-    expect(formatInvite(id, "devnet")).toBe(`devnet-${id}`);
-  });
-  it("parse is the inverse of format, and knows which net the invite is for", () => {
-    expect(parseInvite(formatInvite(id, "mainnet"))).toEqual({ id, net: "mainnet" });
-    expect(parseInvite(` ${formatInvite(id, "devnet")} `)).toEqual({ id, net: "devnet" });
-  });
-  it("refuses what is not an invite at all", () => {
-    expect(parseInvite("cat")).toBeNull();
-    expect(parseInvite("devnet-cat")).toBeNull();
-    expect(parseInvite("")).toBeNull();
   });
 });

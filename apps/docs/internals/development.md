@@ -95,7 +95,7 @@ else — `pnpm dev`, `tsx`, the e2e harness — is on **devnet**. Three things h
 | Swarm topic | `sha256("collagen:" + roomId)` | `sha256("collagen-devnet:" + roomId)` |
 | MCP server | `collagen`, port in 41000–44999 | `collagen-devnet`, port in 45000–48999 |
 
-So the same invite id names two different rooms, one per net, and the two never meet: a
+So the same room id names two different rooms, one per net, and the two never meet: a
 build from source reshaping the log (a protocol bump, a new required field) cannot touch
 a room the installed app is in, and nobody on the release walks into your half-built one.
 Devnet is still the **public DHT**: anyone who pulls the branch and runs from source joins
@@ -104,10 +104,11 @@ installed app alongside; different dir, different port, no clash. The TUI footer
 `devnet` when you are on it. (The local hyperdht **testnet** below is a third, private
 thing: a DHT on this machine only, for two peers on one host.)
 
-Invites carry the net: a devnet room's invite reads `devnet-<uuid>`, a mainnet room's is
-the bare uuid. Paste one into the other net and the app says which net it is for and how
-to get there, instead of opening a room view and waiting on a topic nobody announces on.
-(`--room` takes a bare id and trusts you — it is the scripting path.)
+Invites carry the net: a devnet room's invite starts `devnet-`, a mainnet room's does
+not. Paste one into the other net and the app says which net it is for and how to get
+there, instead of opening a room view and waiting on a topic nobody announces on.
+(`--room` takes a bare room id — it is the scripting path; a peer still needs an invite,
+`join-room`, to be let in.)
 
 Collagen is peer-to-peer, so testing means **two instances**. On one machine we simulate
 two peers with separate **profiles** (each gets its own identity, state file, and MCP

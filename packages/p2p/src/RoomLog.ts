@@ -4,7 +4,7 @@ import Autobase from "autobase";
 import Hyperbee from "hyperbee";
 import b4a from "b4a";
 import { LogAppendFailed } from "./errors";
-import { Attachment, EVICTABLE, LogOp, Member, PROTOCOL_VERSION, RoomMessage } from "./schema";
+import { Attachment, EVICTABLE, InviteRecord, LogOp, Member, PROTOCOL_VERSION, RoomMessage } from "./schema";
 import { ReviewComment, strictlySupersedes, supersedes } from "./review";
 import { ReviewContext } from "./review";
 import { Ticket, contributes, mergeTicket } from "./ticket";
@@ -28,7 +28,16 @@ export interface LogView {
    *  shown on the overview as `unknown`; the rest are counted. Once this
    *  build can read one, `rewriteMigrated` replays it and the row goes. */
   readonly unseen: ReadonlyArray<Unseen>;
+  /** Invites made in this room, each with who it let in once used. */
+  readonly invites: ReadonlyArray<InviteRecord & { readonly usedBy: string | null }>;
+  /** Where the room moved to, once one member opened its encrypted log: the
+   *  new log's key and its encryption key sealed for each member's identity. */
+  readonly moved: { readonly to: string; readonly sealed: Readonly<Record<string, string>>; readonly by: string } | null;
 }
+
+/** How a room's log is read: its own encryption key, a new log made
+ *  encrypted, or a log from before rooms were encrypted. */
+export type LogEncryption = { readonly key: string } | "new" | "none";
 
 export interface Unseen {
   /** The view key the entry claims (`ticket/<id>`, `review/<id>`, …), or `op/<n>` when it claims none. */
@@ -41,9 +50,13 @@ export interface RoomLog {
   readonly key: string;
   /** Our writer core's key: what a member appends to admit us. */
   readonly writerKey: string;
+  /** The key that reads it, null for a log from before rooms were encrypted. */
+  readonly encryptionKey: string | null;
   readonly writable: () => boolean;
   /** Fails (LogAppendFailed, "Not writable") until admitted. Resolves once the view reflects the entry. */
   readonly append: (op: LogOp) => Effect.Effect<void, LogAppendFailed>;
+  /** Several entries as one batch, the same way. */
+  readonly appendAll: (ops: ReadonlyArray<LogOp>) => Effect.Effect<void, LogAppendFailed>;
   readonly read: Effect.Effect<LogView>;
   /** Take the rows no build of ours can read off the room, for every member
    *  (one `evict` entry on the log). Returns how many went. */
@@ -214,6 +227,22 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         if (!current || supersedes(logOp.review, current.value as ReviewContext)) await view.put(`review/${logOp.review.ticketId}`, logOp.review);
         break;
       }
+      case "invite": {
+        // first write wins: an invite is the public half of a secret handed out once
+        const key = `invite/${logOp.invite.id}`;
+        if (!(await view.get(key))) await view.put(key, logOp.invite);
+        break;
+      }
+      case "redeemed": {
+        // first use wins: an invite lets one person in, whoever got there first in log order
+        const key = `redeemed/${logOp.id}`;
+        if (!(await view.get(key))) await view.put(key, { id: logOp.id, identity: logOp.identity, by: logOp.by, ts: logOp.ts });
+        break;
+      }
+      case "moved":
+        // the first move stands: two members moving at once end in one room
+        if (!(await view.get("meta/moved"))) await view.put("meta/moved", { to: logOp.to, sealed: logOp.sealed, by: logOp.by, ts: logOp.ts });
+        break;
       case "evict":
         // the migration, replayed on every member: drop what it names
         for (const key of logOp.keys) if (EVICTABLE.test(key)) await view.del(key);
@@ -238,19 +267,31 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
 
 /** Where in the Corestore a room's log lives. The room's own namespace holds
  *  the writer core we made for it; if that core already belongs to ANOTHER
- *  base (we started a log of our own before adopting the room's), the adopted
- *  log gets a namespace of its own — reusing a writer core across bases
- *  corrupts both. */
+ *  base (we started a log of our own before adopting the room's, or the room
+ *  moved to a new encrypted log), the other log gets a namespace of its own —
+ *  reusing a writer core across bases corrupts both. A log we create while
+ *  the room's namespace is taken (moving the room) lives in `<room>/encrypted`,
+ *  where reopening it by its key finds it again. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const namespaceFor = async (store: any, roomName: string, bootstrap: string | null): Promise<any> => {
   const primary = store.namespace(roomName);
-  if (bootstrap === null) return primary;
-  const local = Autobase.getLocalCore(primary, {});
-  await local.ready();
-  const { referrer } = await Autobase.getUserData(local);
-  await local.close();
-  const ours = referrer === null || referrer === undefined || b4a.equals(referrer, b4a.from(bootstrap, "hex"));
-  return ours ? primary : store.namespace(`${roomName}/${bootstrap}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const localOf = async (namespace: any) => {
+    const local = Autobase.getLocalCore(namespace, {});
+    await local.ready();
+    const { referrer } = await Autobase.getUserData(local);
+    const facts = { key: local.key as Uint8Array, length: local.length as number, referrer: (referrer ?? null) as Uint8Array | null };
+    await local.close();
+    return facts;
+  };
+  const room = await localOf(primary);
+  if (bootstrap === null) return room.length === 0 && room.referrer === null ? primary : store.namespace(`${roomName}/encrypted`);
+  const wanted = b4a.from(bootstrap, "hex");
+  if (room.referrer === null ? room.length === 0 || b4a.equals(room.key, wanted) : b4a.equals(room.referrer, wanted)) return primary;
+  const moved = store.namespace(`${roomName}/encrypted`);
+  const ours = await localOf(moved);
+  if (b4a.equals(ours.key, wanted) || (ours.referrer !== null && b4a.equals(ours.referrer, wanted))) return moved;
+  return store.namespace(`${roomName}/${bootstrap}`);
 };
 
 /** Open (or create, when `bootstrap` is null) a room's Autobase in the
@@ -260,13 +301,19 @@ export const openRoomLog = (
   store: any,
   roomName: string,
   bootstrap: string | null,
+  encryption: LogEncryption = "none",
+  /** "beside": a new log made while the room's own is still open (moving the
+   *  room) — straight into its own namespace: looking into the room's would
+   *  wait forever on the open log's storage lock. */
+  place: "room" | "beside" = "room",
 ): Effect.Effect<RoomLog, never, import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const base = yield* Effect.acquireRelease(
       Effect.promise(async () => {
-        const namespace = await namespaceFor(store, roomName, bootstrap);
+        const namespace = place === "beside" ? store.namespace(`${roomName}/encrypted`) : await namespaceFor(store, roomName, bootstrap);
         const autobase = new Autobase(namespace, bootstrap ? b4a.from(bootstrap, "hex") : null, {
           valueEncoding: "json",
+          ...(encryption === "new" ? { encrypt: true } : typeof encryption === "object" ? { encryptionKey: b4a.from(encryption.key, "hex") } : {}),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           open: (viewStore: any) =>
             new Hyperbee(viewStore.get("view"), { keyEncoding: "utf-8", valueEncoding: "json", extension: false }),
@@ -356,7 +403,11 @@ export const openRoomLog = (
         announcedNewer = unseen.length;
         if (unseen.length > 0) yield* Effect.logWarning(`${unseen.length} record(s) in this room were written by a newer collagen than this one — kept, unseen, until this side updates`);
       }
-      return { tickets, members, messages, attachments, comments, reviews, name: name?.value ?? null, unseen };
+      const used = new Map((yield* readRange("redeemed")).map((row) => [String((row.value as { id?: unknown }).id), String((row.value as { identity?: unknown }).identity)]));
+      const invites = (yield* rows("invite", InviteRecord)).map((row) => ({ ...row.value, usedBy: used.get(row.value.id) ?? null }));
+      const movedRow = yield* Effect.promise(() => base.view.get("meta/moved") as Promise<{ value: { to: string; sealed: Record<string, string>; by: string } } | null>);
+      const moved = movedRow ? { to: movedRow.value.to, sealed: movedRow.value.sealed, by: movedRow.value.by } : null;
+      return { tickets, members, messages, attachments, comments, reviews, name: name?.value ?? null, unseen, invites, moved };
     });
 
     /** The migration: take the rows nobody can read off the room, for every
@@ -496,9 +547,11 @@ export const openRoomLog = (
     // every entry says which build wrote it, so an older reader can tell
     // "newer than me" from "broken" (see LogOp). No caller in the app sets
     // it; a test does, to play a peer from the future.
-    const append = (logOp: LogOp) =>
+    const append = (logOp: LogOp) => appendAll([logOp]);
+    /** Several entries as one batch — a room moved to a new log arrives whole. */
+    const appendAll = (logOps: ReadonlyArray<LogOp>) =>
       Effect.tryPromise({
-        try: () => base.append({ ...logOp, protocol: logOp.protocol ?? PROTOCOL_VERSION }) as Promise<void>,
+        try: () => base.append(logOps.map((logOp) => ({ ...logOp, protocol: logOp.protocol ?? PROTOCOL_VERSION }))) as Promise<void>,
         catch: (cause) => new LogAppendFailed({ cause }),
       }).pipe(
         Effect.andThen(
@@ -509,7 +562,7 @@ export const openRoomLog = (
             Effect.timeoutOption(UPDATE_PATIENCE),
             Effect.flatMap((done) =>
               Option.isNone(done)
-                ? Effect.logWarning(`the room's log is still catching up (${logOp.op} is written, the view will follow)`)
+                ? Effect.logWarning(`the room's log is still catching up (${logOps.map((logOp) => logOp.op).join(", ")} written, the view will follow)`)
                 : Effect.void,
             ),
           ),
@@ -519,8 +572,10 @@ export const openRoomLog = (
     return {
       key: b4a.toString(base.key, "hex"),
       writerKey: b4a.toString(base.local.key, "hex"),
+      encryptionKey: base.encryptionKey ? b4a.toString(base.encryptionKey, "hex") : null,
       writable: () => base.writable as boolean,
       append,
+      appendAll,
       read,
       evictStale,
       rewriteMigrated,

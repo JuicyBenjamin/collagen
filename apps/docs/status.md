@@ -12,8 +12,10 @@ _Last updated: 2026-09-14._
   the name and membership, replicated over the same connections via Corestore. Presence
   and remote-control stay ephemeral frames on a Protomux channel. Periodic discovery
   refresh, a swarm health line, self-healing when peers are known but none connect.
-- **Rooms are conversations** — a room id is an unguessable uuid that doubles as the
-  invite; the room's name is shared state (last-writer-wins). You are in every room you
+- **Rooms are conversations** — a room's log is encrypted, readable by its members only;
+  an invite (`c`, or `invite-to-room`) lets one person in, once, within a week, and a
+  room from before encryption moves to an encrypted log on its own. The room's name is
+  shared state (last-writer-wins). You are in every room you
   joined at once and look at one; elsewhere you're `away`. Live create / join / switch /
   leave, from the TUI (rooms rail) or the agent's tools. Peers announce their protocol
   version; a mismatch is flagged next to the peer and in `list-room`.

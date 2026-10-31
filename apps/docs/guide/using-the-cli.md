@@ -23,7 +23,7 @@ persist per profile. Flags exist as overrides for scripting and same-machine tes
 | Flag | Meaning |
 | --- | --- |
 | `--name`, `-n` | Display name peers see |
-| `--room` | Room id to open (an invite id) |
+| `--room` | Room id to open (being let in still takes an invite: `join-room`) |
 | `--profile`, `-p` | Separate identity/config namespace (default: `default`) — for running two instances on one machine |
 
 On first start Collagen also **registers its MCP server with your agents** (Claude Code's
@@ -49,7 +49,7 @@ No files are written into your projects.
          activity
            ← bob [sandbox/flag-issue]
          mcp: http://127.0.0.1:44040/mcp
-         room: dev room [b5cf1d1c] · invite id: 01a0… (c to copy)
+         room: dev room [b5cf1d1c] · c copies an invite
 ```
 
 - **rooms rail** (left) — one avatar per room. Pill = the room you're in, dot = messages
@@ -96,7 +96,7 @@ No files are written into your projects.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.
-- **footer** — a short activity log, the MCP url, the room's invite id.
+- **footer** — a short activity log, the MCP url, the room, and `c` for an invite.
 
 ### Navigation
 
@@ -116,7 +116,7 @@ what's natural there. Number keys work from anywhere.
 | `a` | Cycle your AI: not set → claude-code → codex → mock:claude-code → mock:codex |
 | `A` | The audit page in your browser: tool calls, tokens per call over time and the tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and steering. Your agent opens it with `open-audit`. |
 | `g` | Cycle your master [steering](./conversations#steering-how-much-your-agent-does-on-its-own) level: ask first → act, then tell → just do it → never (every level, yours and other people's, is on the settings page) |
-| `c` | Copy the room's invite id |
+| `c` | Copy a new invite to the room: it lets one person in, within a week (your agent: `invite-to-room`) |
 | `s` | Settings: your name, the room's shared name, and your switches (`space` flips one) |
 | `u` | Install the newer collagen the status line announces, then restart into it |
 | `esc` | Back to the tab bar |
