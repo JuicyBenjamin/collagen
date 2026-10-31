@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { deriveThreadId, roomProjects, type Conversation, type QuestionLines, type ReviewAnswer, type ReviewContext, type ReviewGuess, type ReviewQuestionHeld, type ReviewQuestionStage, type RoomMessage, type Verdict } from "@collagen/p2p";
-import { readable } from "../lib/reviewRequests";
+import { MOST_READ, readable } from "../lib/reviewRequests";
+import { nextQuestion, type QuestionEvent } from "../lib/questionMachine";
 import { allow, levelOf, type Cause } from "../lib/steering";
 import { sameName } from "../lib/names";
 import { AgentRunner } from "./AgentRunner";
@@ -128,6 +129,19 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
     const keep = (held: ReviewQuestionHeld) =>
       store.update((state) => ({ ...state, reviewQuestions: [...(state.reviewQuestions ?? []).filter((had) => !(had.roomId === held.roomId && had.id === held.id)), held].slice(-200) }));
     const causeOf = (held: ReviewQuestionHeld): Cause => (held.from === identity.pubkey ? "mine" : "others");
+    /** A question moved by an event, as the machine's table says (lib/questionMachine) — or refused,
+     *  when its state has no such move: it never lands somewhere the table does not say. */
+    const move = (held: ReviewQuestionHeld, on: QuestionEvent, also: Partial<ReviewQuestionHeld> = {}) =>
+      Effect.gen(function* () {
+        const to = nextQuestion(held.stage, on);
+        if (to === null) {
+          yield* Effect.logWarning(`review question ${held.id.slice(0, 8)}: "${on}" has no move from ${held.stage} — refused`);
+          return null;
+        }
+        const moved: ReviewQuestionHeld = { ...held, ...also, stage: to };
+        yield* keep(moved);
+        return moved;
+      });
 
     /** Tell the asker how their question stands: collagen's record of it on
      *  the thread between them, and the answer once there is one. Asked about
@@ -175,23 +189,44 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         return { handle, ticket, review, path: project?.path ?? null };
       });
 
+    /** The review's why as the author's collagen revises it: written as it
+     *  is, so its stamp still names the conversation that filed it — never the
+     *  answering job's, which would then be taken for the work. */
+    const rewrite = (roomId: string, review: ReviewContext) =>
+      Effect.gen(function* () {
+        const handle = yield* handleOf(roomId);
+        if (!handle) return;
+        yield* handle.room.shareReview(review).pipe(Effect.catch(() => Effect.logWarning("cannot revise the review's why: not admitted to the room log")));
+      });
+
     // --- the author's end -----------------------------------------------------
 
     /** Answer now: find the work's conversations, copy them out, and queue
      *  the job that answers. Says what happened. */
-    const answerNow = (held: ReviewQuestionHeld) =>
+    const answerNow = (held: ReviewQuestionHeld, on: "allowed" | "yes") =>
       Effect.gen(function* () {
         const found = yield* reviewOf(held.roomId, held.ticketId);
-        if (!found) return `failed: no review ${held.ticketId} of your user's in this room`;
-        if (!found.path) return `failed: ${found.ticket.project} is not a project your user has on this machine, so collagen cannot find the work`;
-        if (!found.review.branch) return `failed: the review names no branch, so collagen cannot find the conversation the work was done in`;
-        const work = yield* requests.findWork(found.path, found.review.branch);
-        const chosen: ReadonlyArray<Conversation> = work.conversations.map((one) => one.conversation);
-        if (chosen.length === 0) {
-          yield* keep({ ...held, stage: "waiting" });
-          yield* tellAsker(held, "waiting", `${WHY["no-conversation"](yield* SubscriptionRef.get(nameRef))}.`, { why: "no-conversation" });
-          return `failed: no conversation of your user's on this machine worked on branch ${found.review.branch}. If this conversation did, answer it yourself with review-question {questionId: "${held.id}", reply: …}; otherwise tell your user, in one line.`;
-        }
+        const unreadable = (why: string) =>
+          Effect.gen(function* () {
+            yield* move(held, "unreadable");
+            yield* tellAsker(held, "waiting", `${WHY["no-conversation"](yield* SubscriptionRef.get(nameRef))}.`, { why: "no-conversation" });
+            return `failed: ${why}`;
+          });
+        if (!found) return yield* unreadable(`no review ${held.ticketId} of your user's in this room`);
+        if (!found.path) return yield* unreadable(`${found.ticket.project} is not a project your user has on this machine, so collagen cannot find the work`);
+        if (!found.review.branch) return yield* unreadable(`the review names no branch, so collagen cannot find the conversation the work was done in`);
+        // the review names the conversation that filed it: that one first, as the work. Others that acted on this
+        // review are its readers — a reviewer's guesses are never the author's reasons — so they are skipped
+        const filer = found.review.conversation;
+        const key = (conversation: Conversation) => `${conversation.ai}:${conversation.id}`;
+        const readers = filer ? Object.values((yield* store.get).worked ?? {}).filter((worked) => worked.tickets.includes(held.ticketId) && key(worked.conversation) !== key(filer)).map((worked) => key(worked.conversation)) : [];
+        const work = yield* requests.findWork(found.path, found.review.branch, new Set(readers));
+        const ownJobs = new Set((yield* store.get).jobConversations ?? []);
+        const filerHere = filer !== undefined && !ownJobs.has(key(filer)) ? (yield* requests.copyOf(filer)) !== null : false;
+        const filed: ReadonlyArray<Conversation> = filerHere && filer ? [filer] : [];
+        const chosen: ReadonlyArray<Conversation> = [...filed, ...work.conversations.map((one) => one.conversation).filter((conversation) => !filed.some((first) => key(first) === key(conversation)))].slice(0, MOST_READ);
+        if (chosen.length === 0)
+          return yield* unreadable(`no conversation of your user's on this machine worked on branch ${found.review.branch}. If this conversation did, answer it yourself with review-question {questionId: "${held.id}", reply: …}; otherwise tell your user, in one line.`);
         const dir = join(copies, held.id);
         const copied: Array<string> = [];
         for (const [index, conversation] of chosen.entries()) {
@@ -204,17 +239,18 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           });
           copied.push(file);
         }
-        if (copied.length === 0) return `failed: the conversations that did the work are not readable on this machine`;
+        if (copied.length === 0) return yield* unreadable(`the conversations that did the work are not readable on this machine`);
         const diffFile = work.diff ? join(dir, "change.diff") : null;
         if (diffFile && work.diff) yield* Effect.sync(() => writeFileSync(diffFile, work.diff!));
         const person = yield* SubscriptionRef.get(nameRef);
         const title = found.ticket.title ?? found.ticket.goal;
         // answering, and the asker told so, before the job can run: it may answer at once
-        yield* keep({ ...held, stage: "answering", conversations: chosen });
+        const answering = yield* move(held, on, { conversations: chosen });
+        if (!answering) return `failed: it is ${held.stage} — it cannot be answered from there`;
         yield* tellAsker(held, "answering");
         const said = yield* jobs.file({ roomId: held.roomId, requestId: held.id, title: `answer ${held.fromName} on "${title}"`, prompt: answeringPrompt(held, title, copied, diffFile, person, server), cwd: found.path ?? homedir(), reads: [dir] }, "answering");
         if (said.startsWith("failed")) {
-          yield* keep({ ...held, stage: "waiting", conversations: chosen });
+          yield* move(answering, "ended");
           yield* tellAsker(held, "waiting");
         }
         return said;
@@ -249,7 +285,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           const level = levelOf(state, "answer", cause, handle.id);
           const reply = `review-question {${id}, answer: true} on their yes, {${id}, decline: their reason} on their no — or answer it yourself from this conversation, if it did the work: {${id}, reply: …}`;
           if (level === "unset" || level === "never" || level === "ask") {
-            yield* keep({ ...held, stage: level === "ask" ? "asking" : "waiting" });
+            yield* move(held, level === "ask" ? "asked" : "held");
             const author = yield* SubscriptionRef.get(nameRef);
             if (level === "ask") yield* tellAsker(held, "asking");
             else yield* tellAsker(held, "waiting", `${WHY[level === "never" ? "never" : "not-chosen"](author)}.`, { why: level === "never" ? "never" : "not-chosen" });
@@ -261,7 +297,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
                   : `\nASK YOUR USER, in one line, whether their AI may answer it from the conversation the work was done in (their steering for answers is ask first): ${reply}.`;
           } else {
             const gate = allow(state, "answer", cause, false, handle.id);
-            const said = "held" in gate ? `failed: ${gate.why}` : yield* answerNow(held);
+            const said = "held" in gate ? `failed: ${gate.why}` : yield* answerNow(held, "allowed");
             line = said.startsWith("failed")
               ? `\nTheir steering says to answer it, but it could not be: ${said.replace(/^failed: /, "")}`
               : `\nTheir steering for answers started answering it: ${said}${level === "act" ? " Tell them, in one line." : ""}`;
@@ -289,7 +325,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           where: held.lines ? [`${held.lines.file}:${held.lines.from.line}`] : [],
           basis: `read from ${yield* SubscriptionRef.get(nameRef)}'s AI, from the conversation the work was done in, answering ${held.fromName}'s question — not told by them`,
         };
-        yield* outbox.tell({ roomId: held.roomId, to: "the room", title: `${found.ticket.title ?? found.ticket.goal} · the why grew`, outgoing: { kind: "review", review: { ...found.review, decisions: [...found.review.decisions, decision], ts: yield* Clock.currentTimeMillis } } });
+        yield* rewrite(held.roomId, { ...found.review, decisions: [...found.review.decisions, decision], ts: yield* Clock.currentTimeMillis });
       });
 
     /** A flaw the answer found: raised with the author, or handed to the
@@ -303,7 +339,6 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         if ((level === "act" || level === "auto") && builder) {
           // the conversation that built the work hears the thread from now on, and fixes it there
           yield* store.update((now) => ({ ...now, threads: { ...now.threads, [held.threadId]: { ai: builder.ai, sessionId: builder.id, since: Date.now() } } }));
-          yield* keep({ ...held, stage: "addressing" });
           yield* tellAsker(held, "addressing", flaw);
           yield* tellHere(
             held,
@@ -321,12 +356,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
       Effect.gen(function* () {
         const found = yield* reviewOf(held.roomId, held.ticketId);
         if (!found || !found.review.decisions.some((decision) => decision.id === id)) return;
-        yield* outbox.tell({
-          roomId: held.roomId,
-          to: "the room",
-          title: `${found.ticket.title ?? found.ticket.goal} · a guess settled`,
-          outgoing: { kind: "review", review: { ...found.review, decisions: found.review.decisions.map((decision) => (decision.id === id ? update(decision) : decision)), ts: yield* Clock.currentTimeMillis } },
-        });
+        yield* rewrite(held.roomId, { ...found.review, decisions: found.review.decisions.map((decision) => (decision.id === id ? update(decision) : decision)), ts: yield* Clock.currentTimeMillis });
       });
 
     /** A reader's AI guessed at a reason the review does not give: added to
@@ -343,7 +373,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         const id = `d${next}`;
         const title = held.question.length > 60 ? `${held.question.slice(0, 57).trimEnd()}…` : held.question;
         const decision = { id, title, what: guess.what, agentWhy: guess.what, where: held.lines ? [`${held.lines.file}:${held.lines.from.line}`] : [], basis: `${message.fromName}'s AI assumes this, as ${yield* SubscriptionRef.get(nameRef)} could not answer: ${guess.basis}`, confidence: guess.confidence };
-        yield* outbox.tell({ roomId: handle.id, to: "the room", title: `${found.ticket.title ?? found.ticket.goal} · a guess at its why`, outgoing: { kind: "review", review: { ...found.review, decisions: [...found.review.decisions, decision], ts: yield* Clock.currentTimeMillis } } });
+        yield* rewrite(handle.id, { ...found.review, decisions: [...found.review.decisions, decision], ts: yield* Clock.currentTimeMillis });
         yield* keep({ ...held, guess: { decision: id, what: guess.what } });
         const line = `\n${message.fromName}'s AI assumed why, as your user could not answer: "${guess.what}". It is on your user's review's why as a guess (${id}). When they say whether it holds: review-question {questionId: "${held.id}", verdict: confirmed | corrected | wrong, reply: the real reason when it is not}.`;
         yield* inbox.push(handle.id, { ...message, findings: `${message.findings}${line}` }, seq);
@@ -369,17 +399,19 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         }
         const held = yield* heldOf(roomId, input.questionId);
         if (!held) return `failed: no question ${input.questionId} — call review-question with nothing to list them`;
-        if (held.stage === "answered" || held.stage === "addressing") return `failed: it is answered already`;
+        const refused = (on: QuestionEvent) => (nextQuestion(held.stage, on) === null ? `failed: it is ${held.stage === "addressing" ? "answered and being fixed" : held.stage} — that cannot be done from there` : null);
         if (input.decline !== undefined) {
-          yield* keep({ ...held, stage: "declined" });
+          if (refused("declined")) return refused("declined")!;
+          yield* move(held, "declined");
           yield* tellAsker(held, "declined", input.decline.trim());
           return `declined; ${held.fromName} is told.`;
         }
         if (input.verdict !== undefined && input.reply === undefined) {
           if (!held.guess) return "failed: nobody has guessed at it — there is no guess to settle; reply with the answer instead";
           if (input.verdict !== "confirmed") return "failed: a guess that does not hold needs the real reason: reply with it";
+          if (refused("answered")) return refused("answered")!;
           yield* settleGuess(held, "confirmed", undefined);
-          yield* keep({ ...held, stage: "answered" });
+          yield* move(held, "answered");
           yield* tellAsker(held, "answered", "", { answer: `${yield* SubscriptionRef.get(nameRef)} confirms the reason your AI assumed: ${held.guess.what}` });
           return `confirmed; ${held.fromName} is told, and the guess on the review's why is marked confirmed.`;
         }
@@ -387,7 +419,11 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           const reply = input.reply.trim();
           if (!reply) return "failed: reply with what the conversation says";
           const flaw = input.flaw?.trim() || undefined;
-          yield* keep({ ...held, stage: "answered" });
+          // a flaw their work steering hands to the conversation that built it is "being fixed"; any other answer, "answered"
+          const level = levelOf(yield* store.get, "work", causeOf(held), roomId);
+          const handed = flaw !== undefined && (level === "act" || level === "auto") && (held.conversations?.length ?? 0) > 0;
+          if (refused(handed ? "fixing" : "answered")) return refused(handed ? "fixing" : "answered")!;
+          yield* move(held, handed ? "fixing" : "answered");
           yield* tellAsker(held, "answered", "", { answer: reply, ...(flaw ? { flaw } : {}) });
           // a guess already on the why is settled by the answer; with none, the answer goes on as read from the author's AI
           if (held.guess) {
@@ -402,7 +438,8 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         // their yes lets ask first and never through, never a level not chosen
         const gate = allow(yield* store.get, "answer", causeOf(held), true, roomId);
         if ("held" in gate) return `failed: ${gate.why} (kind answer)`;
-        return yield* answerNow(held);
+        if (refused("yes")) return refused("yes")!;
+        return yield* answerNow(held, "yes");
       });
 
     // an answering job that ended without answering leaves the question with the author
@@ -417,7 +454,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
               ended.add(view.id);
               const held = ((yield* store.get).reviewQuestions ?? []).find((candidate) => candidate.id === view.ticketId);
               if (!held || held.stage !== "answering") return;
-              yield* keep({ ...held, stage: "waiting" });
+              yield* move(held, "ended");
               yield* tellAsker(held, "waiting");
               yield* tellHere(
                 held,
