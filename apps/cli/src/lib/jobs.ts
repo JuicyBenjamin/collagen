@@ -51,6 +51,31 @@ export const DEFAULT_JOB_LIMIT = 1;
 export const modelFor = (state: Pick<LocalState, "models">, kind: JobKind, defaults: Partial<Record<JobKind, string>>): string | undefined =>
   state.models?.[kind]?.trim() || defaults[kind];
 
+/** The harness the person uses most with collagen: the one whose
+ *  conversations acted on the most threads and tickets here. Not chosen — it
+ *  follows how they work. null before any conversation has. */
+export const mostUsedHarness = (state: Pick<LocalState, "worked">): string | null => {
+  const acts = new Map<string, number>();
+  for (const worked of Object.values(state.worked ?? {})) acts.set(worked.conversation.ai, (acts.get(worked.conversation.ai) ?? 0) + worked.threads.length + worked.tickets.length + 1);
+  return [...acts].sort((first, second) => second[1] - first[1])[0]?.[0] ?? null;
+};
+
+/** The AI the room sees the person use: the one they use most — a mock
+ *  (a test's dummy, set in its state) as it is. */
+export const shownAi = (state: Pick<LocalState, "worked" | "preferredAi">): string | null =>
+  state.preferredAi?.startsWith("mock") ? state.preferredAi : (mostUsedHarness(state) ?? state.preferredAi);
+
+/** The harness a job runs with: the one chosen for it, else the one used
+ *  most, else the AI chosen before jobs named their own. */
+export const jobHarness = (state: Pick<LocalState, "harnesses" | "worked" | "preferredAi">, kind: JobKind): string | null =>
+  state.harnesses?.[kind]?.trim() || mostUsedHarness(state) || state.preferredAi;
+
+/** The state with a job's harness set, or given back to the one used most (null). */
+export const withHarness = <S extends Pick<LocalState, "harnesses">>(state: S, kind: JobKind, harness: string | null): S => {
+  const { [kind]: _was, ...rest } = state.harnesses ?? {};
+  return { ...state, harnesses: { ...rest, ...(harness?.trim() ? { [kind]: harness.trim() } : {}) } };
+};
+
 /** How many jobs run at once. */
 export const jobLimitOf = (state: Pick<LocalState, "jobLimit">): number => Math.max(1, Math.floor(state.jobLimit ?? DEFAULT_JOB_LIMIT));
 

@@ -6,7 +6,8 @@ kill_all; fresh_logs; prep_profiles; testnet
 
 echo "## A. all three up"
 start alice; start bob; start carol --room st-test3
-SA=$(mcp $A); SC=$(mcp $C); wait_for_peer $A "$SA" carol; admitted carol
+# each joiner is let in with an invite of its own, one after the other: wait for both
+SA=$(mcp $A); SC=$(mcp $C); wait_for_peer $A "$SA" carol; admitted carol; admitted bob
 expect "carol admitted while everyone started at once" "$(cat "$OUT/carol.log")" "admitted to the room log"
 call $A "$SA" create-ticket '{"title":"t1 all three up","goal":"t1 all three up","project":"sandbox","steps":[{"id":"s1","owner":"carol","intent":"note","description":"carol keeps this pending"}]}' > /dev/null
 wait_until "carol sees t1" "t1 all three up" goals $C "$SC"

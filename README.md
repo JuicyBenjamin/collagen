@@ -55,8 +55,8 @@ members who were offline. Peers exchange data, never code.
 
 In the TUI: rooms on the left; peers, tickets and projects in the centre;
 keys at the bottom. What your agent wants to send waits at the bottom of the
-messages tab until you say so (`y` sends, `e` edits, `n` drops). `1`/`2` switch tabs, `a` picks your agent, `c` copies an
-invite, `s` settings, `q` quit.
+messages tab until you say so (`y` sends, `e` edits, `n` drops). `1`/`2` switch tabs, `c` copies an
+invite, `s` settings, `i` you, `q` quit.
 
 ## More
 

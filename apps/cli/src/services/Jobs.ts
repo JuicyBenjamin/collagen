@@ -1,7 +1,7 @@
 import { Clock, Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { goalsOf, type JobKind, type OwnRun, type QueuedJob, type Ticket } from "@collagen/p2p";
-import { investigationPrompt, jobLimitOf, modelFor, paceOf, researchKind, researchPrompt, runsOf, type InvestigationRun } from "../lib/jobs";
+import { investigationPrompt, jobHarness, jobLimitOf, modelFor, paceOf, researchKind, researchPrompt, runsOf, type InvestigationRun } from "../lib/jobs";
 import { allow, withRun, type Cause } from "../lib/steering";
 import { withoutWorked } from "../lib/worked";
 import { CliArgs } from "./CliArgs";
@@ -102,7 +102,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
       if (!next) return;
       const view = (yield* SubscriptionRef.get(views)).find((candidate) => candidate.id === next.id);
       const harness = view ? harnessFor(harnesses, view.harness) : undefined;
-      const gate = allow(state, steeredBy(next.kind), next.cause ?? "mine", true);
+      const gate = allow(state, steeredBy(next.kind), next.cause ?? "mine", true, next.roomId);
       if (!view || !harness || "held" in gate) {
         yield* update(next.id, (failed) => ({ ...failed, state: "failed", note: "held" in gate ? gate.why : "its AI is gone" }));
         yield* letGo(next.id);
@@ -142,12 +142,13 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
     const research = (asked: ResearchAsk) =>
       Effect.gen(function* () {
         const state = yield* store.get;
-        const harness = state.preferredAi ? harnessFor(harnesses, state.preferredAi) : undefined;
-        if (!harness) return `failed: collagen runs jobs with your preferred AI, and ${state.preferredAi ? `"${state.preferredAi}" is not one it can run` : "none is set"} — choose one with set-ai (or a in the TUI)`;
-        // an investigation is answered with the model the person chose for
-        // those, and under its own steering
+        // an investigation is answered with the harness and model the person
+        // chose for those, and under its own steering — that room's
         const kind = researchKind(asked.ticket);
-        const gate = allow(state, steeredBy(kind), asked.cause ?? "mine", true);
+        const chosen = jobHarness(state, kind);
+        const harness = chosen ? harnessFor(harnesses, chosen) : undefined;
+        if (!harness) return `failed: collagen runs this job with ${chosen ? `"${chosen}", which it cannot run` : "the AI your user uses most, and none has worked with collagen yet"} — choose one for it on the settings page's AI tab, or with set-jobs`;
+        const gate = allow(state, steeredBy(kind), asked.cause ?? "mine", true, asked.roomId);
         if ("held" in gate && gate.held === "unset") return `failed: ${gate.why}`;
         const model = modelFor(state, kind, harness.defaultModels);
         const title = asked.ticket.title ?? asked.ticket.goal;
@@ -178,6 +179,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
             ...(kind === "investigation" ? { goals: goals.map((goal) => goal.id) } : {}),
             ...(asked.ask?.trim() ? { ask: asked.ask.trim() } : {}),
             ...(before ? { after: before } : {}),
+            roomId: asked.roomId,
           });
         }
         const queued = jobs.map((job): JobView => ({ id: job.id, kind, ticketId: job.ticketId, title: job.goals && runs.length > 1 ? `${title} · ${job.goals.join(", ")}` : title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt }));

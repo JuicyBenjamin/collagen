@@ -43,7 +43,7 @@ export interface TranscriptRoute {
 /** Where the configured app can be. Plain routes are strings; a route with
  *  parameters is an object. `room/*` routes render inside the room layout
  *  (see routes/index.tsx for the table that maps each to its page). */
-export type Route = "settings" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
+export type Route = "settings" | "you" | "rename-room" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
 
 export type RouteName = Route extends infer R ? (R extends string ? R : R extends { readonly name: infer N } ? N : never) : never;
 

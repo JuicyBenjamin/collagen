@@ -47,8 +47,8 @@ import { Attachments } from "./Attachments";
 import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { answerQuestion } from "./InvestigationView";
-import { investigationOf, JOB_KINDS, JOB_LABEL, jobLimitOf, modelFor, withModel, type InvestigationRun } from "../lib/jobs";
-import { allow, KIND_LABEL, levelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
+import { investigationOf, JOB_KINDS, JOB_LABEL, jobHarness, jobLimitOf, modelFor, withHarness, withModel, type InvestigationRun } from "../lib/jobs";
+import { allow, KIND_LABEL, levelOf, roomLevelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
 import { actingWith } from "../lib/agents";
 import { harnessFor, Harnesses } from "./Harness";
@@ -625,32 +625,27 @@ export const Epic = Tool.make("epic", {
   success: Schema.String,
 });
 
-export const SetAi = Tool.make("set-ai", {
-  description:
-    "Set which AI tool acts for this user: a harness collagen knows, by its id; a mock of one ('mock:<id>' — test dummies, visibly labeled to peers); or 'none' (inbox mode: nothing ever auto-runs; messages wait to be pulled). An id collagen does not know is refused with the list. Applies live; peers see the choice and its auth status.",
-  parameters: Schema.Struct({ ai: Schema.String }),
-  success: Schema.String,
-});
-
 export const SetSteering = Tool.make("set-steering", {
   description:
-    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. Called with nothing, it says how things stand. Kept on their machine; applies live.",
+    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room. Kept on their machine; applies live.",
   parameters: Schema.Struct({
     level: Schema.optional(Schema.NullOr(Steering)),
     kind: Schema.optional(Schema.Union([Schema.Literal("master"), SteeringKind])),
     whose: Schema.optional(Schema.Literals(["mine", "others", "both"])),
     tag: Schema.optional(Schema.NullOr(Schema.Literals(["none", "existing", "existing-or-new", "new"]))),
+    room: Schema.optional(Schema.Boolean),
   }),
   success: Schema.String,
 });
 
 export const SetJobs = Tool.make("set-jobs", {
   description:
-    "Your user's jobs: what collagen runs their preferred AI for (waking a conversation, researching a ticket, answering an investigation). 'limit' is how many run at once (1 unless they say more; the rest wait in line). 'job' with 'model' sets the model that job uses — any name their AI takes, an alias like 'haiku' or 'sonnet' follows the newest; null gives it back to the default. Only when your user says so. Called with nothing, it says how things stand.",
+    "Your user's jobs: what collagen runs their AI for (waking a conversation, researching a ticket, answering an investigation). 'limit' is how many run at once (1 unless they say more; the rest wait in line). 'job' with 'harness' sets the harness that job runs with — a harness collagen knows, by its id; null gives it back to the one your user's conversations work in most. 'job' with 'model' sets its model — any name the harness takes, an alias like 'haiku' or 'sonnet' follows the newest; null gives it back to the default. Only when your user says so. Called with nothing, it says how things stand.",
   parameters: Schema.Struct({
     limit: Schema.optional(Schema.Number),
     // every job kind there is, so a new one is settable as it lands
     job: Schema.optional(JobKind),
+    harness: Schema.optional(Schema.NullOr(Schema.String)),
     model: Schema.optional(Schema.NullOr(Schema.String)),
   }),
   success: Schema.String,
@@ -893,7 +888,6 @@ export const CollagenToolkit = Toolkit.make(
   AddProject,
   RemoveProject,
   OrderProjects,
-  SetAi,
   SetSteering,
   SetJobs,
   MergeReview,
@@ -953,7 +947,6 @@ export const DevCollagenToolkit = Toolkit.make(
   AddProject,
   RemoveProject,
   OrderProjects,
-  SetAi,
   SetSteering,
   SetJobs,
   MergeReview,
@@ -1554,14 +1547,14 @@ const makeHandlers = Effect.gen(function* () {
       Effect.gen(function* () {
         if (run === false) return `\nFiled without starting your user's AI (run: false). research starts it whenever they ask.`;
         if (asked.length > 0) return `\nAsked of ${asked.join(", ")}: whether their AI looks into it is their own steering's call. Your user's AI was not started; research starts it if they want their own answer too.`;
-        const level = levelOf(yield* store.get, "investigate", "mine");
+        const level = levelOf(yield* store.get, "investigate", "mine", roomId);
         if (level === "unset")
           return `\nYour user's steering for starting their AI on an investigation is not chosen, so nothing was started. Ask them once, in a line, how far collagen may go (set-steering kind investigate: never, ask first, act then tell, just do it).`;
         if (level === "never") return `\nNothing was started: your user's steering for investigations is never. research starts their AI whenever they ask.`;
         if (level === "ask") return `\nASK YOUR USER, in one line, whether to send their AI to find out now: their steering for investigations is ask first. On their yes, call research with this ticketId.`;
         const said = yield* jobs.research({ roomId, ticket, cwd: projectPath, investigation, ...(goals ? { goals } : {}) });
         if (said.startsWith("failed")) return `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`;
-        const report = levelOf(yield* store.get, "report", "mine");
+        const report = levelOf(yield* store.get, "report", "mine", roomId);
         const back = report === "act" || report === "auto" ? " What it finds comes back to this conversation as it arrives (their report steering), so nobody needs to watch for it." : "";
         return level === "act" ? `\nTheir steering for investigations is act, then tell: ${said}${back} Tell your user, in one line, that their AI is on it.` : `\n${said}${back} (their steering for investigations: just do it).`;
       });
@@ -1579,16 +1572,17 @@ const makeHandlers = Effect.gen(function* () {
       Effect.gen(function* () {
         if (tool === "set-steering" || tool === "watch-ticket") return null;
         const state = yield* store.get;
-        const held = (yield* SubscriptionRef.get(inbox.buffer)).filter(({ message, steeredBy }) => {
+        const held = (yield* SubscriptionRef.get(inbox.buffer)).filter(({ roomId, message, steeredBy }) => {
           if (heldTold.has(message.id)) return false;
           const listener = listenerFor(state, message);
           if (!listener) return false;
-          const gate = allow(state, steeredBy ?? "deliver", message.from === message.to ? "mine" : "others", listener.heard !== "worked");
+          const gate = allow(state, steeredBy ?? "deliver", message.from === message.to ? "mine" : "others", listener.heard !== "worked", roomId);
           return "held" in gate && gate.held === "ask";
         });
         const asking = unchosen(state);
+        const here = (yield* rooms.current).id;
         // an investigation's findings follow the report level; other news, delivery's for others
-        const offerOn = OFFERS_WATCH.has(tool) && !answer.startsWith("failed") && (tool === "investigate" ? levelOf(state, "report", "mine") : levelOf(state, "deliver", "others")) === "ask" ? ticketIn(input, answer) : undefined;
+        const offerOn = OFFERS_WATCH.has(tool) && !answer.startsWith("failed") && (tool === "investigate" ? levelOf(state, "report", "mine", here) : levelOf(state, "deliver", "others", here)) === "ask" ? ticketIn(input, answer) : undefined;
         if (!asking && held.length === 0 && offerOn === undefined) return null;
         const conversation = (yield* actingNow)?.conversation;
         if (!conversation) return null;
@@ -1710,7 +1704,7 @@ const makeHandlers = Effect.gen(function* () {
           const socket = yield* (harnessFor(harnesses, conversation.ai)?.reachOf ?? Effect.succeed(undefined));
           if (socket) yield* store.update((state) => withWorked(state, conversation, { socket }, since));
           yield* Effect.log(`thread ${threadId} adopted → ${conversation.ai} ${conversation.id.slice(0, 8)}…`);
-          const delivery = levelOf(yield* store.get, "deliver", "others");
+          const delivery = levelOf(yield* store.get, "deliver", "others", (yield* rooms.current).id);
           return `adopted: new messages on thread ${threadId} go to your ${conversation.ai} conversation (${conversation.id}) as your user's delivery steering allows — for other people's messages it is ${STEERING_LABEL[delivery]}${delivery === "unset" || delivery === "ask" ? ", so they wait in the inbox for now" : ""}`;
         }).pipe(Effect.withSpan("Mcp.adoptThread")),
       "watch-ticket": Effect.fn("Mcp.watchTicket")(function* (input: { ticketId: string; stop?: boolean }) {
@@ -1724,7 +1718,7 @@ const makeHandlers = Effect.gen(function* () {
         const socket = yield* (harnessFor(harnesses, conversation.ai)?.reachOf ?? Effect.succeed(undefined));
         yield* store.update((state) => withWorked(state, conversation, { watch: { ticket: ticket.id, on: input.stop !== true }, ...(socket ? { socket } : {}) }, now));
         if (input.stop === true) return `stopped: this conversation no longer hears about "${ticketName(ticket)}"`;
-        const delivery = levelOf(yield* store.get, "deliver", "others");
+        const delivery = levelOf(yield* store.get, "deliver", "others", (yield* rooms.current).id);
         return `watching: this conversation hears when "${ticketName(ticket)}" moves — ${harnessFor(harnesses, conversation.ai)?.wakesBy ?? "woken by collagen"}${delivery === "unset" ? ". Your user's delivery steering is not chosen, so nothing comes until they choose one" : ""}.`;
       }),
       "get-messages": ({ threadId }: { threadId: string }) =>
@@ -1737,7 +1731,7 @@ const makeHandlers = Effect.gen(function* () {
           // new to this thread: where it stands, not its whole history as news
           const catchUp = read.first ? yield* catchUpOn(handle.room, threadId, read) : undefined;
           // the person's steering rides what the agent is about to act on
-          const steering = workLine(yield* store.get, messages.some((received) => received.from !== received.to) ? "others" : "mine");
+          const steering = workLine(yield* store.get, messages.some((received) => received.from !== received.to) ? "others" : "mine", handle.id);
           return toToon({ ...(messages.length > 0 ? { steering } : {}), messages, ...(catchUp ? { catchUp } : {}) });
         }).pipe(Effect.withSpan("Mcp.getMessages")),
       execute: ({ script, input }: { script: string; input?: unknown }) =>
@@ -2247,23 +2241,20 @@ const makeHandlers = Effect.gen(function* () {
         yield* store.update((current) => withProjectOrder(current, roomId, after));
         return `set — on this machine only:\n${listed(after)}`;
       }),
-      "set-ai": ({ ai: agent }: { ai: string }) =>
+      "set-steering": (input: { level?: Steering | null; kind?: SteeringAt; whose?: "mine" | "others" | "both"; tag?: "none" | "existing" | "existing-or-new" | "new" | null; room?: boolean }) =>
         Effect.gen(function* () {
-          const choices = (yield* aiChoices.pipe(Effect.provideService(Adapters, adapters), Effect.provideService(Harnesses, harnesses))).filter((choice) => choice !== null);
-          if (agent !== "none" && !choices.includes(agent)) return `failed: collagen does not know "${agent}" — pick one of: ${[...choices, "none"].join(", ")}`;
-          yield* store.update((state) => ({ ...state, preferredAi: agent === "none" ? null : agent }));
-          return agent === "none" ? "ai set to none — inbox mode: nothing auto-runs, messages wait to be pulled" : `ai set to ${agent} — its auth status is probed now and broadcast to the room`;
-        }).pipe(Effect.withSpan("Mcp.setAi")),
-      "set-steering": (input: { level?: Steering | null; kind?: SteeringAt; whose?: "mine" | "others" | "both"; tag?: "none" | "existing" | "existing-or-new" | "new" | null }) =>
-        Effect.gen(function* () {
-          if (input.level !== undefined) yield* store.update((state) => withLevel(state, input.kind ?? "master", input.whose ?? "mine", input.level ?? null));
+          const { id: roomId, name: roomName } = yield* focusedRoom;
+          if (input.level !== undefined) yield* store.update((state) => withLevel(state, input.kind ?? "master", input.whose ?? "mine", input.level ?? null, input.room === true ? roomId : undefined));
           if (input.tag !== undefined) yield* store.update((state) => withTagRoute(state, input.tag ?? null));
           const state = yield* store.get;
           const row = (at: SteeringAt) => {
             const set = at === "master" ? state.steering?.master : state.steering?.kinds?.[at];
             const shown = (cause: "mine" | "others") =>
               at === "master" ? STEERING_LABEL[set?.[cause] ?? "unset"] : `${STEERING_LABEL[levelOf(state, at, cause)]}${set?.[cause] === undefined ? " (follows the master)" : ""}`;
-            return `- ${at === "master" ? "master" : `${at}: ${KIND_LABEL[at]}`} — theirs: ${shown("mine")}; other people's: ${shown("others")}`;
+            // what this room sets itself, where it sets anything
+            const here = (cause: "mine" | "others") => roomLevelOf(state, roomId, at, cause);
+            const inRoom = here("mine") || here("others") ? `; in "${roomName}": theirs ${here("mine") ? STEERING_LABEL[here("mine")!] : "follows everywhere"}, other people's ${here("others") ? STEERING_LABEL[here("others")!] : "follows everywhere"}` : "";
+            return `- ${at === "master" ? "master" : `${at}: ${KIND_LABEL[at]}`} — theirs: ${shown("mine")}; other people's: ${shown("others")}${inRoom}`;
           };
           const changed = input.level !== undefined || input.tag !== undefined;
           return [
@@ -2273,21 +2264,27 @@ const makeHandlers = Effect.gen(function* () {
             "Not chosen: collagen does none of it outside itself in their name. Room-facing actions (messages, takes, settles, closes) remain your user's word.",
           ].join("\n");
         }).pipe(Effect.withSpan("Mcp.setSteering")),
-      "set-jobs": Effect.fn("Mcp.setJobs")(function* (input: { limit?: number; job?: JobKind; model?: string | null }) {
+      "set-jobs": Effect.fn("Mcp.setJobs")(function* (input: { limit?: number; job?: JobKind; harness?: string | null; model?: string | null }) {
         if (input.limit !== undefined) {
           if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 8) return "failed: limit is a whole number from 1 to 8";
           yield* store.update((state) => ({ ...state, jobLimit: input.limit! }));
+        }
+        if (input.harness !== undefined) {
+          if (!input.job) return `failed: say which job the harness is for: ${JOB_KINDS.join(", ")}`;
+          if (input.harness !== null && !harnessFor(harnesses, input.harness)) return `failed: collagen does not know "${input.harness}" — pick one of: ${harnesses.map((one) => one.id).join(", ")}`;
+          yield* store.update((state) => withHarness(state, input.job!, input.harness ?? null));
         }
         if (input.model !== undefined) {
           if (!input.job) return `failed: say which job the model is for: ${JOB_KINDS.join(", ")}`;
           yield* store.update((state) => withModel(state, input.job!, input.model ?? null));
         }
         const state = yield* store.get;
-        const harness = state.preferredAi ? harnessFor(harnesses, state.preferredAi) : undefined;
-        return [
-          `Jobs — your user's own, on this machine: run with ${harness ? harness.name : `no AI collagen can run (preferred AI: ${state.preferredAi ?? "none"})`}, ${jobLimitOf(state)} at a time.`,
-          ...JOB_KINDS.map((kind) => `- ${JOB_LABEL[kind]}: ${modelFor(state, kind, harness?.defaultModels ?? {}) ?? "the AI's own default"}${state.models?.[kind] ? "" : " (the default)"}`),
-        ].join("\n");
+        const line = (kind: JobKind) => {
+          const chosen = jobHarness(state, kind);
+          const harness = chosen ? harnessFor(harnesses, chosen) : undefined;
+          return `- ${JOB_LABEL[kind]}: with ${harness ? harness.name : "no AI collagen can run yet"}${state.harnesses?.[kind] ? "" : " (the one used most)"}, model ${modelFor(state, kind, harness?.defaultModels ?? {}) ?? "the harness's own default"}${state.models?.[kind] ? "" : " (the default)"}`;
+        };
+        return [`Jobs — your user's own, on this machine: ${jobLimitOf(state)} at a time.`, ...JOB_KINDS.map(line)].join("\n");
       }),
       "merge-review": Effect.fn("Mcp.mergeReview")(function* (input: { ticketId: string }) {
         const { id: roomId, room } = yield* focusedRoom;

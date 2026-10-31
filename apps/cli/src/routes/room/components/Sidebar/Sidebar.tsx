@@ -34,7 +34,7 @@ export function Sidebar() {
   return (
     <Focusable
       id="rooms"
-      hint="↑↓ pick room · enter look at it · d leave · + join or create · → into the room · esc"
+      hint="↑↓ pick room · enter look at it · r rename · d leave · + join or create · → into the room · esc"
       flexDirection="column"
       flexShrink={0}
       marginRight={1}
@@ -43,6 +43,15 @@ export function Sidebar() {
         if (key.name === "down" && sel < last) return setCursor(sel + 1), true;
         // the rail is the left edge: nowhere to go
         if (key.name === "up" || key.name === "down" || key.name === "left") return true;
+        // rename: the room picked becomes the one looked at, then its name opens
+        if (key.name === "r") {
+          const room = rooms[sel];
+          if (room) {
+            if (!room.focused) focusRoom({ id: room.id });
+            navigate("rename-room");
+          }
+          return true;
+        }
         if (key.name === "d") {
           const room = rooms[sel];
           if (room) leaveRoom({ id: room.id });

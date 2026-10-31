@@ -8,7 +8,7 @@ other — no accounts, no server.
 The first time you run Collagen it generates a keypair for you and asks for a name. Your
 identity is:
 
-- a **display name** (changeable any time — settings, or `set-name` from your agent)
+- a **display name** (changeable any time — the You page, `i`, or `set-name` from your agent)
 - a **public key** (stable across runs; this is what peers actually trust)
 
 ## A room

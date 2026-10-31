@@ -65,8 +65,12 @@ yet, so the last two deliver to one that exists.
 Nothing is chosen at first, so collagen does nothing outside itself in your name: finishing a
 review on its page says it in the room, not on GitHub, and an approved review is not merged.
 Each AI conversation is told once, on its first call, to ask you to choose. Set them on the
-settings page (`s`), cycle the master with `g` in the room (the status line shows it beside
-your ai), or ask your agent (`set-steering`). Questions only ever come through your agent:
+settings page (`s`) or ask your agent (`set-steering`); the status line shows the general
+level. A row not chosen follows the general level.
+
+Each level can also be set for **one room**: the settings page's second column, or
+`set-steering` with `room`. A room's own level wins there; where it has none, the room
+follows everywhere. A work room can ask first while your own side project just does it. Questions only ever come through your agent:
 the TUI and the review page never ask you anything. A colleague was once surprised to find
 their agent had implemented every change a review asked for without running it by them —
 autonomy is opted into, per person, per kind. The levels are kept on your machine.
@@ -155,8 +159,9 @@ never starts an agent for you, and the agent it reaches is told to relay it, not
 
 ### Jobs: collagen running your AI for you
 
-Your **preferred AI** (`a` in the room, or `set-ai`) is the AI collagen runs for jobs of its
-own, each with a model you choose per job (settings, or `set-jobs`): waking a conversation
+Collagen runs your AI for jobs of its own, each with a harness and a model you choose per
+job (settings, or `set-jobs`). A job with no harness chosen runs the one your conversations
+work in most, the same one the rooms see beside your name. The jobs are waking a conversation
 (a small model; `haiku` by default for Claude Code) and researching a ticket (`sonnet` by
 default). A model is any name your AI takes; an alias like `haiku` follows the newest, so a
 new model needs nothing from collagen.

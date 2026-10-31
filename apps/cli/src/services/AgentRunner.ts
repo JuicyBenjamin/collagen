@@ -145,7 +145,7 @@ export class AgentRunner extends Context.Service<AgentRunner>()("cli/AgentRunner
       // adopting a thread or watching a ticket is the person's yes to it; having worked on one is not
       // an investigation's findings come back to its author's conversation as their report steering says
       const kind = latest.steeredBy ?? "deliver";
-      const gate = allow(state, kind, cause, listener.heard !== "worked");
+      const gate = allow(state, kind, cause, listener.heard !== "worked", latest.roomId);
       if ("held" in gate) {
         yield* Effect.log(`→ inbox · ${about} — not delivered into your conversation: ${kind === "report" ? "report" : "delivery"} steering is ${STEERING_LABEL[gate.held]}; it waits until your agent pulls it`);
         return null;

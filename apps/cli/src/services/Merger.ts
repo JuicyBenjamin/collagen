@@ -84,7 +84,7 @@ export const MergerDaemon = Layer.effectDiscard(
             }
             // someone else's approval merging it is their doing; the person's own Accept, theirs
             const cause: Cause = level === "theirs" ? "others" : "mine";
-            const gate = allow(state, "host", cause, (state.mergeYes ?? []).includes(ticket.id));
+            const gate = allow(state, "host", cause, (state.mergeYes ?? []).includes(ticket.id), handle.id);
             if ("merge" in ready && "held" in gate) {
               const why =
                 gate.held !== "ask"

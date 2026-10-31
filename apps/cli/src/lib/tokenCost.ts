@@ -51,7 +51,6 @@ const KINDS: Record<string, CallKind> = {
   "add-project": "setup",
   "remove-project": "setup",
   "order-projects": "setup",
-  "set-ai": "setup",
   "set-steering": "setup",
   "set-jobs": "setup",
   research: "tickets",

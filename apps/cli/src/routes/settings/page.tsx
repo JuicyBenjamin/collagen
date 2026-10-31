@@ -2,208 +2,223 @@ import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
-import { writeProfileFile } from "../../config/profileFile";
+import type { JobKind, LocalState, MergeFor, Steering } from "@collagen/p2p";
 import { useRouter } from "../../app/router";
-import { useSession } from "../../app/session";
 import { theme } from "../../app/theme";
-import { SETTINGS, settingOf, withSetting, type SettingKey } from "../../lib/settings";
+import { FollowScroll } from "../../components/FollowScroll";
+import { SETTINGS, settingOf, withSetting } from "../../lib/settings";
 import { MERGE_HELP, MERGE_LEVELS, withMergeFor } from "../../lib/merging";
-import { KIND_LABEL, STEERING_KINDS, STEERING_LABEL, STEERING_ORDER, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
-import { JOB_KINDS, JOB_LABEL, jobLimitOf, withModel } from "../../lib/jobs";
-import type { JobKind, MergeFor, Steering, SteeringLevels } from "@collagen/p2p";
-import { myNameAtom, roomAtom } from "../atoms";
-import { stateAtom, updateStateAtom } from "../room/atoms";
-import { renameRoomAtom, setMyNameAtom } from "./atoms";
+import { roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING_ORDER, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
+import { JOB_LABEL, jobLimitOf, mostUsedHarness, withHarness, withModel } from "../../lib/jobs";
+import { roomAtom } from "../atoms";
+import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
+import { pickable, ROWS, STEER_WORDS, TABS, twoColumns, type Row, type Tab } from "./rows";
 
-/** A steering level on the page: where it is set, and whose acts. */
-type SteerField = `steer:${SteeringAt}:${Cause}`;
-const STEER_AT: ReadonlyArray<SteeringAt> = ["master", ...STEERING_KINDS];
-const STEER_FIELDS: ReadonlyArray<SteerField> = STEER_AT.flatMap((at) => [`steer:${at}:mine` as const, `steer:${at}:others` as const]);
-
-/** A job's model on the page: typed, applied on enter. */
-type ModelField = `model:${JobKind}`;
-const MODEL_FIELDS: ReadonlyArray<ModelField> = JOB_KINDS.map((kind) => `model:${kind}` as const);
-
-type Field = "name" | "room" | SettingKey | "mergeDefault" | "mergeRoom" | SteerField | "tag" | "jobLimit" | ModelField;
-const FIELDS: ReadonlyArray<Field> = ["name", "room", ...SETTINGS.map((setting) => setting.key), ...STEER_FIELDS, "tag", "jobLimit", ...MODEL_FIELDS, "mergeDefault", "mergeRoom"];
-
-const isModel = (field: Field): field is ModelField => field.startsWith("model:");
+/** The width of a row's words, and of each column after them. */
+const WORDS = 48;
+const COLUMN = 16;
 /** The job limit round: 1 → 4 and back. */
 const JOB_LIMITS = [1, 2, 3, 4];
 
-const isSteer = (field: Field): field is SteerField => field.startsWith("steer:");
-
-/** A level round: not chosen (or following the master) first, then up from asking. */
-const nextSteer = (level: Steering | undefined): Steering | null => {
+/** A round of levels: not chosen first (following the general level, or —
+ *  in a room — everywhere), then up from never. */
+const nextLevel = (level: Steering | undefined): Steering | null => {
   const order: ReadonlyArray<Steering | null> = [null, ...STEERING_ORDER];
   return order[(order.indexOf(level ?? null) + 1) % order.length]!;
 };
-
-const setLevel = (steering: SteeringLevels | undefined, at: SteeringAt, cause: Cause): Steering | undefined =>
-  at === "master" ? steering?.master?.[cause] : steering?.kinds?.[at]?.[cause];
-
-/** The level after `level` — or, for a room, after its own: none (the default's) first. */
-const nextLevel = (level: MergeFor | undefined, allowNone: boolean): MergeFor | null => {
+const everywhereOf = (state: LocalState | null, at: SteeringAt, cause: Cause): Steering | undefined =>
+  at === "master" ? state?.steering?.master?.[cause] : state?.steering?.kinds?.[at]?.[cause];
+const nextMerge = (level: MergeFor | undefined, allowNone: boolean): MergeFor | null => {
   const order: ReadonlyArray<MergeFor | null> = allowNone ? [null, ...MERGE_LEVELS] : MERGE_LEVELS;
   return order[(order.indexOf(level ?? (allowNone ? null : "off")) + 1) % order.length]!;
 };
+const cell = (text: string) => text.padEnd(COLUMN).slice(0, COLUMN);
 
-/** Settings frame: your name + the room's shared name, both applied on
- *  enter, then your switches, each applied the moment it is flipped (your
- *  agent can flip them for you too — set-settings). */
+/** Settings: what collagen and your AI may do in your name, everywhere and
+ *  in the room you are in, in three tabs — AI, the repo host, and the
+ *  general level the rest follow. Each change applies the moment it is made
+ *  (your agent can make them too: set-steering, set-jobs, set-settings, set-merging). */
 export function SettingsPage() {
-  const { profile } = useSession();
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { navigate } = useRouter();
-  const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => "");
-  const roomName = room.name;
-  const setMyName = useAtomSet(setMyNameAtom);
-  const renameRoom = useAtomSet(renameRoomAtom);
-
-  const [name, setName] = useState(myName);
-  const [label, setLabel] = useState(roomName);
-  const [field, setField] = useState<Field>("name");
-  const [saved, setSaved] = useState(false);
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
+  const choices = AsyncResult.getOrElse(useAtomValue(aiChoicesAtom), (): ReadonlyArray<string | null> => [null]);
   const updateState = useAtomSet(updateStateAtom);
-  const flip = (key: SettingKey) => updateState({ update: (previous) => withSetting(previous, key, !settingOf(previous, key)) });
-  // whose approval collagen waits for before it merges for you: the default each room is given, and this room's
-  const cycleMerge = (which: "mergeDefault" | "mergeRoom") =>
-    updateState({
-      update: (previous) =>
-        which === "mergeDefault"
-          ? withMergeFor(previous, { default: true }, nextLevel(previous.merging?.default, false))
-          : withMergeFor(previous, { room: room.id }, nextLevel(previous.merging?.rooms?.[room.id], true)),
-    });
-  // the person's steering: each level for their own acts and for others', and where a tag goes
-  const cycleSteer = (field: SteerField) => {
-    const [, at, cause] = field.split(":") as [string, SteeringAt, Cause];
-    updateState({ update: (previous) => withLevel(previous, at, cause, nextSteer(setLevel(previous.steering, at, cause))) });
-  };
-  const cycleTag = () =>
-    updateState({ update: (previous) => withTagRoute(previous, TAG_ROUTES[(TAG_ROUTES.indexOf(tagRouteOf(previous)) + 1) % TAG_ROUTES.length]!) });
-  // the jobs collagen runs the person's AI for: how many at once, and each job's model
-  const cycleJobLimit = () => updateState({ update: (previous) => ({ ...previous, jobLimit: JOB_LIMITS[(JOB_LIMITS.indexOf(jobLimitOf(previous)) + 1) % JOB_LIMITS.length]! }) });
+  const [tab, setTab] = useState<Tab>("ai");
+  const rows = ROWS[tab];
+  const [cursor, setCursor] = useState(1);
+  const [column, setColumn] = useState<0 | 1>(0);
   const [models, setModels] = useState<Partial<Record<JobKind, string>>>({});
-  const modelShown = (kind: JobKind) => models[kind] ?? state?.models?.[kind] ?? "";
-  const saveModel = (kind: JobKind) => updateState({ update: (previous) => withModel(previous, kind, models[kind] ?? previous.models?.[kind] ?? null) });
-  const mergeDefault: MergeFor = state?.merging?.default ?? "off";
-  const mergeRoom = state?.merging?.rooms?.[room.id];
+  const row = rows[Math.min(cursor, rows.length - 1)]!;
+  const used = state ? mostUsedHarness(state) : null;
 
-  const next = () => setField((current) => FIELDS[(FIELDS.indexOf(current) + 1) % FIELDS.length]!);
-  const prev = () => setField((current) => FIELDS[(FIELDS.indexOf(current) + FIELDS.length - 1) % FIELDS.length]!);
-  const submit = () => {
-    const newName = name.trim();
-    const newRoomName = label.trim();
-    if (newName.length === 0 || newRoomName.length === 0) return;
-    writeProfileFile(profile, { name: newName });
-    if (newName !== myName) setMyName({ name: newName });
-    // renaming is shared state — broadcast to the whole room
-    if (newRoomName !== roomName) renameRoom({ name: newRoomName });
-    setSaved(true);
+  const move = (by: 1 | -1) => {
+    let next = cursor;
+    do next = (next + by + rows.length) % rows.length;
+    while (!pickable(rows[next]!));
+    setCursor(next);
+  };
+  const switchTab = (by: 1 | -1) => {
+    const next = TABS[(TABS.findIndex((each) => each.id === tab) + by + TABS.length) % TABS.length]!.id;
+    setTab(next);
+    setCursor(ROWS[next].findIndex(pickable));
+    setColumn(0);
+  };
+
+  const change = (update: (previous: LocalState) => LocalState) => updateState({ update });
+  /** space or enter on the cell under the cursor */
+  const act = () => {
+    const here = column === 1 && twoColumns(row);
+    if (row.kind === "steer")
+      return change((previous) =>
+        here ? withLevel(previous, row.at, row.cause, nextLevel(roomLevelOf(previous, room.id, row.at, row.cause)), room.id) : withLevel(previous, row.at, row.cause, nextLevel(everywhereOf(previous, row.at, row.cause))),
+      );
+    if (row.kind === "merge")
+      return change((previous) => (here ? withMergeFor(previous, { room: room.id }, nextMerge(previous.merging?.rooms?.[room.id], true)) : withMergeFor(previous, { default: true }, nextMerge(previous.merging?.default, false))));
+    if (row.kind === "tag") return change((previous) => withTagRoute(previous, TAG_ROUTES[(TAG_ROUTES.indexOf(tagRouteOf(previous)) + 1) % TAG_ROUTES.length]!));
+    if (row.kind === "switch") return change((previous) => withSetting(previous, row.key, !settingOf(previous, row.key)));
+    if (row.kind === "jobLimit") return change((previous) => ({ ...previous, jobLimit: JOB_LIMITS[(JOB_LIMITS.indexOf(jobLimitOf(previous)) + 1) % JOB_LIMITS.length]! }));
+    if (row.kind === "harness") {
+      const round: ReadonlyArray<string | null> = [null, ...choices.filter((choice): choice is string => choice !== null)];
+      return change((previous) => withHarness(previous, row.job, round[(round.indexOf(previous.harnesses?.[row.job] ?? null) + 1) % round.length] ?? null));
+    }
   };
 
   useKeyboard((key) => {
-    if (key.name === "tab") return key.shift ? prev() : next();
     if (key.name === "escape") return navigate("room/overview");
-    // on a switch (not typing in a field): arrows move, space or enter flips
-    if (field === "name" || field === "room" || isModel(field)) return;
-    if (key.name === "down") return next();
-    if (key.name === "up") return prev();
-    if (key.name === "space" || key.name === "return" || key.name === "enter") {
-      if (isSteer(field)) return cycleSteer(field);
-      if (field === "tag") return cycleTag();
-      if (field === "jobLimit") return cycleJobLimit();
-      return field === "mergeDefault" || field === "mergeRoom" ? cycleMerge(field) : flip(field);
-    }
+    if (key.name === "tab") return switchTab(key.shift ? -1 : 1);
+    if (key.name === "down") return move(1);
+    if (key.name === "up") return move(-1);
+    // typing a model: the arrows and space are the field's
+    if (row.kind === "model") return;
+    if (key.name === "left") return setColumn(0);
+    if (key.name === "right") return setColumn(twoColumns(row) ? 1 : 0);
+    if (key.name === "space" || key.name === "return" || key.name === "enter") return act();
   });
 
-  return (
-    <box flexDirection="column" gap={1} marginTop={1}>
-      <text fg={theme.fg}>settings — profile "{profile}"</text>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={field === "name" ? theme.accent : theme.dim} paddingX={1} title=" your name ">
-        <input focused={field === "name"} value={name} onInput={setName} onSubmit={next} placeholder="how peers see you" />
-      </box>
-      <box
-        flexDirection="column"
-        border
-        borderStyle="rounded"
-        borderColor={field === "room" ? theme.accent : theme.dim}
-        paddingX={1}
-        title=" room name (shared with everyone) "
-      >
-        <input focused={field === "room"} value={label} onInput={setLabel} onSubmit={submit} placeholder="renames the room for the whole room" />
-      </box>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={SETTINGS.some((setting) => setting.key === field) ? theme.accent : theme.dim} paddingX={1} title=" switches ">
-        {SETTINGS.map((setting) => {
-          const on = state ? settingOf(state, setting.key) : setting.default;
-          const here = field === setting.key;
-          return (
-            <box key={setting.key} flexDirection="column">
-              <text fg={here ? theme.accent : theme.fg}>
-                {here ? "› " : "  "}
-                {on ? "[on] " : "[off]"} {setting.label}
-              </text>
-              <text fg={theme.dim}>{`        ${on ? setting.on : setting.off}`}</text>
-            </box>
-          );
-        })}
-      </box>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={isSteer(field) || field === "tag" ? theme.accent : theme.dim} paddingX={1} title=" steering — what collagen does in your name ">
-        {STEER_FIELDS.map((steerField) => {
-          const [, at, cause] = steerField.split(":") as [string, SteeringAt, Cause];
-          const set = setLevel(state?.steering, at, cause);
-          const shown = set ? STEERING_LABEL[set] : at === "master" ? STEERING_LABEL.unset : "master's";
-          const here = field === steerField;
-          return (
-            <text key={steerField} fg={here ? theme.accent : set && set !== "ask" ? theme.warn : theme.fg}>
-              {here ? "› " : "  "}
-              {`[${shown}] ${at === "master" ? "master" : KIND_LABEL[at]} — ${cause === "mine" ? "yours" : "other people's"}`}
-            </text>
-          );
-        })}
-        <text fg={field === "tag" ? theme.accent : theme.fg}>
-          {field === "tag" ? "› " : "  "}
-          {`[${state ? tagRouteOf(state) : "existing"}] a message for you goes to ${TAG_LABEL[state ? tagRouteOf(state) : "existing"]}`}
-        </text>
-        <text fg={theme.dim}>{"        not chosen: nothing is done outside collagen in your name · others' never follows yours"}</text>
-      </box>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={field === "jobLimit" || isModel(field) ? theme.accent : theme.dim} paddingX={1} title=" jobs — what collagen runs your AI for ">
-        <text fg={field === "jobLimit" ? theme.accent : theme.fg}>
-          {field === "jobLimit" ? "› " : "  "}
-          {`[${state ? jobLimitOf(state) : 1}] at a time — the rest wait in line`}
-        </text>
-        {JOB_KINDS.map((kind) => (
-          <box key={kind} flexDirection="row" gap={1}>
-            <text fg={field === `model:${kind}` ? theme.accent : theme.fg}>{`${field === `model:${kind}` ? "› " : "  "}${JOB_LABEL[kind]}:`}</text>
+  /** One cell's words: what is set, or what it follows. */
+  const steerCell = (at: SteeringAt, cause: Cause, here: boolean): string => {
+    if (here) {
+      const own = roomLevelOf(state ?? { steering: undefined }, room.id, at, cause);
+      return own ? STEERING_LABEL[own] : "· follows";
+    }
+    const set = everywhereOf(state, at, cause);
+    return set ? STEERING_LABEL[set] : at === "master" ? STEERING_LABEL.unset : "· general";
+  };
+
+  const line = (each: Row, index: number) => {
+    const on = index === cursor;
+    const mark = (col: 0 | 1) => (on && column === col ? theme.accent : theme.fg);
+    const words = (text: string) => <span fg={on ? theme.accent : theme.fg}>{`${on ? "› " : "  "}${text}`.padEnd(WORDS).slice(0, WORDS)}</span>;
+    switch (each.kind) {
+      case "heading":
+        return (
+          <text key={each.id} id={each.id} fg={theme.dim}>
+            {each.text}
+          </text>
+        );
+      case "steer":
+        return (
+          <text key={each.id} id={each.id} wrapMode="none">
+            {words(`${STEER_WORDS[each.at]} — ${each.cause === "mine" ? "yours" : "others'"}`)}
+            <span fg={mark(0)}>{cell(steerCell(each.at, each.cause, false))}</span>
+            <span fg={mark(1)}>{cell(steerCell(each.at, each.cause, true))}</span>
+          </text>
+        );
+      case "merge": {
+        const mergeRoom = state?.merging?.rooms?.[room.id];
+        return (
+          <text key={each.id} id={each.id} wrapMode="none">
+            {words("merge for me")}
+            <span fg={mark(0)}>{cell(state?.merging?.default ?? "off")}</span>
+            <span fg={mark(1)}>{cell(mergeRoom ?? "· follows")}</span>
+          </text>
+        );
+      }
+      case "tag":
+        return (
+          <text key={each.id} id={each.id} wrapMode="none">
+            {words("a message for you goes to")}
+            <span fg={mark(0)}>{TAG_LABEL[state ? tagRouteOf(state) : "existing"]}</span>
+          </text>
+        );
+      case "switch": {
+        const setting = SETTINGS.find((candidate) => candidate.key === each.key)!;
+        return (
+          <text key={each.id} id={each.id} wrapMode="none">
+            {words(setting.label)}
+            <span fg={mark(0)}>{state && settingOf(state, each.key) ? "on" : "off"}</span>
+          </text>
+        );
+      }
+      case "jobLimit":
+        return (
+          <text key={each.id} id={each.id} wrapMode="none">
+            {words("jobs at a time")}
+            <span fg={mark(0)}>{String(state ? jobLimitOf(state) : 1)}</span>
+            <span fg={theme.dim}>{"  the rest wait in line"}</span>
+          </text>
+        );
+      case "harness":
+        return (
+          <text key={each.id} id={each.id} wrapMode="none">
+            {words(`${JOB_LABEL[each.job]}: with`)}
+            <span fg={mark(0)}>{state?.harnesses?.[each.job] ?? `the one you use most${used ? ` (${used})` : ""}`}</span>
+          </text>
+        );
+      case "model":
+        return (
+          <box key={each.id} id={each.id} flexDirection="row">
+            <text wrapMode="none">{words("  its model")}</text>
             <input
-              focused={field === `model:${kind}`}
-              value={modelShown(kind)}
-              onInput={(typed) => setModels((previous) => ({ ...previous, [kind]: typed }))}
-              onSubmit={() => saveModel(kind)}
-              placeholder="your AI's default"
+              focused={on}
+              value={models[each.job] ?? state?.models?.[each.job] ?? ""}
+              onInput={(typed) => setModels((previous) => ({ ...previous, [each.job]: typed }))}
+              onSubmit={() => change((previous) => withModel(previous, each.job, models[each.job] ?? previous.models?.[each.job] ?? null))}
+              placeholder="the harness's default"
             />
           </box>
+        );
+    }
+  };
+
+  /** What the cell under the cursor means, under the list. */
+  const help = (): string => {
+    if (row.kind === "steer") {
+      const level = column === 1 ? roomLevelOf(state ?? { steering: undefined }, room.id, row.at, row.cause) : everywhereOf(state, row.at, row.cause);
+      if (level) return STEERING_HELP[level];
+      return column === 1 ? "this room follows everywhere" : row.at === "master" ? STEERING_HELP.unset : "follows the general level (General tab)";
+    }
+    if (row.kind === "merge") return MERGE_HELP[(column === 1 ? state?.merging?.rooms?.[room.id] : undefined) ?? state?.merging?.default ?? "off"];
+    if (row.kind === "switch") {
+      const setting = SETTINGS.find((candidate) => candidate.key === row.key)!;
+      return state && settingOf(state, row.key) ? setting.on : setting.off;
+    }
+    if (row.kind === "harness") return "a harness collagen knows, or the one your conversations work in most";
+    if (row.kind === "model") return "a model name the harness takes; an alias (haiku, sonnet) follows the newest · enter saves";
+    return "";
+  };
+
+  return (
+    <box flexDirection="column" gap={1} marginTop={1} flexGrow={1}>
+      <text wrapMode="none">
+        {TABS.map((each) => (
+          <span key={each.id} fg={each.id === tab ? theme.accent : theme.dim}>{each.id === tab ? `[${each.label}]  ` : ` ${each.label}   `}</span>
         ))}
-        <text fg={theme.dim}>{"        a model name your AI takes; an alias (haiku, sonnet) follows the newest · enter saves"}</text>
-      </box>
-      <box flexDirection="column" border borderStyle="rounded" borderColor={field === "mergeDefault" || field === "mergeRoom" ? theme.accent : theme.dim} paddingX={1} title=" merge for me ">
-        <text fg={field === "mergeDefault" ? theme.accent : theme.fg}>
-          {field === "mergeDefault" ? "› " : "  "}
-          {`[${mergeDefault}] default for rooms entered from now on`}
-        </text>
-        <text fg={theme.dim}>{`        ${MERGE_HELP[mergeDefault]}`}</text>
-        <text fg={field === "mergeRoom" ? theme.accent : theme.fg}>
-          {field === "mergeRoom" ? "› " : "  "}
-          {`[${mergeRoom ?? "default"}] this room`}
-        </text>
-        <text fg={theme.dim}>{`        ${MERGE_HELP[mergeRoom ?? mergeDefault]} — a review can say otherwise; the host's own rules come first`}</text>
-      </box>
-      <text fg={theme.dim} truncate wrapMode="none">
-        to let someone in: press c in the room — an invite lets one person in, within a week
+        <span fg={theme.dim}>{`   this room: ${room.name}`}</span>
       </text>
-      <text fg={theme.dim}>tab next field · enter next/confirm · on a switch: space flips it · on steering or merge: space changes it</text>
-      <text fg={theme.warn}>{saved ? "saved — applies now" : "changes apply live · esc back"}</text>
+      {rows.some(twoColumns) ? (
+        <text fg={theme.dim} wrapMode="none">
+          {"".padEnd(WORDS)}
+          {cell("everywhere")}
+          {cell("this room")}
+        </text>
+      ) : null}
+      <FollowScroll follow={{ id: row.id }} flexGrow={1}>
+        {rows.map(line)}
+      </FollowScroll>
+      <text fg={theme.dim}>{help()}</text>
+      <text fg={theme.dim}>tab next tab · ↑↓ row · ←→ everywhere / this room · space changes it · esc back</text>
     </box>
   );
 }

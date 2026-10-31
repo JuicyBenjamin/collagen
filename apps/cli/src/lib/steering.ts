@@ -1,5 +1,5 @@
 import { Context, Effect } from "effect";
-import type { LocalState, Steering, SteeringKind, SteeringLevels, SteeringPair, TagRoute } from "@collagen/p2p";
+import type { LocalState, RoomSteering, Steering, SteeringKind, SteeringLevels, SteeringPair, TagRoute } from "@collagen/p2p";
 
 /** Steering: how far collagen and the person's agent may go on their own, in
  *  the person's name. Their setting, never the agent's; nothing is chosen
@@ -43,20 +43,33 @@ export const STEERING_ORDER: ReadonlyArray<Steering> = ["never", "ask", "act", "
 export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate", "report"];
 export const TAG_ROUTES: ReadonlyArray<TagRoute> = ["none", "existing", "existing-or-new", "new"];
 
-/** The level in effect: the kind's own, else the master's, for that cause. */
-export const levelOf = (state: Pick<LocalState, "steering">, kind: SteeringKind, cause: Cause): Level =>
-  state.steering?.kinds?.[kind]?.[cause] ?? state.steering?.master?.[cause] ?? "unset";
+/** The level in effect, for that cause. In a room that sets its own: the
+ *  room's level for the kind, else the room's general level. Then the
+ *  person's everywhere: the kind's, else the general level. A room's general
+ *  level stands over the kinds everywhere — "nothing in this room" means it. */
+export const levelOf = (state: Pick<LocalState, "steering">, kind: SteeringKind, cause: Cause, room?: string): Level => {
+  const own = room === undefined ? undefined : state.steering?.rooms?.[room];
+  return own?.kinds?.[kind]?.[cause] ?? own?.master?.[cause] ?? state.steering?.kinds?.[kind]?.[cause] ?? state.steering?.master?.[cause] ?? "unset";
+};
 
-/** The master level for a cause. */
-export const masterOf = (state: Pick<LocalState, "steering">, cause: Cause = "mine"): Level => state.steering?.master?.[cause] ?? "unset";
+/** The general level for a cause: a room's own when it sets one, else everywhere's. */
+export const masterOf = (state: Pick<LocalState, "steering">, cause: Cause = "mine", room?: string): Level =>
+  (room === undefined ? undefined : state.steering?.rooms?.[room]?.master?.[cause]) ?? state.steering?.master?.[cause] ?? "unset";
+
+/** What a room sets itself, at one place: its general level or a kind's; undefined where it follows everywhere. */
+export const roomLevelOf = (state: Pick<LocalState, "steering">, room: string, at: SteeringAt, cause: Cause): Steering | undefined => {
+  const own = state.steering?.rooms?.[room];
+  return at === "master" ? own?.master?.[cause] : own?.kinds?.[at]?.[cause];
+};
 
 /** Where a message for the person goes; not chosen, to a conversation that holds its thread. */
 export const tagRouteOf = (state: Pick<LocalState, "steering">): TagRoute => state.steering?.tag ?? "existing";
 
 /** Nothing chosen for acting outside collagen, for the person's own acts:
- *  no master, no repo-host level, no delivery level. */
+ *  no master, no repo-host level, no delivery level — anywhere, rooms included. */
 export const unchosen = (state: Pick<LocalState, "steering">): boolean =>
-  masterOf(state) === "unset" && state.steering?.kinds?.host?.mine === undefined && state.steering?.kinds?.deliver?.mine === undefined && state.steering?.kinds?.run?.mine === undefined && state.steering?.kinds?.investigate?.mine === undefined && state.steering?.kinds?.report?.mine === undefined;
+  masterOf(state) === "unset" &&
+  Object.keys(state.steering?.rooms ?? {}).length === 0 && state.steering?.kinds?.host?.mine === undefined && state.steering?.kinds?.deliver?.mine === undefined && state.steering?.kinds?.run?.mine === undefined && state.steering?.kinds?.investigate?.mine === undefined && state.steering?.kinds?.report?.mine === undefined;
 
 const pairWith = (pair: SteeringPair | undefined, whose: Cause | "both", level: Steering | null): SteeringPair | undefined => {
   const causes: ReadonlyArray<Cause> = whose === "both" ? ["mine", "others"] : [whose];
@@ -68,9 +81,25 @@ const pairWith = (pair: SteeringPair | undefined, whose: Cause | "both", level: 
   return next.mine === undefined && next.others === undefined ? undefined : next;
 };
 
-/** The state with one level set, or given back to what it follows (null). */
-export const withLevel = <S extends Pick<LocalState, "steering">>(state: S, at: SteeringAt, whose: Cause | "both", level: Steering | null): S => {
+/** One kind's pair as an entry to spread, or nothing when it is gone. */
+const pairOf = (kind: SteeringKind, pair: SteeringPair | undefined) => (pair ? { [kind]: pair } : {});
+
+/** The state with one level set, or given back to what it follows (null):
+ *  everywhere, or in one room (`room`), where null means it follows everywhere again. */
+export const withLevel = <S extends Pick<LocalState, "steering">>(state: S, at: SteeringAt, whose: Cause | "both", level: Steering | null, room?: string): S => {
   const steering: SteeringLevels = state.steering ?? {};
+  if (room !== undefined) {
+    const own: RoomSteering = steering.rooms?.[room] ?? {};
+    const { master: _master, kinds: _kinds, ...ownRest } = own;
+    const master = at === "master" ? pairWith(own.master, whose, level) : own.master;
+    const { [at === "master" ? "work" : at]: _was, ...otherKinds } = own.kinds ?? {};
+    const kinds = at === "master" ? (own.kinds ?? {}) : { ...otherKinds, ...pairOf(at, pairWith(own.kinds?.[at], whose, level)) };
+    const next: RoomSteering = { ...ownRest, ...(master ? { master } : {}), ...(Object.keys(kinds).length > 0 ? { kinds } : {}) };
+    const { [room]: _old, ...otherRooms } = steering.rooms ?? {};
+    const rooms = { ...otherRooms, ...(Object.keys(next).length > 0 ? { [room]: next } : {}) };
+    const { rooms: _rooms, ...rest } = steering;
+    return { ...state, steering: { ...rest, ...(Object.keys(rooms).length > 0 ? { rooms } : {}) } };
+  }
   if (at === "master") {
     const { master: _was, ...rest } = steering;
     const master = pairWith(steering.master, whose, level);
@@ -144,7 +173,7 @@ export function steeringLine(level: Level): string {
 }
 
 /** The work level's line for what someone caused. */
-export const workLine = (state: Pick<LocalState, "steering">, cause: Cause): string => steeringLine(levelOf(state, "work", cause));
+export const workLine = (state: Pick<LocalState, "steering">, cause: Cause, room?: string): string => steeringLine(levelOf(state, "work", cause, room));
 
 /** Said once to each conversation while nothing is chosen. */
 export const UNCHOSEN_LINE =
@@ -179,8 +208,8 @@ export type Gate<K extends "host" | "deliver" | "report" | "run" | "investigate"
 /** Whether an act of `kind` caused by `cause` may happen now. `yes` is the
  *  person's own word for this one act, relayed by their agent: it lets "ask
  *  first" and "never" through, never "not chosen". */
-export const allow = <K extends "host" | "deliver" | "report" | "run" | "investigate">(state: Pick<LocalState, "steering">, kind: K, cause: Cause, yes = false): Gate<K> => {
-  const level = levelOf(state, kind, cause);
+export const allow = <K extends "host" | "deliver" | "report" | "run" | "investigate">(state: Pick<LocalState, "steering">, kind: K, cause: Cause, yes = false, room?: string): Gate<K> => {
+  const level = levelOf(state, kind, cause, room);
   const whose = cause === "mine" ? "your user's own" : "another person's";
   if (level === "unset")
     return { held: "unset", why: `steering for ${KIND_LABEL[kind]} is not chosen for ${whose} acts, so collagen does not do it in their name — have them choose one with set-steering` };

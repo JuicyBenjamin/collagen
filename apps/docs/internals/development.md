@@ -158,8 +158,8 @@ curl -s -X POST http://127.0.0.1:<port>/mcp \
 
 ### Mocked agents (development only)
 
-`a` cycles past the real agents to **mock:claude-code** / **mock:codex**. A mock is a test
-dummy, not a substitute for an agent: an incoming message spawns `src/dev/mock-agent.mjs` instead of
+A profile whose state file says `"preferredAi": "mock:claude-code"` (or `mock:codex`) is a
+**mock**; the e2e `prep_profiles` writes it for bob. A mock is a test dummy, not a substitute for an agent: an incoming message spawns `src/dev/mock-agent.mjs` instead of
 a CLI, which does the MCP handshake, reads the thread and answers with a canned `mock-ack`
 (capped at 3 per thread; mocks never answer mocks). It's what the e2e scenarios talk to, and
 it's the one kind of AI that answers by itself (no person behind it to tell) — everyone in

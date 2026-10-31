@@ -1,20 +1,22 @@
 import { useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { theme } from "../../../../app/theme";
-import { myNameAtom } from "../../../atoms";
+import { myNameAtom, roomAtom } from "../../../atoms";
 import { aiStatusAtom, appUpdateAtom, jobsAtom, stateAtom } from "../../atoms";
 import { jobsLine } from "../Jobs";
-import type { SteeringLevels } from "@collagen/p2p";
 import { masterOf, STEERING_LABEL } from "../../../../lib/steering";
+import { shownAi } from "../../../../lib/jobs";
 
-/** "<name> · ai <choice> (auth badge) · steering <level> (g) · update … (u)" — the one-line status.
- *  Who you are and what runs for you. What is going out is the outbox tab's
- *  count, not prose next to your agent. */
+/** "<name> (i) · uses <ai> (auth badge) · steering <level> (s) · update … (u)"
+ *  — the one-line status. Who you are, the AI you use most (not chosen: how
+ *  you work), and the general level in this room. What is going out is the
+ *  outbox tab's count, not prose next to your agent. */
 export function StatusLine() {
   const myName = AsyncResult.getOrElse(useAtomValue(myNameAtom), () => "…");
-  const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => ({ preferredAi: null }) as { preferredAi: string | null; steering?: SteeringLevels });
-  const preferredAi = state.preferredAi;
-  const steering = masterOf(state);
+  const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
+  const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
+  const preferredAi = state ? shownAi(state) : null;
+  const steering = masterOf(state ?? { steering: undefined }, "mine", roomId);
   const aiStatus = AsyncResult.getOrElse(useAtomValue(aiStatusAtom), () => "unknown" as const);
   const bad = preferredAi !== null && aiStatus !== "ok" && aiStatus !== "unknown";
   const update = AsyncResult.getOrElse(useAtomValue(appUpdateAtom), () => ({ latest: null, installing: false, note: null }));
@@ -25,15 +27,15 @@ export function StatusLine() {
     // who you are and what runs for you is the room's header, not the brand
     <text truncate wrapMode="none" marginTop={1} flexShrink={0}>
       <span fg={theme.fg}>{myName}</span>
-      <span fg={theme.dim}> · ai </span>
-      <span fg={preferredAi ? theme.warn : theme.dim}>{preferredAi ?? "not set"}</span>
+      <span fg={theme.dim}> (i) · uses </span>
+      <span fg={preferredAi ? theme.fg : theme.dim}>{preferredAi ?? "no AI yet"}</span>
       {bad ? <span fg={theme.warn}> ({aiStatus === "missing" ? "cli not found" : "unauthenticated"})</span> : null}
-      {/* the master level: how much may be done on its own — beside the agent
-          it steers; not chosen and the asking end dim, autonomy in the warn
-          colour so it is never missed */}
+      {/* the general level in this room: how much may be done on its own;
+          not chosen and the asking end dim, autonomy in the warn colour so it
+          is never missed */}
       <span fg={theme.dim}> · steering </span>
       <span fg={steering === "ask" || steering === "unset" || steering === "never" ? theme.dim : theme.warn}>{STEERING_LABEL[steering]}</span>
-      <span fg={theme.dim}> (g)</span>
+      <span fg={theme.dim}> (s)</span>
       {jobs ? <span fg={theme.accent}> · {jobs} (outbox)</span> : null}
       {update.note ? (
         <span fg={update.installing ? theme.warn : theme.dim}> · {update.note}</span>
