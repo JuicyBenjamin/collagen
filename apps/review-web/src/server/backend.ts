@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { AuditPage, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { AuditPage, ChatAsked, ChatSelection, ChatView, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 import type { Marks } from "../marks";
 
@@ -89,6 +89,14 @@ export class ReviewBackend extends Context.Service<
     readonly setViewed: (ticketId: string, file: string, mark: unknown) => Effect.Effect<Marks>;
     /** the person's switches the page wears — now, then on every change, whoever made it */
     readonly pageSettings: Stream.Stream<PageSettings>;
+    /** the reader's conversation with their AI on the review, whole — now, then on every change */
+    readonly chat: (ticketId: string) => Stream.Stream<ChatView>;
+    /** ask their AI — about lines they selected, or not — at `commit`, the one the page shows */
+    readonly ask: (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null) => Effect.Effect<ChatAsked>;
+    /** stop the answer under way */
+    readonly stopAnswer: (ticketId: string) => Effect.Effect<void>;
+    /** a new conversation: the old one gone */
+    readonly newChat: (ticketId: string) => Effect.Effect<void>;
   }
 >()("review-web/ReviewBackend") {}
 

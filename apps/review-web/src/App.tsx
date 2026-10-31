@@ -1,6 +1,7 @@
 import { createEffect, createMemo, createSignal, Errored, Loading } from "solid-js";
 import type { ReviewPageData, ReviewPageHead } from "./data";
 import { Page } from "./components/Page";
+import { Chat } from "./components/Chat";
 import { Popover } from "./components/Popover";
 import { reviewData, reviewHead } from "./api";
 import { overSocket } from "./liveSocket";
@@ -87,6 +88,7 @@ export function App() {
       <Loading fallback={<Page.Skeleton />}>
         <Page head={head()} data={data()} />
         <Popover />
+        <Chat />
       </Loading>
     </Errored>
   );

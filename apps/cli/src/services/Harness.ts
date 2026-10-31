@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import type { ChatAdapter } from "./ChatAdapters";
 import { Context, Layer, type Effect } from "effect";
 import type { FileSystem } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
@@ -87,6 +88,9 @@ export interface Harness {
   /** run a job of collagen's: a fresh, headless run of this AI with the
    *  collagen tools it needs — only with steering's permit */
   readonly runJob: (job: Job) => Effect.Effect<JobDone, never, RunAllowed | ChildProcessSpawner.ChildProcessSpawner>;
+  /** asked about code on the review page (ReviewChat): its CLI run read-only
+   *  in the reader's clone, its answer read off stdout as it is written */
+  readonly chat: ChatAdapter;
   /** its CLI, and a cheap check (no model call) that it is installed and signed in */
   readonly signIn: { readonly cmd: string; readonly args: ReadonlyArray<string>; readonly loggedIn: (out: string, exitCode: number) => boolean };
   /** what an agent in this harness does to keep hearing the room (watch-room) */

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { claudeChat } from "./chat";
 import { Clock, Effect } from "effect";
 import { sessionFiles } from "../../../lib/tokenCost";
 import { walk } from "../../../lib/transcripts";
@@ -21,6 +22,7 @@ const BETWEEN_LOOKS = "250 millis";
 
 export const claudeCode: Harness = {
   id: "claude-code",
+  chat: claudeChat,
   name: "Claude Code",
   matches: (clientName) => /^claude[-_ ]?code/i.test(clientName),
   home: (env, home) => env.CLAUDE_CONFIG_DIR ?? join(home, ".claude"),

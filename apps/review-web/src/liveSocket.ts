@@ -1,4 +1,4 @@
-import type { AuditPage, InvestigationPage, PageSettings, ToolId, ToolState } from "./data";
+import type { AuditPage, ChatView, InvestigationPage, PageSettings, ToolId, ToolState } from "./data";
 import type { PageThemes } from "./themeData";
 import type { Marks } from "./marks";
 
@@ -57,7 +57,7 @@ const send = (target: WebSocket, ask: object) => {
 
 /** A live stream over the page's socket: its values as they come; it ends
  *  when collagen ends it, and breaks when the socket goes. The review's
- *  state as a token, or a language server's state. */
+ *  state as a token, a language server's state, or the reader's chat with their AI. */
 export function overSocket(topic: "changes", subject: string): AsyncIterable<string>;
 export function overSocket(topic: "tool", subject: ToolId): AsyncIterable<ToolState>;
 export function overSocket(topic: "themes", subject: ""): AsyncIterable<PageThemes | null>;
@@ -67,7 +67,8 @@ export function overSocket(topic: "viewed", subject: string): AsyncIterable<Mark
 export function overSocket(topic: "investigation", subject: string): AsyncIterable<InvestigationPage | null>;
 /** a room's audit: subject "<roomId>:<days>" */
 export function overSocket(topic: "audit", subject: string): AsyncIterable<AuditPage | null>;
-export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit", subject: string): AsyncIterable<unknown> {
+export function overSocket(topic: "chat", subject: string): AsyncIterable<ChatView>;
+export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat", subject: string): AsyncIterable<unknown> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<unknown> {
       const id = `s${++nextId}`;
