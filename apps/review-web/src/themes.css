@@ -10,12 +10,15 @@
 @import "daisyui/components/checkbox.css";
 @import "daisyui/components/radio.css";
 @import "daisyui/components/select.css";
+@import "daisyui/components/tooltip.css";
 @import "daisyui/components/input.css";
 @import "daisyui/components/card.css";
 @import "daisyui/components/badge.css";
 @import "daisyui/components/progress.css";
 @import "daisyui/components/list.css";
 @import "daisyui/components/link.css";
+@import "daisyui/utilities/join.css";
+@import "daisyui/components/table.css";
 @import "daisyui/theme/light.css" layer(daisyui-themes);
 @import "daisyui/theme/cupcake.css" layer(daisyui-themes);
 @import "daisyui/theme/nord.css" layer(daisyui-themes);

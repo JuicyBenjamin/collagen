@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@solidjs/web": "2.0.0-rc.13",
+    "@tanstack/charts": "1.1.0",
     "@tanstack/highlight": "1.0.0",
+    "d3-shape": "3.2.0",
     "daisyui": "5.7.47",
     "effect": "4.0.0",
     "gemoji": "8.1.0",
@@ -25,6 +27,7 @@
     "@collagen/p2p": "workspace:*",
     "@collagen/typescript-config": "workspace:*",
     "@solidjs/vite-plugin": "3.0.0-next.47",
+    "@types/d3-shape": "3.1.8",
     "typescript": "catalog:",
     "vite": "^8.3.2",
     "vitest": "catalog:"

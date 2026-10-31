@@ -20,13 +20,15 @@ export function readUsage(jsonl: string, file = ""): SessionCost {
       if (payload.type === "function_call" && typeof payload.name === "string") {
         const tool = collagenTool(payload.name, typeof payload.namespace === "string" ? payload.namespace : undefined);
         const id = asText(payload.call_id);
-        if (tool && !reader.has(id)) reader.call(id, tool, asText(payload.arguments));
+        if (tool && !reader.has(id)) reader.call(id, tool, asText(payload.arguments), at);
       } else if (payload.type === "function_call_output") {
         reader.result(asText(payload.call_id), resultText(payload.output));
       }
       continue;
     }
     if (line.type !== "event_msg") continue;
+    // its name: Codex keeps none in the log, so its first ask
+    if (payload.type === "user_message" && reader.title === null && typeof payload.message === "string" && payload.message.trim()) reader.title = payload.message.trim().slice(0, 80);
     if (payload.type === "token_count") {
       const info = asObject(payload.info);
       if (!info) continue;
@@ -45,7 +47,7 @@ export function readUsage(jsonl: string, file = ""): SessionCost {
       const inv = asObject(payload.invocation) ?? {};
       const id = asText(payload.call_id);
       if (typeof inv.server === "string" && isCollagenServer(inv.server) && typeof inv.tool === "string" && !reader.has(id)) {
-        reader.call(id, inv.tool, asText(inv.arguments));
+        reader.call(id, inv.tool, asText(inv.arguments), at);
         reader.result(id, resultText(asObject(payload.result)?.Ok ?? payload.result));
       }
     }

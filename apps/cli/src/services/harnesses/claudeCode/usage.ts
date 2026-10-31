@@ -10,6 +10,9 @@ export function readUsage(jsonl: string, file = ""): SessionCost {
   const seen = new Set<string>();
   for (const line of lines(jsonl)) {
     const at = typeof line.timestamp === "string" ? line.timestamp : null;
+    // its name: the title it was given (the latest), else its first prompt
+    if (line.type === "custom-title" && typeof line.customTitle === "string" && line.customTitle.trim()) reader.title = line.customTitle.trim();
+    if (line.type === "last-prompt" && reader.title === null && typeof line.lastPrompt === "string" && line.lastPrompt.trim()) reader.title = line.lastPrompt.trim().slice(0, 80);
     if (line.type === "system" && line.subtype === "compact_boundary") {
       const meta = asObject(line.compactMetadata);
       if (meta?.trigger === "manual") reader.compacted();
@@ -35,7 +38,7 @@ export function readUsage(jsonl: string, file = ""): SessionCost {
         const part = asObject(entry);
         if (part?.type !== "tool_use" || typeof part.name !== "string" || typeof part.id !== "string") continue;
         const tool = collagenTool(part.name);
-        if (tool) reader.call(part.id, tool, JSON.stringify(part.input ?? {}));
+        if (tool) reader.call(part.id, tool, JSON.stringify(part.input ?? {}), at);
       }
     } else if (line.type === "user") {
       for (const entry of content) {

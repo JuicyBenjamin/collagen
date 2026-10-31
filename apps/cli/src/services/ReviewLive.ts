@@ -35,7 +35,7 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
      *  hands it the reader's place). Says what happened, url included, for a
      *  machine with no browser to open. */
     /** One of this instance's pages: /review/<ticketId>, /investigation/<ticketId> or /merges/<roomId>. */
-    const pageUrl = (page: "review" | "investigation" | "merges", id: string) =>
+    const pageUrl = (page: "review" | "investigation" | "merges" | "audit", id: string) =>
       Effect.map(mcp.awaitUrl, (mcpUrl) => `${mcpUrl.replace(/\/mcp$/, "")}/${page}/${encodeURIComponent(id)}`);
     const launch = (url: string) => openInBrowser(url).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
     const show = Effect.fn("ReviewPages.show")(function* (ticketId: string) {
@@ -60,6 +60,12 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
       showInvestigation: Effect.fn("ReviewPages.showInvestigation")(function* (ticketId: string) {
         const url = yield* pageUrl("investigation", ticketId);
         return (yield* launch(url)) ? `investigation page opened: ${url}` : `investigation page: ${url} (could not open a browser — paste it into one)`;
+      }),
+      /** Open a room's audit page (review-web, /audit/<roomId>) in the
+       *  person's browser. Says what happened, url included. */
+      showAudit: Effect.fn("ReviewPages.showAudit")(function* (roomId: string) {
+        const url = yield* pageUrl("audit", roomId);
+        return (yield* launch(url)) ? `audit page opened: ${url}` : `audit page: ${url} (could not open a browser — paste it into one)`;
       }),
       /** Open a project's merges page (review-web,
        *  /merges/<roomId>/<project>) in the person's browser — at one of

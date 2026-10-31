@@ -33,6 +33,8 @@ const KINDS: Record<string, CallKind> = {
   "open-review": "review",
   "open-merges": "review",
   "open-investigation": "tickets",
+  "open-audit": "diagnostics",
+  "answer-question": "tickets",
   "review-comments": "review",
   "review-context": "review",
   "get-tickets": "tickets",
@@ -100,6 +102,8 @@ export interface Call {
   readonly kind: CallKind;
   readonly argChars: number;
   readonly resultChars: number;
+  /** when it was made, as the log says (ISO) */
+  readonly at?: string;
   /** Ticket ids this call names, as far as its arguments (or, for a call
    *  that files a ticket, its result) show — matched later, not parsed. */
   readonly text: string;
@@ -124,6 +128,8 @@ export interface SessionCost {
   /** the harness whose session it is (services/Harness) */
   readonly ai: string;
   readonly file: string;
+  /** what the person calls it, when its log says: its title, else its first ask */
+  readonly title?: string;
   readonly calls: ReadonlyArray<Call>;
   /** Model replies (Claude) or steps (Codex) whose usage the log records. */
   readonly replies: number;
@@ -161,12 +167,14 @@ export const TOO_LONG = /prompt is too long|context[ _-]?(window|length)[ _-]?(e
 export class Reader {
   readonly calls: Array<Call> = [];
   readonly breaks: Array<ContextBreak> = [];
-  private readonly pending = new Map<string, { tool: string; args: string }>();
+  private readonly pending = new Map<string, { tool: string; args: string; at: string | null }>();
   private readonly ids = new Set<string>();
   private sinceBreak: Array<Call> = [];
   private inWindow = 0; // collagen chars in the window now
   private activity = false; // anything since the last break
   replies = 0;
+  /** the session's name as its harness keeps it */
+  title: string | null = null;
   inputTokens = 0;
   outputTokens = 0;
   collagenInputTokens = 0;
@@ -179,9 +187,9 @@ export class Reader {
     return this.ids.has(id);
   }
 
-  call(id: string, tool: string, args: string) {
+  call(id: string, tool: string, args: string, at: string | null = null) {
     this.ids.add(id);
-    this.pending.set(id, { tool, args });
+    this.pending.set(id, { tool, args, at });
     this.activity = true;
   }
 
@@ -190,7 +198,7 @@ export class Reader {
     if (!asked) return;
     this.pending.delete(id);
     const kind = kindOf(asked.tool);
-    const call: Call = { tool: asked.tool, kind, argChars: asked.args.length, resultChars: text.length, text: kind === "filing" ? `${asked.args}\n${text}` : asked.args };
+    const call: Call = { tool: asked.tool, kind, argChars: asked.args.length, resultChars: text.length, text: kind === "filing" ? `${asked.args}\n${text}` : asked.args, ...(asked.at ? { at: asked.at } : {}) };
     this.calls.push(call);
     this.sinceBreak.push(call);
     this.inWindow += call.argChars + call.resultChars;
@@ -254,6 +262,7 @@ export const lines = function* (jsonl: string): Generator<Json> {
 export const sessionCost = (ai: SessionCost["ai"], file: string, reader: Reader): SessionCost => ({
   ai,
   file,
+  ...(reader.title ? { title: reader.title } : {}),
   calls: reader.calls,
   replies: reader.replies,
   inputTokens: reader.inputTokens,
