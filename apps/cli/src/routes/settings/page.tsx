@@ -48,9 +48,9 @@ export function SettingsPage() {
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
   const choices = AsyncResult.getOrElse(useAtomValue(aiChoicesAtom), (): ReadonlyArray<string | null> => [null]);
   const updateState = useAtomSet(updateStateAtom);
-  const [tab, setTab] = useState<Tab>("ai");
+  const [tab, setTab] = useState<Tab>(TABS[0]!.id);
   const rows = ROWS[tab];
-  const [cursor, setCursor] = useState(() => ROWS.ai.findIndex(pickable));
+  const [cursor, setCursor] = useState(() => ROWS[TABS[0]!.id].findIndex(pickable));
   const [column, setColumn] = useState<0 | 1>(0);
   // on the tab bar, as in the room: ↑ from the first row reaches it, ←→ switch tabs there
   const [onBar, setOnBar] = useState(false);

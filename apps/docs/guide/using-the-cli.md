@@ -116,7 +116,7 @@ what's natural there. Number keys work from anywhere.
 | `r` | Rail: rename the room under the cursor; everyone in it sees the new name (your agent: `rename-room`) |
 | `A` | The audit page in your browser: tool calls, tokens per call over time and the tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and steering. Your agent opens it with `open-audit`. |
 | `c` | Copy a new invite to the room: it lets one person in, within a week (your agent: `invite-to-room`) |
-| `s` | Settings, in three tabs (`↑` onto them, then `←` `→`; `1` – `3` or a click from anywhere), by who acts in your name: **AI** (your AI, which collagen starts, wakes and hands work to), **Tools** (what collagen does itself with no AI: the repo host) and **General** (the level every row not set follows, and the page's switches). Each [steering](./conversations#steering-how-much-your-agent-does-on-its-own) row has two columns, everywhere and this room (`←` `→`); `space` changes the one under the cursor |
+| `s` | Settings, in three tabs (`↑` onto them, then `←` `→`; `1` – `3` or a click from anywhere), **General** (the level every row not set follows, and the page's switches), then by who acts in your name: **AI** (your AI, which collagen starts, wakes and hands work to) and **Tools** (what collagen does itself with no AI: the repo host). Each [steering](./conversations#steering-how-much-your-agent-does-on-its-own) row has two columns, everywhere and this room (`←` `→`); `space` changes the one under the cursor |
 | `i` | You: your name, your key, and the AI the rooms see you use |
 | `u` | Install the newer collagen the status line announces, then restart into it |
 | `esc` | Back to the tab bar |
