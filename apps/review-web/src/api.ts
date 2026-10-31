@@ -1,5 +1,6 @@
 import { GET } from "@solidjs/web/server-functions";
 import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { Mark, Marks } from "./marks";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
 
@@ -185,6 +186,13 @@ export const mergeView = async (ticketId: string): Promise<MergeView | null> => 
 export const setMerge = async (ticketId: string, level: MergeFor | null): Promise<MergeView | null> => {
   "use server";
   return run((backend) => backend.setMerge(ticketId, level));
+};
+
+/** Keep a file's viewed mark in the reader's own collagen, or (null) take
+ *  it back. What comes back is the review's marks as kept. */
+export const setViewed = async (ticketId: string, file: string, mark: Mark | null): Promise<Marks> => {
+  "use server";
+  return run((backend) => backend.setViewed(ticketId, file, mark));
 };
 
 /** Keep the page's themes in collagen — where the person's agent can choose

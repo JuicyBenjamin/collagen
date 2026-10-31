@@ -38,6 +38,7 @@
     "./sameComment": "./src/sameComment.ts",
     "./forPeople": "./src/forPeople.ts",
     "./themeData": "./src/themeData.ts",
+    "./marks": "./src/marks.ts",
     "./backend": "./src/server/backend.ts"
   }
 }

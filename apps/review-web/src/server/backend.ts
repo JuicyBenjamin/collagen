@@ -1,6 +1,7 @@
 import { Context, Effect, Stream } from "effect";
 import type { AuditPage, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
+import type { Marks } from "../marks";
 
 // What the review page's server functions (src/api.ts) ask of the collagen
 // instance that serves them. The page declares it; the instance provides it
@@ -82,6 +83,10 @@ export class ReviewBackend extends Context.Service<
     readonly themes: Stream.Stream<PageThemes | null>;
     /** keep the page's themes: checked as a pasted theme is, then kept; what is kept now */
     readonly saveThemes: (themes: unknown) => Effect.Effect<PageThemes>;
+    /** a review's viewed marks, the reader's own — now, then on every change, the agent's too */
+    readonly viewed: (ticketId: string) => Stream.Stream<Marks>;
+    /** keep a file's viewed mark, or (null) take it back: checked, then kept; the review's marks now */
+    readonly setViewed: (ticketId: string, file: string, mark: unknown) => Effect.Effect<Marks>;
     /** the person's switches the page wears — now, then on every change, whoever made it */
     readonly pageSettings: Stream.Stream<PageSettings>;
   }

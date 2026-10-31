@@ -694,6 +694,14 @@ export const PageTheme = Schema.Struct({
 export const PageThemes = Schema.Struct({ chosen: Schema.String, saved: Schema.Array(PageTheme) });
 export type PageThemes = typeof PageThemes.Type;
 
+/** A file of a review the person marked viewed: what its changes were then
+ *  (a fingerprint of every line), and the branch's commit then, when known. */
+export const ViewedMark = Schema.Struct({
+  fp: Schema.String,
+  at: Schema.optional(Schema.String),
+});
+export type ViewedMark = typeof ViewedMark.Type;
+
 export const LocalState = Schema.Struct({
   /** the harness jobs ran with before each job named its own (still the
    *  fallback, and how a test drives a mock); no longer chosen in the app */
@@ -724,6 +732,9 @@ export const LocalState = Schema.Struct({
   merging: Schema.optional(Merging),
   /** absent = collagen's own, and none of the person's yet */
   themes: Schema.optional(PageThemes),
+  /** ticketId → file → the person's viewed mark (the review page's, and
+   *  their agent's through review-progress). Theirs alone, never broadcast. */
+  viewed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark))),
   rooms: Schema.Record(Schema.String, Schema.Array(Project)),
   /** roomId → the room's project names in the order the person put them
    *  (cli lib/projectOrder). Local, never broadcast: each person orders
