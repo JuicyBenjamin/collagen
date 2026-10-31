@@ -7,6 +7,7 @@ import { AdaptersLive } from "./Adapters";
 import { HarnessesLive } from "./Harness";
 import { Jobs } from "./Jobs";
 import { AiStatus } from "./AiStatus";
+import { shownAi } from "../lib/jobs";
 import { AgentRunner } from "./AgentRunner";
 import { loadDevBootstrap } from "./DevBootstrap";
 import { Dispatch } from "./Dispatch";
@@ -35,7 +36,7 @@ const Daemons = Layer.effectDiscard(
     const store = yield* StateStore;
     const aiStatus = yield* AiStatus;
     yield* SubscriptionRef.changes(store.state).pipe(
-      Stream.map((state) => state.preferredAi),
+      Stream.map(shownAi),
       Stream.changes,
       Stream.tap((preferredAi) => aiStatus.refresh(preferredAi)),
       Stream.runDrain,

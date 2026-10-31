@@ -157,6 +157,7 @@ export const salvageState = (text: string): Salvaged => {
   const mergeYes = decode(Schema.Array(Schema.String), src.mergeYes);
   const woken = decode(Schema.Array(Schema.String), src.woken);
   const models = decode(Schema.Record(Schema.String, Schema.String), src.models);
+  const harnesses = decode(Schema.Record(Schema.String, Schema.String), src.harnesses);
   const jobLimit = decode(Schema.Finite, src.jobLimit);
   // unreadable, each conversation starts again at the tail of its threads
   const reads = decode(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Finite))), src.reads);
@@ -189,6 +190,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(mergeYes ? { mergeYes } : {}),
       ...(woken ? { woken } : {}),
       ...(models ? { models } : {}),
+      ...(harnesses ? { harnesses } : {}),
       ...(jobLimit !== null ? { jobLimit } : {}),
       ...(reads ? { reads } : {}),
       ...(ownRuns ? { ownRuns } : {}),

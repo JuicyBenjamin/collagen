@@ -37,6 +37,8 @@ export interface AuditInput {
   readonly reviews: ReadonlyArray<ReviewContext>;
   readonly all: ReadonlyMap<string, Ticket>;
   readonly state: Pick<LocalState, "steering">;
+  /** the room the page is about: its steering is that room's */
+  readonly roomId?: string;
   readonly definitions: ReadonlyArray<{ readonly name: string; readonly chars: number }>;
 }
 
@@ -189,8 +191,8 @@ export const auditPage = (input: AuditInput): AuditPage => {
     tickets,
     steering: STEERING_KINDS.map((kind) => ({
       kind,
-      mine: STEERING_LABEL[levelOf(input.state, kind, "mine")],
-      others: STEERING_LABEL[levelOf(input.state, kind, "others")],
+      mine: STEERING_LABEL[levelOf(input.state, kind, "mine", input.roomId)],
+      others: STEERING_LABEL[levelOf(input.state, kind, "others", input.roomId)],
     })),
     sessions: [...input.sessions]
       .sort((a, b) => b.calls.length - a.calls.length)

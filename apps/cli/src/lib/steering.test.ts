@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { SteeringLevels } from "@collagen/p2p";
 import { allow, levelOf, nextSteering, steeringLine, withLevel } from "./steering";
 import { salvageState } from "./localState";
 
@@ -14,6 +15,32 @@ describe("steering", () => {
     expect(levelOf(master, "host", "mine")).toBe("act");
     expect(levelOf(withLevel(master, "host", "mine", "ask"), "host", "mine")).toBe("ask");
     expect(levelOf(withLevel(withLevel(master, "host", "mine", "ask"), "host", "mine", null), "host", "mine")).toBe("act");
+  });
+
+  it("a room that sets its own level stands over everywhere there, and only there", () => {
+    const everywhere = withLevel(withLevel({}, "master", "mine", "ask"), "investigate", "mine", "act");
+    const room = withLevel(everywhere, "investigate", "mine", "never", "room-a");
+    expect(levelOf(room, "investigate", "mine", "room-a")).toBe("never");
+    expect(levelOf(room, "investigate", "mine", "room-b")).toBe("act");
+    expect(levelOf(room, "investigate", "mine")).toBe("act");
+    // a kind the room does not set follows everywhere's for that kind
+    expect(levelOf(room, "host", "mine", "room-a")).toBe("ask");
+  });
+
+  it("a room's general level stands over every kind set everywhere, until the room sets that kind", () => {
+    const everywhere = withLevel({}, "host", "mine", "auto");
+    const quiet = withLevel(everywhere, "master", "mine", "never", "room-a");
+    expect(levelOf(quiet, "host", "mine", "room-a")).toBe("never");
+    expect(levelOf(withLevel(quiet, "host", "mine", "ask", "room-a"), "host", "mine", "room-a")).toBe("ask");
+    expect(allow(quiet, "host", "mine", false, "room-a")).toMatchObject({ held: "never" });
+    expect(allow(quiet, "host", "mine", false, "room-b")).toHaveProperty("go");
+  });
+
+  it("a room given back follows everywhere again, and leaves nothing behind", () => {
+    const set = withLevel(withLevel({ steering: {} as SteeringLevels }, "deliver", "others", "act", "room-a"), "master", "mine", "ask", "room-a");
+    const back = withLevel(withLevel(set, "deliver", "others", null, "room-a"), "master", "mine", null, "room-a");
+    expect(levelOf(back, "deliver", "others", "room-a")).toBe("unset");
+    expect(back.steering?.rooms).toBeUndefined();
   });
 
   it("what someone else caused never follows the person's own level", () => {
