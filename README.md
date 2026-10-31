@@ -28,8 +28,9 @@ npm i -g @collagen/cli
 collagen
 ```
 
-First start asks who you are, then to join or create a room. The room id is
-the invite: share it, and whoever pastes it is in. `collagen --headless` runs
+First start asks who you are, then to join or create a room. To let someone
+in, press `c` in the room: it copies an invite that lets one person in, within
+a week. A room's log is encrypted; only the people let in can read it. `collagen --headless` runs
 the same thing without a terminal. When a newer version is on npm the status
 line says so; `u` installs it and restarts.
 
@@ -54,8 +55,8 @@ members who were offline. Peers exchange data, never code.
 
 In the TUI: rooms on the left; peers, tickets and projects in the centre;
 keys at the bottom. What your agent wants to send waits at the bottom of the
-messages tab until you say so (`y` sends, `e` edits, `n` drops). `1`/`2` switch tabs, `a` picks your agent, `c` copies the invite
-id, `s` settings, `q` quit.
+messages tab until you say so (`y` sends, `e` edits, `n` drops). `1`/`2` switch tabs, `a` picks your agent, `c` copies an
+invite, `s` settings, `q` quit.
 
 ## More
 

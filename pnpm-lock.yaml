@@ -115,7 +115,7 @@ importers:
         version: 2.27.3
       hypercore-crypto:
         specifier: ^3.7.0
-        version: 3.7.0(bare-events@2.9.1)(bare-url@2.4.5)
+        version: 3.7.0
       hyperdht:
         specifier: ^6.32.0
         version: 6.33.2(bare-url@2.4.5)
@@ -268,6 +268,9 @@ importers:
       protomux:
         specifier: ^3.11.0
         version: 3.11.0
+      sodium-universal:
+        specifier: 5.0.1
+        version: 5.0.1(bare-events@2.9.1)(bare-url@2.4.5)
     devDependencies:
       '@collagen/typescript-config':
         specifier: workspace:*
@@ -7353,6 +7356,19 @@ snapshots:
       - bare-abort-controller
       - react-native-b4a
 
+  hypercore-crypto@3.7.0:
+    dependencies:
+      b4a: 1.8.1
+      compact-encoding: 3.4.0
+      sodium-universal: 5.0.1
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bare-events
+      - bare-url
+      - react-native-b4a
+      - sodium-javascript
+
   hypercore-crypto@3.7.0(bare-events@2.9.1)(bare-url@2.4.5):
     dependencies:
       b4a: 1.8.1
@@ -8355,6 +8371,18 @@ snapshots:
       - bare-url
       - react-native-b4a
 
+  sodium-native@5.1.0:
+    dependencies:
+      bare-assert: 1.2.0(bare-events@2.9.1)
+      require-addon: 1.2.0(bare-url@2.4.5)
+      which-runtime: 1.4.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bare-events
+      - bare-url
+      - react-native-b4a
+
   sodium-native@5.1.0(bare-events@2.9.1)(bare-url@2.4.5):
     dependencies:
       bare-assert: 1.2.0(bare-events@2.9.1)
@@ -8378,6 +8406,16 @@ snapshots:
       - bare-url
       - react-native-b4a
       - sodium-javascript
+
+  sodium-universal@5.0.1:
+    dependencies:
+      sodium-native: 5.1.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bare-events
+      - bare-url
+      - react-native-b4a
 
   sodium-universal@5.0.1(bare-events@2.9.1)(bare-url@2.4.5):
     dependencies:

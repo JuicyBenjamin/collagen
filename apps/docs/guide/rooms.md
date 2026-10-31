@@ -15,10 +15,12 @@ identity is:
 
 | Part | What it is |
 | --- | --- |
-| id | an unguessable uuid (v7). The swarm topic derives from it, so **the id is the invite and the secret**. Fixed for the room's life; `c` copies it. A room made by collagen running from source is on [devnet](/internals/development#mainnet-and-devnet) and hands out `devnet-<uuid>`; the installed app tells you so if you paste one. |
+| id | an unguessable uuid (v7). The swarm topic derives from it. Fixed for the room's life. It lets nobody in: an invite does. |
+| keys | the log's key (names the room, checks every entry) and the key that reads it. Only members hold the second: a peer holding just the log's key can copy the room but not read it. |
+| invite | `c` in the room copies one (your agent: `invite-to-room`). It lets one person in, once, within a week, and is useless after. A room made by collagen running from source is on [devnet](/internals/development#mainnet-and-devnet) and its invites start `devnet-`; the installed app tells you so if you paste one. |
 | name | shared state — rename it and everyone in the room sees the new name (last writer wins). Joiners see a short hash until the name reaches them. |
 
-Nobody lands in your room by guessing a cute name; they need the id you handed them.
+Nobody lands in your room by guessing a cute name, or with an invite someone already used.
 
 ## Rooms are conversations
 
@@ -73,20 +75,26 @@ without leaving the app, and your agent can do it too: `create-room`, `join-room
 
 `d` on a room in the rail, or `leave-room` from your agent. Local: you stop taking part
 and the room leaves your list; the other members keep the room and its history (your
-entries on its log stay — they were shared). Rejoining needs the invite id again. You
+entries on its log stay — they were shared). Rejoining needs a new invite. You
 can't leave your only room — the app needs one to look at.
 
 ### Membership
 
-Two layers. The id is the invite: anyone holding it connects and sees presence. Writing
-to the room — messages, tickets, the name — needs **admission to the room's log**: a member
-who is online appends your writer key (it happens automatically on your first greet; the tab
-bar says `waiting for a member to admit you` until then). Members are remembered on the log
-by name, so you can message someone who's offline.
+An invite is a one-time secret whose public half is on the room's log. Joining with one,
+your collagen shows it to whoever is online in the room; a member checks it against the
+log, records that it let you in (the first use stands: an invite lets one person in), and
+hands you the room's keys over the connection — never on the log. You are then admitted
+to the log as a writer. Someone holding an old invite, or the room's id, hears nothing
+from the room. Members are remembered on the log by name, so you can message someone
+who's offline.
+
+A room made before rooms were encrypted moves on its own: the first member on a build
+that encrypts carries the room to a new encrypted log and seals its key for every member;
+the others follow without an invite.
 
 ::: info Planned
-Dropping connections from keys the log doesn't know, and revoking a member (Autobase can
-remove writers). Today admission is automatic for anyone holding the id.
+Revoking a member (Autobase can remove writers, then the room gets a new key), and peers
+that keep a room available without being able to read it.
 :::
 
 ## Projects

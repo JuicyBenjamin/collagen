@@ -11,8 +11,8 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, formatInvite, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type ReviewContext, type Ticket } from "@collagen/p2p";
-import { invitedRoomEntry, newRoomEntry, readProfileFile, writeProfileFile } from "../config/profileFile";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { invitedRoomEntry, newRoomEntry, readProfileFile, upsertRoom, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
@@ -812,34 +812,40 @@ export const RenameRoom = Tool.make("rename-room", {
 
 export const ListRooms = Tool.make("list-rooms", {
   description:
-    "Every room this user is in, one line each: stable short id, shared name, who is online, unread messages waiting there, whether it is the one being looked at, and the invite id (the secret a friend needs to join — share it only when the user asks). Returns TOON text.",
+    "Every room this user is in, one line each: stable short id, shared name, who is online, unread messages waiting there, and whether it is the one being looked at. To let someone in, make them an invite (invite-to-room). Returns TOON text.",
   success: Schema.String,
 });
 
 export const CreateRoom = Tool.make("create-room", {
   description:
-    "Create a new room for the user, join it live and look at it. Returns the invite id to share with friends.",
+    "Create a new room for the user, join it live and look at it. Its log is encrypted: only the people let in can read it. To let someone in, make them an invite (invite-to-room) when your user asks.",
   parameters: Schema.Struct({ name: Schema.String }),
   success: Schema.String,
 });
 
 export const JoinRoom = Tool.make("join-room", {
   description:
-    "Join a friend's room from its invite id (a uuid the friend copied with c), live, and look at it. Optional 'name' is a local label until the room's shared name arrives.",
-  parameters: Schema.Struct({ inviteId: Schema.String, name: Schema.optional(Schema.String) }),
+    "Join a room with an invite a member made (they press c in the room, or their AI uses invite-to-room), pasted whole as 'invite'. A member who is online checks it and lets your user in; an invite lets one person in, within a week. Optional 'name' is a local label until the room's shared name arrives.",
+  parameters: Schema.Struct({ invite: Schema.String, name: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
+export const InviteToRoom = Tool.make("invite-to-room", {
+  description:
+    "Make an invite to the room your user is looking at, for someone to join — the same as pressing c in the room. It lets one person in, once, within a week; hand it to whoever your user names, the way they say. Only when your user asks.",
   success: Schema.String,
 });
 
 export const SwitchRoom = Tool.make("switch-room", {
   description:
-    "Look at (work in) another of the user's rooms, by short id, name, or invite id — see list-rooms. Instant: the user is then present there and away everywhere else; all other tools now refer to that room.",
+    "Look at (work in) another of the user's rooms, by short id or name — see list-rooms. Instant: the user is then present there and away everywhere else; all other tools now refer to that room.",
   parameters: Schema.Struct({ room: Schema.String }),
   success: Schema.String,
 });
 
 export const LeaveRoom = Tool.make("leave-room", {
   description:
-    "Leave one of the user's rooms, by short id, name, or invite id — see list-rooms. Local: the user stops taking part and the room disappears from their list; the other members keep the room and its history. Refused for the user's only room. Only do this when the user asks.",
+    "Leave one of the user's rooms, by short id or name — see list-rooms. Local: the user stops taking part and the room disappears from their list; the other members keep the room and its history. Refused for the user's only room. Only do this when the user asks.",
   parameters: Schema.Struct({ room: Schema.String }),
   success: Schema.String,
 });
@@ -911,6 +917,7 @@ export const CollagenToolkit = Toolkit.make(
   ListRooms,
   CreateRoom,
   JoinRoom,
+  InviteToRoom,
   SwitchRoom,
   LeaveRoom,
 );
@@ -970,6 +977,7 @@ export const DevCollagenToolkit = Toolkit.make(
   ListRooms,
   CreateRoom,
   JoinRoom,
+  InviteToRoom,
   SwitchRoom,
   LeaveRoom,
   DrivePeer,
@@ -1092,14 +1100,12 @@ const makeHandlers = Effect.gen(function* () {
 
     const roomLines = Effect.gen(function* () {
       const all = yield* rooms.summaries;
-      const profileFile = readProfileFile(profile);
       return all.map((summary) => ({
         shortId: summary.shortId,
         name: summary.name,
         online: summary.online,
         unread: summary.unread,
         lookingAt: summary.focused,
-        inviteId: formatInvite(profileFile.rooms?.find((roomEntry) => roomEntry.id === summary.id)?.id ?? summary.id, NET),
       }));
     });
 
@@ -2496,17 +2502,33 @@ const makeHandlers = Effect.gen(function* () {
           if (roomName.length === 0) return "failed: empty room name";
           const entry = newRoomEntry(roomName);
           yield* rooms.join(entry, true);
-          return `created room "${roomName}" [${shortRoomId(entry.id)}] — you are in it now. Invite id to share: ${formatInvite(entry.id, NET)}`;
+          return `created room "${roomName}" [${shortRoomId(entry.id)}] — you are in it now, its log encrypted. To let someone in, make them an invite (invite-to-room) when your user asks`;
         }).pipe(Effect.withSpan("Mcp.createRoom")),
-      "join-room": ({ inviteId, name }: { inviteId: string; name?: string }) =>
+      "join-room": ({ invite, name }: { invite: string; name?: string }) =>
         Effect.gen(function* () {
-          const check = checkInvite(inviteId);
+          const check = checkInvite(invite);
           if (!check.ok) return `failed: ${check.reason}`;
-          const id = check.id;
-          const entry = invitedRoomEntry(id);
+          const id = check.invite.roomName;
+          // a room listed but never let into (no log of its own yet) takes the invite now
+          const listed = (yield* SubscriptionRef.get(rooms.handles)).find((handle) => handle.id === id);
+          if (listed) {
+            if ((yield* listed.room.useInvite(check.invite)) === "in") return `failed: your user is in that room already — switch-room [${shortRoomId(id)}]`;
+            const entry = readProfileFile(profile).rooms?.find((roomEntry) => roomEntry.id === id);
+            if (entry) upsertRoom(profile, { ...entry, invite: invite.trim() });
+            return `joining room [${shortRoomId(id)}] — a member who is online lets your user in with the invite`;
+          }
+          const entry = invitedRoomEntry(id, invite);
           yield* rooms.join(name?.trim() ? { ...entry, name: name.trim() } : entry, true);
-          return `joined room [${shortRoomId(id)}] — you are in it now; its shared name arrives from the peers`;
+          return `joining room [${shortRoomId(id)}] — a member who is online lets your user in with the invite; the room's name and tickets arrive then`;
         }).pipe(Effect.withSpan("Mcp.joinRoom")),
+      "invite-to-room": () =>
+        Effect.gen(function* () {
+          const { name, room } = yield* focusedRoom;
+          return yield* room.createInvite().pipe(
+            Effect.map((invite) => `an invite to "${name}" — it lets one person in, within a week:\n${invite}`),
+            Effect.catchTag("NotWritable", () => Effect.succeed(`failed: "${name}" cannot take invites yet — your user is not let in to write to it, or it is still moving to its encrypted log; try again in a moment`)),
+          );
+        }).pipe(Effect.withSpan("Mcp.inviteToRoom")),
       "leave-room": ({ room: which }: { room: string }) =>
         Effect.gen(function* () {
           const query = which.trim();

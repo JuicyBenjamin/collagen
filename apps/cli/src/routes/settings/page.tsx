@@ -1,5 +1,3 @@
-import { formatInvite } from "@collagen/p2p";
-import { NET } from "../../app/net";
 import { useState } from "react";
 import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
@@ -52,8 +50,7 @@ const nextLevel = (level: MergeFor | undefined, allowNone: boolean): MergeFor | 
 
 /** Settings frame: your name + the room's shared name, both applied on
  *  enter, then your switches, each applied the moment it is flipped (your
- *  agent can flip them for you too — set-settings). The room id is shown
- *  for reference only — it's the invite, never editable. */
+ *  agent can flip them for you too — set-settings). */
 export function SettingsPage() {
   const { profile } = useSession();
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
@@ -203,7 +200,7 @@ export function SettingsPage() {
         <text fg={theme.dim}>{`        ${MERGE_HELP[mergeRoom ?? mergeDefault]} — a review can say otherwise; the host's own rules come first`}</text>
       </box>
       <text fg={theme.dim} truncate wrapMode="none">
-        invite id: <span fg={theme.fg}>{formatInvite(room.id, NET)}</span> (fixed — press c in the room to copy)
+        to let someone in: press c in the room — an invite lets one person in, within a week
       </text>
       <text fg={theme.dim}>tab next field · enter next/confirm · on a switch: space flips it · on steering or merge: space changes it</text>
       <text fg={theme.warn}>{saved ? "saved — applies now" : "changes apply live · esc back"}</text>

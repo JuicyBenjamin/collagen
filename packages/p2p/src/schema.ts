@@ -23,7 +23,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "13";
+export const PROTOCOL_VERSION = "14";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -94,6 +94,27 @@ export const LogInfoFrame = Schema.Struct({
 export const JoinLogFrame = Schema.Struct({
   kind: Schema.Literal("join-log"),
   writer: Schema.String,
+});
+/** "Let me in with this invite" — a newcomer to a member, proving it holds
+ *  the invite's secret (invite.ts proveInvite, bound to its identity). */
+export const RedeemFrame = Schema.Struct({
+  kind: Schema.Literal("redeem"),
+  inviteId: Schema.String,
+  proof: Schema.String,
+});
+/** The room's keys, to a newcomer just let in (or a member who lost them):
+ *  where its log is and the key that reads it. Only ever over a connection,
+ *  never on the log. */
+export const KeysFrame = Schema.Struct({
+  kind: Schema.Literal("keys"),
+  logKey: Schema.String,
+  encryptionKey: Schema.String,
+});
+/** "Not with that invite" — why a redeem was turned down. */
+export const RefusedFrame = Schema.Struct({
+  kind: Schema.Literal("refused"),
+  inviteId: Schema.String,
+  why: Schema.String,
 });
 
 /** The actions a driven peer can be asked to perform. One list, so a tool
@@ -239,7 +260,7 @@ export type AttachmentFrame = typeof AttachmentFrame.Type;
  *  remembered: presence, log bootstrap, remote control, transcripts.
  *  Everything that must outlive a connection (messages, tickets, the room
  *  name, membership) is a LogOp on the room's shared log instead. */
-export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
+export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
 export type TranscriptRequestFrame = typeof TranscriptRequestFrame.Type;
 export type TranscriptFrame = typeof TranscriptFrame.Type;
 export type Frame = typeof Frame.Type;
@@ -254,6 +275,19 @@ export type Frame = typeof Frame.Type;
  *  would have been wiped by the first peer who had not updated yet.
  *  `replays` names the raw `unseen/…` row an entry was replayed from, so
  *  apply removes exactly that row, and only once the entry applied. */
+/** An invite on the room's log: the public half of its secret (the secret
+ *  itself only ever travels in the invite text). */
+export const InviteRecord = Schema.Struct({
+  id: Schema.String,
+  publicKey: Schema.String,
+  /** who made it */
+  by: Schema.String,
+  /** when it lapses (ms) */
+  expires: Schema.Finite,
+  ts: Schema.Finite,
+});
+export type InviteRecord = typeof InviteRecord.Type;
+
 export const LogOp = Schema.Union([
   /** Admit a writer core to the log (any member may append this). */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("add-writer"), key: Schema.String }),
@@ -273,6 +307,15 @@ export const LogOp = Schema.Union([
   /** A comment on a review's code — written once by its author, never
    *  changed: the first write of an id stands. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("comment"), comment: ReviewComment }),
+  /** An invite someone made: the public half of its secret, who made it and
+   *  when it lapses. The first write of an id stands. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("invite"), invite: InviteRecord }),
+  /** An invite used: who it let in. The first use stands, so it lets in one. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("redeemed"), id: Schema.String, identity: Schema.String, by: Schema.String, ts: Schema.Finite }),
+  /** The room moved to a new, encrypted log: its key, and its encryption key
+   *  sealed for each member's identity (invite.ts sealFor). The first move
+   *  stands, so two members moving at once end in one room. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("moved"), to: Schema.String, sealed: Schema.Record(Schema.String, Schema.String), by: Schema.String, ts: Schema.Finite }),
   /** The migration. The log is append-only, so a record written by a build
    *  that spoke another protocol version cannot be rewritten — this is how it
    *  stops being part of the room instead: the rows it left in the view are

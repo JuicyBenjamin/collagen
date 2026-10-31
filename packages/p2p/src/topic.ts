@@ -28,25 +28,8 @@ export function deriveThreadId(first: string, second: string, project: string): 
   return createHash("sha256").update(`${lower}|${higher}|${project}`).digest("hex").slice(0, 16);
 }
 
-/** An invite as people see and paste it: the room id, prefixed `devnet-` when
- *  the room is on devnet. The prefix is what lets the other net say
- *  "not here" at once, instead of waiting on a topic nobody announces on. */
-export function formatInvite(roomId: string, net: Net): string {
-  return net === "devnet" ? `devnet-${roomId}` : roomId;
-}
-
-export type ParsedInvite = { readonly id: string; readonly net: Net };
-
-/** The inverse of formatInvite; null when the text is not an invite at all. */
-export function parseInvite(text: string): ParsedInvite | null {
-  const trimmed = text.trim();
-  const dev = trimmed.startsWith("devnet-");
-  const id = dev ? trimmed.slice(7) : trimmed;
-  return isRoomId(id) ? { id, net: dev ? "devnet" : "mainnet" } : null;
-}
-
-/** A room id (= the invite) is a uuid, v7 in practice. Anything else is
- *  rejected at the edges so a botched paste can't silently become a new room. */
+/** A room id is a uuid, v7 in practice — and, before invites, was the
+ *  invite itself: a bare one pasted to join is an old invite. */
 export function isRoomId(text: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
 }

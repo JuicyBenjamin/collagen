@@ -9,6 +9,7 @@ export * from "./errors";
 export * from "./types";
 export * from "./domain";
 export * from "./topic";
+export * from "./invite";
 export * from "./identity";
 export * from "./Swarm";
 export * from "./RoomLog";
