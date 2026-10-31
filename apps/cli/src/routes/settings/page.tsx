@@ -52,22 +52,26 @@ export function SettingsPage() {
   const rows = ROWS[tab];
   const [cursor, setCursor] = useState(() => ROWS.ai.findIndex(pickable));
   const [column, setColumn] = useState<0 | 1>(0);
+  // on the tab bar, as in the room: ↑ from the first row reaches it, ←→ switch tabs there
+  const [onBar, setOnBar] = useState(false);
   const [models, setModels] = useState<Partial<Record<JobKind, string>>>({});
   const row = rows[Math.min(cursor, rows.length - 1)]!;
   const used = state ? mostUsedHarness(state) : null;
 
+  const first = rows.findIndex(pickable);
   const move = (by: 1 | -1) => {
+    if (by === -1 && cursor === first) return setOnBar(true);
     let next = cursor;
     do next = (next + by + rows.length) % rows.length;
     while (!pickable(rows[next]!));
     setCursor(next);
   };
-  const switchTab = (by: 1 | -1) => {
-    const next = TABS[(TABS.findIndex((each) => each.id === tab) + by + TABS.length) % TABS.length]!.id;
+  const showTab = (next: Tab) => {
     setTab(next);
     setCursor(ROWS[next].findIndex(pickable));
     setColumn(0);
   };
+  const switchTab = (by: 1 | -1) => showTab(TABS[(TABS.findIndex((each) => each.id === tab) + by + TABS.length) % TABS.length]!.id);
 
   const change = (update: (previous: LocalState) => LocalState) => updateState({ update });
   /** space or enter on the cell under the cursor */
@@ -91,6 +95,15 @@ export function SettingsPage() {
   useKeyboard((key) => {
     if (key.name === "escape") return navigate("room/overview");
     if (key.name === "tab") return switchTab(key.shift ? -1 : 1);
+    if (onBar) {
+      if (key.name === "left") return switchTab(-1);
+      if (key.name === "right") return switchTab(1);
+      if (key.name === "down" || key.name === "return" || key.name === "enter") return setOnBar(false);
+    }
+    // a tab by its number, from anywhere but a model being typed
+    const numbered = row.kind === "model" && !onBar ? undefined : TABS[Number(key.name) - 1];
+    if (numbered) return showTab(numbered.id);
+    if (onBar) return;
     if (key.name === "down") return move(1);
     if (key.name === "up") return move(-1);
     // typing a model: the arrows and space are the field's
@@ -111,7 +124,7 @@ export function SettingsPage() {
   };
 
   const line = (each: Row, index: number) => {
-    const on = index === cursor;
+    const on = !onBar && index === cursor;
     const mark = (col: 0 | 1, set = true) => (on && column === col ? theme.accent : set ? theme.fg : theme.dim);
     const words = (text: string) => <span fg={on ? theme.accent : theme.fg}>{`${on ? "› " : "  "}${text}`.padEnd(WORDS).slice(0, WORDS)}</span>;
     switch (each.kind) {
@@ -240,16 +253,22 @@ export function SettingsPage() {
 
   return (
     <box flexDirection="column" gap={1} marginTop={1} flexGrow={1}>
-      <text wrapMode="none">
-        {TABS.map((each) => (
-          <span key={each.id} fg={each.id === tab ? theme.accent : theme.dim}>{each.id === tab ? `[${each.label}]  ` : ` ${each.label}   `}</span>
+      <box flexDirection="row">
+        <text fg={onBar ? theme.accent : theme.dim} wrapMode="none">
+          {onBar ? "› " : "  "}
+        </text>
+        {/* each tab takes a click as well as its keys */}
+        {TABS.map((each, index) => (
+          <text key={each.id} fg={each.id === tab ? theme.accent : theme.dim} wrapMode="none" onMouseDown={() => showTab(each.id)}>
+            {`[${index + 1}] ${each.label}   `}
+          </text>
         ))}
-      </text>
+      </box>
       <FollowScroll follow={{ id: row.id }} flexGrow={1}>
         {rows.map(line)}
       </FollowScroll>
-      <text fg={theme.dim}>{help()}</text>
-      <text fg={theme.dim}>tab next tab · ↑↓ row · ←→ everywhere / this room · space changes it · esc back</text>
+      <text fg={theme.dim}>{onBar ? "" : help()}</text>
+      <text fg={theme.dim}>{onBar ? "←→ switch tab · 1-3 jump · ↓ into the settings · esc back" : "↑↓ row (↑ at the top: the tabs) · 1-3 tab · ←→ everywhere / this room · space changes it · esc back"}</text>
     </box>
   );
 }
