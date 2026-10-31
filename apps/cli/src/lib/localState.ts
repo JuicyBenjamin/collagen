@@ -173,6 +173,8 @@ export const salvageState = (text: string): Salvaged => {
   const chats = decode(Schema.Record(Schema.String, ChatKept), src.chats);
   // unreadable, a review's chat starts without what opened it
   const chatOpeners = decode(Schema.Record(Schema.String, Conversation), src.chatOpeners);
+  // unreadable, a review's earlier chats are lost; the current one stays
+  const pastChats = decode(Schema.Record(Schema.String, Schema.Array(ChatKept)), src.pastChats);
 
   // unreadable, every review reads unviewed again
   const viewed = decode(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark)), src.viewed);
@@ -209,6 +211,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(viewed ? { viewed } : {}),
       ...(chats ? { chats } : {}),
       ...(chatOpeners ? { chatOpeners } : {}),
+      ...(pastChats ? { pastChats } : {}),
       rooms,
       ...(projectOrder ? { projectOrder } : {}),
       ...(threads ? { threads } : {}),

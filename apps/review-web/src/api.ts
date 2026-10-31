@@ -229,8 +229,14 @@ export const stopAnswer = async (ticketId: string): Promise<void> => {
   return run((backend) => backend.stopAnswer(ticketId));
 };
 
-/** Start the conversation over. */
+/** Start a new conversation; the one before is kept among the review's earlier chats. */
 export const newChat = async (ticketId: string): Promise<void> => {
   "use server";
   return run((backend) => backend.newChat(ticketId));
+};
+
+/** Go back to an earlier chat. */
+export const reopenChat = async (ticketId: string, chatId: string): Promise<void> => {
+  "use server";
+  return run((backend) => backend.reopenChat(ticketId, chatId));
 };

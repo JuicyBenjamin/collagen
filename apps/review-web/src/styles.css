@@ -1066,6 +1066,8 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .chat-pill.lifted, .chat-panel.lifted { bottom: 74px; }
 .chat-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); }
 .chat-ai { flex: 1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+/* the earlier chats' menu as wide as its words, not daisyUI's 20rem */
+.chat-head .select { width: auto; max-width: 50%; }
 /* the conversation gives way to the question in a short window: it scrolls in what room is left,
    and a scroll that reaches its end stays in it, never running on into the page */
 .chat-log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px; }

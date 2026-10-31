@@ -6,6 +6,7 @@ import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
 import { selectionLabel, selectionShort } from "../chatText";
 import { Markdown } from "./Markdown";
+import { ago } from "../when";
 import type { ChatTurn } from "../data";
 import { lasting } from "../lasting";
 import { ticketId } from "../ticket";
@@ -22,7 +23,6 @@ export function Chat() {
     chatNow.setView(view);
   });
   chatNow.watch();
-  const turns = () => chatNow.view()?.turns ?? [];
   return (
     <>
       <Appear when={chatNow.offer()}>
@@ -44,7 +44,7 @@ export function Chat() {
           the panel grows out of the pill, and shrinks back onto it, placed
           beneath as it starts to close — its words coming once it is the pill */}
       <InCorner
-        when={!chatNow.open() && turns().length > 0}
+        when={!chatNow.open() && chatNow.held()}
         enter={(element) => (chatNow.turn.intoPill ? arrive(element.firstElementChild, 0.24) : rise(element))}
         // the panel growing out of it covers it from the first frame
         leave={sink}
@@ -164,8 +164,33 @@ function Panel(props: { placed: (element: HTMLElement) => void }) {
     >
       <div class="chat-head">
         <span class="chat-ai">{chatNow.view()?.ai ?? "Your AI"}</span>
+        {/* a new chat keeps the one before: back to any of them */}
+        <Show when={(chatNow.view()?.earlier.length ?? 0) > 0}>
+          <select
+            class="select select-ghost select-xs"
+            aria-label="Earlier chats"
+            value=""
+            onChange={(event) => {
+              const chatId = event.currentTarget.value;
+              event.currentTarget.value = "";
+              if (chatId) chatNow.reopen(chatId);
+            }}
+          >
+            <option value="" disabled>
+              Earlier chats ({chatNow.view()?.earlier.length})
+            </option>
+            <For each={chatNow.view()?.earlier ?? []}>
+              {(earlier) => (
+                <option value={earlier.id}>
+                  {earlier.first ? (earlier.first.length > 48 ? `${earlier.first.slice(0, 47)}…` : earlier.first) : `${earlier.questions} questions`}
+                  {earlier.ended ? ` · ${ago(Date.parse(earlier.ended), Date.now())}` : ""}
+                </option>
+              )}
+            </For>
+          </select>
+        </Show>
         <Show when={(chatNow.view()?.turns.length ?? 0) > 0}>
-          <button type="button" class="btn btn-ghost btn-xs" onClick={() => chatNow.restart()} title="Start the conversation over">
+          <button type="button" class="btn btn-ghost btn-xs" onClick={() => chatNow.restart()} title="Start a new conversation — this one stays under Earlier chats">
             New chat
           </button>
         </Show>

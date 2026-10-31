@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { answerInstead, askAi, forwardQuestion, newChat, stopAnswer } from "./api";
+import { answerInstead, askAi, forwardQuestion, newChat, reopenChat, stopAnswer } from "./api";
 import type { ChatSelection, ChatView, SideLine } from "./data";
 import { diffNow } from "./diffNow";
 import { ticketId } from "./ticket";
@@ -97,10 +97,12 @@ export const chatNow = {
   },
   /** The panel shrinks into the pill — when there is one to come: a chat with nothing in it has none, and sinks. */
   close(): void {
-    turn.intoPill = corner.panel !== undefined && (view()?.turns.length ?? 0) > 0;
+    turn.intoPill = corner.panel !== undefined && chatNow.held();
     setOpen(false);
   },
   detach: () => setAttached(null),
+  /** Is there a chat to come back to: this one, or an earlier one? Then its pill stands in the corner. */
+  held: (): boolean => (view()?.turns.length ?? 0) > 0 || (view()?.earlier.length ?? 0) > 0,
   /** Is an answer under way? */
   /** the reader's own AI is answering — an author's AI answering is not in the way */
   answering: () => (view()?.turns ?? []).some((turn) => turn.state === "answering" && turn.from === undefined),
@@ -180,5 +182,10 @@ export const chatNow = {
   restart: () => {
     setRefused(null);
     void newChat(ticketId).catch((error) => setRefused(String(error)));
+  },
+  /** Back to an earlier chat: the current one is kept among them in its place. */
+  reopen: (chatId: string) => {
+    setRefused(null);
+    void reopenChat(ticketId, chatId).catch((error) => setRefused(String(error)));
   },
 };
