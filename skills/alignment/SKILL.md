@@ -28,6 +28,11 @@ you say a screen is done.
    empty swatch and label column, pushing a lone value right). Override it.
 6. **Legends and keys sit on the edge of what they explain**, swatches in one
    column, names in the next, counts right-aligned in the last.
+7. **Space says what belongs together** (proximity). Lines of one thing sit
+   close; separate things get a breather between them, and separate concepts
+   more than separate items. A title stands apart from the words that
+   explain it, and one section of a page never runs into the next. In a TUI:
+   an empty line between groups, two between sections.
 
 ## How to check
 
@@ -49,6 +54,8 @@ Every edge that should match, does — to the pixel.
 - Panels side by side of different heights, their charts starting at
   different lines.
 - Chips and buttons sized and aligned differently in one row.
+- The TUI settings page stacked steering, its explanation and the AI's jobs
+  with no space between: three concepts read as one block.
 
 ## Checklist
 
