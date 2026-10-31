@@ -51,18 +51,22 @@ export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: 
 
 /** What each kind of run does, a line under its name. */
 export const JOB_ABOUT: Record<JobKind, string> = {
-  wake: "Tells one of your conversations that something came for it.",
+  wake: "Wakes the conversation that worked on a ticket when something new comes on it.",
   research: "Looks into a ticket when you ask for more info, and posts what it found.",
   investigation: "Works through an investigation's goals, and posts what it found.",
 };
 
 /** Where a message for you goes, short. */
 export const TAG_WORDS: Record<TagRoute, string> = {
-  none: "nowhere",
-  existing: "its conversation",
-  "existing-or-new": "its conversation, else a new one",
+  none: "your inbox only",
+  existing: "the conversation on its ticket",
+  "existing-or-new": "that, else a new conversation",
   new: "a new conversation",
 };
+
+/** The routes the page offers: starting a new conversation is not built
+ *  yet, so only these two do what they say (an agent may still set others). */
+export const TAG_CHOICES: ReadonlyArray<TagRoute> = ["existing", "none"];
 
 const steer = (at: SteeringAt): ReadonlyArray<Row> => [
   { id: `steer:${at}:mine`, kind: "steer", at, cause: "mine" },
@@ -99,7 +103,11 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       ["How far collagen goes with your AI before asking you.", "you: you or your AI started it, like a ticket you filed.", "others: someone else did, like their ticket naming you, or their message."],
       [COLUMNS, ...steer("work")],
       ...AI_KINDS.filter((kind) => kind !== "work").map(steer),
-      [{ id: "tag", kind: "tag" }],
+      [
+        { id: "label:tag", kind: "label", text: "messages for you" },
+        { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
+        { id: "tag", kind: "tag" },
+      ],
     ),
     section(
       "AI runs",

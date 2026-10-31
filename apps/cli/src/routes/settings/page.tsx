@@ -8,11 +8,11 @@ import { theme } from "../../app/theme";
 import { FollowScroll } from "../../components/FollowScroll";
 import { SETTINGS, settingOf, withSetting } from "../../lib/settings";
 import { MERGE_HELP, MERGE_LEVELS, withMergeFor } from "../../lib/merging";
-import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING_ORDER, KIND_LABEL, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
+import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING_ORDER, KIND_LABEL, TAG_LABEL, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
 import { JOB_LABEL, jobLimitOf, mostUsedHarness, withHarness, withModel } from "../../lib/jobs";
 import { roomAtom } from "../atoms";
 import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
-import { CAUSE_WORDS, pickable, ROWS, STEER_WORDS, TABS, TAG_WORDS, twoColumns, type Row, type Tab } from "./rows";
+import { CAUSE_WORDS, pickable, TAG_CHOICES, ROWS, STEER_WORDS, TABS, TAG_WORDS, twoColumns, type Row, type Tab } from "./rows";
 
 /** The width of a row's words, and of each column after them. */
 const WORDS = 28;
@@ -78,7 +78,7 @@ export function SettingsPage() {
       );
     if (row.kind === "merge")
       return change((previous) => (here ? withMergeFor(previous, { room: room.id }, nextMerge(previous.merging?.rooms?.[room.id], true)) : withMergeFor(previous, { default: true }, nextMerge(previous.merging?.default, false))));
-    if (row.kind === "tag") return change((previous) => withTagRoute(previous, TAG_ROUTES[(TAG_ROUTES.indexOf(tagRouteOf(previous)) + 1) % TAG_ROUTES.length]!));
+    if (row.kind === "tag") return change((previous) => withTagRoute(previous, TAG_CHOICES[(TAG_CHOICES.indexOf(tagRouteOf(previous)) + 1) % TAG_CHOICES.length]!));
     if (row.kind === "switch") return change((previous) => withSetting(previous, row.key, !settingOf(previous, row.key)));
     if (row.kind === "jobLimit") return change((previous) => ({ ...previous, jobLimit: JOB_LIMITS[(JOB_LIMITS.indexOf(jobLimitOf(previous)) + 1) % JOB_LIMITS.length]! }));
     if (row.kind === "harness") {
@@ -166,7 +166,7 @@ export function SettingsPage() {
       case "tag":
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words("messages go to")}
+            {words("  go to")}
             <span fg={mark(0)}>{TAG_WORDS[state ? tagRouteOf(state) : "existing"]}</span>
           </text>
         );
@@ -221,7 +221,10 @@ export function SettingsPage() {
       const applies = STEERING_HELP[row.at === "master" ? masterOf(known, row.cause, roomId) : levelOf(known, row.at, row.cause, roomId)];
       return `${about}: ${applies}${column === 1 ? " (as everywhere)" : row.at === "master" ? "" : " (as General)"}`;
     }
-    if (row.kind === "tag") return `a message for you goes to ${TAG_LABEL[state ? tagRouteOf(state) : "existing"]}`;
+    if (row.kind === "tag") {
+      const route = state ? tagRouteOf(state) : "existing";
+      return route === "none" ? "a message for you waits in your inbox until you or your agent ask for it" : route === "existing" ? "a message for you wakes the conversation that worked on its ticket, as delivery allows" : `a message for you goes to ${TAG_LABEL[route]}`;
+    }
     if (row.kind === "jobLimit") return "how many runs of your AI collagen keeps going at a time; the rest wait in line";
     if (row.kind === "merge") return MERGE_HELP[(column === 1 ? state?.merging?.rooms?.[room.id] : undefined) ?? state?.merging?.default ?? "off"];
     if (row.kind === "switch") {
