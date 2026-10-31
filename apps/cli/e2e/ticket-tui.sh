@@ -30,7 +30,7 @@ mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
   printf '\033[D'; sleep 2; mark M4d_back_to_list
   printf '\033[D'; sleep 2; mark M5_back_to_ticket
   printf '\033'; sleep 2; printf '\033[B'; sleep 1; mark M6_back
-  printf '?'; sleep 2; mark M7_help; for i in $(seq 1 20); do printf '\033[B'; sleep 0.2; done; sleep 1; mark M7b_scrolled; printf '?'; sleep 2; printf '\033[B'; sleep 1; mark M8_help_closed
+  printf '?'; sleep 2; mark M7_help; for i in $(seq 1 26); do printf '\033[B'; sleep 0.2; done; sleep 1; mark M7b_scrolled; printf '?'; sleep 2; printf '\033[B'; sleep 1; mark M8_help_closed
   printf '\r'; sleep 2; mark M9_reopened; printf '\033[D'; sleep 2; mark M9b_left; printf '\033[B'; sleep 1; mark M9c_down
   while [ ! -f "$OUT/epic.ready" ]; do sleep 1; done; sleep 2
   printf '\r'; sleep 2; mark M10_epic; printf '\r'; sleep 2; mark M10b_part; printf '\033[D'; sleep 2; mark M10c_left; printf '\033[B'; sleep 1; mark M10d_down; sleep 1; printf 'q' ) | \
