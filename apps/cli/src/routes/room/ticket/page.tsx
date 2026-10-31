@@ -20,7 +20,7 @@ import { Arrow } from "../components/Arrow/Arrow";
 import { wrap } from "../../../lib/wrap";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { runDiagnosticAtom, takeStepAtom } from "./atoms";
-import { openReviewPageAtom } from "../review/atoms";
+import { openInvestigationPageAtom, openReviewPageAtom } from "../review/atoms";
 import { EpicPage } from "./EpicPage";
 import { via } from "../../../lib/agents";
 
@@ -78,7 +78,8 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
     if (height && height > 0 && height !== convHeight) setConvHeight(height);
   });
   const run = useAtomSet(runDiagnosticAtom);
-  const openPage = useAtomSet(openReviewPageAtom);
+  const openReviewPage = useAtomSet(openReviewPageAtom);
+  const openInvestigationPage = useAtomSet(openInvestigationPageAtom);
   const outcome = useAtomValue(runDiagnosticAtom);
   const take = useAtomSet(takeStepAtom);
   const taking = useAtomValue(takeStepAtom);
@@ -214,13 +215,13 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
       {review ? (
         <Focusable
           id="ticket-review"
-          hint="enter reads the why — every decision, how it was steered, and the forks · o the diff by decision, in your browser · esc back to the list"
+          hint={`enter reads the why — every decision, how it was steered, and the forks · o ${ticket.kind === "investigation" ? "what it found" : "the diff by decision"}, in your browser · esc back to the list`}
           flexDirection="column"
           flexShrink={0}
           onKey={(key) => {
             if (isEnter(key)) return navigate(to.review(ticketId, route)), true;
             // the code itself, grouped under the why — a page of its own, in the browser
-            if (key.name === "o") return openPage({ ticketId }), true;
+            if (key.name === "o") return (ticket.kind === "investigation" ? openInvestigationPage({ ticketId }) : openReviewPage({ ticketId })), true;
             return false;
           }}
         >

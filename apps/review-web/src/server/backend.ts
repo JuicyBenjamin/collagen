@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 
 // What the review page's server functions (src/api.ts) ask of the collagen
@@ -67,6 +67,12 @@ export class ReviewBackend extends Context.Service<
     readonly setMerge: (ticketId: string, level: MergeFor | null) => Effect.Effect<MergeView | null>;
     /** what was merged into one of a room's projects, `shown` of them, with the tickets each came from; null for a room not here */
     readonly merges: (roomId: string, project: string, shown: number, fresh: boolean) => Effect.Effect<MergeHistory | null>;
+    /** an investigation as its page reads it — now, then each time it moves
+     *  (over the page's socket); null for one not here, or not shown to the reader */
+    readonly investigation: (ticketId: string) => Stream.Stream<InvestigationPage | null>;
+    /** the author's yes or no to a run's question on their investigation: a yes to one
+     *  that leads somewhere adds that follow-up as a goal and starts it */
+    readonly answerQuestion: (ticketId: string, questionId: string, answer: "yes" | "no") => Effect.Effect<HostWrite>;
     /** a room's projects held here, in the reader's order; null for a room not here */
     readonly mergeProjects: (roomId: string) => Effect.Effect<MergeProjects | null>;
     /** the page's themes as collagen keeps them — now, then on every change, whoever made it

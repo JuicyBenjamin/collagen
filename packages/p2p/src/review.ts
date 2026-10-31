@@ -200,7 +200,7 @@ export type InvestigationOutcome = typeof InvestigationOutcome.Type;
 
 /** Written on a goal: if what is found bears this out, the run looks into
  *  this question too, there and then, and answers it under the goal. */
-export const GoalFollowUp = Schema.Struct({ if: Schema.String, ask: Schema.String });
+export const GoalFollowUp = Schema.Struct({ if: Schema.String, ask: Schema.String, title: Schema.optional(Schema.String) });
 export type GoalFollowUp = typeof GoalFollowUp.Type;
 
 /** One thing an investigation sets out to find. Goals of one group are
@@ -209,6 +209,8 @@ export const InvestigationGoal = Schema.Struct({
   id: Schema.String,
   /** What is to be found out, in the asker's words. */
   ask: Schema.String,
+  /** A few words to head it; the ask is read beneath. */
+  title: Schema.optional(Schema.String),
   group: Schema.optional(Schema.String),
   then: Schema.optional(Schema.Array(GoalFollowUp)),
   /** Withdrawn: kept, so its id is never given to another goal. */
@@ -236,6 +238,9 @@ export const InvestigationBrief = Schema.Struct({
   /** Absent: the question is the one goal. */
   goals: Schema.optional(Schema.Array(InvestigationGoal)),
   pace: Schema.optional(InvestigationPace),
+  /** the author's answers to the runs' questions, by question id: a yes
+   *  that led to more looking-into names the goal it added */
+  decided: Schema.optional(Schema.Array(Schema.Struct({ question: Schema.String, answer: Schema.Literals(["yes", "no"]), goal: Schema.optional(Schema.String) }))),
   outcome: Schema.optional(InvestigationOutcome),
   /** The answer, or why there is none. */
   findings: Schema.optional(Schema.String),
@@ -461,15 +466,18 @@ export const mergeReview = (base: ReviewContext, delta: ReviewDelta, writtenAt: 
             for (const given of givenGoals ?? []) {
               const id = given.id ?? nextId("g", goals.map((goal) => goal.id));
               const at = goals.findIndex((goal) => goal.id === id);
-              const entry: InvestigationGoal = { id, ask: given.ask, ...(given.group ? { group: given.group } : {}), ...(given.then && given.then.length > 0 ? { then: given.then } : {}) };
+              const entry: InvestigationGoal = { id, ask: given.ask, ...(given.title ? { title: given.title } : {}), ...(given.group ? { group: given.group } : {}), ...(given.then && given.then.length > 0 ? { then: given.then } : {}) };
               if (at === -1) goals.push(entry);
               else goals[at] = entry;
             }
             // withdrawn, not removed: an answer that names it never meets another goal
             if (delta.retireGoals && delta.retireGoals.length > 0) goals = goals.map((goal) => (delta.retireGoals!.includes(goal.id) ? { ...goal, withdrawn: true } : goal));
           }
-          const { goals: _was, ...kept } = base.investigation ?? { question: "" };
-          return { ...kept, ...fields, ...(goals !== undefined && goals.length > 0 ? { goals } : {}) };
+          const { goals: _was, decided: _before, ...kept } = base.investigation ?? { question: "" };
+          // answers to questions merge by question id: the latest word on one wins
+          const { decided: givenDecided, ...rest } = fields;
+          const decided = [...(base.investigation?.decided ?? []).filter((had) => !(givenDecided ?? []).some((now) => now.question === had.question)), ...(givenDecided ?? [])];
+          return { ...kept, ...rest, ...(goals !== undefined && goals.length > 0 ? { goals } : {}), ...(decided.length > 0 ? { decided } : {}) };
         })();
   const machine = delta.machine === null ? undefined : (delta.machine ?? base.machine);
   const { machine: _machine, ...kept } = base;

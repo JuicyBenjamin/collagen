@@ -627,3 +627,79 @@ export interface MergeProjects {
   readonly room: string;
   readonly projects: ReadonlyArray<string>;
 }
+
+/** A finding as the investigation page draws it: the kind the run picked. */
+export type AnswerBlockView =
+  | { readonly kind: "verdict"; readonly verdict: "yes" | "no" | "partly"; readonly text: string }
+  | { readonly kind: "points"; readonly items: ReadonlyArray<string> }
+  | { readonly kind: "facts"; readonly rows: ReadonlyArray<{ readonly label: string; readonly value: string }> }
+  | { readonly kind: "compare"; readonly left: string; readonly right: string; readonly rows: ReadonlyArray<{ readonly what: string; readonly left: boolean; readonly right: boolean }> }
+  | { readonly kind: "ranking"; readonly options: ReadonlyArray<{ readonly name: string; readonly fit: "best" | "good" | "partial" | "poor"; readonly why?: string }> }
+  | { readonly kind: "choices"; readonly options: ReadonlyArray<{ readonly name: string; readonly call: "adopt" | "maybe" | "skip"; readonly why?: string }> };
+
+/** How an answer ended, when it is not simply answered. */
+export type AnswerOutcome = "answered" | "not-answerable" | "wrong-question";
+
+/** A follow-up written on a goal whose 'if' held, and what looking into it found. */
+export interface FollowUpView {
+  readonly if: string;
+  readonly title: string;
+  readonly outcome: AnswerOutcome;
+  readonly blocks: ReadonlyArray<AnswerBlockView>;
+  /** everything found, when it says more than the blocks */
+  readonly more?: string;
+}
+
+/** One person's answer to a goal. */
+export interface AnswerView {
+  /** who answered it, by name */
+  readonly by: string;
+  readonly outcome: AnswerOutcome;
+  readonly blocks: ReadonlyArray<AnswerBlockView>;
+  /** everything found, when it says more than the blocks (an answer from
+   *  before blocks has its findings here and none above) */
+  readonly more?: string;
+  readonly sources: ReadonlyArray<string>;
+  readonly followUps: ReadonlyArray<FollowUpView>;
+}
+
+export interface GoalView {
+  readonly id: string;
+  /** a few words; the ask beneath */
+  readonly title: string;
+  /** the question as it was asked; absent when the title is all there is */
+  readonly ask?: string;
+  readonly answers: ReadonlyArray<AnswerView>;
+}
+
+/** A run's question for the reader: what a yes would look into next, and
+ *  how it was answered. Only the investigation's author answers, while it is open. */
+export interface QuestionView {
+  readonly id: string;
+  readonly by: string;
+  readonly text: string;
+  /** what a yes looks into next */
+  readonly then?: string;
+  readonly answer?: "yes" | "no";
+  readonly canAnswer: boolean;
+}
+
+/** investigationPage(ticketId) — an investigation as its page reads it. */
+export interface InvestigationPage {
+  readonly id: string;
+  readonly title: string;
+  readonly question: string;
+  readonly open: boolean;
+  readonly openedBy: string;
+  /** goals with an answer, of all */
+  readonly done: number;
+  readonly total: number;
+  /** who has answered, by name */
+  readonly people: ReadonlyArray<string>;
+  /** each model that answered, and in how many runs */
+  readonly models: ReadonlyArray<{ readonly name: string; readonly runs: number }>;
+  /** its goals in their groups, in goal order; a goal in no group stands under none */
+  readonly groups: ReadonlyArray<{ readonly name: string | null; readonly goals: ReadonlyArray<GoalView> }>;
+  /** what only the reader can decide, from every answer */
+  readonly questions: ReadonlyArray<QuestionView>;
+}

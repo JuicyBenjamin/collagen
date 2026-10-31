@@ -106,10 +106,18 @@ const goalsLines = (ticket: Ticket, review: ReviewContext | undefined, nameFor: 
   return {
     goals: goals.map((goal) => {
       const answers = answered.filter(({ answer }) => answer.goal === goal.id);
+      const decided = (questionId: string) => review?.investigation?.decided?.find((had) => had.question === questionId)?.answer;
+      const questions = answers.flatMap(({ answer }) =>
+        (answer.questions ?? []).map((question) =>
+          typeof question === "string" ? question : `${question.id}: ${question.text}${question.then ? ` (yes looks into: ${question.then.title ?? question.then.ask})` : ""}${decided(question.id) ? ` — answered ${decided(question.id)}` : ""}`,
+        ),
+      );
       return {
         id: goal.id,
         ask: goal.ask,
         group: goal.group ?? "",
+        /** what only the author can decide: answer-question {ticketId, questionId, answer} */
+        questions: questions.join(" | "),
         answers:
           answers.length === 0
             ? "none yet"

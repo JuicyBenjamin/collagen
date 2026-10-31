@@ -53,6 +53,14 @@ export const modelName = (id: string): string => {
   return id.replace(/^gpt-/, "GPT-");
 };
 
+/** The model a label names, as its maker calls it: "Claude Code (Sonnet
+ *  5.5, medium effort)" is "Claude Sonnet 5.5"; a label with no model, none. */
+export const modelOfLabel = (label: string): string | undefined => {
+  const model = /\(([^,)]+)/.exec(label)?.[1]?.trim();
+  if (!model || model.endsWith(" effort")) return undefined;
+  return /^(Opus|Sonnet|Haiku|Fable) /.test(model) ? `Claude ${model}` : model;
+};
+
 /** The agent with its turn: "Claude Code (Opus 5.5, high effort)" — in
  *  brackets, so it reads as one name in a line that has dots of its own. */
 export const agentLabel = (name: string, turn: Turn | null): string => {
