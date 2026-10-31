@@ -48,7 +48,11 @@ export const changedBlocks = (newSource: string, hunks: ReadonlyArray<Hunk>): Re
   for (const section of parseDocument(oldSource(newSource, hunks))) {
     let at = Infinity;
     for (let line = section.from; line <= section.to; line++) at = Math.min(at, before.get(line) ?? Infinity);
-    if (at !== Infinity) placed.push({ kind: "removed", blocks: section.blocks, at, end: at - 1 });
+    if (at === Infinity) continue;
+    // what it stood before is inside a block the diff changed (a list with one item rewritten): it goes before that block
+    const within = placed.find((block) => block.kind === "added" && block.at <= at && at <= block.end);
+    const place = within ? within.at : at;
+    placed.push({ kind: "removed", blocks: section.blocks, at: place, end: place - 1 });
   }
   placed.sort((first, second) => first.at - second.at || (first.kind === second.kind ? 0 : first.kind === "removed" ? -1 : 1));
 

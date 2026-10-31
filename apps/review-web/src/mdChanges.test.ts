@@ -30,4 +30,17 @@ describe("a changed Markdown file read as what changed", () => {
   it("shows a rewritten paragraph as the old one out, the new one in, and skips what stayed", () => {
     expect(words(changedBlocks(NOW, DIFF))).toEqual(["removed after a gap: Old intro.", "added: New intro.", "removed after a gap: Gone."]);
   });
+
+  it("an old list goes before the new one when an item inside it was rewritten", () => {
+    const now = "- one\n- TWO\n- three\n";
+    const diff = [
+      hunk(1, 3, [
+        { kind: " ", text: "- one", old: 1, new: 1 },
+        { kind: "-", text: "- two", old: 2 },
+        { kind: "+", text: "- TWO", new: 2 },
+        { kind: " ", text: "- three", old: 3, new: 3 },
+      ]),
+    ];
+    expect(changedBlocks(now, diff).map((block) => block.kind)).toEqual(["removed", "added"]);
+  });
 });
