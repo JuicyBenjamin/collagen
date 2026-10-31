@@ -8,7 +8,7 @@ import { theme } from "../../app/theme";
 import { FollowScroll } from "../../components/FollowScroll";
 import { SETTINGS, settingOf, withSetting } from "../../lib/settings";
 import { MERGE_HELP, MERGE_LEVELS, withMergeFor } from "../../lib/merging";
-import { roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING_ORDER, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
+import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING_ORDER, TAG_LABEL, TAG_ROUTES, tagRouteOf, withLevel, withTagRoute, type Cause, type SteeringAt } from "../../lib/steering";
 import { JOB_LABEL, jobLimitOf, mostUsedHarness, withHarness, withModel } from "../../lib/jobs";
 import { roomAtom } from "../atoms";
 import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
@@ -96,19 +96,19 @@ export function SettingsPage() {
     if (key.name === "space" || key.name === "return" || key.name === "enter") return act();
   });
 
-  /** One cell's words: what is set, or what it follows. */
-  const steerCell = (at: SteeringAt, cause: Cause, here: boolean): string => {
-    if (here) {
-      const own = roomLevelOf(state ?? { steering: undefined }, room.id, at, cause);
-      return own ? STEERING_LABEL[own] : "· follows";
-    }
-    const set = everywhereOf(state, at, cause);
-    return set ? STEERING_LABEL[set] : at === "master" ? STEERING_LABEL.unset : "· general";
+  /** One cell: the level that applies there, and whether it is set there
+   *  (bright) or taken from above it — the General tab, or everywhere (dim). */
+  const steerCell = (at: SteeringAt, cause: Cause, here: boolean): { readonly text: string; readonly set: boolean } => {
+    const known = state ?? { steering: undefined };
+    const roomId = here ? room.id : undefined;
+    const applies = at === "master" ? masterOf(known, cause, roomId) : levelOf(known, at, cause, roomId);
+    const set = here ? roomLevelOf(known, room.id, at, cause) !== undefined : everywhereOf(state, at, cause) !== undefined;
+    return { text: STEERING_LABEL[applies], set };
   };
 
   const line = (each: Row, index: number) => {
     const on = index === cursor;
-    const mark = (col: 0 | 1) => (on && column === col ? theme.accent : theme.fg);
+    const mark = (col: 0 | 1, set = true) => (on && column === col ? theme.accent : set ? theme.fg : theme.dim);
     const words = (text: string) => <span fg={on ? theme.accent : theme.fg}>{`${on ? "› " : "  "}${text}`.padEnd(WORDS).slice(0, WORDS)}</span>;
     switch (each.kind) {
       case "heading":
@@ -117,21 +117,24 @@ export function SettingsPage() {
             {each.text}
           </text>
         );
-      case "steer":
+      case "steer": {
+        const everywhere = steerCell(each.at, each.cause, false);
+        const here = steerCell(each.at, each.cause, true);
         return (
           <text key={each.id} id={each.id} wrapMode="none">
             {words(`${STEER_WORDS[each.at]} — ${each.cause === "mine" ? "yours" : "others'"}`)}
-            <span fg={mark(0)}>{cell(steerCell(each.at, each.cause, false))}</span>
-            <span fg={mark(1)}>{cell(steerCell(each.at, each.cause, true))}</span>
+            <span fg={mark(0, everywhere.set)}>{cell(everywhere.text)}</span>
+            <span fg={mark(1, here.set)}>{cell(here.text)}</span>
           </text>
         );
+      }
       case "merge": {
         const mergeRoom = state?.merging?.rooms?.[room.id];
         return (
           <text key={each.id} id={each.id} wrapMode="none">
             {words("merge for me")}
             <span fg={mark(0)}>{cell(state?.merging?.default ?? "off")}</span>
-            <span fg={mark(1)}>{cell(mergeRoom ?? "· follows")}</span>
+            <span fg={mark(1, mergeRoom !== undefined)}>{cell(mergeRoom ?? state?.merging?.default ?? "off")}</span>
           </text>
         );
       }
@@ -187,7 +190,10 @@ export function SettingsPage() {
     if (row.kind === "steer") {
       const level = column === 1 ? roomLevelOf(state ?? { steering: undefined }, room.id, row.at, row.cause) : everywhereOf(state, row.at, row.cause);
       if (level) return STEERING_HELP[level];
-      return column === 1 ? "this room follows everywhere" : row.at === "master" ? STEERING_HELP.unset : "follows the general level (General tab)";
+      const known = state ?? { steering: undefined };
+      const roomId = column === 1 ? room.id : undefined;
+      const applies = STEERING_HELP[row.at === "master" ? masterOf(known, row.cause, roomId) : levelOf(known, row.at, row.cause, roomId)];
+      return column === 1 ? `${applies} (not set for this room: as everywhere)` : row.at === "master" ? applies : `${applies} (not set: as the General tab)`;
     }
     if (row.kind === "merge") return MERGE_HELP[(column === 1 ? state?.merging?.rooms?.[room.id] : undefined) ?? state?.merging?.default ?? "off"];
     if (row.kind === "switch") {
