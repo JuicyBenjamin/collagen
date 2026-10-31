@@ -306,6 +306,11 @@ export function Hunk(props: {
               {full() ? "Since you viewed" : "Whole change"}
             </button>
           </Show>
+          <Show when={!props.continued && !folded() && asDocument()}>
+            <button type="button" class="whole-toggle" onClick={() => mdView.toggleWhole(props.hunk.file)} title="The whole file rendered, this diff's changes marked">
+              {mdView.whole(props.hunk.file) ? "Just the changes" : "Whole file"}
+            </button>
+          </Show>
           <Show when={canWhole()}>
             <button type="button" class="whole-toggle" onClick={toggleWhole} title="The whole file as the branch has it, with this diff's added and removed lines">
               {props.whole.loading() ? "Reading…" : props.whole.shown() !== null ? (props.whole.count > 1 ? "Just the changes" : "Just the change") : "Whole file"}
@@ -314,7 +319,7 @@ export function Hunk(props: {
           {/* both ways side by side, next to Viewed: the switch never moves under the pointer */}
           <Show when={!props.continued && isMarkdown(props.hunk.file) && diffNow.canReadWhole() && props.whole.readable && !folded()}>
             <span class="view-switch" role="group" aria-label="How this file reads">
-              <button type="button" class={{ on: asDocument() }} aria-pressed={asDocument() ? "true" : "false"} onClick={() => mdView.raw(props.hunk.file) && mdView.toggle(props.hunk.file)} title="The file as it reads, this diff's changes marked">
+              <button type="button" class={{ on: asDocument() }} aria-pressed={asDocument() ? "true" : "false"} onClick={() => mdView.raw(props.hunk.file) && mdView.toggle(props.hunk.file)} title="The file as it reads: what this diff adds and takes out">
                 Rendered
               </button>
               <button type="button" class={{ on: !asDocument() }} aria-pressed={asDocument() ? "false" : "true"} onClick={() => !mdView.raw(props.hunk.file) && mdView.toggle(props.hunk.file)} title="The file's lines as written, with this diff's changes">
@@ -365,7 +370,7 @@ export function Hunk(props: {
       </Show>
       <Show when={!folded() && asDocument()}>
         <div class="hunk-body">
-          <Rendered file={props.hunk.file} read={() => {
+          <Rendered file={props.hunk.file} whole={mdView.whole(props.hunk.file)} read={() => {
             const commit = diffNow.commit();
             return commit ? readFile(props.hunk.file, commit) : Promise.resolve({ error: "the page does not know which commit its diff is" });
           }} />

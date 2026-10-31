@@ -99,6 +99,10 @@ beside them, with the line you were reading where it was on screen; types and pe
 it as on the hunk. "Just the changes" folds it back, again keeping your place. It is offered
 when the diff came from your clone, and not on a deleted file.
 
+A **Markdown** file reads rendered: just the blocks this diff adds and the ones it takes out,
+marked green and red as lines of code are, in the order they stand. **Whole file** renders
+all of it, its changed blocks marked; **Raw** shows its lines as written.
+
 **Viewed**, on each file's header, marks it as read, as on GitHub: the file folds to its
 header everywhere it shows on the page, and the top of the decisions list counts how many
 of the review's files you have viewed. A mark is for the file as you read it, at the branch's commit then —
