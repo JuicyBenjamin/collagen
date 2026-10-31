@@ -4,6 +4,7 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import type { JobKind, LocalState, MergeFor, Steering } from "@collagen/p2p";
 import { useRouter } from "../../app/router";
+import { clip } from "../../lib/columns";
 import { theme } from "../../app/theme";
 import { FollowScroll } from "../../components/FollowScroll";
 import { SETTINGS, settingOf, withSetting } from "../../lib/settings";
@@ -133,7 +134,8 @@ export function SettingsPage() {
           <text key={each.id} id={each.id} fg={theme.dim} wrapMode="none">
             {"".padEnd(WORDS)}
             {cell("everywhere")}
-            {cell("this room")}
+            {/* the room the second column is for, by its name: the last column, so it may run long */}
+            {room.name ? `in ${clip(room.name, 40)}` : "this room"}
           </text>
         );
       case "note":
@@ -242,7 +244,6 @@ export function SettingsPage() {
         {TABS.map((each) => (
           <span key={each.id} fg={each.id === tab ? theme.accent : theme.dim}>{each.id === tab ? `[${each.label}]  ` : ` ${each.label}   `}</span>
         ))}
-        <span fg={theme.dim}>{`   this room: ${room.name}`}</span>
       </text>
       <FollowScroll follow={{ id: row.id }} flexGrow={1}>
         {rows.map(line)}
