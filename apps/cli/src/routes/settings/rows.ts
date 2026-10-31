@@ -2,15 +2,15 @@ import type { JobKind, SteeringKind, TagRoute } from "@collagen/p2p";
 import type { SettingKey } from "../../lib/settings";
 import type { Cause, SteeringAt } from "../../lib/steering";
 
-/** The settings page's tabs, by who acts in your name: your AI, which
- *  collagen starts, wakes and hands work to; tools, which collagen calls
- *  itself with no AI (the repo host now, more to come); and the general
- *  level every row not set follows, with the page's own switches. */
+/** The settings page's tabs: first the general level every row not set
+ *  follows, with the page's own switches; then, by who acts in your name,
+ *  your AI, which collagen starts, wakes and hands work to, and tools,
+ *  which collagen calls itself with no AI (the repo host now, more to come). */
 export type Tab = "ai" | "tools" | "general";
 export const TABS: ReadonlyArray<{ readonly id: Tab; readonly label: string }> = [
+  { id: "general", label: "General" },
   { id: "ai", label: "AI" },
   { id: "tools", label: "Tools" },
-  { id: "general", label: "General" },
 ];
 
 /** One line on the page. Steering and merging have two columns —
