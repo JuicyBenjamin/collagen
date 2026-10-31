@@ -37,7 +37,10 @@ order the author tested and wrong for another.
 7. **A new field is a protocol change.** Add its default in `migrate.ts` and
    bump `PROTOCOL_VERSION`, or an older peer rewriting the record drops it.
    (A field only its author ever writes, on a record older peers never write
-   back, can skip the bump — say why in the review.)
+   back, can skip the bump — say why in the review.) Bump it **once per
+   release**: one past what `main` released, and never further — if it is
+   already one past `main`, your change rides on that bump. Only a release
+   moves it again. `pnpm lint` refuses anything else.
 8. **A field already on the log never becomes required.** Records written
    before it existed are in every peer's log; a build that cannot decode a row
    *evicts it for the whole room* (`evictStale`). Add a field as
@@ -62,5 +65,5 @@ order the author tested and wrong for another.
 - [ ] Ties are broken by a total order over the whole record.
 - [ ] New ids come from `opId()` (or another random UUID).
 - [ ] Nothing ordered by `Date.now()` across peers; causal where it matters.
-- [ ] Schema change: migration default + `PROTOCOL_VERSION` bump, or a stated reason not to.
+- [ ] Schema change: migration default + `PROTOCOL_VERSION` one past main's (already so? leave it), or a stated reason not to bump.
 - [ ] A new field on a stored record is optional there; a record without it still decodes (tested).

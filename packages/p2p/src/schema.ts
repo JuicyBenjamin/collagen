@@ -22,8 +22,12 @@ export type AiStatus = typeof AiStatus.Type;
  *
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
- *  not accommodated. */
-export const PROTOCOL_VERSION = "14";
+ *  not accommodated.
+ *
+ *  Once per release: it is main's (the released) version, or one past it —
+ *  every change on the way to the next release shares that one bump, however
+ *  many there are. `pnpm lint` checks it (scripts/check-protocol.mjs). */
+export const PROTOCOL_VERSION = "13";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
