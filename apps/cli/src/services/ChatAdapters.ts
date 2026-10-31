@@ -14,6 +14,8 @@ export interface ChatCtx {
   readonly sessionId: Option.Option<string>;
   readonly mcpUrl: string;
   readonly serverName: string;
+  /** the model chosen for chats — none: the CLI's own */
+  readonly model: Option.Option<string>;
 }
 
 export type ChatEvent =

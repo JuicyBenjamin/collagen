@@ -12,7 +12,7 @@ const turn: ChatTurn = { id: "t", question: "q", selection: null, commit: null, 
 
 describe("claudeChat", () => {
   it("resumes the conversation and asks for a stream of what it writes, read-only", () => {
-    const args = claudeChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("s1"), mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice" });
+    const args = claudeChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("s1"), mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice", model: Option.none() });
     expect(args.slice(0, 2)).toEqual(["--resume", "s1"]);
     expect(args).toContain("stream-json");
     expect(args).toContain("--include-partial-messages");
@@ -70,7 +70,7 @@ describe("codexChat", () => {
   });
 
   it("resumes with exec resume, read-only", () => {
-    const args = codexChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("th1"), mcpUrl: "", serverName: "collagen" });
+    const args = codexChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("th1"), mcpUrl: "", serverName: "collagen", model: Option.none() });
     expect(args.slice(0, 3)).toEqual(["exec", "resume", "th1"]);
     expect(args).toContain('sandbox_mode="read-only"');
     expect(args.join(" ")).not.toContain("default_tools_approval_mode");

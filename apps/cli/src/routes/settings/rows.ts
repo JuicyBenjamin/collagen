@@ -51,7 +51,7 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
 export const CAUSE_WORDS: Record<Cause, string> = { mine: "You", others: "Others" };
 
 /** Each job's row name. */
-export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks", answering: "answers" };
+export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks", answering: "answers", chat: "chat" };
 
 /** What each kind of run does, a line under its name. */
 export const JOB_ABOUT: Record<JobKind, string> = {
@@ -60,6 +60,7 @@ export const JOB_ABOUT: Record<JobKind, string> = {
   investigation: "Works through an investigation's goals, and posts what it found.",
   filing: "Reads the conversation your work was done in, and files the review someone asked for.",
   answering: "Reads the conversation your work was done in, and answers a question about your review.",
+  chat: "Answers what you ask about a review on its page, reading your clone.",
 };
 
 /** Where a message for you goes, short. */
@@ -131,6 +132,7 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       [...job("investigation"), { id: "switch:investigationsAtOnce", kind: "switch", key: "investigationsAtOnce", name: "  goals", says: { on: "all together", off: "one by one" } }],
       job("filing"),
       job("answering"),
+      job("chat"),
     ),
   ),
   tools: sections(

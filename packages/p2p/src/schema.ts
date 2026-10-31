@@ -655,7 +655,7 @@ export const Worked = Schema.Struct({
 export type Worked = typeof Worked.Type;
 
 /** The jobs collagen runs an AI for, each with a model the person may choose. */
-export const JobKind = Schema.Literals(["wake", "research", "investigation", "filing", "answering"]);
+export const JobKind = Schema.Literals(["wake", "research", "investigation", "filing", "answering", "chat"]);
 export type JobKind = typeof JobKind.Type;
 
 /** A model run collagen made itself, in the person's name (cli AgentRunner,

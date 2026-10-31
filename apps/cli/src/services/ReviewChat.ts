@@ -13,7 +13,7 @@ import { StateStore } from "./StateStore";
 import { commitIn, reviewNamed, reviewTree } from "./ReviewView";
 import { draftComments } from "./ReviewTalk";
 import { harnessFor, Harnesses, transcriptFile } from "./Harness";
-import { shownAi } from "../lib/jobs";
+import { chatAi, modelFor } from "../lib/jobs";
 import { readLine, type TranscriptLine } from "../lib/transcripts";
 import { levelOf } from "../lib/steering";
 import { IdentityService } from "./Identity";
@@ -271,7 +271,9 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
     const answer = Effect.fn("ReviewChat.answer")(
       function* (ticketId: string, turnId: string, ai: string, cwd: string, prompt: string, resume: Option.Option<string>) {
         const chat = chatOf(ai)!;
-        const context = { cwd, prompt, sessionId: resume, mcpUrl: yield* mcp.awaitUrl, serverName: mcpServerName(profile) };
+        // the model chosen for chats, else the harness's own default for them; a mock has none
+        const model = Option.fromNullishOr(modelFor(yield* store.get, "chat", harnessFor(harnesses, ai)?.defaultModels ?? {}));
+        const context = { cwd, prompt, sessionId: resume, mcpUrl: yield* mcp.awaitUrl, serverName: mcpServerName(profile), model };
         const proc = yield* ChildProcess.make(chat.cmd, [...chat.args(context)], { cwd, stdin: "ignore" });
         const blocks: Array<string> = [];
         const stderr: Array<string> = [];
@@ -324,7 +326,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
      *  not — at the commit the page shows. Refused while it is still
      *  answering, or when there is no AI to ask. */
     const ask = Effect.fn("ReviewChat.ask")(function* (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null, about?: { readonly questionId: string; readonly mode: "assume" | "critique"; readonly author: string; readonly asked: string }) {
-      const ai = shownAi(yield* store.get);
+      const ai = chatAi(yield* store.get);
       const no = cannot(ai);
       if (no || ai === null) return { error: no ?? "No AI set in collagen" } satisfies ChatAsked;
       const found = yield* reviewNamed(ticketId);
@@ -523,7 +525,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
         Stream.mapEffect(() =>
           Effect.gen(function* () {
             yield* recall(ticketId);
-            const ai = shownAi(yield* store.get);
+            const ai = chatAi(yield* store.get);
             const turns = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns ?? [];
             const found = yield* reviewNamed(ticketId).pipe(Effect.provideContext(roomContext));
             // the person's own review: "you", answered by the conversation of theirs that did the work
