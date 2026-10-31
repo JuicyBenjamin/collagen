@@ -62,6 +62,7 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
     { id: "merge", kind: "merge" },
     { id: "h:switches", kind: "heading", text: "reviews" },
     { id: "switch:openReviewPage", kind: "switch", key: "openReviewPage" },
+    { id: "switch:progressBar", kind: "switch", key: "progressBar" },
   ],
   general: [
     { id: "h:steer", kind: "heading", text: "steering — every row not chosen follows it" },

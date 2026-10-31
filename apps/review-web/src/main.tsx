@@ -7,6 +7,7 @@ import { MergesApp, mergesPlace, MergesRoom } from "./Merges";
 import { Investigation, investigationPlace } from "./components/Investigation";
 import { Audit, auditPlace } from "./components/Audit";
 import { startHandoff } from "./handoff";
+import { settingsNow } from "./settingsNow";
 import { themeNow } from "./themeNow";
 import "./themes.css";
 import "./styles.css";
@@ -31,7 +32,10 @@ themeNow.start();
 const merges = mergesPlace;
 const investigation = investigationPlace;
 const audit = auditPlace;
-if (merges === null && investigation === null && audit === null) startHandoff();
+if (merges === null && investigation === null && audit === null) {
+  startHandoff();
+  settingsNow.start();
+}
 render(
   () =>
     investigation !== null ? (

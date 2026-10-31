@@ -20,6 +20,7 @@ import { Outbox } from "./Outbox";
 import { Rooms } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { checkedThemes } from "@collagen/review-web/themeData";
+import { settingOf } from "../lib/settings";
 
 // The review page talks to this instance through Solid's server functions
 // (apps/review-web src/api.ts) — no routes of its own. The page's build
@@ -99,6 +100,10 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
       Stream.map((state) => state.themes ?? null),
       Stream.changesWith((before, after) => JSON.stringify(before) === JSON.stringify(after)),
     ),
+    pageSettings: SubscriptionRef.changes(store.state).pipe(
+      Stream.map((state) => ({ progressBar: settingOf(state, "progressBar") })),
+      Stream.changesWith((before, after) => before.progressBar === after.progressBar),
+    ),
     saveThemes: (given) => store.update((state) => ({ ...state, themes: checkedThemes(given) })).pipe(Effect.andThen(store.get), Effect.map((state) => state.themes ?? checkedThemes(null))),
     hover: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.hover(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
     definition: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.definition(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
@@ -172,7 +177,7 @@ const handle = (load: Effect.Effect<ServerEntry | null>) => (request: HttpServer
 
 /** What a page asks its live socket for: a stream opened under its own id,
  *  or one it no longer needs. */
-type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "themes" | "investigation" | "audit"; readonly subject: string } | { readonly close: string };
+type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "themes" | "settings" | "investigation" | "audit"; readonly subject: string } | { readonly close: string };
 /** An audit's subject, "<roomId>:<days>", read once: a room, and 1 to 365 days. */
 const auditOf = (impl: ReviewBackend["Service"], subject: string): Stream.Stream<unknown> => {
   const [roomId, days] = subject.split(":");
@@ -184,7 +189,7 @@ const liveAskOf = (text: string): LiveAsk | null => {
   try {
     const ask = JSON.parse(text) as Record<string, unknown>;
     if (liveIdOk(ask["close"])) return { close: ask["close"] };
-    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "themes" || ask["topic"] === "investigation" || ask["topic"] === "audit") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
+    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "themes" || ask["topic"] === "settings" || ask["topic"] === "investigation" || ask["topic"] === "audit") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
   } catch {
     // not one: ignored
   }
@@ -222,7 +227,7 @@ const liveSocket = (impl: ReviewBackend["Service"]) => (request: HttpServerReque
           }
           yield* stop(ask.open);
           const values: Stream.Stream<unknown> =
-            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "investigation" ? impl.investigation(ask.subject) : ask.topic === "audit" ? auditOf(impl, ask.subject) : ask.topic === "themes" ? impl.themes : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
+            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "investigation" ? impl.investigation(ask.subject) : ask.topic === "audit" ? auditOf(impl, ask.subject) : ask.topic === "themes" ? impl.themes : ask.topic === "settings" ? impl.pageSettings : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
           const fiber = yield* values.pipe(
             Stream.runForEach((value) => write(JSON.stringify({ id: ask.open, value }))),
             // its stream ended: the page is told, to open it again

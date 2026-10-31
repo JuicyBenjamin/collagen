@@ -3,6 +3,7 @@ import { Diff } from "./components/Diff";
 import { Header } from "./components/Header";
 import { HostActivity } from "./components/HostActivity";
 import { Outline } from "./components/Outline";
+import { ReadingBar } from "./components/ReadingBar";
 import { Corner } from "./components/ReviewDial";
 import { Running } from "./components/Running";
 
@@ -18,10 +19,12 @@ import { Running } from "./components/Running";
 // the room, the diff, the host) and arrives as soon as that is in.
 
 /** The review page: the outline beside, the review's header, what was said
- *  on its host, its code, and the corner that floats once the header is out of sight. */
+ *  on its host, its code, and the corner that floats once the header is out of sight;
+ *  atop it all, how far the reader has scrolled. */
 export function Page(props: { head: ReviewPageHead; data: ReviewPageData }) {
   return (
     <>
+      <ReadingBar />
       <div class="wrap">
         <nav aria-label="Outline">
           <Outline data={props.data} />
