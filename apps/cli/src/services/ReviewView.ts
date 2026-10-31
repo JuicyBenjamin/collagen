@@ -270,7 +270,7 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
     if (!review) return null;
     const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ room: handle.room, ticket })) : null;
     // where it runs comes with the head: its section stands from the first paint
-    const shows = shownShows(review.shows);
+    const shows = shownShows(review.shows, review.author === me);
     const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me));
     return { ...head, review: { ...head.review, ...(shows ? { shows } : {}) }, stack };
   }
@@ -308,8 +308,8 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
         tests.set(file, { after: lines(texts.get(file)), before: forked ? (lines(before) ?? []) : null });
       }
     }
-    const shows = shownShows(review.shows);
     const me = (yield* IdentityService).identity.pubkey;
+    const shows = shownShows(review.shows, review.author === me);
     const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me));
     return {
       ...head,

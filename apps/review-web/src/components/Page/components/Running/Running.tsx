@@ -11,12 +11,12 @@ import { PageLink } from "./components/PageLink";
 export function Running(props: { head: ReviewPageHead }) {
   return (
     <Appear when={props.head.review.shows && props.head.review.shows.length > 0 ? props.head.review.shows : null}>
-      {(shows) => <List shows={shows()} author={props.head.review.authorName} />}
+      {(shows) => <List shows={shows()} />}
     </Appear>
   );
 }
 
-function List(props: { shows: ReadonlyArray<ShowData>; author: string }) {
+function List(props: { shows: ReadonlyArray<ShowData> }) {
   return (
     <section class="running" aria-label="See it running">
       <p class="who">See it running</p>
@@ -24,7 +24,7 @@ function List(props: { shows: ReadonlyArray<ShowData>; author: string }) {
         <For each={props.shows}>
           {(show) => (
             <li>
-              <PageLink show={show} author={props.author} />
+              <PageLink show={show} />
             </li>
           )}
         </For>

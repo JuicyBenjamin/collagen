@@ -34,8 +34,18 @@ describe("where a change runs, as read", () => {
     const shown = shownShows([
       { id: "s1", title: "Page", url: "javascript:alert(1)" },
       { id: "s2", title: "Preview", url: "https://preview-42.example.com/x" },
-    ]);
+    ], true);
     expect(shown).toEqual([{ id: "s2", title: "Preview", url: "https://preview-42.example.com/x", local: false }]);
-    expect(shownShows([{ id: "s1", title: "Page", url: "data:text/html,x" }])).toBeUndefined();
+    expect(shownShows([{ id: "s1", title: "Page", url: "data:text/html,x" }], true)).toBeUndefined();
+  });
+
+  it("a page on its author's machine is there for its author, and not at all for anyone else", () => {
+    const shows = [
+      { id: "s1", title: "Settings", url: "http://localhost:5173/settings" },
+      { id: "s2", title: "Preview", url: "https://preview-42.example.com/x" },
+    ];
+    expect(shownShows(shows, true)?.map((show) => show.id)).toEqual(["s1", "s2"]);
+    expect(shownShows(shows, false)?.map((show) => show.id)).toEqual(["s2"]);
+    expect(shownShows([shows[0]!], false)).toBeUndefined();
   });
 });
