@@ -417,8 +417,12 @@ chat, and onto the review's why, marked **Read from their AI**. When answering s
 wrong with the change, the author's work steering raises it with them, or hands it to the
 conversation that built the work to fix, and your chat says it is being fixed. When the author can't answer for now (they haven't turned answering on, or no
 conversation of theirs holds the work), your chat says why, and offers your own AI's reading
-instead: **Assume the reason**, plainly marked as an assumption, or **Critique it**. A later
-answer from them still lands in its place.
+instead. **Assume the reason**: your AI's best reading of why goes onto their review's why as
+a guess, marked **Assumption** with how sure it is, for them (or their AI, once they turn
+answering on) to confirm, correct or reject; the page then marks it **Guessed, confirmed** or
+**corrected**. **Critique it**: the same guess, then whether it is a good enough reason; each
+change your AI would ask for becomes a draft comment on the lines, yours to accept, edit or
+decline. A later answer from them still lands in its place.
 
 ## A review built from assumptions
 

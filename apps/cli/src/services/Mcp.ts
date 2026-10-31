@@ -487,10 +487,19 @@ export const AskAuthor = Tool.make("ask-author", {
   success: Schema.String,
 });
 
+export const GuessReason = Tool.make("guess-reason", {
+  description: [
+    "When a review's author cannot answer a question your user asked (ask-author came back saying why), put your best reading of why the code is this way on their review's why as a GUESS: plainly marked as your user's AI's assumption, for the author or their AI to confirm, correct or reject later. Only on your user's word ('assume the reason').",
+    "'questionId' is the question it guesses at; 'what' the reason you assume, a sentence; 'basis' what in the code or the why points there; 'confidence' high, medium or low. A critique of that reason goes on the code as draft comments (review-comments, action draft), not here.",
+  ].join("\n"),
+  parameters: Schema.Struct({ ticketId: Schema.String, questionId: Schema.String, what: Schema.String, basis: Schema.String, confidence: Schema.Literals(["high", "medium", "low"]) }),
+  success: Schema.String,
+});
+
 export const ReviewQuestionTool = Tool.make("review-question", {
   description: [
     "Answer a question a reader asked about your user's review (ask-author): with nothing, it lists the questions waiting on them. 'answer: true' is your user's yes — collagen finds the conversation the work was done in, and a job of theirs reads it and answers. 'decline' is their no, with their reason. 'reply' IS the answer — from the answering job, or from THIS conversation if it did the work — in plain words; add 'flaw' when answering shows something wrong with the change: their work steering then raises it with them or hands it to the conversation that built it.",
-    "The reader is told, and the answer goes onto the review's why, marked as read from your user's AI.",
+    "The reader is told, and the answer goes onto the review's why, marked as read from your user's AI. When the reader's AI already guessed at it (a guess on the why), 'verdict' settles that guess: confirmed (alone is enough), corrected or wrong (with 'reply', the real reason).",
   ].join("\n"),
   parameters: Schema.Struct({
     questionId: Schema.optional(Schema.String),
@@ -498,6 +507,7 @@ export const ReviewQuestionTool = Tool.make("review-question", {
     decline: Schema.optional(Schema.String),
     reply: Schema.optional(Schema.String),
     flaw: Schema.optional(Schema.String),
+    verdict: Schema.optional(Schema.Literals(["confirmed", "corrected", "wrong"])),
   }),
   success: Schema.String,
 });
@@ -954,6 +964,7 @@ export const CollagenToolkit = Toolkit.make(
   RequestReview,
   ReviewRequest,
   AskAuthor,
+  GuessReason,
   ReviewQuestionTool,
   AssumeReview,
   ClaimReview,
@@ -1018,6 +1029,7 @@ export const DevCollagenToolkit = Toolkit.make(
   RequestReview,
   ReviewRequest,
   AskAuthor,
+  GuessReason,
   ReviewQuestionTool,
   AssumeReview,
   ClaimReview,
@@ -1955,7 +1967,12 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question: input.question.trim(), ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) });
       }),
-      "review-question": Effect.fn("Mcp.reviewQuestion")(function* (input: { questionId?: string; answer?: boolean; decline?: string; reply?: string; flaw?: string }) {
+      "guess-reason": Effect.fn("Mcp.guessReason")(function* (input: { ticketId: string; questionId: string; what: string; basis: string; confidence: "high" | "medium" | "low" }) {
+        if (!input.what.trim()) return "failed: 'what' is the reason you assume";
+        const { id: roomId } = yield* focusedRoom;
+        return yield* reviewQuestions.assume(roomId, { id: input.questionId, ticketId: input.ticketId, what: input.what.trim(), basis: input.basis.trim() || "the code", confidence: input.confidence });
+      }),
+      "review-question": Effect.fn("Mcp.reviewQuestion")(function* (input: { questionId?: string; answer?: boolean; decline?: string; reply?: string; flaw?: string; verdict?: "confirmed" | "corrected" | "wrong" }) {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.respond(roomId, input);
       }),

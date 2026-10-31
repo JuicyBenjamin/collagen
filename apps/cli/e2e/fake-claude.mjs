@@ -43,7 +43,7 @@ if (questionId) {
       jsonrpc: "2.0",
       id: 2,
       method: "tools/call",
-      params: { name: "review-question", arguments: { questionId, reply: `The conversation says: ${said}`, ...(negative ? { flaw: "a negative count is doubled too, and the dashboard never shows negatives" } : {}) } },
+      params: { name: "review-question", arguments: { questionId, reply: `The conversation says: ${said}`, ...(/assumed: "/.test(prompt) ? { verdict: "corrected" } : {}), ...(negative ? { flaw: "a negative count is doubled too, and the dashboard never shows negatives" } : {}) } },
     },
     init.sid,
   );

@@ -20,7 +20,7 @@ import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic, type Net } from "./topic";
 import { checkProof, formatInvite, INVITE_LIFETIME_MS, newInvite, openSealed, proveInvite, sealFor, type Invite } from "./invite";
 import { openRoomLog, type LogEncryption, type LogView, type RoomLog, type Unseen } from "./RoomLog";
-import type { LogOp, ReviewAnswer, ReviewAsk, ReviewAskStatus, ReviewQuestion } from "./schema";
+import type { LogOp, ReviewAnswer, ReviewAsk, ReviewAskStatus, ReviewGuess, ReviewQuestion } from "./schema";
 import b4a from "b4a";
 import { Swarm, type TopicHooks } from "./Swarm";
 
@@ -634,7 +634,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     const sendTo = Effect.fn("Room.sendTo")(function* (
       peerKey: string,
-      payload: { project: string; intent: string; findings: string; ticketId?: string; agent?: string; conversation?: Conversation; reviewAsk?: ReviewAsk; reviewStatus?: ReviewAskStatus; reviewQuestion?: ReviewQuestion; reviewAnswer?: ReviewAnswer },
+      payload: { project: string; intent: string; findings: string; ticketId?: string; agent?: string; conversation?: Conversation; reviewAsk?: ReviewAsk; reviewStatus?: ReviewAskStatus; reviewQuestion?: ReviewQuestion; reviewAnswer?: ReviewAnswer; reviewGuess?: ReviewGuess },
     ) {
       const roomLog = yield* requireLog;
       const now = yield* Clock.currentTimeMillis;
@@ -656,6 +656,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         ...(payload.reviewStatus ? { reviewStatus: payload.reviewStatus } : {}),
         ...(payload.reviewQuestion ? { reviewQuestion: payload.reviewQuestion } : {}),
         ...(payload.reviewAnswer ? { reviewAnswer: payload.reviewAnswer } : {}),
+        ...(payload.reviewGuess ? { reviewGuess: payload.reviewGuess } : {}),
       };
       yield* roomLog.append({ op: "msg", msg: message }).pipe(Effect.orDie);
       return message;

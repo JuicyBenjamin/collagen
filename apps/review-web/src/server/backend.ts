@@ -95,6 +95,8 @@ export class ReviewBackend extends Context.Service<
     readonly ask: (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null) => Effect.Effect<ChatAsked>;
     /** ask the review's author's AI what an answer could not settle (the reader's word) */
     readonly forward: (ticketId: string, turnId: string) => Effect.Effect<ChatAsked>;
+    /** in the author's place: the reader's AI assumes the reason a question asked (or assumes and critiques it) */
+    readonly instead: (ticketId: string, turnId: string, mode: "assume" | "critique") => Effect.Effect<ChatAsked>;
     /** stop the answer under way */
     readonly stopAnswer: (ticketId: string) => Effect.Effect<void>;
     /** a new conversation: the old one gone */

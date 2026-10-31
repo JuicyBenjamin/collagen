@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { askAi, forwardQuestion, newChat, stopAnswer } from "./api";
+import { answerInstead, askAi, forwardQuestion, newChat, stopAnswer } from "./api";
 import type { ChatSelection, ChatView, SideLine } from "./data";
 import { diffNow } from "./diffNow";
 import { ticketId } from "./ticket";
@@ -133,10 +133,11 @@ export const chatNow = {
     }
   },
   stop: () => void stopAnswer(ticketId).catch((error) => setRefused(String(error))),
-  /** ask the reader's own AI, about lines of an earlier turn: when the author cannot answer */
-  askAbout: async (question: string, selection: ChatSelection | null) => {
-    setAttached(selection);
-    return chatNow.ask(question);
+  /** in the author's place: the reader's AI assumes why, or assumes and critiques it */
+  instead: async (turnId: string, mode: "assume" | "critique") => {
+    setRefused(null);
+    const said = await answerInstead(ticketId, turnId, mode).catch((error): { error: string } => ({ error: String(error) }));
+    if ("error" in said) setRefused(said.error);
   },
   /** the reader's word: ask the review's author's AI what the why did not say */
   forward: async (turnId: string) => {
