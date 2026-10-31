@@ -59,8 +59,9 @@ function morph(into: Landing, from: ReadonlyArray<readonly [HTMLElement, string]
  *  shape (styles.css: data-corner-morph). */
 function inCorner(into: Landing, from: HTMLElement, change: () => void): void {
   const page = document.documentElement;
-  page.toggleAttribute("data-corner-morph", true);
-  void morph(into, [[from, "ask-panel"]], change).finished.then(() => page.toggleAttribute("data-corner-morph", false));
+  // which way it goes: the panel opens on a spring, and closes into the pill on a softer one
+  page.dataset.cornerMorph = into;
+  void morph(into, [[from, "ask-panel"]], change).finished.then(() => delete page.dataset.cornerMorph);
 }
 /** Moves each time the reader picks lines to ask about: the panel's input takes the focus. */
 const [asking, setAsking] = createSignal(0);
