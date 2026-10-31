@@ -403,8 +403,9 @@ and the answer streams into a panel in the corner as your AI writes it. Collagen
 model of its own — it runs your AI (the one your conversations use most; Claude Code or Codex) in your clone,
 read-only, told which commit the page shows, and the next question goes on with the same
 conversation. **Stop** ends an answer where it is; **New chat** starts over. The
-conversation is your collagen's: every tab on the review shows it, a reload finds it again,
-a restart forgets it, and nothing of it reaches the room or the host.
+conversation is your AI's own: collagen keeps only which one it is, per review, so every
+tab shows it, and after a restart the next question re-enters it, its earlier turns read back
+from your AI's log. Nothing of it reaches the room or the host.
 
 ## A review built from assumptions
 

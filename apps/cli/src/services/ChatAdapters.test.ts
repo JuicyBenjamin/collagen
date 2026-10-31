@@ -4,7 +4,7 @@ import type { ChatTurn } from "@collagen/review-web/data";
 import type { ChatEvent } from "./ChatAdapters";
 import { claudeChat } from "./harnesses/claudeCode/chat";
 import { codexChat } from "./harnesses/codex/chat";
-import { applyEvents, promptFor } from "./ReviewChat";
+import { applyEvents, promptFor, turnsFromLog } from "./ReviewChat";
 
 const lines = (...objects: ReadonlyArray<unknown>) => objects.map((object) => JSON.stringify(object));
 const read = (adapter: typeof claudeChat, stdout: ReadonlyArray<string>): ReadonlyArray<ChatEvent> => stdout.flatMap(adapter.read);
@@ -82,5 +82,23 @@ describe("promptFor", () => {
     expect(promptFor({ opening: "You read a review.", moved: null, now: "Their question: q" })).toBe("You read a review.\n\nTheir question: q");
     expect(promptFor({ opening: null, moved: null, now: "Their question: q" })).toBe("Their question: q");
     expect(promptFor({ opening: null, moved: "abc123", now: "Their question: q" })).toContain("git show abc123:<path>");
+  });
+});
+
+describe("a review's chat read back from the AI's own log", () => {
+  it("each question collagen sent, with its lines and commit, and the last thing the AI wrote before the next", () => {
+    const log = [
+      { ts: null, who: "user", text: "Your user is reading a code review…, at commit abc1234def.\nThey selected src/a.ts, lines 3–4 of the diff:\n```diff\n+const a = 1;\n+const b = 2;\n```\nTheir question: why two?" },
+      { ts: null, who: "assistant", text: "⚙ Read {\"file_path\":\"src/a.ts\"}" },
+      { ts: null, who: "user", text: "↳ const a = 1;" },
+      { ts: null, who: "assistant", text: "Because b is new." },
+      { ts: null, who: "user", text: "Their question: and now?" },
+      { ts: null, who: "assistant", text: "(thinking)" },
+      { ts: null, who: "assistant", text: "Still two." },
+    ];
+    expect(turnsFromLog(log).map((turn) => [turn.question, turn.selection?.file ?? null, turn.selection?.to.line ?? null, turn.commit, turn.answer])).toEqual([
+      ["why two?", "src/a.ts", 4, "abc1234def", "Because b is new."],
+      ["and now?", null, null, "abc1234def", "Still two."],
+    ]);
   });
 });

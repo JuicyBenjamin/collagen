@@ -74,10 +74,21 @@ expect "…and the AI's process is gone" "$(pgrep -f 'content_block_delta' | wc 
 expect "a question after it is answered" "$(post askAi "[\"$TICKET\",\"still there?\",null,\"$SHOWN\"]")" '"ok":true'
 wait_until "…in the same conversation" '"Mock answer: still there\?".*"done"' sfn_live chatLive "[\"$TICKET\"]"
 
+echo "## a restart keeps where the conversation is, and re-enters it"
+chat_id() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("chats",{}).get(sys.argv[2],{}).get("id",""))' "$CFG/state-alice-$SCN.json" "$TICKET"; }
+SID=$(chat_id)
+expect "her state keeps which conversation the review's chat is (the AI keeps the conversation)" "$SID" "^mock-chat-[0-9]+$"
+stop alice; start alice; SA=$(mcp $A)
+wait_until "after the restart the page still names her AI" '"ai":"mock:claude-code"' sfn_live chatLive "[\"$TICKET\"]"
+expect "a question after the restart is under way" "$(post askAi "[\"$TICKET\",\"back again?\",null,\"$SHOWN\"]")" '"ok":true'
+wait_until "…answered" '"Mock answer: back again\?".*"done"' sfn_live chatLive "[\"$TICKET\"]"
+expect "…in the same conversation as before the restart" "$(chat_id)" "^$SID$"
+
 echo "## New chat starts over"
 post newChat "[\"$TICKET\"]" > /dev/null
 said() { sfn_live chatLive "[\"$TICKET\"]" | grep -c "$1"; }
-wait_until "the turns are gone" "^0$" said "why map over rows"
+wait_until "the turns are gone" "^0$" said "back again"
+expect "…and her state no longer points at the old conversation" "$(chat_id)" "^$"
 
 if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
 kill_all
