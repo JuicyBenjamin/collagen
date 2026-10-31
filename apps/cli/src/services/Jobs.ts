@@ -1,8 +1,8 @@
 import { Clock, Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import type { JobKind, OwnRun, QueuedJob, Ticket } from "@collagen/p2p";
-import { jobLimitOf, modelFor, researchPrompt } from "../lib/jobs";
-import { allow, withRun } from "../lib/steering";
+import { jobLimitOf, modelFor, researchKind, researchPrompt } from "../lib/jobs";
+import { allow, withRun, type Cause } from "../lib/steering";
 import { CliArgs } from "./CliArgs";
 import { harnessFor, Harnesses, type Job } from "./Harness";
 import { IdentityService } from "./Identity";
@@ -40,7 +40,14 @@ export interface ResearchAsk {
   readonly ticket: Ticket;
   readonly ask?: string;
   readonly cwd: string;
+  /** whose doing it is: the person's own ask (the default), or another's
+   *  investigation that reached them */
+  readonly cause?: Cause;
 }
+
+/** The steering a job answers to: an investigation's its own kind, any
+ *  other research the run level. */
+const steeredBy = (kind: JobKind): "run" | "investigate" => (kind === "investigation" ? "investigate" : "run");
 
 /** How many finished jobs stay shown. */
 const KEPT = 10;
@@ -83,7 +90,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
       if (!next) return;
       const view = (yield* SubscriptionRef.get(views)).find((candidate) => candidate.id === next.id);
       const harness = view ? harnessFor(harnesses, view.harness) : undefined;
-      const gate = allow(state, "run", "mine", true);
+      const gate = allow(state, steeredBy(next.kind), next.cause ?? "mine", true);
       if (!view || !harness || "held" in gate) {
         yield* update(next.id, (failed) => ({ ...failed, state: "failed", note: "held" in gate ? gate.why : "its AI is gone" }));
         yield* letGo(next.id);
@@ -118,14 +125,17 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         const state = yield* store.get;
         const harness = state.preferredAi ? harnessFor(harnesses, state.preferredAi) : undefined;
         if (!harness) return `failed: collagen runs jobs with your preferred AI, and ${state.preferredAi ? `"${state.preferredAi}" is not one it can run` : "none is set"} — choose one with set-ai (or a in the TUI)`;
-        const gate = allow(state, "run", "mine", true);
+        // an investigation is answered with the model the person chose for
+        // those, and under its own steering
+        const kind = researchKind(asked.ticket);
+        const gate = allow(state, steeredBy(kind), asked.cause ?? "mine", true);
         if ("held" in gate && gate.held === "unset") return `failed: ${gate.why}`;
-        const model = modelFor(state, "research", harness.defaultModels);
+        const model = modelFor(state, kind, harness.defaultModels);
         const id = crypto.randomUUID();
         const title = asked.ticket.title ?? asked.ticket.goal;
         const queuedAt = yield* Clock.currentTimeMillis;
-        const job: QueuedJob = { id, kind: "research", ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: researchPrompt(asked.ticket, asked.ask, yield* SubscriptionRef.get(nameRef), name), cwd: asked.cwd };
-        const queued: JobView = { id, kind: "research", ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
+        const job: QueuedJob = { id, kind, ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: researchPrompt(asked.ticket, asked.ask, yield* SubscriptionRef.get(nameRef), name), cwd: asked.cwd, ...(asked.cause === "others" ? { cause: "others" as const } : {}) };
+        const queued: JobView = { id, kind, ticketId: asked.ticket.id, title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
         yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
         yield* SubscriptionRef.update(views, (all) => [...all, queued]);
         yield* Ref.update(waiting, (queue) => [...queue, job]);

@@ -2,9 +2,13 @@ import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
-import { isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
+import { answeredInvestigations, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
 import { AgentRunner } from "./AgentRunner";
+import { Jobs } from "./Jobs";
+import { levelOf } from "../lib/steering";
+import { sameName } from "../lib/names";
+import { homedir } from "node:os";
 import { AiStatus } from "./AiStatus";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
@@ -53,6 +57,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     const aiStatus = yield* AiStatus;
     const inbox = yield* Inbox;
     const runner = yield* AgentRunner;
+    const jobs = yield* Jobs;
     const swarm = yield* Swarm;
 
     const focused = yield* SubscriptionRef.make(initial.id);
@@ -131,6 +136,24 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 // the person's steering, said on the step itself: the turn
                 // the agent reads it is the turn it is about to act
                 const steer = workLine(yield* store.get, ticket.createdBy === identity.pubkey ? "mine" : "others");
+                // an investigation asked of the person by someone else: their
+                // steering for others' investigations says whether their AI
+                // starts on it now, is offered, or is left alone
+                const investigating =
+                  ticket.kind === "investigation" && ticket.createdBy !== identity.pubkey && mine.some((step) => step.status === "pending")
+                    ? yield* Effect.gen(function* () {
+                        const state = yield* store.get;
+                        const level = levelOf(state, "investigate", "others");
+                        if (level === "unset") return "\nYour user's steering for others' investigations is not chosen, so their AI was not started. Ask them once, in a line, to choose one (set-steering kind investigate, whose others).";
+                        if (level === "never") return "\nTheir steering for others' investigations is never, so their AI was not started; research starts it on their word.";
+                        if (level === "ask") return "\nASK YOUR USER, in one line, whether to send their AI to find out (research with this ticketId): their steering for others' investigations is ask first.";
+                        const project = (state.rooms[handle.id] ?? []).find((candidate) => sameName(candidate.name, ticket.project));
+                        const said = yield* jobs.research({ roomId: handle.id, ticket, cwd: project?.path ?? homedir(), cause: "others" });
+                        return said.startsWith("failed")
+                          ? `\nTheir steering says to start their AI on it, but it could not: ${said.replace(/^failed: /, "")}`
+                          : `\nTheir steering for others' investigations started their AI on it: ${said}${level === "act" ? " Tell them, in one line." : ""}`;
+                      })
+                    : "";
                 for (const step of mine) {
                   const settled = ticket.steps
                     .filter((other) => other.status === "settled" && step.needs.includes(other.id))
@@ -147,7 +170,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                     intent: `ticket-step:${step.intent}`,
                     findings: `${creatorName} asks your user to "${step.intent}" for the ticket "${ticket.goal}" (${ticket.id}, step ${step.id}).\nThe step, in full: ${step.description}${
                       settled ? `\nSettled inputs from earlier steps:\n${settled}` : ""
-                    }\n${steer} When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${step.id}", and the result they want to send — it goes out as you call it.`,
+                    }\n${steer} When they say it is done (or declined), call settle-step with ticketId "${ticket.id}", stepId "${step.id}", and the result they want to send — it goes out as you call it.${investigating}`,
                     ts: now,
                   };
                   yield* Effect.log(`⧉ ticket ${ticket.id.slice(0, 8)} step ${step.id} actionable`);
@@ -217,6 +240,20 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                 if (actionableSteps(change.ticket, identity.pubkey).length > 0) continue; // the step delivery covers it
                 const actorName = yield* nameOf(change.step.owner);
                 yield* notify(myThreadFor(change.ticket, trace, identity.pubkey, change.step.owner), change.step.owner, actorName, change.ticket, stepUpdateWhat(change), stepUpdateText(change, actedBy(actorName, change.step.agent)), change.step.agent, own ? change.step.conversation : undefined);
+              }
+              // an investigation is over: what it found reaches whoever is on
+              // the tickets it grew from, so a plan that stopped on a question
+              // goes on with the answer
+              const answered = answeredInvestigations(prev, all);
+              const reviews = answered.length > 0 ? yield* SubscriptionRef.get(room.reviews) : [];
+              for (const { investigation, parents } of answered) {
+                const brief = reviews.find((review) => review.ticketId === investigation.id)?.investigation;
+                const closer = investigation.closed!.by;
+                const closerName = yield* nameOf(closer);
+                for (const parent of parents) {
+                  if (!visibleTo(parent, all, identity.pubkey) || !isParticipant(parent, trace, identity.pubkey)) continue;
+                  yield* notify(myThreadFor(parent, trace, identity.pubkey, closer), closer, closerName, parent, "an investigation is answered", investigationAnsweredText(investigation, parent, brief, closerName));
+                }
               }
             }),
           ),

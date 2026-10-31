@@ -23,7 +23,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  One version at a time: this is an alpha, and nothing here carries a path
  *  for an older build's shapes. A peer on another version is told to update,
  *  not accommodated. */
-export const PROTOCOL_VERSION = "12";
+export const PROTOCOL_VERSION = "13";
 
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
@@ -501,7 +501,7 @@ export const Worked = Schema.Struct({
 export type Worked = typeof Worked.Type;
 
 /** The jobs collagen runs an AI for, each with a model the person may choose. */
-export const JobKind = Schema.Literals(["wake", "research"]);
+export const JobKind = Schema.Literals(["wake", "research", "investigation"]);
 export type JobKind = typeof JobKind.Type;
 
 /** A model run collagen made itself, in the person's name (cli AgentRunner,
@@ -512,7 +512,7 @@ export const OwnRun = Schema.Struct({
   /** the harness that ran it */
   harness: Schema.String,
   /** what it was for */
-  why: Schema.Literals(["wake", "research"]),
+  why: Schema.Literals(["wake", "research", "investigation"]),
   model: Schema.optional(Schema.String),
   inputTokens: Schema.Finite,
   outputTokens: Schema.Finite,
@@ -534,6 +534,9 @@ export const QueuedJob = Schema.Struct({
   queuedAt: Schema.Finite,
   prompt: Schema.String,
   cwd: Schema.String,
+  /** whose doing started it: the person's, or another's investigation that
+   *  reached them (their steering for others' then let it run) */
+  cause: Schema.optional(Schema.Literals(["mine", "others"])),
 });
 export type QueuedJob = typeof QueuedJob.Type;
 
@@ -541,9 +544,10 @@ export type QueuedJob = typeof QueuedJob.Type;
  *  belongs to the room it was added in (Keet-style) — the same repo shared
  *  into two rooms is two entries. */
 /** How much the person's agent may do on its own with what collagen hands
- *  it: ask first, act then tell, or just do it (cli lib/steering). Local —
- *  the person's own setting, never broadcast. */
-export const Steering = Schema.Literals(["ask", "act", "auto"]);
+ *  it: never (only on their own word, and nobody asks), ask first, act then
+ *  tell, or just do it (cli lib/steering). Local — the person's own setting,
+ *  never broadcast. */
+export const Steering = Schema.Literals(["never", "ask", "act", "auto"]);
 export type Steering = typeof Steering.Type;
 
 /** The kinds of thing steered, each with a level of its own under the
@@ -551,7 +555,7 @@ export type Steering = typeof Steering.Type;
  *  host in their name (reviews, comments, merges — one level for every
  *  host), delivering into their AI conversations, and running their AI for
  *  a job of collagen's (researching a ticket). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run"]);
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -570,7 +574,7 @@ export type TagRoute = typeof TagRoute.Type;
  *  person's own choice, never broadcast. */
 export const SteeringLevels = Schema.Struct({
   master: Schema.optional(SteeringPair),
-  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair) })),
+  kinds: Schema.optional(Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair) })),
   tag: Schema.optional(TagRoute),
 });
 export type SteeringLevels = typeof SteeringLevels.Type;

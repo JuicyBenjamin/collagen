@@ -50,11 +50,11 @@ describe("the tabs in a narrow pane", () => {
   const row = (fitted: ReturnType<typeof fitTabs>) => `${fitted.before ? "‹ " : ""}${fitted.tabs.map((drawn) => (drawn.open ? `[${drawn.text}]` : drawn.text)).join(" ")}${fitted.after ? " ›" : ""}`;
 
   it("all of them, when they fit", () => {
-    expect(row(fitTabs("all", counts, 120))).toBe("[all tickets 12] ♛ epics 0 ✦ proposals 9 ⚑ bugs 0 ≡ plans 0 ☐ tasks 3 ± reviews 0");
+    expect(row(fitTabs("all", counts, 120))).toBe("[all tickets 12] ♛ epics 0 ? investigations 0 ✦ proposals 9 ⚑ bugs 0 ≡ plans 0 ☐ tasks 3 ± reviews 0");
   });
 
   it("the open one whole, the others by glyph, when they do not", () => {
-    expect(row(fitTabs("epic", counts, 50))).toBe("all 12 [♛ epics 0] ✦ 9 ⚑ 0 ≡ 0 ☐ 3 ± 0");
+    expect(row(fitTabs("epic", counts, 50))).toBe("all 12 [♛ epics 0] ? 0 ✦ 9 ⚑ 0 ≡ 0 ☐ 3 ± 0");
   });
 
   it("a window around the open one, marked where cut — the open one always named", () => {

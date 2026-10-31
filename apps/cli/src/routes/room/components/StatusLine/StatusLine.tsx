@@ -32,7 +32,7 @@ export function StatusLine() {
           it steers; not chosen and the asking end dim, autonomy in the warn
           colour so it is never missed */}
       <span fg={theme.dim}> · steering </span>
-      <span fg={steering === "ask" || steering === "unset" ? theme.dim : theme.warn}>{STEERING_LABEL[steering]}</span>
+      <span fg={steering === "ask" || steering === "unset" || steering === "never" ? theme.dim : theme.warn}>{STEERING_LABEL[steering]}</span>
       <span fg={theme.dim}> (g)</span>
       {jobs ? <span fg={theme.accent}> · {jobs} (outbox)</span> : null}
       {update.note ? (

@@ -1,4 +1,4 @@
-import { closedAs, IMPORTANCE, isTake, type Assumed, type BugReport, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork, type Ticket } from "@collagen/p2p";
+import { closedAs, IMPORTANCE, isTake, type Assumed, type BugReport, type InvestigationBrief, type Confidence, type OutlineItem, type ReviewContext, type ReviewDecision, type ReviewFork, type Ticket } from "@collagen/p2p";
 import type { YourReview } from "@collagen/review-web/data";
 import { actedBy } from "./agents";
 
@@ -82,6 +82,8 @@ export interface ReviewInput {
   /** A bug report, whole or in part, and the optional fields withdrawn. */
   readonly bug?: Partial<BugReport>;
   readonly retireBug?: ReadonlyArray<string>;
+  /** An investigation's brief, whole or in part. */
+  readonly investigation?: Partial<InvestigationBrief>;
   /** A review's units, and the ids withdrawn — how its code reads. */
   readonly units?: ReadonlyArray<unknown>;
   readonly retireUnits?: ReadonlyArray<string>;
@@ -100,7 +102,7 @@ const blank = (text: string | undefined): boolean => (text ?? "").trim().length 
  *  to go and do. A review without the why is the status quo, so the tool
  *  refuses it rather than sending half of one. `amending` relaxes the
  *  wholesale checks: a later call adds to a review that already stands. */
-export type JudgedKind = "review" | "plan" | "proposal" | "bug";
+export type JudgedKind = "review" | "plan" | "proposal" | "bug" | "investigation";
 
 /** What is missing before this is worth a reader's time. A review without a
  *  summary and a why is the status quo, so it is refused. A plan's summary is
@@ -120,12 +122,21 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
     const moved = Object.keys(bug).length > 0 || (input.retireBug?.length ?? 0) > 0 || decisions.length > 0 || forks.length > 0 || !blank(input.summary);
     if (amending && !moved) return "failed: nothing to amend — pass the part of the report that changed, or a decision";
   }
-  if (!amending && kind !== "proposal" && kind !== "bug" && blank(input.summary)) {
+  // an investigation is its question, as a bug is its symptom; what is known,
+  // ruled out and, at the end, found arrive as they are known
+  if (kind === "investigation") {
+    const brief = input.investigation ?? {};
+    if (!amending && blank(brief.question)) return "failed: pass the question — what is to be found out, in your user's words. It is the one thing an investigation always has.";
+    if (brief.outcome !== undefined && blank(brief.findings)) return "failed: an outcome needs its findings — the answer, or why there is none (not answerable, the wrong question)";
+    const moved = Object.keys(brief).length > 0 || decisions.length > 0 || forks.length > 0 || !blank(input.summary);
+    if (amending && !moved) return "failed: nothing to amend — pass what changed: the question, what is known or ruled out, or the findings";
+  }
+  if (!amending && kind !== "proposal" && kind !== "bug" && kind !== "investigation" && blank(input.summary)) {
     return kind === "review"
       ? "failed: pass a summary — the purpose in a sentence or two: what is different for whoever uses it once it lands, not a commit list"
       : "failed: pass a summary — your user's thinking in a paragraph: what they intend and how, in their terms";
   }
-  if (!amending && kind !== "bug" && decisions.length === 0) {
+  if (!amending && kind !== "bug" && kind !== "investigation" && decisions.length === 0) {
     return kind === "review"
       ? "failed: pass the decisions behind the change. Read back over THIS conversation and take them from it: what your user asked for, what they prefaced, what they ruled out, what you chose on your own and why. A review with no why is the review they already get from a diff."
       : `failed: pass at least one decision — a thought behind the ${kind}: 'what' your user means, 'userWhy' in their words, or 'agentWhy' as yours. ${kind === "proposal" ? "One is enough: an idea written down is still an idea with a reason." : "Read back over THIS conversation and take them from it."}`;
@@ -135,7 +146,7 @@ export const reviewGaps = (input: ReviewInput, amending: boolean, kind: JudgedKi
     return `failed: the summary is ${input.summary.trim().length} characters — a review's summary is its headline, ${SUMMARY_MAX} at most: the purpose in a sentence or two, what is different for whoever uses it once it lands. How it was built belongs in the decisions; the code carries the rest.`;
   }
   const outlineMoves = (input.outline?.length ?? 0) > 0 || (input.retireOutline?.length ?? 0) > 0;
-  const bugMoves = Object.keys(input.bug ?? {}).length > 0 || (input.retireBug?.length ?? 0) > 0;
+  const bugMoves = Object.keys(input.bug ?? {}).length > 0 || (input.retireBug?.length ?? 0) > 0 || Object.keys(input.investigation ?? {}).length > 0;
   const unitsMove = (input.units?.length ?? 0) > 0 || (input.retireUnits?.length ?? 0) > 0 || (input.shows?.length ?? 0) > 0 || (input.retireShows?.length ?? 0) > 0;
   if (amending && decisions.length === 0 && forks.length === 0 && blank(input.summary) && blank(input.branch) && blank(input.base) && blank(input.link) && !outlineMoves && !bugMoves && !unitsMove && (input.retireGuesses?.length ?? 0) === 0) {
     return "failed: nothing to amend — pass the decisions, forks or fields you are adding";
@@ -242,8 +253,28 @@ export const reviewRows = (review: ReviewContext, about?: string) => {
     ...(outline.length > 0 ? { outline: outline.map((item) => ({ id: item.id, intent: item.intent, description: item.description, owner: item.owner ?? "" })) } : {}),
     // a bug's report, whole: the symptom is the fact, the rest the reporter's reading
     ...(bug ? { bug: bugRows(bug) } : {}),
+    // an investigation's question, what narrows it, and what was found
+    ...(review.investigation ? { investigation: investigationRows(review.investigation) } : {}),
   };
 };
+
+/** How each outcome reads, in a clause. */
+export const OUTCOME_WORDS = {
+  answered: "answered",
+  "not-answerable": "not answerable — there is no answer to be had",
+  "wrong-question": "the wrong question — what should be asked instead is in the findings",
+} as const;
+
+/** An investigation as a reader gets it: the question, then what narrows
+ *  it, then, once it is over, how it ended and what was found. */
+export const investigationRows = (brief: InvestigationBrief) => ({
+  question: brief.question,
+  ...(brief.known ? { known: brief.known } : {}),
+  ...(brief.ruledOut ? { ruledOut: brief.ruledOut } : {}),
+  ...(brief.outcome ? { outcome: OUTCOME_WORDS[brief.outcome] } : {}),
+  ...(brief.findings ? { findings: brief.findings } : {}),
+  ...(brief.evidence && brief.evidence.length > 0 ? { evidence: brief.evidence.join("; ") } : {}),
+});
 
 /** Searched exactly as rendered — the score and its anchor included, so
  *  "4" and "blocking" find the report the reader would see them in. */

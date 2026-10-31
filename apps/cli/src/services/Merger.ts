@@ -87,12 +87,12 @@ export const MergerDaemon = Layer.effectDiscard(
             const gate = allow(state, "host", cause, (state.mergeYes ?? []).includes(ticket.id));
             if ("merge" in ready && "held" in gate) {
               const why =
-                gate.held === "unset"
+                gate.held !== "ask"
                   ? `"${ticketName(ticket)}" (${ticket.id}) is approved as your user asked and #${found.pull.number} is ready, but collagen merges nothing on ${host.name} in their name: ${gate.why}. Tell your user in one line.`
                   : `"${ticketName(ticket)}" (${ticket.id}) is approved as your user asked and #${found.pull.number} is ready to merge. Their repo-host steering is ask first: ask them whether collagen should merge it on ${host.name} as them, through their own gh. On their yes, call merge-review {ticketId: "${ticket.id}"}.`;
               if (told.get(ticket.id) !== why) {
                 told.set(ticket.id, why);
-                yield* tell(handle.id, ticket, trace, gate.held === "unset" ? "not merged" : "ready to merge", why);
+                yield* tell(handle.id, ticket, trace, gate.held !== "ask" ? "not merged" : "ready to merge", why);
               }
               continue;
             }

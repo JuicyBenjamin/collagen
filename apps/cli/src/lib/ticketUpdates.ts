@@ -1,4 +1,4 @@
-import { type OwnedStep, type ReviewContext, type RoomMessage, type StepStatus, type Ticket, deriveThreadId, isJudged, isOwned, isTake, stepThreadId, ticketName } from "@collagen/p2p";
+import { type InvestigationBrief, type OwnedStep, type ReviewContext, type RoomMessage, type StepStatus, type Ticket, deriveThreadId, isJudged, isOwned, isTake, stepThreadId, ticketName } from "@collagen/p2p";
 import { actedBy } from "./agents";
 import { aboutTicket, ticketThreads } from "./ticketSummary";
 
@@ -92,5 +92,29 @@ export const stepUpdateText = (change: StepChange, actorName: string): string =>
 };
 
 /** What a participant is told when someone weighs in. */
+/** Investigations closed between two snapshots, each with the open tickets
+ *  it grew from: their people hear what it found. One already closed when
+ *  first seen is history, not news. */
+export function answeredInvestigations(prev: ReadonlyMap<string, Ticket>, all: ReadonlyMap<string, Ticket>): ReadonlyArray<{ readonly investigation: Ticket; readonly parents: ReadonlyArray<Ticket> }> {
+  const answered: Array<{ investigation: Ticket; parents: ReadonlyArray<Ticket> }> = [];
+  for (const ticket of all.values()) {
+    const before = prev.get(ticket.id);
+    if (ticket.kind !== "investigation" || !ticket.closed || !before || before.closed) continue;
+    const parents = (ticket.from ?? []).map((id) => all.get(id)).filter((parent): parent is Ticket => parent !== undefined && parent.id !== ticket.id && !parent.closed);
+    if (parents.length > 0) answered.push({ investigation: ticket, parents });
+  }
+  return answered;
+}
+
+/** What an investigation found, told to whoever is on a ticket it grew from. */
+export const investigationAnsweredText = (investigation: Ticket, parent: Ticket, brief: InvestigationBrief | undefined, closerName: string): string =>
+  [
+    `${closerName} closed the investigation "${ticketName(investigation)}" (${investigation.id}), which grew from "${ticketName(parent)}" (${parent.id})${brief?.outcome ? `: ${brief.outcome === "answered" ? "answered" : brief.outcome === "not-answerable" ? "not answerable" : "the wrong question"}` : ""}.`,
+    brief?.findings ? `Findings: ${brief.findings}` : investigation.closed?.reason ? `Why it closed: ${investigation.closed.reason}` : "No findings were put on it; review-context on it has whatever was said.",
+    brief?.evidence && brief.evidence.length > 0 ? `Evidence: ${brief.evidence.join("; ")}` : "",
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
+
 export const weighInText = (ticket: Ticket, message: RoomMessage, toName: string): string =>
   `${actedBy(message.fromName, message.agent)} weighed in on the ticket "${ticketName(ticket)}" (${ticket.id}), to ${toName}: ${firstLine(message.findings)}`;

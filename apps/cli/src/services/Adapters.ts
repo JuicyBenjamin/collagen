@@ -51,7 +51,7 @@ export function wakeLine(spawnContext: SpawnCtx): string {
   const level = spawnContext.steering ?? "unset";
   return [
     headline,
-    level === "ask" || level === "unset"
+    level === "ask" || level === "unset" || level === "never"
       ? `Tell your user exactly that, in one line, and wait. Do not read the details yet, do not investigate, decide or answer anything: a person decides here.`
       : `Tell your user exactly that, in one line. ${steeringLine(level)}`,
     `If your user asks what it says or wants more, read it with the ${spawnContext.serverName} get-messages tool, threadId "${message.threadId}" (a ticket's steps: get-ticket), and relay what is there — never fill gaps from your own head.`,
