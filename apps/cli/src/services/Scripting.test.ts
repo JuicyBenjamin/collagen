@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Effect, Layer, Option, PubSub, Stream, SubscriptionRef } from "effect";
-import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext, type Unseen, type ReviewComment, type NoteTurn, type SteeringNote, type Conversation } from "@collagen/p2p";
+import { deriveThreadId, NotWritable, type DriveAction, type LocalState, type Member, type Peer, type RoomMessage, type Ticket, type Attachment, type ReviewContext, type Unseen, type ReviewComment, type Acl, EMPTY_ACL, type NoteTurn, type SteeringNote, type Conversation } from "@collagen/p2p";
 import { Inbox } from "./Inbox";
 import { StateStore } from "./StateStore";
 import { Rooms, type RoomHandle } from "./Rooms";
@@ -73,6 +73,14 @@ const roomsStub = (sent: Array<Sent>) =>
         attach: () => Effect.succeed(undefined),
         comments,
         comment: () => Effect.succeed(undefined),
+        awaiting: yield* SubscriptionRef.make<{ readonly room: string } | null>(null),
+        acl: yield* SubscriptionRef.make<Acl>(EMPTY_ACL),
+        setRole: () => Effect.die("not in this test"),
+        removeRole: () => Effect.die("not in this test"),
+        grant: () => Effect.die("not in this test"),
+        admit: () => Effect.die("not in this test"),
+        decline: () => Effect.die("not in this test"),
+        remove: () => Effect.die("not in this test"),
         notes: yield* SubscriptionRef.make<ReadonlyArray<SteeringNote>>([]),
         noteTurns: yield* SubscriptionRef.make<ReadonlyArray<NoteTurn>>([]),
         note: () => Effect.succeed(undefined),

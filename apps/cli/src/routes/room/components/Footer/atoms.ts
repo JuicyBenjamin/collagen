@@ -26,6 +26,7 @@ export const inviteAtom = runtimeAtom.fn(
     return yield* room.createInvite().pipe(
       Effect.map((invite) => ({ invite }) as const),
       Effect.catchTag("NotWritable", () => Effect.succeed({ why: "not let in to write yet, or still moving to its encrypted log — try again in a moment" } as const)),
+      Effect.catchTag("NotPermitted", () => Effect.succeed({ why: "your role in this room does not let you invite" } as const)),
     );
   }),
 );

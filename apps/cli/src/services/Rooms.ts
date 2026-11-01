@@ -1,6 +1,6 @@
 import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
-import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTake, parseInvite, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
+import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTake, parseInvite, permitted, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { answeredInvestigations, findingsText, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
@@ -44,6 +44,10 @@ export interface RoomSummary {
    *  a step that became theirs. The rail's dot. */
   readonly needsYou: number;
   readonly focused: boolean;
+  /** Joined with an invite that waits on someone allowed to let you in: the room's name as they gave it. */
+  readonly awaiting?: string;
+  /** People waiting to be let in, for those whose role may let them in. */
+  readonly waiting?: number;
 }
 
 /** All the rooms this profile is in, live at once — like conversations, you
@@ -562,6 +566,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       for (const handle of yield* SubscriptionRef.get(handles)) {
         const peers = yield* SubscriptionRef.get(handle.room.roster);
         const meta = yield* SubscriptionRef.get(handle.room.meta);
+        const awaiting = yield* SubscriptionRef.get(handle.room.awaiting);
+        const rules = yield* SubscriptionRef.get(handle.room.acl);
+        const waiting = permitted(rules, identity.pubkey, "approve") ? rules.waiting.size : 0;
         out.push({
           id: handle.id,
           shortId: shortRoomId(handle.id),
@@ -570,6 +577,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           unread: counts.get(handle.id)?.unread ?? 0,
           needsYou: counts.get(handle.id)?.needsYou ?? 0,
           focused: handle.id === focusedId,
+          ...(awaiting ? { awaiting: awaiting.room } : {}),
+          ...(waiting > 0 ? { waiting } : {}),
         });
       }
       return out;
@@ -584,7 +593,12 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           [
             pulse(SubscriptionRef.changes(focused)),
             pulse(SubscriptionRef.changes(inbox.buffer)),
-            ...liveHandles.flatMap((handle) => [pulse(SubscriptionRef.changes(handle.room.roster)), pulse(SubscriptionRef.changes(handle.room.meta))]),
+            ...liveHandles.flatMap((handle) => [
+              pulse(SubscriptionRef.changes(handle.room.roster)),
+              pulse(SubscriptionRef.changes(handle.room.meta)),
+              pulse(SubscriptionRef.changes(handle.room.awaiting)),
+              pulse(SubscriptionRef.changes(handle.room.acl)),
+            ]),
           ],
           { concurrency: "unbounded" },
         ),

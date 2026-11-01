@@ -22,3 +22,9 @@ export class LogAppendFailed extends Data.TaggedError("LogAppendFailed")<{
     return this.cause instanceof Error ? this.cause.message : String(this.cause);
   }
 }
+
+/** The person's role in the room does not hold the permission an act needs (acl.ts). */
+export class NotPermitted extends Data.TaggedError("NotPermitted")<{
+  readonly roomId: string;
+  readonly permission: string;
+}> {}

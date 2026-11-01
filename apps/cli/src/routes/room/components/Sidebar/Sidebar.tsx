@@ -73,12 +73,13 @@ export function Sidebar() {
             <Avatar
               key={room.id}
               text={initials(room.name)}
-              label={room.name}
+              // waiting to be let in, its name said so; people waiting on you to let them in need you
+              label={room.awaiting ? `${room.name} · awaiting approval` : room.name}
               current={room.focused}
               selected={hovered && index === sel}
               expanded={hovered}
               online={room.online}
-              needsYou={room.needsYou > 0}
+              needsYou={room.needsYou > 0 || (room.waiting ?? 0) > 0}
             />
           ))}
           <Avatar text="+ " label="new room" selected={hovered && sel === last} expanded={hovered} />

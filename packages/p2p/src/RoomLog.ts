@@ -9,6 +9,7 @@ import { ReviewComment, strictlySupersedes, supersedes } from "./review";
 import { ReviewContext } from "./review";
 import { Ticket, contributes, mergeTicket } from "./ticket";
 import { NoteTurn, SteeringNote } from "./note";
+import { AclEntry } from "./acl";
 import { migrateOp, migrateRow, readTicket } from "./migrate";
 
 /** The room as derived from its log. Read whole — rooms are small. */
@@ -24,6 +25,8 @@ export interface LogView {
   readonly comments: ReadonlyArray<ReviewComment>;
   /** The why behind each review ticket, one per ticket. */
   readonly reviews: ReadonlyArray<ReviewContext>;
+  /** Signed acts about who may do what, in log order (foldAcl reads them). */
+  readonly acl: ReadonlyArray<AclEntry>;
   /** Steering notes on the room's projects, as first written. */
   readonly notes: ReadonlyArray<SteeringNote>;
   /** Every turn on them; a note now is noteNow(note, turns). */
@@ -122,6 +125,7 @@ const unseenKey = (claimed: string | null, value: unknown) => `${UNSEEN}${claime
 /** The claimed key an unseen row was filed under: `unseen/ticket/t1/9f2c…` → `ticket/t1`. */
 const unseenClaim = (rowKey: string): string => rowKey.slice(UNSEEN.length).replace(/\/[0-9a-f]{64}$/, "");
 const MSG_KEY = (seq: number) => `msg/${String(seq).padStart(12, "0")}`;
+const ACL_KEY = (seq: number) => `acl/${String(seq).padStart(12, "0")}`;
 
 /** The view key an entry we CANNOT read would have written, when the entry is
  *  still shaped enough to say. One protocol version at a time: an entry from
@@ -211,6 +215,15 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
       case "rename": {
         const current = await view.get("meta/name");
         if (!current || logOp.ts > current.value.ts) await view.put("meta/name", { name: logOp.name, ts: logOp.ts });
+        break;
+      }
+      case "acl": {
+        // in log order, once per id: who may do what is decided by that order (foldAcl)
+        if (await view.get(`aclid/${logOp.entry.id}`)) break;
+        const count = (await view.get("state/acls"))?.value ?? 0;
+        await view.put(ACL_KEY(count), logOp.entry);
+        await view.put("state/acls", count + 1);
+        await view.put(`aclid/${logOp.entry.id}`, count);
         break;
       }
       case "msg": {
@@ -317,7 +330,31 @@ const namespaceFor = async (store: any, roomName: string, bootstrap: string | nu
   const moved = store.namespace(`${roomName}/encrypted`);
   const ours = await localOf(moved);
   if (b4a.equals(ours.key, wanted) || (ours.referrer !== null && b4a.equals(ours.referrer, wanted))) return moved;
+  // a log we made when the room moved to a new key (someone taken out): in an epoch of its own
+  for (let epoch = 1; epoch <= EPOCHS; epoch++) {
+    const rotated = store.namespace(`${roomName}/epoch-${epoch}`);
+    const facts = await localOf(rotated);
+    if (facts.length === 0 && facts.referrer === null) break;
+    if (b4a.equals(facts.key, wanted) || (facts.referrer !== null && b4a.equals(facts.referrer, wanted))) return rotated;
+  }
   return store.namespace(`${roomName}/${bootstrap}`);
+};
+
+/** How many times one person's collagen can move a room to a new key. */
+const EPOCHS = 64;
+
+/** The first epoch nothing lives in yet: where a log made for a new key goes. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const freeEpoch = async (store: any, roomName: string): Promise<any> => {
+  for (let epoch = 1; epoch <= EPOCHS; epoch++) {
+    const namespace = store.namespace(`${roomName}/epoch-${epoch}`);
+    const local = Autobase.getLocalCore(namespace, {});
+    await local.ready();
+    const empty = local.length === 0 && ((await Autobase.getUserData(local)).referrer ?? null) === null;
+    await local.close();
+    if (empty) return namespace;
+  }
+  throw new Error(`room ${roomName} has moved to a new key ${EPOCHS} times from here: no room left`);
 };
 
 /** Open (or create, when `bootstrap` is null) a room's Autobase in the
@@ -331,12 +368,13 @@ export const openRoomLog = (
   /** "beside": a new log made while the room's own is still open (moving the
    *  room) — straight into its own namespace: looking into the room's would
    *  wait forever on the open log's storage lock. */
-  place: "room" | "beside" = "room",
+  place: "room" | "beside" | "epoch" = "room",
 ): Effect.Effect<RoomLog, never, import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const base = yield* Effect.acquireRelease(
       Effect.promise(async () => {
-        const namespace = place === "beside" ? store.namespace(`${roomName}/encrypted`) : await namespaceFor(store, roomName, bootstrap);
+        const namespace =
+          place === "beside" ? store.namespace(`${roomName}/encrypted`) : place === "epoch" ? await freeEpoch(store, roomName) : await namespaceFor(store, roomName, bootstrap);
         const autobase = new Autobase(namespace, bootstrap ? b4a.from(bootstrap, "hex") : null, {
           valueEncoding: "json",
           ...(encryption === "new" ? { encrypt: true } : typeof encryption === "object" ? { encryptionKey: b4a.from(encryption.key, "hex") } : {}),
@@ -394,6 +432,7 @@ export const openRoomLog = (
       const attachments = (yield* rows("attachment", Attachment)).map((row) => row.value);
       const comments = (yield* rows("comment", ReviewComment)).map((row) => row.value);
       const reviews = (yield* rows("review", ReviewContext)).map((row) => row.value);
+      const acl = (yield* rows("acl", AclEntry)).map((row) => row.value);
       const notes = (yield* rows("note", SteeringNote)).map((row) => row.value);
       const noteTurns = (yield* rows("note-turn", NoteTurn)).map((row) => row.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
@@ -435,7 +474,7 @@ export const openRoomLog = (
       const invites = (yield* rows("invite", InviteRecord)).map((row) => ({ ...row.value, usedBy: used.get(row.value.id) ?? null }));
       const movedRow = yield* Effect.promise(() => base.view.get("meta/moved") as Promise<{ value: { to: string; sealed: Record<string, string>; by: string } } | null>);
       const moved = movedRow ? { to: movedRow.value.to, sealed: movedRow.value.sealed, by: movedRow.value.by } : null;
-      return { tickets, members, messages, attachments, comments, reviews, notes, noteTurns, name: name?.value ?? null, unseen, invites, moved };
+      return { tickets, members, messages, attachments, comments, reviews, acl, notes, noteTurns, name: name?.value ?? null, unseen, invites, moved };
     });
 
     /** The migration: take the rows nobody can read off the room, for every
