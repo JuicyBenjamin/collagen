@@ -43,6 +43,8 @@ const KINDS: Record<string, CallKind> = {
   "answer-question": "tickets",
   "review-comments": "review",
   "review-context": "review",
+  "review-chat": "review",
+  "steering-notes": "review",
   "get-tickets": "tickets",
   "send-to-peer": "messages",
   "pending-threads": "messages",

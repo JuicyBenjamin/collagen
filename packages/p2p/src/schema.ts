@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { Conversation } from "./acting";
 import { DraftComment, ReviewComment, ReviewContext } from "./review";
 import { GoalAnswer, Ticket } from "./ticket";
+import { NoteTurn, SteeringNote } from "./note";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
 // (swarm frames, state files) is Schema-validated at the edge.
@@ -410,6 +411,10 @@ export const LogOp = Schema.Union([
   /** A comment on a review's code — written once by its author, never
    *  changed: the first write of an id stands. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("comment"), comment: ReviewComment }),
+  /** A steering note on a project — written once by its id; what changes it is turns. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("note"), note: SteeringNote }),
+  /** One act on a steering note (change, comment, retire, restore, miss, keep) — the first write of an id stands. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("note-turn"), turn: NoteTurn }),
   /** An invite someone made: the public half of its secret, who made it and
    *  when it lapses. The first write of an id stands. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("invite"), invite: InviteRecord }),
@@ -437,7 +442,7 @@ export const LogOp = Schema.Union([
 export type LogOp = typeof LogOp.Type;
 
 /** What an `evict` may remove: room records only, never the room's meta. */
-export const EVICTABLE = /^(ticket|review|attachment|comment|msg|member)\//;
+export const EVICTABLE = /^(ticket|review|attachment|comment|note|note-turn|msg|member)\//;
 
 /** A member as recorded on the log. */
 export const Member = Schema.Struct({
@@ -818,7 +823,7 @@ export type Steering = typeof Steering.Type;
  *  proposal or bug, once its review is accepted or merged), and filing a
  *  review of their work someone asked for (their AI reading the conversation
  *  the work was done in). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer"]);
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer", "notes"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -832,7 +837,7 @@ export type SteeringPair = typeof SteeringPair.Type;
 export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
 export type TagRoute = typeof TagRoute.Type;
 
-const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair), forward: Schema.optional(SteeringPair), answer: Schema.optional(SteeringPair) });
+const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair), forward: Schema.optional(SteeringPair), answer: Schema.optional(SteeringPair), notes: Schema.optional(SteeringPair) });
 
 /** One room's own levels: a general level and per kind, each absent where
  *  the room follows the person's levels everywhere. */

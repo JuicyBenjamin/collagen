@@ -11,7 +11,8 @@ import { isEnter } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
 import { roomAtom } from "../../atoms";
-import { rosterAtom, stateAtom, updateStateAtom } from "../atoms";
+import { notesAtom, noteTurnsAtom, rosterAtom, stateAtom, updateStateAtom } from "../atoms";
+import { notesOf } from "../../../lib/steeringNotes";
 import { sharedProject } from "../../../lib/projects";
 import { withProjectOrder } from "../../../lib/projectOrder";
 import { projectRows } from "../projectRows";
@@ -38,6 +39,8 @@ export function ProjectsPage() {
   const [picking, setPicking] = useState<{ readonly as?: string } | null>(null);
 
   const rows = projectRows(state, roomId, peers);
+  const notes = AsyncResult.getOrElse(useAtomValue(notesAtom), () => [] as const);
+  const noteTurns = AsyncResult.getOrElse(useAtomValue(noteTurnsAtom), () => [] as const);
   // the last row is always "+ add project", so adding is arrows + enter
   const last = rows.length;
   const sel = clamp(cursor, 0, last);
@@ -134,6 +137,18 @@ export function ProjectsPage() {
                       {"    "}not here yet
                     </text>
                   ) : null}
+                  {/* the project under the cursor: how the room steers its AIs there */}
+                  {selected
+                    ? notesOf(notes, noteTurns, row.name)
+                        .filter((note) => !note.retired)
+                        .map((note) => (
+                          <text key={note.note.id} fg={theme.dim} truncate wrapMode="none">
+                            {"    "}
+                            {note.words.title}
+                            {note.words.strength ? <span fg={theme.dim}> · {note.words.strength}</span> : null}
+                          </text>
+                        ))
+                    : null}
                 </box>
               );
             })}

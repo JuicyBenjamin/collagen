@@ -3,7 +3,7 @@ import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { closedAs, isClosed, roomProjects, visibleTo, type ReviewComment, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { closedAs, isClosed, noteNow, roomProjects, visibleTo, type NoteTurn, type ReviewComment, type ReviewContext, type SteeringNote, type Ticket } from "@collagen/p2p";
 import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult, YourReview } from "@collagen/review-web/data";
@@ -249,12 +249,31 @@ const saidBy = (room: { readonly comments: SubscriptionRef.SubscriptionRef<Reado
 
 /** The review's own part of the page — ticket, why, links — read from the
  *  room alone: no clone, no diff, so it is there at once, before the code is. */
-const headOf = (ticket: Ticket, review: ReviewContext, me: string, said: number): ReviewPageHead => {
+/** A steering note named in a decision's guidedBy ("note:<id>") as the reader knows it: by its title now. */
+const guidedByNotes = (decisions: ReviewContext["decisions"], titleOf: (id: string) => string | null): ReviewContext["decisions"] =>
+  decisions.map((decision) =>
+    decision.guidedBy?.some((name) => name.startsWith("note:"))
+      ? { ...decision, guidedBy: decision.guidedBy.map((name) => (name.startsWith("note:") ? `note: ${titleOf(name.slice("note:".length).trim()) ?? name.slice("note:".length).trim()}` : name)) }
+      : decision,
+  );
+
+/** The titles of a room's steering notes now, by id (or the start of one). */
+const noteTitles = (room: { readonly notes: SubscriptionRef.SubscriptionRef<ReadonlyArray<SteeringNote>>; readonly noteTurns: SubscriptionRef.SubscriptionRef<ReadonlyArray<NoteTurn>> }) =>
+  Effect.gen(function* () {
+    const notes = yield* SubscriptionRef.get(room.notes);
+    const turns = yield* SubscriptionRef.get(room.noteTurns);
+    return (id: string): string | null => {
+      const note = notes.find((candidate) => candidate.id === id || (id.length >= 8 && candidate.id.startsWith(id)));
+      return note ? noteNow(note, turns).words.title : null;
+    };
+  });
+
+const headOf = (ticket: Ticket, review: ReviewContext, me: string, said: number, noteTitle: (id: string) => string | null): ReviewPageHead => {
   const base = review.base ?? "main";
   const host = review.link ? hostOf(review.link) : undefined;
   return {
     ticket: { id: ticket.id, ...(ticket.title ? { title: ticket.title } : {}), goal: ticket.goal, kind: ticket.kind, project: ticket.project, mine: ticket.createdBy === me, closed: closedAs(ticket) !== null, ...withYours(yourFinish(ticket, review, me), said) },
-    review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, ...(review.agent ? { agent: review.agent } : {}), decisions: review.decisions, forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ...(review.machine ? { machine: review.machine } : {}), ts: review.ts },
+    review: { summary: review.summary, branch: review.branch, base: review.base, link: review.link, authorName: review.authorName, ...(review.agent ? { agent: review.agent } : {}), decisions: guidedByNotes(review.decisions, noteTitle), forks: review.forks, ...(review.assumed ? { assumed: review.assumed } : {}), ...(review.claimed ? { claimed: review.claimed } : {}), ...(review.machine ? { machine: review.machine } : {}), ts: review.ts },
     links: host && review.link ? host.links(review.link, base, review.branch) : review.link ? [{ label: "link", url: review.link }] : [],
   };
 };
@@ -271,7 +290,7 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
     const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ room: handle.room, ticket })) : null;
     // where it runs comes with the head: its section stands from the first paint
     const shows = shownShows(review.shows, review.author === me);
-    const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me));
+    const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me), yield* noteTitles(handle.room));
     return { ...head, review: { ...head.review, ...(shows ? { shows } : {}) }, stack };
   }
   return null;
@@ -310,7 +329,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     }
     const me = (yield* IdentityService).identity.pubkey;
     const shows = shownShows(review.shows, review.author === me);
-    const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me));
+    const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me), yield* noteTitles(handle.room));
     return {
       ...head,
       review: { ...head.review, ...(shows ? { shows } : {}) },

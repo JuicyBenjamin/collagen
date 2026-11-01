@@ -11,7 +11,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, noteNow, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, upsertRoom, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -46,6 +46,7 @@ import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
 import { ReviewQuestions } from "./ReviewQuestions";
 import { chatInWords, ReviewChat } from "./ReviewChat";
+import { indexLine, noteInWords, notesIndex, notesOf } from "../lib/steeringNotes";
 import { ReviewRequests } from "./ReviewRequests";
 import { MergeHistory } from "./MergeHistory";
 import { Transcripts } from "./Transcripts";
@@ -54,7 +55,7 @@ import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { answerQuestion } from "./InvestigationView";
 import { investigationOf, JOB_KINDS, JOB_LABEL, jobHarness, jobLimitOf, modelFor, withHarness, withModel, type InvestigationRun } from "../lib/jobs";
-import { allow, KIND_LABEL, levelOf, roomLevelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
+import { allow, KIND_LABEL, levelOf, notesFollowed, roomLevelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
 import { actingWith } from "../lib/agents";
 import { harnessFor, Harnesses } from "./Harness";
@@ -506,6 +507,29 @@ export const ReviewChatTool = Tool.make("review-chat", {
   success: Schema.String,
 });
 
+export const SteeringNotesTool = Tool.make("steering-notes", {
+  description: [
+    "Steering notes: how the people in a room steer their AIs on a project — the corrections they keep having to make, said once and then followed. Not good code patterns (you infer those from the code): what your user would otherwise have to tell you again. Each note is the room's, for one project, and alive like a skill: anyone may comment on it, change it with a reason, retire it or bring it back, and whoever wrote it before is told.",
+    "'action': 'list' (a project's notes, or every project's: id, title, the line, where it applies, how strong); 'read' a whole note by 'id' (its reasoning, examples and every turn on it); 'add' one ('project', 'title' a few words, 'line' the one line agents are handed, 'body' the whole of it, 'where' paths or globs it applies to, 'strength' nit, suggest, wish or must, 'fromTicket'/'fromComment' when it grew from a review); 'change' its words ('id', only what changes, and a 'reason'); 'comment' ('id', 'reason' is what you say); 'retire' or 'restore' ('id', 'reason'); 'keep' (your user read it and keeps it as it is); 'miss' ('id', 'reason' what was missed) when you were about to note what a note already says: it was not followed, and that is recorded against it, never noted twice.",
+    "'said: true' only when your user asked for this act in their words. Without it you act on your own, as their notes steering allows (set-steering kind notes): not chosen or never, it does not happen; ask first, ask them, then call again with 'said: true'; act then tell, tell them what you did. 'keep' needs their word.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    action: Schema.Literals(["list", "read", "add", "change", "comment", "retire", "restore", "keep", "miss"]),
+    project: Schema.optional(Schema.String),
+    id: Schema.optional(Schema.String),
+    title: Schema.optional(Schema.String),
+    line: Schema.optional(Schema.String),
+    body: Schema.optional(Schema.String),
+    where: Schema.optional(Schema.Array(Schema.String)),
+    strength: Schema.optional(Schema.Literals(["nit", "suggest", "wish", "must"])),
+    reason: Schema.optional(Schema.String),
+    said: Schema.optional(Schema.Boolean),
+    fromTicket: Schema.optional(Schema.String),
+    fromComment: Schema.optional(Schema.String),
+  }),
+  success: Schema.String,
+});
+
 export const GuessReason = Tool.make("guess-reason", {
   description: [
     "When a review's author cannot answer a question your user asked (ask-author came back saying why), put your best reading of why the code is this way on their review's why as a GUESS: plainly marked as your user's AI's assumption, for the author or their AI to confirm, correct or reject later. Only on your user's word ('assume the reason').",
@@ -552,7 +576,7 @@ export const AskReview = Tool.make("ask-review", {
     "Ask for a review of your user's code, with the WHY attached — the thing a diff cannot show. Only when your user asks for a review (\"ask <peer> for a review\", \"put it up for review\") — never on your own initiative. It reaches the room at once, and the collagen TUI's outbox shows them what went, in full.",
     "'peers' is who is asked, and it is 0 to many — it carries exactly the names your user said, and NONE is the default. They named nobody, you name nobody: never infer a reviewer from who is in the room, who is online, or who touched the code. Name several and each gets a review step of their own. With nobody asked the ticket sits in the room with the why on it for whoever reads it — another peer, or your user's own second agent — and nothing is pushed to anyone. Reviews are posted with post-review, one step per reader, so a second and a third reader can review the same change.",
     "A reviewer must see what the change is FOR before anything else, so lead with purpose. The ticket's 'title' is the review page's headline: a few words a reader gets at a glance (\"Ticket list stays in its box\"). 'summary' is the line beneath it, a sentence or two (200 characters at most): what is different for whoever uses this once it lands — not how it was built, not a list of the parts, and no ticket ids or branch names (the page shows where the code is). Every decision needs a 'title': its headline, a few words (60 characters at most), what it achieves, in plain words — \"Big exports finish\", \"One tab per review\", \"Typos caught before merge\" — never the mechanism (\"SSE endpoint with SubscriptionRef streams\"). 'what' is the line beneath it: what was actually done, in one line. Short and sweet beats complete: the why, the forks and the code carry the rest.",
-    "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line) — required: a rule applied across the change points at every hunk it shaped, and a decision to leave code alone points at that code — and 'guidedBy' when a skill or an agent instruction file told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\"); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then the 'units': the change grouped into code that together achieves ONE thing — a component with its sub-components and its implementation; a service with its routes — each with a 'title' saying what it achieves, never a file name (\"Big exports finish\", not \"export.ts\"; 60 characters at most), a 'what' line beneath it (what that code does, in a line), and 'where' it lives (files, or file:line for one part of a file, as for one route of a big routes file). The review page's sections are units, every piece of code shown once, read building blocks first, each headed by its title, its 'what' and the decisions that shaped it. Cover every change but the tests — the page reads those apart, in a tab of their own, each by its describe and test titles, so name them for what they protect; what you leave out goes under the decision pointing at it, else under \"Not explained\", and the outcome names it. Files that only apply one change, each the same way (a new component put to use on ten pages): give that change its unit an 'id', and the files that use it ONE more unit with 'usesOf' set to that id — its 'title' and 'what' say what each use does. The page shows them as one item, marked viewed together, and flags a file that differs from the rest; a file that also does something of its own is not a copy and belongs elsewhere. 'retireUnits' withdraws one by id. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none. The why is reasons, never a test log: what passed belongs on CI, not on the ticket.",
+    "Before calling, read back over THIS conversation and mine it: for each decision behind the change, what your user asked for, prefaced, or ruled out ('userWhy' — their words where you have them) and your own reason for the shape it took ('agentWhy'), plus 'where' it landed (file, or file:line) — required: a rule applied across the change points at every hunk it shaped, and a decision to leave code alone points at that code — and 'guidedBy' when a skill, an agent instruction file or a steering note told you to do it that way — name each (\"skill: frontend-design\", \"CLAUDE.md\", \"apps/web/AGENTS.md\", \"note:<id>\" for a steering note); the reader sees it beside the code, so a skill pointing the wrong way is caught there. Leave it out when nothing did. Then the 'units': the change grouped into code that together achieves ONE thing — a component with its sub-components and its implementation; a service with its routes — each with a 'title' saying what it achieves, never a file name (\"Big exports finish\", not \"export.ts\"; 60 characters at most), a 'what' line beneath it (what that code does, in a line), and 'where' it lives (files, or file:line for one part of a file, as for one route of a big routes file). The review page's sections are units, every piece of code shown once, read building blocks first, each headed by its title, its 'what' and the decisions that shaped it. Cover every change but the tests — the page reads those apart, in a tab of their own, each by its describe and test titles, so name them for what they protect; what you leave out goes under the decision pointing at it, else under \"Not explained\", and the outcome names it. Files that only apply one change, each the same way (a new component put to use on ten pages): give that change its unit an 'id', and the files that use it ONE more unit with 'usesOf' set to that id — its 'title' and 'what' say what each use does. The page shows them as one item, marked viewed together, and flags a file that differs from the rest; a file that also does something of its own is not a copy and belongs elsewhere. 'retireUnits' withdraws one by id. Then every fork in the road: a point where you could have gone one way and went the other — 'at' (file:line of the code the choice produced), 'chose', 'instead', 'why', and 'by' (\"user\" if they made the call, \"agent\" if you did). Enough for the reviewer to judge the turn, not an essay. Pass forks as [] only when there genuinely were none. The why is reasons, never a test log: what passed belongs on CI, not on the ticket.",
     "'machine' (optional): when the change adds or alters behaviour that moves through states — a lifecycle, a loading sequence, a handshake — draw it, and the review page plays it in a tab of its own. 'states' in the order things usually pass through them, each an 'id', a 'name' and 'shows' (what a person sees of a thing in it); 'moves' between them, each 'from', 'to' and 'on' (what takes it, a few words); the 'actors' that run it (page parts, tickets, peers — each an 'id', a 'name' and the state it 'starts' in); the 'sources' of what moves them (each an 'id', a 'name' and what it 'gives'). 'play' is one walk-through, beat by beat: the source a beat comes 'from', the 'moves' it causes ({actor, to}), and what it 'says' — one plain sentence of what happens and why. 'states', 'moves' and 'play' go under 'now'; when the change alters a machine that was there, the same under 'before', and the page marks what the change took out and put in. A machine the change brings in has no 'before'. Every name must exist and every played move be one the machine has, or it is refused. Leave it out when nothing moves through states; null withdraws it.",
     "'merge' (optional, only when your user says): whose approval collagen waits for before it merges this review's pull request for them — off, theirs, mine or both — overriding their room's setting for this review; null gives it back (see set-merging).",
     "'title' is the ticket's headline in every list — a few words, 60 characters at most, what the change is for; required when filing. The goal beneath it defaults to the branch.",
@@ -728,7 +752,7 @@ export const Epic = Tool.make("epic", {
 
 export const SetSteering = Tool.make("set-steering", {
   description:
-    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's), 'close' (closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only), 'review' (a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room. Kept on their machine; applies live.",
+    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's), 'close' (closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only), 'review' (a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only), 'notes' (steering notes: 'mine' is whether what your AI notes of how your user steers it, or changes in a note, goes into the room on its own — just do it, act then tell, ask first, or never; 'others' is whether your agents follow a note a colleague's AI added that no person has read yet). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room. Kept on their machine; applies live.",
   parameters: Schema.Struct({
     level: Schema.optional(Schema.NullOr(Steering)),
     kind: Schema.optional(Schema.Union([Schema.Literal("master"), SteeringKind])),
@@ -984,6 +1008,7 @@ export const CollagenToolkit = Toolkit.make(
   ReviewRequest,
   AskAuthor,
   ReviewChatTool,
+  SteeringNotesTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1050,6 +1075,7 @@ export const DevCollagenToolkit = Toolkit.make(
   ReviewRequest,
   AskAuthor,
   ReviewChatTool,
+  SteeringNotesTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1176,6 +1202,30 @@ const makeHandlers = Effect.gen(function* () {
           ? myName
           : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 12));
     });
+
+    /** The steering notes handed to an agent working on a ticket's project, as a block to follow its answer; "" when there are none. */
+    const notesFor = (project: string) =>
+      Effect.gen(function* () {
+        const { id: roomId, room } = yield* focusedRoom;
+        const nameOf = yield* nameLookup;
+        const index = notesIndex(yield* SubscriptionRef.get(room.notes), yield* SubscriptionRef.get(room.noteTurns), project, { me: identity.pubkey, others: notesFollowed(yield* store.get, roomId), nameOf });
+        return index ? `\n\n${index}` : "";
+      });
+
+    /** At the end of a piece of work (a take posted, a step settled, a ticket
+     *  closed done): ask the agent whether its user had to steer it where that
+     *  should not have been needed, so it is noted once — only when their
+     *  notes steering is chosen, and never on a refusal. */
+    const learnAfter = (ticketId: string, said: string, finished: boolean) =>
+      Effect.gen(function* () {
+        if (!finished || said.startsWith("failed")) return said;
+        const { id: roomId, room } = yield* focusedRoom;
+        const level = levelOf(yield* store.get, "notes", "mine", roomId);
+        if (level === "unset" || level === "never") return said;
+        const ticket = (yield* SubscriptionRef.get(room.tickets)).get(ticketId);
+        if (!ticket) return said;
+        return `${said}\n\nBEFORE YOU MOVE ON — steering notes: in this work, did your user have to correct or steer you where that should not have been needed: something they had to say that they would want followed from the start next time, by any AI in this room? Not a code pattern (that you read from the code): how they want things done. If so, note it (steering-notes add, project "${ticket.project}", a line and the whole of it); if one of the notes below already said it, it was missed: record that (steering-notes miss) instead of noting it again. Nothing to note: say nothing about it.${yield* notesFor(ticket.project)}`;
+      });
 
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
       const { room } = yield* focusedRoom;
@@ -2027,6 +2077,126 @@ const makeHandlers = Effect.gen(function* () {
         const view = yield* now();
         return view ? chatInWords(view) : `no chat on ${input.ticketId}`;
       }, Effect.provideContext(talkContext)),
+      "steering-notes": Effect.fn("Mcp.steeringNotes")(function* (input: {
+        action: "list" | "read" | "add" | "change" | "comment" | "retire" | "restore" | "keep" | "miss";
+        project?: string;
+        id?: string;
+        title?: string;
+        line?: string;
+        body?: string;
+        where?: ReadonlyArray<string>;
+        strength?: "nit" | "suggest" | "wish" | "must";
+        reason?: string;
+        said?: boolean;
+        fromTicket?: string;
+        fromComment?: string;
+      }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const nameOf = yield* nameLookup;
+        const notes = yield* SubscriptionRef.get(room.notes);
+        const turns = yield* SubscriptionRef.get(room.noteTurns);
+        const when = (at: number) => new Date(at).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+        const peers = yield* SubscriptionRef.get(room.roster);
+        const state = yield* store.get;
+        // the project as the room spells it
+        const projectOf = (name: string) => projectSpelling(name, peers, roomProjects(state, roomId));
+        if (input.action === "list") {
+          const projects = input.project ? [projectOf(input.project)] : [...new Set(notes.map((note) => note.project))];
+          if (projects.length === 0) return "No steering notes in this room yet.";
+          return projects
+            .map((project) => {
+              const now = notesOf(notes, turns, project);
+              const live = now.filter((note) => !note.retired);
+              const retired = now.length - live.length;
+              return [`${project}: ${live.length} note${live.length === 1 ? "" : "s"}${retired > 0 ? `, ${retired} retired` : ""}`, ...live.map((note) => indexLine(note, nameOf))].join("\n");
+            })
+            .join("\n\n");
+        }
+        const found = input.id ? notes.find((note) => note.id === input.id || note.id.startsWith(input.id ?? "")) : undefined;
+        if (input.action === "read") return found ? noteInWords(noteNow(found, turns), nameOf, when) : `failed: no steering note ${input.id ?? "(give 'id')"} — list them with action list`;
+        // a write: your user's word, or your own as their notes steering allows
+        const acting = yield* actingNow;
+        const said = input.said === true;
+        if (input.action === "keep" && !said) return "failed: keeping a note is your user's word that they read it — only when they say so (said: true)";
+        let tell = "";
+        if (!said && input.action !== "miss") {
+          const gate = allow(state, "notes", "mine", false, roomId);
+          if ("held" in gate) return gate.held === "ask" ? `ask your user first: ${gate.why}. On their yes, call again with said: true.` : `not done: ${gate.why}.`;
+          if (gate.go.level === "act") tell = " Tell your user what you did, in one line.";
+        }
+        const me = identity.pubkey;
+        const myName = yield* SubscriptionRef.get(nameRef);
+        const at = yield* Clock.currentTimeMillis;
+        const mark = { ...(said ? {} : { unread: true }), ...(acting?.agent ? { agent: acting.agent } : {}), ...(acting?.conversation ? { conversation: acting.conversation } : {}) };
+        if (input.action === "add") {
+          if (!input.project || !input.title?.trim() || !input.line?.trim()) return "failed: a note needs 'project', 'title' and 'line' (and 'body', the whole of it)";
+          const project = projectOf(input.project);
+          const id = crypto.randomUUID();
+          const wrote = yield* room.note({
+            id,
+            project,
+            title: input.title.trim(),
+            line: input.line.trim(),
+            body: input.body?.trim() || input.line.trim(),
+            ...(input.where && input.where.length > 0 ? { where: input.where } : {}),
+            ...(input.strength ? { strength: input.strength } : {}),
+            by: me,
+            byName: myName,
+            at,
+            ...(input.fromTicket ? { from: { ticketId: input.fromTicket, ...(input.fromComment ? { commentId: input.fromComment } : {}) } } : {}),
+            ...mark,
+          }).pipe(Effect.as(true), Effect.catchTag("NotWritable", () => Effect.succeed(false)));
+          if (!wrote) return "failed: this room does not let you write yet (not admitted)";
+          return `added steering note "${input.title.trim()}" [${id}] on ${project}; every agent working there is handed it from now.${tell}`;
+        }
+        if (!found) return `failed: no steering note ${input.id ?? "(give 'id')"} — list them with action list`;
+        const before = noteNow(found, turns);
+        if (["change", "retire", "restore", "comment", "miss"].includes(input.action) && !input.reason?.trim())
+          return `failed: say why ('reason')${input.action === "comment" ? " — it is the comment" : input.action === "miss" ? " — what was missed" : ""}`;
+        const change =
+          input.action === "change"
+            ? Object.fromEntries(
+                Object.entries({ title: input.title?.trim(), line: input.line?.trim(), body: input.body?.trim(), where: input.where, strength: input.strength }).filter(([, value]) => value !== undefined && value !== ""),
+              )
+            : undefined;
+        if (input.action === "change" && Object.keys(change ?? {}).length === 0) return "failed: say what changes: 'title', 'line', 'body', 'where' or 'strength'";
+        const turned = yield* room.noteTurn({
+          id: crypto.randomUUID(),
+          note: found.id,
+          kind: input.action,
+          ...(input.reason?.trim() ? { reason: input.reason.trim() } : {}),
+          ...(change ? { change } : {}),
+          knows: before.turns.map((turn) => turn.id),
+          by: me,
+          byName: myName,
+          at,
+          ...mark,
+        }).pipe(Effect.as(true), Effect.catchTag("NotWritable", () => Effect.succeed(false)));
+        if (!turned) return "failed: this room does not let you write yet (not admitted)";
+        // everyone who wrote it before hears what changed and why, as messages go
+        const told: Array<string> = [];
+        if (input.action !== "keep") {
+          for (const writer of before.writers.filter((key) => key !== me)) {
+            const name = nameOf(writer);
+            const verb = { change: "changed", comment: "commented on", retire: "retired", restore: "brought back", miss: "found missed" }[input.action];
+            yield* outbox.tell({
+              roomId,
+              to: name,
+              title: `${found.project} · steering note`,
+              outgoing: {
+                kind: "message",
+                peer: name,
+                project: found.project,
+                intent: `steering note ${verb}`,
+                findings: `${myName}${said ? "" : "'s AI"} ${verb} the steering note "${before.words.title}"${input.reason?.trim() ? `: ${input.reason.trim()}` : ""}. Read it with steering-notes action read, id ${found.id}.`,
+              },
+            }).pipe(Effect.ignore);
+            told.push(name);
+          }
+        }
+        const did = { change: "changed", comment: "commented on", retire: "retired", restore: "brought back", keep: "kept", miss: "recorded a miss on" }[input.action];
+        return `${did} steering note "${before.words.title}" [${found.id}]${told.length > 0 ? `; told ${told.join(", ")}` : ""}.${tell}`;
+      }),
       "guess-reason": Effect.fn("Mcp.guessReason")(function* (input: { ticketId: string; questionId: string; what: string; basis: string; confidence: "high" | "medium" | "low" }) {
         if (!input.what.trim()) return "failed: 'what' is the reason you assume";
         const { id: roomId } = yield* focusedRoom;
@@ -2242,7 +2412,7 @@ const makeHandlers = Effect.gen(function* () {
         );
         if (next.length === 0) return told;
         return `${told}\nNEXT IN THE STACK, open to your user now: ${next.map((candidate) => `"${candidate.title ?? candidate.goal}" (${candidate.id})`).join(", ")} — tell them in a line and go on with it when they say (review-context, then post-review).`;
-      }),
+      }, (effect, input) => effect.pipe(Effect.flatMap((said) => learnAfter(input.ticketId, said, true)))),
       epic: Effect.fn("Mcp.epic")(function* (input: { action: "create" | "add" | "remove" | "exclude" | "include" | "order" | "close" | "reopen" | "rename"; epicId?: string; title?: string; goal?: string; summary?: string; ticketIds?: ReadonlyArray<string>; reason?: string }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
@@ -2343,7 +2513,7 @@ const makeHandlers = Effect.gen(function* () {
           title: `${ticket.goal} · closed`,
           outgoing: { kind: "close", ticketId: input.ticketId, outcome: input.outcome, ...(input.reason ? { reason: input.reason } : {}) },
         });
-      }),
+      }, (effect, input) => effect.pipe(Effect.flatMap((said) => learnAfter(input.ticketId, said, input.outcome === "done")))),
       "settle-step": Effect.fn("Mcp.settleStep")(function* (input: { ticketId: string; stepId: string; result: string; failed?: boolean }) {
         const { id: roomId, room } = yield* focusedRoom;
         const all = yield* SubscriptionRef.get(room.tickets);
@@ -2364,16 +2534,18 @@ const makeHandlers = Effect.gen(function* () {
           title: `${ticket.goal} · ${input.stepId} ${input.failed ? "failed" : "settled"}`,
           outgoing: { kind: "settle", ticketId: input.ticketId, stepId: input.stepId, result: input.result, failed: input.failed ?? false },
         });
-      }),
+      }, (effect, input) => effect.pipe(Effect.flatMap((said) => learnAfter(input.ticketId, said, true)))),
       "take-step": Effect.fn("Mcp.takeStep")(function* (input: { ticketId: string; stepId: string }) {
         const { id: roomId, room } = yield* focusedRoom;
         const ticket = (yield* SubscriptionRef.get(room.tickets)).get(input.ticketId);
-        return yield* outbox.tell({
+        const taken = yield* outbox.tell({
           roomId,
           to: "the room",
           title: `${ticket ? ticketName(ticket) : input.ticketId} · ${input.stepId} taken`,
           outgoing: { kind: "take", ticketId: input.ticketId, stepId: input.stepId },
         });
+        // the work is about to start: how the room steers its AIs on this project
+        return ticket && !taken.startsWith("failed") ? taken + (yield* notesFor(ticket.project)) : taken;
       }),
       "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: { peer: string; action: DriveAction }) {
         const { room } = yield* focusedRoom;
@@ -2811,7 +2983,7 @@ const makeHandlers = Effect.gen(function* () {
           const all = yield* SubscriptionRef.get(room.tickets);
           const ticket = all.get(input.ticketId);
           if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
-          return toToon(yield* renderTicket(ticket));
+          return toToon(yield* renderTicket(ticket)) + (yield* notesFor(ticket.project));
         }).pipe(Effect.withSpan("Mcp.getTicket")),
     });
   });
