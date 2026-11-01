@@ -368,6 +368,8 @@ td.t { position: relative; }
 .add-comment { position: absolute; left: -11px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: var(--accent); color: var(--color-primary-content); font: 700 15px/20px -apple-system, sans-serif; text-align: center; cursor: pointer; opacity: 0; transition: opacity 80ms, transform 80ms; z-index: 1; }
 tr:hover > td.t > .add-comment, tr.picked > td.t > .add-comment:focus-visible { opacity: 1; }
 .add-comment:hover { transform: translateY(-50%) scale(1.12); }
+/* asking the reader's AI about a line: beside the +, further out */
+.add-comment.ask-line { left: -33px; font-size: 12px; }
 tr.picked td { background: color-mix(in srgb, var(--accent) 16%, transparent) !important; }
 tr.picked td.n { box-shadow: inset 2px 0 0 var(--accent); }
 .composer-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12.5px; color: var(--dim); }
@@ -1064,6 +1066,8 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .chat-pill.lifted, .chat-panel.lifted { bottom: 74px; }
 .chat-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); }
 .chat-ai { flex: 1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+/* the earlier chats' menu as wide as its words, not daisyUI's 20rem */
+.chat-head .select { width: auto; max-width: 50%; }
 /* the conversation gives way to the question in a short window: it scrolls in what room is left,
    and a scroll that reaches its end stays in it, never running on into the page */
 .chat-log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 14px; }

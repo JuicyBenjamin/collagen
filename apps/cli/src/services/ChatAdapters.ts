@@ -16,6 +16,8 @@ export interface ChatCtx {
   readonly serverName: string;
   /** the model chosen for chats — none: the CLI's own */
   readonly model: Option.Option<string>;
+  /** `sessionId` is another conversation to start from, as a copy: it is never written to */
+  readonly fork: boolean;
 }
 
 export type ChatEvent =
@@ -29,6 +31,8 @@ export type ChatEvent =
 
 export interface ChatAdapter {
   readonly cmd: string;
+  /** it can start a new conversation as a copy of another, headless (ChatCtx fork) */
+  readonly forks?: boolean;
   readonly args: (o: ChatCtx) => ReadonlyArray<string>;
   /** one line of the CLI's stdout, as events — none for a line that says nothing to the page */
   readonly read: (line: string) => ReadonlyArray<ChatEvent>;

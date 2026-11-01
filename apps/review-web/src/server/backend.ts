@@ -99,8 +99,10 @@ export class ReviewBackend extends Context.Service<
     readonly instead: (ticketId: string, turnId: string, mode: "assume" | "critique") => Effect.Effect<ChatAsked>;
     /** stop the answer under way */
     readonly stopAnswer: (ticketId: string) => Effect.Effect<void>;
-    /** a new conversation: the old one gone */
+    /** a new conversation: the one before kept among the review's earlier chats */
     readonly newChat: (ticketId: string) => Effect.Effect<void>;
+    /** back to an earlier chat: the current one set aside in its place */
+    readonly reopenChat: (ticketId: string, chatId: string) => Effect.Effect<void>;
   }
 >()("review-web/ReviewBackend") {}
 

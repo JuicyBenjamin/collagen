@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { statSync } from "node:fs";
 import { createServer } from "node:http";
 import { basename, resolve } from "node:path";
-import { Clock, Effect, Layer, Schema, SubscriptionRef } from "effect";
+import { Clock, Duration, Effect, Layer, Option, Schema, Stream, SubscriptionRef } from "effect";
 import { McpProtocol, McpServer, Tool, Toolkit } from "effect/ai";
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http";
 import { NodeHttpServer } from "@effect/platform-node";
@@ -45,6 +45,7 @@ import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
 import { ReviewQuestions } from "./ReviewQuestions";
+import { chatInWords, ReviewChat } from "./ReviewChat";
 import { ReviewRequests } from "./ReviewRequests";
 import { MergeHistory } from "./MergeHistory";
 import { Transcripts } from "./Transcripts";
@@ -484,6 +485,24 @@ export const AskAuthor = Tool.make("ask-author", {
     "Only when your user's forwarding steering lets you (set-steering kind forward), or on their word. 'question' in their words, standalone; 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows, when it is about code.",
   ].join("\n"),
   parameters: Schema.Struct({ ticketId: Schema.String, question: Schema.String, lines: Schema.optional(QuestionLinesInput), commit: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
+export const ReviewChatTool = Tool.make("review-chat", {
+  description: [
+    "Your user's chat on a review's page: their questions to their own AI about the review, and its answers — a conversation apart from this one. With only 'ticketId' it reads it: each question, the lines it was about and the answer, so you carry on from what they asked there instead of asking again.",
+    "'question' asks it, as your user would on the page: it answers read-only in their clone, the page shows it live, and this waits for the answer and gives it back. 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows. Usually you answer your user yourself; ask through it only when they want it kept on the review. 'stop' stops the answer under way; 'new' starts a new conversation, the one before it kept among the review's earlier chats (reading lists them). 'chat' with an earlier chat's id reads that one; 'reopen' with it goes back to it, the current one set aside in its place. Asking, stopping, starting over and going back only on your user's word.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    ticketId: Schema.String,
+    question: Schema.optional(Schema.String),
+    lines: Schema.optional(QuestionLinesInput),
+    commit: Schema.optional(Schema.String),
+    stop: Schema.optional(Schema.Boolean),
+    new: Schema.optional(Schema.Boolean),
+    chat: Schema.optional(Schema.String),
+    reopen: Schema.optional(Schema.String),
+  }),
   success: Schema.String,
 });
 
@@ -964,6 +983,7 @@ export const CollagenToolkit = Toolkit.make(
   RequestReview,
   ReviewRequest,
   AskAuthor,
+  ReviewChatTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1029,6 +1049,7 @@ export const DevCollagenToolkit = Toolkit.make(
   RequestReview,
   ReviewRequest,
   AskAuthor,
+  ReviewChatTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1103,6 +1124,7 @@ const makeHandlers = Effect.gen(function* () {
     const jobs = yield* Jobs;
     const reviewRequests = yield* ReviewRequests;
     const reviewQuestions = yield* ReviewQuestions;
+    const reviewChat = yield* ReviewChat;
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
@@ -1967,6 +1989,44 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question: input.question.trim(), ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) });
       }),
+      "review-chat": Effect.fn("Mcp.reviewChat")(function* (input: { ticketId: string; question?: string; lines?: QuestionLines; commit?: string; stop?: boolean; new?: boolean; chat?: string; reopen?: string }) {
+        const now = () => reviewChat.view(input.ticketId).pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
+        if (input.new) {
+          yield* reviewChat.clear(input.ticketId);
+          return "Started over: the next question on the review begins a new conversation; the one before is kept among its earlier chats.";
+        }
+        if (input.chat) {
+          const earlier = yield* reviewChat.earlierView(input.ticketId, input.chat);
+          return earlier ? chatInWords(earlier).replace("Your user's chat on this review", `Your user's earlier chat ${input.chat} on this review`) : `failed: no earlier chat ${input.chat} on this review — reading lists them`;
+        }
+        if (input.reopen) {
+          const said = yield* reviewChat.reopen(input.ticketId, input.reopen);
+          if (said !== "ok") return `failed: ${said}`;
+          const view = yield* now();
+          return view ? chatInWords(view) : "Went back to it.";
+        }
+        if (input.stop) {
+          yield* reviewChat.stop(input.ticketId);
+          const view = yield* now();
+          return view ? chatInWords(view) : "Stopped.";
+        }
+        if (input.question?.trim()) {
+          const before = (yield* now())?.turns.length ?? 0;
+          const asked = yield* reviewChat.ask(input.ticketId, input.question.trim(), input.lines ?? null, input.commit ?? null);
+          if ("error" in asked) return `failed: ${asked.error}`;
+          // the page shows it as it comes; this waits for the answer to settle
+          const settled = yield* reviewChat.view(input.ticketId).pipe(
+            Stream.filter((view) => view.turns.length > before && view.turns.slice(before).every((turn) => turn.state !== "answering")),
+            Stream.runHead,
+            Effect.timeoutOption(Duration.minutes(5)),
+            Effect.map(Option.flatten),
+          );
+          if (Option.isSome(settled)) return chatInWords(settled.value);
+          return "It is still answering after five minutes: call review-chat with only 'ticketId' later to read the answer.";
+        }
+        const view = yield* now();
+        return view ? chatInWords(view) : `no chat on ${input.ticketId}`;
+      }, Effect.provideContext(talkContext)),
       "guess-reason": Effect.fn("Mcp.guessReason")(function* (input: { ticketId: string; questionId: string; what: string; basis: string; confidence: "high" | "medium" | "low" }) {
         if (!input.what.trim()) return "failed: 'what' is the reason you assume";
         const { id: roomId } = yield* focusedRoom;
@@ -2528,6 +2588,9 @@ const makeHandlers = Effect.gen(function* () {
         const ticket = all.get(ticketId);
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}, not a review — only a review has a page (its why is in review-context)`;
+        // the page's chat starts from the conversation that opened it (ReviewChat)
+        const opener = (yield* actingNow)?.conversation;
+        if (opener) yield* store.update((state) => ({ ...state, chatOpeners: { ...state.chatOpeners, [ticketId]: opener } }));
         return yield* pages.show(ticketId);
       }),
       "review-progress": Effect.fn("Mcp.reviewProgress")(function* (input: { ticketId: string; mark?: ReadonlyArray<string>; unmark?: ReadonlyArray<string> }) {

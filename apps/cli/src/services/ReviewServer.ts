@@ -186,6 +186,7 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
     instead: (ticketId, turnId, mode) =>
       ticketIdOk(ticketId) && typeof turnId === "string" && /^[\w-]{1,80}$/.test(turnId) && (mode === "assume" || mode === "critique") ? on(chat.instead(ticketId, turnId, mode)) : Effect.succeed({ error: "bad request" }),
     newChat: (ticketId) => (ticketIdOk(ticketId) ? chat.clear(ticketId) : Effect.void),
+    reopenChat: (ticketId, chatId) => (ticketIdOk(ticketId) ? chat.reopen(ticketId, chatId).pipe(Effect.asVoid) : Effect.void),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];
 });

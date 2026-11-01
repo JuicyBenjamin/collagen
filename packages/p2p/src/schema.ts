@@ -751,7 +751,13 @@ export type ChatTurnKept = typeof ChatTurnKept.Type;
 
 /** Where a review's chat is: the AI and its own conversation id (the AI
  *  keeps the conversation), and the turns, so the page shows them at once. */
-export const ChatKept = Schema.Struct({ ai: Schema.String, id: Schema.String, turns: Schema.optional(Schema.Array(ChatTurnKept)) });
+export const ChatKept = Schema.Struct({
+  ai: Schema.String,
+  id: Schema.String,
+  turns: Schema.optional(Schema.Array(ChatTurnKept)),
+  /** when a new chat took its place (ISO, UTC): set on an earlier chat only */
+  ended: Schema.optional(Schema.String),
+});
 export type ChatKept = typeof ChatKept.Type;
 
 /** A question about the person's review, kept by their collagen until it is
@@ -931,6 +937,13 @@ export const LocalState = Schema.Struct({
    *  (review page chat): which AI, and its own conversation id. The AI keeps
    *  the conversation; this is only where to find it again. Never broadcast. */
   chats: Schema.optional(Schema.Record(Schema.String, ChatKept)),
+  /** ticketId → the AI conversation that opened the review's page
+   *  (open-review): the page's chat starts as a fork of it, or reads its log,
+   *  so it knows what the person was discussing. Never broadcast. */
+  chatOpeners: Schema.optional(Schema.Record(Schema.String, Conversation)),
+  /** ticketId → the review's earlier chats, newest first: a new chat sets
+   *  the one before it here instead of losing it. Never broadcast. */
+  pastChats: Schema.optional(Schema.Record(Schema.String, Schema.Array(ChatKept))),
   /** ticketId → file → the person's viewed mark (the review page's, and
    *  their agent's through review-progress). Theirs alone, never broadcast. */
   viewed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark))),

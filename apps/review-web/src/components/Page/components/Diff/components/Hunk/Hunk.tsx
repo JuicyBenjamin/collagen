@@ -1,4 +1,4 @@
-import { createMemo, createSignal, flush, For, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, flush, For, onCleanup, Show } from "solid-js";
 import type { DiffLine, Hunk as HunkData, WholeFileResult } from "~/data";
 import { diffNow } from "~/diffNow";
 import { ticketId } from "~/ticket";
@@ -16,6 +16,7 @@ import { FileThread } from "./components/FileThread";
 import { Rendered } from "./components/Rendered";
 import { isMarkdown, mdView } from "~/mdView";
 import { hostNow } from "~/hostNow";
+import { chatNow } from "~/chatNow";
 import { reading, viewed } from "~/viewedNow";
 import { sinceOf } from "~/sinceNow";
 import { moved, placeSince } from "~/since";
@@ -473,16 +474,10 @@ export function Lines(props: {
   // the lines picked for a comment in this hunk, first to last, while picked here
   const picked = createMemo(() => {
     const pick = hostNow.pick();
-    return pick && pick.hunk === props.hunk.id ? { first: Math.min(pick.anchor, pick.focus), last: Math.max(pick.anchor, pick.focus) } : null;
+    return pick && pick.hunk === props.hunk.id ? { first: Math.min(pick.anchor, pick.focus), last: Math.max(pick.anchor, pick.focus), for: pick.for } : null;
   });
-  const inPick = (index: number) => {
-    const block = picked();
-    return block !== null && index >= block.first && index <= block.last;
-  };
-  /** The composer for the pick, under its last line once the drag is over. */
-  const composerAt = (index: number) => {
-    const block = picked();
-    if (!block || block.last !== index || hostNow.dragging()) return null;
+  /** The picked block's lines: where they start and end, and each as the diff shows it. */
+  const linesOf = (block: { readonly first: number; readonly last: number }) => {
     const from = sideOf(rows()[block.first]!.line);
     const to = sideOf(rows()[block.last]!.line);
     if (!from || !to) return null;
@@ -491,10 +486,34 @@ export function Lines(props: {
     return {
       from: { side: from.side, line: from.line },
       to: { side: to.side, line: to.line },
-      suggestable: lines.every((line) => line.kind !== "-") ? lines.map((line) => line.text) : null,
+      lines,
       // as the diff shows them, each after its sign: what the reader's AI is asked about
       code: lines.map((line) => (line.kind === "+" || line.kind === "-" ? line.kind : " ") + line.text).join("\n"),
     };
+  };
+  // lines picked for the reader's AI go straight to the chat once the drag is over: no comment box
+  createEffect(
+    () => {
+      const block = picked();
+      return block?.for === "ai" && !hostNow.dragging() ? linesOf(block) : null;
+    },
+    (asked) => {
+      if (!asked) return;
+      hostNow.clearPick();
+      chatNow.askAbout({ file: props.hunk.file, from: asked.from, to: asked.to, text: asked.code });
+    },
+  );
+  const inPick = (index: number) => {
+    const block = picked();
+    return block !== null && index >= block.first && index <= block.last;
+  };
+  /** The composer for the pick, under its last line once the drag is over. */
+  const composerAt = (index: number) => {
+    const block = picked();
+    if (!block || block.for !== "comment" || block.last !== index || hostNow.dragging()) return null;
+    const chosen = linesOf(block);
+    if (!chosen) return null;
+    return { from: chosen.from, to: chosen.to, suggestable: chosen.lines.every((line) => line.kind !== "-") ? chosen.lines.map((line) => line.text) : null, code: chosen.code };
   };
   /** The new file's lines from `from` to `to`, as this hunk shows them — what a suggestion replaces. */
   const codeOf = (from: number, to: number): ReadonlyArray<string> | null => {
@@ -539,6 +558,22 @@ export function Lines(props: {
                 >
                   {/* GitHub's +: shown on hover; press and drag down (or shift-click
                       another line's) for a block of lines */}
+                  {/* ask the reader's AI about this line — drag, or shift-click another, for several */}
+                  <button
+                    type="button"
+                    class="add-comment ask-line"
+                    title="Ask your AI about this line — drag, or shift-click another line, for several"
+                    aria-label="Ask your AI about this line"
+                    onMouseDown={(event) => {
+                      if (event.button !== 0) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      hostNow.startPick(props.hunk.id, index(), event.shiftKey, "ai");
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    ✦
+                  </button>
                   <Show when={talks() && (props.talkOn?.(line) ?? true)}>
                     <button
                       type="button"

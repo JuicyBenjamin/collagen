@@ -58,6 +58,8 @@ export interface Pick {
   readonly hunk: string;
   readonly anchor: number;
   readonly focus: number;
+  /** what the lines are picked for: a comment (+), or a question to the reader's AI */
+  readonly for: "comment" | "ai";
 }
 const [pick, setPick] = createSignal<Pick | null>(null);
 
@@ -293,9 +295,9 @@ export const hostNow = {
   /** The pointer went down on a line's +: a new pick there — or, with shift
    *  held, the pick in this hunk stretched to it. Dragging goes on until the
    *  button comes up, anywhere. */
-  startPick: (hunk: string, row: number, stretch: boolean): void => {
+  startPick: (hunk: string, row: number, stretch: boolean, purpose: Pick["for"] = "comment"): void => {
     const picked = pick();
-    setPick(stretch && picked?.hunk === hunk ? { ...picked, focus: row } : { hunk, anchor: row, focus: row });
+    setPick(stretch && picked?.hunk === hunk && picked.for === purpose ? { ...picked, focus: row } : { hunk, anchor: row, focus: row, for: purpose });
     setDragging(true);
     window.addEventListener("mouseup", () => setDragging(false), { once: true });
   },
