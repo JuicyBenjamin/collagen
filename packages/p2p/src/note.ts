@@ -14,12 +14,12 @@ import { Conversation } from "./acting";
 export const NoteStrength = Schema.Literals(["nit", "suggest", "wish", "must"]);
 export type NoteStrength = typeof NoteStrength.Type;
 
-/** What a note says: a title, the one line an agent is handed, and the whole
- *  of it (reasoning, examples) read only when it is relevant. */
+/** What a note says: a title people read at a glance — short, saying what it
+ *  aims for — and the description an agent takes its knowledge from, read
+ *  only when the note is relevant. */
 export const NoteWords = Schema.Struct({
   title: Schema.String,
-  line: Schema.String,
-  body: Schema.String,
+  description: Schema.String,
   /** where it applies: paths or globs ("apps/review-web/**", "*.tsx"); none: the whole project */
   where: Schema.optional(Schema.Array(Schema.String)),
   strength: Schema.optional(NoteStrength),
@@ -29,8 +29,7 @@ export type NoteWords = typeof NoteWords.Type;
 /** A change's new words: only what changed. */
 export const NoteChange = Schema.Struct({
   title: Schema.optional(Schema.String),
-  line: Schema.optional(Schema.String),
-  body: Schema.optional(Schema.String),
+  description: Schema.optional(Schema.String),
   where: Schema.optional(Schema.Array(Schema.String)),
   strength: Schema.optional(NoteStrength),
 });
@@ -129,7 +128,7 @@ export const orderTurns = (turns: ReadonlyArray<NoteTurn>): ReadonlyArray<NoteTu
 /** A note folded with its turns (those for other notes are ignored). */
 export const noteNow = (note: SteeringNote, turns: ReadonlyArray<NoteTurn>): NoteNow => {
   const ordered = orderTurns(turns.filter((turn) => turn.note === note.id));
-  let words: NoteWords = { title: note.title, line: note.line, body: note.body, ...(note.where ? { where: note.where } : {}), ...(note.strength ? { strength: note.strength } : {}) };
+  let words: NoteWords = { title: note.title, description: note.description, ...(note.where ? { where: note.where } : {}), ...(note.strength ? { strength: note.strength } : {}) };
   let retired = false;
   let read = note.unread !== true;
   const writers = new Set<string>([note.by]);
