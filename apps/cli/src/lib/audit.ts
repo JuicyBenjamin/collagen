@@ -27,6 +27,7 @@ const RUN_WORDS: Record<OwnRun["why"], string> = {
   filing: "Review asks",
   answering: "Answers",
   chat: "Chats",
+  guidance: "Guidance passes",
 };
 
 export interface AuditInput {

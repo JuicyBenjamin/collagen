@@ -71,10 +71,13 @@ const FILING_TOOLS = ["review-context", "ask-review", "review-request"];
 /** The collagen tools an answering job may call: the why to read, and the
  *  question to answer. */
 const ANSWERING_TOOLS = ["review-context", "review-question"];
+/** The collagen tools a guidance pass may call: a note whole, and its verdict. */
+const GUIDANCE_TOOLS = ["get-note", "guidance-pass"];
 
 /** The steering a job answers to: an investigation's its own kind, a review
  *  asked of the person the review level, any other research the run level. */
-const steeredBy = (kind: JobKind): "run" | "investigate" | "review" | "answer" => (kind === "investigation" ? "investigate" : kind === "filing" ? "review" : kind === "answering" ? "answer" : "run");
+const steeredBy = (kind: JobKind): "run" | "investigate" | "review" | "answer" | "guidance" =>
+  kind === "investigation" ? "investigate" : kind === "filing" ? "review" : kind === "answering" ? "answer" : kind === "guidance" ? "guidance" : "run";
 
 /** How many of collagen's own job conversations are remembered. */
 const JOB_CONVERSATIONS = 200;
@@ -137,7 +140,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
           const url = yield* mcpInfo.awaitUrl;
           // an investigation's run is told its goals as they are now
           const prompt = next.kind === "investigation" && next.goals ? investigationPrompt({ id: next.ticketId, title: next.title }, next.goals, next.ask, yield* SubscriptionRef.get(nameRef), name) : next.prompt;
-          const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}), ...(next.kind === "filing" ? { tools: FILING_TOOLS } : next.kind === "answering" ? { tools: ANSWERING_TOOLS } : {}), ...(next.reads ? { reads: next.reads } : {}) };
+          const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}), ...(next.kind === "filing" ? { tools: FILING_TOOLS } : next.kind === "answering" ? { tools: ANSWERING_TOOLS } : next.kind === "guidance" ? { tools: GUIDANCE_TOOLS } : {}), ...(next.reads ? { reads: next.reads } : {}) };
           const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           yield* letGo(next.id);
           // the job's own conversation is over: it never hears news of the ticket
@@ -226,7 +229,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
     /** Queue filing the review someone asked of the person's work, as their
      *  steering for review asks allowed: runs when there is room under their
      *  limit. Says what happened, or why not. */
-    const file = (asked: FilingAsk, kind: "filing" | "answering" = "filing") =>
+    const file = (asked: FilingAsk, kind: "filing" | "answering" | "guidance" = "filing") =>
       Effect.gen(function* () {
         const state = yield* store.get;
         const chosen = jobHarness(state, kind);
@@ -234,7 +237,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         if (!harness) return `failed: collagen runs this job with ${chosen ? `"${chosen}", which it cannot run` : "the AI your user uses most, and none has worked with collagen yet"} — choose one for it on the settings page's AI tab, or with set-jobs`;
         const model = modelFor(state, kind, harness.defaultModels);
         const queuedAt = yield* Clock.currentTimeMillis;
-        const job: QueuedJob = { id: crypto.randomUUID(), kind, ticketId: asked.requestId, title: asked.title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: asked.prompt, cwd: asked.cwd, cause: "others", roomId: asked.roomId, reads: asked.reads };
+        const job: QueuedJob = { id: crypto.randomUUID(), kind, ticketId: asked.requestId, title: asked.title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: asked.prompt, cwd: asked.cwd, cause: kind === "guidance" ? "mine" : "others", roomId: asked.roomId, reads: asked.reads };
         yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
         const view: JobView = { id: job.id, kind, ticketId: job.ticketId, title: job.title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
         yield* SubscriptionRef.update(views, (all) => [...all, view]);

@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { AdoptedThread, DraftComment, LocalState, Merging, OwnRun, Project, Proposal, QueuedJob, Settings, Steering, SteeringLevels, TranscriptAsk, ViewedMark, Worked, ChatKept, Conversation } from "@collagen/p2p";
+import { AdoptedThread, DraftComment, LocalState, Merging, OwnRun, Project, Proposal, QueuedJob, Settings, Steering, SteeringLevels, TranscriptAsk, ViewedMark, Worked, ChatKept, Conversation, Preparing } from "@collagen/p2p";
 import { checkedThemes } from "@collagen/review-web/themeData";
 
 /** Reading the user's own state file must never cost them their rooms.
@@ -175,6 +175,8 @@ export const salvageState = (text: string): Salvaged => {
   const chatOpeners = decode(Schema.Record(Schema.String, Conversation), src.chatOpeners);
   // unreadable, a review's earlier chats are lost; the current one stays
   const pastChats = decode(Schema.Record(Schema.String, Schema.Array(ChatKept)), src.pastChats);
+  // unreadable, a review being prepared is left as it is in the room
+  const preparing = decode(Schema.Record(Schema.String, Preparing), src.preparing);
 
   // unreadable, every review reads unviewed again
   const viewed = decode(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark)), src.viewed);
@@ -212,6 +214,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(chats ? { chats } : {}),
       ...(chatOpeners ? { chatOpeners } : {}),
       ...(pastChats ? { pastChats } : {}),
+      ...(preparing ? { preparing } : {}),
       rooms,
       ...(projectOrder ? { projectOrder } : {}),
       ...(threads ? { threads } : {}),
