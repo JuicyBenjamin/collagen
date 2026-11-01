@@ -290,8 +290,9 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           // instruction to the agent, not two: what to report, then what to do
           const fact = `closed "${merged.goal}" [ticket ${merged.id}] as ${out.outcome === "dropped" ? "dropped (out of its epic's progress)" : "done"}${out.reason ? ` — ${out.reason.replace(/\.$/, "")}` : ""}. It has left the lists and stays on the log with its steps as they were${open > 0 ? ` (${open} never answered)` : ""}; later tickets can still refer to it.`;
           // what it grew from, still open and theirs: closed with it by their
-          // own setting unless they keep it, or (setting off) only on their word
-          const parents = openParents(merged, yield* SubscriptionRef.get(room.tickets), identity.pubkey);
+          // own setting unless they keep it, or (setting off) only on their word —
+          // only when its work was done: a dropped ticket finished nothing it grew from
+          const parents = out.outcome === "done" ? openParents(merged, yield* SubscriptionRef.get(room.tickets), identity.pubkey) : [];
           const named = parents.map((parent) => `"${parent.title}" [ticket ${parent.id}]`).join(", ");
           // as their closing steering says: never, leave it; ask first; act, then tell; or just do it
           const closing = levelOf(yield* store.get, "close", "mine", roomId);
