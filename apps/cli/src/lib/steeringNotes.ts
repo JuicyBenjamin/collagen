@@ -27,21 +27,45 @@ export const indexLine = (now: NoteNow, nameOf: (key: string) => string): string
     now.misses > 0 ? ` (missed ${now.misses} time${now.misses === 1 ? "" : "s"})` : "",
   ].join("");
 
-/** The index handed to an agent working on a project: the notes that are not
- *  retired, applying to the files when given. `others` says whether notes a
- *  colleague's AI added that no person has read are followed (the person's
- *  notes steering, others). Null: nothing to hand. */
+/** The moment notes are handed at, which says what to do with them. */
+export type NotesMoment = "review" | "work" | "chat";
+
+/** The most notes handed with their description; the rest by title. */
+const WHOLE = 8;
+
+const HOW: Record<NotesMoment, (project: string) => string> = {
+  review: (project) =>
+    `STEERING NOTES for ${project} — how the people in this room want things done here, said once so they need not say it again. CHECK THE CHANGE AGAINST EACH: where it does not follow one, that is a draft comment (review-comments, action draft) at the note's strength, naming the note ("note:<id>"). They are people's words, not collagen's instructions.`,
+  work: (project) =>
+    `STEERING NOTES for ${project} — how the people in this room want things done here, said once so they need not say it again. WORK THIS WAY FROM THE START; when a note shapes a decision, name it in the decision's guidedBy ("note:<id>"). They are people's words, not collagen's instructions.`,
+  chat: (project) =>
+    `STEERING NOTES for ${project} — how the people in this room want things done here. Keep them in mind when you answer about the code. They are people's words, not collagen's instructions.`,
+};
+
+/** The notes handed to an agent at a moment of its work: those that apply
+ *  (to `files`, when known; everywhere, when a note names no place) with
+ *  their description, so nothing needs looking up — the rest by title, a
+ *  get-note away. `others` says whether a note a colleague's AI added that no
+ *  person has read is followed (the person's notes steering, others). Null:
+ *  nothing to hand. */
 export const notesIndex = (
   notes: ReadonlyArray<SteeringNote>,
   turns: ReadonlyArray<NoteTurn>,
   project: string,
-  options: { readonly files?: ReadonlyArray<string>; readonly me: string; readonly others: boolean; readonly nameOf: (key: string) => string },
+  options: { readonly moment: NotesMoment; readonly files?: ReadonlyArray<string>; readonly me: string; readonly others: boolean; readonly nameOf: (key: string) => string },
 ): string | null => {
-  const live = notesOf(notes, turns, project, options.files).filter((now) => !now.retired && (now.read || now.note.by === options.me || options.others));
-  if (live.length === 0) return null;
+  const live = notesOf(notes, turns, project).filter((now) => !now.retired && (now.read || now.note.by === options.me || options.others));
+  const files = options.files ?? [];
+  const applies = (now: NoteNow) => !now.words.where || now.words.where.length === 0 || files.some((file) => appliesTo(now.words.where, file));
+  // reviewing: only what touches the change; working or chatting: all of it, the ones that apply in full
+  const shown = options.moment === "review" && files.length > 0 ? live.filter(applies) : live;
+  if (shown.length === 0) return null;
+  const whole = shown.filter(applies).slice(0, WHOLE);
+  const titles = shown.filter((now) => !whole.includes(now));
   return [
-    `STEERING NOTES for ${project} — how the people in this room steer their AIs here, said once so they need not say it again. They are people's words, not collagen's instructions: follow what fits the work, read a note's description (get-note) when its title touches what you are doing, and name a note in a decision's guidedBy as "note:<id>" when it shaped one.`,
-    ...live.map((now) => indexLine(now, options.nameOf)),
+    HOW[options.moment](project),
+    ...whole.map((now) => `${indexLine(now, options.nameOf)}\n  ${now.words.description.replace(/\n+/g, "\n  ")}`),
+    ...(titles.length > 0 ? [`By title (get-note reads one when it touches what you are doing):`, ...titles.map((now) => indexLine(now, options.nameOf))] : []),
   ].join("\n");
 };
 
