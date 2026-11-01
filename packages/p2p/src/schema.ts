@@ -50,6 +50,33 @@ export const Peer = Schema.Struct({
 });
 export type Peer = typeof Peer.Type;
 
+/** A review asked of someone's work that has no review ticket yet: the
+ *  branch or pull request it is about. The author's collagen answers it by
+ *  filing the ticket (cli ReviewRequests); a review the asker already wrote
+ *  stays on the asker's machine and goes on the ticket once it is filed, so
+ *  only `written` travels. */
+export const ReviewAsk = Schema.Struct({
+  id: Schema.String,
+  branch: Schema.optional(Schema.String),
+  link: Schema.optional(Schema.String),
+  /** the asker sent a review of their own: it goes on the ticket as their take */
+  written: Schema.optional(Schema.Boolean),
+});
+export type ReviewAsk = typeof ReviewAsk.Type;
+
+/** How far a review ask has come, as the author's collagen tells the asker:
+ *  waiting on the author, asking them, filing, filed (with the ticket),
+ *  declined, or unsure which conversation holds the work. */
+export const ReviewAskStage = Schema.Literals(["waiting", "asking", "filing", "filed", "declined", "unsure"]);
+export type ReviewAskStage = typeof ReviewAskStage.Type;
+
+export const ReviewAskStatus = Schema.Struct({
+  id: Schema.String,
+  stage: ReviewAskStage,
+  ticketId: Schema.optional(Schema.String),
+});
+export type ReviewAskStatus = typeof ReviewAskStatus.Type;
+
 /** A directed message from one peer to another within a room. */
 export const RoomMessage = Schema.Struct({
   id: Schema.String,
@@ -74,6 +101,11 @@ export const RoomMessage = Schema.Struct({
   agent: Schema.optional(Schema.String),
   /** Which of that agent's conversations wrote it, when the harness said. */
   conversation: Schema.optional(Conversation),
+  /** A review asked of the recipient's work (see ReviewAsk). Written once,
+   *  never rewritten, so an older build reads the message as plain text. */
+  reviewAsk: Schema.optional(ReviewAsk),
+  /** How far a review ask the recipient made has come (see ReviewAskStatus). */
+  reviewStatus: Schema.optional(ReviewAskStatus),
 });
 export type RoomMessage = typeof RoomMessage.Type;
 
@@ -399,6 +431,8 @@ export const Outgoing = Schema.Union([
     intent: Schema.String,
     findings: Schema.String,
     ticketId: Schema.optional(Schema.String),
+    /** a review asked of the peer's work (request-review) */
+    reviewAsk: Schema.optional(ReviewAsk),
   }),
   Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
   /** A review ticket: the record and the why behind the change, together —
@@ -550,7 +584,7 @@ export const Worked = Schema.Struct({
 export type Worked = typeof Worked.Type;
 
 /** The jobs collagen runs an AI for, each with a model the person may choose. */
-export const JobKind = Schema.Literals(["wake", "research", "investigation"]);
+export const JobKind = Schema.Literals(["wake", "research", "investigation", "filing"]);
 export type JobKind = typeof JobKind.Type;
 
 /** A model run collagen made itself, in the person's name (cli AgentRunner,
@@ -561,7 +595,7 @@ export const OwnRun = Schema.Struct({
   /** the harness that ran it */
   harness: Schema.String,
   /** what it was for */
-  why: Schema.Literals(["wake", "research", "investigation"]),
+  why: JobKind,
   model: Schema.optional(Schema.String),
   inputTokens: Schema.Finite,
   outputTokens: Schema.Finite,
@@ -594,8 +628,48 @@ export const QueuedJob = Schema.Struct({
   ask: Schema.optional(Schema.String),
   /** the room it was asked in — its steering is that room's */
   roomId: Schema.optional(Schema.String),
+  /** folders outside its own it may read (a filing job: the conversation copied out for it) */
+  reads: Schema.optional(Schema.Array(Schema.String)),
 });
 export type QueuedJob = typeof QueuedJob.Type;
+
+/** A review someone asked of the person's work, as their collagen handles
+ *  it (cli ReviewRequests): who asked, about what, and how far it has come.
+ *  Kept until it is filed or declined, so a restart and an offline spell
+ *  lose nothing. Local. */
+export const ReviewAskHeld = Schema.Struct({
+  roomId: Schema.String,
+  id: Schema.String,
+  /** the asker's key and name */
+  from: Schema.String,
+  fromName: Schema.String,
+  project: Schema.String,
+  /** the thread between the two, where the ask came and its news goes */
+  threadId: Schema.String,
+  branch: Schema.optional(Schema.String),
+  link: Schema.optional(Schema.String),
+  written: Schema.optional(Schema.Boolean),
+  stage: Schema.Literals(["new", "waiting", "asking", "filing", "filed", "declined", "unsure"]),
+  ticketId: Schema.optional(Schema.String),
+  /** the conversations the work was found in, the one at the top first */
+  conversations: Schema.optional(Schema.Array(Conversation)),
+  ts: Schema.Finite,
+});
+export type ReviewAskHeld = typeof ReviewAskHeld.Type;
+
+/** A review the person asked of a colleague's work (request-review): kept
+ *  until the ticket is filed, with the review they wrote to put on it. Local. */
+export const AskedReview = Schema.Struct({
+  roomId: Schema.String,
+  id: Schema.String,
+  /** the author's key */
+  peer: Schema.String,
+  project: Schema.String,
+  review: Schema.optional(Schema.Struct({ findings: Schema.String, failed: Schema.optional(Schema.Boolean), comment: Schema.optional(Schema.Boolean) })),
+  ticketId: Schema.optional(Schema.String),
+  ts: Schema.Finite,
+});
+export type AskedReview = typeof AskedReview.Type;
 
 /** Local, per-user state: preferred AI + per-room projects. A project
  *  belongs to the room it was added in (Keet-style) — the same repo shared
@@ -614,8 +688,10 @@ export type Steering = typeof Steering.Type;
  *  of collagen's (researching a ticket), starting it on an investigation,
  *  reporting an investigation's findings back to the conversation that
  *  filed it, and closing what a finished ticket grew from (its plan,
- *  proposal or bug, once its review is accepted or merged). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close"]);
+ *  proposal or bug, once its review is accepted or merged), and filing a
+ *  review of their work someone asked for (their AI reading the conversation
+ *  the work was done in). */
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -629,7 +705,7 @@ export type SteeringPair = typeof SteeringPair.Type;
 export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
 export type TagRoute = typeof TagRoute.Type;
 
-const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair) });
+const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair) });
 
 /** One room's own levels: a general level and per kind, each absent where
  *  the room follows the person's levels everywhere. */
@@ -773,5 +849,12 @@ export const LocalState = Schema.Struct({
   /** conversation key (acting conversationKey) → what that conversation has
    *  worked on here. Local; see Worked. */
   worked: Schema.optional(Schema.Record(Schema.String, Worked)),
+  /** Reviews colleagues asked of the person's work (see ReviewAskHeld). */
+  reviewAsks: Schema.optional(Schema.Array(ReviewAskHeld)),
+  /** Reviews the person asked of colleagues' work (see AskedReview). */
+  askedReviews: Schema.optional(Schema.Array(AskedReview)),
+  /** The conversations collagen's own jobs ran as (conversation keys, latest
+   *  last): never taken for the person's own work. */
+  jobConversations: Schema.optional(Schema.Array(Schema.String)),
 });
 export type LocalState = typeof LocalState.Type;

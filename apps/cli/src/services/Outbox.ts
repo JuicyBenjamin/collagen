@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
-import { actingFields, ticketName, type Outgoing, type Proposal } from "@collagen/p2p";
+import { actingFields, ticketName, type Conversation, type Outgoing, type Proposal } from "@collagen/p2p";
 import { actingWith } from "../lib/agents";
 import { Harnesses } from "./Harness";
 import { NO_TITLE } from "../lib/review";
@@ -134,11 +134,14 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
      *  outbox is a receipt of what left this machine, so a failure recorded
      *  as a send would be a lie the person cannot see through. The caller
      *  gets the outcome, tag and all: some of them have to retry. */
-    const send = (proposal: Omit<Proposal, "id" | "ts" | "agent" | "conversation">) =>
+    /** `readFrom`: the conversation the words came from, when it is not the
+     *  calling one's — a filing job writes for the conversation it read. */
+    const send = (proposal: Omit<Proposal, "id" | "ts" | "agent" | "conversation">, readFrom?: Conversation) =>
       Effect.gen(function* () {
         // the agent whose tool call this is, and its conversation — none when the person acted
-        const acting = yield* actingNow;
-        const outcome = yield* dispatch.perform(proposal.roomId, proposal.outgoing, acting);
+        const caller = yield* actingNow;
+        const acting = readFrom && caller ? { ...caller, conversation: readFrom } : caller;
+        const outcome = yield* dispatch.perform(proposal.roomId, proposal.outgoing, acting, readFrom === undefined);
         if (outcome._tag === "sent") {
           const full: Proposal = { ...proposal, id: crypto.randomUUID(), ts: yield* Clock.currentTimeMillis, ...actingFields(acting) };
           yield* store.update((state) => ({ ...state, sent: [full, ...(state.sent ?? [])].slice(0, KEPT) }));
@@ -151,7 +154,7 @@ export class Outbox extends Context.Service<Outbox>()("cli/Outbox", {
     /** For a caller that only relays what happened to its agent: the text,
      *  without the tag. Anything that must react to a refusal (retry, keep a
      *  peer's request alive) uses `send` and reads the tag. */
-    const tell = (proposal: Omit<Proposal, "id" | "ts" | "agent" | "conversation">) => send(proposal).pipe(Effect.map((outcome) => outcome.text));
+    const tell = (proposal: Omit<Proposal, "id" | "ts" | "agent" | "conversation">, readFrom?: Conversation) => send(proposal, readFrom).pipe(Effect.map((outcome) => outcome.text));
 
     return { all, changes, send, tell } as const;
   }),

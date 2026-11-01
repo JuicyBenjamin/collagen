@@ -57,6 +57,7 @@ export const runJob = (job: Job): Effect.Effect<JobDone, never, RunAllowed | Chi
         ...(job.model ? ["-m", job.model] : []),
         "-c", `${server}.url="${job.server.url}"`,
         "-c", `${server}.default_tools_approval_mode="approve"`,
+        ...(job.tools ? ["-c", `${server}.enabled_tools=${JSON.stringify(job.tools)}`] : []),
         job.prompt,
       ],
       { cwd: job.cwd, stdin: "ignore" },

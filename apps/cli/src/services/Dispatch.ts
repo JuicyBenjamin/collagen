@@ -81,7 +81,7 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
           if (who._tag === "refused") return refused(who.text);
           const target = who.person;
           const online = peers.some((peer) => peer.key === target.key);
-          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}), ...actingFields(acting) }).pipe(
+          return yield* room.sendTo(target.key, { project: out.project, intent: out.intent, findings: out.findings, ...(out.ticketId ? { ticketId: out.ticketId } : {}), ...(out.reviewAsk ? { reviewAsk: out.reviewAsk } : {}), ...actingFields(acting) }).pipe(
             Effect.tap((message) => Effect.sync(() => wroteOn.push(message.threadId))),
             Effect.map(() => sent(online ? `sent to ${target.name}` : `sent to ${target.name} (offline — they get it when they are next online)`)),
             Effect.catchTag("NotWritable", () => Effect.succeed(NOT_ADMITTED)),
@@ -393,13 +393,15 @@ export class Dispatch extends Context.Service<Dispatch>()("cli/Dispatch", {
     /** Write it, and — when an agent's conversation did — remember that the
      *  conversation worked on its thread and tickets (lib/worked), and how
      *  to reach it — delivered to only as the person's steering lets it. */
-    const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing, acting?: Acting) {
+    /** `calling`: whether `acting`'s conversation is the one calling now —
+     *  only then is how to reach it read from the call. */
+    const perform = Effect.fn("Dispatch.perform")(function* (roomId: string, out: Outgoing, acting?: Acting, calling = true) {
       const wroteOn: Array<string> = [];
       const done = yield* write(roomId, out, acting, wroteOn);
       const conversation = acting?.conversation;
       if (done._tag === "sent" && conversation) {
         const now = yield* Clock.currentTimeMillis;
-        const socket = yield* (harnessFor(harnesses, conversation.ai)?.reachOf ?? Effect.succeed(undefined));
+        const socket = calling ? yield* (harnessFor(harnesses, conversation.ai)?.reachOf ?? Effect.succeed(undefined)) : undefined;
         yield* store.update((state) => withWorked(state, conversation, { threads: wroteOn, tickets: ticketsOf(out), ...(socket ? { socket } : {}) }, now));
       }
       return done;

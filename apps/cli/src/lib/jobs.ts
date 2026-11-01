@@ -7,12 +7,13 @@ import { settingOf } from "./settings";
 // heard of is passed through, so a new model needs nothing from collagen
 // (and the harness's aliases, like Claude Code's "haiku", follow the newest).
 
-export const JOB_KINDS: ReadonlyArray<JobKind> = ["wake", "research", "investigation"];
+export const JOB_KINDS: ReadonlyArray<JobKind> = ["wake", "research", "investigation", "filing"];
 
 export const JOB_LABEL: Record<JobKind, string> = {
   wake: "waking a conversation",
   research: "researching a ticket",
   investigation: "answering an investigation",
+  filing: "filing a review asked of you",
 };
 
 /** The job a ticket's research is: an investigation's question is answered,

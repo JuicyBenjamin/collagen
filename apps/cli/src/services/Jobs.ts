@@ -1,6 +1,6 @@
 import { Clock, Context, Effect, Layer, Ref, Scope, SubscriptionRef } from "effect";
 import { ChildProcessSpawner } from "effect/process";
-import { goalsOf, type JobKind, type OwnRun, type QueuedJob, type Ticket } from "@collagen/p2p";
+import { conversationKey, goalsOf, type JobKind, type OwnRun, type QueuedJob, type Ticket } from "@collagen/p2p";
 import { investigationPrompt, jobHarness, jobLimitOf, modelFor, paceOf, researchKind, researchPrompt, runsOf, type InvestigationRun } from "../lib/jobs";
 import { allow, withRun, type Cause } from "../lib/steering";
 import { withoutWorked } from "../lib/worked";
@@ -12,7 +12,8 @@ import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
 
 // Jobs: collagen running the person's AI for work of its own — researching
-// a ticket that needs more info. Run with their preferred AI and the model
+// a ticket that needs more info, filing a review someone asked of their
+// work (steered by `review`, not `run`). Run with their preferred AI and the model
 // they chose for the job, behind their steering (`run`), at most as many at
 // once as they allow (one unless they say more), the rest queued in order.
 // Every job shows while it waits and runs, and stays shown a while after,
@@ -52,9 +53,27 @@ export interface ResearchAsk {
   readonly goals?: ReadonlyArray<string>;
 }
 
-/** The steering a job answers to: an investigation's its own kind, any
- *  other research the run level. */
-const steeredBy = (kind: JobKind): "run" | "investigate" => (kind === "investigation" ? "investigate" : "run");
+/** What a filing job runs: the review ask it answers (its id stands where a
+ *  ticket's would), its prompt, where, and the folder of what it reads. */
+export interface FilingAsk {
+  readonly roomId: string;
+  readonly requestId: string;
+  readonly title: string;
+  readonly prompt: string;
+  readonly cwd: string;
+  readonly reads: ReadonlyArray<string>;
+}
+
+/** The collagen tools a filing job may call: the why to read, the ticket to
+ *  file, and the ask to answer when it cannot. */
+const FILING_TOOLS = ["review-context", "ask-review", "review-request"];
+
+/** The steering a job answers to: an investigation's its own kind, a review
+ *  asked of the person the review level, any other research the run level. */
+const steeredBy = (kind: JobKind): "run" | "investigate" | "review" => (kind === "investigation" ? "investigate" : kind === "filing" ? "review" : "run");
+
+/** How many of collagen's own job conversations are remembered. */
+const JOB_CONVERSATIONS = 200;
 
 /** How many finished jobs stay shown. */
 const KEPT = 10;
@@ -114,13 +133,15 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
           const url = yield* mcpInfo.awaitUrl;
           // an investigation's run is told its goals as they are now
           const prompt = next.kind === "investigation" && next.goals ? investigationPrompt({ id: next.ticketId, title: next.title }, next.goals, next.ask, yield* SubscriptionRef.get(nameRef), name) : next.prompt;
-          const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}) };
+          const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}), ...(next.kind === "filing" ? { tools: FILING_TOOLS } : {}), ...(next.reads ? { reads: next.reads } : {}) };
           const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           yield* letGo(next.id);
           // the job's own conversation is over: it never hears news of the ticket
+          // and it is never taken for the person's own work
           if (done.conversation) {
             const ran = done.conversation;
-            yield* store.update((now) => withoutWorked(now, ran));
+            const key = conversationKey(ran);
+            yield* store.update((now) => ({ ...withoutWorked(now, ran), jobConversations: [...(now.jobConversations ?? []).filter((had) => had !== key), key].slice(-JOB_CONVERSATIONS) }));
           }
           const at = yield* Clock.currentTimeMillis;
           if (done.spent) {
@@ -198,9 +219,30 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         return `${kind === "investigation" ? "investigation run" : "research"} on "${title}" is queued${ahead >= 0 ? `, ${ahead + 1} in line` : ""}${jobs[0]!.after ? ", after this ticket's run before it" : ""}: ${limit}.`;
       });
 
+    /** Queue filing the review someone asked of the person's work, as their
+     *  steering for review asks allowed: runs when there is room under their
+     *  limit. Says what happened, or why not. */
+    const file = (asked: FilingAsk) =>
+      Effect.gen(function* () {
+        const state = yield* store.get;
+        const chosen = jobHarness(state, "filing");
+        const harness = chosen ? harnessFor(harnesses, chosen) : undefined;
+        if (!harness) return `failed: collagen runs this job with ${chosen ? `"${chosen}", which it cannot run` : "the AI your user uses most, and none has worked with collagen yet"} — choose one for it on the settings page's AI tab, or with set-jobs`;
+        const model = modelFor(state, "filing", harness.defaultModels);
+        const queuedAt = yield* Clock.currentTimeMillis;
+        const job: QueuedJob = { id: crypto.randomUUID(), kind: "filing", ticketId: asked.requestId, title: asked.title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: asked.prompt, cwd: asked.cwd, cause: "others", roomId: asked.roomId, reads: asked.reads };
+        yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
+        const view: JobView = { id: job.id, kind: "filing", ticketId: job.ticketId, title: job.title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
+        yield* SubscriptionRef.update(views, (all) => [...all, view]);
+        yield* Ref.update(waiting, (queue) => [...queue, job]);
+        yield* pump;
+        const running = (yield* SubscriptionRef.get(views)).find((view) => view.id === job.id)?.state === "running";
+        return `${harness.name}${model ? ` (${model})` : ""} ${running ? "is reading" : "will read, once a job before it is done,"} the conversation the work was done in, and files the review ticket in your user's name. It shows in the jobs list.`;
+      });
+
     // the queue a restart left goes on, once collagen is up
     if (kept.length > 0) yield* Effect.forkIn(pump, scope);
-    return { views, research } as const;
+    return { views, research, file } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

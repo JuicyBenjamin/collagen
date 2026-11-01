@@ -20,6 +20,8 @@ const KINDS: Record<string, CallKind> = {
   "create-ticket": "filing",
   "ask-review": "filing",
   "assume-review": "filing",
+  "request-review": "filing",
+  "review-request": "filing",
   "claim-review": "filing",
   "ask-plan": "filing",
   propose: "filing",

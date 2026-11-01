@@ -36,6 +36,22 @@ export interface Job {
   readonly model?: string;
   readonly cwd: string;
   readonly server: { readonly name: string; readonly url: string };
+  /** the collagen tools it may call (absent: a research job's) */
+  readonly tools?: ReadonlyArray<string>;
+  /** folders outside `cwd` it may read */
+  readonly reads?: ReadonlyArray<string>;
+}
+
+/** One conversation as its session log records it: the folder it ran in,
+ *  the git branches its entries name, the conversation it was started from
+ *  (a sub-agent's parent), and when it began and last moved. */
+export interface Session {
+  readonly conversation: string;
+  readonly cwd: string;
+  readonly branches: ReadonlyArray<string>;
+  readonly parent?: string;
+  readonly startedAt: number;
+  readonly endedAt: number;
 }
 
 /** How a job went: whether it finished, what it last said, what it spent,
@@ -103,6 +119,9 @@ export interface Harness {
   /** one line of its session log as a person reads it — null for its
    *  bookkeeping, undefined when the line is not its own */
   readonly readLine: (record: Readonly<Record<string, unknown>>, stamp: string | null) => TranscriptLine | null | undefined;
+  /** what one session file (from `usage.sessions`) records of its
+   *  conversation, or null when it is not one */
+  readonly readSession: (jsonl: string, file: string) => Session | null;
   /** a line a handed-over slice always keeps, whatever its time (a header that gives the rest its shape) */
   readonly keepsWhole: (record: Readonly<Record<string, unknown>>) => boolean;
   /** its sessions changed since `since`, and what each says of collagen's token use */

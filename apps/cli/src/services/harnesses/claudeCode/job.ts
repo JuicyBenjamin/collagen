@@ -9,7 +9,7 @@ import { courierSpent } from "./reach";
 // looking (the project's files, the web) — nothing of the person's setup
 // loaded, nothing it could change on their machine.
 
-/** The collagen tools a job may call, on the server `name`. */
+/** The collagen tools a research job may call, on the server `name`; a job may name its own. */
 const COLLAGEN_TOOLS = ["get-ticket", "get-tickets", "review-context", "post-review"];
 /** What a job may use besides: reading the project and the web. */
 const LOOKING = ["Read", "Grep", "Glob", "WebSearch", "WebFetch"];
@@ -17,7 +17,7 @@ const LOOKING = ["Read", "Grep", "Glob", "WebSearch", "WebFetch"];
 export const runJob = (job: Job): Effect.Effect<JobDone, never, RunAllowed | ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function* () {
     yield* RunAllowed;
-    const allowed = [...COLLAGEN_TOOLS.map((tool) => `mcp__${job.server.name}__${tool}`), ...LOOKING];
+    const allowed = [...(job.tools ?? COLLAGEN_TOOLS).map((tool) => `mcp__${job.server.name}__${tool}`), ...LOOKING];
     const proc = yield* ChildProcess.make(
       "claude",
       [
@@ -26,6 +26,7 @@ export const runJob = (job: Job): Effect.Effect<JobDone, never, RunAllowed | Chi
         "--mcp-config", JSON.stringify({ mcpServers: { [job.server.name]: { type: "http", url: job.server.url } } }),
         "--strict-mcp-config",
         "--tools", LOOKING.join(","),
+        ...(job.reads ?? []).flatMap((dir) => ["--add-dir", dir]),
         "--allowedTools", allowed.join(","),
         "--setting-sources", "",
         "--disable-slash-commands",
