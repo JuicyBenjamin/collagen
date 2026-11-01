@@ -13,7 +13,8 @@ import {
   type TranscriptFrame,
   type TranscriptRequestFrame,
 } from "./schema";
-import { NotWritable, PeerNotConnected } from "./errors";
+import { NotPermitted, NotWritable, PeerNotConnected } from "./errors";
+import { EMPTY_ACL, EVERYONE, foldAcl, permitted, rankOf, signAcl, type Acl, type AclAct, type RoomRole } from "./acl";
 import type { Conversation } from "./acting";
 import type { ReviewComment, ReviewContext } from "./review";
 import type { NoteTurn, SteeringNote } from "./note";
@@ -82,6 +83,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const encryptionKey = yield* SubscriptionRef.make<string | null>(config.log.encryptionKey);
     // why the invite we are joining with was turned down, or why we cannot follow the room
     const refusal = yield* SubscriptionRef.make<string | null>(null);
+    // our invite was heard, and needs someone allowed to let us in: the room's name meanwhile
+    const awaiting = yield* SubscriptionRef.make<{ readonly room: string } | null>(null);
+    // who may do what in the room, as its signed acts stand (acl.ts)
+    const acl = yield* SubscriptionRef.make<Acl>(EMPTY_ACL);
     const writable = yield* SubscriptionRef.make(false);
     // Messages addressed to us, as the view has them. Consumers subscribe to
     // `messages`, which replays these and then follows — a PubSub would drop
@@ -181,8 +186,21 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       );
       yield* SubscriptionRef.set(tickets, new Map(view.tickets.map((ticket) => [ticket.id, ticket])));
       yield* SubscriptionRef.set(members, view.members);
+      const rules = foldAcl(config.roomName, view.acl);
+      yield* SubscriptionRef.set(acl, rules);
+      // who belongs: its members and whoever an invite let in — never someone
+      // still waiting to be let in, nor anyone taken out
       for (const member of view.members) known.add(member.key);
       for (const invite of view.invites) if (invite.usedBy) known.add(invite.usedBy);
+      for (const identity of [...rules.removed.keys(), ...[...rules.waiting.keys()].filter((identity) => !rules.admitted.has(identity))]) known.delete(identity);
+      // someone taken out is not talked to from now: out of the roster, said nothing more
+      for (const identity of rules.removed.keys())
+        if (peers.has(identity)) {
+          peers.delete(identity);
+          greeted.delete(identity);
+          announced.delete(identity);
+          yield* publishRoster;
+        }
       lastView = view;
       yield* SubscriptionRef.set(trace, view.messages.map((logged) => logged.message));
       yield* SubscriptionRef.set(attachments, view.attachments);
@@ -225,6 +243,18 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       }
     });
 
+    /** Make a signed act about who may do what, on the log. Whether it counts
+     *  is the fold's to say (foldAcl): the result says if it did. */
+    const writeAcl = (act: AclAct) =>
+      Effect.gen(function* () {
+        const roomLog = yield* requireLog;
+        const now = yield* Clock.currentTimeMillis;
+        const entry = signAcl(config.roomName, { id: randomUUID(), by: me, at: now, act }, swarm.identity.keyPair);
+        yield* roomLog.append({ op: "acl", entry }).pipe(Effect.orDie);
+        yield* refresh;
+        return entry;
+      });
+
     /** Say who we are on the log — once we can write to it. The creator also
      *  puts the room's name there the first time, so a room named before the
      *  log existed (or named at creation) reaches joiners by name. */
@@ -235,6 +265,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* log.append({ op: "member", key: me, name: profile.name, ts: now }).pipe(Effect.ignore);
       const view = yield* log.read;
       const label = config.roomLabel;
+      // the creator founds the room: its owner, from the first act on the log
+      if (config.log.creator && foldAcl(config.roomName, view.acl).owner === null && log.encryptionKey !== null) {
+        const entry = signAcl(config.roomName, { id: randomUUID(), by: me, at: now, act: { kind: "found" } }, swarm.identity.keyPair);
+        yield* log.append({ op: "acl", entry }).pipe(Effect.ignore);
+      }
       if (config.log.creator && view.name === null && label.ts > 0) {
         yield* log.append({ op: "rename", name: label.name, ts: label.ts }).pipe(Effect.ignore);
       }
@@ -350,10 +385,32 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             Effect.catchTag("PeerNotConnected", () => Effect.void),
           );
         const now = yield* Clock.currentTimeMillis;
-        const invite = (yield* roomLog.read).invites.find((candidate) => candidate.id === inviteId);
+        const view = yield* roomLog.read;
+        const invite = view.invites.find((candidate) => candidate.id === inviteId);
         if (!invite) return yield* refuse("this room has no such invite — it may not have reached this member yet");
         if (!checkProof(config.roomName, invite.id, invite.publicKey, from, proof)) return yield* refuse("the invite does not prove out");
         if (invite.usedBy !== null && invite.usedBy !== from) return yield* refuse("this invite has been used — ask for a new one");
+        const rules = foldAcl(config.roomName, view.acl);
+        if (rules.removed.has(from)) return yield* refuse("you were taken out of this room");
+        if (rules.declined.has(from)) return yield* refuse(`you were not let in${rules.declined.get(from)?.reason ? `: ${rules.declined.get(from)!.reason}` : ""}`);
+        // an invite from someone who may not invite (any more) lets nobody in
+        if (!rules.admitted.has(from) && !permitted(rules, invite.by, "invite")) return yield* refuse("whoever made this invite may not invite to this room any more — ask for a new one");
+        // let in at once: by an invite from someone who may let people in, or already let in by one
+        const letIn = rules.admitted.has(from) || permitted(rules, invite.by, "approve");
+        if (!letIn) {
+          if (invite.usedBy === null && invite.expires < now) return yield* refuse("this invite has lapsed — ask for a new one");
+          if (!roomLog.writable()) return;
+          // heard: the invite is theirs, and they wait, on the log, for someone allowed to let them in
+          if (invite.usedBy === null) yield* roomLog.append({ op: "redeemed", id: invite.id, identity: from, by: me, ts: now }).pipe(Effect.ignore);
+          if (!rules.waiting.has(from)) {
+            const name = strangers.get(from)?.name ?? peers.get(from)?.name ?? from.slice(0, 8);
+            yield* roomLog.append({ op: "acl", entry: signAcl(config.roomName, { id: randomUUID(), by: me, at: now, act: { kind: "request", identity: from, name, inviteId } }, swarm.identity.keyPair) }).pipe(Effect.ignore);
+            yield* refresh;
+            yield* Effect.log(`${from.slice(0, 8)} is waiting to be let in`);
+          }
+          const shown = yield* SubscriptionRef.get(meta);
+          return yield* send(from, { kind: "waiting", inviteId, room: shown.name || config.roomLabel.name || config.roomName }).pipe(Effect.catchTag("PeerNotConnected", () => Effect.void));
+        }
         if (invite.usedBy === null) {
           if (invite.expires < now) return yield* refuse("this invite has lapsed — ask for a new one");
           // a member not let in to write yet cannot record it: another member will
@@ -403,7 +460,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         const sealed = moved.sealed[me];
         const opened = sealed ? openSealed(sealed, swarm.identity.keyPair) : null;
         if (!opened) {
-          const why = "this room moved to an encrypted log while you were not among its members — ask one of them for an invite";
+          const why = "this room moved to a new key while you were not among its members — ask one of them for an invite";
           yield* SubscriptionRef.set(refusal, why);
           return yield* Effect.logWarning(why);
         }
@@ -416,14 +473,22 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
      *  carrying the room as it stands, then a `moved` entry on the old one with
      *  the new log's key sealed for each member. The first move stands: one
      *  that lost the race is let go, and the winner followed. */
-    const moveRoom = (old: RoomLog, view: LogView): Effect.Effect<void> =>
+    const moveRoom = (old: RoomLog, view: LogView, without: ReadonlySet<string> = new Set()): Effect.Effect<void> =>
       Effect.gen(function* () {
         const child = yield* Scope.fork(scope);
-        const next = yield* openRoomLog(swarm.store, config.roomName, null, "new", "beside").pipe(Effect.provideService(Scope.Scope, child));
+        // from an encrypted log (someone taken out): a log in an epoch of its own
+        const next = yield* openRoomLog(swarm.store, config.roomName, null, "new", old.encryptionKey === null ? "beside" : "epoch").pipe(Effect.provideService(Scope.Scope, child));
         const key = next.encryptionKey;
         if (key === null) return yield* Scope.close(child, Exit.void);
         const carried: Array<LogOp> = [
+          // who may do what goes first, in its order, so the new log decides as the old one did
+          ...view.acl.map((entry): LogOp => ({ op: "acl", entry })),
+          // everyone's name, the ones taken out included: their removal keeps them out, and they are still named
           ...view.members.map((member): LogOp => ({ op: "member", key: member.key, name: member.name, ts: member.ts })),
+          ...view.invites.filter((invite) => invite.usedBy === null || !without.has(invite.usedBy)).flatMap((invite): ReadonlyArray<LogOp> => [
+            { op: "invite", invite: { id: invite.id, publicKey: invite.publicKey, by: invite.by, expires: invite.expires, ts: invite.ts } },
+            ...(invite.usedBy !== null ? [{ op: "redeemed", id: invite.id, identity: invite.usedBy, by: me, ts: invite.ts } satisfies LogOp] : []),
+          ]),
           ...(view.name ? [{ op: "rename", name: view.name.name, ts: view.name.ts } satisfies LogOp] : []),
           ...view.tickets.map((ticket): LogOp => ({ op: "ticket", ticket })),
           ...view.reviews.map((review): LogOp => ({ op: "review", review })),
@@ -436,7 +501,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         const copied = yield* next.appendAll(carried).pipe(Effect.as(true), Effect.catch((error) => Effect.logWarning(`moving the room failed: ${error.message}`).pipe(Effect.as(false))));
         if (!copied) return yield* Scope.close(child, Exit.void);
         const sealed: Record<string, string> = {};
-        for (const identity of new Set([me, ...view.members.map((member) => member.key)])) {
+        // the new key for everyone who stays — and for whoever an invite let in who has not joined yet
+        const rules = foldAcl(config.roomName, view.acl);
+        const stay = [me, ...view.members.map((member) => member.key), ...rules.admitted, ...view.invites.flatMap((invite) => (invite.usedBy !== null && !rules.waiting.has(invite.usedBy) ? [invite.usedBy] : []))];
+        for (const identity of new Set(stay.filter((identity) => !without.has(identity) && !rules.removed.has(identity)))) {
           const box = sealFor(identity, b4a.from(key, "hex"));
           if (box) sealed[identity] = box;
         }
@@ -460,7 +528,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const moveOn: Effect.Effect<void> = Effect.suspend(() => {
       const roomLog = log;
       const view = lastView;
-      if (!roomLog || roomLog.encryptionKey !== null || !view || moving || config.plainLogs) return Effect.void;
+      if (!roomLog || !view || moving) return Effect.void;
+      // an encrypted log moves only when someone is taken out: follow it then
+      if (roomLog.encryptionKey !== null && !view.moved) return Effect.void;
+      if (roomLog.encryptionKey === null && config.plainLogs) return Effect.void;
       if (!view.moved && !roomLog.writable()) return Effect.void;
       moving = true;
       const work: Effect.Effect<void> = view.moved ? follow(view.moved) : Effect.log("moving the room to an encrypted log").pipe(Effect.andThen(moveRoom(roomLog, view)));
@@ -597,7 +668,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           case "redeem":
             return redeem(key, frame.inviteId, frame.proof);
           case "keys":
-            return takeKeys(key, frame.logKey, frame.encryptionKey);
+            return SubscriptionRef.set(awaiting, null).pipe(Effect.andThen(takeKeys(key, frame.logKey, frame.encryptionKey)));
+          case "waiting":
+            return Effect.suspend(() => (joining && frame.inviteId === joining.id && !log ? SubscriptionRef.set(awaiting, { room: frame.room }) : Effect.void));
           case "refused":
             return Effect.suspend(() =>
               joining && frame.inviteId === joining.id && !log
@@ -748,10 +821,74 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       const roomLog = yield* requireLog;
       // a room from before encryption is moving; it takes invites once it has
       if (roomLog.encryptionKey === null) return yield* new NotWritable({ roomId: config.roomName });
+      // only a role that holds 'invite' makes invites
+      if (!permitted(foldAcl(config.roomName, (yield* roomLog.read).acl), me, "invite")) return yield* new NotPermitted({ roomId: config.roomName, permission: "invite" });
       const made = newInvite(config.roomName, config.net, roomLog.key);
       const now = yield* Clock.currentTimeMillis;
       yield* roomLog.append({ op: "invite", invite: { id: made.invite.id, publicKey: made.publicKey, by: me, expires: now + INVITE_LIFETIME_MS, ts: now } }).pipe(Effect.orDie);
       return formatInvite(made.invite);
+    });
+
+    // ── who may do what (acl.ts): each act checked here for a plain refusal; the fold decides ──
+    const refuseUnless = (ok: boolean, permission: string) => (ok ? Effect.void : Effect.fail(new NotPermitted({ roomId: config.roomName, permission })));
+
+    /** Make or change a role — only one ranked below your own, with 'manage-roles'. */
+    const setRole = Effect.fn("Room.setRole")(function* (role: RoomRole) {
+      const rules = yield* SubscriptionRef.get(acl);
+      const before = rules.roles.get(role.id);
+      yield* refuseUnless(permitted(rules, me, "manage-roles"), "manage-roles");
+      yield* refuseUnless((role.id === EVERYONE.id ? 0 : role.rank) < rankOf(rules, me) && (!before || before.rank < rankOf(rules, me)), "manage-roles above your own rank");
+      return yield* writeAcl({ kind: "role", role });
+    });
+
+    /** Take a role away — one ranked below your own, never everyone's. */
+    const removeRole = Effect.fn("Room.removeRole")(function* (roleId: string) {
+      const rules = yield* SubscriptionRef.get(acl);
+      const before = rules.roles.get(roleId);
+      yield* refuseUnless(permitted(rules, me, "manage-roles") && before !== undefined && roleId !== EVERYONE.id && before.rank < rankOf(rules, me), "manage-roles above your own rank");
+      return yield* writeAcl({ kind: "unrole", roleId });
+    });
+
+    /** Set a member's roles — someone ranked below you, with roles ranked below you. */
+    const grant = Effect.fn("Room.grant")(function* (identity: string, roleIds: ReadonlyArray<string>) {
+      const rules = yield* SubscriptionRef.get(acl);
+      const mine = rankOf(rules, me);
+      const changed = [...new Set([...(rules.held.get(identity) ?? []), ...roleIds])];
+      yield* refuseUnless(permitted(rules, me, "manage-roles"), "manage-roles");
+      yield* refuseUnless(identity !== rules.owner && rankOf(rules, identity) < mine && changed.every((id) => (rules.roles.get(id)?.rank ?? Number.POSITIVE_INFINITY) < mine), "manage-roles above your own rank");
+      return yield* writeAcl({ kind: "grant", identity, roles: roleIds });
+    });
+
+    /** Let someone waiting in: the keys go to them the next time they ask. */
+    const admit = Effect.fn("Room.admit")(function* (identity: string) {
+      const rules = yield* SubscriptionRef.get(acl);
+      yield* refuseUnless(permitted(rules, me, "approve"), "approve");
+      return yield* writeAcl({ kind: "admit", identity });
+    });
+
+    /** Turn someone waiting away. */
+    const decline = Effect.fn("Room.decline")(function* (identity: string, reason?: string) {
+      const rules = yield* SubscriptionRef.get(acl);
+      yield* refuseUnless(permitted(rules, me, "approve"), "approve");
+      return yield* writeAcl({ kind: "decline", identity, ...(reason ? { reason } : {}) });
+    });
+
+    /** Take someone out: nothing more is sent to them, and the room moves to a
+     *  new key sealed to everyone who stays, so they read nothing written after.
+     *  What they already hold stays with them. */
+    const remove = Effect.fn("Room.remove")(function* (identity: string, reason?: string) {
+      const rules = yield* SubscriptionRef.get(acl);
+      yield* refuseUnless(permitted(rules, me, "remove"), "remove");
+      yield* refuseUnless(identity !== rules.owner && rankOf(rules, identity) < rankOf(rules, me), "remove someone ranked as high as you, or the owner");
+      const entry = yield* writeAcl({ kind: "remove", identity, ...(reason ? { reason } : {}) });
+      const roomLog = log;
+      if (!roomLog || moving) return entry;
+      moving = true;
+      yield* moveRoom(roomLog, yield* roomLog.read, new Set([identity])).pipe(
+        Effect.catchCause((cause) => Effect.logError(`moving the room to a new key failed: ${String(cause)}`)),
+        Effect.ensuring(Effect.sync(() => void (moving = false))),
+      );
+      return entry;
     });
 
     /** Rename the room for everyone: stamp now, append; the view updates all. */
@@ -845,6 +982,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       encryptionKey,
       /** Why our invite was turned down, or why we cannot follow the room; null when nothing stands in the way. */
       refusal,
+      /** Our invite was heard and waits on someone allowed to let us in: the room's name meanwhile. */
+      awaiting,
+      /** Who may do what in the room, as its signed acts stand. */
+      acl,
+      setRole,
+      removeRole,
+      grant,
+      admit,
+      decline,
+      remove,
       /** A new invite to hand someone: lets one person in, within a week. */
       createInvite,
       /** Join with an invite a room we list but were never let into. */

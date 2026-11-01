@@ -15,3 +15,4 @@ export * from "./Swarm";
 export * from "./RoomLog";
 export * from "./Room";
 export * from "./note";
+export * from "./acl";
