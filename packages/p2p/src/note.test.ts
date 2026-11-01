@@ -6,8 +6,7 @@ const note: SteeringNote = {
   id: "n1",
   project: "collagen",
   title: "Measure alignment",
-  line: "Things that sit together share an edge; measure it before calling it done.",
-  body: "Said every time a screen was built.",
+  description: "Things that sit together share an edge; measure it before calling it done. Said every time a screen was built.",
   by: "alice",
   byName: "Alice",
   at: 100,
@@ -15,7 +14,7 @@ const note: SteeringNote = {
 
 // three people at once: bob changes the line having seen nothing, carol
 // retires it having seen nothing, then alice, having seen both, restores it
-const bob: NoteTurn = { id: "t-b", note: "n1", kind: "change", reason: "shorter", change: { line: "Share edges, measured." }, knows: [], by: "bob", byName: "Bob", at: 300 };
+const bob: NoteTurn = { id: "t-b", note: "n1", kind: "change", reason: "shorter", change: { description: "Share edges, measured." }, knows: [], by: "bob", byName: "Bob", at: 300 };
 const carol: NoteTurn = { id: "t-c", note: "n1", kind: "retire", reason: "the page does it now", knows: [], by: "carol", byName: "Carol", at: 200 };
 const alice: NoteTurn = { id: "t-a", note: "n1", kind: "restore", reason: "it does not, yet", knows: ["t-b", "t-c"], by: "alice", byName: "Alice", at: 150 };
 
@@ -35,7 +34,7 @@ describe("a steering note", () => {
     // alice's clock is behind, but she restored it after seeing the retire
     const now = noteNow(note, [bob, carol, alice]);
     expect(now.retired).toBe(false);
-    expect(now.words.line).toBe("Share edges, measured.");
+    expect(now.words.description).toBe("Share edges, measured.");
     expect(now.turns.at(-1)?.id).toBe("t-a");
   });
 
@@ -47,7 +46,7 @@ describe("a steering note", () => {
   });
 
   it("decodes as first written, with none of what it may grow", () => {
-    expect(Schema.decodeUnknownSync(SteeringNote)({ id: "n", project: "p", title: "t", line: "l", body: "b", by: "k", byName: "K", at: 1 })).toMatchObject({ id: "n" });
+    expect(Schema.decodeUnknownSync(SteeringNote)({ id: "n", project: "p", title: "t", description: "d", by: "k", byName: "K", at: 1 })).toMatchObject({ id: "n" });
   });
 
   it("applies where it says", () => {

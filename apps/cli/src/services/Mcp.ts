@@ -507,19 +507,32 @@ export const ReviewChatTool = Tool.make("review-chat", {
   success: Schema.String,
 });
 
-export const SteeringNotesTool = Tool.make("steering-notes", {
+export const GetNotes = Tool.make("get-notes", {
   description: [
-    "Steering notes: how the people in a room steer their AIs on a project — the corrections they keep having to make, said once and then followed. Not good code patterns (you infer those from the code): what your user would otherwise have to tell you again. Each note is the room's, for one project, and alive like a skill: anyone may comment on it, change it with a reason, retire it or bring it back, and whoever wrote it before is told.",
-    "'action': 'list' (a project's notes, or every project's: id, title, the line, where it applies, how strong); 'read' a whole note by 'id' (its reasoning, examples and every turn on it); 'add' one ('project', 'title' a few words, 'line' the one line agents are handed, 'body' the whole of it, 'where' paths or globs it applies to, 'strength' nit, suggest, wish or must, 'fromTicket'/'fromComment' when it grew from a review); 'change' its words ('id', only what changes, and a 'reason'); 'comment' ('id', 'reason' is what you say); 'retire' or 'restore' ('id', 'reason'); 'keep' (your user read it and keeps it as it is); 'miss' ('id', 'reason' what was missed) when you were about to note what a note already says: it was not followed, and that is recorded against it, never noted twice.",
+    "Steering notes: how the people in a room steer their AIs on a project — the corrections they keep having to make, said once and then followed. Not good code patterns (you infer those from the code): what your user would otherwise have to tell you again. This lists them by title: each note's id, title, how strong (nit, suggest, wish, must) and where it applies. Read one's description with get-note when its title touches what you are doing.",
+    "'project' narrows it to one (else every project's); retired notes are left out unless 'retired: true', which lists only those.",
+  ].join("\n"),
+  parameters: Schema.Struct({ project: Schema.optional(Schema.String), retired: Schema.optional(Schema.Boolean) }),
+  success: Schema.String,
+});
+
+export const GetNote = Tool.make("get-note", {
+  description: "One steering note whole, by 'id' (from get-notes, or the index handed with your work): its title, the description to take your knowledge from, where it applies, and every change, comment, retire and miss on it with its reason.",
+  parameters: Schema.Struct({ id: Schema.String }),
+  success: Schema.String,
+});
+
+export const SteeringNoteTool = Tool.make("steering-note", {
+  description: [
+    "Write a steering note — the room's, for one project, alive like a skill: anyone may comment on it, change it with a reason, retire it or bring it back, and whoever wrote it before is told. 'action': 'add' ('project', 'title' — short and plain, what the note aims for, for people to read at a glance — and 'description', the whole of it, which agents take their knowledge from; 'where' paths or globs it applies to, 'strength' nit, suggest, wish or must; 'fromTicket'/'fromComment' when it grew from a review); 'change' ('id', only what changes, and a 'reason'); 'comment' ('id', 'reason' is what you say); 'retire' or 'restore' ('id', 'reason'); 'keep' (your user read it and keeps it as it is); 'miss' ('id', 'reason' what was missed) when you were about to note what a note already says: it was not followed, and that is recorded against it, never noted twice.",
     "'said: true' only when your user asked for this act in their words. Without it you act on your own, as their notes steering allows (set-steering kind notes): not chosen or never, it does not happen; ask first, ask them, then call again with 'said: true'; act then tell, tell them what you did. 'keep' needs their word.",
   ].join("\n"),
   parameters: Schema.Struct({
-    action: Schema.Literals(["list", "read", "add", "change", "comment", "retire", "restore", "keep", "miss"]),
+    action: Schema.Literals(["add", "change", "comment", "retire", "restore", "keep", "miss"]),
     project: Schema.optional(Schema.String),
     id: Schema.optional(Schema.String),
     title: Schema.optional(Schema.String),
-    line: Schema.optional(Schema.String),
-    body: Schema.optional(Schema.String),
+    description: Schema.optional(Schema.String),
     where: Schema.optional(Schema.Array(Schema.String)),
     strength: Schema.optional(Schema.Literals(["nit", "suggest", "wish", "must"])),
     reason: Schema.optional(Schema.String),
@@ -1008,7 +1021,9 @@ export const CollagenToolkit = Toolkit.make(
   ReviewRequest,
   AskAuthor,
   ReviewChatTool,
-  SteeringNotesTool,
+  GetNotes,
+  GetNote,
+  SteeringNoteTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1075,7 +1090,9 @@ export const DevCollagenToolkit = Toolkit.make(
   ReviewRequest,
   AskAuthor,
   ReviewChatTool,
-  SteeringNotesTool,
+  GetNotes,
+  GetNote,
+  SteeringNoteTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1224,7 +1241,7 @@ const makeHandlers = Effect.gen(function* () {
         if (level === "unset" || level === "never") return said;
         const ticket = (yield* SubscriptionRef.get(room.tickets)).get(ticketId);
         if (!ticket) return said;
-        return `${said}\n\nBEFORE YOU MOVE ON — steering notes: in this work, did your user have to correct or steer you where that should not have been needed: something they had to say that they would want followed from the start next time, by any AI in this room? Not a code pattern (that you read from the code): how they want things done. If so, note it (steering-notes add, project "${ticket.project}", a line and the whole of it); if one of the notes below already said it, it was missed: record that (steering-notes miss) instead of noting it again. Nothing to note: say nothing about it.${yield* notesFor(ticket.project)}`;
+        return `${said}\n\nBEFORE YOU MOVE ON — steering notes: in this work, did your user have to correct or steer you where that should not have been needed: something they had to say that they would want followed from the start next time, by any AI in this room? Not a code pattern (that you read from the code): how they want things done. If so, note it (steering-note add, project "${ticket.project}", a short title and its description); if one of the notes below already said it, it was missed: record that (steering-note miss) instead of noting it again. Nothing to note: say nothing about it.${yield* notesFor(ticket.project)}`;
       });
 
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
@@ -2077,13 +2094,42 @@ const makeHandlers = Effect.gen(function* () {
         const view = yield* now();
         return view ? chatInWords(view) : `no chat on ${input.ticketId}`;
       }, Effect.provideContext(talkContext)),
-      "steering-notes": Effect.fn("Mcp.steeringNotes")(function* (input: {
-        action: "list" | "read" | "add" | "change" | "comment" | "retire" | "restore" | "keep" | "miss";
+      "get-notes": Effect.fn("Mcp.getNotes")(function* (input: { project?: string; retired?: boolean }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const nameOf = yield* nameLookup;
+        const notes = yield* SubscriptionRef.get(room.notes);
+        const turns = yield* SubscriptionRef.get(room.noteTurns);
+        const peers = yield* SubscriptionRef.get(room.roster);
+        const state = yield* store.get;
+        const projects = input.project ? [projectSpelling(input.project, peers, roomProjects(state, roomId))] : [...new Set(notes.map((note) => note.project))];
+        if (projects.length === 0) return "No steering notes in this room yet.";
+        return projects
+          .map((project) => {
+            const all = notesOf(notes, turns, project);
+            const shown = all.filter((note) => note.retired === (input.retired === true));
+            const others = all.length - shown.length;
+            const head = input.retired
+              ? `${project}: ${shown.length} retired note${shown.length === 1 ? "" : "s"}`
+              : `${project}: ${shown.length} note${shown.length === 1 ? "" : "s"}${others > 0 ? ` (${others} retired: retired: true lists them)` : ""}`;
+            return [head, ...shown.map((note) => indexLine(note, nameOf))].join("\n");
+          })
+          .join("\n\n");
+      }),
+      "get-note": Effect.fn("Mcp.getNote")(function* (input: { id: string }) {
+        const { room } = yield* focusedRoom;
+        const nameOf = yield* nameLookup;
+        const notes = yield* SubscriptionRef.get(room.notes);
+        const found = notes.find((note) => note.id === input.id || (input.id.length >= 8 && note.id.startsWith(input.id)));
+        if (!found) return `failed: no steering note ${input.id} — get-notes lists them`;
+        const when = (at: number) => new Date(at).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+        return noteInWords(noteNow(found, yield* SubscriptionRef.get(room.noteTurns)), nameOf, when);
+      }),
+      "steering-note": Effect.fn("Mcp.steeringNote")(function* (input: {
+        action: "add" | "change" | "comment" | "retire" | "restore" | "keep" | "miss";
         project?: string;
         id?: string;
         title?: string;
-        line?: string;
-        body?: string;
+        description?: string;
         where?: ReadonlyArray<string>;
         strength?: "nit" | "suggest" | "wish" | "must";
         reason?: string;
@@ -2100,20 +2146,7 @@ const makeHandlers = Effect.gen(function* () {
         const state = yield* store.get;
         // the project as the room spells it
         const projectOf = (name: string) => projectSpelling(name, peers, roomProjects(state, roomId));
-        if (input.action === "list") {
-          const projects = input.project ? [projectOf(input.project)] : [...new Set(notes.map((note) => note.project))];
-          if (projects.length === 0) return "No steering notes in this room yet.";
-          return projects
-            .map((project) => {
-              const now = notesOf(notes, turns, project);
-              const live = now.filter((note) => !note.retired);
-              const retired = now.length - live.length;
-              return [`${project}: ${live.length} note${live.length === 1 ? "" : "s"}${retired > 0 ? `, ${retired} retired` : ""}`, ...live.map((note) => indexLine(note, nameOf))].join("\n");
-            })
-            .join("\n\n");
-        }
         const found = input.id ? notes.find((note) => note.id === input.id || note.id.startsWith(input.id ?? "")) : undefined;
-        if (input.action === "read") return found ? noteInWords(noteNow(found, turns), nameOf, when) : `failed: no steering note ${input.id ?? "(give 'id')"} — list them with action list`;
         // a write: your user's word, or your own as their notes steering allows
         const acting = yield* actingNow;
         const said = input.said === true;
@@ -2129,15 +2162,14 @@ const makeHandlers = Effect.gen(function* () {
         const at = yield* Clock.currentTimeMillis;
         const mark = { ...(said ? {} : { unread: true }), ...(acting?.agent ? { agent: acting.agent } : {}), ...(acting?.conversation ? { conversation: acting.conversation } : {}) };
         if (input.action === "add") {
-          if (!input.project || !input.title?.trim() || !input.line?.trim()) return "failed: a note needs 'project', 'title' and 'line' (and 'body', the whole of it)";
+          if (!input.project || !input.title?.trim() || !input.description?.trim()) return "failed: a note needs 'project', a short 'title' and its 'description'";
           const project = projectOf(input.project);
           const id = crypto.randomUUID();
           const wrote = yield* room.note({
             id,
             project,
             title: input.title.trim(),
-            line: input.line.trim(),
-            body: input.body?.trim() || input.line.trim(),
+            description: input.description.trim(),
             ...(input.where && input.where.length > 0 ? { where: input.where } : {}),
             ...(input.strength ? { strength: input.strength } : {}),
             by: me,
@@ -2149,17 +2181,17 @@ const makeHandlers = Effect.gen(function* () {
           if (!wrote) return "failed: this room does not let you write yet (not admitted)";
           return `added steering note "${input.title.trim()}" [${id}] on ${project}; every agent working there is handed it from now.${tell}`;
         }
-        if (!found) return `failed: no steering note ${input.id ?? "(give 'id')"} — list them with action list`;
+        if (!found) return `failed: no steering note ${input.id ?? "(give 'id')"} — get-notes lists them`;
         const before = noteNow(found, turns);
         if (["change", "retire", "restore", "comment", "miss"].includes(input.action) && !input.reason?.trim())
           return `failed: say why ('reason')${input.action === "comment" ? " — it is the comment" : input.action === "miss" ? " — what was missed" : ""}`;
         const change =
           input.action === "change"
             ? Object.fromEntries(
-                Object.entries({ title: input.title?.trim(), line: input.line?.trim(), body: input.body?.trim(), where: input.where, strength: input.strength }).filter(([, value]) => value !== undefined && value !== ""),
+                Object.entries({ title: input.title?.trim(), description: input.description?.trim(), where: input.where, strength: input.strength }).filter(([, value]) => value !== undefined && value !== ""),
               )
             : undefined;
-        if (input.action === "change" && Object.keys(change ?? {}).length === 0) return "failed: say what changes: 'title', 'line', 'body', 'where' or 'strength'";
+        if (input.action === "change" && Object.keys(change ?? {}).length === 0) return "failed: say what changes: 'title', 'description', 'where' or 'strength'";
         const turned = yield* room.noteTurn({
           id: crypto.randomUUID(),
           note: found.id,
@@ -2188,7 +2220,7 @@ const makeHandlers = Effect.gen(function* () {
                 peer: name,
                 project: found.project,
                 intent: `steering note ${verb}`,
-                findings: `${myName}${said ? "" : "'s AI"} ${verb} the steering note "${before.words.title}"${input.reason?.trim() ? `: ${input.reason.trim()}` : ""}. Read it with steering-notes action read, id ${found.id}.`,
+                findings: `${myName}${said ? "" : "'s AI"} ${verb} the steering note "${before.words.title}"${input.reason?.trim() ? `: ${input.reason.trim()}` : ""}. Read it with get-note, id ${found.id}.`,
               },
             }).pipe(Effect.ignore);
             told.push(name);

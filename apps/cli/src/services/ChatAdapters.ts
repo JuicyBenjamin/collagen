@@ -101,6 +101,6 @@ export const doingOf = (name: string, input: Record<string, unknown>): string =>
   if (tool === "Bash") return commandDoing(stringOf(input["command"]) ?? "");
   if (tool === "review-context") return "Reading the review";
   if (tool === "get-tickets") return "Reading the tickets";
-  if (tool === "steering-notes") return "Reading the steering notes";
+  if (tool === "get-notes" || tool === "get-note") return "Reading the steering notes";
   return `Using ${tool}`;
 };
