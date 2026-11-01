@@ -11,7 +11,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, noteNow, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, noteNow, NotPermitted, NotWritable, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, upsertRoom, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -560,6 +560,30 @@ export const GuidancePassTool = Tool.make("guidance-pass", {
   success: Schema.String,
 });
 
+export const GetRoomAccess = Tool.make("get-room-access", {
+  description:
+    "Who may do what in the room your user is looking at. Collagen defines the permissions — invite, approve (let someone waiting in; your own invites let people straight in), remove, manage-roles — and each room defines its own roles: a name, a rank (a higher rank stands above a lower one; only someone ranked above may give, change or take a role, or act on its holders) and the permissions it holds; 'everyone' is the role every member holds. The owner (the room's creator) holds every permission. Lists the roles, who holds which, who is waiting to be let in, who was turned away and who was taken out.",
+  success: Schema.String,
+});
+
+export const SetRoomAccess = Tool.make("set-room-access", {
+  description: [
+    "Change who may do what in the room your user is looking at, as their role there allows (get-room-access). 'action': 'role' makes or changes a role ('name', 'rank', 'permissions' — any of invite, approve, remove, manage-roles; the role 'everyone' is every member's, and taking 'approve' from it means newcomers wait for someone who holds it); 'unrole' takes a role away ('name'); 'grant' sets a person's roles ('person', 'roles' by name — [] takes them all); 'let-in' lets someone waiting in ('person'); 'turn-away' does not ('person', 'reason'); 'remove' takes someone out ('person', 'reason'): nothing more is sent to them and the room moves to a new key they are not given, so they read nothing written after.",
+    "'said: true' only when your user asked for this in their words. Letting in, turning away and removing otherwise follow their steering for it (set-steering kind admit): not chosen or never, not done; ask first, ask them, then call again with 'said: true'. Roles change only on their word.",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    action: Schema.Literals(["role", "unrole", "grant", "let-in", "turn-away", "remove"]),
+    name: Schema.optional(Schema.String),
+    rank: Schema.optional(Schema.Finite),
+    permissions: Schema.optional(Schema.Array(Schema.Literals(["invite", "approve", "remove", "manage-roles"]))),
+    person: Schema.optional(Schema.String),
+    roles: Schema.optional(Schema.Array(Schema.String)),
+    reason: Schema.optional(Schema.String),
+    said: Schema.optional(Schema.Boolean),
+  }),
+  success: Schema.String,
+});
+
 export const GuessReason = Tool.make("guess-reason", {
   description: [
     "When a review's author cannot answer a question your user asked (ask-author came back saying why), put your best reading of why the code is this way on their review's why as a GUESS: plainly marked as your user's AI's assumption, for the author or their AI to confirm, correct or reject later. Only on your user's word ('assume the reason').",
@@ -1042,6 +1066,8 @@ export const CollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  GetRoomAccess,
+  SetRoomAccess,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1112,6 +1138,8 @@ export const DevCollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  GetRoomAccess,
+  SetRoomAccess,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1315,6 +1343,10 @@ const makeHandlers = Effect.gen(function* () {
         online: summary.online,
         unread: summary.unread,
         lookingAt: summary.focused,
+        // joined with an invite that waits on someone allowed to let your user in
+        ...(summary.awaiting ? { status: `awaiting approval to join "${summary.awaiting}"` } : {}),
+        // people waiting to be let in, when your user's role may let them in (get-room-access)
+        ...(summary.waiting ? { waiting: summary.waiting } : {}),
       }));
     });
 
@@ -2281,6 +2313,94 @@ const makeHandlers = Effect.gen(function* () {
         if (input.round === undefined || input.passed === undefined) return "failed: a report gives 'round' and 'passed' (and 'findings' when it falls short)";
         return yield* guidancePass.report(roomId, input.ticketId, input.round, input.passed, input.findings ?? []);
       }),
+      "get-room-access": Effect.fn("Mcp.getRoomAccess")(function* () {
+        const { name, room } = yield* focusedRoom;
+        const nameOf = yield* nameLookup;
+        const rules = yield* SubscriptionRef.get(room.acl);
+        const members = yield* SubscriptionRef.get(room.members);
+        const roles = [...rules.roles.values()].sort((first, second) => second.rank - first.rank);
+        const holders = (roleId: string) => [...rules.held].filter(([, ids]) => ids.includes(roleId)).map(([identity]) => nameOf(identity));
+        return [
+          `"${name}" — owner: ${rules.owner ? nameOf(rules.owner) : "none on the log yet (a room from before roles: its creator becomes owner when they next open it)"}`,
+          "Roles, highest first:",
+          ...roles.map((role) => `- ${role.name} (rank ${role.rank}): ${role.permissions.length > 0 ? role.permissions.join(", ") : "no permissions"}${role.id === "everyone" ? " — every member" : holders(role.id).length > 0 ? ` — ${holders(role.id).join(", ")}` : " — nobody yet"}`),
+          `Members: ${members.filter((member) => !rules.removed.has(member.key)).map((member) => member.name).join(", ") || "none"}`,
+          rules.waiting.size > 0 ? `Waiting to be let in: ${[...rules.waiting].map(([, ask]) => ask.name).join(", ")} (set-room-access let-in or turn-away)` : "Nobody is waiting to be let in.",
+          ...(rules.declined.size > 0 ? [`Turned away: ${[...rules.declined.keys()].map(nameOf).join(", ")}`] : []),
+          ...(rules.removed.size > 0 ? [`Taken out: ${[...rules.removed].map(([identity, out]) => `${nameOf(identity)}${out.reason ? ` (${out.reason})` : ""}`).join(", ")}`] : []),
+        ].join("\n");
+      }),
+      "set-room-access": Effect.fn("Mcp.setRoomAccess")(function* (input: {
+        action: "role" | "unrole" | "grant" | "let-in" | "turn-away" | "remove";
+        name?: string;
+        rank?: number;
+        permissions?: ReadonlyArray<"invite" | "approve" | "remove" | "manage-roles">;
+        person?: string;
+        roles?: ReadonlyArray<string>;
+        reason?: string;
+        said?: boolean;
+      }) {
+        const { id: roomId, name: roomName, room } = yield* focusedRoom;
+        const rules = yield* SubscriptionRef.get(room.acl);
+        const said = input.said === true;
+        // roles are the person's word; who comes in or goes out may follow their steering
+        if (["role", "unrole", "grant"].includes(input.action) && !said) return "failed: roles change only on your user's word (said: true)";
+        if (["let-in", "turn-away", "remove"].includes(input.action) && !said) {
+          const gate = allow(yield* store.get, "admit", "mine", false, roomId);
+          if ("held" in gate) return gate.held === "ask" ? `ask your user first: ${gate.why}. On their yes, call again with said: true.` : `not done: ${gate.why}.`;
+        }
+        const roleNamed = (wanted: string) => [...rules.roles.values()].find((role) => role.name.toLowerCase() === wanted.trim().toLowerCase());
+        // a person: a member or peer by name, or someone waiting by the name they gave
+        const personOf = Effect.gen(function* () {
+          if (!input.person?.trim()) return { _tag: "refused", text: "failed: say who ('person')" } as const;
+          const waitingHit = [...rules.waiting].find(([, ask]) => sameName(ask.name, input.person!));
+          if (waitingHit && (input.action === "let-in" || input.action === "turn-away")) return { _tag: "found", key: waitingHit[0], name: waitingHit[1].name } as const;
+          const found = personNamed(input.person, { peers: yield* SubscriptionRef.get(room.roster), members: yield* SubscriptionRef.get(room.members), me: identity.pubkey });
+          return found._tag === "found" ? ({ _tag: "found", key: found.person.key, name: found.person.name } as const) : ({ _tag: "refused", text: found.text } as const);
+        });
+        const done = <A,>(act: Effect.Effect<A, NotPermitted | NotWritable>, outcome: string) =>
+          act.pipe(
+            Effect.as(outcome),
+            Effect.catchTag("NotPermitted", (refusal) => Effect.succeed(`failed: your user's role in "${roomName}" does not allow it (${refusal.permission}) — get-room-access shows what each role holds`)),
+            Effect.catchTag("NotWritable", () => Effect.succeed(`failed: your user is not let in to write to "${roomName}" yet`)),
+          );
+        switch (input.action) {
+          case "role": {
+            if (!input.name?.trim()) return "failed: name the role ('name')";
+            const before = roleNamed(input.name);
+            const role = { id: before?.id ?? (input.name.trim().toLowerCase() === "everyone" ? "everyone" : crypto.randomUUID()), name: input.name.trim(), rank: input.rank ?? before?.rank ?? 1, permissions: input.permissions ?? before?.permissions ?? [] };
+            return yield* done(room.setRole(role), `${before ? "changed" : "made"} the role "${role.name}" (rank ${role.rank}): ${role.permissions.join(", ") || "no permissions"}.`);
+          }
+          case "unrole": {
+            const role = input.name ? roleNamed(input.name) : undefined;
+            if (!role) return `failed: no role "${input.name ?? ""}" — get-room-access lists them`;
+            return yield* done(room.removeRole(role.id), `took the role "${role.name}" away.`);
+          }
+          case "grant": {
+            const who = yield* personOf;
+            if (who._tag === "refused") return who.text;
+            const ids = (input.roles ?? []).map((wanted) => roleNamed(wanted));
+            if (ids.some((role) => role === undefined)) return "failed: a role named there does not exist — get-room-access lists them";
+            return yield* done(room.grant(who.key, ids.map((role) => role!.id)), `${who.name}'s roles are now: ${ids.map((role) => role!.name).join(", ") || "only everyone's"}.`);
+          }
+          case "let-in": {
+            const who = yield* personOf;
+            if (who._tag === "refused") return who.text;
+            return yield* done(room.admit(who.key), `let ${who.name} in: they get the room's keys the next time they ask (within seconds while they are online).`);
+          }
+          case "turn-away": {
+            const who = yield* personOf;
+            if (who._tag === "refused") return who.text;
+            return yield* done(room.decline(who.key, input.reason?.trim()), `turned ${who.name} away.`);
+          }
+          case "remove": {
+            const who = yield* personOf;
+            if (who._tag === "refused") return who.text;
+            return yield* done(room.remove(who.key, input.reason?.trim()), `took ${who.name} out of "${roomName}": nothing more is sent to them, and the room moves to a new key they are not given.`);
+          }
+        }
+        return `failed: no action "${String(input.action)}"`;
+      }),
       "guess-reason": Effect.fn("Mcp.guessReason")(function* (input: { ticketId: string; questionId: string; what: string; basis: string; confidence: "high" | "medium" | "low" }) {
         if (!input.what.trim()) return "failed: 'what' is the reason you assume";
         const { id: roomId } = yield* focusedRoom;
@@ -3027,6 +3147,7 @@ const makeHandlers = Effect.gen(function* () {
           return yield* room.createInvite().pipe(
             Effect.map((invite) => `an invite to "${name}" — it lets one person in, within a week:\n${invite}`),
             Effect.catchTag("NotWritable", () => Effect.succeed(`failed: "${name}" cannot take invites yet — your user is not let in to write to it, or it is still moving to its encrypted log; try again in a moment`)),
+            Effect.catchTag("NotPermitted", () => Effect.succeed(`failed: your user's role in "${name}" does not let them invite — someone whose role holds 'invite' can (get-room-access)`)),
           );
         }).pipe(Effect.withSpan("Mcp.inviteToRoom")),
       "leave-room": ({ room: which }: { room: string }) =>

@@ -143,8 +143,14 @@ Rough order, not committed.
 ### 3. Rooms lifecycle — [spec](/guide/rooms#room-lifecycle)
 
 - [x] Leave a room (local forget; `d` in the rail, `leave-room`)
-- [ ] Membership enforcement: drop connections from keys the log doesn't know; revoke a
-  member (`removeWriter`). Admission to the log exists; it's automatic today.
+- [x] Roles the room defines: collagen defines the permissions (invite, approve, remove,
+  manage-roles), each room its own roles and ranks, signed on the log and honoured by every
+  peer in log order; the creator owns the room (`get-room-access`, `set-room-access`)
+- [x] Approval: whoever's invite lacks 'approve' leaves the newcomer waiting — the room's name
+  and "awaiting approval", no keys — until someone with 'approve' lets them in
+- [x] Removal: taken out, nothing more is sent to them, and the room moves to a new key
+  sealed to everyone who stays
+- [ ] Roles and approval in the TUI (the people page): the tools do it today
 
 ### 4. Single player — [spec](/guide/conversations#single-player)
 

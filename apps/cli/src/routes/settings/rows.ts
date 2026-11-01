@@ -47,6 +47,7 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   answer: "answers",
   notes: "steering notes",
   guidance: "guidance pass",
+  admit: "letting in",
 };
 
 /** Whose doing a steering row is about: yours, or another person's. */
@@ -123,6 +124,8 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       steer("notes"),
       // a pass on reviews you file: only your own doing
       [{ id: "steer:guidance:mine", kind: "steer", at: "guidance", cause: "mine" }],
+      // who comes into a room, and who is taken out: only your own doing
+      [{ id: "steer:admit:mine", kind: "steer", at: "admit", cause: "mine" }],
       [
         { id: "label:tag", kind: "label", text: "messages for you" },
         { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },

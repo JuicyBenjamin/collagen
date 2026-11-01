@@ -3,6 +3,7 @@ import { Conversation } from "./acting";
 import { DraftComment, ReviewComment, ReviewContext } from "./review";
 import { GoalAnswer, Ticket } from "./ticket";
 import { NoteTurn, SteeringNote } from "./note";
+import { AclEntry } from "./acl";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
 // (swarm frames, state files) is Schema-validated at the edge.
@@ -214,6 +215,13 @@ export const KeysFrame = Schema.Struct({
   logKey: Schema.String,
   encryptionKey: Schema.String,
 });
+/** "Let in once someone allowed to says so" — a redeem heard, waiting on approval: the room's name, and nothing else. */
+export const WaitingFrame = Schema.Struct({
+  kind: Schema.Literal("waiting"),
+  inviteId: Schema.String,
+  room: Schema.String,
+});
+
 /** "Not with that invite" — why a redeem was turned down. */
 export const RefusedFrame = Schema.Struct({
   kind: Schema.Literal("refused"),
@@ -364,7 +372,7 @@ export type AttachmentFrame = typeof AttachmentFrame.Type;
  *  remembered: presence, log bootstrap, remote control, transcripts.
  *  Everything that must outlive a connection (messages, tickets, the room
  *  name, membership) is a LogOp on the room's shared log instead. */
-export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
+export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, WaitingFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
 export type TranscriptRequestFrame = typeof TranscriptRequestFrame.Type;
 export type TranscriptFrame = typeof TranscriptFrame.Type;
 export type Frame = typeof Frame.Type;
@@ -411,6 +419,8 @@ export const LogOp = Schema.Union([
   /** A comment on a review's code — written once by its author, never
    *  changed: the first write of an id stands. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("comment"), comment: ReviewComment }),
+  /** A signed act about who may do what in the room (acl.ts) — kept in log order, once per id. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("acl"), entry: AclEntry }),
   /** A steering note on a project — written once by its id; what changes it is turns. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("note"), note: SteeringNote }),
   /** One act on a steering note (change, comment, retire, restore, miss, keep) — the first write of an id stands. */
@@ -442,7 +452,7 @@ export const LogOp = Schema.Union([
 export type LogOp = typeof LogOp.Type;
 
 /** What an `evict` may remove: room records only, never the room's meta. */
-export const EVICTABLE = /^(ticket|review|attachment|comment|note|note-turn|msg|member)\//;
+export const EVICTABLE = /^(ticket|review|attachment|comment|note|note-turn|acl|msg|member)\//;
 
 /** A member as recorded on the log. */
 export const Member = Schema.Struct({
@@ -837,7 +847,7 @@ export type Steering = typeof Steering.Type;
  *  proposal or bug, once its review is accepted or merged), and filing a
  *  review of their work someone asked for (their AI reading the conversation
  *  the work was done in). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer", "notes", "guidance"]);
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer", "notes", "guidance", "admit"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -851,7 +861,7 @@ export type SteeringPair = typeof SteeringPair.Type;
 export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
 export type TagRoute = typeof TagRoute.Type;
 
-const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair), forward: Schema.optional(SteeringPair), answer: Schema.optional(SteeringPair), notes: Schema.optional(SteeringPair), guidance: Schema.optional(SteeringPair) });
+const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair), forward: Schema.optional(SteeringPair), answer: Schema.optional(SteeringPair), notes: Schema.optional(SteeringPair), guidance: Schema.optional(SteeringPair), admit: Schema.optional(SteeringPair) });
 
 /** One room's own levels: a general level and per kind, each absent where
  *  the room follows the person's levels everywhere. */
