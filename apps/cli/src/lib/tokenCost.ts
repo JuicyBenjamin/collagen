@@ -47,6 +47,7 @@ const KINDS: Record<string, CallKind> = {
   "get-notes": "review",
   "get-note": "review",
   "steering-note": "review",
+  "guidance-pass": "review",
   "get-tickets": "tickets",
   "send-to-peer": "messages",
   "pending-threads": "messages",

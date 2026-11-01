@@ -12,7 +12,8 @@ export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, held
     const { counted, done } = epicParts(ticket, all);
     return `${done} of ${counted} done`;
   };
-  const status = closed ? "closed" : heldBy.length > 0 ? "held" : ticket.kind !== "epic" && finished(ticket) ? "answered" : "open";
+  // being prepared by its author's own agents (guidance pass): only its author sees it, so only they read this
+  const status = closed ? "closed" : ticket.preparing ? "being prepared" : heldBy.length > 0 ? "held" : ticket.kind !== "epic" && finished(ticket) ? "answered" : "open";
   return {
     id: ticket.id,
     kind: ticket.kind,
