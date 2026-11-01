@@ -77,6 +77,66 @@ export const ReviewAskStatus = Schema.Struct({
 });
 export type ReviewAskStatus = typeof ReviewAskStatus.Type;
 
+/** Lines a question is about, in one file of a review's diff: a removed
+ *  line by its old number, any other by its new one. */
+export const QuestionLines = Schema.Struct({
+  file: Schema.String,
+  from: Schema.Struct({ line: Schema.Finite, side: Schema.Literals(["LEFT", "RIGHT"]) }),
+  to: Schema.Struct({ line: Schema.Finite, side: Schema.Literals(["LEFT", "RIGHT"]) }),
+  /** the lines as the diff shows them */
+  text: Schema.String,
+});
+export type QuestionLines = typeof QuestionLines.Type;
+
+/** A question about a review that its why does not answer, asked of the
+ *  author's AI from a reader's chat on the review page (cli ReviewQuestions):
+ *  the author's collagen answers it from the conversation the work was done
+ *  in, as their steering allows. */
+export const ReviewQuestion = Schema.Struct({
+  id: Schema.String,
+  ticketId: Schema.String,
+  question: Schema.String,
+  lines: Schema.optional(QuestionLines),
+  /** the commit the reader's page showed */
+  commit: Schema.optional(Schema.String),
+});
+export type ReviewQuestion = typeof ReviewQuestion.Type;
+
+/** How a question about a review has come, as the author's collagen tells
+ *  the asker: waiting on the author, asking them, being answered, answered
+ *  (with the answer), declined, or being addressed (it found a flaw, and the
+ *  conversation that built the work is fixing it). */
+export const ReviewQuestionStage = Schema.Literals(["waiting", "asking", "answering", "answered", "declined", "addressing"]);
+export type ReviewQuestionStage = typeof ReviewQuestionStage.Type;
+
+export const ReviewAnswer = Schema.Struct({
+  id: Schema.String,
+  ticketId: Schema.String,
+  stage: ReviewQuestionStage,
+  answer: Schema.optional(Schema.String),
+  /** what the answer found wrong, when it found something */
+  flaw: Schema.optional(Schema.String),
+  /** why it waits, when it cannot be answered for now: the author has not
+   *  chosen their answering steering, it is never, or no conversation of
+   *  theirs did the work — the asker's AI then offers its own reading */
+  why: Schema.optional(Schema.Literals(["not-chosen", "never", "no-conversation"])),
+});
+export type ReviewAnswer = typeof ReviewAnswer.Type;
+
+/** A reader's AI's guess at why the code is the way it is, when the author
+ *  could not answer: the author's collagen adds it to their review's why as
+ *  a guess, for them (or their AI) to confirm, correct or reject. `id` is the
+ *  question it guesses at. */
+export const ReviewGuess = Schema.Struct({
+  id: Schema.String,
+  ticketId: Schema.String,
+  what: Schema.String,
+  /** what in the code or the why points there */
+  basis: Schema.String,
+  confidence: Schema.Literals(["high", "medium", "low"]),
+});
+export type ReviewGuess = typeof ReviewGuess.Type;
+
 /** A directed message from one peer to another within a room. */
 export const RoomMessage = Schema.Struct({
   id: Schema.String,
@@ -106,6 +166,13 @@ export const RoomMessage = Schema.Struct({
   reviewAsk: Schema.optional(ReviewAsk),
   /** How far a review ask the recipient made has come (see ReviewAskStatus). */
   reviewStatus: Schema.optional(ReviewAskStatus),
+  /** A question about the recipient's review (see ReviewQuestion). Written
+   *  once, never rewritten: an older build reads it as plain text. */
+  reviewQuestion: Schema.optional(ReviewQuestion),
+  /** How a question the recipient asked has come (see ReviewAnswer). */
+  reviewAnswer: Schema.optional(ReviewAnswer),
+  /** A reader's AI's guess at a reason the recipient's review does not give (see ReviewGuess). */
+  reviewGuess: Schema.optional(ReviewGuess),
 });
 export type RoomMessage = typeof RoomMessage.Type;
 
@@ -433,6 +500,10 @@ export const Outgoing = Schema.Union([
     ticketId: Schema.optional(Schema.String),
     /** a review asked of the peer's work (request-review) */
     reviewAsk: Schema.optional(ReviewAsk),
+    /** a question about the peer's review (ask-author) */
+    reviewQuestion: Schema.optional(ReviewQuestion),
+    /** a guess at a reason the peer's review does not give */
+    reviewGuess: Schema.optional(ReviewGuess),
   }),
   Schema.Struct({ kind: Schema.Literal("ticket"), ticket: Ticket }),
   /** A review ticket: the record and the why behind the change, together —
@@ -584,7 +655,7 @@ export const Worked = Schema.Struct({
 export type Worked = typeof Worked.Type;
 
 /** The jobs collagen runs an AI for, each with a model the person may choose. */
-export const JobKind = Schema.Literals(["wake", "research", "investigation", "filing"]);
+export const JobKind = Schema.Literals(["wake", "research", "investigation", "filing", "answering", "chat"]);
 export type JobKind = typeof JobKind.Type;
 
 /** A model run collagen made itself, in the person's name (cli AgentRunner,
@@ -657,6 +728,56 @@ export const ReviewAskHeld = Schema.Struct({
 });
 export type ReviewAskHeld = typeof ReviewAskHeld.Type;
 
+/** A turn of a review page's chat as the person's collagen keeps it, so the
+ *  chat shows at once: the question, the lines and commit it was about, the
+ *  answer, and — for a question that went to the review's author — who
+ *  answered it and how forwarding it stands. */
+export const ChatTurnKept = Schema.Struct({
+  id: Schema.String,
+  question: Schema.String,
+  selection: Schema.optional(QuestionLines),
+  commit: Schema.optional(Schema.String),
+  answer: Schema.String,
+  state: Schema.Literals(["done", "stopped", "failed"]),
+  error: Schema.optional(Schema.String),
+  /** the author an answer is from, when it is their AI's */
+  from: Schema.optional(Schema.String),
+  /** a question the why could not answer: offered to the author, or asked of them (with its id) */
+  forward: Schema.optional(Schema.Struct({ id: Schema.optional(Schema.String), question: Schema.String, state: Schema.Literals(["offered", "asked", "off"]) })),
+  /** the author cannot answer for now: the reader is offered their own AI's reading instead */
+  fallback: Schema.optional(Schema.Boolean),
+});
+export type ChatTurnKept = typeof ChatTurnKept.Type;
+
+/** Where a review's chat is: the AI and its own conversation id (the AI
+ *  keeps the conversation), and the turns, so the page shows them at once. */
+export const ChatKept = Schema.Struct({ ai: Schema.String, id: Schema.String, turns: Schema.optional(Schema.Array(ChatTurnKept)) });
+export type ChatKept = typeof ChatKept.Type;
+
+/** A question about the person's review, kept by their collagen until it is
+ *  answered or declined (cli ReviewQuestions). Local. */
+export const ReviewQuestionHeld = Schema.Struct({
+  roomId: Schema.String,
+  id: Schema.String,
+  ticketId: Schema.String,
+  /** the asker's key and name */
+  from: Schema.String,
+  fromName: Schema.String,
+  project: Schema.String,
+  /** the thread between the two, where the question came and its news goes */
+  threadId: Schema.String,
+  question: Schema.String,
+  lines: Schema.optional(QuestionLines),
+  commit: Schema.optional(Schema.String),
+  stage: Schema.Literals(["new", "waiting", "asking", "answering", "answered", "declined", "addressing"]),
+  /** the conversations the work was found in, the one at the top first */
+  conversations: Schema.optional(Schema.Array(Conversation)),
+  /** the reader's AI's guess at it, as added to the review's why: its decision id and what it says */
+  guess: Schema.optional(Schema.Struct({ decision: Schema.String, what: Schema.String })),
+  ts: Schema.Finite,
+});
+export type ReviewQuestionHeld = typeof ReviewQuestionHeld.Type;
+
 /** A review the person asked of a colleague's work (request-review): kept
  *  until the ticket is filed, with the review they wrote to put on it. Local. */
 export const AskedReview = Schema.Struct({
@@ -691,7 +812,7 @@ export type Steering = typeof Steering.Type;
  *  proposal or bug, once its review is accepted or merged), and filing a
  *  review of their work someone asked for (their AI reading the conversation
  *  the work was done in). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review"]);
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -705,7 +826,7 @@ export type SteeringPair = typeof SteeringPair.Type;
 export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
 export type TagRoute = typeof TagRoute.Type;
 
-const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair) });
+const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair), forward: Schema.optional(SteeringPair), answer: Schema.optional(SteeringPair) });
 
 /** One room's own levels: a general level and per kind, each absent where
  *  the room follows the person's levels everywhere. */
@@ -809,7 +930,7 @@ export const LocalState = Schema.Struct({
   /** ticketId → the conversation the person's AI holds about that review
    *  (review page chat): which AI, and its own conversation id. The AI keeps
    *  the conversation; this is only where to find it again. Never broadcast. */
-  chats: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ ai: Schema.String, id: Schema.String }))),
+  chats: Schema.optional(Schema.Record(Schema.String, ChatKept)),
   /** ticketId → file → the person's viewed mark (the review page's, and
    *  their agent's through review-progress). Theirs alone, never broadcast. */
   viewed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark))),
@@ -851,6 +972,8 @@ export const LocalState = Schema.Struct({
   worked: Schema.optional(Schema.Record(Schema.String, Worked)),
   /** Reviews colleagues asked of the person's work (see ReviewAskHeld). */
   reviewAsks: Schema.optional(Schema.Array(ReviewAskHeld)),
+  /** questions about the person's reviews, until answered or declined (cli ReviewQuestions) */
+  reviewQuestions: Schema.optional(Schema.Array(ReviewQuestionHeld)),
   /** Reviews the person asked of colleagues' work (see AskedReview). */
   askedReviews: Schema.optional(Schema.Array(AskedReview)),
   /** The conversations collagen's own jobs ran as (conversation keys, latest

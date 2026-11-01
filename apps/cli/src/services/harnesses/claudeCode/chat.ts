@@ -26,6 +26,7 @@ export const claudeChat: ChatAdapter = {
       "stream-json",
       "--verbose",
       "--include-partial-messages",
+      ...(Option.isSome(context.model) ? ["--model", context.model.value] : []),
     ];
     return Option.isSome(context.sessionId) ? ["--resume", context.sessionId.value, ...base] : base;
   },

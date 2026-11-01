@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // A stand-in for the `claude` CLI, put first on PATH by a scenario: it plays
-// a filing job (review-request.sh). `claude auth status` says it is signed
-// in; `claude -p <prompt> …` reads the conversation the prompt names, files
-// the review with ask-review {request} over the MCP server its --mcp-config
-// gives, and answers as `claude --output-format json` does. Every call's
+// a filing job (review-request.sh) or an answering job (review-question.sh).
+// `claude auth status` says it is signed in; `claude -p <prompt> …` reads
+// the conversation the prompt names, then files the review with ask-review
+// {request}, or answers the question with review-question {questionId} —
+// with a flaw when the question asks about negative numbers — over the MCP
+// server its --mcp-config gives, and answers as `claude --output-format json`
+// does. Every call's
 // arguments go to $FAKE_CLAUDE_CALLS, one JSON line each. No model runs.
 import { appendFileSync, readFileSync } from "node:fs";
 
@@ -32,6 +35,22 @@ async function rpc(body, session) {
 }
 const init = await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake-claude", version: "0" } } });
 await rpc({ jsonrpc: "2.0", method: "notifications/initialized" }, init.sid);
+const questionId = /questionId: "([^"]+)"/.exec(prompt)?.[1];
+if (questionId) {
+  const negative = /negative/i.test(/The question: (.*)/.exec(prompt)?.[1] ?? "");
+  const answered = await rpc(
+    {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "review-question", arguments: { questionId, reply: `The conversation says: ${said}`, ...(/assumed: "/.test(prompt) ? { verdict: "corrected" } : {}), ...(negative ? { flaw: "a negative count is doubled too, and the dashboard never shows negatives" } : {}) } },
+    },
+    init.sid,
+  );
+  const text = answered.json?.result?.content?.[0]?.text ?? JSON.stringify(answered.json);
+  console.log(JSON.stringify({ result: text.slice(0, 200), session_id: `fake-job-${process.pid}` }));
+  process.exit(0);
+}
 const filed = await rpc(
   {
     jsonrpc: "2.0",

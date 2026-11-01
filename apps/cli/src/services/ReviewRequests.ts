@@ -170,14 +170,19 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
       });
 
     /** The person's conversations that did the work on `branch` in the project at `path`. */
-    const findWork = (path: string, branch: string) =>
+    /** The person's conversations that did the work on `branch` in the
+     *  project at `path`: never one of collagen's own jobs, nor a review
+     *  page's chat (a session in the clone, talking of the same branch), nor
+     *  any in `skip` (a review's readers, say). */
+    const findWork = (path: string, branch: string, skipToo: ReadonlySet<string> = new Set()) =>
       Effect.gen(function* () {
         const roots = yield* rootsOf(path);
         const change = yield* changeOf(path, branch);
         const now = yield* Clock.currentTimeMillis;
         const since = (change?.began ?? now - LOOK_BACK) - Duration.toMillis(Duration.days(1));
         const homes = homesOf(harnesses);
-        const skip = new Set((yield* store.get).jobConversations ?? []);
+        const state = yield* store.get;
+        const skip = new Set([...(state.jobConversations ?? []), ...Object.values(state.chats ?? {}).map((chat) => `${chat.ai}:${chat.id}`), ...skipToo]);
         const found = yield* Effect.promise(async () => {
           const out: Array<Found> = [];
           for (const harness of harnesses) {
@@ -493,7 +498,7 @@ export class ReviewRequests extends Context.Service<ReviewRequests>()("cli/Revie
       Effect.forkScoped,
     );
 
-    return { ask, answer, filed, heldOf } as const;
+    return { ask, answer, filed, heldOf, findWork, copyOf } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

@@ -1,6 +1,6 @@
 import { createSignal, For, Show } from "solid-js";
 import type { CommentSpot, DiffSide, DraftView, LineComment } from "~/data";
-import { enter } from "~/fold";
+import { enter, leave } from "~/fold";
 import { chatNow } from "~/chatNow";
 import { hostNow } from "~/hostNow";
 import { bodyParts, suggestionBlock } from "~/suggest";
@@ -283,11 +283,14 @@ export function LineComposer(props: {
   let box: HTMLTextAreaElement | undefined;
   const block = () => props.from.line !== props.to.line || props.from.side !== props.to.side;
   const spot = (): CommentSpot => ({ file: props.file, line: props.to.line, side: props.to.side, ...(block() ? { startLine: props.from.line, startSide: props.from.side } : {}) });
-  const close = () => hostNow.clearPick();
-  /** the picked lines go to the reader's AI instead; words begun here stay */
+  let thread: HTMLDivElement | undefined;
+  let form: HTMLFormElement | undefined;
+  // folds shut, then the pick is let go
+  const close = () => void leave(thread).then(() => hostNow.clearPick());
+  /** the picked lines, and the words begun here, become a question to the reader's AI: the box flies into the chat */
   const askAi = () => {
-    chatNow.askAbout({ file: props.file, from: props.from, to: props.to, text: props.code });
-    if (body().trim().length === 0) close();
+    if (!form) return;
+    chatNow.handOver({ file: props.file, from: props.from, to: props.to, text: props.code }, body(), form, close);
   };
   const suggest = () => {
     if (!box || !props.suggestable) return;
@@ -322,8 +325,15 @@ export function LineComposer(props: {
   return (
     <tr class={["thread-row", { "handed-off": handedOff() }]}>
       <td colspan={3}>
-        <div class="thread">
+        <div
+          class="thread"
+          ref={(element) => {
+            thread = element;
+            enter(element);
+          }}
+        >
           <form
+            ref={(element) => (form = element)}
             class="line-composer"
             onSubmit={(event) => {
               event.preventDefault();

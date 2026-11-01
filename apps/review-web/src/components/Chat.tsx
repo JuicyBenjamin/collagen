@@ -1,8 +1,11 @@
-import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Show, type Element } from "solid-js";
 import { Appear } from "./Appear";
+import { arrive, flyIn, grow, rise, shrink, sink } from "../fold";
+import { floating } from "../floating";
 import { chatNow } from "../chatNow";
 import { overSocket } from "../liveSocket";
-import { answerParts, selectionLabel } from "../chatText";
+import { selectionLabel, selectionShort } from "../chatText";
+import { Markdown } from "./Markdown";
 import type { ChatTurn } from "../data";
 import { lasting } from "../lasting";
 import { ticketId } from "../ticket";
@@ -37,20 +40,100 @@ export function Chat() {
           </button>
         )}
       </Appear>
-      <Appear when={!chatNow.open() && turns().length > 0}>
-        {() => (
-          <button type="button" class="chat-pill" onClick={() => chatNow.toggle()}>
-            {chatNow.answering() ? "AI answering…" : "AI chat"}
+      {/* the pill and the panel turn into each other (chatNow.openUp, close):
+          the panel grows out of the pill, and shrinks back onto it, placed
+          beneath as it starts to close — its words coming once it is the pill */}
+      <InCorner
+        when={!chatNow.open() && turns().length > 0}
+        enter={(element) => (chatNow.turn.intoPill ? arrive(element.firstElementChild, 0.24) : rise(element))}
+        // the panel growing out of it covers it from the first frame
+        leave={sink}
+        held={(element) => (chatNow.corner.pill = element)}
+      >
+        {(placed) => (
+          <button ref={placed} type="button" class={["chat-pill", { lifted: floating() }]} onClick={() => chatNow.openUp()}>
+            <span>{chatNow.answering() ? "AI answering…" : "AI chat"}</span>
           </button>
         )}
-      </Appear>
-      <Appear when={chatNow.open()}>{() => <Panel />}</Appear>
+      </InCorner>
+      <InCorner
+        when={chatNow.open()}
+        enter={(element) => {
+          const { from, flyFrom } = chatNow.turn;
+          chatNow.turn.from = chatNow.turn.flyFrom = null;
+          // from the pill, from a comment form (chatNow.handOver), or out of its corner
+          if (from) grow(element, from);
+          else if (flyFrom) flyIn(element, flyFrom);
+          else rise(element);
+        }}
+        leave={async (element) => {
+          if (!chatNow.turn.intoPill) return sink(element);
+          // the pill is placed as this starts to close: once it is drawn, this closes onto it
+          await Promise.resolve();
+          const pill = chatNow.corner.pill;
+          try {
+            await (pill ? shrink(element, pill.getBoundingClientRect()) : sink(element));
+          } finally {
+            chatNow.turn.intoPill = false;
+          }
+        }}
+        held={(element) => (chatNow.corner.panel = element)}
+      >
+        {(placed) => <Panel placed={placed} />}
+      </InCorner>
     </>
   );
 }
 
-function Panel() {
-  const [question, setQuestion] = createSignal("");
+/** Something in the window's corner, the chat's pill or its panel: `enter`
+ *  brings it in as it is placed, and it stays placed through `leave`, taken
+ *  away then only if it was not opened again meanwhile (it rises back).
+ *  `held` is told the element while it is placed, and undefined after. */
+function InCorner(props: {
+  when: boolean;
+  enter: (element: HTMLElement) => void;
+  leave: (element: HTMLElement) => Promise<void>;
+  held: (element: HTMLElement | undefined) => void;
+  children: (placed: (element: HTMLElement) => void) => Element;
+}) {
+  const [placed, setPlaced] = createSignal(props.when);
+  let element: HTMLElement | undefined;
+  let sinking = false;
+  const gone = () => {
+    sinking = false;
+    element = undefined;
+    props.held(undefined);
+    setPlaced(false);
+  };
+  createEffect(
+    () => props.when,
+    (when) => {
+      if (when) {
+        if (sinking && element) rise(element);
+        sinking = false;
+        return void setPlaced(true);
+      }
+      if (!element) return gone();
+      sinking = true;
+      void props.leave(element).then(() => {
+        if (sinking) gone();
+      });
+    },
+  );
+  return (
+    <Show when={placed()}>
+      {props.children((placedElement) => {
+        element = placedElement;
+        props.held(placedElement);
+        props.enter(placedElement);
+      })}
+    </Show>
+  );
+}
+
+function Panel(props: { placed: (element: HTMLElement) => void }) {
+  const question = chatNow.draft;
+  const setQuestion = chatNow.setDraft;
   let log: HTMLDivElement | undefined;
   let input: HTMLTextAreaElement | undefined;
   // follows the answer down as it grows — unless the reader scrolled up to read
@@ -73,11 +156,16 @@ function Panel() {
   };
   const cannot = () => chatNow.view()?.cannot ?? null;
   return (
-    <aside class="chat" aria-label="Chat with your AI">
+    <aside
+      // above the review's pill once it floats in the corner
+      class={["chat-panel", { lifted: floating() }]}
+      aria-label="Chat with your AI"
+      ref={props.placed}
+    >
       <div class="chat-head">
         <span class="chat-ai">{chatNow.view()?.ai ?? "Your AI"}</span>
         <Show when={(chatNow.view()?.turns.length ?? 0) > 0}>
-          <button type="button" class="quiet small" onClick={() => chatNow.restart()} title="Start the conversation over">
+          <button type="button" class="btn btn-ghost btn-xs" onClick={() => chatNow.restart()} title="Start the conversation over">
             New chat
           </button>
         </Show>
@@ -110,15 +198,16 @@ function Panel() {
         >
           <Show when={chatNow.attached()}>
             {(selection) => (
-              <span class="chat-attached">
-                <code>{selectionLabel(selection())}</code>
-                <button type="button" class="chat-detach" aria-label="Don't ask about these lines" onClick={() => chatNow.detach()}>
+              <span class="chat-attached badge badge-sm badge-soft badge-primary" title={selectionLabel(selection())}>
+                {selectionShort(selection())}
+                <button type="button" class="btn btn-ghost btn-xs btn-circle" aria-label="Don't ask about these lines" onClick={() => chatNow.detach()}>
                   ×
                 </button>
               </span>
             )}
           </Show>
           <textarea
+            class="textarea"
             ref={(element) => (input = element)}
             rows={2}
             placeholder={chatNow.attached() ? "Ask about these lines" : "Ask about this review"}
@@ -136,12 +225,12 @@ function Panel() {
             <Show
               when={chatNow.answering()}
               fallback={
-                <button type="submit" class="banner-go" disabled={chatNow.sending() || question().trim().length === 0}>
+                <button type="submit" class="btn btn-primary btn-sm" disabled={chatNow.sending() || question().trim().length === 0}>
                   Ask
                 </button>
               }
             >
-              <button type="button" class="quiet" onClick={() => chatNow.stop()}>
+              <button type="button" class="btn btn-sm" onClick={() => chatNow.stop()}>
                 Stop
               </button>
             </Show>
@@ -153,33 +242,85 @@ function Panel() {
 }
 
 function Turn(props: { turn: ChatTurn }) {
-  const parts = createMemo(() => answerParts(props.turn.answer));
+  // the person's own review ("you"): the conversation of theirs that did the work answers
+  const author = () => chatNow.view()?.author ?? "the author";
+  const whose = (name: string) => (name === "you" ? "the conversation that did the work" : `${name}'s AI`);
+  /** who answers: the reader's own AI, or the review's author's */
+  const answerer = () => (props.turn.from === undefined ? (chatNow.view()?.ai ?? "Your AI") : props.turn.from === "you" ? "The conversation that did the work" : `${props.turn.from}'s AI`);
   return (
     <div class="chat-turn">
-      <div class="chat-q">
-        <Show when={props.turn.selection}>{(selection) => <code class="chat-about">{selectionLabel(selection())}</code>}</Show>
-        <p>{props.turn.question}</p>
-      </div>
-      <div class={["chat-a", { failed: props.turn.state === "failed" }]}>
-        <For each={parts()}>
-          {(part) => (
-            <Show when={part.kind === "code"} fallback={<p>{part.text}</p>}>
-              <pre>
-                <code>{part.text}</code>
-              </pre>
+      {/* an author's AI answers under the question it was asked: no question of its own */}
+      <Show when={props.turn.from === undefined}>
+        <div class="chat chat-end">
+          <Show when={props.turn.selection}>
+            {(selection) => (
+              <div class="chat-header">
+                <span class="badge badge-sm badge-soft badge-primary" title={selectionLabel(selection())}>
+                  {selectionShort(selection())}
+                </span>
+              </div>
+            )}
+          </Show>
+          <div class="chat-bubble chat-bubble-primary chat-q">
+            <p>{props.turn.question}</p>
+          </div>
+        </div>
+      </Show>
+      <div class="chat chat-start">
+        <div class="chat-header">{answerer()}</div>
+        <div class="chat-bubble">
+          {/* as the page reads any comment: markdown, never set as HTML */}
+          <Show when={props.turn.answer}>
+            <Markdown text={props.turn.answer} />
+          </Show>
+          {/* nothing said yet: it is thinking */}
+          <Show when={props.turn.state === "answering" && !props.turn.answer}>
+            <span class="loading loading-dots loading-sm" aria-label="Thinking" />
+          </Show>
+        </div>
+        <Show when={(props.turn.state === "answering" && props.turn.doing) || props.turn.state === "stopped" || props.turn.state === "failed"}>
+          <div class="chat-footer">
+            <Show when={props.turn.state === "answering"}>
+              <span class="chat-doing">{props.turn.doing}</span>
             </Show>
-          )}
-        </For>
-        <Show when={props.turn.state === "answering"}>
-          <p class="chat-doing">{props.turn.doing ?? (props.turn.answer ? "" : "Thinking…")}</p>
-        </Show>
-        <Show when={props.turn.state === "stopped"}>
-          <p class="chat-doing">Stopped</p>
-        </Show>
-        <Show when={props.turn.state === "failed"}>
-          <p class="host-error">{props.turn.error ?? "Failed"}</p>
+            <Show when={props.turn.state === "stopped"}>
+              <span class="chat-doing">Stopped</span>
+            </Show>
+            <Show when={props.turn.state === "failed"}>
+              <span class="host-error">{props.turn.error ?? "Failed"}</span>
+            </Show>
+          </div>
         </Show>
       </div>
+      {/* the author cannot answer for now: the reader's own AI, instead of a guess passed off as theirs */}
+      <Show when={props.turn.fallback && props.turn.from}>
+        <div class="chat-fallback">
+          <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "assume")} title="Your AI's best reading of why, sent to their review's why as a guess for them to settle">
+            Assume the reason
+          </button>
+          <button type="button" class="btn btn-xs" disabled={chatNow.answering()} onClick={() => void chatNow.instead(props.turn.id, "critique")} title="The same guess, then whether it is good enough: what it asks to change becomes your draft comments">
+            Critique it
+          </button>
+        </div>
+      </Show>
+      <Show when={props.turn.forward}>
+        {(forward) => (
+          <div class="chat-fallback">
+            <Show
+              when={forward().state === "offered"}
+              fallback={
+                <Show when={forward().state === "asked"}>
+                  <span class="chat-doing">Asked {whose(author())}</span>
+                </Show>
+              }
+            >
+              <button type="button" class="btn btn-primary btn-xs" onClick={() => void chatNow.forward(props.turn.id)} title={forward().question}>
+                Ask {whose(author())}
+              </button>
+            </Show>
+          </div>
+        )}
+      </Show>
     </div>
   );
 }

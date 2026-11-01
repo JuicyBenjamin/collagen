@@ -30,7 +30,20 @@ export function DecisionWhy(props: { decision: Decision }) {
       </p>
       <Show
         when={assumedNow.isGuess(props.decision)}
-        fallback={<ToldWhy decision={props.decision} />}
+        fallback={
+          <>
+            {/* a reason read from the author's AI, answering a reader's question: said so, not taken for their word */}
+            <Show when={props.decision.basis}>
+              {(basis) => (
+                <div class="why-part">
+                  <p class="who">Read from their AI</p>
+                  <p class="quote">{basis()}</p>
+                </div>
+              )}
+            </Show>
+            <ToldWhy decision={props.decision} />
+          </>
+        }
       >
         <AssumedWhy decision={props.decision} />
       </Show>

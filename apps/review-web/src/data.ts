@@ -909,6 +909,15 @@ export interface ChatTurn {
   readonly doing: string | null;
   readonly state: "answering" | "done" | "stopped" | "failed";
   readonly error?: string;
+  /** the review's author whose AI this answer is from; absent: the reader's own AI */
+  readonly from?: string;
+  /** a question the why could not answer: offered to the author (a button,
+   *  as the reader's forwarding steering asks), asked of them, or not sent */
+  readonly forward?: { readonly id?: string; readonly question: string; readonly state: "offered" | "asked" | "off" };
+  /** the author cannot answer for now: offer the reader their own AI's reading instead (assume the reason, or look at it critically) */
+  readonly fallback?: boolean;
+  /** this turn is the reader's AI's own reading in the author's place: of which question, assumed or critiqued */
+  readonly about?: { readonly questionId: string; readonly mode: "assume" | "critique" };
 }
 
 /** chat(ticketId) — the reader's conversation with their AI on this review,
@@ -918,6 +927,8 @@ export interface ChatView {
   readonly ai: string | null;
   /** why it cannot be asked here, in words; null: it can */
   readonly cannot: string | null;
+  /** the review's author, by name: whose AI a forwarded question goes to */
+  readonly author: string | null;
   readonly turns: ReadonlyArray<ChatTurn>;
 }
 

@@ -7,13 +7,15 @@ import { settingOf } from "./settings";
 // heard of is passed through, so a new model needs nothing from collagen
 // (and the harness's aliases, like Claude Code's "haiku", follow the newest).
 
-export const JOB_KINDS: ReadonlyArray<JobKind> = ["wake", "research", "investigation", "filing"];
+export const JOB_KINDS: ReadonlyArray<JobKind> = ["wake", "research", "investigation", "filing", "answering", "chat"];
 
 export const JOB_LABEL: Record<JobKind, string> = {
   wake: "waking a conversation",
   research: "researching a ticket",
   investigation: "answering an investigation",
   filing: "filing a review asked of you",
+  answering: "answering a question about your review",
+  chat: "your chat on a review page",
 };
 
 /** The job a ticket's research is: an investigation's question is answered,
@@ -70,6 +72,9 @@ export const shownAi = (state: Pick<LocalState, "worked" | "preferredAi">): stri
  *  most, else the AI chosen before jobs named their own. */
 export const jobHarness = (state: Pick<LocalState, "harnesses" | "worked" | "preferredAi">, kind: JobKind): string | null =>
   state.harnesses?.[kind]?.trim() || mostUsedHarness(state) || state.preferredAi;
+
+/** The AI the review page's chat asks: the one chosen for chats, else the one the room sees. */
+export const chatAi = (state: Pick<LocalState, "harnesses" | "worked" | "preferredAi">): string | null => state.harnesses?.chat?.trim() || shownAi(state);
 
 /** The state with a job's harness set, or given back to the one used most (null). */
 export const withHarness = <S extends Pick<LocalState, "harnesses">>(state: S, kind: JobKind, harness: string | null): S => {

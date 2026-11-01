@@ -4,7 +4,7 @@ import type { ChatTurn } from "@collagen/review-web/data";
 import type { ChatEvent } from "./ChatAdapters";
 import { claudeChat } from "./harnesses/claudeCode/chat";
 import { codexChat } from "./harnesses/codex/chat";
-import { applyEvents, promptFor, turnsFromLog } from "./ReviewChat";
+import { applyEvents, forwardOf, insteadAnswer, promptFor, turnsFromLog } from "./ReviewChat";
 
 const lines = (...objects: ReadonlyArray<unknown>) => objects.map((object) => JSON.stringify(object));
 const read = (adapter: typeof claudeChat, stdout: ReadonlyArray<string>): ReadonlyArray<ChatEvent> => stdout.flatMap(adapter.read);
@@ -12,7 +12,7 @@ const turn: ChatTurn = { id: "t", question: "q", selection: null, commit: null, 
 
 describe("claudeChat", () => {
   it("resumes the conversation and asks for a stream of what it writes, read-only", () => {
-    const args = claudeChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("s1"), mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice" });
+    const args = claudeChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("s1"), mcpUrl: "http://127.0.0.1:1/mcp", serverName: "collagen-alice", model: Option.none() });
     expect(args.slice(0, 2)).toEqual(["--resume", "s1"]);
     expect(args).toContain("stream-json");
     expect(args).toContain("--include-partial-messages");
@@ -39,7 +39,7 @@ describe("claudeChat", () => {
     expect(mid.answer).toBe("Let me look.\n\nIt maps rows.");
     const done = applyEvents(mid, blocks, read(claudeChat, lines({ type: "result", subtype: "success", is_error: false, result: "It maps rows.", session_id: "s1" })));
     expect(done.answer).toBe("It maps rows.");
-    expect(events).toContainEqual({ kind: "doing", what: "Read src/a.ts" });
+    expect(events).toContainEqual({ kind: "doing", what: "Reading a.ts" });
     expect(events[0]).toEqual({ kind: "session", id: "s1" });
   });
 
@@ -63,14 +63,14 @@ describe("codexChat", () => {
     );
     expect(events).toEqual([
       { kind: "session", id: "th1" },
-      { kind: "doing", what: "git show abc:src/a.ts" },
+      { kind: "doing", what: "Reading a.ts at abc" },
       { kind: "text", text: "It maps rows.", block: true },
     ]);
     expect(read(codexChat, lines({ type: "turn.failed", error: { message: "no auth" } }))).toEqual([{ kind: "failed", error: "no auth" }]);
   });
 
   it("resumes with exec resume, read-only", () => {
-    const args = codexChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("th1"), mcpUrl: "", serverName: "collagen" });
+    const args = codexChat.args({ cwd: "/r", prompt: "hi", sessionId: Option.some("th1"), mcpUrl: "", serverName: "collagen", model: Option.none() });
     expect(args.slice(0, 3)).toEqual(["exec", "resume", "th1"]);
     expect(args).toContain('sandbox_mode="read-only"');
     expect(args.join(" ")).not.toContain("default_tools_approval_mode");
@@ -100,5 +100,29 @@ describe("a review's chat read back from the AI's own log", () => {
       ["why two?", "src/a.ts", 4, "abc1234def", "Because b is new."],
       ["and now?", null, null, "abc1234def", "Still two."],
     ]);
+  });
+});
+
+describe("an answer that only the author can settle", () => {
+  it("hands its last line's question over, and keeps the rest as the answer", () => {
+    expect(forwardOf("The why does not say.\n\nASK THE AUTHOR: why double inside thing()?")).toEqual({ answer: "The why does not say.", question: "why double inside thing()?" });
+    expect(forwardOf("It doubles because the export reads it too.")).toBeNull();
+    expect(forwardOf("Nothing says.\n`ASK THE AUTHOR: why?`")).toEqual({ answer: "Nothing says.", question: "why?" });
+  });
+});
+
+describe("an answer in the author's place", () => {
+  it("reads the guess and the draft comments out of it, and leaves the reader the words", () => {
+    const read = insteadAnswer(
+      [
+        "It looks done so the export gets it too. That is not reason enough: the export should double on its own.",
+        "ASSUMED: doubled inside thing() so every caller, the export too, gets it || RESTS ON: thing() is read by the dashboard and the export || SURE: medium",
+        "`DRAFT: thing.js:1 || wish || Double in the dashboard instead: the export wants raw counts.`",
+        "DRAFT: nowhere || must || dropped: no line",
+      ].join("\n"),
+    );
+    expect(read.answer).toBe("It looks done so the export gets it too. That is not reason enough: the export should double on its own.");
+    expect(read.assumed).toEqual({ what: "doubled inside thing() so every caller, the export too, gets it", basis: "thing() is read by the dashboard and the export", confidence: "medium" });
+    expect(read.drafts).toEqual([{ file: "thing.js", line: 1, strength: "wish", body: "Double in the dashboard instead: the export wants raw counts." }]);
   });
 });

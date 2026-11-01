@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { askAi, newChat, stopAnswer } from "./api";
+import { answerInstead, askAi, forwardQuestion, newChat, stopAnswer } from "./api";
 import type { ChatSelection, ChatView, SideLine } from "./data";
 import { diffNow } from "./diffNow";
 import { ticketId } from "./ticket";
@@ -17,6 +17,15 @@ const [attached, setAttached] = createSignal<ChatSelection | null>(null);
 const [offer, setOffer] = createSignal<{ readonly selection: ChatSelection; readonly x: number; readonly y: number } | null>(null);
 const [refused, setRefused] = createSignal<string | null>(null);
 const [sending, setSending] = createSignal(false);
+/** The question being written: words a comment box handed over come in it. */
+const [draft, setDraft] = createSignal("");
+/** The chat's panel and its pill, while placed: what one grows from and shrinks into. */
+const corner: { panel?: HTMLElement; pill?: HTMLElement } = {};
+/** How the panel comes and goes, besides rising and sinking (fold.ts): the
+ *  pill it grows from as it opens, the comment form it flies from, and
+ *  whether it is shrinking into the pill as it closes. */
+const turn: { from: DOMRect | null; flyFrom: DOMRect | null; intoPill: boolean } = { from: null, flyFrom: null, intoPill: false };
+
 /** Moves each time the reader picks lines to ask about: the panel's input takes the focus. */
 const [asking, setAsking] = createSignal(0);
 
@@ -76,12 +85,25 @@ export const chatNow = {
   refused,
   sending,
   asking,
+  draft,
+  setDraft,
+  corner,
+  turn,
   setView,
-  toggle: () => setOpen(!open()),
-  close: () => setOpen(false),
+  /** The pill grows into the panel. */
+  openUp(): void {
+    turn.from = corner.pill?.getBoundingClientRect() ?? null;
+    setOpen(true);
+  },
+  /** The panel shrinks into the pill — when there is one to come: a chat with nothing in it has none, and sinks. */
+  close(): void {
+    turn.intoPill = corner.panel !== undefined && (view()?.turns.length ?? 0) > 0;
+    setOpen(false);
+  },
   detach: () => setAttached(null),
   /** Is an answer under way? */
-  answering: () => (view()?.turns ?? []).some((turn) => turn.state === "answering"),
+  /** the reader's own AI is answering — an author's AI answering is not in the way */
+  answering: () => (view()?.turns ?? []).some((turn) => turn.state === "answering" && turn.from === undefined),
   /** Follow the reader's selection: selected code is offered to ask about. Once per page. */
   watch(): void {
     if (watching || typeof document === "undefined") return;
@@ -103,12 +125,23 @@ export const chatNow = {
     getSelection()?.removeAllRanges();
     chatNow.askAbout(offered.selection);
   },
-  /** Ask about these lines (picked in the margin, or selected): they go with the next question. */
-  askAbout(selection: ChatSelection): void {
+  /** Ask about these lines (picked in the margin, or selected): they go with the next question, after any words already begun. */
+  askAbout(selection: ChatSelection, words = ""): void {
     setAttached(selection);
+    if (words.trim()) setDraft(words);
     setRefused(null);
     setOpen(true);
     setAsking((count) => count + 1);
+  },
+  /** A comment form turns into the question: its lines and words go to the
+   *  chat, and the panel flies in from where the form stood, so one box is
+   *  open at a time (fold.ts: flyIn). `away` takes the form's place away,
+   *  folding shut as the panel flies. An open panel just takes the words. */
+  handOver(selection: ChatSelection, words: string, form: HTMLElement, away: () => void): void {
+    if (!open()) turn.flyFrom = form.getBoundingClientRect();
+    form.style.visibility = "hidden";
+    away();
+    chatNow.askAbout(selection, words);
   },
   /** Ask the reader's AI — with the lines attached, if any. True when it is under way. */
   async ask(question: string): Promise<boolean> {
@@ -132,6 +165,18 @@ export const chatNow = {
     }
   },
   stop: () => void stopAnswer(ticketId).catch((error) => setRefused(String(error))),
+  /** in the author's place: the reader's AI assumes why, or assumes and critiques it */
+  instead: async (turnId: string, mode: "assume" | "critique") => {
+    setRefused(null);
+    const said = await answerInstead(ticketId, turnId, mode).catch((error): { error: string } => ({ error: String(error) }));
+    if ("error" in said) setRefused(said.error);
+  },
+  /** the reader's word: ask the review's author's AI what the why did not say */
+  forward: async (turnId: string) => {
+    setRefused(null);
+    const said = await forwardQuestion(ticketId, turnId).catch((error): { error: string } => ({ error: String(error) }));
+    if ("error" in said) setRefused(said.error);
+  },
   restart: () => {
     setRefused(null);
     void newChat(ticketId).catch((error) => setRefused(String(error)));

@@ -43,7 +43,7 @@ export const claudeCode: Harness = {
   reachOf: callerSocket,
   wakesBy: "a courier tells this conversation in one line",
   wake: courier,
-  defaultModels: { wake: "haiku", research: "sonnet", investigation: "sonnet", filing: "sonnet" },
+  defaultModels: { wake: "haiku", research: "sonnet", investigation: "sonnet", filing: "sonnet", answering: "sonnet", chat: "sonnet" },
   runJob,
   signIn: {
     cmd: "claude",
