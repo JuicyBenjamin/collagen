@@ -5,6 +5,8 @@ import type { RoomMessage } from "@collagen/p2p";
 import { steeringLine, type Level } from "../lib/steering";
 import { actedBy } from "../lib/agents";
 import { Harnesses } from "./Harness";
+import type { ChatAdapter } from "./ChatAdapters";
+import { claudeChat } from "./harnesses/claudeCode/chat";
 
 export interface SpawnCtx {
   cwd: string;
@@ -26,6 +28,8 @@ export interface Adapter {
     /** exitCode/out from running `cmd auth.args` */
     loggedIn: (out: string, exitCode: number) => boolean;
   };
+  /** asked about code on the review page, its answer streamed there (ReviewChat) — absent: it cannot be */
+  chat?: ChatAdapter;
 }
 
 /** Words someone else wrote, made safe to quote in one line: no line breaks
@@ -60,6 +64,31 @@ export function wakeLine(spawnContext: SpawnCtx): string {
   ].join(" ");
 }
 
+// Mock: no model — a few words back in Claude's own format, a little at a
+// time, so the page's streaming is exercised by a machine with no AI.
+const MOCK_SCRIPT = `
+const q = (process.argv[1] || "").split("\\n").filter((l) => l.startsWith("Their question: ")).pop() || "";
+const words = ("Mock answer: " + q.slice("Their question: ".length)).split(" ");
+const out = (o) => process.stdout.write(JSON.stringify(o) + "\\n");
+const sid = process.argv[2] === "fresh" ? "mock-chat-" + process.pid : process.argv[2];
+out({ type: "system", subtype: "init", session_id: sid });
+out({ type: "stream_event", event: { type: "content_block_start", content_block: { type: "text", text: "" } } });
+let i = 0;
+const tick = () => {
+  if (i < words.length) {
+    out({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: (i ? " " : "") + words[i++] } } });
+    setTimeout(tick, 40);
+  } else out({ type: "result", subtype: "success", is_error: false, result: words.join(" "), session_id: sid });
+};
+tick();
+`;
+
+export const mockChat: ChatAdapter = {
+  cmd: process.execPath,
+  args: (context) => ["-e", MOCK_SCRIPT, context.prompt, Option.getOrElse(context.sessionId, () => "fresh")],
+  read: claudeChat.read,
+};
+
 // Mock: a real spawn of a tiny node script that does the full agent dance
 // (MCP handshake → get-messages → send-to-peer ack) with canned "thinking".
 // Lets a machine without any LLM CLI be a complete peer in a cross-network
@@ -72,6 +101,7 @@ const mockAgentPath = [new URL("./mock-agent.mjs", import.meta.url), new URL("..
 
 export const mockAdapter: Adapter = {
   cmd: process.execPath,
+  chat: mockChat,
   auth: {
     args: ["--version"],
     loggedIn: (_out, exitCode) => exitCode === 0,

@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { Mark, Marks } from "./marks";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
@@ -200,4 +200,23 @@ export const setViewed = async (ticketId: string, file: string, mark: Mark | nul
 export const saveThemes = async (themes: PageThemes): Promise<PageThemes> => {
   "use server";
   return run((backend) => backend.saveThemes(themes));
+};
+
+/** Ask the reader's own AI — only ever on their word — about the lines they
+ *  selected (or none), at the commit the page shows. */
+export const askAi = async (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null): Promise<ChatAsked> => {
+  "use server";
+  return run((backend) => backend.ask(ticketId, question, selection, commit));
+};
+
+/** Stop the answer under way; what it said so far stays. */
+export const stopAnswer = async (ticketId: string): Promise<void> => {
+  "use server";
+  return run((backend) => backend.stopAnswer(ticketId));
+};
+
+/** Start the conversation over. */
+export const newChat = async (ticketId: string): Promise<void> => {
+  "use server";
+  return run((backend) => backend.newChat(ticketId));
 };

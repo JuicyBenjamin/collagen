@@ -396,6 +396,17 @@ you open it; that is what the author's agent reads (`review-context`), and the s
 are what goes to GitHub. A comment posted to GitHub shows once on the page — GitHub's copy,
 marked **with AI** when your agent drafted it.
 
+### Asking your AI about code
+
+Select code in the diff and **Ask AI** appears under it: the lines go with your question,
+and the answer streams into a panel in the corner as your AI writes it. Collagen brings no
+model of its own — it runs your AI (the one your conversations use most; Claude Code or Codex) in your clone,
+read-only, told which commit the page shows, and the next question goes on with the same
+conversation. **Stop** ends an answer where it is; **New chat** starts over. The
+conversation is your AI's own: collagen keeps only which one it is, per review, so every
+tab shows it, and after a restart the next question re-enters it, its earlier turns read back
+from your AI's log. Nothing of it reaches the room or the host.
+
 ## A review built from assumptions
 
 For a change its author did not file in collagen — a colleague's pull request, say — ask

@@ -169,6 +169,9 @@ export const salvageState = (text: string): Salvaged => {
   // unreadable, the conversations are simply told again
   const worked = salvageRecord(src.worked, Worked, () => {});
 
+  // unreadable, a review's chat starts a new conversation next time
+  const chats = decode(Schema.Record(Schema.String, Schema.Struct({ ai: Schema.String, id: Schema.String })), src.chats);
+
   // unreadable, every review reads unviewed again
   const viewed = decode(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark)), src.viewed);
 
@@ -202,6 +205,7 @@ export const salvageState = (text: string): Salvaged => {
       ...(merging ? { merging } : {}),
       ...(themes ? { themes } : {}),
       ...(viewed ? { viewed } : {}),
+      ...(chats ? { chats } : {}),
       rooms,
       ...(projectOrder ? { projectOrder } : {}),
       ...(threads ? { threads } : {}),

@@ -730,6 +730,10 @@ export const LocalState = Schema.Struct({
   merging: Schema.optional(Merging),
   /** absent = collagen's own, and none of the person's yet */
   themes: Schema.optional(PageThemes),
+  /** ticketId → the conversation the person's AI holds about that review
+   *  (review page chat): which AI, and its own conversation id. The AI keeps
+   *  the conversation; this is only where to find it again. Never broadcast. */
+  chats: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ ai: Schema.String, id: Schema.String }))),
   /** ticketId → file → the person's viewed mark (the review page's, and
    *  their agent's through review-progress). Theirs alone, never broadcast. */
   viewed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark))),
