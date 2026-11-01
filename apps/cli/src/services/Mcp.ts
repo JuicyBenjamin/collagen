@@ -1220,12 +1220,16 @@ const makeHandlers = Effect.gen(function* () {
           : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 12));
     });
 
-    /** The steering notes handed to an agent working on a ticket's project, as a block to follow its answer; "" when there are none. */
-    const notesFor = (project: string) =>
+    /** The steering notes handed to an agent starting work on a ticket, as a
+     *  block to follow its answer: in full the ones that apply to the files its
+     *  why names (or everywhere), the rest by title; "" when there are none. */
+    const notesFor = (ticket: Ticket) =>
       Effect.gen(function* () {
         const { id: roomId, room } = yield* focusedRoom;
         const nameOf = yield* nameLookup;
-        const index = notesIndex(yield* SubscriptionRef.get(room.notes), yield* SubscriptionRef.get(room.noteTurns), project, { me: identity.pubkey, others: notesFollowed(yield* store.get, roomId), nameOf });
+        const why = (yield* SubscriptionRef.get(room.reviews)).find((review) => review.ticketId === ticket.id);
+        const files = why ? [...why.decisions, ...(why.units ?? [])].flatMap((part) => part.where).map((place) => place.replace(/:[\d,\-–]+$/, "")) : [];
+        const index = notesIndex(yield* SubscriptionRef.get(room.notes), yield* SubscriptionRef.get(room.noteTurns), ticket.project, { moment: "work", files, me: identity.pubkey, others: notesFollowed(yield* store.get, roomId), nameOf });
         return index ? `\n\n${index}` : "";
       });
 
@@ -1241,7 +1245,7 @@ const makeHandlers = Effect.gen(function* () {
         if (level === "unset" || level === "never") return said;
         const ticket = (yield* SubscriptionRef.get(room.tickets)).get(ticketId);
         if (!ticket) return said;
-        return `${said}\n\nBEFORE YOU MOVE ON — steering notes: in this work, did your user have to correct or steer you where that should not have been needed: something they had to say that they would want followed from the start next time, by any AI in this room? Not a code pattern (that you read from the code): how they want things done. If so, note it (steering-note add, project "${ticket.project}", a short title and its description); if one of the notes below already said it, it was missed: record that (steering-note miss) instead of noting it again. Nothing to note: say nothing about it.${yield* notesFor(ticket.project)}`;
+        return `${said}\n\nBEFORE YOU MOVE ON — steering notes: in this work, did your user have to correct or steer you where that should not have been needed: something they had to say that they would want followed from the start next time, by any AI in this room? Not a code pattern (that you read from the code): how they want things done. If so, note it (steering-note add, project "${ticket.project}", a short title and its description); if one of the notes below already said it, it was missed: record that (steering-note miss) instead of noting it again. Nothing to note: say nothing about it.${yield* notesFor(ticket)}`;
       });
 
     const renderTicket = Effect.fnUntraced(function* (ticket: Ticket) {
@@ -2577,7 +2581,7 @@ const makeHandlers = Effect.gen(function* () {
           outgoing: { kind: "take", ticketId: input.ticketId, stepId: input.stepId },
         });
         // the work is about to start: how the room steers its AIs on this project
-        return ticket && !taken.startsWith("failed") ? taken + (yield* notesFor(ticket.project)) : taken;
+        return ticket && !taken.startsWith("failed") ? taken + (yield* notesFor(ticket)) : taken;
       }),
       "drive-peer": Effect.fn("Mcp.drivePeer")(function* (input: { peer: string; action: DriveAction }) {
         const { room } = yield* focusedRoom;
@@ -3015,7 +3019,7 @@ const makeHandlers = Effect.gen(function* () {
           const all = yield* SubscriptionRef.get(room.tickets);
           const ticket = all.get(input.ticketId);
           if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
-          return toToon(yield* renderTicket(ticket)) + (yield* notesFor(ticket.project));
+          return toToon(yield* renderTicket(ticket)) + (yield* notesFor(ticket));
         }).pipe(Effect.withSpan("Mcp.getTicket")),
     });
   });

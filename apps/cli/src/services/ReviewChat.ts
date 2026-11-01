@@ -390,6 +390,8 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               openerLog ? `Your user opened this review from a ${harnessFor(harnesses, opener!.ai)?.name ?? opener!.ai} conversation; its log is at ${openerLog}. Read it only when the question leans on what they discussed there.` : "",
               // how the room steers its AIs on this project
               notesIndex(yield* SubscriptionRef.get(found.room.notes), yield* SubscriptionRef.get(found.room.noteTurns), found.ticket.project, {
+                moment: "chat",
+                files: [...found.review.decisions, ...(found.review.units ?? [])].flatMap((part) => part.where).map((place) => place.replace(/:[\d,\-–]+$/, "")),
                 me,
                 others: notesFollowed(yield* store.get, found.roomId),
                 nameOf: (key) => (key === me ? "your user" : (members.find((member) => member.key === key)?.name ?? key.slice(0, 12))),

@@ -125,6 +125,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
       const index =
         reading && ticket
           ? notesIndex(yield* SubscriptionRef.get(handle.room.notes), yield* SubscriptionRef.get(handle.room.noteTurns), ticket.project, {
+              moment: "review",
               files,
               me,
               others: notesFollowed(yield* state, context.roomId),
