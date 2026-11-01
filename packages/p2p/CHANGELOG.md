@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.25.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.24.0-alpha...p2p-v0.25.0-alpha) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* protocol 13. A kind is a literal on a shared record; peers on 12 keep what 13 writes unseen until they update.
+
+### Features
+
+* a new chat keeps the one before it, among the review's earlier chats ([613f034](https://github.com/JuicyBenjamin/collagen/commit/613f0340d1c21279ee3f7d12fd12936368e8ba67))
+* a question the author cannot answer yet says why, and offers a reading instead ([47885b2](https://github.com/JuicyBenjamin/collagen/commit/47885b206303c254c6da27e3de6f7ff58717bfff))
+* a reader's AI can guess the reason, and critique it, when the author cannot say ([7dbfc85](https://github.com/JuicyBenjamin/collagen/commit/7dbfc856ee531f8febaf2e967c332c100f091508))
+* a review can be asked for work that has no ticket, and its author's collagen files it ([36d39db](https://github.com/JuicyBenjamin/collagen/commit/36d39dbea235fbb293a87b3ed893cc0bdb5bbf4c))
+* a review is prepared before anyone else reads it — the guidance pass ([eae3448](https://github.com/JuicyBenjamin/collagen/commit/eae3448aa3110b08ee760159cd0cc1e8e34063ff))
+* a review's chat outlives a restart, re-entering the same conversation ([7a7f82e](https://github.com/JuicyBenjamin/collagen/commit/7a7f82e3b536d527ed2588bfdc6ecda4bd5679cc))
+* a run's question comes with what a yes would look into, and your yes starts it ([3800194](https://github.com/JuicyBenjamin/collagen/commit/38001948e31885e677d8dd5a1959da47c1eb52b6))
+* a steering level of never: nothing on its own, nobody asks, only your own word ([a92cdde](https://github.com/JuicyBenjamin/collagen/commit/a92cdde8829d550e578c25a72a2ca2b0ef14a9fd))
+* an investigation has a page you read at a glance ([80fc7c0](https://github.com/JuicyBenjamin/collagen/commit/80fc7c0fae8b4e3bcc90bd6ea47cb6d27f5bd2f9))
+* an investigation splits into goals, checked in groups, one by one or all at once ([55c22f8](https://github.com/JuicyBenjamin/collagen/commit/55c22f86f16263f0646876abf9e5a94ab29996e7))
+* an investigation's findings come back to the conversation that filed it, as your report steering says ([3550c7b](https://github.com/JuicyBenjamin/collagen/commit/3550c7b1ab47d8e3a021d88d57edaeeafbc369ad))
+* ask a review's author's AI what its why does not say ([e080b14](https://github.com/JuicyBenjamin/collagen/commit/e080b14f5ddba128b72ca949ae271c28fa70ca29))
+* closing what finished work grew from is a steering row ([48b89ee](https://github.com/JuicyBenjamin/collagen/commit/48b89ee98122fa9c8604aeaee7c5c3a933f069b0))
+* encrypted rooms, joined by invites that let one person in ([68466c4](https://github.com/JuicyBenjamin/collagen/commit/68466c4d75fa95bcd7fe3f254fdd973dfd2f2da5))
+* investigation tickets: a question in, findings out, your AI on it ([36c8941](https://github.com/JuicyBenjamin/collagen/commit/36c89419aa90075949273623d9b15b56610ae1e8))
+* **review-web:** a reading progress bar atop the review page ([3ae7a63](https://github.com/JuicyBenjamin/collagen/commit/3ae7a638ca8d28cc0cf627148a504608e7101a53))
+* settings in tabs, steering per room, the AI per job ([4828fea](https://github.com/JuicyBenjamin/collagen/commit/4828feae19250a80268efafca03c6644e68a4fd6))
+* steering notes — how a room steers its AIs, said once ([38d640a](https://github.com/JuicyBenjamin/collagen/commit/38d640ad9967063cab078e959a50bf3f89ff26f8))
+* steering notes read like tickets: titles first, one note whole on demand ([79d4da7](https://github.com/JuicyBenjamin/collagen/commit/79d4da7604c87f70f246fb7924fd1b07ee7ba4de))
+* the review page's chat and the conversation that opened it see each other ([6802c28](https://github.com/JuicyBenjamin/collagen/commit/6802c285442a88a93c512042c0d834e8e6f8aa1a))
+* the review page's chat has its own harness and model ([3915d6a](https://github.com/JuicyBenjamin/collagen/commit/3915d6a50259a68c6a693c690a5af1a114cdcc26))
+* viewed marks are kept by your collagen, where your AI can read them ([2810e2a](https://github.com/JuicyBenjamin/collagen/commit/2810e2a0ef27f67f0f618785491b7ac2229112bd))
+* who may do what in a room — roles, approval, removal ([30206ef](https://github.com/JuicyBenjamin/collagen/commit/30206ef69c2722ef35dc6d7c764c404fd1e312ab))
+* your steering decides when collagen starts your AI on an investigation ([4654ab0](https://github.com/JuicyBenjamin/collagen/commit/4654ab0cb78c3af92faa75058328c81c015563d5))
+
+
+### Bug Fixes
+
+* a follow-up is answered inside its goal, not filed as a new investigation ([a3eb36f](https://github.com/JuicyBenjamin/collagen/commit/a3eb36f52db7af6f5b091b9c6a56e25b97de4027))
+
 ## [0.24.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.23.0-alpha...p2p-v0.24.0-alpha) (2026-10-29)
 
 
