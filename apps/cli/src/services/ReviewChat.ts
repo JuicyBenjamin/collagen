@@ -14,6 +14,8 @@ import { commitIn, reviewNamed, reviewTree } from "./ReviewView";
 import { draftComments } from "./ReviewTalk";
 import { harnessFor, Harnesses, transcriptFile } from "./Harness";
 import { chatAi, modelFor } from "../lib/jobs";
+import { notesFollowed } from "../lib/steering";
+import { notesIndex } from "../lib/steeringNotes";
 import { readLine, type TranscriptLine } from "../lib/transcripts";
 import { levelOf } from "../lib/steering";
 import { IdentityService } from "./Identity";
@@ -377,6 +379,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       // a new conversation starts from the one that opened the page: a copy
       // of it when this AI can make one headless, else a pointer to its log
       const opener = Option.isNone(session) ? (yield* store.get).chatOpeners?.[ticketId] : undefined;
+      const members = yield* SubscriptionRef.get(found.room.members);
       const fork = opener !== undefined && opener.ai === ai && chatOf(ai)?.forks === true;
       const openerLog = opener && !fork ? transcriptFile(harnesses, opener.ai, opener.id) : null;
       const prompt = promptFor({
@@ -385,6 +388,14 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               preamble({ title: found.ticket.title ?? found.ticket.goal, branch: found.review.branch, base: found.review.base, commit, ticketId, serverName: mcpServerName(profile), clone }),
               fork ? "This conversation is a copy of the one your user opened the review from: what you discussed there, you know; from here on you answer on the review page, read-only." : "",
               openerLog ? `Your user opened this review from a ${harnessFor(harnesses, opener!.ai)?.name ?? opener!.ai} conversation; its log is at ${openerLog}. Read it only when the question leans on what they discussed there.` : "",
+              // how the room steers its AIs on this project
+              notesIndex(yield* SubscriptionRef.get(found.room.notes), yield* SubscriptionRef.get(found.room.noteTurns), found.ticket.project, {
+                moment: "chat",
+                files: [...found.review.decisions, ...(found.review.units ?? [])].flatMap((part) => part.where).map((place) => place.replace(/:[\d,\-–]+$/, "")),
+                me,
+                others: notesFollowed(yield* store.get, found.roomId),
+                nameOf: (key) => (key === me ? "your user" : (members.find((member) => member.key === key)?.name ?? key.slice(0, 12))),
+              }) ?? "",
             ]
               .filter(Boolean)
               .join("\n\n")

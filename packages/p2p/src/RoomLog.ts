@@ -8,6 +8,7 @@ import { Attachment, EVICTABLE, InviteRecord, LogOp, Member, PROTOCOL_VERSION, R
 import { ReviewComment, strictlySupersedes, supersedes } from "./review";
 import { ReviewContext } from "./review";
 import { Ticket, contributes, mergeTicket } from "./ticket";
+import { NoteTurn, SteeringNote } from "./note";
 import { migrateOp, migrateRow, readTicket } from "./migrate";
 
 /** The room as derived from its log. Read whole — rooms are small. */
@@ -23,6 +24,10 @@ export interface LogView {
   readonly comments: ReadonlyArray<ReviewComment>;
   /** The why behind each review ticket, one per ticket. */
   readonly reviews: ReadonlyArray<ReviewContext>;
+  /** Steering notes on the room's projects, as first written. */
+  readonly notes: ReadonlyArray<SteeringNote>;
+  /** Every turn on them; a note now is noteNow(note, turns). */
+  readonly noteTurns: ReadonlyArray<NoteTurn>;
   /** Entries written by a NEWER build than this one, kept raw and unapplied:
    *  records this build cannot read until it updates. A ticket among them is
    *  shown on the overview as `unknown`; the rest are counted. Once this
@@ -148,6 +153,15 @@ const claimedKey = (value: unknown): string | null => {
     const id = field(record.comment, "id");
     return ticketId && id ? `comment/${ticketId}/${id}` : null;
   }
+  if (record.op === "note") {
+    const id = field(record.note, "id");
+    return id ? `note/${id}` : null;
+  }
+  if (record.op === "note-turn") {
+    const note = field(record.turn, "note");
+    const id = field(record.turn, "id");
+    return note && id ? `note-turn/${note}/${id}` : null;
+  }
   return null;
 };
 
@@ -213,6 +227,18 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         // written once by its author: the first write of an id stands
         const key = `comment/${logOp.comment.ticketId}/${logOp.comment.id}`;
         if (!(await view.get(key))) await view.put(key, logOp.comment);
+        break;
+      }
+      case "note": {
+        // written once by its id: what changes a note is its turns
+        const key = `note/${logOp.note.id}`;
+        if (!(await view.get(key))) await view.put(key, logOp.note);
+        break;
+      }
+      case "note-turn": {
+        // grow-only: the first write of a turn's id stands
+        const key = `note-turn/${logOp.turn.note}/${logOp.turn.id}`;
+        if (!(await view.get(key))) await view.put(key, logOp.turn);
         break;
       }
       case "attachment": {
@@ -368,6 +394,8 @@ export const openRoomLog = (
       const attachments = (yield* rows("attachment", Attachment)).map((row) => row.value);
       const comments = (yield* rows("comment", ReviewComment)).map((row) => row.value);
       const reviews = (yield* rows("review", ReviewContext)).map((row) => row.value);
+      const notes = (yield* rows("note", SteeringNote)).map((row) => row.value);
+      const noteTurns = (yield* rows("note-turn", NoteTurn)).map((row) => row.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);
       // entries a build behind kept raw: list them, and queue for replay the
       // ones this build can read — once appended they apply like any entry
@@ -407,7 +435,7 @@ export const openRoomLog = (
       const invites = (yield* rows("invite", InviteRecord)).map((row) => ({ ...row.value, usedBy: used.get(row.value.id) ?? null }));
       const movedRow = yield* Effect.promise(() => base.view.get("meta/moved") as Promise<{ value: { to: string; sealed: Record<string, string>; by: string } } | null>);
       const moved = movedRow ? { to: movedRow.value.to, sealed: movedRow.value.sealed, by: movedRow.value.by } : null;
-      return { tickets, members, messages, attachments, comments, reviews, name: name?.value ?? null, unseen, invites, moved };
+      return { tickets, members, messages, attachments, comments, reviews, notes, noteTurns, name: name?.value ?? null, unseen, invites, moved };
     });
 
     /** The migration: take the rows nobody can read off the room, for every

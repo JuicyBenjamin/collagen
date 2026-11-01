@@ -40,7 +40,7 @@ export type Cause = "mine" | "others";
 export type SteeringAt = "master" | SteeringKind;
 
 export const STEERING_ORDER: ReadonlyArray<Steering> = ["never", "ask", "act", "auto"];
-export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer"];
+export const STEERING_KINDS: ReadonlyArray<SteeringKind> = ["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer", "notes"];
 export const TAG_ROUTES: ReadonlyArray<TagRoute> = ["none", "existing", "existing-or-new", "new"];
 
 /** The level in effect, for that cause. In a room that sets its own: the
@@ -140,6 +140,7 @@ export const KIND_LABEL: Record<SteeringKind, string> = {
   review: "filing a review of your work someone asks for (your AI reads the conversation it was done in)",
   forward: "asking a review's author's AI, from your chat on its page, what its why does not say",
   answer: "answering a question about your review from the conversation the work was done in",
+  notes: "steering notes: what your AI adds or changes in the room's notes on its own (you), and following a note a colleague's AI added that no person has read yet (others)",
 };
 
 export const TAG_LABEL: Record<TagRoute, string> = {
@@ -188,7 +189,7 @@ export const UNCHOSEN_LINE =
 declare const minted: unique symbol;
 /** Proof that steering let an act outside through: who caused it, at which
  *  level. Only `allow` makes one. */
-export interface Permit<K extends "host" | "deliver" | "report" | "run" | "investigate" | "review" | "answer" | "forward"> {
+export interface Permit<K extends "host" | "deliver" | "report" | "run" | "investigate" | "review" | "answer" | "forward" | "notes"> {
   readonly [minted]: K;
   readonly cause: Cause;
   readonly level: Steering;
@@ -206,14 +207,14 @@ export class RunAllowed extends Context.Service<RunAllowed, Permit<"run" | "inve
 
 /** What steering says to an act outside: go (with the permit to provide), or
  *  held — not chosen, never, or waiting on the person's yes. */
-export type Gate<K extends "host" | "deliver" | "report" | "run" | "investigate" | "review" | "answer" | "forward"> =
+export type Gate<K extends "host" | "deliver" | "report" | "run" | "investigate" | "review" | "answer" | "forward" | "notes"> =
   | { readonly go: Permit<K> }
   | { readonly held: "unset" | "never" | "ask"; readonly why: string };
 
 /** Whether an act of `kind` caused by `cause` may happen now. `yes` is the
  *  person's own word for this one act, relayed by their agent: it lets "ask
  *  first" and "never" through, never "not chosen". */
-export const allow = <K extends "host" | "deliver" | "report" | "run" | "investigate" | "review" | "answer" | "forward">(state: Pick<LocalState, "steering">, kind: K, cause: Cause, yes = false, room?: string): Gate<K> => {
+export const allow = <K extends "host" | "deliver" | "report" | "run" | "investigate" | "review" | "answer" | "forward" | "notes">(state: Pick<LocalState, "steering">, kind: K, cause: Cause, yes = false, room?: string): Gate<K> => {
   const level = levelOf(state, kind, cause, room);
   const whose = cause === "mine" ? "your user's own" : "another person's";
   if (level === "unset")
@@ -221,6 +222,14 @@ export const allow = <K extends "host" | "deliver" | "report" | "run" | "investi
   if (level === "never" && !yes) return { held: "never", why: `steering for ${KIND_LABEL[kind]} is never for ${whose} acts: collagen does it only on their own word` };
   if (level === "ask" && !yes) return { held: "ask", why: `steering for ${KIND_LABEL[kind]} is ask first for ${whose} acts` };
   return { go: { level, cause } as unknown as Permit<K> };
+};
+
+/** Whether the person's agents follow a steering note a colleague's AI added
+ *  that no person has read yet: their notes steering for others' doing, set
+ *  to anything but never. Not chosen, they do not. */
+export const notesFollowed = (state: Pick<LocalState, "steering">, room?: string): boolean => {
+  const level = levelOf(state, "notes", "others", room);
+  return level !== "unset" && level !== "never";
 };
 
 /** A mock agent is collagen's own development dummy: delivering to it reaches

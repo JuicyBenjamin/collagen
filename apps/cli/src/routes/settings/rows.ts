@@ -45,6 +45,7 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   review: "review asks",
   forward: "forwarding",
   answer: "answers",
+  notes: "steering notes",
 };
 
 /** Whose doing a steering row is about: yours, or another person's. */
@@ -117,6 +118,7 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       // your chat asking a review's author's AI: only your own doing
       [{ id: "steer:forward:mine", kind: "steer", at: "forward", cause: "mine" }],
       steer("answer"),
+      steer("notes"),
       [
         { id: "label:tag", kind: "label", text: "messages for you" },
         { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },

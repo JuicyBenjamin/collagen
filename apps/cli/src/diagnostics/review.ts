@@ -5,6 +5,8 @@ import { closedAs, epicBecause, epicParts, epicStatus, excludedFromEpic, finishe
 import { whereOf } from "../lib/comments";
 import { whyOpen } from "../lib/mergeTickets";
 import { reviewRows } from "../lib/review";
+import { notesFollowed } from "../lib/steering";
+import { notesIndex } from "../lib/steeringNotes";
 import { roomEdges, stackOf, stackPlace } from "../lib/stack";
 import { diagnostic } from "./registry";
 
@@ -21,7 +23,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
   // a review ticket shows a review section of its own, and enter there opens
   // the page — nothing to add to the diagnostics row
   fromContext: () => null,
-  run: ({ ticketId, about, anyway }, context, { rooms, me, reviewStarted }) =>
+  run: ({ ticketId, about, anyway }, context, { rooms, me, reviewStarted, state }) =>
     Effect.gen(function* () {
       const handle = (yield* SubscriptionRef.get(rooms.handles)).find((candidate) => candidate.id === context.roomId);
       if (!handle) return "failed: that room is gone";
@@ -117,6 +119,20 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
         stack && place
           ? { stack: `${place.at} of ${place.of} — built on ${stack.below.map((step) => step.label).join(" › ") || "the trunk"}${stack.above.length > 0 ? `; built on it: ${stack.above.map((step) => step.label).join(" › ")}` : ""}${stack.split.length > 0 ? `; then split into ${stack.split.map((step) => step.label).join(" / ")}` : ""}` }
           : {};
-      return toToon({ ...inStack, ...rows, ...comments }) + opened + drafting + answer;
+      // how the room steers its AIs on this project: the notes that apply to the files it touches
+      const files = [...new Set([...review.decisions, ...(review.units ?? [])].flatMap((part) => part.where).map((place) => place.replace(/:[\d,\-–]+$/, "")))];
+      const members = yield* SubscriptionRef.get(handle.room.members);
+      const index =
+        reading && ticket
+          ? notesIndex(yield* SubscriptionRef.get(handle.room.notes), yield* SubscriptionRef.get(handle.room.noteTurns), ticket.project, {
+              moment: "review",
+              files,
+              me,
+              others: notesFollowed(yield* state, context.roomId),
+              nameOf: (key) => members.find((member) => member.key === key)?.name ?? key.slice(0, 12),
+            })
+          : null;
+      const notes = index ? `\n\n${index}` : "";
+      return toToon({ ...inStack, ...rows, ...comments }) + opened + drafting + notes + answer;
     }),
 });
