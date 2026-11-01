@@ -105,6 +105,18 @@ export const commentsAtom = runtimeAtom.atom(
   })),
 );
 
+/** The focused room's steering notes, and every turn on them. */
+export const notesAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.notes));
+  })),
+);
+export const noteTurnsAtom = runtimeAtom.atom(
+  Stream.unwrap(Effect.gen(function* () {
+    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.noteTurns));
+  })),
+);
+
 /** Records a newer collagen wrote into the focused room that this build
  *  cannot read yet — a ticket among them is a row saying to update. */
 export const unseenAtom = runtimeAtom.atom(

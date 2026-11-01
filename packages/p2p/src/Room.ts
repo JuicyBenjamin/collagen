@@ -16,6 +16,7 @@ import {
 import { NotWritable, PeerNotConnected } from "./errors";
 import type { Conversation } from "./acting";
 import type { ReviewComment, ReviewContext } from "./review";
+import type { NoteTurn, SteeringNote } from "./note";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic, type Net } from "./topic";
 import { checkProof, formatInvite, INVITE_LIFETIME_MS, newInvite, openSealed, proveInvite, sealFor, type Invite } from "./invite";
@@ -106,6 +107,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const reviews = yield* SubscriptionRef.make<ReadonlyArray<ReviewContext>>([]);
     // Comments on reviews' code, said in the room.
     const comments = yield* SubscriptionRef.make<ReadonlyArray<ReviewComment>>([]);
+    // Steering notes on the room's projects, and every turn on them.
+    const notes = yield* SubscriptionRef.make<ReadonlyArray<SteeringNote>>([]);
+    const noteTurns = yield* SubscriptionRef.make<ReadonlyArray<NoteTurn>>([]);
     // records a newer build wrote that this one cannot read yet (RoomLog.Unseen)
     const unseen = yield* SubscriptionRef.make<ReadonlyArray<Unseen>>([]);
     const fetchRequests = yield* Effect.acquireRelease(
@@ -184,6 +188,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* SubscriptionRef.set(attachments, view.attachments);
       yield* SubscriptionRef.set(reviews, view.reviews);
       yield* SubscriptionRef.set(comments, view.comments);
+      yield* SubscriptionRef.set(notes, view.notes);
+      yield* SubscriptionRef.set(noteTurns, view.noteTurns);
       yield* SubscriptionRef.set(unseen, view.unseen);
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (current) => (name.ts > current.ts ? name : current));
@@ -422,6 +428,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           ...view.tickets.map((ticket): LogOp => ({ op: "ticket", ticket })),
           ...view.reviews.map((review): LogOp => ({ op: "review", review })),
           ...view.comments.map((comment): LogOp => ({ op: "comment", comment })),
+          ...view.notes.map((note): LogOp => ({ op: "note", note })),
+          ...view.noteTurns.map((turn): LogOp => ({ op: "note-turn", turn })),
           ...view.attachments.map((attachment): LogOp => ({ op: "attachment", attachment })),
           ...view.messages.map(({ message }): LogOp => ({ op: "msg", msg: message })),
         ];
@@ -690,6 +698,20 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       yield* refresh;
     });
 
+    /** Add a steering note to the log — once; what changes it is turns. */
+    const note = Effect.fn("Room.note")(function* (steeringNote: SteeringNote) {
+      const roomLog = yield* requireLog;
+      yield* roomLog.append({ op: "note", note: steeringNote }).pipe(Effect.orDie);
+      yield* refresh;
+    });
+
+    /** Write a turn on a steering note — once; turns only grow. */
+    const noteTurn = Effect.fn("Room.noteTurn")(function* (turn: NoteTurn) {
+      const roomLog = yield* requireLog;
+      yield* roomLog.append({ op: "note-turn", turn }).pipe(Effect.orDie);
+      yield* refresh;
+    });
+
     /** Hand a fetched attachment's bytes to the one who asked. */
     const sendAttachment = Effect.fn("Room.sendAttachment")(function* (peerKey: string, attachment: Omit<AttachmentFrame, "kind">) {
       if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
@@ -799,6 +821,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       /** Comments on reviews' code, as the log has them. */
       comments,
       comment,
+      /** Steering notes on the room's projects, and the turns on them, as the log has them. */
+      notes,
+      noteTurns,
+      note,
+      noteTurn,
       /** Files attached to the room's tickets — references from the log. */
       attachments,
       attach,
