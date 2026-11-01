@@ -47,6 +47,7 @@ import { askWhy } from "./AskWhy";
 import { ReviewQuestions } from "./ReviewQuestions";
 import { chatInWords, ReviewChat } from "./ReviewChat";
 import { indexLine, noteInWords, notesIndex, notesOf } from "../lib/steeringNotes";
+import { filesOfWhy, GuidancePass } from "./GuidancePass";
 import { ReviewRequests } from "./ReviewRequests";
 import { MergeHistory } from "./MergeHistory";
 import { Transcripts } from "./Transcripts";
@@ -543,6 +544,22 @@ export const SteeringNoteTool = Tool.make("steering-note", {
   success: Schema.String,
 });
 
+export const GuidancePassTool = Tool.make("guidance-pass", {
+  description: [
+    "A review your user files is prepared before anyone else reads it, as their guidance steering allows (set-steering kind guidance): a guidance pass checks it against the steering notes that apply, the conversation that built it fixes what falls short, and the pass runs again — three rounds at most — then it opens to its readers. Meanwhile nobody else sees it; your user sees it as being prepared.",
+    "'action': 'run' starts its pass on your user's word; 'open' sends it to its readers as it is, on their word (said: true); 'status' says how it stands; 'fixed' — from the conversation that built it — says what fell short is fixed, and the pass runs again; 'report' is the pass's own verdict (round, passed, and 'findings': each note it falls short of, where, and what to change).",
+  ].join("\n"),
+  parameters: Schema.Struct({
+    action: Schema.Literals(["run", "open", "status", "fixed", "report"]),
+    ticketId: Schema.String,
+    said: Schema.optional(Schema.Boolean),
+    round: Schema.optional(Schema.Finite),
+    passed: Schema.optional(Schema.Boolean),
+    findings: Schema.optional(Schema.Array(Schema.Struct({ note: Schema.String, where: Schema.optional(Schema.String), what: Schema.String }))),
+  }),
+  success: Schema.String,
+});
+
 export const GuessReason = Tool.make("guess-reason", {
   description: [
     "When a review's author cannot answer a question your user asked (ask-author came back saying why), put your best reading of why the code is this way on their review's why as a GUESS: plainly marked as your user's AI's assumption, for the author or their AI to confirm, correct or reject later. Only on your user's word ('assume the reason').",
@@ -765,7 +782,7 @@ export const Epic = Tool.make("epic", {
 
 export const SetSteering = Tool.make("set-steering", {
   description:
-    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's), 'close' (closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only), 'review' (a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only), 'notes' (steering notes: 'mine' is whether what your AI notes of how your user steers it, or changes in a note, goes into the room on its own — just do it, act then tell, ask first, or never; 'others' is whether your agents follow a note a colleague's AI added that no person has read yet). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room. Kept on their machine; applies live.",
+    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's), 'close' (closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only), 'review' (a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only), 'notes' (steering notes: 'mine' is whether what your AI notes of how your user steers it, or changes in a note, goes into the room on its own — just do it, act then tell, ask first, or never; 'others' is whether your agents follow a note a colleague's AI added that no person has read yet), 'guidance' (a pass on each review your user files: their AI checks it against the steering notes that apply and the conversation that built it fixes what falls short, before anyone else reads it — 'mine' only). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room. Kept on their machine; applies live.",
   parameters: Schema.Struct({
     level: Schema.optional(Schema.NullOr(Steering)),
     kind: Schema.optional(Schema.Union([Schema.Literal("master"), SteeringKind])),
@@ -1024,6 +1041,7 @@ export const CollagenToolkit = Toolkit.make(
   GetNotes,
   GetNote,
   SteeringNoteTool,
+  GuidancePassTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1093,6 +1111,7 @@ export const DevCollagenToolkit = Toolkit.make(
   GetNotes,
   GetNote,
   SteeringNoteTool,
+  GuidancePassTool,
   GuessReason,
   ReviewQuestionTool,
   AssumeReview,
@@ -1168,6 +1187,7 @@ const makeHandlers = Effect.gen(function* () {
     const reviewRequests = yield* ReviewRequests;
     const reviewQuestions = yield* ReviewQuestions;
     const reviewChat = yield* ReviewChat;
+    const guidancePass = yield* GuidancePass;
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
@@ -1707,8 +1727,16 @@ const makeHandlers = Effect.gen(function* () {
           ...(branch ? { branch } : {}),
           ...(link ? { link } : {}),
         }, now);
+        // your own review, prepared before anyone else reads it: as your
+        // guidance steering says, when steering notes apply to its files
+        const guidance = kind === "review" && !input.assumed ? levelOf(yield* store.get, "guidance", "mine", roomId) : "unset";
+        const applying =
+          guidance === "unset" || guidance === "never"
+            ? 0
+            : notesOf(yield* SubscriptionRef.get(room.notes), yield* SubscriptionRef.get(room.noteTurns), projectName, filesOfWhy(review)).filter((now) => !now.retired).length;
+        const prepared = applying > 0 ? { ...ticket, preparing: true } : ticket;
         // grown out of a part of an epic: filed into it, unless its filer says otherwise
-        const inEpic = yield* filedInEpic(ticket, room, input.epic, now);
+        const inEpic = yield* filedInEpic(prepared, room, input.epic, now);
         if (typeof inEpic === "string") return inEpic;
         const filed = yield* outbox.tell({
           roomId,
@@ -1730,7 +1758,13 @@ const makeHandlers = Effect.gen(function* () {
         const coverage = units && !filed.startsWith("failed") ? yield* unitCoverageNote(projectPath, review) : "";
         // an investigation filed: whether the person's AI starts on it is their steering's call
         const started =
-          kind === "investigation" && !filed.startsWith("failed") ? yield* startOnFiling(roomId, inEpic, investigationOf(inEpic, [review]), projectPath, asked, input.run) : "";
+          kind === "investigation" && !filed.startsWith("failed")
+            ? yield* startOnFiling(roomId, inEpic, investigationOf(inEpic, [review]), projectPath, asked, input.run)
+            : applying > 0 && !filed.startsWith("failed")
+              ? guidance === "ask"
+                ? `\nBEING PREPARED, seen by nobody else yet: ${applying} steering note${applying === 1 ? "" : "s"} apply to it. Ask your user, in one line, whether to run its guidance pass first (guidance-pass action run) or send it as it is (guidance-pass action open).`
+                : `\n${yield* guidancePass.start(roomId, ticketId)}`
+              : "";
         return under.length > 0 && !filed.startsWith("failed")
           ? `${filed}${coverage}\nNOTE FOR YOU, NOT FOR YOUR USER UNLESS IT MATTERS: its base ${input.base} is the branch of the open review "${under[0]!.goal}" [ticket ${under[0]!.id}]. If your user wants this one read after that one, call ask-review with ticketId "${ticketId}" and after ["${under[0]!.id}"] — ask them first; nothing was set.`
           : filed + coverage + started;
@@ -2232,6 +2266,20 @@ const makeHandlers = Effect.gen(function* () {
         }
         const did = { change: "changed", comment: "commented on", retire: "retired", restore: "brought back", keep: "kept", miss: "recorded a miss on" }[input.action];
         return `${did} steering note "${before.words.title}" [${found.id}]${told.length > 0 ? `; told ${told.join(", ")}` : ""}.${tell}`;
+      }),
+      "guidance-pass": Effect.fn("Mcp.guidancePass")(function* (input: { action: "run" | "open" | "status" | "fixed" | "report"; ticketId: string; said?: boolean; round?: number; passed?: boolean; findings?: ReadonlyArray<{ note: string; where?: string; what: string }> }) {
+        const { id: roomId } = yield* focusedRoom;
+        if (input.action === "status") {
+          const kept = yield* guidancePass.status(input.ticketId);
+          return kept
+            ? `being prepared — round ${kept.round} of 3, ${kept.stage === "checking" ? "its pass is checking it" : kept.stage === "fixing" ? "the conversation that built it is fixing what fell short" : "stopped: your user decides"}${kept.findings ? `\n${kept.findings}` : ""}`
+            : `not being prepared: review ${input.ticketId} is open to its readers, or was never held`;
+        }
+        if (input.action === "open") return input.said ? yield* guidancePass.open(roomId, input.ticketId, "sent as it is, on your user's word") : "failed: sending it as it is is your user's word (said: true)";
+        if (input.action === "run") return yield* guidancePass.start(roomId, input.ticketId);
+        if (input.action === "fixed") return yield* guidancePass.fixed(roomId, input.ticketId);
+        if (input.round === undefined || input.passed === undefined) return "failed: a report gives 'round' and 'passed' (and 'findings' when it falls short)";
+        return yield* guidancePass.report(roomId, input.ticketId, input.round, input.passed, input.findings ?? []);
       }),
       "guess-reason": Effect.fn("Mcp.guessReason")(function* (input: { ticketId: string; questionId: string; what: string; basis: string; confidence: "high" | "medium" | "low" }) {
         if (!input.what.trim()) return "failed: 'what' is the reason you assume";

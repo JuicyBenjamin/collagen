@@ -660,7 +660,7 @@ export const Worked = Schema.Struct({
 export type Worked = typeof Worked.Type;
 
 /** The jobs collagen runs an AI for, each with a model the person may choose. */
-export const JobKind = Schema.Literals(["wake", "research", "investigation", "filing", "answering", "chat"]);
+export const JobKind = Schema.Literals(["wake", "research", "investigation", "filing", "answering", "chat", "guidance"]);
 export type JobKind = typeof JobKind.Type;
 
 /** A model run collagen made itself, in the person's name (cli AgentRunner,
@@ -754,6 +754,20 @@ export const ChatTurnKept = Schema.Struct({
 });
 export type ChatTurnKept = typeof ChatTurnKept.Type;
 
+/** A review being prepared: its guidance pass checks it against the steering
+ *  notes that apply, the conversation that built it fixes what falls short,
+ *  and it opens to its readers once it passes — three rounds at most. */
+export const Preparing = Schema.Struct({
+  roomId: Schema.String,
+  /** 1, 2 or 3 */
+  round: Schema.Finite,
+  stage: Schema.Literals(["checking", "fixing", "stuck"]),
+  /** what fell short, as the last pass said */
+  findings: Schema.optional(Schema.String),
+  at: Schema.Finite,
+});
+export type Preparing = typeof Preparing.Type;
+
 /** Where a review's chat is: the AI and its own conversation id (the AI
  *  keeps the conversation), and the turns, so the page shows them at once. */
 export const ChatKept = Schema.Struct({
@@ -823,7 +837,7 @@ export type Steering = typeof Steering.Type;
  *  proposal or bug, once its review is accepted or merged), and filing a
  *  review of their work someone asked for (their AI reading the conversation
  *  the work was done in). */
-export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer", "notes"]);
+export const SteeringKind = Schema.Literals(["work", "host", "deliver", "run", "investigate", "report", "close", "review", "forward", "answer", "notes", "guidance"]);
 export type SteeringKind = typeof SteeringKind.Type;
 
 /** A level for what the person or their own agents caused, and one for
@@ -837,7 +851,7 @@ export type SteeringPair = typeof SteeringPair.Type;
 export const TagRoute = Schema.Literals(["none", "existing", "existing-or-new", "new"]);
 export type TagRoute = typeof TagRoute.Type;
 
-const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair), forward: Schema.optional(SteeringPair), answer: Schema.optional(SteeringPair), notes: Schema.optional(SteeringPair) });
+const SteeringKinds = Schema.Struct({ work: Schema.optional(SteeringPair), host: Schema.optional(SteeringPair), deliver: Schema.optional(SteeringPair), run: Schema.optional(SteeringPair), investigate: Schema.optional(SteeringPair), report: Schema.optional(SteeringPair), close: Schema.optional(SteeringPair), review: Schema.optional(SteeringPair), forward: Schema.optional(SteeringPair), answer: Schema.optional(SteeringPair), notes: Schema.optional(SteeringPair), guidance: Schema.optional(SteeringPair) });
 
 /** One room's own levels: a general level and per kind, each absent where
  *  the room follows the person's levels everywhere. */
@@ -949,6 +963,10 @@ export const LocalState = Schema.Struct({
   /** ticketId → the review's earlier chats, newest first: a new chat sets
    *  the one before it here instead of losing it. Never broadcast. */
   pastChats: Schema.optional(Schema.Record(Schema.String, Schema.Array(ChatKept))),
+  /** ticketId → a review of the person's being prepared before anyone else
+   *  reads it (cli GuidancePass): which round of its guidance pass, and where
+   *  it stands. Its ticket is marked preparing in the room meanwhile. Local. */
+  preparing: Schema.optional(Schema.Record(Schema.String, Preparing)),
   /** ticketId → file → the person's viewed mark (the review page's, and
    *  their agent's through review-progress). Theirs alone, never broadcast. */
   viewed: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, ViewedMark))),

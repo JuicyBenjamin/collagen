@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { actionableSteps, closeTicket, contributes, finished, mergeTicket, readySteps, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, takeStep, Ticket as TicketSchema, type Ticket, type TicketStep } from "./ticket";
+import { actionableSteps, closeTicket, contributes, finished, gated, mergeTicket, visibleTo, readySteps, retireSteps, postReview, reviewStepId, settleStep, stepThreadId, takeStep, Ticket as TicketSchema, type Ticket, type TicketStep } from "./ticket";
 import { deriveThreadId } from "./topic";
 
 const step = (over: Partial<TicketStep>): TicketStep => ({
@@ -62,6 +62,27 @@ describe("mergeTicket", () => {
     const first = ticket({});
     const other = ticket({ id: "other", steps: [step({})] });
     expect(mergeTicket(first, other).steps).toHaveLength(0);
+  });
+});
+
+describe("a review being prepared", () => {
+  const prepared = ticket({ kind: "review", preparing: true, structureAt: 5, steps: [step({ id: "review-bob", owner: "bob", intent: "take" })] });
+  const all = new Map([["t1", prepared]]);
+
+  it("is shown to its author alone, and nobody is told it is their move", () => {
+    expect(visibleTo(prepared, all, "alice")).toBe(true);
+    expect(visibleTo(prepared, all, "bob")).toBe(false);
+    expect(gated(prepared, all, "bob")).toBe(true);
+  });
+
+  it("opens on the author's newer copy, whatever order the copies arrive in", () => {
+    const opened = { ...prepared, preparing: false, structureAt: 9 };
+    // bob's copy, written before it opened (a stale settle advances updatedAt only)
+    const stale = { ...prepared, updatedAt: 20 };
+    for (const merged of [mergeTicket(mergeTicket(prepared, stale), opened), mergeTicket(opened, mergeTicket(stale, prepared)), mergeTicket(stale, opened)]) {
+      expect(merged.preparing).toBe(false);
+      expect(visibleTo(merged, new Map([["t1", merged]]), "bob")).toBe(true);
+    }
   });
 });
 

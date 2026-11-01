@@ -133,9 +133,9 @@ export function Tickets() {
     0,
     ...epics.flatMap((block) => [
       cells(progressShort(epicProgress(block.epic.ticket, byId))),
-      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket), places.get(row.ticket.id)))) : []),
+      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket), places.get(row.ticket.id), row.ticket.preparing === true))) : []),
     ]),
-    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined, places.get(row.ticket.id)))))),
+    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined, places.get(row.ticket.id), row.ticket.preparing === true))))),
     ...closedGroups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(closedInfo(row.ticket))))),
     ...[...groups, ...closedGroups].flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket)))))),
     ...epics.flatMap((block) => block.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket))))),
@@ -519,6 +519,7 @@ const rowInfo = (
   goalOf: (ticketId: string) => string | undefined,
   excluded: boolean | undefined,
   place: StackPlace | undefined,
+  preparing = false,
 ): ReadonlyArray<Part> => {
   // waiting on the row it is drawn under says so in one word; waiting on one
   // elsewhere (another group, or a second of two) names it
@@ -528,6 +529,8 @@ const rowInfo = (
   return [
     ...(place ? [{ text: `${BRANCH_STACK} ${place.at} of ${place.of}` }] : []),
     ...(excluded ? [{ text: "excluded" }] : []),
+    // your own review in its guidance pass: only you see it, being made ready
+    ...(preparing ? [{ text: "being prepared" }] : []),
     ...(summary.held.length > 0 ? [{ text: `${on ? `${STACK.waits} after "${on}"` : `${STACK.waits} waiting`}${elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}` }] : []),
     ...(people.length > 0 ? [{ text: people, warn: summary.state === "needs-you" }] : []),
   ];
@@ -697,7 +700,7 @@ function TicketRow({
 }) {
   const yours = summary.state === "needs-you";
   // waiting on another ticket: only its author sees the row, dim, saying on what
-  const dim = atRest(summary) || summary.held.length > 0 || excluded === true;
+  const dim = atRest(summary) || summary.held.length > 0 || excluded === true || ticket.preparing === true;
   const color = selected ? theme.accent : dim ? theme.dim : theme.fg;
   return (
     <box id={rowId(ticket.id)} flexDirection="row" flexShrink={0}>
@@ -724,7 +727,7 @@ function TicketRow({
         {project ? <span fg={theme.dim}>{project} · </span> : null}
         {ticket.title ? ticket.title : <span fg={theme.dim}>{rowTitle(ticket)}</span>}
       </text>
-      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded, place)} width={infoWidth} />
+      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded, place, ticket.preparing === true)} width={infoWidth} />
       <Info parts={related} width={relationWidth} />
     </box>
   );

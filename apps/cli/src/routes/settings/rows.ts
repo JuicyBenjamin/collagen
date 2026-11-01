@@ -46,13 +46,14 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   forward: "forwarding",
   answer: "answers",
   notes: "steering notes",
+  guidance: "guidance pass",
 };
 
 /** Whose doing a steering row is about: yours, or another person's. */
 export const CAUSE_WORDS: Record<Cause, string> = { mine: "You", others: "Others" };
 
 /** Each job's row name. */
-export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks", answering: "answers", chat: "chat" };
+export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks", answering: "answers", chat: "chat", guidance: "guidance pass" };
 
 /** What each kind of run does, a line under its name. */
 export const JOB_ABOUT: Record<JobKind, string> = {
@@ -62,6 +63,7 @@ export const JOB_ABOUT: Record<JobKind, string> = {
   filing: "Reads the conversation your work was done in, and files the review someone asked for.",
   answering: "Reads the conversation your work was done in, and answers a question about your review.",
   chat: "Answers what you ask about a review on its page, reading your clone.",
+  guidance: "Checks a review you file against the steering notes that apply, before anyone else reads it.",
 };
 
 /** Where a message for you goes, short. */
@@ -119,6 +121,8 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       [{ id: "steer:forward:mine", kind: "steer", at: "forward", cause: "mine" }],
       steer("answer"),
       steer("notes"),
+      // a pass on reviews you file: only your own doing
+      [{ id: "steer:guidance:mine", kind: "steer", at: "guidance", cause: "mine" }],
       [
         { id: "label:tag", kind: "label", text: "messages for you" },
         { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
@@ -135,6 +139,7 @@ export const ROWS: Record<Tab, ReadonlyArray<Row>> = {
       job("filing"),
       job("answering"),
       job("chat"),
+      job("guidance"),
     ),
   ),
   tools: sections(

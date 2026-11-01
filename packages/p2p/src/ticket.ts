@@ -261,6 +261,12 @@ export const Ticket = Schema.Struct({
    *  unknown ids, no self, no cycle (`afterProblem`), so a ticket cannot be
    *  left invisible forever. `[]` withdraws it. */
   after: Schema.optional(Schema.Array(Schema.String)),
+  /** Being prepared by its author's own agents before anyone else reads it —
+   *  a review in its guidance pass, and its fixes. While true the ticket is
+   *  GATED, as an unanswered `after` gates it: its author sees it, being
+   *  prepared; nobody else is shown it or nudged about it. Author's
+   *  structure; false (or absent) opens it. */
+  preparing: Schema.optional(Schema.Boolean),
   /** Which epic this ticket is in, as every move ever made — the latest
    *  holds (`epicOf`). Anyone's to change, so not the author's structure. */
   partOf: Schema.optional(Schema.Array(PartMove)),
@@ -292,7 +298,7 @@ export type Ticket = typeof Ticket.Type;
  *  - per step, the copy with the higher status rank wins; equal ranks resolve
  *    by updatedAt, then one order over the whole step — so two takes of an
  *    open step that never saw each other end on the later one, everywhere
- *  - title, goal, kind, from, after, whenClosed, agent and conversation follow the copy with the newer
+ *  - title, goal, kind, from, after, preparing, whenClosed, agent and conversation follow the copy with the newer
  *    `structureAt` — the author's own clock, which only the author advances,
  *    so a peer's take or settle (which advances updatedAt on a possibly stale
  *    copy) can never revert the author's latest decision
@@ -321,7 +327,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
         : structureTiebreak(local, incoming);
   const closed =
     local.closed && incoming.closed ? (local.closed.ts <= incoming.closed.ts ? local.closed : incoming.closed) : (local.closed ?? incoming.closed);
-  const { from: _lf, after: _la, whenClosed: _lw, partOf: _lp, turns: _lt, order: _lo, agent: _lag, conversation: _lco, ...rest } = local;
+  const { from: _lf, after: _la, preparing: _lprep, whenClosed: _lw, partOf: _lp, turns: _lt, order: _lo, agent: _lag, conversation: _lco, ...rest } = local;
   const partOf = union(local.partOf, incoming.partOf, (partMove) => partMove.id);
   const turns = union(local.turns, incoming.turns, (turn) => turn.id);
   const order = union(local.order, incoming.order, (ordering) => `${ordering.at}|${ordering.by}|${ordering.ids.join(",")}`);
@@ -344,6 +350,7 @@ export function mergeTicket(local: Ticket, incoming: Ticket): Ticket {
     // are how the author withdraws them, and a merge must carry that through
     ...(author.from !== undefined ? { from: author.from } : {}),
     ...(author.after !== undefined ? { after: author.after } : {}),
+    ...(author.preparing !== undefined ? { preparing: author.preparing } : {}),
     ...(author.whenClosed !== undefined ? { whenClosed: author.whenClosed } : {}),
     ...(author.agent !== undefined ? { agent: author.agent } : {}),
     ...(author.conversation !== undefined ? { conversation: author.conversation } : {}),
@@ -603,7 +610,8 @@ export function turnEpic(
 }
 
 /** The author-controlled structure, as one comparable string. */
-const structureKey = (ticket: Ticket): string => JSON.stringify([ticket.goal, ticket.kind, ticket.from ?? null, ticket.whenClosed ?? null, ticket.after ?? null, ticket.title ?? null, ticket.agent ?? null, conversationKey(ticket.conversation)]);
+const structureKey = (ticket: Ticket): string =>
+  JSON.stringify([ticket.goal, ticket.kind, ticket.from ?? null, ticket.whenClosed ?? null, ticket.after ?? null, ticket.title ?? null, ticket.agent ?? null, conversationKey(ticket.conversation), ticket.preparing ?? null]);
 
 /** Two author revisions in the same millisecond: pick one the same way on
  *  every peer, whichever side it arrived from, so the merge still commutes. */
@@ -903,8 +911,8 @@ export function heldBy(ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: str
   });
 }
 
-/** Waiting, for `me`, on a ticket that has not been answered yet. */
-export const gated = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): boolean => heldBy(ticket, all, me).length > 0;
+/** Held back, for `me`: being prepared by its author, or waiting on a ticket that has not been answered yet. */
+export const gated = (ticket: Ticket, all: ReadonlyMap<string, Ticket>, me: string): boolean => ticket.preparing === true || heldBy(ticket, all, me).length > 0;
 
 /** May `me` be shown this ticket? Its author always — they keep it current
  *  while it waits; anyone else once it is no longer gated for them. Every
