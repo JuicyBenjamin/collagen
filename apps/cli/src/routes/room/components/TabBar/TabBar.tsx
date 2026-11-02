@@ -6,7 +6,7 @@ import { isEnter } from "../../../../components/keys";
 import { theme } from "../../../../app/theme";
 import { admittedAtom, rosterAtom } from "../../atoms";
 import { mergesShownAtom, openMergesPageAtom } from "../../merges/atoms";
-import { TABS, useTabs } from "../../tabs";
+import { TAB_LABEL, TABS, useTabs } from "../../tabs";
 
 /** The tab bar is a section: hover it and ←→ switch tabs (← past the first
  *  tab leaves for whatever sits to the left — the rooms rail); ↓ (or enter)
@@ -53,17 +53,11 @@ export function TabBar() {
         <box flexDirection="row">
           <text wrapMode="none" flexShrink={0}>
             <span fg={focused ? theme.accent : theme.dim}>{focused ? "› " : "  "}</span>
-            <span fg={active === "room/overview" ? theme.accent : theme.dim}>[1] overview</span>
-            <span fg={theme.dim}>  </span>
-            <span fg={active === "room/projects" ? theme.accent : theme.dim}>[2] projects</span>
-            <span fg={theme.dim}>  </span>
-            <span fg={active === "room/merges" ? theme.accent : theme.dim}>[3] merges</span>
-            <span fg={theme.dim}>  </span>
-            <span fg={active === "room/messages" ? theme.accent : theme.dim}>[4] messages</span>
-            <span fg={theme.dim}>  </span>
-            <span fg={active === "room/outbox" ? theme.accent : theme.dim}>[5] outbox</span>
-            <span fg={theme.dim}>  </span>
-            <span fg={active === "room/board" ? theme.accent : theme.dim}>[6] board</span>
+            {TABS.map((tab, index) => (
+              <span key={tab} fg={active === tab ? theme.accent : theme.dim}>
+                {index > 0 ? "  " : ""}[{index + 1}] {TAB_LABEL[tab]}
+              </span>
+            ))}
           </text>
           <text truncate wrapMode="none" flexShrink={1} minWidth={0}>
             <span fg={theme.dim}>  ·  </span>

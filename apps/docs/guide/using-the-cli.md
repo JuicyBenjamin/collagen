@@ -36,7 +36,7 @@ No files are written into your projects.
  you alice · ai codex
 
   ╭────╮ ╭─ room · dev room ──────────────────────────────────────────╮
-  │ WO │ │ › [1] overview   [2] projects   …   [5] outbox  ·  2 online  │
+  │ WO │ │ › [1] overview   [2] board   …   [6] outbox  ·  2 online  │
   ╰────╯ │                                                            │
  ▌╭────╮ │   ● you, bob                                               │
  ▌│ DR │ │   ○ carol                                                  │

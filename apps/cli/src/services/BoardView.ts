@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { Clock, Effect, Stream, SubscriptionRef } from "effect";
-import { BOARD_LABEL, closedAs, KIND_ORDER, shortRoomId } from "@collagen/p2p";
+import { BOARD_LABEL, closedAs, shortRoomId } from "@collagen/p2p";
 import type { BoardData, BoardKind } from "@collagen/review-web/data";
-import { boardEpics, boardOf, kindCounts, unreadLine, unreadTickets } from "../lib/board";
+import { BOARD_KINDS, boardEpics, boardOf, kindCounts, unreadLine, unreadTickets } from "../lib/board";
 import type { Row } from "../lib/ticketGroups";
 import { kindGlyph } from "../lib/ticketTabs";
 import { rowTitle } from "../lib/ticketSummary";
@@ -17,9 +17,6 @@ import { Rooms } from "./Rooms";
 
 /** A short room id (shortRoomId); anything else is not looked up. */
 export const shortIdOk = (id: string | undefined): id is string => id !== undefined && /^[0-9a-f]{8}$/.test(id);
-
-/** The kinds a board can be filtered to: every kind but epic, which is a view, not a card. */
-export const BOARD_KINDS: ReadonlyArray<BoardKind> = KIND_ORDER.filter((kind): kind is BoardKind => kind !== "epic");
 
 /** A list of board kinds from the page, each once. */
 export const boardKindsOk = (kinds: unknown): kinds is ReadonlyArray<BoardKind> =>

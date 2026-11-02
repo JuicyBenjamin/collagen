@@ -18,7 +18,7 @@ import { Keys } from "./components/Keys/Keys";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { StatusLine } from "./components/StatusLine/StatusLine";
 import { TabBar } from "./components/TabBar/TabBar";
-import { useTabs } from "./tabs";
+import { TABS, useTabs } from "./tabs";
 
 /** Room layout: status line · the rooms sidebar beside the room panel (tab
  *  bar + the active tab as children) · footer. Owns
@@ -108,12 +108,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "s") return navigate("settings");
     if (key.name === "i") return navigate("you");
     if (key.name === "u") return installUpdate({});
-    if (key.name === "1") return jump("room/overview");
-    if (key.name === "2") return jump("room/projects");
-    if (key.name === "3") return jump("room/merges");
-    if (key.name === "4") return jump("room/messages");
-    if (key.name === "5") return jump("room/outbox");
-    if (key.name === "6") return jump("room/board");
+    // a tab by its number on the bar
+    const numbered = /^[1-9]$/.test(key.name) ? TABS[Number(key.name) - 1] : undefined;
+    if (numbered) return jump(numbered);
     if (key.name === "escape") {
       // inside a page (ticket, transcripts), esc is "back"; on a tab, back to the tab bar
       if (crumb) return goBack();

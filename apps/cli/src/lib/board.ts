@@ -1,4 +1,4 @@
-import { BOARD_COLUMNS, boardColumn, epicOf, heldBy, visibleTo, type BoardColumn, type RoomMessage, type Ticket, type TicketKind, type Unseen } from "@collagen/p2p";
+import { BOARD_COLUMNS, boardColumn, epicOf, heldBy, KIND_ORDER, visibleTo, type BoardColumn, type RoomMessage, type Ticket, type TicketKind, type Unseen } from "@collagen/p2p";
 import { compareSummaries, summarize } from "./ticketSummary";
 import type { Row } from "./ticketGroups";
 
@@ -13,6 +13,12 @@ export interface Lane {
   /** done tickets left off, finished before the recent ones */
   readonly older: number;
 }
+
+/** A kind a board can be filtered to: any but epic, which is a view, not a card. */
+export type BoardKind = Exclude<TicketKind, "epic">;
+
+/** The kinds a board can be filtered to, in the lists' order. */
+export const BOARD_KINDS: ReadonlyArray<BoardKind> = KIND_ORDER.filter((kind): kind is BoardKind => kind !== "epic");
 
 /** Which board: everything, or one epic's; and whether the done column shows all it has. */
 export interface BoardView {

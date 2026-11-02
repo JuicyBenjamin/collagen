@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { BOARD_LABEL, closedAs } from "@collagen/p2p";
 import { Focusable } from "../../../components/Focusable";
 import { FollowScroll } from "../../../components/FollowScroll";
-import { isEnter } from "../../../components/keys";
+import { isEnter, isSpace } from "../../../components/keys";
 import { theme } from "../../../app/theme";
 import { to, useRouter } from "../../../app/router";
 import { clamp } from "../../../lib/math";
 import { cells, clip } from "../../../lib/columns";
 import { GLYPH } from "../../../lib/glyphs";
-import { boardEpics, boardOf, unreadLine, unreadTickets, type Lane } from "../../../lib/board";
+import { BOARD_KINDS, boardEpics, boardOf, kindCounts, unreadLine, unreadTickets, type BoardKind, type Lane } from "../../../lib/board";
 import { kindGlyph } from "../../../lib/ticketTabs";
 import { rowTitle } from "../../../lib/ticketSummary";
 import type { Row } from "../../../lib/ticketGroups";
@@ -18,7 +18,7 @@ import { roomAtom } from "../../atoms";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../atoms";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { openReviewPageAtom } from "../review/atoms";
-import { boardCursorAtom, boardEpicAtom, openBoardPageAtom } from "./atoms";
+import { boardCursorAtom, boardEpicAtom, boardKindsAtom, openBoardPageAtom } from "./atoms";
 
 /** The board: the room's tickets in three columns — to do, in progress,
  *  done — by p2p's boardColumn, the rule the app's board reads too. Only
@@ -39,6 +39,8 @@ export function BoardPage() {
   const { navigate } = useRouter();
   const chosen = useAtomValue(boardEpicAtom);
   const setChosen = useAtomSet(boardEpicAtom);
+  const kinds = useAtomValue(boardKindsAtom);
+  const setKinds = useAtomSet(boardKindsAtom);
 
   const me = identity?.pubkey ?? "";
   // everything, or one epic with open tickets: e goes round them
@@ -46,28 +48,98 @@ export function BoardPage() {
   const epic = epics.some((entry) => entry.epic.id === chosen) ? chosen : null;
   const views = [null, ...epics.map((entry) => entry.epic.id)];
   const nextView = () => setChosen(views[(views.indexOf(epic) + 1) % views.length] ?? null);
-  const viewName = epic === null ? "everything" : rowTitle(epics.find((entry) => entry.epic.id === epic)!.epic);
+  const viewName = epic === null ? "all tickets" : rowTitle(epics.find((entry) => entry.epic.id === epic)!.epic);
+  // every kind, or only some: what each would leave is counted on the board without the filter
+  const view = { epic, now: Date.now() };
+  const everyKind = boardOf(tickets, trace, me, view);
+  const counts = kindCounts(everyKind);
+  const offered = BOARD_KINDS.filter((kind) => (counts.get(kind) ?? 0) > 0 || kinds.includes(kind)).map((kind) => ({ kind, count: counts.get(kind) ?? 0, on: kinds.includes(kind) }));
+  const toggle = (kind: BoardKind) => setKinds(BOARD_KINDS.filter((each) => (each === kind ? !kinds.includes(each) : kinds.includes(each))));
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
 
   return (
     <Board
-      lanes={boardOf(tickets, trace, me, { epic, now: Date.now() })}
-      view={epics.length > 0 ? `${viewName} · ${views.indexOf(epic) + 1} of ${views.length}` : null}
+      lanes={kinds.length === 0 ? everyKind : boardOf(tickets, trace, me, { ...view, kinds })}
+      filters={<Filters view={epics.length > 0 ? `${viewName} · ${views.indexOf(epic) + 1} of ${views.length}` : null} onNextView={nextView} kinds={offered} onToggle={toggle} />}
       onNextView={epics.length > 0 ? nextView : undefined}
       unread={unread}
       nameFor={nameFor}
       onOpen={(id) => navigate(to.ticket(id, "room/board"))}
       onReview={(id) => openReviewPage({ ticketId: id })}
-      onBrowser={roomId ? () => openBoardPage({ roomId, epic }) : undefined}
+      onBrowser={roomId ? () => openBoardPage({ roomId, epic, kinds }) : undefined}
     />
+  );
+}
+
+/** What the board is read through, one row above it, as on the app's
+ *  board: the epic — enter goes round them — then each kind with how many
+ *  it shows, enter turning it on or off; none on is every kind. ←→ move
+ *  along it, ↓ goes down into the board. */
+function Filters({
+  view,
+  onNextView,
+  kinds,
+  onToggle,
+}: {
+  /** the epic it is read through and where that is among them; null when there are no epics to choose */
+  view: string | null;
+  onNextView: () => void;
+  kinds: ReadonlyArray<{ readonly kind: BoardKind; readonly count: number; readonly on: boolean }>;
+  onToggle: (kind: BoardKind) => void;
+}) {
+  const [at, setAt] = useState(0);
+  // the epic first, when there is one to choose, then the kinds
+  const items = [...(view !== null ? (["epic"] as const) : []), ...kinds.map((entry) => entry.kind)];
+  const index = clamp(at, 0, Math.max(0, items.length - 1));
+  const current = items[index];
+  if (items.length === 0) return null;
+  return (
+    <Focusable
+      id="board-filters"
+      marginBottom={1}
+      hint={`←→ choose · enter ${current === "epic" ? "next epic" : "show or hide this kind"} · ↓ the board`}
+      flexDirection="row"
+      flexShrink={0}
+      onKey={(key) => {
+        if (key.name === "left" && index > 0) return setAt(index - 1), true;
+        if (key.name === "right" && index < items.length - 1) return setAt(index + 1), true;
+        if (isEnter(key) || isSpace(key)) {
+          if (current === "epic") onNextView();
+          else if (current) onToggle(current);
+          return true;
+        }
+        return false;
+      }}
+    >
+      {(focused) => (
+        <text wrapMode="none" truncate>
+          {view !== null ? (
+            <>
+              <span fg={focused && current === "epic" ? theme.accent : theme.dim}>{focused && current === "epic" ? "› " : "  "}epic </span>
+              <span fg={theme.epic}>{view}</span>
+            </>
+          ) : null}
+          {kinds.map((entry) => {
+            const here = focused && current === entry.kind;
+            return (
+              <span key={entry.kind} fg={here ? theme.accent : entry.on ? theme.fg : theme.dim}>
+                {here ? "  › " : "    "}
+                {entry.on ? "● " : ""}
+                {kindGlyph(entry.kind)} {entry.kind}s {entry.count}
+              </span>
+            );
+          })}
+        </text>
+      )}
+    </Focusable>
   );
 }
 
 /** The three columns and the cursor across them; what a key opens is the page's to say. */
 export function Board({
   lanes,
-  view,
+  filters,
   onNextView,
   unread,
   nameFor,
@@ -76,8 +148,8 @@ export function Board({
   onBrowser,
 }: {
   lanes: ReadonlyArray<Lane>;
-  /** what it is read through, and where that is among the views; null when there are no epics to choose */
-  view: string | null;
+  /** the row above it saying what it is read through: the epic, the kinds */
+  filters: ReactNode;
   /** e: the next view — the next epic, or everything again */
   onNextView: (() => void) | undefined;
   /** tickets a newer collagen wrote, which the board cannot place */
@@ -106,12 +178,7 @@ export function Board({
 
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} minHeight={0}>
-    {view !== null ? (
-      <text fg={theme.dim} wrapMode="none" truncate flexShrink={0}>
-        {"  "}
-        <span fg={theme.epic}>{view}</span>
-      </text>
-    ) : null}
+    {filters}
     <Focusable
       id="board"
       hint={`←→ column · ↑↓ select · enter open${onNextView ? " · e next epic" : ""}${current?.ticket.kind === "review" ? " · o review in browser" : ""}${onBrowser ? " · b board in browser" : ""}`}
@@ -175,9 +242,13 @@ function LaneView({ lane, selected, focused, nameFor }: { lane: Lane; selected: 
         </text>
       ) : (
         <FollowScroll follow={current ? (selected === 0 ? "start" : { id: cardId(current.ticket.id) }) : null} onWidth={setWidth}>
-          {lane.rows.map((row, index) => (
-            <Card key={row.ticket.id} row={row} under={under.has(row.ticket.id)} selected={focused && index === selected} width={width} nameFor={nameFor} />
-          ))}
+          {lane.stacks.flatMap((stack, at) => [
+            // a line of work of more than one stands apart from what is beside it, a blank line on each side
+            ...(at > 0 && (stack.length > 1 || lane.stacks[at - 1]!.length > 1) ? [<box key={`gap-${stack[0]!.ticket.id}`} height={1} flexShrink={0} />] : []),
+            ...stack.map((row) => (
+              <Card key={row.ticket.id} row={row} under={under.has(row.ticket.id)} selected={focused && lane.rows[selected ?? -1]?.ticket.id === row.ticket.id} width={width} nameFor={nameFor} />
+            )),
+          ])}
         </FollowScroll>
       )}
       {lane.older > 0 ? (
