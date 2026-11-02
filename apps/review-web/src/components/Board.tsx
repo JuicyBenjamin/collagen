@@ -60,24 +60,24 @@ function Board(props: { data: BoardData; onEpic: (epic: string | null) => void; 
     <main class="board">
       <header class="board-head">
         <h1>{props.data.room}</h1>
+        {/* everything, or one epic with open tickets: what the board is read through */}
+        <Show when={props.data.epics.length > 0}>
+          <label class="board-view">
+            <span>Epic</span>
+            <select class="select select-sm" value={props.data.epic ?? ""} onChange={(event) => props.onEpic(event.currentTarget.value || null)}>
+              <option value="">All tickets</option>
+              <For each={props.data.epics}>
+                {(epic) => (
+                  <option value={epic.id}>
+                    {epic.title} · {epic.open} open
+                  </option>
+                )}
+              </For>
+            </select>
+          </label>
+        </Show>
         <Corner />
       </header>
-      {/* everything, or one epic with open tickets: the board's views */}
-      <Show when={props.data.epics.length > 0}>
-        <nav class="board-views join" aria-label="Views">
-          <button type="button" class={["btn btn-sm join-item", { "btn-primary": props.data.epic === null }]} onClick={() => props.onEpic(null)}>
-            Everything
-          </button>
-          <For each={props.data.epics}>
-            {(epic) => (
-              <button type="button" class={["btn btn-sm join-item", { "btn-primary": props.data.epic === epic.id }]} onClick={() => props.onEpic(epic.id)} title={`${epic.open} open`}>
-                {epic.title}
-                <span class="badge badge-sm">{epic.open}</span>
-              </button>
-            )}
-          </For>
-        </nav>
-      </Show>
       <div class="lanes">
         <For each={props.data.lanes}>
           {(lane) => {
