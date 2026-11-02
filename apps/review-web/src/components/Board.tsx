@@ -62,18 +62,28 @@ function Board(props: { data: BoardData; onEpic: (epic: string | null) => void; 
         <h1>{props.data.room}</h1>
         {/* everything, or one epic with open tickets: what the board is read through */}
         <Show when={props.data.epics.length > 0}>
+          {/* a combo box: type to find an epic among many, empty for all tickets */}
           <label class="board-view">
             <span>Epic</span>
-            <select class="select select-sm" value={props.data.epic ?? ""} onChange={(event) => props.onEpic(event.currentTarget.value || null)}>
-              <option value="">All tickets</option>
-              <For each={props.data.epics}>
-                {(epic) => (
-                  <option value={epic.id}>
-                    {epic.title} · {epic.open} open
-                  </option>
-                )}
-              </For>
-            </select>
+            <input
+              class="input input-sm board-epic"
+              list="board-epics"
+              placeholder="All tickets"
+              value={props.data.epics.find((epic) => epic.id === props.data.epic)?.title ?? ""}
+              onChange={(event) => {
+                const typed = event.currentTarget.value.trim();
+                const found = props.data.epics.find((epic) => epic.title === typed);
+                if (found || typed === "") props.onEpic(found?.id ?? null);
+              }}
+            />
+            <datalist id="board-epics">
+              <For each={props.data.epics}>{(epic) => <option value={epic.title} label={`${epic.open} open`} />}</For>
+            </datalist>
+            <Show when={props.data.epic !== null}>
+              <button type="button" class="btn btn-ghost btn-xs" aria-label="All tickets" title="All tickets" onClick={() => props.onEpic(null)}>
+                ×
+              </button>
+            </Show>
           </label>
         </Show>
         <Corner />
@@ -115,24 +125,47 @@ function Board(props: { data: BoardData; onEpic: (epic: string | null) => void; 
   );
 }
 
-/** One line of work — what grew from what — as a stack: the latest in
- *  front, those before it behind, each offset so its title shows. The
- *  pointer over it fans it out (styles.css). */
+/** What came before the latest in a line of work, in a few words. */
+const earlierLine = (earlier: ReadonlyArray<BoardCard>): string =>
+  earlier.length === 1 ? `+1 earlier: ${earlier[0]!.title}` : `+${earlier.length} earlier: ${earlier[0]!.title} and ${earlier.length - 1} more`;
+
+/** One line of work — what grew from what. At rest its latest card, the
+ *  edges of those before it under it, and what they are in a line. The
+ *  pointer over it (or focus inside it) opens it: a panel raised over the
+ *  board, the cards unfolding out of the front one, the one under the
+ *  pointer marked; it folds back when the pointer leaves the panel. It
+ *  takes no room when open, so nothing on the board moves under the
+ *  pointer (styles.css). */
 function Stack(props: { cards: ReadonlyArray<BoardCard>; done: boolean }) {
-  // drawn back to front: the latest last, in front
-  const backToFront = () => [...props.cards].reverse();
+  const latest = () => props.cards[0]!;
+  const earlier = () => props.cards.slice(1);
   return (
-    <div class={["board-stack", { stacked: props.cards.length > 1 }]} style={{ "--depth": String(props.cards.length) }}>
-      <For each={backToFront()}>{(card, index) => <Card card={card} done={props.done} layer={index()} />}</For>
+    <div class={["board-stack", { stacked: props.cards.length > 1 }]}>
+      <Card card={latest()} done={props.done} />
+      <Show when={earlier().length > 0}>
+        <div class="board-stack-edges" aria-hidden="true">
+          <For each={earlier().slice(0, 2)}>{() => <span />}</For>
+        </div>
+        <p class="board-stack-more">{earlierLine(earlier())}</p>
+        <div class="board-stack-open" role="list" aria-label="This line of work">
+          <For each={props.cards}>
+            {(card, index) => (
+              <div role="listitem" class="board-stack-item" style={{ "--i": String(index()) }}>
+                <Card card={card} done={props.done} />
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }
 
 /** One ticket: its kind, its title — a review's or an investigation's opens
  *  its page — and whose it is; marked when it is the reader's now. The goal on hover. */
-function Card(props: { card: BoardCard; done: boolean; layer: number }) {
+function Card(props: { card: BoardCard; done: boolean }) {
   return (
-    <article class={["card card-border card-sm board-card", { "board-quiet": props.done }]} style={{ "--layer": String(props.layer) }} title={props.card.goal}>
+    <article class={["card card-border card-sm board-card", { "board-quiet": props.done }]} title={props.card.goal}>
       <div class="card-body board-card-body">
         <span class={["board-kind", { epic: props.card.kind === "epic" }]} aria-label={props.card.kind}>
           {props.card.glyph}

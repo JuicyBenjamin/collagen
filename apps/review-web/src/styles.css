@@ -1087,6 +1087,7 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .board-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin: 0 0 24px; }
 .board-head > .header-corner { margin-left: auto; }
 .board-view { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+.board-epic { width: 18rem; }
 .board-head h1 { font-size: 22px; line-height: 1.3; margin: 0; }
 .lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
 @media (max-width: 900px) {
@@ -1105,19 +1106,34 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .board-quiet .board-title { color: var(--dim); }
 .board-who { color: var(--faint); font-size: 12.5px; white-space: nowrap; }
 .board-who.mine { color: var(--accent); }
-/* a stack, at rest a deck: every card in one place, those behind raised a
-   step and drawn in at the sides, so each title shows above the one in
-   front. Hover changes nothing: a layout that moves under the pointer
-   moves what is under it, and flickers */
-.board-stack { --step: 26px; --fan: 50px; --inset: 7px; display: grid; position: relative; padding-top: calc((var(--depth) - 1) * var(--step)); perspective: 1100px; transition: padding-top 280ms ease; }
-.board-stack > .board-card {
-  grid-area: 1 / 1;
-  transform-origin: center bottom;
-  margin-inline: calc((var(--depth) - 1 - var(--layer)) * var(--inset));
-  transform: translateY(calc((var(--layer) - var(--depth) + 1) * var(--step)));
-  transition: transform 280ms ease, margin 280ms ease, scale 160ms ease, box-shadow 160ms ease;
+/* a line of work, at rest: its latest card, the edges of those before it
+   under it, and a line saying what they are. Open, under the pointer: a
+   panel raised over the board where the stack stands, taking no room —
+   nothing on the board moves, so nothing moves under the pointer — the
+   cards unfolding out of the front one, the one under the pointer marked.
+   One surface with no gaps, so the pointer can go from card to card; it
+   folds back once the pointer leaves the panel */
+.board-stack { position: relative; display: flex; flex-direction: column; }
+.board-stack > .board-card { position: relative; z-index: 1; }
+.board-stack-edges { display: flex; flex-direction: column; align-items: stretch; }
+.board-stack-edges > span { height: 7px; margin: -3px 12px 0; border: 1px solid var(--color-base-300); border-top: 0; border-radius: 0 0 8px 8px; background: var(--color-base-100); filter: brightness(0.92); }
+.board-stack-edges > span + span { margin-inline: 24px; filter: brightness(0.85); }
+.board-stack-more { margin: 4px 0 0 10px; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-stack-open {
+  position: absolute; top: -6px; left: -6px; right: -6px; z-index: 5;
+  display: flex; flex-direction: column; gap: 6px; padding: 6px;
+  background: var(--color-base-200); border: 1px solid var(--color-base-300); border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+  perspective: 900px;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 140ms ease, visibility 0s linear 140ms;
 }
-.board-stack.stacked > .board-card:not(:last-child) { box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18); }
+.board-stack-item { transform-origin: top center; transform: translateY(calc(var(--i) * -100%)) rotateX(16deg); transition: transform 260ms ease; }
+.board-stack-item:first-child { transform: none; }
+.board-stack.stacked:hover > .board-stack-open, .board-stack.stacked:focus-within > .board-stack-open { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 140ms ease; }
+.board-stack.stacked:hover > .board-stack-open > .board-stack-item, .board-stack.stacked:focus-within > .board-stack-open > .board-stack-item { transform: none; }
+.board-stack-item > .board-card { transition: border-color 120ms ease, box-shadow 120ms ease; }
+.board-stack-item:hover > .board-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 @media (prefers-reduced-motion: reduce) {
-  .board-stack, .board-stack > .board-card { transition: none; }
+  .board-stack-open, .board-stack-item { transition: none; }
 }
