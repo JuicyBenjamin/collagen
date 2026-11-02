@@ -7,14 +7,15 @@ import type { DiffLine, Hunk, TestCase, TestFile } from "@collagen/review-web/da
 // away, the whole test as one hunk. Pure: the diff's hunks of a test file
 // and the file's text at both ends (services/ReviewView reads those).
 
-/** A test file, by its name (`.test` or `.spec` as a part of it, also
- *  before another: Foo.test.stories.tsx — stories that test, with their
- *  play steps, are tests) or its folder. */
-export const isTest = (file: string): boolean => /\.(test|spec)\.[^/]+$/i.test(file) || /(^|\/)(tests?|__tests__)\//.test(file);
+/** A Storybook file: the UI's sandbox, its stories read by their names,
+ *  apart from the code and the tests (lib/stories). Named as a test too
+ *  (Foo.test.stories.tsx), it is still a story: its play steps are read as
+ *  stories, and a test file with no tests in it would show as none. */
+export const isStory = (file: string): boolean => /\.stories\.(tsx?|jsx?|mdx|svelte|vue)$/i.test(file);
 
-/** A Storybook file that is not a test: the UI's sandbox, its stories read
- *  by their names, apart from the code and the tests (lib/stories). */
-export const isStory = (file: string): boolean => /\.stories\.(tsx?|jsx?|mdx|svelte|vue)$/i.test(file) && !isTest(file);
+/** A test file, by its name (`.test` or `.spec` as a part of it) or its
+ *  folder; never a story file. */
+export const isTest = (file: string): boolean => !isStory(file) && (/\.(test|spec)\.[^/]+$/i.test(file) || /(^|\/)(tests?|__tests__)\//.test(file));
 
 /** A test as its file has it: the describes it sits in, its title, and the
  *  lines it spans (1-based, both ends in). */
