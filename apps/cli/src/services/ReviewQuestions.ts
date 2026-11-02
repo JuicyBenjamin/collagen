@@ -289,7 +289,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         }
         yield* tellAsker(held, "answering");
         const prompt = held.whys ? whysPrompt(held, title, copied, diffFile, person, server, gaps) : answeringPrompt(held, title, copied, diffFile, person, server);
-        const said = yield* jobs.file({ roomId: held.roomId, requestId: held.id, title: held.whys ? `give ${held.fromName} the whys of "${title}"` : `answer ${held.fromName} on "${title}"`, prompt, cwd: found.path ?? homedir(), reads: [dir] }, "answering");
+        const said = yield* jobs.file({ roomId: held.roomId, requestId: held.id, title: held.whys ? `give ${held.fromName} the whys of "${title}"` : `answer ${held.fromName} on "${title}"`, prompt, cwd: found.path ?? homedir(), reads: [dir], cause: causeOf(held) }, "answering");
         if (said.startsWith("failed")) {
           yield* move(answering, "ended");
           yield* tellAsker(held, "waiting");
