@@ -124,6 +124,18 @@ export interface TestCase {
 
 /** A test file of the diff: its tests that changed, its hunks in no test
  *  (imports, helpers, setup), and the decisions and forks pointing into it. */
+/** A job running on a ticket right now — the reader's own, or one a peer
+ *  shares while it runs: whose, what kind, how far it says it is. */
+export interface RunningJob {
+  /** "you", or the peer's name */
+  readonly who: string;
+  readonly kind: string;
+  readonly step?: number;
+  readonly of?: number;
+  readonly doing?: string;
+  readonly since: number;
+}
+
 export interface TestFile {
   readonly file: string;
   readonly tests: ReadonlyArray<TestCase>;

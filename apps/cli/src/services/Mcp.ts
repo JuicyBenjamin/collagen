@@ -563,6 +563,13 @@ export const GuidancePassTool = Tool.make("guidance-pass", {
   success: Schema.String,
 });
 
+export const JobProgressTool = Tool.make("job-progress", {
+  description:
+    "For a job collagen runs (research, an investigation, filing, answering, a guidance pass), when its prompt names its job id: say how far you are. First {job, step: 0, of: how many steps you will take, doing: what you start with}, then after each step {job, step, of, doing: what you do next}, a few words each. The people waiting on it see it, in their rooms, on the ticket and its review page. Never for your own work outside such a job.",
+  parameters: Schema.Struct({ job: Schema.String, step: Schema.Finite, of: Schema.optional(Schema.Finite), doing: Schema.String }),
+  success: Schema.String,
+});
+
 export const RoomConnection = Tool.make("room-connection", {
   description:
     "How a room is connected, when it seems stuck — a colleague missing, nothing arriving, waiting to be let in: what stands in the way and what to try, in one line; then you (net, protocol, reachable directly or behind a firewall), the room's log (open, writable), who is here and on which protocol, who is away, who is on the room but not let in, who waits to be let in, who was turned away, admits that failed, the swarm's connections, and this machine's recent warnings and errors. 'room' (short id or name) for another of your user's rooms; the one they look at by default. Read only.",
@@ -1078,6 +1085,7 @@ export const CollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  JobProgressTool,
   RoomConnection,
   GetRoomAccess,
   SetRoomAccess,
@@ -1151,6 +1159,7 @@ export const DevCollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  JobProgressTool,
   RoomConnection,
   GetRoomAccess,
   SetRoomAccess,
@@ -2328,6 +2337,9 @@ const makeHandlers = Effect.gen(function* () {
         if (input.action === "fixed") return yield* guidancePass.fixed(roomId, input.ticketId);
         if (input.round === undefined || input.passed === undefined) return "failed: a report gives 'round' and 'passed' (and 'findings' when it falls short)";
         return yield* guidancePass.report(roomId, input.ticketId, input.round, input.passed, input.findings ?? []);
+      }),
+      "job-progress": Effect.fn("Mcp.jobProgress")(function* (input: { job: string; step: number; of?: number; doing: string }) {
+        return yield* jobs.progress(input.job, input.step, input.of, input.doing);
       }),
       "room-connection": Effect.fn("Mcp.roomConnection")(function* (input: { room?: string }) {
         const all = yield* rooms.summaries;

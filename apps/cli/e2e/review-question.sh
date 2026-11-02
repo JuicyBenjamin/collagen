@@ -36,7 +36,7 @@ PY
 echo "## a stand-in claude on PATH plays the answering job; bob runs no AI"
 mkdir -p "$OUT/bin"
 printf '#!/bin/sh\nexec node "%s/fake-claude.mjs" "$@"\n' "$E2E" > "$OUT/bin/claude"; chmod +x "$OUT/bin/claude"
-export PATH="$OUT/bin:$PATH" FAKE_CLAUDE_CALLS="$OUT/claude.calls"
+export PATH="$OUT/bin:$PATH" FAKE_CLAUDE_CALLS="$OUT/claude.calls" FAKE_CLAUDE_HOLD=4000
 python3 -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s["preferredAi"]=None; json.dump(s, open(p,"w"))' "$CFG/state-bob-$SCN.json"
 start alice; start bob
 SA=$(mcp $A); wait_for_peer $A "$SA" bob; SB=$(mcp $B); admitted bob
@@ -72,6 +72,17 @@ echo "## just do it: her AI answers from the conversation the work was done in"
 call $A "$SA" set-steering '{"kind":"answer","whose":"others","level":"auto"}' > /dev/null
 YES=$(call $A "$SA" review-question "{\"questionId\":\"$QID\",\"answer\":true}")
 echo "  (yes: ${YES:0:300})"
+# what runs on the review, as bob's page gets it over its socket: alice's job, shared while it runs
+running() {
+  node -e '
+    const [origin, ticket] = process.argv.slice(1);
+    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+    socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic: "running", subject: ticket }));
+    socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(JSON.stringify(message.value)); };
+    setTimeout(() => process.exit(0), 1500);
+  ' "${B%/mcp}" "$TICKET"
+}
+wait_until "bob's page sees alice's AI answering, and how far it is" '"who":"alice".*"kind":"answering","step":1,"of":2,"doing":"reading the conversation"' running
 expect "her yes runs it now" "$YES" "is reading|will read"
 wait_until "bob gets the answer, from the conversation" "alice's AI answered.*|Double inside thing\(\), not in the dashboard" bob_saw
 wait_until "her AI's answer settles bob's guess: corrected, the real reason in its place" "corrected.*the export reads thing\(\) too|the export reads thing\(\) too.*corrected" why

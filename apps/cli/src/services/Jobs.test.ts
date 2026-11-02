@@ -118,7 +118,7 @@ describe("jobs", () => {
     expect(seen.whileRunning).toEqual(["Plan a:running"]);
     expect(seen.after).toEqual(["Plan a:done"]);
     expect(seen.kept).toEqual([]);
-    expect(asked.map((job) => [job.prompt, job.model])).toEqual([["look into a", "opus"]]);
+    expect(asked.map((job) => [job.prompt.split("\n")[0], job.model])).toEqual([["look into a", "opus"]]);
   });
 
   it("run nothing while running the person's AI is not chosen in their steering", async () => {
