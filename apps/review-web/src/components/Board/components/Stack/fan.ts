@@ -3,7 +3,7 @@ import { animate } from "motion";
 // A line of work opening, with Motion: from the middle where the stack
 // stands, as many cards above as below, the board shaded back behind it.
 // Every card alike, evenly apart and tilted back a little; the one in focus
-// alone comes flat, forward and a touch larger, on a spring, so moving along
+// alone comes flat and a touch larger, on a spring, so moving along
 // the line flows from card to card. None at all when the reader asks their
 // system for less.
 
@@ -19,13 +19,13 @@ export interface Parts {
   readonly shade: HTMLElement;
 }
 
-/** The pointer over a folded stack: it lifts a little — the front card a
- *  touch larger, the cards under it spread a few pixels — so it reads as
- *  something to open. */
-export function lift({ face, edges }: Parts, on: boolean): void {
+/** The pointer over a card, alone or the front of a folded stack: it lifts
+ *  a little — a touch larger, and the cards under it, when there are any,
+ *  spread a few pixels — so it reads as something to reach for. */
+export function lift(face: HTMLElement, edges: HTMLElement | undefined, on: boolean): void {
   const moves = still.matches ? { duration: 0 } : ({ type: "spring", visualDuration: 0.22, bounce: 0.25 } as const);
   animate(face, { scale: on ? 1.015 : 1 }, moves);
-  [...edges.children].forEach((edge, index) => animate(edge, { y: on ? (index + 1) * 2 : 0 }, moves));
+  [...(edges?.children ?? [])].forEach((edge, index) => animate(edge, { y: on ? (index + 1) * 2 : 0 }, moves));
 }
 
 /** Move a stack to where it is now: open around `focus`, or folded back
@@ -44,8 +44,8 @@ export function spread({ face, fan, shade }: Parts, open: boolean, focus: number
     animate(
       item,
       open
-        ? { y: (index - mid) * STEP, z: focused ? 24 : 0, rotateX: focused ? 0 : 10, scale: focused ? 1.05 : 1, filter: `brightness(${focused ? 1 : 0.85})` }
-        : { y: 0, z: 0, rotateX: 0, scale: 1, filter: "brightness(1)" },
+        ? { y: (index - mid) * STEP, rotateX: focused ? 0 : 6, scale: focused ? 1.02 : 1, filter: `brightness(${focused ? 1 : 0.92})` }
+        : { y: 0, rotateX: 0, scale: 1, filter: "brightness(1)" },
       moves,
     );
   });

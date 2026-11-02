@@ -9,12 +9,12 @@ const earlierLine = (earlier: ReadonlyArray<BoardCard>): string =>
 
 /** One line of work — what grew from what. At rest its latest card, the
  *  edges of those before it under it, and what they are in a line; the
- *  pointer over it lights it a little. A click opens it from the middle,
- *  as many cards above where it stands as below, over the board and
- *  taking no room, so nothing moves under the pointer. Read like a game
- *  menu: the card in focus (pointed at, or reached with the arrows) flat,
- *  forward and largest, the rest curving away from it (fan.ts). It
- *  folds when the pointer or focus leaves it, on Escape, or another click. */
+ *  pointer over it lifts it a little, as it does any card. A click opens it
+ *  from the middle, as many cards above where it stands as below, over the
+ *  board and taking no room, so nothing moves under the pointer: every card
+ *  alike, the one in focus (pointed at, or reached with the arrows) a touch
+ *  larger (fan.ts). It folds when the pointer or focus leaves it, on
+ *  Escape, or another click. */
 export function Stack(props: { cards: ReadonlyArray<BoardCard>; done: boolean }) {
   const [open, setOpen] = createSignal(false);
   const [focus, setFocus] = createSignal(0);
@@ -35,8 +35,7 @@ export function Stack(props: { cards: ReadonlyArray<BoardCard>; done: boolean })
   createEffect(
     () => over() && !open(),
     (lifted) => {
-      const now = parts();
-      if (now) lift(now, lifted);
+      if (face) lift(face, edges, lifted);
     },
   );
   const close = () => {
