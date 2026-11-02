@@ -124,16 +124,23 @@ export type TestTexts = (file: string) => { readonly after: ReadonlyArray<string
  *  it most precisely (a line over a whole file; the first unit on a tie);
  *  what no unit claims goes with the file it belongs with (a sub-component)
  *  when that is in a unit, else under the decision that claims it most
- *  precisely; the rest is "Not explained", last. Test files go to none:
- *  they are laid out test by test, apart. */
+ *  precisely; the rest is "Not explained", last. Test and story files go to none
+ *  (those with no test or story in them are code): they are laid out case by case, apart. */
 export function groupByUnit(
   review: { readonly decisions: ReadonlyArray<Decision>; readonly forks: ReadonlyArray<Fork>; readonly units?: ReadonlyArray<AuthorUnit> },
   all: ReadonlyArray<Hunk>,
   imports: Imports,
   texts: TestTexts = () => ({ after: null, before: null }),
 ): Grouped {
+  // each test file's tests, each story file's stories; a file with none (a
+  // helper, a fixture) is code, so a tab lists only what it counts
+  const read = (file: string) => {
+    const text = texts(file);
+    return testsOfFile(file, all, text.after, text.before, isStory(file) ? storiesIn : undefined);
+  };
+  const apart = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => isTest(file) || isStory(file)).map((file) => [file, read(file)] as const).filter(([, cases]) => cases.tests.length > 0));
   // the code, read in units; pointers are still read against every hunk
-  const hunks = all.filter((hunk) => !isTest(hunk.file) && !isStory(hunk.file));
+  const hunks = all.filter((hunk) => !apart.has(hunk.file));
   // each hunk's home among a list of claimants (units, or decisions): the
   // one whose pointer claims it most precisely, the first on a tie
   const homes = (claimants: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>): Map<string, number> => {
@@ -232,18 +239,17 @@ export function groupByUnit(
     ...ordered.map(shape),
     ...(unexplainedIds.length > 0 ? [shape({ id: "unexplained", title: "Not explained", what: "Changes no decision covers — worth a question to the author.", by: "unexplained", ids: unexplainedIds })] : []),
   ];
-  // each test file, and each story file read by its stories' names: their cases, and the decisions and forks pointing into them
-  const casesOf = (kind: (file: string) => boolean, read?: typeof storiesIn) => [...new Set(all.filter((hunk) => kind(hunk.file)).map((hunk) => hunk.file))].map((file) => {
-    const text = texts(file);
+  // each test file and story file with cases, and the decisions and forks pointing into it
+  const casesOf = (kind: (file: string) => boolean) => [...apart].filter(([file]) => kind(file)).map(([file, cases]) => {
     const ids = new Set(all.filter((hunk) => hunk.file === file).map((hunk) => hunk.id));
     return {
-      ...testsOfFile(file, all, text.after, text.before, read),
+      ...cases,
       decisions: review.decisions.filter((decision) => [...ids].some((id) => claims.get(id)?.includes(decision.id))).map((decision) => decision.id),
       forks: review.forks.filter((fork) => [...forkHunks.get(fork.id)!].some((id) => ids.has(id))),
     };
   });
   const tests = casesOf(isTest);
-  const stories = casesOf(isStory, storiesIn);
+  const stories = casesOf(isStory);
   const shown = new Set([...units.flatMap((unit) => unit.decisions), ...[...tests, ...stories].flatMap((file) => file.decisions)]);
   const forksShown = new Set([...units, ...tests, ...stories].flatMap((part) => part.forks.map((fork) => fork.id)));
   return {
