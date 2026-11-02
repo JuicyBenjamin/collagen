@@ -15,6 +15,7 @@ import { BareDecision } from "./components/BareDecision";
 import { Forks } from "./components/Forks";
 import { Machine } from "./components/Machine";
 import { Outside } from "./components/Outside";
+import { Lockfiles } from "./components/Lockfiles";
 import { Tabs } from "./components/Tabs";
 import { lastTabs } from "../../lastTabs";
 import { Tests } from "./components/Tests";
@@ -42,19 +43,28 @@ export function Body(props: { data: ReviewPageData }) {
   });
   const tests = () => props.data.grouped?.tests ?? [];
   const stories = () => props.data.grouped?.stories ?? [];
-  // the files the Code tab holds: every changed file but the tests and stories, as "files viewed" counts them
+  const lockfiles = () => props.data.grouped?.lockfiles ?? [];
+  // the files the Code tab holds: every changed file but the tests, stories and lockfiles, as "files viewed" counts them
   const codeFiles = () => {
-    const testFiles = new Set([...tests(), ...stories()].map((file) => file.file));
+    const testFiles = new Set([...tests(), ...stories(), ...lockfiles()].map((file) => file.file));
     return new Set((props.data.grouped?.hunks ?? []).map((hunk) => hunk.file).filter((file) => !testFiles.has(file))).size;
   };
   // the tab asked for, if this review has what it shows
   const shown = () =>
-    tab() === "tests" && tests().length > 0 ? "tests" : tab() === "stories" && stories().length > 0 ? "stories" : tab() === "machine" && props.data.review.machine ? "machine" : "code";
-  // the files a mark can be for, as this diff has them — tests and stories are judged, not viewed
+    tab() === "tests" && tests().length > 0
+      ? "tests"
+      : tab() === "stories" && stories().length > 0
+        ? "stories"
+        : tab() === "lockfiles" && lockfiles().length > 0
+          ? "lockfiles"
+          : tab() === "machine" && props.data.review.machine
+            ? "machine"
+            : "code";
+  // the files a mark can be for, as this diff has them — tests, stories and lockfiles are read apart, not viewed
   createEffect(
     () => props.data.grouped?.hunks ?? [],
     (all) => {
-      const testFiles = new Set([...tests(), ...stories()].map((file) => file.file));
+      const testFiles = new Set([...tests(), ...stories(), ...lockfiles()].map((file) => file.file));
       viewed.setFiles(all.filter((hunk) => !testFiles.has(hunk.file)));
       diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
     },
@@ -93,12 +103,15 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
-      <Tabs tests={tests()} stories={stories()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
+      <Tabs tests={tests()} stories={stories()} lockfiles={lockfiles()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
       <Show when={shown() === "tests"}>
         <Tests files={tests()} kind="test" hunks={hunks()} decisions={decisions()} />
       </Show>
       <Show when={shown() === "stories"}>
         <Tests files={stories()} kind="story" hunks={hunks()} decisions={decisions()} />
+      </Show>
+      <Show when={shown() === "lockfiles"}>
+        <Lockfiles files={lockfiles()} hunks={hunks()} />
       </Show>
       <Show when={shown() === "machine" && props.data.review.machine}>
         {(machine) => <Machine machine={machine()} />}

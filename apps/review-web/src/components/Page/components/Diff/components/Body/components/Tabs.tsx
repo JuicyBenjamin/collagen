@@ -1,14 +1,14 @@
 import { Show } from "solid-js";
-import type { TestFile } from "~/data";
+import type { LockFile, TestFile } from "~/data";
 import { Masked } from "~/components/Masked";
 import { showTab, tab } from "~/testsNow";
 
-/** The code, how it works, the tests and the stories: tabs under the header,
+/** The code, how it works, the tests, the stories and the lockfiles: tabs under the header,
  *  always there — the code's alone when there is nothing else — so what comes
  *  under them stands in the same place whatever the review holds. How it
  *  works when the change has a machine drawn; tests and stories, counted,
  *  when it has them. */
-export function Tabs(props: { tests: ReadonlyArray<TestFile>; stories: ReadonlyArray<TestFile>; files: number; machine: boolean }) {
+export function Tabs(props: { tests: ReadonlyArray<TestFile>; stories: ReadonlyArray<TestFile>; lockfiles: ReadonlyArray<LockFile>; files: number; machine: boolean }) {
   return (
     <div class="tabs" role="tablist">
       <button type="button" role="tab" aria-selected={tab() === "code" ? "true" : "false"} class={{ on: tab() === "code" }} onClick={() => showTab("code")}>
@@ -27,6 +27,12 @@ export function Tabs(props: { tests: ReadonlyArray<TestFile>; stories: ReadonlyA
       <Show when={props.stories.length > 0}>
         <button type="button" role="tab" aria-selected={tab() === "stories" ? "true" : "false"} class={{ on: tab() === "stories" }} onClick={() => showTab("stories")}>
           Stories <span class="tab-count">{props.stories.reduce((count, file) => count + file.tests.length, 0)}</span>
+        </button>
+      </Show>
+      <Show when={props.lockfiles.length > 0}>
+        <button type="button" role="tab" aria-selected={tab() === "lockfiles" ? "true" : "false"} class={{ on: tab() === "lockfiles" }} onClick={() => showTab("lockfiles")}>
+          {/* counted by the packages they move; a lockfile not read as packages counts as one */}
+          Lockfiles <span class="tab-count">{props.lockfiles.reduce((count, file) => count + (file.packages?.length ?? 1), 0)}</span>
         </button>
       </Show>
     </div>

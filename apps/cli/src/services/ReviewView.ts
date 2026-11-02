@@ -13,6 +13,7 @@ import { yourFinish } from "../lib/review";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isStory, isTest } from "../lib/tests";
+import { isLockfile } from "../lib/lockfiles";
 import { roomEdges, stackOf, type Edge } from "../lib/stack";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type RepoHost } from "./RepoHost";
@@ -323,7 +324,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       for (const file of files) texts.set(file, yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
       imports = importsAmong(files, (file) => texts.get(file) ?? null);
       const lines = (text: string | null | undefined) => (text == null || text.includes("\0") ? null : text.replace(/\n$/, "").split("\n"));
-      for (const file of files.filter((file) => isTest(file) || isStory(file))) {
+      for (const file of files.filter((file) => isTest(file) || isStory(file) || isLockfile(file))) {
         const before = forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
         tests.set(file, { after: lines(texts.get(file)), before: forked ? (lines(before) ?? []) : null });
       }

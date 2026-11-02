@@ -153,6 +153,16 @@ export interface TestFile {
   readonly forks: ReadonlyArray<Fork>;
 }
 
+/** A lockfile of the diff, read as the packages its change moves; its
+ *  lines one step away. `packages` is null for a format collagen does not
+ *  read, whose lines are all there is. */
+export interface LockFile {
+  readonly file: string;
+  readonly packages: ReadonlyArray<{ readonly name: string; readonly before: ReadonlyArray<string>; readonly after: ReadonlyArray<string> }> | null;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
 export interface Grouped {
   /** in reading order: what something is built from before what uses it —
    *  test files are in none: they are `tests` */
@@ -162,6 +172,8 @@ export interface Grouped {
   /** the diff's Storybook files, apart from the code and the tests: each
    *  story a case, by its name (a story's picture is not in a review) */
   readonly stories?: ReadonlyArray<TestFile>;
+  /** the diff's lockfiles, apart from the code: each read as the packages it moves */
+  readonly lockfiles?: ReadonlyArray<LockFile>;
   readonly hunks: ReadonlyArray<Hunk>;
   /** per decision id, its pointers that matched no change: the code there
    *  did not move, or the why is older than the branch */
