@@ -71,6 +71,23 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     const handles = yield* SubscriptionRef.make<ReadonlyArray<RoomHandle>>([]);
     const scopes = new Map<string, Scope.Closeable>();
 
+    /** The jobs running for this person on a room's tickets, as the room is
+     *  told them: never a guidance pass, nor a ticket still being prepared —
+     *  both are the author's alone. */
+    const runningIn = (roomId: string) =>
+      Effect.gen(function* () {
+        const handle = (yield* SubscriptionRef.get(handles)).find((live) => live.id === roomId);
+        const tickets = handle ? yield* SubscriptionRef.get(handle.room.tickets) : new Map<string, Ticket>();
+        return (yield* SubscriptionRef.get(jobs.views))
+          .filter((view) => view.state === "running" && view.roomId === roomId && view.kind !== "guidance" && tickets.has(view.onTicket ?? view.ticketId) && tickets.get(view.onTicket ?? view.ticketId)?.preparing !== true)
+          .map((view) => ({
+            ticketId: view.onTicket ?? view.ticketId,
+            kind: view.kind,
+            since: view.startedAt ?? view.queuedAt,
+            ...(view.progress ? { step: view.progress.step, doing: view.progress.doing, ...(view.progress.of !== undefined ? { of: view.progress.of } : {}) } : {}),
+          }));
+      });
+
     const profileFor = (roomId: string) =>
       Effect.gen(function* () {
         const state = yield* store.get;
@@ -81,6 +98,10 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           protocol: PROTOCOL_VERSION,
           projects: roomProjects(state, roomId).map((project) => ({ name: project.name, path: project.path })),
           away: (yield* SubscriptionRef.get(focused)) !== roomId,
+          running: yield* runningIn(roomId),
+          awaiting: ((yield* store.get).reviewQuestions ?? [])
+            .filter((held) => held.roomId === roomId && held.from !== identity.pubkey && (held.stage === "waiting" || held.stage === "asking"))
+            .map((held) => ({ ticketId: held.ticketId, what: held.whys ? "the missing whys" : "a question about it" })),
         };
       });
 
@@ -654,7 +675,13 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     // Our presence and profile in every room follow the shared state.
     const tick = <A>(stream: Stream.Stream<A>) => stream.pipe(Stream.drop(1), Stream.map(() => undefined));
     yield* Stream.mergeAll(
-      [tick(SubscriptionRef.changes(store.state)), tick(SubscriptionRef.changes(aiStatus.current)), tick(SubscriptionRef.changes(nameRef))],
+      [
+        tick(SubscriptionRef.changes(store.state)),
+        tick(SubscriptionRef.changes(aiStatus.current)),
+        tick(SubscriptionRef.changes(nameRef)),
+        // a job starting, saying how far it is, or ending: those waiting on it see it
+        tick(SubscriptionRef.changes(jobs.views).pipe(Stream.map((views) => JSON.stringify(views.filter((view) => view.state === "running").map((view) => [view.id, view.progress?.step, view.progress?.doing]))), Stream.changes)),
+      ],
       { concurrency: "unbounded" },
     ).pipe(
       Stream.tap(() => broadcastAll),

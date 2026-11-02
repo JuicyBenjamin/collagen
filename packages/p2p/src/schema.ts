@@ -31,6 +31,19 @@ export type AiStatus = typeof AiStatus.Type;
  *  many there are. `pnpm lint` checks it (scripts/check-protocol.mjs). */
 export const PROTOCOL_VERSION = "13";
 
+/** A job collagen runs for someone on a ticket of the room, as the sender
+ *  shares it while it runs: what kind, how far it says it is, since when.
+ *  Live in the profile only — never on the log. */
+export const RunningJob = Schema.Struct({
+  ticketId: Schema.String,
+  kind: Schema.String,
+  step: Schema.optional(Schema.Finite),
+  of: Schema.optional(Schema.Finite),
+  doing: Schema.optional(Schema.String),
+  since: Schema.Finite,
+});
+export type RunningJob = typeof RunningJob.Type;
+
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
   /** PROTOCOL_VERSION of the sender. */
@@ -43,6 +56,13 @@ export const SharedProfile = Schema.Struct({
   /** Connected to this room but working in another one: present for
    *  messages, not counted as online, nothing auto-runs for them. */
   away: Schema.Boolean,
+  /** the jobs running for the sender on this room's tickets — what those
+   *  waiting on them see. Optional: an older build sends none and reads past it. */
+  running: Schema.optional(Schema.Array(RunningJob)),
+  /** what waits on the sender by hand, on this room's tickets: an ask their
+   *  steering left to them (a question about their review) — so the asker
+   *  sees it waits on a person, not on nothing */
+  awaiting: Schema.optional(Schema.Array(Schema.Struct({ ticketId: Schema.String, what: Schema.String }))),
 });
 export type SharedProfile = typeof SharedProfile.Type;
 
@@ -702,6 +722,8 @@ export const QueuedJob = Schema.Struct({
   id: Schema.String,
   kind: JobKind,
   ticketId: Schema.String,
+  /** the room's ticket it works on, when `ticketId` names the ask it answers instead (a question, a review request) */
+  onTicket: Schema.optional(Schema.String),
   title: Schema.String,
   harness: Schema.String,
   model: Schema.optional(Schema.String),

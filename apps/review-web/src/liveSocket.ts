@@ -1,4 +1,4 @@
-import type { AuditPage, ChatView, InvestigationPage, PageSettings, ToolId, ToolState } from "./data";
+import type { AuditPage, TicketNext, ChatView, InvestigationPage, PageSettings, ToolId, ToolState } from "./data";
 import type { PageThemes } from "./themeData";
 import type { Marks } from "./marks";
 
@@ -68,7 +68,8 @@ export function overSocket(topic: "investigation", subject: string): AsyncIterab
 /** a room's audit: subject "<roomId>:<days>" */
 export function overSocket(topic: "audit", subject: string): AsyncIterable<AuditPage | null>;
 export function overSocket(topic: "chat", subject: string): AsyncIterable<ChatView>;
-export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat", subject: string): AsyncIterable<unknown> {
+export function overSocket(topic: "next", subject: string): AsyncIterable<TicketNext>;
+export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat" | "next", subject: string): AsyncIterable<unknown> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<unknown> {
       const id = `s${++nextId}`;

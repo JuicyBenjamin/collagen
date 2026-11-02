@@ -36,7 +36,25 @@ export interface JobView {
   readonly endedAt?: number;
   /** what it last said, or why it failed */
   readonly note?: string;
+  /** the room it works in */
+  readonly roomId?: string;
+  /** the room's ticket it works on, when `ticketId` names the ask it answers instead */
+  readonly onTicket?: string;
+  /** how far it says it is (job-progress): its step, of how many, what it is doing */
+  readonly progress?: JobProgress;
 }
+
+/** How far a running job says it is. */
+export interface JobProgress {
+  readonly step: number;
+  readonly of?: number;
+  readonly doing: string;
+  readonly at: number;
+}
+
+/** What every job is told: how to say how far it is, for the people waiting on it. */
+const progressLine = (jobId: string, server: string): string =>
+  `As you go, say how far you are with the ${server} job-progress tool, job "${jobId}": first {job, step: 0, of: how many steps you will take, doing: what you start with}, then after each step {job, step, of, doing: what you do next}. A few words each: the people waiting on this read it.`;
 
 /** What someone asks for: research on a ticket, with what they want to know. */
 export interface ResearchAsk {
@@ -63,6 +81,8 @@ export interface FilingAsk {
   readonly prompt: string;
   readonly cwd: string;
   readonly reads: ReadonlyArray<string>;
+  /** the room's ticket it works on, when the request is about one (a question about a review) */
+  readonly onTicket?: string;
   /** whose ask it answers: another person's (a colleague's review ask or
    *  question), unless the person asked it of their own work */
   readonly cause?: "mine" | "others";
@@ -70,12 +90,12 @@ export interface FilingAsk {
 
 /** The collagen tools a filing job may call: the why to read, the ticket to
  *  file, and the ask to answer when it cannot. */
-const FILING_TOOLS = ["review-context", "ask-review", "review-request"];
+const FILING_TOOLS = ["review-context", "ask-review", "review-request", "job-progress"];
 /** The collagen tools an answering job may call: the why to read, and the
  *  question to answer. */
-const ANSWERING_TOOLS = ["review-context", "review-question"];
+const ANSWERING_TOOLS = ["review-context", "review-question", "job-progress"];
 /** The collagen tools a guidance pass may call: a note whole, and its verdict. */
-const GUIDANCE_TOOLS = ["get-note", "guidance-pass"];
+const GUIDANCE_TOOLS = ["get-note", "guidance-pass", "job-progress"];
 
 /** The steering a job answers to: an investigation's its own kind, a review
  *  asked of the person the review level, any other research the run level. */
@@ -102,7 +122,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
     // what was asked for before a restart waits again, first in line
     const kept = (yield* store.get).queuedJobs ?? [];
     const views = yield* SubscriptionRef.make<ReadonlyArray<JobView>>(
-      kept.map((job) => ({ id: job.id, kind: job.kind, ticketId: job.ticketId, title: job.title, harness: job.harness, ...(job.model ? { model: job.model } : {}), state: "queued", queuedAt: job.queuedAt })),
+      kept.map((job) => ({ id: job.id, kind: job.kind, ticketId: job.ticketId, title: job.title, harness: job.harness, ...(job.model ? { model: job.model } : {}), state: "queued", queuedAt: job.queuedAt, ...(job.roomId ? { roomId: job.roomId } : {}), ...(job.onTicket ? { onTicket: job.onTicket } : {}) })),
     );
     const waiting = yield* Ref.make<ReadonlyArray<QueuedJob>>(kept);
     const name = mcpServerName(profile);
@@ -143,7 +163,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
           const url = yield* mcpInfo.awaitUrl;
           // an investigation's run is told its goals as they are now
           const prompt = next.kind === "investigation" && next.goals ? investigationPrompt({ id: next.ticketId, title: next.title }, next.goals, next.ask, yield* SubscriptionRef.get(nameRef), name) : next.prompt;
-          const job: Job = { prompt, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}), ...(next.kind === "filing" ? { tools: FILING_TOOLS } : next.kind === "answering" ? { tools: ANSWERING_TOOLS } : next.kind === "guidance" ? { tools: GUIDANCE_TOOLS } : {}), ...(next.reads ? { reads: next.reads } : {}) };
+          const job: Job = { prompt: `${prompt}\n\n${progressLine(next.id, name)}`, cwd: next.cwd, server: { name, url }, ...(next.model ? { model: next.model } : {}), ...(next.kind === "filing" ? { tools: FILING_TOOLS } : next.kind === "answering" ? { tools: ANSWERING_TOOLS } : next.kind === "guidance" ? { tools: GUIDANCE_TOOLS } : {}), ...(next.reads ? { reads: next.reads } : {}) };
           const done = yield* withRun(gate.go, harness.runJob(job)).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
           yield* letGo(next.id);
           // the job's own conversation is over: it never hears news of the ticket
@@ -158,7 +178,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
             const run: OwnRun = { at, harness: harness.id, why: view.kind, ...done.spent };
             yield* store.update((now) => ({ ...now, ownRuns: [...(now.ownRuns ?? []), run].slice(-1000) }));
           }
-          yield* update(next.id, (ended) => ({ ...ended, state: done.ok ? "done" : "failed", endedAt: at, ...(done.said ? { note: done.said.slice(0, 300) } : {}) }));
+          yield* update(next.id, ({ progress: _progress, ...ended }) => ({ ...ended, state: done.ok ? "done" : "failed", endedAt: at, ...(done.said ? { note: done.said.slice(0, 300) } : {}) }));
           yield* Effect.log(`job ${view.kind} on "${view.title}" ${done.ok ? "done" : "failed"}`);
           yield* pump;
         }),
@@ -213,7 +233,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
             roomId: asked.roomId,
           });
         }
-        const queued = jobs.map((job): JobView => ({ id: job.id, kind, ticketId: job.ticketId, title: job.goals && runs.length > 1 ? `${title} · ${job.goals.join(", ")}` : title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt }));
+        const queued = jobs.map((job): JobView => ({ id: job.id, kind, ticketId: job.ticketId, title: job.goals && runs.length > 1 ? `${title} · ${job.goals.join(", ")}` : title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt, roomId: asked.roomId }));
         yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), ...jobs] }));
         yield* SubscriptionRef.update(views, (all) => [...all, ...queued]);
         yield* Ref.update(waiting, (queue) => [...queue, ...jobs]);
@@ -240,9 +260,9 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         if (!harness) return `failed: collagen runs this job with ${chosen ? `"${chosen}", which it cannot run` : "the AI your user uses most, and none has worked with collagen yet"} — choose one for it on the settings page's AI tab, or with set-jobs`;
         const model = modelFor(state, kind, harness.defaultModels);
         const queuedAt = yield* Clock.currentTimeMillis;
-        const job: QueuedJob = { id: crypto.randomUUID(), kind, ticketId: asked.requestId, title: asked.title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: asked.prompt, cwd: asked.cwd, cause: kind === "guidance" ? "mine" : (asked.cause ?? "others"), roomId: asked.roomId, reads: asked.reads };
+        const job: QueuedJob = { id: crypto.randomUUID(), kind, ticketId: asked.requestId, title: asked.title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: asked.prompt, cwd: asked.cwd, cause: kind === "guidance" ? "mine" : (asked.cause ?? "others"), roomId: asked.roomId, reads: asked.reads, ...(asked.onTicket ? { onTicket: asked.onTicket } : {}) };
         yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
-        const view: JobView = { id: job.id, kind, ticketId: job.ticketId, title: job.title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
+        const view: JobView = { id: job.id, kind, ticketId: job.ticketId, title: job.title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt, roomId: job.roomId, ...(job.onTicket ? { onTicket: job.onTicket } : {}) };
         yield* SubscriptionRef.update(views, (all) => [...all, view]);
         yield* Ref.update(waiting, (queue) => [...queue, job]);
         yield* pump;
@@ -252,7 +272,21 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
 
     // the queue a restart left goes on, once collagen is up
     if (kept.length > 0) yield* Effect.forkIn(pump, scope);
-    return { views, research, file } as const;
+    /** A running job says how far it is (job-progress). Says what happened. */
+    const progress = (jobId: string, step: number, of: number | undefined, doing: string) =>
+      Effect.gen(function* () {
+        const view = (yield* SubscriptionRef.get(views)).find((candidate) => candidate.id === jobId);
+        if (!view) return `failed: no job ${jobId}`;
+        if (view.state !== "running") return `failed: that job is ${view.state}, not running`;
+        if (!Number.isInteger(step) || step < 0 || (of !== undefined && (!Number.isInteger(of) || of < 1 || step > of))) return "failed: step is a whole number from 0, and of (when given) the steps in all, at least the step";
+        const said = doing.trim().slice(0, 160);
+        if (!said) return "failed: say what you are doing, in a few words";
+        const at = yield* Clock.currentTimeMillis;
+        yield* update(jobId, (running) => ({ ...running, progress: { step, ...(of !== undefined ? { of } : running.progress?.of !== undefined ? { of: running.progress.of } : {}), doing: said, at } }));
+        return "noted: the people waiting on it see it.";
+      });
+
+    return { views, research, file, progress } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

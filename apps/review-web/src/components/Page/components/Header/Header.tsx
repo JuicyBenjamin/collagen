@@ -8,6 +8,7 @@ import { Viewer } from "./components/HostBar/components/Viewer";
 import { MergeFor } from "./components/MergeFor";
 import { Meta } from "./components/Meta";
 import { Purpose } from "./components/Purpose";
+import { Next } from "./components/Next";
 import { StackRow } from "./components/StackRow";
 import { Unplaced } from "./components/Unplaced";
 
@@ -32,6 +33,7 @@ export function Header(props: { head: ReviewPageHead }) {
         <HostBar head={props.head} />
       </div>
       <StackRow head={props.head} />
+      <Next />
       <DraftsBar />
       <Unplaced />
       <Purpose head={props.head} />
