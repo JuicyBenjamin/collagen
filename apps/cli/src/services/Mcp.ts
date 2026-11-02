@@ -943,7 +943,7 @@ export const AnswerQuestion = Tool.make("answer-question", {
 
 export const OpenBoard = Tool.make("open-board", {
   description:
-    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as b on the terminal's board tab — all of it, or one epic's when 'epic' names one (its title or id; the board offers the epics with open tickets); every kind, or only those in 'kinds' (a line of work keeps its cards of those kinds). When your user asks to see the board, where things stand, how an epic is going, or only the bugs (say). It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as o on the terminal's board tab — all of it, or one epic's when 'epic' names one (its title or id; the board offers the epics with open tickets); every kind, or only those in 'kinds' (a line of work keeps its cards of those kinds). When your user asks to see the board, where things stand, how an epic is going, or only the bugs (say). It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
   parameters: Schema.Struct({ epic: Schema.optional(Schema.String), kinds: Schema.optional(Schema.Array(Schema.Literals(["investigation", "proposal", "bug", "plan", "task", "review"]))) }),
   success: Schema.String,
 });

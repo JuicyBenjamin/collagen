@@ -4,7 +4,7 @@ import type { BoardKind } from "../../../lib/board";
 import { ReviewPages } from "../../../services/ReviewLive";
 import { runtimeAtom } from "../../../app/runtime";
 
-/** b on the board: the same board, the same view, in the person's browser.
+/** o on the board (or its tab): the same board, the same view, in the person's browser.
  *  What happened goes to the activity log, url included, for a machine with no browser. */
 export const openBoardPageAtom = runtimeAtom.fn(
   Effect.fnUntraced(function* ({ roomId, epic, kinds }: { roomId: string; epic: string | null; kinds: ReadonlyArray<BoardKind> }) {

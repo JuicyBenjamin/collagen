@@ -97,7 +97,10 @@ No files are written into your projects.
   do until a step of it is handed to its owner, in progress from then, and done once
   every step is answered or it is closed (dropped ones say so); an epic follows its
   tickets. `←→` move between columns, `↑↓` within one, `enter` opens the ticket (`esc`
-  comes back to the board), `b` opens the same board in your browser.
+  comes back to the board), `o` opens the same board in your browser (on the tab bar
+  too). The row above it is what it is read through: the epic, which `enter` goes round,
+  and each kind, which `enter` shows or hides; `↑` from the board reaches it. On the
+  overview, `b` on an epic opens that epic's board.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.

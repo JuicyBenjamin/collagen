@@ -17,7 +17,6 @@ import type { Row } from "../../../lib/ticketGroups";
 import { roomAtom } from "../../atoms";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../atoms";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
-import { openReviewPageAtom } from "../review/atoms";
 import { boardCursorAtom, boardEpicAtom, boardKindsAtom, openBoardPageAtom } from "./atoms";
 
 /** The board: the room's tickets in three columns — to do, in progress,
@@ -34,7 +33,6 @@ export function BoardPage() {
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const unread = unreadTickets(AsyncResult.getOrElse(useAtomValue(unseenAtom), () => [] as const));
   const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
-  const openReviewPage = useAtomSet(openReviewPageAtom);
   const openBoardPage = useAtomSet(openBoardPageAtom);
   const { navigate } = useRouter();
   const chosen = useAtomValue(boardEpicAtom);
@@ -66,7 +64,6 @@ export function BoardPage() {
       unread={unread}
       nameFor={nameFor}
       onOpen={(id) => navigate(to.ticket(id, "room/board"))}
-      onReview={(id) => openReviewPage({ ticketId: id })}
       onBrowser={roomId ? () => openBoardPage({ roomId, epic, kinds }) : undefined}
     />
   );
@@ -144,7 +141,6 @@ export function Board({
   unread,
   nameFor,
   onOpen,
-  onReview,
   onBrowser,
 }: {
   lanes: ReadonlyArray<Lane>;
@@ -157,9 +153,7 @@ export function Board({
   nameFor: (key: string) => string;
   /** enter: the ticket's page */
   onOpen: (ticketId: string) => void;
-  /** o on a review: its page in the browser */
-  onReview: (ticketId: string) => void;
-  /** b: this board in the browser */
+  /** o: this board in the browser, as it is read here */
   onBrowser: (() => void) | undefined;
 }) {
   const cursor = useAtomValue(boardCursorAtom);
@@ -181,7 +175,7 @@ export function Board({
     {filters}
     <Focusable
       id="board"
-      hint={`←→ column · ↑↓ select · enter open${onNextView ? " · e next epic" : ""}${current?.ticket.kind === "review" ? " · o review in browser" : ""}${onBrowser ? " · b board in browser" : ""}`}
+      hint={`←→ column · ↑↓ select · enter open${onNextView ? " · e next epic" : ""}${onBrowser ? " · o in browser" : ""}`}
       flexDirection="row"
       gap={2}
       flexGrow={1}
@@ -197,8 +191,7 @@ export function Board({
           if (current) onOpen(current.ticket.id);
           return true;
         }
-        if (key.name === "o" && current?.ticket.kind === "review") return onReview(current.ticket.id), true;
-        if (key.name === "b" && onBrowser) return onBrowser(), true;
+        if (key.name === "o" && onBrowser) return onBrowser(), true;
         if (key.name === "e" && onNextView) return onNextView(), true;
         // ↑ from a column's top reaches the tab bar; ← and → at the ends, what sits beside
         return false;
