@@ -32,10 +32,12 @@ export const testsJudged = (files: ReadonlyArray<TestFile>) => {
 };
 
 /** What the page shows under its header: the code, how the change works, its
- *  tests or its stories — the code, unless the url says otherwise. */
-type Tab = "code" | "machine" | "tests" | "stories";
-const hashes: Record<Tab, string> = { code: "", machine: "#how-it-works", tests: "#tests", stories: "#stories" };
-const [tabNow, setTab] = createSignal<Tab>(location.hash.startsWith("#tests") ? "tests" : location.hash.startsWith("#stories") ? "stories" : location.hash.startsWith("#how-it-works") ? "machine" : "code");
+ *  tests, its stories or its lockfiles — the code, unless the url says otherwise. */
+type Tab = "code" | "machine" | "tests" | "stories" | "lockfiles" | "generated" | "translations" | "migrations";
+const hashes: Record<Tab, string> = { code: "", machine: "#how-it-works", tests: "#tests", stories: "#stories", lockfiles: "#lockfiles", generated: "#generated", translations: "#translations", migrations: "#migrations" };
+const [tabNow, setTab] = createSignal<Tab>(
+  location.hash.startsWith("#tests") ? "tests" : location.hash.startsWith("#stories") ? "stories" : location.hash.startsWith("#lockfiles") ? "lockfiles" : location.hash.startsWith("#generated") ? "generated" : location.hash.startsWith("#translations") ? "translations" : location.hash.startsWith("#migrations") ? "migrations" : location.hash.startsWith("#how-it-works") ? "machine" : "code",
+);
 export const tab = tabNow;
 export const showTab = (shown: Tab) => {
   setTab(shown);

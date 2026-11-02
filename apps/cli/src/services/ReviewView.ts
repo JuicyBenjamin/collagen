@@ -13,6 +13,9 @@ import { yourFinish } from "../lib/review";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isStory, isTest } from "../lib/tests";
+import { isLockfile } from "../lib/lockfiles";
+import { isTranslation, languageOf } from "../lib/translations";
+import { isMigration } from "../lib/migrations";
 import { roomEdges, stackOf, type Edge } from "../lib/stack";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type RepoHost } from "./RepoHost";
@@ -317,15 +320,28 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const hunks = diff === null ? [] : parseDiff(diff);
     let imports: Imports = new Map();
     const tests = new Map<string, { after: ReadonlyArray<string> | null; before: ReadonlyArray<string> | null }>();
+    const unchangedTranslations: Array<string> = [];
     if (project && commit && hunks.length > 0) {
       const files = [...new Set(hunks.map((hunk) => hunk.file))];
       const texts = new Map<string, string | null>();
       for (const file of files) texts.set(file, yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
       imports = importsAmong(files, (file) => texts.get(file) ?? null);
       const lines = (text: string | null | undefined) => (text == null || text.includes("\0") ? null : text.replace(/\n$/, "").split("\n"));
-      for (const file of files.filter((file) => isTest(file) || isStory(file))) {
-        const before = forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
-        tests.set(file, { after: lines(texts.get(file)), before: forked ? (lines(before) ?? []) : null });
+      for (const file of files) {
+        // both ends of a test, story or lockfile, to read what changed in it; the rest only as it is now (what made it)
+        const both = isTest(file) || isStory(file) || isLockfile(file) || isTranslation(file) || isMigration(file);
+        const before = both && forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
+        tests.set(file, { after: lines(texts.get(file)), before: both && forked ? (lines(before) ?? []) : null });
+      }
+      // the languages of a translation set the change leaves as they are, read as they are: what did not keep up shows
+      const sets = new Set(files.filter(isTranslation).map((file) => languageOf(file).set));
+      if (sets.size > 0) {
+        const tree = (yield* run("git", ["ls-tree", "-r", "--name-only", commit], project.path, 5_000)) ?? "";
+        for (const file of tree.split("\n").filter((file) => isTranslation(file) && !files.includes(file) && sets.has(languageOf(file).set))) {
+          const text = lines(yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
+          tests.set(file, { after: text, before: text });
+          unchangedTranslations.push(file);
+        }
       }
     }
     const me = (yield* IdentityService).identity.pubkey;
@@ -336,7 +352,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       review: { ...head.review, ...(shows ? { shows } : {}) },
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
-      grouped: diff === null ? null : groupByUnit(review, hunks, imports, (file) => tests.get(file) ?? { after: null, before: null }),
+      grouped: diff === null ? null : groupByUnit(review, hunks, imports, (file) => tests.get(file) ?? { after: null, before: null }, unchangedTranslations),
     } satisfies ReviewPageData;
   }
   return null;

@@ -153,6 +153,52 @@ export interface TestFile {
   readonly forks: ReadonlyArray<Fork>;
 }
 
+/** A lockfile of the diff, read as the packages its change moves; its
+ *  lines one step away. `packages` is null for a format collagen does not
+ *  read, whose lines are all there is. */
+export interface LockFile {
+  readonly file: string;
+  readonly packages: ReadonlyArray<{ readonly name: string; readonly before: ReadonlyArray<string>; readonly after: ReadonlyArray<string> }> | null;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
+/** A file a tool wrote or a test recorded: what made it, how much moved;
+ *  its lines one step away. */
+export interface GeneratedFile {
+  readonly file: string;
+  /** what made it: "protoc", "a test snapshot", "a code generator" */
+  readonly by: string;
+  readonly added: number;
+  readonly removed: number;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
+/** One set of translation files — the same file in each language — read as
+ *  the keys its change moves, each language side by side; its lines one
+ *  step away. `keys` is null when a file of it cannot be read. */
+export interface TranslationSet {
+  /** its path, the language left out: "src/locales/*.json" */
+  readonly set: string;
+  /** every language it has, the changed ones and the rest */
+  readonly languages: ReadonlyArray<string>;
+  readonly keys: ReadonlyArray<{ readonly key: string; readonly texts: Readonly<Record<string, { readonly before?: string; readonly after?: string }>> }> | null;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
+/** A migration of the diff, read as what it does to the schema; its lines
+ *  one step away. `changes` is null for a kind collagen does not read. */
+export interface MigrationFile {
+  readonly file: string;
+  readonly changes: ReadonlyArray<{ readonly action: string; readonly table: string; readonly target?: string; readonly detail?: string; readonly losesData: boolean }> | null;
+  /** it existed before the change and was edited: it may have run somewhere already */
+  readonly edited: boolean;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
 export interface Grouped {
   /** in reading order: what something is built from before what uses it —
    *  test files are in none: they are `tests` */
@@ -162,6 +208,14 @@ export interface Grouped {
   /** the diff's Storybook files, apart from the code and the tests: each
    *  story a case, by its name (a story's picture is not in a review) */
   readonly stories?: ReadonlyArray<TestFile>;
+  /** the diff's lockfiles, apart from the code: each read as the packages it moves */
+  readonly lockfiles?: ReadonlyArray<LockFile>;
+  /** the diff's generated files and snapshots, apart from the code: each one line, what made it */
+  readonly generated?: ReadonlyArray<GeneratedFile>;
+  /** the diff's translation files, apart from the code: each set as the keys it moves, every language side by side */
+  readonly translations?: ReadonlyArray<TranslationSet>;
+  /** the diff's migrations, apart from the code: each as what it does to the schema */
+  readonly migrations?: ReadonlyArray<MigrationFile>;
   readonly hunks: ReadonlyArray<Hunk>;
   /** per decision id, its pointers that matched no change: the code there
    *  did not move, or the why is older than the branch */

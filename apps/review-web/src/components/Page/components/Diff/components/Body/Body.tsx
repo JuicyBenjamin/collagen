@@ -15,6 +15,10 @@ import { BareDecision } from "./components/BareDecision";
 import { Forks } from "./components/Forks";
 import { Machine } from "./components/Machine";
 import { Outside } from "./components/Outside";
+import { Generated } from "./components/Generated";
+import { Migrations } from "./components/Migrations";
+import { Translations } from "./components/Translations";
+import { Lockfiles } from "./components/Lockfiles";
 import { Tabs } from "./components/Tabs";
 import { lastTabs } from "../../lastTabs";
 import { Tests } from "./components/Tests";
@@ -42,19 +46,39 @@ export function Body(props: { data: ReviewPageData }) {
   });
   const tests = () => props.data.grouped?.tests ?? [];
   const stories = () => props.data.grouped?.stories ?? [];
-  // the files the Code tab holds: every changed file but the tests and stories, as "files viewed" counts them
+  const lockfiles = () => props.data.grouped?.lockfiles ?? [];
+  const generated = () => props.data.grouped?.generated ?? [];
+  const translations = () => props.data.grouped?.translations ?? [];
+  const migrations = () => props.data.grouped?.migrations ?? [];
+  // the files read apart from the code: the tests, stories, lockfiles, generated files and translations
+  const apartFiles = () => new Set([...[...tests(), ...stories(), ...lockfiles(), ...generated(), ...migrations()].map((file) => file.file), ...(props.data.grouped?.hunks ?? []).filter((hunk) => translations().some((set) => set.hunks.includes(hunk.id))).map((hunk) => hunk.file)]);
+  // the files the Code tab holds: every changed file but those read apart, as "files viewed" counts them
   const codeFiles = () => {
-    const testFiles = new Set([...tests(), ...stories()].map((file) => file.file));
+    const testFiles = apartFiles();
     return new Set((props.data.grouped?.hunks ?? []).map((hunk) => hunk.file).filter((file) => !testFiles.has(file))).size;
   };
   // the tab asked for, if this review has what it shows
   const shown = () =>
-    tab() === "tests" && tests().length > 0 ? "tests" : tab() === "stories" && stories().length > 0 ? "stories" : tab() === "machine" && props.data.review.machine ? "machine" : "code";
-  // the files a mark can be for, as this diff has them — tests and stories are judged, not viewed
+    tab() === "tests" && tests().length > 0
+      ? "tests"
+      : tab() === "stories" && stories().length > 0
+        ? "stories"
+        : tab() === "lockfiles" && lockfiles().length > 0
+          ? "lockfiles"
+          : tab() === "generated" && generated().length > 0
+            ? "generated"
+            : tab() === "translations" && translations().length > 0
+              ? "translations"
+              : tab() === "migrations" && migrations().length > 0
+                ? "migrations"
+            : tab() === "machine" && props.data.review.machine
+            ? "machine"
+            : "code";
+  // the files a mark can be for, as this diff has them — tests, stories and lockfiles are read apart, not viewed
   createEffect(
     () => props.data.grouped?.hunks ?? [],
     (all) => {
-      const testFiles = new Set([...tests(), ...stories()].map((file) => file.file));
+      const testFiles = apartFiles();
       viewed.setFiles(all.filter((hunk) => !testFiles.has(hunk.file)));
       diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
     },
@@ -93,12 +117,24 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
-      <Tabs tests={tests()} stories={stories()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
+      <Tabs tests={tests()} stories={stories()} lockfiles={lockfiles()} generated={generated()} translations={translations()} migrations={migrations()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
       <Show when={shown() === "tests"}>
         <Tests files={tests()} kind="test" hunks={hunks()} decisions={decisions()} />
       </Show>
       <Show when={shown() === "stories"}>
         <Tests files={stories()} kind="story" hunks={hunks()} decisions={decisions()} />
+      </Show>
+      <Show when={shown() === "lockfiles"}>
+        <Lockfiles files={lockfiles()} hunks={hunks()} />
+      </Show>
+      <Show when={shown() === "generated"}>
+        <Generated files={generated()} hunks={hunks()} />
+      </Show>
+      <Show when={shown() === "translations"}>
+        <Translations sets={translations()} hunks={hunks()} />
+      </Show>
+      <Show when={shown() === "migrations"}>
+        <Migrations files={migrations()} hunks={hunks()} />
       </Show>
       <Show when={shown() === "machine" && props.data.review.machine}>
         {(machine) => <Machine machine={machine()} />}

@@ -2,6 +2,10 @@ import type { Decision, Fork, Grouped, Hunk, Unit } from "@collagen/review-web/d
 import { claimed, parsePointer, sameFile } from "./reviewView";
 import { storiesIn } from "./stories";
 import { isStory, isTest, testsOfFile } from "./tests";
+import { isLockfile, packageChanges } from "./lockfiles";
+import { generatedBy } from "./generated";
+import { isTranslation, keyChanges, languageOf } from "./translations";
+import { isMigration, schemaChanges } from "./migrations";
 
 // A review read by units: code that together achieves one thing — a
 // component with its sub-components and its implementation — each hunk of
@@ -131,16 +135,23 @@ export function groupByUnit(
   all: ReadonlyArray<Hunk>,
   imports: Imports,
   texts: TestTexts = () => ({ after: null, before: null }),
+  /** translation files the change leaves as they are, in the sets it touches: their languages are shown beside the changed ones */
+  unchangedTranslations: ReadonlyArray<string> = [],
 ): Grouped {
   // each test file's tests, each story file's stories; a file with none (a
   // helper, a fixture) is code, so a tab lists only what it counts
+  // what a tool wrote or a test recorded, read apart before anything else: a snapshot named as a test is still a snapshot
+  const madeBy = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => !isLockfile(file)).flatMap((file) => {
+    const by = generatedBy(file, texts(file).after);
+    return by === null ? [] : [[file, by] as const];
+  }));
   const read = (file: string) => {
     const text = texts(file);
     return testsOfFile(file, all, text.after, text.before, isStory(file) ? storiesIn : undefined);
   };
-  const apart = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => isTest(file) || isStory(file)).map((file) => [file, read(file)] as const).filter(([, cases]) => cases.tests.length > 0));
-  // the code, read in units; pointers are still read against every hunk
-  const hunks = all.filter((hunk) => !apart.has(hunk.file));
+  const apart = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => !madeBy.has(file) && (isTest(file) || isStory(file))).map((file) => [file, read(file)] as const).filter(([, cases]) => cases.tests.length > 0));
+  // the code, read in units — not the tests, the stories or the lockfiles, read apart; pointers are still read against every hunk
+  const hunks = all.filter((hunk) => !apart.has(hunk.file) && !isLockfile(hunk.file) && !madeBy.has(hunk.file) && !isTranslation(hunk.file) && !isMigration(hunk.file));
   // each hunk's home among a list of claimants (units, or decisions): the
   // one whose pointer claims it most precisely, the first on a tie
   const homes = (claimants: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>): Map<string, number> => {
@@ -250,12 +261,44 @@ export function groupByUnit(
   });
   const tests = casesOf(isTest);
   const stories = casesOf(isStory);
+  // each generated file: what made it, and how much moved
+  const generated = [...madeBy].map(([file, by]) => {
+    const mine = all.filter((hunk) => hunk.file === file);
+    const count = (kind: "+" | "-") => mine.reduce((total, hunk) => total + hunk.lines.filter((line) => line.kind === kind).length, 0);
+    return { file, by, added: count("+"), removed: count("-"), hunks: mine.map((hunk) => hunk.id) };
+  });
+  // each set of translation files, as the keys it moves in every language it has
+  const changedTranslations = [...new Set(all.filter((hunk) => isTranslation(hunk.file) && !madeBy.has(hunk.file)).map((hunk) => hunk.file))];
+  const translations = [...new Set(changedTranslations.map((file) => languageOf(file).set))].map((set) => {
+    const files = [...changedTranslations, ...unchangedTranslations].filter((file) => languageOf(file).set === set);
+    const byLanguage = files.map((file) => ({ file, lang: languageOf(file).lang, ...texts(file) }));
+    return {
+      set,
+      languages: byLanguage.map((one) => one.lang).sort(),
+      keys: byLanguage.every((one) => one.after === null && one.before === null) ? null : keyChanges(byLanguage),
+      hunks: all.filter((hunk) => files.includes(hunk.file)).map((hunk) => hunk.id),
+    };
+  });
+  // each migration, as what it does to the schema; one edited after it was written may have run already
+  const migrations = [...new Set(all.filter((hunk) => isMigration(hunk.file) && !madeBy.has(hunk.file)).map((hunk) => hunk.file))].map((file) => {
+    const text = texts(file);
+    return { file, changes: text.after === null ? null : schemaChanges(file, text.after), edited: (text.before?.length ?? 0) > 0, hunks: all.filter((hunk) => hunk.file === file).map((hunk) => hunk.id) };
+  });
+  // each lockfile, as the packages it moves (its texts at both ends, as the tests are read)
+  const lockfiles = [...new Set(all.filter((hunk) => isLockfile(hunk.file)).map((hunk) => hunk.file))].map((file) => {
+    const text = texts(file);
+    return { file, packages: text.after === null && text.before === null ? null : packageChanges(file, text.after, text.before), hunks: all.filter((hunk) => hunk.file === file).map((hunk) => hunk.id) };
+  });
   const shown = new Set([...units.flatMap((unit) => unit.decisions), ...[...tests, ...stories].flatMap((file) => file.decisions)]);
   const forksShown = new Set([...units, ...tests, ...stories].flatMap((part) => part.forks.map((fork) => fork.id)));
   return {
     units,
     tests,
     stories,
+    ...(lockfiles.length > 0 ? { lockfiles } : {}),
+    ...(madeBy.size > 0 ? { generated } : {}),
+    ...(translations.length > 0 ? { translations } : {}),
+    ...(migrations.length > 0 ? { migrations } : {}),
     hunks: all,
     unmatched,
     looseForks: review.forks.filter((fork) => !forksShown.has(fork.id)),
@@ -267,7 +310,7 @@ export function groupByUnit(
  *  units leave to the page's own grouping. Tests need no unit. */
 export const uncovered = (units: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>, hunks: ReadonlyArray<Hunk>): ReadonlyArray<string> => {
   const covered = new Set(units.flatMap((unit) => unit.where.flatMap((pointer) => claimed(parsePointer(pointer), hunks).map((hunk) => hunk.id))));
-  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id) && !isTest(hunk.file) && !isStory(hunk.file)).map((hunk) => hunk.file))];
+  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id) && !isTest(hunk.file) && !isStory(hunk.file) && !isLockfile(hunk.file) && !isTranslation(hunk.file) && !isMigration(hunk.file) && generatedBy(hunk.file, null) === null).map((hunk) => hunk.file))];
 };
 
 /** A file named in a pointer, as the diff spells it — for the import reader. */
