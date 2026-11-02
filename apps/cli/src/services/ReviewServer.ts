@@ -216,7 +216,7 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
       ticketIdOk(ticketId) && typeof turnId === "string" && /^[\w-]{1,80}$/.test(turnId) && (mode === "assume" || mode === "critique") ? on(chat.instead(ticketId, turnId, mode)) : Effect.succeed({ error: "bad request" }),
     newChat: (ticketId) => (ticketIdOk(ticketId) ? chat.clear(ticketId) : Effect.void),
     reopenChat: (ticketId, chatId) => (ticketIdOk(ticketId) ? chat.reopen(ticketId, chatId).pipe(Effect.asVoid) : Effect.void),
-    board: (roomId) => (shortIdOk(roomId) ? on(boardData(roomId)) : Effect.succeed(null)),
+    board: (roomId, epic = null, allDone = false) => (shortIdOk(roomId) && (epic === null || ticketIdOk(epic)) && typeof allDone === "boolean" ? on(boardData(roomId, epic, allDone)) : Effect.succeed(null)),
     boardChanges: (roomId) => (shortIdOk(roomId) ? boardChanges(roomId).pipe(Stream.provideContext(context)) : Stream.empty),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];

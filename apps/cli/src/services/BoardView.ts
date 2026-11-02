@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { Effect, Stream, SubscriptionRef } from "effect";
+import { Clock, Effect, Stream, SubscriptionRef } from "effect";
 import { BOARD_LABEL, closedAs, shortRoomId } from "@collagen/p2p";
 import type { BoardData } from "@collagen/review-web/data";
-import { boardOf, unreadLine, unreadTickets } from "../lib/board";
+import { boardEpics, boardOf, unreadLine, unreadTickets } from "../lib/board";
+import type { Row } from "../lib/ticketGroups";
 import { kindGlyph } from "../lib/ticketTabs";
 import { rowTitle } from "../lib/ticketSummary";
 import { IdentityService } from "./Identity";
@@ -10,7 +11,7 @@ import { Rooms } from "./Rooms";
 
 // The board in the browser: a room's tickets in to do, in progress and
 // done — the terminal's board (lib/board, on p2p's boardColumn), drawn by
-// the page at /board/<short room id>. Read-only, on loopback, like the
+// the page at /room/<short room id>/board. Read-only, on loopback, like the
 // review page. The url names the room by its short id: the full one is the
 // invite, and a url is kept in the browser's history.
 
@@ -23,8 +24,10 @@ const roomNamed = (shortId: string) =>
     return (yield* SubscriptionRef.get((yield* Rooms).handles)).find((handle) => shortRoomId(handle.id) === shortId);
   });
 
-/** The room's board for this instance's person, all of it read at one moment. */
-export const boardData = Effect.fn("BoardView.data")(function* (shortId: string) {
+/** The room's board for this instance's person, all of it read at one
+ *  moment: everything, or one epic's (by its id or the start of it); the
+ *  done column what finished lately, or all of it. */
+export const boardData = Effect.fn("BoardView.data")(function* (shortId: string, epic: string | null = null, allDone = false) {
   const handle = yield* roomNamed(shortId);
   if (!handle) return null;
   const { room } = handle;
@@ -40,27 +43,32 @@ export const boardData = Effect.fn("BoardView.data")(function* (shortId: string)
   const unread = unreadTickets(unseen);
   const nameFor = (key: string): string =>
     key === me ? "you" : (roster.find((person) => person.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
+  const card = ({ ticket, summary }: Row) => ({
+    id: ticket.id,
+    kind: ticket.kind,
+    glyph: kindGlyph(ticket.kind),
+    title: rowTitle(ticket),
+    goal: ticket.goal,
+    author: nameFor(ticket.createdBy),
+    mine: summary.mine,
+    yours: summary.state === "needs-you",
+    dropped: closedAs(ticket) === "dropped",
+  });
+  const epics = boardEpics([...tickets.values()], me);
+  const chosen = epic ? (epics.find((entry) => entry.epic.id === epic || entry.epic.id.startsWith(epic))?.epic.id ?? null) : null;
   return {
     room: meta.name,
-    lanes: boardOf([...tickets.values()], trace, me).map((lane) => ({
+    epics: epics.map((entry) => ({ id: entry.epic.id, title: rowTitle(entry.epic), open: entry.open })),
+    epic: chosen,
+    lanes: boardOf([...tickets.values()], trace, me, { epic: chosen, allDone, now: yield* Clock.currentTimeMillis }).map((lane) => ({
       column: lane.column,
       label: BOARD_LABEL[lane.column],
-      cards: lane.rows.map(({ ticket, summary }) => ({
-        id: ticket.id,
-        kind: ticket.kind,
-        glyph: kindGlyph(ticket.kind),
-        title: rowTitle(ticket),
-        goal: ticket.goal,
-        author: nameFor(ticket.createdBy),
-        mine: summary.mine,
-        yours: summary.state === "needs-you",
-        dropped: closedAs(ticket) === "dropped",
-      })),
+      stacks: lane.stacks.map((stack) => stack.map(card)),
+      older: lane.older,
     })),
     unread: unread > 0 ? unreadLine(unread) : null,
   } satisfies BoardData;
 });
-
 /** The board as a token for an open page — a hash of what it shows —
  *  current first, then each time that moves: a ticket, a message (the
  *  order within a column follows activity), a name, a ticket unread. */

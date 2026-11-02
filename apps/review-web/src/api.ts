@@ -17,9 +17,9 @@ export const reviewHead = GET(async (ticketId: string): Promise<ReviewPageHead |
 });
 
 /** A room's board, by its short id: its tickets in to do, in progress and done. */
-export const boardData = GET(async (roomShort: string): Promise<BoardData | null> => {
+export const boardData = GET(async (roomShort: string, epic: string | null, allDone: boolean): Promise<BoardData | null> => {
   "use server";
-  return run((backend) => backend.board(roomShort));
+  return run((backend) => backend.board(roomShort, epic, allDone));
 });
 
 export const reviewData = GET(async (ticketId: string): Promise<ReviewPageData | null> => {

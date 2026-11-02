@@ -6,10 +6,14 @@ import { runtimeAtom } from "../../../app/runtime";
 /** b on the board: the same board in the person's browser. What happened
  *  goes to the activity log, url included, for a machine with no browser. */
 export const openBoardPageAtom = runtimeAtom.fn(
-  Effect.fnUntraced(function* ({ roomId }: { roomId: string }) {
-    yield* Effect.log(yield* (yield* ReviewPages).showBoard(roomId));
+  Effect.fnUntraced(function* ({ roomId, epic }: { roomId: string; epic: string | null }) {
+    yield* Effect.log(yield* (yield* ReviewPages).showBoard(roomId, epic));
   }),
 );
+
+/** The epic the board is read through — null: everything — kept while the
+ *  reader opens a ticket and comes back. */
+export const boardEpicAtom = Atom.keepAlive(Atom.make<string | null>(null));
 
 /** Where the board's cursor is — the ticket it is on, and its place — kept
  *  while the reader opens a ticket and comes back. */

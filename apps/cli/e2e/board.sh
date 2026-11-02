@@ -32,9 +32,9 @@ id_of() { grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 # the column a ticket is in on someone's board, or "none"
 column_of() { sfn boardData "[\"$SHORT\"]" "${2:-$ORIGIN}" | python3 -c 'import json,sys
 b = json.load(sys.stdin) or {"lanes": []}
-print(next((l["column"] for l in b["lanes"] for c in l["cards"] if c["id"] == sys.argv[1]), "none"))' "$1"; }
+print(next((l["column"] for l in b["lanes"] for stack in l["stacks"] for c in stack if c["id"] == sys.argv[1]), "none"))' "$1"; }
 dropped_of() { sfn boardData "[\"$SHORT\"]" | python3 -c 'import json,sys
-print(next((c["dropped"] for l in json.load(sys.stdin)["lanes"] for c in l["cards"] if c["id"] == sys.argv[1]), None))' "$1"; }
+print(next((c["dropped"] for l in json.load(sys.stdin)["lanes"] for stack in l["stacks"] for c in stack if c["id"] == sys.argv[1]), None))' "$1"; }
 
 echo "## the page: served on loopback for a room alice is in"
 expect "/room/<short id>/board is the page" "$(curl -s "$ORIGIN/room/$SHORT/board")" "<div id=\"root\">"

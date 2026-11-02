@@ -15,6 +15,7 @@ import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversati
 import { invitedRoomEntry, newRoomEntry, readProfileFile, upsertRoom, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
+import { boardEpics } from "../lib/board";
 import { agoText, troubleOf } from "../lib/roomHealth";
 import { LogBuffer } from "./Logging";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
@@ -942,8 +943,8 @@ export const AnswerQuestion = Tool.make("answer-question", {
 
 export const OpenBoard = Tool.make("open-board", {
   description:
-    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as o on the terminal's board tab. When your user asks to see the board, or where things stand. It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
-  parameters: Tool.EmptyParams,
+    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as b on the terminal's board tab — all of it, or one epic's when 'epic' names one (its title or id; the board offers the epics with open tickets). When your user asks to see the board, where things stand, or how an epic is going. It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Schema.Struct({ epic: Schema.optional(Schema.String) }),
   success: Schema.String,
 });
 
@@ -3071,9 +3072,15 @@ const makeHandlers = Effect.gen(function* () {
         const done = yield* answerQuestion(input.ticketId, input.questionId, input.answer).pipe(Effect.provideContext(answerContext));
         return "error" in done ? `failed: ${done.error}` : input.answer === "yes" ? "answered yes: where it leads, it is a goal now, and started as their steering allows; open-investigation shows it" : "answered no";
       }),
-      "open-board": Effect.fn("Mcp.openBoard")(function* () {
-        const { id: roomId } = yield* focusedRoom;
-        return yield* pages.showBoard(roomId);
+      "open-board": Effect.fn("Mcp.openBoard")(function* (input: { epic?: string }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const query = input.epic?.trim();
+        if (!query) return yield* pages.showBoard(roomId);
+        const tickets = [...(yield* SubscriptionRef.get(room.tickets)).values()];
+        const epics = boardEpics(tickets, identity.pubkey);
+        const hit = epics.find((entry) => entry.epic.id.startsWith(query) || sameName(entry.epic.title ?? entry.epic.goal, query));
+        if (!hit) return `failed: no epic "${query}" with open tickets — the board offers ${epics.map((entry) => `"${entry.epic.title ?? entry.epic.goal}"`).join(", ") || "none"}`;
+        return yield* pages.showBoard(roomId, hit.epic.id);
       }),
       "open-audit": Effect.fn("Mcp.openAudit")(function* () {
         const { id: roomId } = yield* focusedRoom;

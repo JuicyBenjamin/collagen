@@ -1044,7 +1044,18 @@ export interface BoardCard {
  *  the terminal's board has them; null for a room this instance is not in. */
 export interface BoardData {
   readonly room: string;
-  readonly lanes: ReadonlyArray<{ readonly column: "todo" | "doing" | "done"; readonly label: string; readonly cards: ReadonlyArray<BoardCard> }>;
+  /** the epics it can be read through, those with open tickets, the most open first */
+  readonly epics: ReadonlyArray<{ readonly id: string; readonly title: string; readonly open: number }>;
+  /** the epic it is read through now; null: everything */
+  readonly epic: string | null;
+  readonly lanes: ReadonlyArray<{
+    readonly column: "todo" | "doing" | "done";
+    readonly label: string;
+    /** each a line of work — what grew from what — the latest first */
+    readonly stacks: ReadonlyArray<ReadonlyArray<BoardCard>>;
+    /** done tickets left off, finished before the recent ones */
+    readonly older: number;
+  }>;
   /** tickets a newer collagen wrote that this build cannot place, said in a line */
   readonly unread: string | null;
 }

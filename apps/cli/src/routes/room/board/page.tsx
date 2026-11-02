@@ -10,7 +10,7 @@ import { to, useRouter } from "../../../app/router";
 import { clamp } from "../../../lib/math";
 import { cells, clip } from "../../../lib/columns";
 import { GLYPH } from "../../../lib/glyphs";
-import { boardOf, unreadLine, unreadTickets, type Lane } from "../../../lib/board";
+import { boardEpics, boardOf, unreadLine, unreadTickets, type Lane } from "../../../lib/board";
 import { kindGlyph } from "../../../lib/ticketTabs";
 import { rowTitle } from "../../../lib/ticketSummary";
 import type { Row } from "../../../lib/ticketGroups";
@@ -18,7 +18,7 @@ import { roomAtom } from "../../atoms";
 import { identityAtom, membersAtom, rosterAtom, traceAtom, unseenAtom } from "../atoms";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { openReviewPageAtom } from "../review/atoms";
-import { boardCursorAtom, openBoardPageAtom } from "./atoms";
+import { boardCursorAtom, boardEpicAtom, openBoardPageAtom } from "./atoms";
 
 /** The board: the room's tickets in three columns — to do, in progress,
  *  done — by p2p's boardColumn, the rule the app's board reads too. Only
@@ -37,19 +37,29 @@ export function BoardPage() {
   const openReviewPage = useAtomSet(openReviewPageAtom);
   const openBoardPage = useAtomSet(openBoardPageAtom);
   const { navigate } = useRouter();
+  const chosen = useAtomValue(boardEpicAtom);
+  const setChosen = useAtomSet(boardEpicAtom);
 
   const me = identity?.pubkey ?? "";
+  // everything, or one epic with open tickets: e goes round them
+  const epics = boardEpics(tickets, me);
+  const epic = epics.some((entry) => entry.epic.id === chosen) ? chosen : null;
+  const views = [null, ...epics.map((entry) => entry.epic.id)];
+  const nextView = () => setChosen(views[(views.indexOf(epic) + 1) % views.length] ?? null);
+  const viewName = epic === null ? "everything" : rowTitle(epics.find((entry) => entry.epic.id === epic)!.epic);
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
 
   return (
     <Board
-      lanes={boardOf(tickets, trace, me)}
+      lanes={boardOf(tickets, trace, me, { epic, now: Date.now() })}
+      view={epics.length > 0 ? `${viewName} · ${views.indexOf(epic) + 1} of ${views.length}` : null}
+      onNextView={epics.length > 0 ? nextView : undefined}
       unread={unread}
       nameFor={nameFor}
       onOpen={(id) => navigate(to.ticket(id, "room/board"))}
       onReview={(id) => openReviewPage({ ticketId: id })}
-      onBrowser={roomId ? () => openBoardPage({ roomId }) : undefined}
+      onBrowser={roomId ? () => openBoardPage({ roomId, epic }) : undefined}
     />
   );
 }
@@ -57,6 +67,8 @@ export function BoardPage() {
 /** The three columns and the cursor across them; what a key opens is the page's to say. */
 export function Board({
   lanes,
+  view,
+  onNextView,
   unread,
   nameFor,
   onOpen,
@@ -64,6 +76,10 @@ export function Board({
   onBrowser,
 }: {
   lanes: ReadonlyArray<Lane>;
+  /** what it is read through, and where that is among the views; null when there are no epics to choose */
+  view: string | null;
+  /** e: the next view — the next epic, or everything again */
+  onNextView: (() => void) | undefined;
   /** tickets a newer collagen wrote, which the board cannot place */
   unread: number;
   nameFor: (key: string) => string;
@@ -90,9 +106,15 @@ export function Board({
 
   return (
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} minHeight={0}>
+    {view !== null ? (
+      <text fg={theme.dim} wrapMode="none" truncate flexShrink={0}>
+        {"  "}
+        <span fg={theme.epic}>{view}</span>
+      </text>
+    ) : null}
     <Focusable
       id="board"
-      hint={`←→ column · ↑↓ select · enter open${current?.ticket.kind === "review" ? " · o review in browser" : ""}${onBrowser ? " · b board in browser" : ""}`}
+      hint={`←→ column · ↑↓ select · enter open${onNextView ? " · e next epic" : ""}${current?.ticket.kind === "review" ? " · o review in browser" : ""}${onBrowser ? " · b board in browser" : ""}`}
       flexDirection="row"
       gap={2}
       flexGrow={1}
@@ -110,6 +132,7 @@ export function Board({
         }
         if (key.name === "o" && current?.ticket.kind === "review") return onReview(current.ticket.id), true;
         if (key.name === "b" && onBrowser) return onBrowser(), true;
+        if (key.name === "e" && onNextView) return onNextView(), true;
         // ↑ from a column's top reaches the tab bar; ← and → at the ends, what sits beside
         return false;
       }}
@@ -133,6 +156,8 @@ export function Board({
 function LaneView({ lane, selected, focused, nameFor }: { lane: Lane; selected: number | null; focused: boolean; nameFor: (key: string) => string }) {
   const [width, setWidth] = useState<number | undefined>(undefined);
   const yours = lane.rows.filter((row) => row.summary.state === "needs-you").length;
+  // a line of work is one stack: the latest at its head, what it grew from tucked under it
+  const under = new Set(lane.stacks.flatMap((stack) => stack.slice(1).map((row) => row.ticket.id)));
   const current = selected === null ? undefined : lane.rows[selected];
   // the count stays whole; the heading is cut at its end to make room for it
   const count = yours > 0 ? `  ${GLYPH.yours} ${yours}` : "";
@@ -151,10 +176,16 @@ function LaneView({ lane, selected, focused, nameFor }: { lane: Lane; selected: 
       ) : (
         <FollowScroll follow={current ? (selected === 0 ? "start" : { id: cardId(current.ticket.id) }) : null} onWidth={setWidth}>
           {lane.rows.map((row, index) => (
-            <Card key={row.ticket.id} row={row} selected={focused && index === selected} width={width} nameFor={nameFor} />
+            <Card key={row.ticket.id} row={row} under={under.has(row.ticket.id)} selected={focused && index === selected} width={width} nameFor={nameFor} />
           ))}
         </FollowScroll>
       )}
+      {lane.older > 0 ? (
+        <text fg={theme.dim} wrapMode="none" truncate flexShrink={0}>
+          {"  "}
+          {lane.older} older
+        </text>
+      ) : null}
     </box>
   );
 }
@@ -166,11 +197,12 @@ const HEAD = 6;
  *  its kind, its title, and at the right edge whose it is — "you" bright, a
  *  name dim — or, closed as dropped, that it was. The title gives way first;
  *  the name goes when there is no room for both. */
-function Card({ row: { ticket, summary }, selected, width, nameFor }: { row: Row; selected: boolean; width: number | undefined; nameFor: (key: string) => string }) {
+function Card({ row: { ticket, summary }, under, selected, width, nameFor }: { row: Row; under: boolean; selected: boolean; width: number | undefined; nameFor: (key: string) => string }) {
   const dim = summary.state === "done" || summary.state === "closed" || summary.held.length > 0;
   const colour = selected ? theme.accent : dim ? theme.dim : theme.fg;
   const after = closedAs(ticket) === "dropped" ? "dropped" : clip(nameFor(ticket.createdBy), 8);
-  const room = width === undefined ? undefined : width - HEAD;
+  // under the head of its stack: a branch's width given up by its title
+  const room = width === undefined ? undefined : width - HEAD - (under ? 2 : 0);
   const withName = room === undefined || room - cells(after) - 1 >= MIN_TITLE;
   // the name at the card's right edge, so the names read down a column
   const fit = room === undefined ? rowTitle(ticket) : clip(rowTitle(ticket), withName ? room - cells(after) - 1 : room);
@@ -180,7 +212,8 @@ function Card({ row: { ticket, summary }, selected, width, nameFor }: { row: Row
       <text wrapMode="none" truncate fg={colour}>
         {selected ? "› " : "  "}
         <span fg={theme.warn}>{summary.state === "needs-you" ? `${GLYPH.yours} ` : "  "}</span>
-        <span fg={ticket.kind === "epic" ? theme.epic : theme.dim}>{kindGlyph(ticket.kind)} </span>
+        {under ? <span fg={theme.dim}>└ </span> : null}
+        <span fg={theme.dim}>{kindGlyph(ticket.kind)} </span>
         {title}
         {withName ? <span fg={summary.mine && after === "you" ? theme.accent : theme.dim}> {after}</span> : null}
       </text>
