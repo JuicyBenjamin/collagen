@@ -33,7 +33,7 @@ import { marksOf, withViewed } from "../lib/viewedMarks";
 // emits a server bundle (dist/server/entry.js): Solid's handler, the
 // functions it can call, and a hook to provide what they run on. Here the
 // instance loads it, provides that backend from its own services, and
-// mounts the handler under /review/_server. Everything a function is asked
+// mounts the handler under /_server, as Solid lays it out. Everything a function is asked
 // arrives from a browser, so every argument is checked here before anything
 // is done with it; the handler itself refuses cross-origin calls, and only
 // this machine's own browser reaches it at all (localHost).
@@ -328,6 +328,6 @@ export const ReviewServerRoutes = (definitions: ReadonlyArray<{ readonly name: s
     const load = bundle(impl);
     // the wildcard takes the endpoint itself too (POSTed calls) and what
     // is under it (a GET's /<id>, a live call's /live/<id>)
-    return Layer.mergeAll(HttpRouter.add("*", "/review/_server/*", handle(load)), HttpRouter.add("GET", "/review/_live", liveSocket(impl)));
+    return Layer.mergeAll(HttpRouter.add("*", "/_server/*", handle(load)), HttpRouter.add("GET", "/_live", liveSocket(impl)));
   }),
 );

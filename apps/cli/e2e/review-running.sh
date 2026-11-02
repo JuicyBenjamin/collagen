@@ -31,7 +31,7 @@ expect "its agent reads them back" "$(call $A "$SA" review-context "{\"ticketId\
 ORIGIN=${A%/mcp}
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn() { node "$E2E/sfn.mjs" "$ORIGIN/review/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn() { node "$E2E/sfn.mjs" "$ORIGIN/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 
 echo "## the page lists them"
 wait_until "the review's data is served" '"shows"' sfn reviewData "[\"$TICKET\"]"

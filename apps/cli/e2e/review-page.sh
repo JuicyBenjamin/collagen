@@ -54,16 +54,16 @@ ORIGIN=${A%/mcp}
 # build gives each a stable id), the arguments as JSON — a read is a GET
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn_url() { echo "$ORIGIN/review/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn_url() { echo "$ORIGIN/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 sfn() { node "$E2E/sfn.mjs" "$(sfn_url "$1" "$2")"; }
 # a live one's first few seconds, as it streams them: one event per value
 # a live state, as the page gets it: over its WebSocket (ReviewServer's
-# /review/_live), each value on a line, for $3 seconds (4)
+# /_live), each value on a line, for $3 seconds (4)
 sfn_live() {
   node -e '
     const [origin, name, args, seconds] = process.argv.slice(1);
     const topic = { toolStates: "tool", reviewChanges: "changes" }[name];
-    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/_live`, { headers: { Origin: origin } });
     socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic, subject: JSON.parse(args)[0] }));
     socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(JSON.stringify(message.value)); };
     setTimeout(() => process.exit(0), Number(seconds) * 1000);
@@ -119,9 +119,9 @@ echo "## the page itself"
 TICKET_PAGE=$(page_of $A "$SA" "$TICKET")
 PAGE=$(curl -s "$TICKET_PAGE")
 expect "the page is served: the Solid app's document" "$PAGE" "<title>Review by intent</title>"
-ASSET=$(echo "$PAGE" | grep -oE '/review/assets/[A-Za-z0-9_.-]+\.js' | head -1)
+ASSET=$(echo "$PAGE" | grep -oE '/_build/assets/[A-Za-z0-9_.-]+\.js' | head -1)
 expect "…and its script, from the build, as JavaScript" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$ORIGIN$ASSET")" "^200 text/javascript"
-expect "nothing outside the build is served as an asset" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/assets/..%2Fpackage.json")" "^404$"
+expect "nothing outside the build is served as an asset" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/_build/assets/..%2Fpackage.json")" "^404$"
 expect "a call naming another host is refused (DNS rebinding)" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url reviewData "[\"$TICKET\"]")")" "^403$"
 expect "an unknown ticket has no data" "$(sfn reviewData '["not-a-ticket"]')" "^null$"
 # a rebuilt page (its server bundle's file time moved) is taken up by the
@@ -135,7 +135,7 @@ expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sT
 echo "## types and definitions, from collagen's own TypeScript 7 over the branch"
 expect "the page follows the pinned TypeScript live: there, and ready" "$(sfn_live toolStates '["typescript"]')" "\"7\.[0-9.]+\".*\"ready\""
 expect "…a tool collagen does not have streams nothing" "$(sfn_live toolStates '["cobol"]' 2 | grep -c .)" "^0$"
-expect "installing from another origin is refused (Solid's same-origin guard)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'Origin: https://evil.example' --data '["typescript"]' "$ORIGIN/review/_server/$(sfn_id installTool)")" "^403$"
+expect "installing from another origin is refused (Solid's same-origin guard)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'Origin: https://evil.example' --data '["typescript"]' "$ORIGIN/_server/$(sfn_id installTool)")" "^403$"
 # the commit the page's diff is read at: types, peeks, the whole file and
 # what moved since are all of it
 SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
@@ -160,7 +160,7 @@ EV="$OUT/events.txt"; rm -f "$EV"
 # over the page's WebSocket, as the page follows it: each value a line, for 40 seconds
 node -e '
   const [origin, ticket] = process.argv.slice(1);
-  const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+  const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/_live`, { headers: { Origin: origin } });
   socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic: "changes", subject: ticket }));
   socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(`value: ${JSON.stringify(message.value)}`); };
   setTimeout(() => process.exit(0), 40000);
@@ -226,7 +226,7 @@ PHPAT=$(git -C "$R" rev-parse HEAD)
 colof() { awk -v w="$3" -v n="$2" 'NR == n { print index($0, w) - 1 }' "$R/$1"; }
 expect "the page can see the pinned Intelephense is there" "$(sfn_live toolStates '["php"]')" "\"php\".*\"PHP\".*\"Intelephense\".*\"ready\""
 # the page starts its server as it opens, so the project is read before the first hover
-expect "opening the page starts its PHP server" "$(node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id warmTypes)" "[\"$TICKET\",\"php\",\"$PHPAT\"]")" "^null$"
+expect "opening the page starts its PHP server" "$(node "$E2E/sfn.mjs" post "$ORIGIN/_server/$(sfn_id warmTypes)" "[\"$TICKET\",\"php\",\"$PHPAT\"]")" "^null$"
 # until it has read the project an answer is partial, with how far it has
 # read; the page asks again by itself until it is whole (it ends on its markdown)
 wait_until "hovering a method of the branch's own interface: its name and signature" "Rows::fetch.*public function fetch\\(int \\\$limit\\): array.*\"\\}$" sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch),\"$PHPAT\"]"
@@ -242,7 +242,7 @@ expect "…and peeks as the package's file" "$(sfn definitionAt "[\"$TICKET\",\"
 expect "peeking a PHP function says it is built into PHP" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
 
 echo "## live updates on one WebSocket, opened only by the page itself"
-upgrade() { curl -s -o /dev/null -w "%{http_code}" --max-time 2 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$@" "$ORIGIN/review/_live"; }
+upgrade() { curl -s -o /dev/null -w "%{http_code}" --max-time 2 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$@" "$ORIGIN/_live"; }
 expect "the page's own origin gets its socket" "$(upgrade -H "Origin: $ORIGIN")" "^101$"
 expect "another site cannot open one — a socket is not held to the same-origin rule" "$(upgrade -H "Origin: http://evil.example")" "^403$"
 expect "…nor can a request naming no origin" "$(upgrade)" "^403$"

@@ -16,13 +16,13 @@ ORIGIN=${A%/mcp}
 SHORT=$(python3 -c 'import hashlib; print(hashlib.sha256(b"collagen-short:st-test3").hexdigest()[:8])')
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn_url() { echo "${4:-$ORIGIN}/review/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn_url() { echo "${4:-$ORIGIN}/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 sfn() { node "$E2E/sfn.mjs" "$(sfn_url "$1" "$2" data "${3:-$ORIGIN}")"; }
 # the board's state as the page gets it, over its socket: each value on a line, for $2 seconds
 board_live() {
   node -e '
     const [origin, room, seconds] = process.argv.slice(1);
-    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/_live`, { headers: { Origin: origin } });
     socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic: "board", subject: room }));
     socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(JSON.stringify(message.value)); };
     setTimeout(() => process.exit(0), Number(seconds) * 1000);

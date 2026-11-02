@@ -39,8 +39,8 @@ ask "{\"title\":\"Export docs\",\"project\":\"sandbox\",\"branch\":\"feat/docs\"
 ORIGIN=${A%/mcp}
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn() { node "$E2E/sfn.mjs" "$ORIGIN/review/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
-post() { node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
+sfn() { node "$E2E/sfn.mjs" "$ORIGIN/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+post() { node "$E2E/sfn.mjs" post "$ORIGIN/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
 # where a comment sits, as the page sends it: a file, a line and a side, and where a block starts
 # (built here: a {…} written inside "$(…)" is brace-expanded by macOS's bash 3.2)
 at() { printf '{"file":"%s","line":%s,"side":"%s"%s}' "$1" "$2" "$3" "${4:+,\"startLine\":$4,\"startSide\":\"$3\"}"; }
