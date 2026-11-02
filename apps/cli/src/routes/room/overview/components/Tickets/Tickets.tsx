@@ -18,6 +18,8 @@ import { runningOn, runningShort, SPINNER } from "../../../../../lib/running";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
 import { closedLine, endedMark, fitTabs, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
 import { openInvestigationPageAtom, openReviewPageAtom } from "../../../review/atoms";
+import { openBoardPageAtom } from "../../../board/atoms";
+import { roomAtom } from "../../../../atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
  *  closed, whoever made it and whoever it is for — or, on a kind's tab, the
@@ -49,6 +51,8 @@ export function Tickets() {
   const { navigate } = useRouter();
   const openReviewPage = useAtomSet(openReviewPageAtom);
   const openInvestigationPage = useAtomSet(openInvestigationPageAtom);
+  const openBoardPage = useAtomSet(openBoardPageAtom);
+  const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const [cursor, setCursor] = useState(0);
   // an epic shows its tickets until someone folds it, for this session
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
@@ -184,7 +188,7 @@ export function Tickets() {
     <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(nextTab) => (setTab(nextTab), setCursor(0))} />
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
+      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? " · o in browser" : ""}${current?.ticket.kind === "epic" ? " · b its board in browser" : ""} · ${LEGEND} · ? the rest`}
       flexDirection="column"
       flexShrink={1}
       minHeight={0}
@@ -209,6 +213,8 @@ export function Tickets() {
         // straight from the list to the diff read by intent, in the browser
         if (key.name === "o" && current?.ticket.kind === "review") return openReviewPage({ ticketId: current.ticket.id }), true;
         if (key.name === "o" && current?.ticket.kind === "investigation") return openInvestigationPage({ ticketId: current.ticket.id }), true;
+        // an epic's board, in the browser: its tickets in to do, in progress and done
+        if (key.name === "b" && current?.ticket.kind === "epic" && roomId) return openBoardPage({ roomId, epic: current.ticket.id, kinds: [] }), true;
         // the closed ones, shown or not
         if (key.name === "h") return setShowClosed(!showClosed), true;
         // one key to what a ticket hangs from

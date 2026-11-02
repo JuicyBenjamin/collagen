@@ -1082,9 +1082,17 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .chat-ask { display: grid; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--line); }
 .chat-attached { justify-self: start; }
 
-/* the board: three lanes side by side, each a DaisyUI list */
+/* the board: three lanes side by side, the views above them, each line of work a stack of DaisyUI cards */
 .board { max-width: 1640px; margin: 0 auto; padding: 32px 24px 80px; }
-.board-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 20px; }
+.board-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin: 0 0 24px; }
+.board-head > .header-corner { margin-left: auto; }
+/* the epic picker as wide as an epic's name, its menu under it on the page's raised surface, which has no utilities for it */
+.board-epic > .input { width: 20rem; }
+.board-epic-list { width: 20rem; max-height: 22rem; overflow-y: auto; flex-wrap: nowrap; margin-top: 4px; background: var(--color-base-200); border: 1px solid var(--color-base-300); border-radius: var(--radius-box); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45); }
+.board-epic-list li > div { display: flex; gap: 10px; box-sizing: border-box; max-width: 100%; }
+.board-epic-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.board-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.board-kind-count { color: var(--faint); font-weight: 400; }
 .board-head h1 { font-size: 22px; line-height: 1.3; margin: 0; }
 .lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
 @media (max-width: 900px) {
@@ -1092,10 +1100,40 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
   .lanes { grid-template-columns: minmax(0, 1fr); }
 }
 .lane h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); font-weight: 600; margin: 0 0 10px; }
-.lane-none { color: var(--faint); font-size: 14px; }
-.board-kind { color: var(--faint); }
+.lane-none { color: var(--faint); font-size: 14px; margin-top: 10px; }
+.board-stacks { display: flex; flex-direction: column; gap: 10px; }
+/* a card on the page's panel, its edge the theme's line: DaisyUI's own base colours, which the page has no utilities for */
+.board-card { background: var(--color-base-100); border-color: var(--color-base-300); }
+.board-card-body { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 8px 12px; font-size: 14px; }
+.board-kind { color: var(--faint); text-align: center; }
 .board-kind.epic { color: var(--kind-epic); }
 .board-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-quiet .board-title { color: var(--dim); }
 .board-who { color: var(--faint); font-size: 12.5px; white-space: nowrap; }
 .board-who.mine { color: var(--accent); }
+/* a line of work, at rest: its latest card, the edges of those before it
+   under it, and a line saying what they are; the pointer over it lights it
+   a little. Clicked, it opens from the middle where it stands (its cards
+   moved by Motion, Stack/fan.ts), raised over the board and taking no
+   room: nothing on the board moves, so nothing moves under the pointer.
+   The fan is one box over every card and the gaps between, so the pointer
+   goes card to card without leaving the stack; it folds once the pointer
+   leaves. The card in focus is marked by the accent */
+.board-stack { position: relative; display: flex; flex-direction: column; }
+.board-stack.stacked { cursor: pointer; }
+.board-stack.open { z-index: 10; }
+.board-stack-front { position: relative; z-index: 4; }
+.board-stack-shade { position: fixed; inset: 0; z-index: 3; background: color-mix(in oklab, var(--color-base-200) 72%, transparent); opacity: 0; pointer-events: none; }
+.board-stack-face { position: relative; z-index: 1; border-radius: var(--radius-box); }
+.board-stack-face:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.board-stack.stacked:not(.open):hover .board-stack-face > .board-card { border-color: color-mix(in oklab, var(--accent) 40%, var(--color-base-300)); }
+/* the cards under the front one, a deck seen from the front: each behind the one before, narrower, and showing a little further down */
+.board-stack-edges { display: flex; flex-direction: column; align-items: stretch; }
+.board-stack-edges > span { position: relative; z-index: 2; height: 7px; margin: -1px 10px 0; border: 1px solid var(--color-base-300); border-top: 0; border-radius: 0 0 8px 8px; background: var(--color-base-100); filter: brightness(0.9); }
+.board-stack-edges > span + span { z-index: 1; margin: -3px 20px 0; filter: brightness(0.8); }
+.board-stack-more { margin: 4px 0 0 10px; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-stack-fan { position: absolute; left: 0; right: 0; z-index: 5; top: calc(var(--mid) * var(--step) * -1); bottom: calc(var(--mid) * var(--step) * -1); perspective: 900px; opacity: 0; pointer-events: none; }
+.board-stack.open .board-stack-fan { pointer-events: auto; }
+.board-stack-item { position: absolute; left: 0; right: 0; top: calc(var(--mid) * var(--step)); }
+.board-stack.open .board-stack-item > .board-card { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
+.board-stack.open .board-stack-item.focused > .board-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 18px 40px rgba(0, 0, 0, 0.45); }

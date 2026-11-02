@@ -1021,11 +1021,14 @@ export interface ChatEarlier {
 /** What asking said: under way, or refused in words. */
 export type ChatAsked = { readonly ok: true } | { readonly error: string };
 
+/** A kind a board's tickets can be filtered to. */
+export type BoardKind = "investigation" | "proposal" | "bug" | "plan" | "task" | "review";
+
 /** A ticket on the board: what it is and whose, and whether it is the
  *  reader's to act on now. */
 export interface BoardCard {
   readonly id: string;
-  readonly kind: "task" | "review" | "plan" | "proposal" | "bug" | "investigation" | "epic";
+  readonly kind: BoardKind | "epic";
   /** the kind's glyph, as the terminal draws it */
   readonly glyph: string;
   readonly title: string;
@@ -1044,7 +1047,23 @@ export interface BoardCard {
  *  the terminal's board has them; null for a room this instance is not in. */
 export interface BoardData {
   readonly room: string;
-  readonly lanes: ReadonlyArray<{ readonly column: "todo" | "doing" | "done"; readonly label: string; readonly cards: ReadonlyArray<BoardCard> }>;
+  /** the epics it can be read through, those with open tickets, the most open first */
+  readonly epics: ReadonlyArray<{ readonly id: string; readonly title: string; readonly open: number }>;
+  /** the epic it is read through now; null: everything */
+  readonly epic: string | null;
+  /** the kinds it can be filtered to, in the lists' order: those on the
+   *  board without a filter, and any chosen; each with how many it shows */
+  readonly kinds: ReadonlyArray<{ readonly kind: BoardKind; readonly glyph: string; readonly label: string; readonly count: number }>;
+  /** the kinds it is filtered to now; empty: every kind */
+  readonly chosen: ReadonlyArray<BoardKind>;
+  readonly lanes: ReadonlyArray<{
+    readonly column: "todo" | "doing" | "done";
+    readonly label: string;
+    /** each a line of work — what grew from what — the latest first */
+    readonly stacks: ReadonlyArray<ReadonlyArray<BoardCard>>;
+    /** done tickets left off, finished before the recent ones */
+    readonly older: number;
+  }>;
   /** tickets a newer collagen wrote that this build cannot place, said in a line */
   readonly unread: string | null;
 }

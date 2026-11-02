@@ -54,10 +54,12 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
     });
 
     /** Open a room's board in the person's browser: its tickets in to do,
-     *  in progress and done, as the terminal's board has them. */
-    const showBoard = Effect.fn("ReviewPages.showBoard")(function* (roomId: string) {
+     *  in progress and done, as the terminal's board has them — one epic's,
+     *  and only some kinds, when given. */
+    const showBoard = Effect.fn("ReviewPages.showBoard")(function* (roomId: string, epic: string | null = null, kinds: ReadonlyArray<string> = []) {
       // by its short id (lib/pageAddress): the full one is the invite, and a url stays in the browser's history
-      const url = yield* pageUrl(boardPath(roomId));
+      const view = [...(epic ? [`epic=${epic.slice(0, 8)}`] : []), ...(kinds.length > 0 ? [`kinds=${kinds.join(",")}`] : [])].join("&");
+      const url = `${yield* pageUrl(boardPath(roomId))}${view ? `#${view}` : ""}`;
       return (yield* launch(url)) ? `board opened: ${url}` : `board: ${url} (could not open a browser — paste it into one)`;
     });
 

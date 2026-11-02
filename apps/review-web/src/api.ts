@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { BoardData, ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { BoardData, BoardKind, ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { Mark, Marks } from "./marks";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
@@ -17,9 +17,9 @@ export const reviewHead = GET(async (ticketId: string): Promise<ReviewPageHead |
 });
 
 /** A room's board, by its short id: its tickets in to do, in progress and done. */
-export const boardData = GET(async (roomShort: string): Promise<BoardData | null> => {
+export const boardData = GET(async (roomShort: string, epic: string | null, allDone: boolean, kinds: ReadonlyArray<BoardKind>): Promise<BoardData | null> => {
   "use server";
-  return run((backend) => backend.board(roomShort));
+  return run((backend) => backend.board(roomShort, epic, allDone, kinds));
 });
 
 export const reviewData = GET(async (ticketId: string): Promise<ReviewPageData | null> => {
