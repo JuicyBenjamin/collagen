@@ -5,6 +5,7 @@ import { isStory, isTest, testsOfFile } from "./tests";
 import { isLockfile, packageChanges } from "./lockfiles";
 import { generatedBy } from "./generated";
 import { isTranslation, keyChanges, languageOf } from "./translations";
+import { isMigration, schemaChanges } from "./migrations";
 
 // A review read by units: code that together achieves one thing — a
 // component with its sub-components and its implementation — each hunk of
@@ -150,7 +151,7 @@ export function groupByUnit(
   };
   const apart = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => !madeBy.has(file) && (isTest(file) || isStory(file))).map((file) => [file, read(file)] as const).filter(([, cases]) => cases.tests.length > 0));
   // the code, read in units — not the tests, the stories or the lockfiles, read apart; pointers are still read against every hunk
-  const hunks = all.filter((hunk) => !apart.has(hunk.file) && !isLockfile(hunk.file) && !madeBy.has(hunk.file) && !isTranslation(hunk.file));
+  const hunks = all.filter((hunk) => !apart.has(hunk.file) && !isLockfile(hunk.file) && !madeBy.has(hunk.file) && !isTranslation(hunk.file) && !isMigration(hunk.file));
   // each hunk's home among a list of claimants (units, or decisions): the
   // one whose pointer claims it most precisely, the first on a tie
   const homes = (claimants: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>): Map<string, number> => {
@@ -278,6 +279,11 @@ export function groupByUnit(
       hunks: all.filter((hunk) => files.includes(hunk.file)).map((hunk) => hunk.id),
     };
   });
+  // each migration, as what it does to the schema; one edited after it was written may have run already
+  const migrations = [...new Set(all.filter((hunk) => isMigration(hunk.file) && !madeBy.has(hunk.file)).map((hunk) => hunk.file))].map((file) => {
+    const text = texts(file);
+    return { file, changes: text.after === null ? null : schemaChanges(file, text.after), edited: (text.before?.length ?? 0) > 0, hunks: all.filter((hunk) => hunk.file === file).map((hunk) => hunk.id) };
+  });
   // each lockfile, as the packages it moves (its texts at both ends, as the tests are read)
   const lockfiles = [...new Set(all.filter((hunk) => isLockfile(hunk.file)).map((hunk) => hunk.file))].map((file) => {
     const text = texts(file);
@@ -292,6 +298,7 @@ export function groupByUnit(
     ...(lockfiles.length > 0 ? { lockfiles } : {}),
     ...(madeBy.size > 0 ? { generated } : {}),
     ...(translations.length > 0 ? { translations } : {}),
+    ...(migrations.length > 0 ? { migrations } : {}),
     hunks: all,
     unmatched,
     looseForks: review.forks.filter((fork) => !forksShown.has(fork.id)),
@@ -303,7 +310,7 @@ export function groupByUnit(
  *  units leave to the page's own grouping. Tests need no unit. */
 export const uncovered = (units: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>, hunks: ReadonlyArray<Hunk>): ReadonlyArray<string> => {
   const covered = new Set(units.flatMap((unit) => unit.where.flatMap((pointer) => claimed(parsePointer(pointer), hunks).map((hunk) => hunk.id))));
-  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id) && !isTest(hunk.file) && !isStory(hunk.file) && !isLockfile(hunk.file) && !isTranslation(hunk.file) && generatedBy(hunk.file, null) === null).map((hunk) => hunk.file))];
+  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id) && !isTest(hunk.file) && !isStory(hunk.file) && !isLockfile(hunk.file) && !isTranslation(hunk.file) && !isMigration(hunk.file) && generatedBy(hunk.file, null) === null).map((hunk) => hunk.file))];
 };
 
 /** A file named in a pointer, as the diff spells it — for the import reader. */

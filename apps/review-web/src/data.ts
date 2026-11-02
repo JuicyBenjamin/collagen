@@ -188,6 +188,17 @@ export interface TranslationSet {
   readonly hunks: ReadonlyArray<string>;
 }
 
+/** A migration of the diff, read as what it does to the schema; its lines
+ *  one step away. `changes` is null for a kind collagen does not read. */
+export interface MigrationFile {
+  readonly file: string;
+  readonly changes: ReadonlyArray<{ readonly action: string; readonly table: string; readonly target?: string; readonly detail?: string; readonly losesData: boolean }> | null;
+  /** it existed before the change and was edited: it may have run somewhere already */
+  readonly edited: boolean;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
 export interface Grouped {
   /** in reading order: what something is built from before what uses it —
    *  test files are in none: they are `tests` */
@@ -203,6 +214,8 @@ export interface Grouped {
   readonly generated?: ReadonlyArray<GeneratedFile>;
   /** the diff's translation files, apart from the code: each set as the keys it moves, every language side by side */
   readonly translations?: ReadonlyArray<TranslationSet>;
+  /** the diff's migrations, apart from the code: each as what it does to the schema */
+  readonly migrations?: ReadonlyArray<MigrationFile>;
   readonly hunks: ReadonlyArray<Hunk>;
   /** per decision id, its pointers that matched no change: the code there
    *  did not move, or the why is older than the branch */

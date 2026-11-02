@@ -32,6 +32,7 @@ sed -i.bak '25s/line/changed, and nobody said why/' "$R/src/notes.txt"; rm -f "$
 printf "lockfileVersion: '9.0'\n\npackages:\n\n  left-pad@1.3.1:\n    resolution: {}\n" > "$R/pnpm-lock.yaml"
 mkdir -p "$R/src/__snapshots__"; printf 'exports[`page 1`] = `100`;\n' > "$R/src/__snapshots__/page.test.ts.snap"
 printf '{"save":"Save","cancel":"Cancel"}\n' > "$R/src/locales/en.json"
+mkdir -p "$R/db/migrations"; printf 'ALTER TABLE rows ADD COLUMN page INTEGER;\nALTER TABLE rows DROP COLUMN offset;\n' > "$R/db/migrations/002_page.sql"
 git -C "$R" add -A; git -C "$R" commit -qm change
 
 # the type hints need collagen's pinned TypeScript, normally installed on
@@ -75,6 +76,7 @@ DATA=$(sfn reviewData "[\"$TICKET\"]")
 expect "a decision carries what guided it to the page" "$DATA" '"guidedBy":\["CLAUDE.md"\]'
 expect "the lockfile is read apart, as the package it moves" "$DATA" '"lockfiles":\[\{"file":"pnpm-lock.yaml","packages":\[\{"name":"left-pad","before":\["1.3.0"\],"after":\["1.3.1"\]\}\]'
 expect "…the translations, as the key added, beside the language that did not keep up" "$DATA" '"translations":\[\{"set":"src/locales/\*.json","languages":\["de","en"\],"keys":\[\{"key":"cancel","texts":\{"en":\{"after":"Cancel"\},"de":\{\}'
+expect "…the migration, as what it does to the schema, the drop that loses data marked" "$DATA" '"migrations":\[\{"file":"db/migrations/002_page.sql","changes":\[\{"action":"add column","table":"rows","target":"page","detail":"INTEGER","losesData":false\},\{"action":"drop column","table":"rows","target":"offset","losesData":true\}\],"edited":false'
 expect "…and the snapshot, as what made it" "$DATA" '"generated":\[\{"file":"src/__snapshots__/page.test.ts.snap","by":"a test snapshot","added":1,"removed":0'
 shape() { python3 -c '
 import json, sys
@@ -84,7 +86,7 @@ for u in g["units"]:
     print("unit", u["title"], "by", u["by"], "hunks", " ".join(u["hunks"]), "decisions", " ".join(u["decisions"]), "forks", " ".join(f["id"] for f in u["forks"]), "unexplained", " ".join(u["unexplained"]))
 for t in g["tests"]:
     print("tests", t["file"] + ":", " | ".join(c["change"] + " " + " › ".join(c["under"] + [c["title"]]) for c in t["tests"]))
-tested = {t["file"] for t in g["tests"] + g.get("stories", []) + g.get("lockfiles", []) + g.get("generated", [])} | {h["file"] for h in g["hunks"] if any(h["id"] in s["hunks"] for s in g.get("translations", []))}
+tested = {t["file"] for t in g["tests"] + g.get("stories", []) + g.get("lockfiles", []) + g.get("generated", []) + g.get("migrations", [])} | {h["file"] for h in g["hunks"] if any(h["id"] in s["hunks"] for s in g.get("translations", []))}
 every = [h for u in g["units"] for h in u["hunks"]]
 code = [h for h in g["hunks"] if h["file"] not in tested]
 print("hunks", len(every), "once" if len(every) == len(set(every)) == len(code) else "NOT ONCE")

@@ -15,6 +15,7 @@ import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isStory, isTest } from "../lib/tests";
 import { isLockfile } from "../lib/lockfiles";
 import { isTranslation, languageOf } from "../lib/translations";
+import { isMigration } from "../lib/migrations";
 import { roomEdges, stackOf, type Edge } from "../lib/stack";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type RepoHost } from "./RepoHost";
@@ -328,7 +329,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       const lines = (text: string | null | undefined) => (text == null || text.includes("\0") ? null : text.replace(/\n$/, "").split("\n"));
       for (const file of files) {
         // both ends of a test, story or lockfile, to read what changed in it; the rest only as it is now (what made it)
-        const both = isTest(file) || isStory(file) || isLockfile(file) || isTranslation(file);
+        const both = isTest(file) || isStory(file) || isLockfile(file) || isTranslation(file) || isMigration(file);
         const before = both && forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
         tests.set(file, { after: lines(texts.get(file)), before: both && forked ? (lines(before) ?? []) : null });
       }

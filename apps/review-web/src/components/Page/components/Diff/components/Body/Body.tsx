@@ -16,6 +16,7 @@ import { Forks } from "./components/Forks";
 import { Machine } from "./components/Machine";
 import { Outside } from "./components/Outside";
 import { Generated } from "./components/Generated";
+import { Migrations } from "./components/Migrations";
 import { Translations } from "./components/Translations";
 import { Lockfiles } from "./components/Lockfiles";
 import { Tabs } from "./components/Tabs";
@@ -48,8 +49,9 @@ export function Body(props: { data: ReviewPageData }) {
   const lockfiles = () => props.data.grouped?.lockfiles ?? [];
   const generated = () => props.data.grouped?.generated ?? [];
   const translations = () => props.data.grouped?.translations ?? [];
+  const migrations = () => props.data.grouped?.migrations ?? [];
   // the files read apart from the code: the tests, stories, lockfiles, generated files and translations
-  const apartFiles = () => new Set([...[...tests(), ...stories(), ...lockfiles(), ...generated()].map((file) => file.file), ...(props.data.grouped?.hunks ?? []).filter((hunk) => translations().some((set) => set.hunks.includes(hunk.id))).map((hunk) => hunk.file)]);
+  const apartFiles = () => new Set([...[...tests(), ...stories(), ...lockfiles(), ...generated(), ...migrations()].map((file) => file.file), ...(props.data.grouped?.hunks ?? []).filter((hunk) => translations().some((set) => set.hunks.includes(hunk.id))).map((hunk) => hunk.file)]);
   // the files the Code tab holds: every changed file but those read apart, as "files viewed" counts them
   const codeFiles = () => {
     const testFiles = apartFiles();
@@ -67,6 +69,8 @@ export function Body(props: { data: ReviewPageData }) {
             ? "generated"
             : tab() === "translations" && translations().length > 0
               ? "translations"
+              : tab() === "migrations" && migrations().length > 0
+                ? "migrations"
             : tab() === "machine" && props.data.review.machine
             ? "machine"
             : "code";
@@ -113,7 +117,7 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
-      <Tabs tests={tests()} stories={stories()} lockfiles={lockfiles()} generated={generated()} translations={translations()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
+      <Tabs tests={tests()} stories={stories()} lockfiles={lockfiles()} generated={generated()} translations={translations()} migrations={migrations()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
       <Show when={shown() === "tests"}>
         <Tests files={tests()} kind="test" hunks={hunks()} decisions={decisions()} />
       </Show>
@@ -128,6 +132,9 @@ export function Body(props: { data: ReviewPageData }) {
       </Show>
       <Show when={shown() === "translations"}>
         <Translations sets={translations()} hunks={hunks()} />
+      </Show>
+      <Show when={shown() === "migrations"}>
+        <Migrations files={migrations()} hunks={hunks()} />
       </Show>
       <Show when={shown() === "machine" && props.data.review.machine}>
         {(machine) => <Machine machine={machine()} />}
