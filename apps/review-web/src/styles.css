@@ -1107,10 +1107,8 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .board-who.mine { color: var(--accent); }
 /* a stack, at rest a deck: every card in one place, those behind raised a
    step and drawn in at the sides, so each title shows above the one in
-   front. Under the pointer it fans out where it stands — the stack grows,
-   what is below it moves down, nothing is covered — tilting back like a
-   sliced deck, the card under the pointer lifted out; it closes only when
-   the pointer leaves the whole stack */
+   front. Hover changes nothing: a layout that moves under the pointer
+   moves what is under it, and flickers */
 .board-stack { --step: 26px; --fan: 50px; --inset: 7px; display: grid; position: relative; padding-top: calc((var(--depth) - 1) * var(--step)); perspective: 1100px; transition: padding-top 280ms ease; }
 .board-stack > .board-card {
   grid-area: 1 / 1;
@@ -1120,9 +1118,6 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
   transition: transform 280ms ease, margin 280ms ease, scale 160ms ease, box-shadow 160ms ease;
 }
 .board-stack.stacked > .board-card:not(:last-child) { box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.18); }
-.board-stack.stacked:hover { padding-top: calc((var(--depth) - 1) * var(--fan)); }
-.board-stack.stacked:hover > .board-card { margin-inline: 0; transform: translateY(calc((var(--layer) - var(--depth) + 1) * var(--fan))) rotateX(8deg); }
-.board-stack.stacked:hover > .board-card:hover { z-index: 1; scale: 1.04; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); }
 @media (prefers-reduced-motion: reduce) {
   .board-stack, .board-stack > .board-card { transition: none; }
 }
