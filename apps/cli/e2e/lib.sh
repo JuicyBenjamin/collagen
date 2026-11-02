@@ -254,6 +254,9 @@ everything() {
   for id in $ids; do call "$1" "$2" get-ticket "{\"ticketId\":\"$id\"}"; echo; done
 }
 
+# page_of <url> <sid> <ticketId> — a ticket's page, under the room being looked at, by short ids
+page_of() { echo "${1%/mcp}/room/$(call "$1" "$2" list-rooms '{}' | awk -F, '/,true$/ { sub(/^ +/, "", $1); print $1; exit }')/ticket/${3:0:8}"; }
+
 # goals <url> <sid> — the open tickets' list: their titles and the lines beneath
 goals() { call "$1" "$2" get-tickets '{}' | tr '\n' ' '; }
 

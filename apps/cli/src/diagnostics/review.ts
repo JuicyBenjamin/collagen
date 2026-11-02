@@ -113,7 +113,7 @@ export const reviewContext = diagnostic<{ readonly ticketId: string; readonly ab
           ? `\n\nIF YOUR USER WROTE THIS CODE (${review.assumed.author}'s pull request): they can take this review over — claim-review, with their answer to each guess (confirmed, corrected, wrong) and their own decisions. Ask them first.`
           : "";
       // a review whose branch is one in a stack of the room's reviews: where, and what is below and above
-      const stack = ticket?.kind === "review" && review.branch ? stackOf(review.branch, review.base ?? "main", roomEdges(all, yield* SubscriptionRef.get(handle.room.reviews), me, ticket.project)) : null;
+      const stack = ticket?.kind === "review" && review.branch ? stackOf(review.branch, review.base ?? "main", roomEdges(all, yield* SubscriptionRef.get(handle.room.reviews), me, ticket.project, handle.id)) : null;
       const place = stack ? stackPlace(stack) : null;
       const inStack =
         stack && place

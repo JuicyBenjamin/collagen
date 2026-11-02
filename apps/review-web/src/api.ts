@@ -143,7 +143,7 @@ export const mergeHistory = GET(async (roomId: string, project: string, shown: n
   return run((backend) => backend.merges(roomId, project, shown, fresh));
 });
 
-/** A room's projects held here, in the reader's order: where /merges/<roomId> goes. */
+/** A room's projects held here, in the reader's order: where /room/<room>/merges goes. */
 export const mergeProjects = GET(async (roomId: string): Promise<MergeProjects | null> => {
   "use server";
   return run((backend) => backend.mergeProjects(roomId));

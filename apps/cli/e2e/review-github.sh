@@ -339,5 +339,5 @@ expect "…GitHub never asked to post" "$(calls | sed -n "$((N + 1)),\$p" | grep
 expect "a comment typed on its page is said in the room too" "$(post sendComment "[\"$BARE\",$(at src/export.ts 1 RIGHT),\"typed here\",\"$SHOWN\",null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"typed here"'
 expect "…and read back on the page" "$(talk "$BARE")" '"body":"room only".*"body":"typed here"'
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $(page_of $A "$SA" "$TICKET")"; summary; exit; fi
 kill_all; summary

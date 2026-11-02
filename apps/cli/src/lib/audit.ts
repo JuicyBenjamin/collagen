@@ -10,7 +10,7 @@ import { modelName, modelOfLabel } from "./agents";
 import { levelOf, STEERING_KINDS, STEERING_LABEL } from "./steering";
 import { byTool, kindOf, tokensOf, type SessionCost } from "./tokenCost";
 
-// The audit page's numbers (review-web, /audit/<roomId>): what collagen
+// The audit page's numbers (review-web, /room/<room>/audit): what collagen
 // put into the AIs' windows on this machine, tool by tool and call by call,
 // what it ran itself, and the room's tickets, models and steering — counted
 // here, drawn there.

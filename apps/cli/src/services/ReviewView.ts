@@ -2,12 +2,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
-import { closedAs, isClosed, noteNow, roomProjects, visibleTo, type NoteTurn, type ReviewComment, type ReviewContext, type SteeringNote, type Ticket } from "@collagen/p2p";
+import { HttpRouter, HttpServerResponse, type HttpServerRequest } from "effect/http";
+import { closedAs, isClosed, noteNow, roomProjects, shortRoomId, visibleTo, type NoteTurn, type ReviewComment, type ReviewContext, type SteeringNote, type Ticket } from "@collagen/p2p";
 import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult, YourReview } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
+import { mergesPath, TICKET_SHORT } from "../lib/pageAddress";
 import { yourFinish } from "../lib/review";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
@@ -287,7 +288,7 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
     if (!ticket) continue;
     const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
     if (!review) return null;
-    const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ room: handle.room, ticket })) : null;
+    const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ roomId: handle.id, room: handle.room, ticket })) : null;
     // where it runs comes with the head: its section stands from the first paint
     const shows = shownShows(review.shows, review.author === me);
     const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me), yield* noteTitles(handle.room));
@@ -383,10 +384,10 @@ const shown = ({ branch: _branch, base: _base, merged: _merged, ...pull }: HostP
 /** The room's own open reviews of the same project as stack edges: each
  *  names its branch and the base it builds on — only those the reader may
  *  see (a review waiting on another is its author's alone until then). */
-const reviewEdges = (found: { readonly room: { readonly tickets: SubscriptionRef.SubscriptionRef<ReadonlyMap<string, Ticket>>; readonly reviews: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewContext>> }; readonly ticket: Ticket }) =>
+const reviewEdges = (found: { readonly roomId: string; readonly room: { readonly tickets: SubscriptionRef.SubscriptionRef<ReadonlyMap<string, Ticket>>; readonly reviews: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewContext>> }; readonly ticket: Ticket }) =>
   Effect.gen(function* () {
     const { identity } = yield* IdentityService;
-    return roomEdges(yield* SubscriptionRef.get(found.room.tickets), yield* SubscriptionRef.get(found.room.reviews), identity.pubkey, found.ticket.project);
+    return roomEdges(yield* SubscriptionRef.get(found.room.tickets), yield* SubscriptionRef.get(found.room.reviews), identity.pubkey, found.ticket.project, found.roomId);
   });
 
 /** The review on its host, for the page: who is signed in, its pull request
@@ -456,61 +457,100 @@ const TYPES: Record<string, string> = {
   ".map": "application/json",
 };
 
+/** Where a page is, as the server found it: written into the document, so
+ *  the page draws what it is at once (review-web place.ts) — a ticket's
+ *  page by the ticket's kind, with no read first. */
+type Place =
+  | { readonly page: "review" | "investigation" | "ticket"; readonly kind: string; readonly room: string; readonly roomShort: string; readonly ticket: string }
+  | { readonly page: "audit"; readonly room: string; readonly roomShort: string }
+  | { readonly page: "merges"; readonly room: string; readonly roomShort: string; readonly project: string | null };
+
+/** The one document every page is, with its place in it. */
+const pageAt = (place: Place) => {
+  const root = webRoot();
+  if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
+  const said = JSON.stringify(place).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8").replace("</head>", `<meta name="collagen-place" content="${said}">\n</head>`));
+};
+
+/** One of the person's rooms, by its short id. */
+const roomByShort = (short: string | undefined) =>
+  Effect.gen(function* () {
+    const rooms = yield* Rooms;
+    return short === undefined ? undefined : (yield* SubscriptionRef.get(rooms.handles)).find((handle) => shortRoomId(handle.id) === short);
+  });
+
+/** A page only for this machine: refused from anywhere else. */
+const local = <E, R>(handler: (request: HttpServerRequest.HttpServerRequest) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) => (request: HttpServerRequest.HttpServerRequest) =>
+  localHost(request.headers["host"]) ? handler(request) : Effect.succeed(HttpServerResponse.text("forbidden", { status: 403 }));
+
+const SHORT_ID = /^[0-9a-f]{8}$/;
+
 export const ReviewRoutes = Layer.mergeAll(
-  // the page: one document for every ticket; it reads its id from the url
-  HttpRouter.add("GET", "/review/:ticketId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      if (!ticketIdOk(ticketId)) return notFound("no ticket");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // a ticket's page, whatever its kind: the review page, the investigation
+  // page, or — a kind with no page yet — the page saying so
+  HttpRouter.add(
+    "GET",
+    "/room/:room/ticket/:ticket",
+    local(() =>
+      Effect.gen(function* () {
+        const { room, ticket } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        if (!handle || !ticket || !ticketIdOk(ticket) || ticket.length < TICKET_SHORT) return notFound("no such ticket in your rooms");
+        const found = [...(yield* SubscriptionRef.get(handle.room.tickets)).values()].filter((each) => each.id.startsWith(ticket));
+        if (found.length !== 1) return notFound(found.length === 0 ? "no such ticket in this room" : "more than one ticket starts so: use more of its id");
+        const kind = found[0]!.kind;
+        return pageAt({ page: kind === "review" || kind === "investigation" ? kind : "ticket", kind, room: handle.id, roomShort: room!, ticket: found[0]!.id });
+      }),
+    ),
   ),
-  // an investigation: the same document, for one investigation ticket
-  HttpRouter.add("GET", "/investigation/:ticketId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      if (!ticketIdOk(ticketId)) return notFound("no ticket");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // a room's audit
+  HttpRouter.add(
+    "GET",
+    "/room/:room/audit",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        return handle ? pageAt({ page: "audit", room: handle.id, roomShort: room! }) : notFound("no such room");
+      }),
+    ),
   ),
-  // a room's audit: the same document
-  HttpRouter.add("GET", "/audit/:roomId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { roomId } = yield* HttpRouter.params;
-      if (!ticketIdOk(roomId)) return notFound("no room");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // a room's merges, which go on to a project's, and a project's
+  HttpRouter.add(
+    "GET",
+    "/room/:room/merges",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        return handle ? pageAt({ page: "merges", room: handle.id, roomShort: room!, project: null }) : notFound("no such room");
+      }),
+    ),
   ),
-  // a project's merges: the same document, for one of a room's projects
-  HttpRouter.add("GET", "/merges/:roomId/:project", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { roomId, project } = yield* HttpRouter.params;
-      if (!ticketIdOk(roomId) || !projectNameOk(project)) return notFound("no project");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  HttpRouter.add(
+    "GET",
+    "/room/:room/merges/:project",
+    local(() =>
+      Effect.gen(function* () {
+        const { room, project } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        if (!handle || !projectNameOk(project)) return notFound("no such project");
+        return pageAt({ page: "merges", room: handle.id, roomShort: room!, project });
+      }),
+    ),
   ),
-  // a room's merges: the same document, which goes on to a project's
-  HttpRouter.add("GET", "/merges/:roomId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { roomId } = yield* HttpRouter.params;
-      if (!ticketIdOk(roomId)) return notFound("no room");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // the room itself: its merges, until it has a page of its own
+  HttpRouter.add(
+    "GET",
+    "/room/:room",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = room && SHORT_ID.test(room) ? yield* roomByShort(room) : undefined;
+        return handle ? HttpServerResponse.redirect(mergesPath(handle.id)) : notFound("no such room");
+      }),
+    ),
   ),
   // its hashed assets, by bare file name only — nothing outside the bundle
   HttpRouter.add("GET", "/review/assets/:file", (request) =>

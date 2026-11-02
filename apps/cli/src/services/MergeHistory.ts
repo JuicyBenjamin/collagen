@@ -12,7 +12,7 @@ import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 
 // What was merged into a room's projects: the TUI's merges tab and the
-// merges page (review-web, /merges/<roomId>/<project>) read the same, one
+// merges page (review-web, /room/<room>/merges/<project>) read the same, one
 // project at a time — the one whose tab is open, the one the page is of.
 // Both show a page of merges and more as the reader scrolls on; the host's
 // pages read so far are kept, so scrolling on reads only the pages past

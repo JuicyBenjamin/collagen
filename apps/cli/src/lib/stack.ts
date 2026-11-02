@@ -1,4 +1,5 @@
 import { isClosed, visibleTo, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { ticketPath } from "./pageAddress";
 import type { Stack, StackStep } from "@collagen/review-web/data";
 
 // The stack a branch sits in: each branch built on another's head, down to
@@ -77,12 +78,13 @@ export const stackPlace = (stack: Stack): StackPlace => {
 };
 
 /** The room's open review tickets in `project` the reader may see, as
- *  branches built on their bases: the stack the room's own reviews make. */
-export const roomEdges = (all: ReadonlyMap<string, Ticket>, reviews: ReadonlyArray<ReviewContext>, me: string, project: string): ReadonlyArray<Edge> =>
+ *  branches built on their bases: the stack the room's own reviews make —
+ *  each linked to its page when the room is named. */
+export const roomEdges = (all: ReadonlyMap<string, Ticket>, reviews: ReadonlyArray<ReviewContext>, me: string, project: string, roomId?: string): ReadonlyArray<Edge> =>
   reviews.flatMap((review): ReadonlyArray<Edge> => {
     const ticket = all.get(review.ticketId);
     if (!ticket || ticket.kind !== "review" || isClosed(ticket) || !review.branch || ticket.project.trim().toLowerCase() !== project.trim().toLowerCase() || !visibleTo(ticket, all, me)) return [];
-    return [{ branch: review.branch, base: review.base ?? "main", label: ticket.title ?? ticket.goal, url: `/review/${ticket.id}`, kind: "review" }];
+    return [{ branch: review.branch, base: review.base ?? "main", label: ticket.title ?? ticket.goal, ...(roomId ? { url: ticketPath(roomId, ticket.id) } : {}), kind: "review" }];
   });
 
 /** Each open review the reader sees that sits in a stack of the room's own
