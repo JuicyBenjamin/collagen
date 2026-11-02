@@ -19,7 +19,7 @@ import { notesIndex } from "../lib/steeringNotes";
 import { readLine, type TranscriptLine } from "../lib/transcripts";
 import { levelOf } from "../lib/steering";
 import { IdentityService } from "./Identity";
-import { OWN, ReviewQuestions } from "./ReviewQuestions";
+import { OWN, ReviewQuestions, WHYS_QUESTION } from "./ReviewQuestions";
 import type { Rooms } from "./Rooms";
 import type { ChatKept, ChatTurnKept, ReviewAnswer, ReviewQuestionStage } from "@collagen/p2p";
 
@@ -66,6 +66,7 @@ const preamble = (review: { readonly title: string; readonly branch?: string; re
         : `This folder is a clone of the project.`,
     `Answer what they ask, briefly, in plain text (code in fenced blocks). You read; you change nothing — no edits, no messages, nothing posted.`,
     `If neither the code nor the review's why answers it — the reason is the author's, and nothing here says it — never guess: say so in a line, and end your answer with one last line \`${FORWARD} <the question, standalone, for the author>\`. Collagen may then ask the author's AI, which answers from the conversation the work was done in.`,
+    `If they ask you to get the author's missing whys (the reasons the review does not give), you cannot ask anyone yourself, but collagen can, on their word: end your answer with one last line \`${WHYS}\`. Collagen then asks the author's AI at once, and each why goes onto the review where it is missing. Before that line, say in a line or two what is missing; never write the whys yourself.`,
   ].join("\n");
 
 const asked = (selection: ChatSelection | null, question: string): string => {
@@ -87,6 +88,16 @@ export const promptFor = (parts: { readonly opening: string | null; readonly mov
 const QUESTION = "Their question: ";
 /** The line a chat answer ends with when only the author can answer it. */
 const FORWARD = "ASK THE AUTHOR:";
+
+/** The line a chat answer ends with when its reader asks for the author's missing whys. */
+const WHYS = "ASK THE AUTHOR FOR THE MISSING WHYS";
+
+/** An answer that ends asking for the missing whys: the answer without that line. */
+export const whysOf = (answer: string): string | null => {
+  const at = answer.lastIndexOf(WHYS);
+  if (at < 0 || answer.slice(at + WHYS.length).replace(/[`.\s]/g, "") !== "") return null;
+  return answer.slice(0, at).replace(/`?\s*$/, "").trim();
+};
 
 /** An answer and the question it hands to the author, when it ends with one. */
 export const forwardOf = (answer: string): { readonly answer: string; readonly question: string } | null => {
@@ -446,12 +457,12 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       });
 
     /** Hand a question to the review's author's AI: refused for the reader's own review. */
-    const askAuthor = (ticketId: string, turn: ChatTurn, question: string) =>
+    const askAuthor = (ticketId: string, turn: ChatTurn, question: string, whys = false) =>
       Effect.gen(function* () {
         const found = yield* reviewNamed(ticketId);
         if (!found) return null;
         const id = randomUUID();
-        const said = yield* questions.ask(found.roomId, { id, ticketId, question, ...(turn.selection ? { lines: turn.selection } : {}), ...(turn.commit ? { commit: turn.commit } : {}) });
+        const said = yield* questions.ask(found.roomId, { id, ticketId, question, ...(whys ? { whys: true } : turn.selection ? { lines: turn.selection } : {}), ...(turn.commit ? { commit: turn.commit } : {}) });
         return said.startsWith("failed") ? null : id;
       });
 
@@ -460,6 +471,14 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
     const forwarded = (ticketId: string, turnId: string) =>
       Effect.gen(function* () {
         const turn = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
+        // the reader asked for the missing whys: their word, so it is asked at once, whatever the forwarding steering
+        const before = turn && turn.state === "done" ? whysOf(turn.answer) : null;
+        if (turn && before !== null) {
+          const id = yield* askAuthor(ticketId, turn, WHYS_QUESTION, true);
+          const said = id ? "Asked for every why the review is missing: each goes onto the review where it is missing, as it comes." : "The ask for the missing whys could not be sent.";
+          yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: [before, said].filter((part) => part.length > 0).join("\n\n"), ...(id ? { forward: { id, question: WHYS_QUESTION, state: "asked" as const } } : {}) }));
+          return;
+        }
         const handed = turn && turn.state === "done" ? forwardOf(turn.answer) : null;
         if (!turn || !handed) return;
         const found = yield* reviewNamed(ticketId);

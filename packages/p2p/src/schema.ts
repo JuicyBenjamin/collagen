@@ -101,6 +101,11 @@ export const ReviewQuestion = Schema.Struct({
   lines: Schema.optional(QuestionLines),
   /** the commit the reader's page showed */
   commit: Schema.optional(Schema.String),
+  /** not one question but every why the review is missing: the author's
+   *  collagen finds the gaps and its AI fills each one on the review's why.
+   *  No protocol bump: only the asker writes a message, nobody rewrites it,
+   *  and an older author reads it as the plain question it also carries. */
+  whys: Schema.optional(Schema.Boolean),
 });
 export type ReviewQuestion = typeof ReviewQuestion.Type;
 
@@ -804,6 +809,8 @@ export const ReviewQuestionHeld = Schema.Struct({
   question: Schema.String,
   lines: Schema.optional(QuestionLines),
   commit: Schema.optional(Schema.String),
+  /** every missing why, not one question (ReviewQuestion.whys) */
+  whys: Schema.optional(Schema.Boolean),
   stage: Schema.Literals(["new", "waiting", "asking", "answering", "answered", "declined", "addressing"]),
   /** the conversations the work was found in, the one at the top first */
   conversations: Schema.optional(Schema.Array(Conversation)),

@@ -63,6 +63,9 @@ export interface FilingAsk {
   readonly prompt: string;
   readonly cwd: string;
   readonly reads: ReadonlyArray<string>;
+  /** whose ask it answers: another person's (a colleague's review ask or
+   *  question), unless the person asked it of their own work */
+  readonly cause?: "mine" | "others";
 }
 
 /** The collagen tools a filing job may call: the why to read, the ticket to
@@ -237,7 +240,7 @@ export class Jobs extends Context.Service<Jobs>()("cli/Jobs", {
         if (!harness) return `failed: collagen runs this job with ${chosen ? `"${chosen}", which it cannot run` : "the AI your user uses most, and none has worked with collagen yet"} — choose one for it on the settings page's AI tab, or with set-jobs`;
         const model = modelFor(state, kind, harness.defaultModels);
         const queuedAt = yield* Clock.currentTimeMillis;
-        const job: QueuedJob = { id: crypto.randomUUID(), kind, ticketId: asked.requestId, title: asked.title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: asked.prompt, cwd: asked.cwd, cause: kind === "guidance" ? "mine" : "others", roomId: asked.roomId, reads: asked.reads };
+        const job: QueuedJob = { id: crypto.randomUUID(), kind, ticketId: asked.requestId, title: asked.title, harness: harness.id, ...(model ? { model } : {}), queuedAt, prompt: asked.prompt, cwd: asked.cwd, cause: kind === "guidance" ? "mine" : (asked.cause ?? "others"), roomId: asked.roomId, reads: asked.reads };
         yield* store.update((now) => ({ ...now, queuedJobs: [...(now.queuedJobs ?? []), job] }));
         const view: JobView = { id: job.id, kind, ticketId: job.ticketId, title: job.title, harness: harness.id, ...(model ? { model } : {}), state: "queued", queuedAt };
         yield* SubscriptionRef.update(views, (all) => [...all, view]);
