@@ -1086,8 +1086,13 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .board { max-width: 1640px; margin: 0 auto; padding: 32px 24px 80px; }
 .board-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin: 0 0 24px; }
 .board-head > .header-corner { margin-left: auto; }
-.board-view { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
-.board-epic { width: 18rem; }
+/* the epic picker as wide as an epic's name, its menu under it on the page's raised surface, which has no utilities for it */
+.board-epic > .input { width: 20rem; }
+.board-epic-list { width: 20rem; max-height: 22rem; overflow-y: auto; flex-wrap: nowrap; margin-top: 4px; background: var(--color-base-200); border: 1px solid var(--color-base-300); border-radius: var(--radius-box); box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45); }
+.board-epic-list li > div { display: flex; gap: 10px; box-sizing: border-box; max-width: 100%; }
+.board-epic-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.board-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.board-kind-count { color: var(--faint); font-weight: 400; }
 .board-head h1 { font-size: 22px; line-height: 1.3; margin: 0; }
 .lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
 @media (max-width: 900px) {
@@ -1107,33 +1112,27 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .board-who { color: var(--faint); font-size: 12.5px; white-space: nowrap; }
 .board-who.mine { color: var(--accent); }
 /* a line of work, at rest: its latest card, the edges of those before it
-   under it, and a line saying what they are. Open, under the pointer: a
-   panel raised over the board where the stack stands, taking no room —
-   nothing on the board moves, so nothing moves under the pointer — the
-   cards unfolding out of the front one, the one under the pointer marked.
-   One surface with no gaps, so the pointer can go from card to card; it
-   folds back once the pointer leaves the panel */
+   under it, and a line saying what they are; the pointer over it lights it
+   a little. Clicked, it opens from the middle where it stands (its cards
+   moved by Motion, Stack/fan.ts), raised over the board and taking no
+   room: nothing on the board moves, so nothing moves under the pointer.
+   The fan is one box over every card and the gaps between, so the pointer
+   goes card to card without leaving the stack; it folds once the pointer
+   leaves. The card in focus is marked by the accent */
 .board-stack { position: relative; display: flex; flex-direction: column; }
-.board-stack > .board-card { position: relative; z-index: 1; }
+.board-stack.stacked { cursor: pointer; }
+.board-stack.open { z-index: 10; }
+.board-stack-front { position: relative; z-index: 1; }
+.board-stack-shade { position: fixed; inset: 0; z-index: 0; background: color-mix(in oklab, var(--color-base-200) 72%, transparent); opacity: 0; pointer-events: none; }
+.board-stack-face { position: relative; z-index: 1; border-radius: var(--radius-box); }
+.board-stack-face:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.board-stack.stacked:not(.open):hover .board-stack-face > .board-card { border-color: color-mix(in oklab, var(--accent) 40%, var(--color-base-300)); }
 .board-stack-edges { display: flex; flex-direction: column; align-items: stretch; }
 .board-stack-edges > span { height: 7px; margin: -3px 12px 0; border: 1px solid var(--color-base-300); border-top: 0; border-radius: 0 0 8px 8px; background: var(--color-base-100); filter: brightness(0.92); }
 .board-stack-edges > span + span { margin-inline: 24px; filter: brightness(0.85); }
 .board-stack-more { margin: 4px 0 0 10px; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.board-stack-open {
-  position: absolute; top: -6px; left: -6px; right: -6px; z-index: 5;
-  display: flex; flex-direction: column; gap: 6px; padding: 6px;
-  background: var(--color-base-200); border: 1px solid var(--color-base-300); border-radius: 12px;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
-  perspective: 900px;
-  opacity: 0; visibility: hidden; pointer-events: none;
-  transition: opacity 140ms ease, visibility 0s linear 140ms;
-}
-.board-stack-item { transform-origin: top center; transform: translateY(calc(var(--i) * -100%)) rotateX(16deg); transition: transform 260ms ease; }
-.board-stack-item:first-child { transform: none; }
-.board-stack.stacked:hover > .board-stack-open, .board-stack.stacked:focus-within > .board-stack-open { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 140ms ease; }
-.board-stack.stacked:hover > .board-stack-open > .board-stack-item, .board-stack.stacked:focus-within > .board-stack-open > .board-stack-item { transform: none; }
-.board-stack-item > .board-card { transition: border-color 120ms ease, box-shadow 120ms ease; }
-.board-stack-item:hover > .board-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-@media (prefers-reduced-motion: reduce) {
-  .board-stack-open, .board-stack-item { transition: none; }
-}
+.board-stack-fan { position: absolute; left: 0; right: 0; z-index: 5; top: calc(var(--mid) * var(--step) * -1); bottom: calc(var(--mid) * var(--step) * -1); perspective: 900px; opacity: 0; pointer-events: none; }
+.board-stack.open .board-stack-fan { pointer-events: auto; }
+.board-stack-item { position: absolute; left: 0; right: 0; top: calc(var(--mid) * var(--step)); }
+.board-stack.open .board-stack-item > .board-card { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
+.board-stack.open .board-stack-item.focused > .board-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 18px 40px rgba(0, 0, 0, 0.45); }

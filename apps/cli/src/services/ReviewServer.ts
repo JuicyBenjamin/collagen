@@ -13,7 +13,7 @@ import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, projectNameOk, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
 import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
-import { boardChanges, boardData, shortIdOk } from "./BoardView";
+import { boardChanges, boardData, boardKindsOk, shortIdOk } from "./BoardView";
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
 import { answerQuestion, investigationView } from "./InvestigationView";
@@ -216,7 +216,8 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
       ticketIdOk(ticketId) && typeof turnId === "string" && /^[\w-]{1,80}$/.test(turnId) && (mode === "assume" || mode === "critique") ? on(chat.instead(ticketId, turnId, mode)) : Effect.succeed({ error: "bad request" }),
     newChat: (ticketId) => (ticketIdOk(ticketId) ? chat.clear(ticketId) : Effect.void),
     reopenChat: (ticketId, chatId) => (ticketIdOk(ticketId) ? chat.reopen(ticketId, chatId).pipe(Effect.asVoid) : Effect.void),
-    board: (roomId, epic = null, allDone = false) => (shortIdOk(roomId) && (epic === null || ticketIdOk(epic)) && typeof allDone === "boolean" ? on(boardData(roomId, epic, allDone)) : Effect.succeed(null)),
+    board: (roomId, epic = null, allDone = false, kinds = []) =>
+      shortIdOk(roomId) && (epic === null || ticketIdOk(epic)) && typeof allDone === "boolean" && boardKindsOk(kinds) ? on(boardData(roomId, epic, allDone, kinds)) : Effect.succeed(null),
     boardChanges: (roomId) => (shortIdOk(roomId) ? boardChanges(roomId).pipe(Stream.provideContext(context)) : Stream.empty),
     drop: (ticketId, ids, kind) => (ticketIdOk(ticketId) && idsOk(ids) && (kind === "ai" || kind === "pending") ? on(dropDrafts(ticketId, ids, kind)) : Effect.succeed(0)),
   } satisfies ReviewBackend["Service"];

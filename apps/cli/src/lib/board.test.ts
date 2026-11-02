@@ -53,6 +53,15 @@ describe("boardOf", () => {
     expect(todo.stacks.map((stack) => stack.map((row) => row.ticket.id))).toEqual([["other"], ["plan", "proposal"]]);
   });
 
+  it("a kind filter keeps a line of work's cards of those kinds, still stacked as one line", () => {
+    const proposal = ticket("proposal", "bob", "pending", { kind: "proposal", updatedAt: 1 });
+    const plan = ticket("plan", "bob", "pending", { kind: "plan", from: ["proposal"], updatedAt: 2 });
+    const task = ticket("task", "bob", "pending", { kind: "task", from: ["plan"], updatedAt: 3 });
+    const bug = ticket("bug", "bob", "pending", { kind: "bug", updatedAt: 4 });
+    const todo = boardOf([proposal, plan, task, bug], [], "carol", { ...NOW, kinds: ["proposal", "task"] }).find((lane) => lane.column === "todo")!;
+    expect(todo.stacks.map((stack) => stack.map((row) => row.ticket.id))).toEqual([["task", "proposal"]]);
+  });
+
   it("keeps done to what finished lately, the rest counted", () => {
     const lately = ticket("lately", "bob", "settled", { updatedAt: 25 * DAY });
     const long = ticket("long", "bob", "settled", { updatedAt: 1 * DAY });

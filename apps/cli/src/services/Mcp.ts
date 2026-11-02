@@ -943,8 +943,8 @@ export const AnswerQuestion = Tool.make("answer-question", {
 
 export const OpenBoard = Tool.make("open-board", {
   description:
-    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as b on the terminal's board tab — all of it, or one epic's when 'epic' names one (its title or id; the board offers the epics with open tickets). When your user asks to see the board, where things stand, or how an epic is going. It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
-  parameters: Schema.Struct({ epic: Schema.optional(Schema.String) }),
+    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as b on the terminal's board tab — all of it, or one epic's when 'epic' names one (its title or id; the board offers the epics with open tickets); every kind, or only those in 'kinds' (a line of work keeps its cards of those kinds). When your user asks to see the board, where things stand, how an epic is going, or only the bugs (say). It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Schema.Struct({ epic: Schema.optional(Schema.String), kinds: Schema.optional(Schema.Array(Schema.Literals(["investigation", "proposal", "bug", "plan", "task", "review"]))) }),
   success: Schema.String,
 });
 
@@ -3072,15 +3072,16 @@ const makeHandlers = Effect.gen(function* () {
         const done = yield* answerQuestion(input.ticketId, input.questionId, input.answer).pipe(Effect.provideContext(answerContext));
         return "error" in done ? `failed: ${done.error}` : input.answer === "yes" ? "answered yes: where it leads, it is a goal now, and started as their steering allows; open-investigation shows it" : "answered no";
       }),
-      "open-board": Effect.fn("Mcp.openBoard")(function* (input: { epic?: string }) {
+      "open-board": Effect.fn("Mcp.openBoard")(function* (input: { epic?: string; kinds?: ReadonlyArray<string> }) {
         const { id: roomId, room } = yield* focusedRoom;
         const query = input.epic?.trim();
-        if (!query) return yield* pages.showBoard(roomId);
+        const kinds = [...new Set(input.kinds ?? [])];
+        if (!query) return yield* pages.showBoard(roomId, null, kinds);
         const tickets = [...(yield* SubscriptionRef.get(room.tickets)).values()];
         const epics = boardEpics(tickets, identity.pubkey);
         const hit = epics.find((entry) => entry.epic.id.startsWith(query) || sameName(entry.epic.title ?? entry.epic.goal, query));
         if (!hit) return `failed: no epic "${query}" with open tickets — the board offers ${epics.map((entry) => `"${entry.epic.title ?? entry.epic.goal}"`).join(", ") || "none"}`;
-        return yield* pages.showBoard(roomId, hit.epic.id);
+        return yield* pages.showBoard(roomId, hit.epic.id, kinds);
       }),
       "open-audit": Effect.fn("Mcp.openAudit")(function* () {
         const { id: roomId } = yield* focusedRoom;

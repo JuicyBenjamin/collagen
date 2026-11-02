@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { Clock, Effect, Stream, SubscriptionRef } from "effect";
-import { BOARD_LABEL, closedAs, shortRoomId } from "@collagen/p2p";
-import type { BoardData } from "@collagen/review-web/data";
-import { boardEpics, boardOf, unreadLine, unreadTickets } from "../lib/board";
+import { BOARD_LABEL, closedAs, KIND_ORDER, shortRoomId } from "@collagen/p2p";
+import type { BoardData, BoardKind } from "@collagen/review-web/data";
+import { boardEpics, boardOf, kindCounts, unreadLine, unreadTickets } from "../lib/board";
 import type { Row } from "../lib/ticketGroups";
 import { kindGlyph } from "../lib/ticketTabs";
 import { rowTitle } from "../lib/ticketSummary";
@@ -18,6 +18,13 @@ import { Rooms } from "./Rooms";
 /** A short room id (shortRoomId); anything else is not looked up. */
 export const shortIdOk = (id: string | undefined): id is string => id !== undefined && /^[0-9a-f]{8}$/.test(id);
 
+/** The kinds a board can be filtered to: every kind but epic, which is a view, not a card. */
+export const BOARD_KINDS: ReadonlyArray<BoardKind> = KIND_ORDER.filter((kind): kind is BoardKind => kind !== "epic");
+
+/** A list of board kinds from the page, each once. */
+export const boardKindsOk = (kinds: unknown): kinds is ReadonlyArray<BoardKind> =>
+  Array.isArray(kinds) && kinds.length <= BOARD_KINDS.length && kinds.every((kind) => BOARD_KINDS.includes(kind)) && new Set(kinds).size === kinds.length;
+
 /** The room this instance is in that a short id names. */
 const roomNamed = (shortId: string) =>
   Effect.gen(function* () {
@@ -25,9 +32,9 @@ const roomNamed = (shortId: string) =>
   });
 
 /** The room's board for this instance's person, all of it read at one
- *  moment: everything, or one epic's (by its id or the start of it); the
- *  done column what finished lately, or all of it. */
-export const boardData = Effect.fn("BoardView.data")(function* (shortId: string, epic: string | null = null, allDone = false) {
+ *  moment: everything, or one epic's (by its id or the start of it); every
+ *  kind, or only some; the done column what finished lately, or all of it. */
+export const boardData = Effect.fn("BoardView.data")(function* (shortId: string, epic: string | null = null, allDone = false, kinds: ReadonlyArray<BoardKind> = []) {
   const handle = yield* roomNamed(shortId);
   if (!handle) return null;
   const { room } = handle;
@@ -56,11 +63,17 @@ export const boardData = Effect.fn("BoardView.data")(function* (shortId: string,
   });
   const epics = boardEpics([...tickets.values()], me);
   const chosen = epic ? (epics.find((entry) => entry.epic.id === epic || entry.epic.id.startsWith(epic))?.epic.id ?? null) : null;
+  const view = { epic: chosen, allDone, now: yield* Clock.currentTimeMillis };
+  const everyKind = boardOf([...tickets.values()], trace, me, view);
+  const lanes = kinds.length === 0 ? everyKind : boardOf([...tickets.values()], trace, me, { ...view, kinds });
+  const counts = kindCounts(everyKind);
   return {
     room: meta.name,
     epics: epics.map((entry) => ({ id: entry.epic.id, title: rowTitle(entry.epic), open: entry.open })),
     epic: chosen,
-    lanes: boardOf([...tickets.values()], trace, me, { epic: chosen, allDone, now: yield* Clock.currentTimeMillis }).map((lane) => ({
+    kinds: BOARD_KINDS.filter((kind) => (counts.get(kind) ?? 0) > 0 || kinds.includes(kind)).map((kind) => ({ kind, glyph: kindGlyph(kind), label: `${kind}s`, count: counts.get(kind) ?? 0 })),
+    chosen: kinds,
+    lanes: lanes.map((lane) => ({
       column: lane.column,
       label: BOARD_LABEL[lane.column],
       stacks: lane.stacks.map((stack) => stack.map(card)),
