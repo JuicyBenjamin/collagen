@@ -149,6 +149,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     let joining: Invite | null = config.invite;
     // join requests we couldn't serve yet (no log, or not admitted ourselves)
     const pendingJoins = new Set<string>();
+    // writers whose admit to the log last failed, and why: retried on their next ask
+    const admitFailures = new Map<string, { readonly why: string; readonly at: number }>();
     let log: RoomLog | null = null;
     // the view as last read, for what follows a refresh (moving the room)
     let lastView: LogView | null = null;
@@ -238,7 +240,18 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         yield* Effect.log(`admitting ${writer.slice(0, 8)} to the room log`);
         // a failed admit is not an admit: their next ask (every few seconds) tries again
         yield* roomLog.append({ op: "add-writer", key: writer }).pipe(
-          Effect.catch((error) => Effect.logWarning(`admit failed: ${error.message}`).pipe(Effect.andThen(Effect.sync(() => void admitted.delete(writer))))),
+          Effect.andThen(Effect.sync(() => void admitFailures.delete(writer))),
+          Effect.catch((error) =>
+            Effect.logWarning(`admit failed: ${error.message}`).pipe(
+              Effect.andThen(Clock.currentTimeMillis),
+              Effect.andThen((at) =>
+                Effect.sync(() => {
+                  admitted.delete(writer);
+                  admitFailures.set(writer, { why: error.message, at });
+                }),
+              ),
+            ),
+          ),
         );
       }
     });
@@ -998,6 +1011,18 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       useInvite,
       /** Whether we can write to the room's log yet. */
       writable,
+      /** How the room's connection stands now: whether its log is open,
+       *  who is on its topic but not let in, admits that failed, and the
+       *  swarm's own state — for a person or an AI asking why it is quiet. */
+      connection: Effect.gen(function* () {
+        return {
+          logOpen: log !== null,
+          onTopic: connected.size,
+          strangers: [...strangers.values()].map((peer) => ({ key: peer.key, name: peer.name })),
+          admitFailed: [...admitFailures].map(([key, failure]) => ({ key, ...failure })),
+          swarm: yield* swarm.health,
+        };
+      }),
     } as const;
   }),
 }) {
