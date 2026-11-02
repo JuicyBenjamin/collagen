@@ -167,18 +167,18 @@ const djangoChanges = (text: string): ReadonlyArray<SchemaChange> => {
   for (const operation of operations) {
     const kind = /^(\w+)\(/.exec(operation)![1]!;
     // by its own name, never inside another (name in model_name)
-    const arg = (name: string) => new RegExp(`(?:^|[^\\w])${name}\\s*=\\s*['"]([^'"]+)['"]`).exec(operation)?.[1] ?? "";
+    const argument = (name: string) => new RegExp(`(?:^|[^\\w])${name}\\s*=\\s*['"]([^'"]+)['"]`).exec(operation)?.[1] ?? "";
     const field = /field\s*=\s*models\.(\w+)/.exec(operation)?.[1];
-    const model = (arg("model_name") || arg("name")).toLowerCase();
+    const model = (argument("model_name") || argument("name")).toLowerCase();
     if (kind === "CreateModel") {
       const columns = [...operation.matchAll(/\(\s*['"](\w+)['"]\s*,\s*models\./g)].map((found) => found[1]!);
-      changes.push({ action: "create table", table: arg("name").toLowerCase(), detail: columns.join(", "), losesData: false });
+      changes.push({ action: "create table", table: argument("name").toLowerCase(), detail: columns.join(", "), losesData: false });
     } else if (kind === "DeleteModel") changes.push({ action: "drop table", table: model, losesData: true });
-    else if (kind === "AddField") changes.push({ action: "add column", table: model, target: arg("name"), ...(field ? { detail: field } : {}), losesData: false });
-    else if (kind === "RemoveField") changes.push({ action: "drop column", table: model, target: arg("name"), losesData: true });
-    else if (kind === "AlterField") changes.push({ action: "change column", table: model, target: arg("name"), ...(field ? { detail: `type ${field}` } : {}), losesData: true });
-    else if (kind === "RenameField") changes.push({ action: "rename column", table: model, target: arg("old_name"), detail: arg("new_name"), losesData: false });
-    else if (kind === "RenameModel") changes.push({ action: "rename table", table: arg("old_name").toLowerCase(), detail: arg("new_name").toLowerCase(), losesData: false });
+    else if (kind === "AddField") changes.push({ action: "add column", table: model, target: argument("name"), ...(field ? { detail: field } : {}), losesData: false });
+    else if (kind === "RemoveField") changes.push({ action: "drop column", table: model, target: argument("name"), losesData: true });
+    else if (kind === "AlterField") changes.push({ action: "change column", table: model, target: argument("name"), ...(field ? { detail: `type ${field}` } : {}), losesData: true });
+    else if (kind === "RenameField") changes.push({ action: "rename column", table: model, target: argument("old_name"), detail: argument("new_name"), losesData: false });
+    else if (kind === "RenameModel") changes.push({ action: "rename table", table: argument("old_name").toLowerCase(), detail: argument("new_name").toLowerCase(), losesData: false });
     else if (kind === "AddIndex") changes.push({ action: "add index", table: model, losesData: false });
     else if (kind === "RunSQL") changes.push(...sqlChanges(/['"]{3}([\s\S]*?)['"]{3}|['"]([^'"]*)['"]/.exec(operation)?.slice(1).find(Boolean) ?? ""));
     else changes.push({ action: kind.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase(), table: model, losesData: false });
