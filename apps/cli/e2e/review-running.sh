@@ -39,5 +39,5 @@ DATA=$(sfn reviewData "[\"$TICKET\"]")
 expect "the page, marked as running on its author's machine" "$DATA" '"id":"s1","title":"Export page","url":"http://localhost:5173/export","local":true'
 expect "the staging page, not local" "$DATA" '"id":"s2","title":"On staging","url":"https://staging.example.com/export","local":false'
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $(page_of $A "$SA" "$TICKET")"; summary; exit; fi
 kill_all; summary

@@ -1,2 +1,4 @@
-/** /review/<ticketId> — the one thing the url carries. */
-export const ticketId = decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] ?? "");
+import { place } from "./place";
+
+/** The ticket this page is about: its full id, as collagen wrote it into the page. */
+export const ticketId = place && "ticket" in place ? place.ticket : "";

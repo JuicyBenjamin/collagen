@@ -13,8 +13,12 @@ hint says so when a review is selected), on the **why** section of its page, or 
 full why page:
 
 ```
-http://127.0.0.1:<your instance's port>/review/<ticket id>
+http://127.0.0.1:<your instance's port>/room/<room>/ticket/<ticket>
 ```
+
+Every page lives under its room, by short ids: a ticket's page (a review, an
+investigation) at `/room/<room>/ticket/<ticket>`, the room's audit at
+`/room/<room>/audit`, its merges at `/room/<room>/merges/<project>`.
 
 It also opens by itself when your agent starts reading a review you were asked for — once,
 and only while the [switch](./using-the-cli#switches) for it is on (it is by default; your

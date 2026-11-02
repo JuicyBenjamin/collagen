@@ -89,5 +89,5 @@ expect "…and the fork, with the road not taken" "$(echo "$TEXT" | grep -c 'ins
 expect "…pointing at the code the choice produced" "$(echo "$TEXT" | grep -c 'f1 src/components/Logo/Logo.tsx:87')" "^[1-9]"
 expect "the crumb says why, under the ticket's title" "$(echo "$TEXT" | grep -cE 'The logo glides into place.{0,20}why')" "^[1-9]"
 expect "← went back to the ticket" "$(echo "$KEYS" | tr ' ' '\n' | tail -3 | tr '\n' ' ')" "ticket-review"
-expect "o on the review ticket's row opened the review page in the browser" "$(cat "$OUT/opened" 2>/dev/null)" "^http://127.0.0.1:[0-9]+/review/$TICKET$"
+expect "o on the review ticket's row opened the review page in the browser" "$(cat "$OUT/opened" 2>/dev/null)" "^http://127.0.0.1:[0-9]+/room/[0-9a-f]{8}/ticket/${TICKET:0:8}$"
 kill_all; summary

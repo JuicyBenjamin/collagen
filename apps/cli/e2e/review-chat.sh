@@ -90,6 +90,6 @@ said() { sfn_live chatLive "[\"$TICKET\"]" | grep -c "$1"; }
 wait_until "the turns are gone" "^0$" said "back again"
 expect "…and her state no longer points at the old conversation" "$(chat_id)" "^$"
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $(page_of $A "$SA" "$TICKET")"; summary; exit; fi
 kill_all
 summary

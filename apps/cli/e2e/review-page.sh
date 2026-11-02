@@ -1,7 +1,7 @@
 #!/bin/bash
 # The review page: a review read by intent, not by filename. alice's project
 # is a real git repo with a branch off main; she asks for a review with the
-# why pointing at the lines it produced. The instance serves /review/<id>:
+# why pointing at the lines it produced. The instance serves /room/<room>/ticket/<ticket>:
 # the diff from her own clone (git diff main...branch), each hunk under the
 # decision whose `where` claims it, a fork beside the hunk it sits in, and
 # the hunk no decision claims under "not explained". Loopback only, and a
@@ -105,7 +105,8 @@ expect "a unit titled by a file is refused" "$(call $A "$SA" ask-review "{\"tick
 expect "a unit with no line beneath its title is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Pages of a hundred\",\"what\":\" \",\"where\":[\"src/page.ts\"]}]}")" "has no 'what'"
 
 echo "## the page itself"
-PAGE=$(curl -s "$ORIGIN/review/$TICKET")
+TICKET_PAGE=$(page_of $A "$SA" "$TICKET")
+PAGE=$(curl -s "$TICKET_PAGE")
 expect "the page is served: the Solid app's document" "$PAGE" "<title>Review by intent</title>"
 ASSET=$(echo "$PAGE" | grep -oE '/review/assets/[A-Za-z0-9_.-]+\.js' | head -1)
 expect "…and its script, from the build, as JavaScript" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$ORIGIN$ASSET")" "^200 text/javascript"
@@ -189,7 +190,7 @@ expect "…a commit the page names but the clone lacks is refused, not swapped f
 kill $CURL 2>/dev/null
 # o on a review open where its tab cannot be brought forward opens one
 # marked ?take, which the old tab hands over to: the marker serves the page
-expect "a tab marked to take over is the same page" "$(curl -s "$ORIGIN/review/$TICKET?take")" "<title>Review by intent</title>"
+expect "a tab marked to take over is the same page" "$(curl -s "$TICKET_PAGE?take")" "<title>Review by intent</title>"
 
 echo "## PHP: Intelephense over the branch, the clone's vendor/ linked in"
 # the clone's own Composer install: untracked, as vendor/ always is
@@ -241,5 +242,5 @@ MERGED=$(sfn reviewData "[\"$TICKET\"]")
 expect "an empty diff is no diff, never empty blocks" "$MERGED" '"grouped":null'
 expect "…and the reason names what is missing" "$MERGED" '"source":\{"kind":"none","detail":"feat/stream-export has no changes against main"\}'
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $TICKET_PAGE"; summary; exit; fi
 kill_all; summary
