@@ -56,7 +56,7 @@ why() { call $A "$SA" review-context "{\"ticketId\":\"$TICKET\"}"; }
 next() {
   node -e '
     const [origin, ticket] = process.argv.slice(1);
-    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/_live`, { headers: { Origin: origin } });
     socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic: "next", subject: ticket }));
     socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(JSON.stringify(message.value)); };
     setTimeout(() => process.exit(0), 1500);

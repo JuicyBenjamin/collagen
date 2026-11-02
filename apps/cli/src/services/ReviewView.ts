@@ -581,14 +581,14 @@ export const ReviewRoutes = Layer.mergeAll(
     ),
   ),
   // its hashed assets, by bare file name only — nothing outside the bundle
-  HttpRouter.add("GET", "/review/assets/:file", (request) =>
+  HttpRouter.add("GET", "/_build/assets/:file", (request) =>
     Effect.gen(function* () {
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
       const { file } = yield* HttpRouter.params;
       const root = webRoot();
       const type = file ? TYPES[extname(file)] : undefined;
       if (!root || !file || !/^[\w.-]+$/.test(file) || !type) return notFound("no such asset");
-      const path = join(root, "assets", file);
+      const path = join(root, "_build", "assets", file);
       if (!existsSync(path)) return notFound("no such asset");
       return HttpServerResponse.uint8Array(readFileSync(path), { contentType: type, headers: { "cache-control": "public, max-age=31536000, immutable" } });
     }),

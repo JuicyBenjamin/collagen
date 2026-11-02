@@ -67,7 +67,7 @@ ROOM=$(curl -s "$PAGE" | python3 -c 'import html,json,re,sys; print(json.loads(h
 expect "the page is served" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$PAGE")" "^200 text/html"
 expect "…and the room's, which goes on to a project's" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "${PAGE%/*}")" "^200 text/html"
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
-sfn() { node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$(grep -oE "registerServerReference\\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn() { node "$E2E/sfn.mjs" "${A%/mcp}/_server/data/$(grep -oE "registerServerReference\\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 expect "the room's projects here, for its tabs and where its address goes" "$(sfn mergeProjects "[\"$ROOM\"]" | python3 -c 'import json,sys; print(*json.load(sys.stdin)["projects"])')" "^sandbox$"
 HISTORY=$(sfn mergeHistory "[\"$ROOM\",\"sandbox\",50,false]")
 expect "its data: into main, the latest first" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["history"]; print(d["base"], *[m["number"] for m in d["merges"]])')" "^main 6 5 1000 "
