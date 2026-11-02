@@ -44,7 +44,7 @@ import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
-import { ReviewQuestions } from "./ReviewQuestions";
+import { ReviewQuestions, WHYS_QUESTION, type WhyGiven } from "./ReviewQuestions";
 import { chatInWords, ReviewChat } from "./ReviewChat";
 import { indexLine, noteInWords, notesIndex, notesOf } from "../lib/steeringNotes";
 import { filesOfWhy, GuidancePass } from "./GuidancePass";
@@ -485,8 +485,9 @@ export const AskAuthor = Tool.make("ask-author", {
   description: [
     "Ask the author's AI something about a review that its why does not answer (review-context said nothing on it): their collagen answers from the conversation the work was done in, as THEIR steering allows, and the answer comes back to your user's chat on the review page and onto the review's why, marked as read from their AI.",
     "Only when your user's forwarding steering lets you (set-steering kind forward), or on their word. 'question' in their words, standalone; 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows, when it is about code.",
+    "'whys: true' asks for every why the review is missing instead (decisions with no reason, changes no decision covers): their collagen finds each gap, and each why goes where its gap is on the review's why. 'question' is then optional.",
   ].join("\n"),
-  parameters: Schema.Struct({ ticketId: Schema.String, question: Schema.String, lines: Schema.optional(QuestionLinesInput), commit: Schema.optional(Schema.String) }),
+  parameters: Schema.Struct({ ticketId: Schema.String, question: Schema.optional(Schema.String), lines: Schema.optional(QuestionLinesInput), commit: Schema.optional(Schema.String), whys: Schema.optional(Schema.Boolean) }),
   success: Schema.String,
 });
 
@@ -597,12 +598,14 @@ export const ReviewQuestionTool = Tool.make("review-question", {
   description: [
     "Answer a question a reader asked about your user's review (ask-author): with nothing, it lists the questions waiting on them. 'answer: true' is your user's yes — collagen finds the conversation the work was done in, and a job of theirs reads it and answers. 'decline' is their no, with their reason. 'reply' IS the answer — from the answering job, or from THIS conversation if it did the work — in plain words; add 'flaw' when answering shows something wrong with the change: their work steering then raises it with them or hands it to the conversation that built it.",
     "The reader is told, and the answer goes onto the review's why, marked as read from your user's AI. When the reader's AI already guessed at it (a guess on the why), 'verdict' settles that guess: confirmed (alone is enough), corrected or wrong (with 'reply', the real reason).",
+    "A question for every missing why is answered with 'whys' instead of 'reply': one entry per gap — {decision, why} for a decision that gave no reason, {where: [file:line-line], title, why} for changes no decision covers — each put where its gap is.",
   ].join("\n"),
   parameters: Schema.Struct({
     questionId: Schema.optional(Schema.String),
     answer: Schema.optional(Schema.Boolean),
     decline: Schema.optional(Schema.String),
     reply: Schema.optional(Schema.String),
+    whys: Schema.optional(Schema.Array(Schema.Struct({ decision: Schema.optional(Schema.String), where: Schema.optional(Schema.Array(Schema.String)), title: Schema.optional(Schema.String), why: Schema.String }))),
     flaw: Schema.optional(Schema.String),
     verdict: Schema.optional(Schema.Literals(["confirmed", "corrected", "wrong"])),
   }),
@@ -2121,10 +2124,11 @@ const makeHandlers = Effect.gen(function* () {
             : `failed: ${who.person.name} is not online, so collagen cannot see their projects — pass 'project'`;
         return yield* reviewRequests.ask(roomId, { peer: who.person, project, ...(branch ? { branch } : {}), ...(link ? { link } : {}), ...(input.note ? { note: input.note } : {}), ...(input.review ? { review: input.review } : {}) });
       }),
-      "ask-author": Effect.fn("Mcp.askAuthor")(function* (input: { ticketId: string; question: string; lines?: QuestionLines; commit?: string }) {
-        if (!input.question.trim()) return "failed: 'question' in your user's words";
+      "ask-author": Effect.fn("Mcp.askAuthor")(function* (input: { ticketId: string; question?: string; lines?: QuestionLines; commit?: string; whys?: boolean }) {
+        const question = input.question?.trim() || (input.whys ? WHYS_QUESTION : "");
+        if (!question) return "failed: 'question' in your user's words, or whys: true for every missing why";
         const { id: roomId } = yield* focusedRoom;
-        return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question: input.question.trim(), ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) });
+        return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question, ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}), ...(input.whys ? { whys: true } : {}) });
       }),
       "review-chat": Effect.fn("Mcp.reviewChat")(function* (input: { ticketId: string; question?: string; lines?: QuestionLines; commit?: string; stop?: boolean; new?: boolean; chat?: string; reopen?: string }) {
         const now = () => reviewChat.view(input.ticketId).pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
@@ -2406,7 +2410,7 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.assume(roomId, { id: input.questionId, ticketId: input.ticketId, what: input.what.trim(), basis: input.basis.trim() || "the code", confidence: input.confidence });
       }),
-      "review-question": Effect.fn("Mcp.reviewQuestion")(function* (input: { questionId?: string; answer?: boolean; decline?: string; reply?: string; flaw?: string; verdict?: "confirmed" | "corrected" | "wrong" }) {
+      "review-question": Effect.fn("Mcp.reviewQuestion")(function* (input: { questionId?: string; answer?: boolean; decline?: string; reply?: string; whys?: ReadonlyArray<WhyGiven>; flaw?: string; verdict?: "confirmed" | "corrected" | "wrong" }) {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.respond(roomId, input);
       }),
