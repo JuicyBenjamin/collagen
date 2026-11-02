@@ -26,6 +26,8 @@ expect "bob may still invite" "$INV" "st-test3\."
 call $C "$SC" join-room "{\"invite\":\"$INV\"}" > /dev/null
 wait_until "carol is told she waits, by the room's name" "awaiting approval" call $C "$SC" list-rooms '{}'
 wait_until "alice sees carol waiting" "Waiting to be let in: carol" call $A "$SA" get-room-access '{}'
+expect "carol's room-connection says she waits, and who could let her in" "$(call $C "$SC" room-connection '{}')" "In the way: Waiting for a member to let you in — [1-9] members? connected"
+expect "…and alice's says who waits" "$(call $A "$SA" room-connection '{}')" "Waiting to be let in: carol \([0-9]+ s\)"
 expect "bob may not let her in" "$(call $B "$SB" set-room-access '{"action":"let-in","person":"carol","said":true}')" "does not allow it"
 expect "…and she is not let in yet" "$(grep -c 'admitted to the room log' "$OUT/carol.log")" "^0$"
 
@@ -34,6 +36,7 @@ expect "alice lets her in" "$(call $A "$SA" set-room-access '{"action":"let-in",
 admitted carol
 call $A "$SA" create-ticket '{"title":"t1 carol is in","goal":"t1 carol is in","project":"sandbox","steps":[{"id":"s1","owner":"alice","intent":"note","description":"a note"}]}' > /dev/null
 wait_until "carol reads the room" "t1 carol is in" goals $C "$SC"
+expect "once in, nothing stands in carol's way" "$(call $C "$SC" room-connection '{}')" "Nothing in the way."
 
 echo "## E. alice takes bob out: a new key he is not given"
 expect "alice takes bob out" "$(call $A "$SA" set-room-access '{"action":"remove","person":"bob","reason":"left the team","said":true}')" "took bob out"

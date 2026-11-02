@@ -70,6 +70,18 @@ const encodeEnvelope = Schema.encodeEffect(EnvelopeFromJson);
  * key made the relayed handshakes land on the wrong node and connections
  * time out — see the 2026-09-07 entry in the docs' status page.)
  */
+/** How the swarm stands now — what a person or an AI asking why a room is
+ *  quiet needs (cli room-connection): its connections, whether this machine
+ *  is reachable directly, and the peers whose build speaks another protocol. */
+export interface SwarmHealth {
+  readonly open: number;
+  readonly connecting: number;
+  /** null until the DHT has looked */
+  readonly firewalled: boolean | null;
+  /** peers whose frames name another protocol, by key: the one they speak */
+  readonly otherProtocol: ReadonlyMap<string, string>;
+}
+
 export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
   make: Effect.gen(function* () {
     const config = yield* SwarmConfig;
@@ -84,8 +96,8 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       () => Effect.promise(() => store.close() as Promise<void>).pipe(Effect.ignore),
     );
     const hooksByTopic = new Map<string, TopicHooks>();
-    /** peers already told their build is the odd one out (say it once) */
-    const mismatched = new Set<string>();
+    /** peers whose build is the odd one out, and the protocol it speaks (said once) */
+    const mismatched = new Map<string, string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const discoveries = new Map<string, any>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,7 +138,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
             if (theirs === null || theirs === PROTOCOL_VERSION || mismatched.has(key)) {
               return Effect.logWarning(`dropped invalid frame from ${key.slice(0, 8)}: ${String(error.issue).slice(0, 120)}`);
             }
-            mismatched.add(key);
+            mismatched.set(key, theirs);
             return Effect.logWarning(
               `${key.slice(0, 8)} speaks collagen protocol ${theirs}, we speak ${PROTOCOL_VERSION} — nothing between you gets through until the older side updates (npm i -g @collagen/cli)`,
             );
@@ -323,12 +335,23 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
         );
       });
 
+    /** How the swarm stands now. */
+    const health = Effect.sync(
+      (): SwarmHealth => ({
+        open: swarm ? (swarm.connections as Set<unknown>).size : 0,
+        connecting: swarm ? (swarm.connecting as number) : 0,
+        firewalled: swarm?.dht?.firewalled === undefined || !swarm.dht.bootstrapped ? null : Boolean(swarm.dht.firewalled),
+        otherProtocol: new Map(mismatched),
+      }),
+    );
+
     return {
       identity: config.identity,
       /** This identity's Corestore — rooms keep their logs in namespaces of it. */
       store,
       join,
       write,
+      health,
     } as const;
   }),
 }) {

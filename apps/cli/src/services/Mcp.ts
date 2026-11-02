@@ -15,6 +15,8 @@ import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversati
 import { invitedRoomEntry, newRoomEntry, readProfileFile, upsertRoom, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
+import { agoText, troubleOf } from "../lib/roomHealth";
+import { LogBuffer } from "./Logging";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
@@ -561,6 +563,13 @@ export const GuidancePassTool = Tool.make("guidance-pass", {
   success: Schema.String,
 });
 
+export const RoomConnection = Tool.make("room-connection", {
+  description:
+    "How a room is connected, when it seems stuck — a colleague missing, nothing arriving, waiting to be let in: what stands in the way and what to try, in one line; then you (net, protocol, reachable directly or behind a firewall), the room's log (open, writable), who is here and on which protocol, who is away, who is on the room but not let in, who waits to be let in, who was turned away, admits that failed, the swarm's connections, and this machine's recent warnings and errors. 'room' (short id or name) for another of your user's rooms; the one they look at by default. Read only.",
+  parameters: Schema.Struct({ room: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
 export const GetRoomAccess = Tool.make("get-room-access", {
   description:
     "Who may do what in the room your user is looking at. Collagen defines the permissions — invite, approve (let someone waiting in; your own invites let people straight in), remove, manage-roles — and each room defines its own roles: a name, a rank (a higher rank stands above a lower one; only someone ranked above may give, change or take a role, or act on its holders) and the permissions it holds; 'everyone' is the role every member holds. The owner (the room's creator) holds every permission. Lists the roles, who holds which, who is waiting to be let in, who was turned away and who was taken out.",
@@ -1069,6 +1078,7 @@ export const CollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  RoomConnection,
   GetRoomAccess,
   SetRoomAccess,
   GuessReason,
@@ -1141,6 +1151,7 @@ export const DevCollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  RoomConnection,
   GetRoomAccess,
   SetRoomAccess,
   GuessReason,
@@ -1210,6 +1221,7 @@ const makeHandlers = Effect.gen(function* () {
     /** The page's themes kept, and said back: every open page follows. */
     const keepThemes = (themes: PageThemes) => store.update((state) => ({ ...state, themes })).pipe(Effect.as(`set — every open page follows now.\n${describeThemes(themes)}`));
     const mcpInfo = yield* McpInfo;
+    const logBuffer = yield* LogBuffer;
     const pages = yield* ReviewPages;
     const { profile } = yield* CliArgs;
     const inbox = yield* Inbox;
@@ -2316,6 +2328,33 @@ const makeHandlers = Effect.gen(function* () {
         if (input.action === "fixed") return yield* guidancePass.fixed(roomId, input.ticketId);
         if (input.round === undefined || input.passed === undefined) return "failed: a report gives 'round' and 'passed' (and 'findings' when it falls short)";
         return yield* guidancePass.report(roomId, input.ticketId, input.round, input.passed, input.findings ?? []);
+      }),
+      "room-connection": Effect.fn("Mcp.roomConnection")(function* (input: { room?: string }) {
+        const all = yield* rooms.summaries;
+        const query = input.room?.trim();
+        const hit = query ? all.find((summary) => summary.id === query || summary.shortId === query || sameName(summary.name, query)) : all.find((summary) => summary.focused);
+        if (!hit) return `failed: no room "${query}" among your user's — list-rooms names them`;
+        const state = yield* rooms.connectionOf(hit.id);
+        if (!state) return `failed: not in "${hit.name}" now`;
+        const trouble = troubleOf(state);
+        const list = (items: ReadonlyArray<string>) => (items.length === 0 ? "none" : items.join(", "));
+        const reach = state.firewalled === null ? "not known yet whether reachable directly" : state.firewalled ? "behind a firewall: not reachable directly" : "reachable directly";
+        const troubles = (yield* SubscriptionRef.get(logBuffer.troubles)).slice(-8).map((line) => `  ${line.slice(11, 19)} ${line.slice(25)}`);
+        return [
+          `${hit.name} [${hit.shortId}]`,
+          trouble ? `In the way: ${trouble.what} ${trouble.next}` : "Nothing in the way.",
+          `You: ${state.net} · protocol ${state.protocol} · ${reach}`,
+          `Log: ${state.logOpen ? (state.writable ? "open, writable" : "open, read only — not let in yet") : "not open"}`,
+          `Here: ${list(state.here.map((peer) => (peer.protocol === state.protocol ? peer.name : `${peer.name} (protocol ${peer.protocol})`)))}`,
+          `Away: ${list(state.away)}`,
+          ...(state.strangers.length > 0 ? [`On the room, not let in: ${list(state.strangers)}`] : []),
+          ...(state.waiting.length > 0 ? [`Waiting to be let in: ${list(state.waiting.map((waiter) => `${waiter.name} (${agoText(state.now, waiter.at)})`))}`] : []),
+          ...(state.declined.length > 0 ? [`Turned away: ${list(state.declined.map((turned) => (turned.reason ? `${turned.name} (${turned.reason})` : turned.name)))}`] : []),
+          ...(state.admitFailed.length > 0 ? [`Admits that failed: ${list(state.admitFailed.map((failure) => `${failure.name} — ${failure.why} (${agoText(state.now, failure.at)} ago)`))}`] : []),
+          ...(state.otherProtocol.length > 0 ? [`On another protocol, unread: ${list(state.otherProtocol.map((peer) => `${peer.key} (${peer.protocol})`))}`] : []),
+          `Swarm (every room): ${state.open} open, ${state.connecting} connecting`,
+          troubles.length > 0 ? `Recent warnings and errors on this machine, every room, UTC:\n${troubles.join("\n")}` : "No recent warnings or errors on this machine.",
+        ].join("\n");
       }),
       "get-room-access": Effect.fn("Mcp.getRoomAccess")(function* () {
         const { name, room } = yield* focusedRoom;
