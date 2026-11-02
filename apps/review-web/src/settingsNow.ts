@@ -7,7 +7,7 @@ import { overSocket } from "./liveSocket";
 // or by their agent (set-settings), every open page follows. Until collagen
 // answers, the defaults.
 
-const [settings, setSettings] = createSignal<PageSettings>({ progressBar: true });
+const [settings, setSettings] = createSignal<PageSettings>({ progressBar: true, clippy: false });
 
 export const settingsNow = {
   /** Made once, before any page renders. */

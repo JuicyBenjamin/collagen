@@ -195,6 +195,9 @@ importers:
       '@tanstack/highlight':
         specifier: 1.0.0
         version: 1.0.0
+      clippyjs:
+        specifier: 0.1.0
+        version: 0.1.0
       d3-shape:
         specifier: 3.2.0
         version: 3.2.0
@@ -2619,6 +2622,9 @@ packages:
   chokidar@4.0.3:
     resolution: {integrity: sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA==}
     engines: {node: '>= 14.16.0'}
+
+  clippyjs@0.1.0:
+    resolution: {integrity: sha512-XnchzSR8H8X43TvwnAktK5xDewKGSyfGu8DagBZCbOUdx0dWAFrFdxdCWlaJkyfx4M3Amvvu13jbHQ/IYQOD+w==}
 
   cliui@8.0.1:
     resolution: {integrity: sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==}
@@ -6597,6 +6603,8 @@ snapshots:
   chokidar@4.0.3:
     dependencies:
       readdirp: 4.1.2
+
+  clippyjs@0.1.0: {}
 
   cliui@8.0.1:
     dependencies:

@@ -293,6 +293,8 @@ export interface YourReview {
 /** The person's switches a page wears, as collagen keeps them. */
 export interface PageSettings {
   readonly progressBar: boolean;
+  /** the ask-AI chat is Clippy */
+  readonly clippy: boolean;
 }
 
 /** The review's own part of the page: its ticket, its why and its links,

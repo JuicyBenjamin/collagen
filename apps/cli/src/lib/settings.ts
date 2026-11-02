@@ -39,6 +39,14 @@ export const SETTINGS: ReadonlyArray<Setting> = [
     on: "a thin bar atop the review page fills as you scroll through it",
     off: "the review page shows no progress bar",
   },
+  // a gag, on no settings screen: a person finds it by asking their agent
+  {
+    key: "clippy",
+    default: false,
+    label: "clippy",
+    on: "the review page's ask-AI chat is Clippy: he sits in the corner, opens the chat when clicked, thinks while the AI works and says its answer",
+    off: "the review page's ask-AI chat is a plain pill in the corner",
+  },
 ];
 
 /** A switch's value: what was set, or its default. */

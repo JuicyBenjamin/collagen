@@ -907,7 +907,7 @@ export const RemoveTheme = Tool.make("remove-theme", {
 
 export const SetSettings = Tool.make("set-settings", {
   description:
-    `Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. ${SETTINGS.map((setting) => `${setting.key} (${setting.default ? "on" : "off"} by default): ${setting.on}`).join(". ")}. Applies live, and the settings page in their TUI shows the same switches.`,
+    `Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. ${SETTINGS.map((setting) => `${setting.key} (${setting.default ? "on" : "off"} by default): ${setting.on}`).join(". ")}. Applies live, and the settings page in their TUI shows the same switches — all but clippy, a gag on no screen: your user finds it by asking you for it.`,
   // every switch the Settings schema has, so a new one is settable here as it lands
   parameters: Settings,
   success: Schema.String,

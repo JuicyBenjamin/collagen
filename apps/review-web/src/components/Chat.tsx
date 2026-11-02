@@ -10,6 +10,8 @@ import { ago } from "../when";
 import type { ChatTurn } from "../data";
 import { lasting } from "../lasting";
 import { ticketId } from "../ticket";
+import { settingsNow } from "../settingsNow";
+import { Clippy } from "./Clippy";
 
 /** The reader's conversation with their own AI on this review: an offer to
  *  ask under code they select, and a panel in the corner — their questions,
@@ -36,15 +38,19 @@ export function Chat() {
             onClick={() => chatNow.take()}
             title={`Ask your AI about ${selectionLabel(offer().selection)}`}
           >
-            Ask AI
+            {settingsNow.settings().clippy ? "Ask Clippy" : "Ask AI"}
           </button>
         )}
       </Appear>
       {/* the pill and the panel turn into each other (chatNow.openUp, close):
           the panel grows out of the pill, and shrinks back onto it, placed
           beneath as it starts to close — its words coming once it is the pill */}
+      {/* the gag (set-settings clippy): Clippy stands where the pill would, always */}
+      <Show when={settingsNow.settings().clippy}>
+        <Clippy />
+      </Show>
       <InCorner
-        when={!chatNow.open() && chatNow.held()}
+        when={!settingsNow.settings().clippy && !chatNow.open() && chatNow.held()}
         enter={(element) => (chatNow.turn.intoPill ? arrive(element.firstElementChild, 0.24) : rise(element))}
         // the panel growing out of it covers it from the first frame
         leave={sink}

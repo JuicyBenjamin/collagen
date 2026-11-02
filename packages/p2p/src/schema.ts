@@ -921,6 +921,8 @@ export const Settings = Schema.Struct({
   investigationsAtOnce: Schema.optional(Schema.Boolean),
   /** absent = on: a thin bar atop the review page fills as the reader scrolls */
   progressBar: Schema.optional(Schema.Boolean),
+  /** absent = off: the review page's ask-AI chat is Clippy — a gag, set only by an agent */
+  clippy: Schema.optional(Schema.Boolean),
 });
 export type Settings = typeof Settings.Type;
 
