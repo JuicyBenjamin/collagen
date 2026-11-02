@@ -1,21 +1,31 @@
 import { animate } from "motion";
 
 // A line of work opening, with Motion: from the middle where the stack
-// stands, as many cards above as below, read like a game menu — the board
-// shaded back behind it, the card in focus flat, forward and largest, the
-// rest curving away from it, smaller, tilted and darker the further off,
-// each still solid. A spring, so focus moving along the line rolls rather
-// than slides; none at all when the reader asks their system for less.
+// stands, as many cards above as below, the board shaded back behind it.
+// Every card alike, evenly apart and tilted back a little; the one in focus
+// alone comes flat, forward and a touch larger, on a spring, so moving along
+// the line flows from card to card. None at all when the reader asks their
+// system for less.
 
 /** How far apart the cards stand when the stack is open, in pixels. */
 export const STEP = 46;
 const still = matchMedia("(prefers-reduced-motion: reduce)");
 
-/** A stack's parts that move: its front card, the fan of every card, and the shade over the board behind. */
+/** A stack's parts that move: its front card, the edges of those under it, the fan of every card, and the shade over the board behind. */
 export interface Parts {
   readonly face: HTMLElement;
+  readonly edges: HTMLElement;
   readonly fan: HTMLElement;
   readonly shade: HTMLElement;
+}
+
+/** The pointer over a folded stack: it lifts a little — the front card a
+ *  touch larger, the cards under it spread a few pixels — so it reads as
+ *  something to open. */
+export function lift({ face, edges }: Parts, on: boolean): void {
+  const moves = still.matches ? { duration: 0 } : ({ type: "spring", visualDuration: 0.22, bounce: 0.25 } as const);
+  animate(face, { scale: on ? 1.015 : 1 }, moves);
+  [...edges.children].forEach((edge, index) => animate(edge, { y: on ? (index + 1) * 2 : 0 }, moves));
 }
 
 /** Move a stack to where it is now: open around `focus`, or folded back
@@ -29,15 +39,12 @@ export function spread({ face, fan, shade }: Parts, open: boolean, focus: number
   animate(face, { opacity: open ? 0 : 1 }, fades);
   animate(shade, { opacity: open ? 1 : 0 }, { duration: still.matches ? 0 : 0.2 });
   items.forEach((item, index) => {
-    const off = index - focus;
-    const far = Math.abs(off);
-    // the wheel curves no further than three cards off: a long line's far ends stay readable
-    const bend = Math.sign(off) * Math.min(far, 3);
-    item.style.zIndex = String(50 - far);
+    const focused = index === focus;
+    item.style.zIndex = focused ? "2" : "1";
     animate(
       item,
       open
-        ? { y: (index - mid) * STEP, z: far === 0 ? 40 : -Math.abs(bend) * 34, rotateX: -bend * 12, scale: far === 0 ? 1.06 : 1 - Math.abs(bend) * 0.05, filter: `brightness(${Math.max(0.45, 1 - far * 0.16)})` }
+        ? { y: (index - mid) * STEP, z: focused ? 24 : 0, rotateX: focused ? 0 : 10, scale: focused ? 1.05 : 1, filter: `brightness(${focused ? 1 : 0.85})` }
         : { y: 0, z: 0, rotateX: 0, scale: 1, filter: "brightness(1)" },
       moves,
     );
