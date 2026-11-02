@@ -97,6 +97,7 @@ export function MergesRoom(props: { roomId: string }) {
           <main class="merges-page">
             <header>
               <h1>Merges</h1>
+              <Corner />
               <p class="meta">{data().room}</p>
             </header>
             <p class="merges-none">No projects here</p>

@@ -1,4 +1,5 @@
 import { createEffect, createMemo, Errored, For, Show } from "solid-js";
+import { Corner } from "~/components/Corner";
 import { lasting } from "~/lasting";
 import { overSocket } from "~/liveSocket";
 import { Arrives } from "~/components/Arrives";
@@ -70,6 +71,12 @@ Investigation.Skeleton = () => (
     <nav />
     <main class="inv-main">
       <header class="inv-header">
+        <div class="inv-top">
+          <p class="inv-kind">
+            <Masked>Investigation</Masked>
+          </p>
+          <Corner />
+        </div>
         <h1>
           <Masked>Delta DB in collagen</Masked>
         </h1>

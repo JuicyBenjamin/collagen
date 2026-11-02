@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, Errored, For } from "solid-js";
+import { Corner } from "~/components/Corner";
 import { lasting } from "~/lasting";
 import { overSocket } from "~/liveSocket";
 import { Arrives } from "~/components/Arrives";
@@ -67,6 +68,7 @@ export function Audit(props: { roomId: string }) {
             )}
           </For>
         </div>
+        <Corner />
       </header>
       <Errored
         fallback={(error) => (
