@@ -8,7 +8,7 @@ import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult, YourReview } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
-import { mergesPath, TICKET_SHORT } from "../lib/pageAddress";
+import { boardPath, TICKET_SHORT } from "../lib/pageAddress";
 import { yourFinish } from "../lib/review";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
@@ -478,7 +478,7 @@ const TYPES: Record<string, string> = {
  *  page by the ticket's kind, with no read first. */
 type Place =
   | { readonly page: "review" | "investigation" | "ticket"; readonly kind: string; readonly room: string; readonly roomShort: string; readonly ticket: string }
-  | { readonly page: "audit"; readonly room: string; readonly roomShort: string }
+  | { readonly page: "audit" | "board"; readonly room: string; readonly roomShort: string }
   | { readonly page: "merges"; readonly room: string; readonly roomShort: string; readonly project: string | null };
 
 /** The one document every page is, with its place in it. */
@@ -556,7 +556,19 @@ export const ReviewRoutes = Layer.mergeAll(
       }),
     ),
   ),
-  // the room itself: its merges, until it has a page of its own
+  // a room's board: its tickets in to do, in progress and done (services/BoardView)
+  HttpRouter.add(
+    "GET",
+    "/room/:room/board",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        return handle ? pageAt({ page: "board", room: handle.id, roomShort: room! }) : notFound("no such room");
+      }),
+    ),
+  ),
+  // the room itself: its board
   HttpRouter.add(
     "GET",
     "/room/:room",
@@ -564,7 +576,7 @@ export const ReviewRoutes = Layer.mergeAll(
       Effect.gen(function* () {
         const { room } = yield* HttpRouter.params;
         const handle = room && SHORT_ID.test(room) ? yield* roomByShort(room) : undefined;
-        return handle ? HttpServerResponse.redirect(mergesPath(handle.id)) : notFound("no such room");
+        return handle ? HttpServerResponse.redirect(boardPath(handle.id)) : notFound("no such room");
       }),
     ),
   ),

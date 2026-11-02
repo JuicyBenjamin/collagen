@@ -1020,3 +1020,31 @@ export interface ChatEarlier {
 
 /** What asking said: under way, or refused in words. */
 export type ChatAsked = { readonly ok: true } | { readonly error: string };
+
+/** A ticket on the board: what it is and whose, and whether it is the
+ *  reader's to act on now. */
+export interface BoardCard {
+  readonly id: string;
+  readonly kind: "task" | "review" | "plan" | "proposal" | "bug" | "investigation" | "epic";
+  /** the kind's glyph, as the terminal draws it */
+  readonly glyph: string;
+  readonly title: string;
+  /** the line beneath the title */
+  readonly goal: string;
+  /** whose it is: "you", or the author's name */
+  readonly author: string;
+  readonly mine: boolean;
+  /** a step of the reader's is up, or it is theirs to close */
+  readonly yours: boolean;
+  /** closed as dropped */
+  readonly dropped: boolean;
+}
+
+/** boardData(roomId) — a room's tickets in to do, in progress and done, as
+ *  the terminal's board has them; null for a room this instance is not in. */
+export interface BoardData {
+  readonly room: string;
+  readonly lanes: ReadonlyArray<{ readonly column: "todo" | "doing" | "done"; readonly label: string; readonly cards: ReadonlyArray<BoardCard> }>;
+  /** tickets a newer collagen wrote that this build cannot place, said in a line */
+  readonly unread: string | null;
+}

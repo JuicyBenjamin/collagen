@@ -1,6 +1,7 @@
 export * from "./schema";
 export * from "./acting";
 export * from "./ticket";
+export * from "./board";
 export * from "./kinds";
 export * from "./migrate";
 export * from "./review";

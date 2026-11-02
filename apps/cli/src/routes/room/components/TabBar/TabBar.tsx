@@ -31,7 +31,7 @@ export function TabBar() {
       // one row, always: a page that grows must not push the bar off its line
       flexShrink={0}
       // o first on the merges tab: a long hint loses its middle
-      hint={`${active === "room/merges" ? "o in browser · " : ""}←→ switch tab · ↓ into the tab · 1-5 jump · A audit · c copy invite · s settings · i you · q quit`}
+      hint={`${active === "room/merges" ? "o in browser · " : ""}←→ switch tab · ↓ into the tab · 1-6 jump · A audit · c copy invite · s settings · i you · q quit`}
       onKey={(key) => {
         const index = TABS.indexOf(active);
         if (key.name === "left" && index > 0) return jump(TABS[index - 1]!), true;
@@ -62,6 +62,8 @@ export function TabBar() {
             <span fg={active === "room/messages" ? theme.accent : theme.dim}>[4] messages</span>
             <span fg={theme.dim}>  </span>
             <span fg={active === "room/outbox" ? theme.accent : theme.dim}>[5] outbox</span>
+            <span fg={theme.dim}>  </span>
+            <span fg={active === "room/board" ? theme.accent : theme.dim}>[6] board</span>
           </text>
           <text truncate wrapMode="none" flexShrink={1} minWidth={0}>
             <span fg={theme.dim}>  ·  </span>

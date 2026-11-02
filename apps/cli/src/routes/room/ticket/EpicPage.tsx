@@ -35,7 +35,7 @@ export function EpicPage({
 }) {
   const setFocus = useAtomSet(focusAtom);
   const focus = useAtomValue(focusAtom);
-  const { navigate } = useRouter();
+  const { route, navigate } = useRouter();
   const [sel, setSel] = useState(0);
   useEffect(() => {
     if (focus !== "ticket-parts") setFocus("ticket-parts");
@@ -106,8 +106,9 @@ export function EpicPage({
         onKey={(key) => {
           if (key.name === "up" && selected > 0) return setSel(selected - 1), true;
           if (key.name === "down" && selected < inside.length - 1) return setSel(selected + 1), true;
-          // a ticket opened from here comes back here
-          if (isEnter(key) && inside[selected]) return navigate(to.ticket(inside[selected]!.id, { name: "room/ticket", ticketId: epic.id })), true;
+          // a ticket opened from here comes back here — and from here, to wherever this epic was opened from
+          const here = typeof route === "object" && route.name === "room/ticket" ? route : { name: "room/ticket" as const, ticketId: epic.id };
+          if (isEnter(key) && inside[selected]) return navigate(to.ticket(inside[selected]!.id, here)), true;
           return false;
         }}
       >

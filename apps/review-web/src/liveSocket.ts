@@ -69,7 +69,8 @@ export function overSocket(topic: "investigation", subject: string): AsyncIterab
 export function overSocket(topic: "audit", subject: string): AsyncIterable<AuditPage | null>;
 export function overSocket(topic: "chat", subject: string): AsyncIterable<ChatView>;
 export function overSocket(topic: "next", subject: string): AsyncIterable<TicketNext>;
-export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat" | "next", subject: string): AsyncIterable<unknown> {
+export function overSocket(topic: "board", subject: string): AsyncIterable<string>;
+export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat" | "next" | "board", subject: string): AsyncIterable<unknown> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<unknown> {
       const id = `s${++nextId}`;

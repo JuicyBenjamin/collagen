@@ -16,6 +16,9 @@ export const roomPath = (roomId: string): string => `/room/${shortRoomId(roomId)
 /** A ticket's page: a review, an investigation, or any other kind. */
 export const ticketPath = (roomId: string, ticketId: string): string => `${roomPath(roomId)}/ticket/${encodeURIComponent(ticketId.slice(0, TICKET_SHORT))}`;
 
+/** A room's board: its tickets in to do, in progress and done. */
+export const boardPath = (roomId: string): string => `${roomPath(roomId)}/board`;
+
 /** A room's audit. */
 export const auditPath = (roomId: string): string => `${roomPath(roomId)}/audit`;
 
