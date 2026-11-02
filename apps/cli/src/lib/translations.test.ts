@@ -31,9 +31,9 @@ describe("translation files read as the keys their change moves", () => {
   });
 
   it("show every language beside a key, and the one that did not keep up", () => {
-    const en = { file: "locales/en.json", lang: "en", before: lines('{"save":"Save"}'), after: lines('{"save":"Save it","cancel":"Cancel"}') };
-    const de = { file: "locales/de.json", lang: "de", before: lines('{"save":"Sichern"}'), after: lines('{"save":"Sichern"}') };
-    expect(keyChanges([en, de])).toEqual([
+    const english = { file: "locales/en.json", lang: "en", before: lines('{"save":"Save"}'), after: lines('{"save":"Save it","cancel":"Cancel"}') };
+    const german = { file: "locales/de.json", lang: "de", before: lines('{"save":"Sichern"}'), after: lines('{"save":"Sichern"}') };
+    expect(keyChanges([english, german])).toEqual([
       { key: "cancel", texts: { en: { after: "Cancel" }, de: {} } },
       { key: "save", texts: { en: { before: "Save", after: "Save it" }, de: { before: "Sichern", after: "Sichern" } } },
     ]);
