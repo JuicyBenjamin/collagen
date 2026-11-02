@@ -20,6 +20,7 @@ mkdir -p "$R/src"
 printf 'export const a = 1;\n' > "$R/src/export.ts"
 printf 'line\n%.0s' $(seq 1 30) > "$R/src/notes.txt"
 printf "lockfileVersion: '9.0'\n\npackages:\n\n  left-pad@1.3.0:\n    resolution: {}\n" > "$R/pnpm-lock.yaml"
+mkdir -p "$R/src/locales"; printf '{"save":"Save"}\n' > "$R/src/locales/en.json"; printf '{"save":"Sichern"}\n' > "$R/src/locales/de.json"
 git -C "$R" add -A; git -C "$R" commit -qm base
 git -C "$R" checkout -qb feat/stream-export
 printf 'export const a = 1;\nexport const stream = (rows) => rows.map(String);\n' > "$R/src/export.ts"
@@ -30,6 +31,7 @@ sed -i.bak '25s/line/changed, and nobody said why/' "$R/src/notes.txt"; rm -f "$
 # what no person wrote: a lockfile moving a package, a test's snapshot
 printf "lockfileVersion: '9.0'\n\npackages:\n\n  left-pad@1.3.1:\n    resolution: {}\n" > "$R/pnpm-lock.yaml"
 mkdir -p "$R/src/__snapshots__"; printf 'exports[`page 1`] = `100`;\n' > "$R/src/__snapshots__/page.test.ts.snap"
+printf '{"save":"Save","cancel":"Cancel"}\n' > "$R/src/locales/en.json"
 git -C "$R" add -A; git -C "$R" commit -qm change
 
 # the type hints need collagen's pinned TypeScript, normally installed on
@@ -72,6 +74,7 @@ wait_until "the review's data is served" "\"units\"" sfn reviewData "[\"$TICKET\
 DATA=$(sfn reviewData "[\"$TICKET\"]")
 expect "a decision carries what guided it to the page" "$DATA" '"guidedBy":\["CLAUDE.md"\]'
 expect "the lockfile is read apart, as the package it moves" "$DATA" '"lockfiles":\[\{"file":"pnpm-lock.yaml","packages":\[\{"name":"left-pad","before":\["1.3.0"\],"after":\["1.3.1"\]\}\]'
+expect "…the translations, as the key added, beside the language that did not keep up" "$DATA" '"translations":\[\{"set":"src/locales/\*.json","languages":\["de","en"\],"keys":\[\{"key":"cancel","texts":\{"en":\{"after":"Cancel"\},"de":\{\}'
 expect "…and the snapshot, as what made it" "$DATA" '"generated":\[\{"file":"src/__snapshots__/page.test.ts.snap","by":"a test snapshot","added":1,"removed":0'
 shape() { python3 -c '
 import json, sys
@@ -81,7 +84,7 @@ for u in g["units"]:
     print("unit", u["title"], "by", u["by"], "hunks", " ".join(u["hunks"]), "decisions", " ".join(u["decisions"]), "forks", " ".join(f["id"] for f in u["forks"]), "unexplained", " ".join(u["unexplained"]))
 for t in g["tests"]:
     print("tests", t["file"] + ":", " | ".join(c["change"] + " " + " › ".join(c["under"] + [c["title"]]) for c in t["tests"]))
-tested = {t["file"] for t in g["tests"] + g.get("stories", []) + g.get("lockfiles", []) + g.get("generated", [])}
+tested = {t["file"] for t in g["tests"] + g.get("stories", []) + g.get("lockfiles", []) + g.get("generated", [])} | {h["file"] for h in g["hunks"] if any(h["id"] in s["hunks"] for s in g.get("translations", []))}
 every = [h for u in g["units"] for h in u["hunks"]]
 code = [h for h in g["hunks"] if h["file"] not in tested]
 print("hunks", len(every), "once" if len(every) == len(set(every)) == len(code) else "NOT ONCE")
