@@ -4,9 +4,10 @@ import { pathToFileURL } from "node:url";
 import { Effect, Fiber, Layer, Stream, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
-import type { ChatSelection, CommentSpot, RunningJob } from "@collagen/review-web/data";
-import type { Peer, ViewedMark } from "@collagen/p2p";
+import type { ChatSelection, CommentSpot, TicketNext } from "@collagen/review-web/data";
+import { heldBy, type ViewedMark } from "@collagen/p2p";
 import { runningOn } from "../lib/running";
+import { nextStepOf } from "../lib/nextStep";
 import type { Harnesses } from "./Harness";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
@@ -109,18 +110,26 @@ const selectionOk = (selection: unknown): selection is ChatSelection | null => {
   return typeof file === "string" && treePathOk(file) && sideLineOk(from) && sideLineOk(to) && typeof text === "string" && text.length <= 50_000;
 };
 
-/** The jobs running on a ticket — the person's own, and those its room's
- *  peers share — now, then whenever one starts, moves or ends. */
-const runningChanges = (ticketId: string): Stream.Stream<ReadonlyArray<RunningJob>, never, Rooms | Jobs> =>
+/** What a ticket waits on — the jobs running on it, the person's own and
+ *  those its room's peers share, and who it waits on next — now, then
+ *  whenever a job starts, moves or ends, a peer comes or goes, or the ticket moves. */
+const nextChanges = (ticketId: string): Stream.Stream<TicketNext, never, Rooms | Jobs | IdentityService> =>
   Stream.unwrap(
     Effect.gen(function* () {
       const rooms = yield* Rooms;
       const jobs = yield* Jobs;
+      const { identity } = yield* IdentityService;
       let holder: RoomHandle | undefined;
       for (const handle of yield* SubscriptionRef.get(rooms.handles)) if ((yield* SubscriptionRef.get(handle.room.tickets)).has(ticketId)) holder = handle;
-      const roster = holder ? SubscriptionRef.changes(holder.room.roster) : Stream.make([] as ReadonlyArray<Peer>);
-      return Stream.zipLatest(SubscriptionRef.changes(jobs.views), roster).pipe(
-        Stream.map(([views, peers]) => runningOn(ticketId, views, peers)),
+      if (!holder) return Stream.succeed<TicketNext>({ running: [], next: null });
+      const room = holder.room;
+      return Stream.zipLatest(Stream.zipLatest(SubscriptionRef.changes(jobs.views), SubscriptionRef.changes(room.roster)), Stream.zipLatest(SubscriptionRef.changes(room.tickets), SubscriptionRef.changes(room.members))).pipe(
+        Stream.map(([[views, peers], [all, members]]): TicketNext => {
+          const ticket = all.get(ticketId);
+          const nameOf = (key: string) => (key === identity.pubkey ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8)));
+          const awaiting = peers.flatMap((peer) => (peer.awaiting ?? []).filter((ask) => ask.ticketId === ticketId).map((ask) => ({ who: peer.name, what: ask.what })));
+          return { running: runningOn(ticketId, views, peers), next: ticket ? nextStepOf(ticket, all, heldBy(ticket, all, identity.pubkey), awaiting, nameOf) : null };
+        }),
         Stream.changesWith((before, after) => JSON.stringify(before) === JSON.stringify(after)),
       );
     }),
@@ -197,7 +206,7 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
     investigation: (ticketId) => (ticketIdOk(ticketId) ? investigationView(ticketId).pipe(Stream.provideContext(context)) : Stream.make(null)),
     mergeProjects: (roomId) => (ticketIdOk(roomId) ? on(history.projects(roomId)) : Effect.succeed(null)),
     chat: (ticketId) => (ticketIdOk(ticketId) ? chat.view(ticketId) : Stream.empty),
-    running: (ticketId) => (ticketIdOk(ticketId) ? runningChanges(ticketId).pipe(Stream.provideContext(context)) : Stream.empty),
+    next: (ticketId) => (ticketIdOk(ticketId) ? nextChanges(ticketId).pipe(Stream.provideContext(context)) : Stream.empty),
     ask: (ticketId, question, selection, commit) =>
       ticketIdOk(ticketId) && questionOk(question) && selectionOk(selection) && (commit === null || commitOk(commit)) ? on(chat.ask(ticketId, question.trim(), selection, commit)) : Effect.succeed({ error: "bad request" }),
     stopAnswer: (ticketId) => (ticketIdOk(ticketId) ? chat.stop(ticketId) : Effect.void),
@@ -241,7 +250,7 @@ const handle = (load: Effect.Effect<ServerEntry | null>) => (request: HttpServer
 
 /** What a page asks its live socket for: a stream opened under its own id,
  *  or one it no longer needs. */
-type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat" | "running"; readonly subject: string } | { readonly close: string };
+type LiveAsk = { readonly open: string; readonly topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat" | "next"; readonly subject: string } | { readonly close: string };
 /** An audit's subject, "<roomId>:<days>", read once: a room, and 1 to 365 days. */
 const auditOf = (impl: ReviewBackend["Service"], subject: string): Stream.Stream<unknown> => {
   const [roomId, days] = subject.split(":");
@@ -253,7 +262,7 @@ const liveAskOf = (text: string): LiveAsk | null => {
   try {
     const ask = JSON.parse(text) as Record<string, unknown>;
     if (liveIdOk(ask["close"])) return { close: ask["close"] };
-    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "themes" || ask["topic"] === "settings" || ask["topic"] === "viewed" || ask["topic"] === "chat" || ask["topic"] === "running" || ask["topic"] === "investigation" || ask["topic"] === "audit") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
+    if (liveIdOk(ask["open"]) && (ask["topic"] === "changes" || ask["topic"] === "tool" || ask["topic"] === "themes" || ask["topic"] === "settings" || ask["topic"] === "viewed" || ask["topic"] === "chat" || ask["topic"] === "next" || ask["topic"] === "investigation" || ask["topic"] === "audit") && typeof ask["subject"] === "string") return { open: ask["open"], topic: ask["topic"], subject: ask["subject"] };
   } catch {
     // not one: ignored
   }
@@ -291,7 +300,7 @@ const liveSocket = (impl: ReviewBackend["Service"]) => (request: HttpServerReque
           }
           yield* stop(ask.open);
           const values: Stream.Stream<unknown> =
-            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "chat" ? impl.chat(ask.subject) : ask.topic === "running" ? impl.running(ask.subject) : ask.topic === "investigation" ? impl.investigation(ask.subject) : ask.topic === "audit" ? auditOf(impl, ask.subject) : ask.topic === "themes" ? impl.themes : ask.topic === "settings" ? impl.pageSettings : ask.topic === "viewed" ? impl.viewed(ask.subject) : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
+            ask.topic === "changes" ? impl.changes(ask.subject) : ask.topic === "chat" ? impl.chat(ask.subject) : ask.topic === "next" ? impl.next(ask.subject) : ask.topic === "investigation" ? impl.investigation(ask.subject) : ask.topic === "audit" ? auditOf(impl, ask.subject) : ask.topic === "themes" ? impl.themes : ask.topic === "settings" ? impl.pageSettings : ask.topic === "viewed" ? impl.viewed(ask.subject) : impl.tool(ask.subject as Parameters<typeof impl.tool>[0]);
           const fiber = yield* values.pipe(
             Stream.runForEach((value) => write(JSON.stringify({ id: ask.open, value }))),
             // its stream ended: the page is told, to open it again

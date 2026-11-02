@@ -136,6 +136,13 @@ export interface RunningJob {
   readonly since: number;
 }
 
+/** What a ticket waits on now: the jobs running on it, and who it waits on
+ *  next and for what — "Awaiting alice: a review", or by hand. */
+export interface TicketNext {
+  readonly running: ReadonlyArray<RunningJob>;
+  readonly next: { readonly who: string; readonly what: string; readonly manual: boolean } | null;
+}
+
 export interface TestFile {
   readonly file: string;
   readonly tests: ReadonlyArray<TestCase>;

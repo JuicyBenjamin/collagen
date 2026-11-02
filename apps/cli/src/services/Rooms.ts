@@ -99,6 +99,9 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           projects: roomProjects(state, roomId).map((project) => ({ name: project.name, path: project.path })),
           away: (yield* SubscriptionRef.get(focused)) !== roomId,
           running: yield* runningIn(roomId),
+          awaiting: ((yield* store.get).reviewQuestions ?? [])
+            .filter((held) => held.roomId === roomId && held.from !== identity.pubkey && (held.stage === "waiting" || held.stage === "asking"))
+            .map((held) => ({ ticketId: held.ticketId, what: held.whys ? "the missing whys" : "a question about it" })),
         };
       });
 

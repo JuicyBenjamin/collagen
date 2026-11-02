@@ -61,7 +61,7 @@ export function Tickets() {
 
   const me = identity?.pubkey ?? "";
   // a job running on a ticket, yours or one a peer shares: its row turns a
-  // spinner, and says how far it is — the frame only moves while one runs
+  // spinner, and says how far it is — the frame only moves while one runs;
   const anyRunning = jobs.some((view) => view.state === "running") || peers.some((peer) => (peer.running ?? []).length > 0);
   const [frame, setFrame] = useState(0);
   useEffect(() => {
@@ -69,7 +69,11 @@ export function Tickets() {
     const timer = setInterval(() => setFrame((at) => (at + 1) % SPINNER.length), 120);
     return () => clearInterval(timer);
   }, [anyRunning]);
-  const runningText = (ticketId: string): string | null => runningShort(runningOn(ticketId, jobs, peers), SPINNER[frame]!);
+  // else an ask on it waiting on someone's hands: said, so it never looks like it waits on nothing
+  const runningText = (ticketId: string): string | null => {
+    const hands = peers.filter((peer) => (peer.awaiting ?? []).some((ask) => ask.ticketId === ticketId)).map((peer) => peer.name);
+    return runningShort(runningOn(ticketId, jobs, peers), SPINNER[frame]!) ?? (hands.length > 0 ? `awaiting ${hands.join(", ")} by hand` : null);
+  };
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
 

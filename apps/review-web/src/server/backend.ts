@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { AuditPage, RunningJob, ChatAsked, ChatSelection, ChatView, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { AuditPage, TicketNext, ChatAsked, ChatSelection, ChatView, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 import type { Marks } from "../marks";
 
@@ -91,8 +91,8 @@ export class ReviewBackend extends Context.Service<
     readonly pageSettings: Stream.Stream<PageSettings>;
     /** the reader's conversation with their AI on the review, whole — now, then on every change */
     readonly chat: (ticketId: string) => Stream.Stream<ChatView>;
-    /** the jobs running on a ticket, the reader's own and those peers share — now, then on every change */
-    readonly running: (ticketId: string) => Stream.Stream<ReadonlyArray<RunningJob>>;
+    /** what a ticket waits on: the jobs running on it (the reader's own, and those peers share) and who it waits on next — now, then on every change */
+    readonly next: (ticketId: string) => Stream.Stream<TicketNext>;
     /** ask their AI — about lines they selected, or not — at `commit`, the one the page shows */
     readonly ask: (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null) => Effect.Effect<ChatAsked>;
     /** ask the review's author's AI what an answer could not settle (the reader's word) */

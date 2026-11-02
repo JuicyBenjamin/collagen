@@ -59,6 +59,10 @@ export const SharedProfile = Schema.Struct({
   /** the jobs running for the sender on this room's tickets — what those
    *  waiting on them see. Optional: an older build sends none and reads past it. */
   running: Schema.optional(Schema.Array(RunningJob)),
+  /** what waits on the sender by hand, on this room's tickets: an ask their
+   *  steering left to them (a question about their review) — so the asker
+   *  sees it waits on a person, not on nothing */
+  awaiting: Schema.optional(Schema.Array(Schema.Struct({ ticketId: Schema.String, what: Schema.String }))),
 });
 export type SharedProfile = typeof SharedProfile.Type;
 
