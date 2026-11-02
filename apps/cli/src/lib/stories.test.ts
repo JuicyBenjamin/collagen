@@ -30,10 +30,10 @@ describe("a story file read by its stories' names", () => {
     ]);
   });
 
-  it("is a story file only when it is not a test: a test named one stays with the tests", () => {
+  it("is a story file whatever else its name says: a story named as a test stays with the stories", () => {
     expect(isStory("src/Button.stories.tsx")).toBe(true);
-    expect(isStory("src/Button.test.stories.tsx")).toBe(false);
-    expect(isTest("src/Button.test.stories.tsx")).toBe(true);
+    expect(isStory("src/Button.test.stories.tsx")).toBe(true);
+    expect(isTest("src/Button.test.stories.tsx")).toBe(false);
     expect(isTest("src/Button.stories.tsx")).toBe(false);
   });
 });
