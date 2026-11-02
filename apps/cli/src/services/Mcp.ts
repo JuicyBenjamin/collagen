@@ -940,6 +940,13 @@ export const AnswerQuestion = Tool.make("answer-question", {
   success: Schema.String,
 });
 
+export const OpenBoard = Tool.make("open-board", {
+  description:
+    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as o on the terminal's board tab. When your user asks to see the board, or where things stand. It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
 export const OpenAudit = Tool.make("open-audit", {
   description:
     "Open the audit page in your user's browser: what collagen did and what it cost — tool calls, tokens per call over time, tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and their steering — the same as pressing A in the room. When your user asks to see collagen's numbers, its cost, or the audit. It updates itself while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -1123,6 +1130,7 @@ export const CollagenToolkit = Toolkit.make(
   OpenInvestigation,
   AnswerQuestion,
   OpenAudit,
+  OpenBoard,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -1197,6 +1205,7 @@ export const DevCollagenToolkit = Toolkit.make(
   OpenInvestigation,
   AnswerQuestion,
   OpenAudit,
+  OpenBoard,
   OpenMerges,
   ReviewComments,
   AskWhy,
@@ -3061,6 +3070,10 @@ const makeHandlers = Effect.gen(function* () {
       "answer-question": Effect.fn("Mcp.answerQuestion")(function* (input: { ticketId: string; questionId: string; answer: "yes" | "no" }) {
         const done = yield* answerQuestion(input.ticketId, input.questionId, input.answer).pipe(Effect.provideContext(answerContext));
         return "error" in done ? `failed: ${done.error}` : input.answer === "yes" ? "answered yes: where it leads, it is a goal now, and started as their steering allows; open-investigation shows it" : "answered no";
+      }),
+      "open-board": Effect.fn("Mcp.openBoard")(function* () {
+        const { id: roomId } = yield* focusedRoom;
+        return yield* pages.showBoard(roomId);
       }),
       "open-audit": Effect.fn("Mcp.openAudit")(function* () {
         const { id: roomId } = yield* focusedRoom;

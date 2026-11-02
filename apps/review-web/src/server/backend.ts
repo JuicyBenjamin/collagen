@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { AuditPage, TicketNext, ChatAsked, ChatSelection, ChatView, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { AuditPage, BoardData, TicketNext, ChatAsked, ChatSelection, ChatView, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 import type { Marks } from "../marks";
 
@@ -91,6 +91,10 @@ export class ReviewBackend extends Context.Service<
     readonly pageSettings: Stream.Stream<PageSettings>;
     /** the reader's conversation with their AI on the review, whole — now, then on every change */
     readonly chat: (ticketId: string) => Stream.Stream<ChatView>;
+    /** a room's board, by its short id: its tickets in to do, in progress and done */
+    readonly board: (roomShort: string) => Effect.Effect<BoardData | null>;
+    /** the board's state as a token, current first, then each time it moves */
+    readonly boardChanges: (roomShort: string) => Stream.Stream<string>;
     /** what a ticket waits on: the jobs running on it (the reader's own, and those peers share) and who it waits on next — now, then on every change */
     readonly next: (ticketId: string) => Stream.Stream<TicketNext>;
     /** ask their AI — about lines they selected, or not — at `commit`, the one the page shows */

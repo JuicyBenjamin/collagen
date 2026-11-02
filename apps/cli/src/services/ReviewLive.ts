@@ -3,7 +3,7 @@ import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { ChildProcessSpawner } from "effect/process";
 import { focusTab } from "../lib/focusTab";
 import { openerOverride, openInBrowser } from "../lib/opener";
-import { auditPath, mergesPath, ticketPath } from "../lib/pageAddress";
+import { auditPath, boardPath, mergesPath, ticketPath } from "../lib/pageAddress";
 import { settingOf } from "../lib/settings";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
@@ -53,7 +53,16 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
       return (yield* launch(already ? `${url}?take` : url)) ? `review page opened: ${url}` : `review page: ${url} (could not open a browser — paste it into one)`;
     });
 
+    /** Open a room's board in the person's browser: its tickets in to do,
+     *  in progress and done, as the terminal's board has them. */
+    const showBoard = Effect.fn("ReviewPages.showBoard")(function* (roomId: string) {
+      // by its short id (lib/pageAddress): the full one is the invite, and a url stays in the browser's history
+      const url = yield* pageUrl(boardPath(roomId));
+      return (yield* launch(url)) ? `board opened: ${url}` : `board: ${url} (could not open a browser — paste it into one)`;
+    });
+
     return {
+      showBoard,
       opened: (id: string) => open.set(id, (open.get(id) ?? 0) + 1),
       closed: (id: string) => {
         const count = (open.get(id) ?? 1) - 1;

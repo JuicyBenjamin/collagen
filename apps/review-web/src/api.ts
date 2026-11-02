@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { BoardData, ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { Mark, Marks } from "./marks";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
@@ -14,6 +14,12 @@ import { run, stream } from "./server/backend";
 export const reviewHead = GET(async (ticketId: string): Promise<ReviewPageHead | null> => {
   "use server";
   return run((backend) => backend.head(ticketId));
+});
+
+/** A room's board, by its short id: its tickets in to do, in progress and done. */
+export const boardData = GET(async (roomShort: string): Promise<BoardData | null> => {
+  "use server";
+  return run((backend) => backend.board(roomShort));
 });
 
 export const reviewData = GET(async (ticketId: string): Promise<ReviewPageData | null> => {

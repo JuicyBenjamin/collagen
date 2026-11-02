@@ -6,7 +6,7 @@
 
 export type Place =
   | { readonly page: "review" | "investigation" | "ticket"; readonly kind: string; readonly room: string; readonly roomShort: string; readonly ticket: string }
-  | { readonly page: "audit"; readonly room: string; readonly roomShort: string }
+  | { readonly page: "audit" | "board"; readonly room: string; readonly roomShort: string }
   | { readonly page: "merges"; readonly room: string; readonly roomShort: string; readonly project: string | null };
 
 /** This page's place; null where collagen wrote none (a page opened apart from it). */

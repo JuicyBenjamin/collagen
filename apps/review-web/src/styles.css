@@ -1081,3 +1081,21 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .chat-doing { color: var(--faint); font-style: italic; }
 .chat-ask { display: grid; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--line); }
 .chat-attached { justify-self: start; }
+
+/* the board: three lanes side by side, each a DaisyUI list */
+.board { max-width: 1640px; margin: 0 auto; padding: 32px 24px 80px; }
+.board-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 20px; }
+.board-head h1 { font-size: 22px; line-height: 1.3; margin: 0; }
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+@media (max-width: 900px) {
+  .board { padding: 20px 16px 64px; }
+  .lanes { grid-template-columns: minmax(0, 1fr); }
+}
+.lane h2 { display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); font-weight: 600; margin: 0 0 10px; }
+.lane-none { color: var(--faint); font-size: 14px; }
+.board-kind { color: var(--faint); }
+.board-kind.epic { color: var(--kind-epic); }
+.board-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-quiet .board-title { color: var(--dim); }
+.board-who { color: var(--faint); font-size: 12.5px; white-space: nowrap; }
+.board-who.mine { color: var(--accent); }
