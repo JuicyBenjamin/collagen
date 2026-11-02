@@ -3,6 +3,7 @@ import { claimed, parsePointer, sameFile } from "./reviewView";
 import { storiesIn } from "./stories";
 import { isStory, isTest, testsOfFile } from "./tests";
 import { isLockfile, packageChanges } from "./lockfiles";
+import { generatedBy } from "./generated";
 
 // A review read by units: code that together achieves one thing — a
 // component with its sub-components and its implementation — each hunk of
@@ -135,13 +136,18 @@ export function groupByUnit(
 ): Grouped {
   // each test file's tests, each story file's stories; a file with none (a
   // helper, a fixture) is code, so a tab lists only what it counts
+  // what a tool wrote or a test recorded, read apart before anything else: a snapshot named as a test is still a snapshot
+  const madeBy = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => !isLockfile(file)).flatMap((file) => {
+    const by = generatedBy(file, texts(file).after);
+    return by === null ? [] : [[file, by] as const];
+  }));
   const read = (file: string) => {
     const text = texts(file);
     return testsOfFile(file, all, text.after, text.before, isStory(file) ? storiesIn : undefined);
   };
-  const apart = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => isTest(file) || isStory(file)).map((file) => [file, read(file)] as const).filter(([, cases]) => cases.tests.length > 0));
+  const apart = new Map([...new Set(all.map((hunk) => hunk.file))].filter((file) => !madeBy.has(file) && (isTest(file) || isStory(file))).map((file) => [file, read(file)] as const).filter(([, cases]) => cases.tests.length > 0));
   // the code, read in units — not the tests, the stories or the lockfiles, read apart; pointers are still read against every hunk
-  const hunks = all.filter((hunk) => !apart.has(hunk.file) && !isLockfile(hunk.file));
+  const hunks = all.filter((hunk) => !apart.has(hunk.file) && !isLockfile(hunk.file) && !madeBy.has(hunk.file));
   // each hunk's home among a list of claimants (units, or decisions): the
   // one whose pointer claims it most precisely, the first on a tie
   const homes = (claimants: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>): Map<string, number> => {
@@ -251,6 +257,12 @@ export function groupByUnit(
   });
   const tests = casesOf(isTest);
   const stories = casesOf(isStory);
+  // each generated file: what made it, and how much moved
+  const generated = [...madeBy].map(([file, by]) => {
+    const mine = all.filter((hunk) => hunk.file === file);
+    const count = (kind: "+" | "-") => mine.reduce((total, hunk) => total + hunk.lines.filter((line) => line.kind === kind).length, 0);
+    return { file, by, added: count("+"), removed: count("-"), hunks: mine.map((hunk) => hunk.id) };
+  });
   // each lockfile, as the packages it moves (its texts at both ends, as the tests are read)
   const lockfiles = [...new Set(all.filter((hunk) => isLockfile(hunk.file)).map((hunk) => hunk.file))].map((file) => {
     const text = texts(file);
@@ -263,6 +275,7 @@ export function groupByUnit(
     tests,
     stories,
     ...(lockfiles.length > 0 ? { lockfiles } : {}),
+    ...(madeBy.size > 0 ? { generated } : {}),
     hunks: all,
     unmatched,
     looseForks: review.forks.filter((fork) => !forksShown.has(fork.id)),
@@ -274,7 +287,7 @@ export function groupByUnit(
  *  units leave to the page's own grouping. Tests need no unit. */
 export const uncovered = (units: ReadonlyArray<{ readonly where: ReadonlyArray<string> }>, hunks: ReadonlyArray<Hunk>): ReadonlyArray<string> => {
   const covered = new Set(units.flatMap((unit) => unit.where.flatMap((pointer) => claimed(parsePointer(pointer), hunks).map((hunk) => hunk.id))));
-  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id) && !isTest(hunk.file) && !isStory(hunk.file) && !isLockfile(hunk.file)).map((hunk) => hunk.file))];
+  return [...new Set(hunks.filter((hunk) => !covered.has(hunk.id) && !isTest(hunk.file) && !isStory(hunk.file) && !isLockfile(hunk.file) && generatedBy(hunk.file, null) === null).map((hunk) => hunk.file))];
 };
 
 /** A file named in a pointer, as the diff spells it — for the import reader. */

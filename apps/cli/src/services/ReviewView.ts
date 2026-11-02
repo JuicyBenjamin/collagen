@@ -324,9 +324,11 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       for (const file of files) texts.set(file, yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
       imports = importsAmong(files, (file) => texts.get(file) ?? null);
       const lines = (text: string | null | undefined) => (text == null || text.includes("\0") ? null : text.replace(/\n$/, "").split("\n"));
-      for (const file of files.filter((file) => isTest(file) || isStory(file) || isLockfile(file))) {
-        const before = forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
-        tests.set(file, { after: lines(texts.get(file)), before: forked ? (lines(before) ?? []) : null });
+      for (const file of files) {
+        // both ends of a test, story or lockfile, to read what changed in it; the rest only as it is now (what made it)
+        const both = isTest(file) || isStory(file) || isLockfile(file);
+        const before = both && forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
+        tests.set(file, { after: lines(texts.get(file)), before: both && forked ? (lines(before) ?? []) : null });
       }
     }
     const me = (yield* IdentityService).identity.pubkey;

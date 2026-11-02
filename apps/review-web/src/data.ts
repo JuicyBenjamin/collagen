@@ -163,6 +163,18 @@ export interface LockFile {
   readonly hunks: ReadonlyArray<string>;
 }
 
+/** A file a tool wrote or a test recorded: what made it, how much moved;
+ *  its lines one step away. */
+export interface GeneratedFile {
+  readonly file: string;
+  /** what made it: "protoc", "a test snapshot", "a code generator" */
+  readonly by: string;
+  readonly added: number;
+  readonly removed: number;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
 export interface Grouped {
   /** in reading order: what something is built from before what uses it —
    *  test files are in none: they are `tests` */
@@ -174,6 +186,8 @@ export interface Grouped {
   readonly stories?: ReadonlyArray<TestFile>;
   /** the diff's lockfiles, apart from the code: each read as the packages it moves */
   readonly lockfiles?: ReadonlyArray<LockFile>;
+  /** the diff's generated files and snapshots, apart from the code: each one line, what made it */
+  readonly generated?: ReadonlyArray<GeneratedFile>;
   readonly hunks: ReadonlyArray<Hunk>;
   /** per decision id, its pointers that matched no change: the code there
    *  did not move, or the why is older than the branch */

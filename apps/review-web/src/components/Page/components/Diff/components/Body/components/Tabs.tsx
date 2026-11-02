@@ -1,5 +1,5 @@
 import { Show } from "solid-js";
-import type { LockFile, TestFile } from "~/data";
+import type { GeneratedFile, LockFile, TestFile } from "~/data";
 import { Masked } from "~/components/Masked";
 import { showTab, tab } from "~/testsNow";
 
@@ -8,7 +8,7 @@ import { showTab, tab } from "~/testsNow";
  *  under them stands in the same place whatever the review holds. How it
  *  works when the change has a machine drawn; tests and stories, counted,
  *  when it has them. */
-export function Tabs(props: { tests: ReadonlyArray<TestFile>; stories: ReadonlyArray<TestFile>; lockfiles: ReadonlyArray<LockFile>; files: number; machine: boolean }) {
+export function Tabs(props: { tests: ReadonlyArray<TestFile>; stories: ReadonlyArray<TestFile>; lockfiles: ReadonlyArray<LockFile>; generated: ReadonlyArray<GeneratedFile>; files: number; machine: boolean }) {
   return (
     <div class="tabs" role="tablist">
       <button type="button" role="tab" aria-selected={tab() === "code" ? "true" : "false"} class={{ on: tab() === "code" }} onClick={() => showTab("code")}>
@@ -33,6 +33,11 @@ export function Tabs(props: { tests: ReadonlyArray<TestFile>; stories: ReadonlyA
         <button type="button" role="tab" aria-selected={tab() === "lockfiles" ? "true" : "false"} class={{ on: tab() === "lockfiles" }} onClick={() => showTab("lockfiles")}>
           {/* counted by the packages they move; a lockfile not read as packages counts as one */}
           Lockfiles <span class="tab-count">{props.lockfiles.reduce((count, file) => count + (file.packages?.length ?? 1), 0)}</span>
+        </button>
+      </Show>
+      <Show when={props.generated.length > 0}>
+        <button type="button" role="tab" aria-selected={tab() === "generated" ? "true" : "false"} class={{ on: tab() === "generated" }} onClick={() => showTab("generated")}>
+          Generated <span class="tab-count">{props.generated.length}</span>
         </button>
       </Show>
     </div>

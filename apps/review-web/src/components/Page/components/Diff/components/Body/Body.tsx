@@ -15,6 +15,7 @@ import { BareDecision } from "./components/BareDecision";
 import { Forks } from "./components/Forks";
 import { Machine } from "./components/Machine";
 import { Outside } from "./components/Outside";
+import { Generated } from "./components/Generated";
 import { Lockfiles } from "./components/Lockfiles";
 import { Tabs } from "./components/Tabs";
 import { lastTabs } from "../../lastTabs";
@@ -44,9 +45,10 @@ export function Body(props: { data: ReviewPageData }) {
   const tests = () => props.data.grouped?.tests ?? [];
   const stories = () => props.data.grouped?.stories ?? [];
   const lockfiles = () => props.data.grouped?.lockfiles ?? [];
-  // the files the Code tab holds: every changed file but the tests, stories and lockfiles, as "files viewed" counts them
+  const generated = () => props.data.grouped?.generated ?? [];
+  // the files the Code tab holds: every changed file but those read apart, as "files viewed" counts them
   const codeFiles = () => {
-    const testFiles = new Set([...tests(), ...stories(), ...lockfiles()].map((file) => file.file));
+    const testFiles = new Set([...tests(), ...stories(), ...lockfiles(), ...generated()].map((file) => file.file));
     return new Set((props.data.grouped?.hunks ?? []).map((hunk) => hunk.file).filter((file) => !testFiles.has(file))).size;
   };
   // the tab asked for, if this review has what it shows
@@ -57,14 +59,16 @@ export function Body(props: { data: ReviewPageData }) {
         ? "stories"
         : tab() === "lockfiles" && lockfiles().length > 0
           ? "lockfiles"
-          : tab() === "machine" && props.data.review.machine
+          : tab() === "generated" && generated().length > 0
+            ? "generated"
+            : tab() === "machine" && props.data.review.machine
             ? "machine"
             : "code";
   // the files a mark can be for, as this diff has them — tests, stories and lockfiles are read apart, not viewed
   createEffect(
     () => props.data.grouped?.hunks ?? [],
     (all) => {
-      const testFiles = new Set([...tests(), ...stories(), ...lockfiles()].map((file) => file.file));
+      const testFiles = new Set([...tests(), ...stories(), ...lockfiles(), ...generated()].map((file) => file.file));
       viewed.setFiles(all.filter((hunk) => !testFiles.has(hunk.file)));
       diffNow.set(all, props.data.source.kind === "clone", props.data.commit);
     },
@@ -103,7 +107,7 @@ export function Body(props: { data: ReviewPageData }) {
       >
         {(tool) => <TypesBanner tool={tool} />}
       </For>
-      <Tabs tests={tests()} stories={stories()} lockfiles={lockfiles()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
+      <Tabs tests={tests()} stories={stories()} lockfiles={lockfiles()} generated={generated()} files={codeFiles()} machine={props.data.review.machine !== undefined} />
       <Show when={shown() === "tests"}>
         <Tests files={tests()} kind="test" hunks={hunks()} decisions={decisions()} />
       </Show>
@@ -112,6 +116,9 @@ export function Body(props: { data: ReviewPageData }) {
       </Show>
       <Show when={shown() === "lockfiles"}>
         <Lockfiles files={lockfiles()} hunks={hunks()} />
+      </Show>
+      <Show when={shown() === "generated"}>
+        <Generated files={generated()} hunks={hunks()} />
       </Show>
       <Show when={shown() === "machine" && props.data.review.machine}>
         {(machine) => <Machine machine={machine()} />}
