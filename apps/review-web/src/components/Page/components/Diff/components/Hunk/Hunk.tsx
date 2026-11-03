@@ -4,13 +4,13 @@ import { diffNow } from "~/diffNow";
 import { ticketId } from "~/ticket";
 import { wholeFile } from "~/api";
 import { hasNewSide, wholeHunk } from "~/whole";
-import { foldAway, glideToTop, holdInPlace, markLanded } from "~/fold";
+import { enter, foldAway, glideToTop, holdInPlace, markLanded } from "~/fold";
 import { highlightHunk } from "~/highlight";
 import { markWord, peek, peekAt, pointAt, readyFor, wordAt, wordEnd, type Spot } from "~/intel";
 import { ChangedLine, CodeLine } from "~/components/Code";
 import { rowsOf } from "~/inline";
 import { Peek } from "./components/Peek";
-import { LineComposer, LineThread } from "./components/LineThread";
+import { Draft, LineComposer, LineThread, Pending } from "./components/LineThread";
 import { Chevron } from "./components/Chevron";
 import { FileThread } from "./components/FileThread";
 import { Rendered } from "./components/Rendered";
@@ -237,8 +237,8 @@ export function Hunk(props: {
   const canWhole = () => diffNow.canReadWhole() && props.whole.readable && !folded() && !asDocument();
   // read already: the file folds to its header here and wherever else it shows
   const state = () => viewed.state(props.hunk.file);
-  // folded: viewed and not opened again to read
-  const folded = () => reading.folded(props.hunk.file) && !waiting();
+  // folded: viewed and not opened again to read; comments waiting in it are listed under its header
+  const folded = () => reading.folded(props.hunk.file);
 
   // moved since it was viewed: what changed from the commit it was viewed at
   // to the branch now, the part of it that falls in this hunk
@@ -276,7 +276,7 @@ export function Hunk(props: {
           fallback={
             <Show when={state() === "viewed"} fallback={<span class="head path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>}>
               {/* viewed: the chevron opens it again to read, the mark stays */}
-              <button type="button" class="head reread-toggle" disabled={waiting()} onClick={async () => {
+              <button type="button" class="head reread-toggle" onClick={async () => {
                   // folding it again closes smoothly, the header held where the reader clicked it; opening it is at once
                   void holdInPlace(head);
                   const settle = folded() ? () => undefined : await foldAway(card());
@@ -284,7 +284,7 @@ export function Hunk(props: {
                   // drawn folded: the card is its header's size of itself again
                   flush();
                   settle();
-                }} aria-expanded={folded() ? "false" : "true"} title={waiting() ? "Comments wait on you here: it stays open until they are added or declined" : folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
+                }} aria-expanded={folded() ? "false" : "true"} title={folded() ? "Open it again to read — it stays marked as viewed" : "Fold it again"}>
                 <Chevron open={!folded()} /><span class="path" title={props.hunk.file}><bdi dir="ltr">{props.hunk.file}</bdi></span>
               </button>
             </Show>
@@ -341,12 +341,10 @@ export function Hunk(props: {
                 // when this was its last file, closes with it); unmarking
                 // holds the header where it was clicked
                 const marking = state() !== "viewed";
-                // comments waiting on the reader keep it open: marked, it stays where it is
-                const folds = marking && !waiting();
                 const group = card();
-                void (folds ? glideToTop(head) : holdInPlace(head));
+                void (marking ? glideToTop(head) : holdInPlace(head));
                 let settle: () => void = () => undefined;
-                if (folds && !reading.folded(props.hunk.file)) {
+                if (marking && !reading.folded(props.hunk.file)) {
                   reading.foldsNow(props.hunk.file, true);
                   settle = await foldAway(group);
                 }
@@ -365,6 +363,17 @@ export function Hunk(props: {
           </Show>
         </span>
       </div>
+      {/* folded, the comments waiting on the reader in it stay in sight under its header */}
+      <Show when={!props.continued && folded() && waiting()}>
+        <div class="hunk-body">
+          <div class="code">
+            <div class="thread" ref={enter}>
+              <For each={hostNow.waitingOn(props.hunk.file).pending}>{(pending) => <Pending comment={pending} codeOf={() => null} />}</For>
+              <For each={hostNow.waitingOn(props.hunk.file).drafts}>{(draft) => <Draft draft={draft} codeOf={() => null} />}</For>
+            </div>
+          </div>
+        </div>
+      </Show>
       {/* what is said about the file itself, at its top; it folds away with the file */}
       <Show when={!props.continued && !folded()}>
         <div class="hunk-body">
