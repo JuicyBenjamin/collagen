@@ -8,16 +8,25 @@ import { selectionLabel, selectionShort } from "../chatText";
 // Clippy. He stands in the corner where its pill would; a click on him opens
 // the chat in his own yellow balloon — what you last asked and his answer,
 // and a box to ask the next thing — as the Office assistant asked "What
-// would you like to do?". While the reader's AI answers he thinks; when an
-// answer comes in with the balloon shut, he says the start of it. Microsoft's
+// would you like to do?". While the reader's AI answers he thinks, and he
+// gestures when it is done. Microsoft's
 // own Clippy, through clippyjs, loaded only when he is asked for — his
 // sprites come with the page, nothing is fetched from elsewhere.
+//
+// He moves the page as little as he can: a review page holds a great many
+// lines, and anything that changes the layout costs it a long pause. So he
+// is not dragged (clippyjs moves a dragged agent every 10 ms), he is put in
+// his corner once (and again only when the window is resized), and his
+// balloon is placed when it opens and when an answer is done, not as it
+// streams — set where he stands, never measured (clippyjs's own placing
+// measures the page four times over). His own animation only shifts his
+// sprite, which costs nothing.
 
 type Agent = Awaited<ReturnType<typeof initAgent>>;
 
-/** How much of an answer he says with the balloon shut: a line, not the whole reply. */
-const SAYS = 160;
 const EDGE = 18;
+/** Between his head and the balloon's tip. */
+const ABOVE = 15;
 
 /** An answer as words in his balloon: no code fences, no markdown marks. */
 const plain = (answer: string): string =>
@@ -26,34 +35,57 @@ const plain = (answer: string): string =>
     .replace(/[`*_#>[\]]/g, "")
     .replace(/[ \t]+/g, " ")
     .trim();
-const said = (answer: string): string => {
-  const words = plain(answer).replace(/\s+/g, " ");
-  return words.length > SAYS ? `${words.slice(0, SAYS - 1).trimEnd()}…` : words;
-};
 
 export function Clippy() {
   const [agent, setAgent] = createSignal<Agent | null>(null);
   // the chat's own box in his balloon, beside the words he says
   const [box, setBox] = createSignal<HTMLDivElement | null>(null);
   let gone = false;
+  // where he stands, kept, so nothing need measure him again
+  let stand = { left: 0, top: 0, width: 0 };
+  /** in the corner, at once: one change to the page, not a walk across it */
+  const corner = (him: Agent | null = agent()) => {
+    if (!him) return;
+    const { offsetWidth: width, offsetHeight: height } = him._el;
+    stand = { left: Math.max(EDGE, innerWidth - EDGE - width), top: Math.max(EDGE, innerHeight - EDGE - height), width };
+    him._el.style.left = `${stand.left}px`;
+    him._el.style.top = `${stand.top}px`;
+    if (chatNow.open()) beside(him);
+  };
+  /** the balloon over him, its tip at his head: pinned by its right and
+   *  bottom edges, so it grows upward with what is in it and is placed once */
+  const beside = (him: Agent) => {
+    const style = him._balloon._balloon.style;
+    style.top = style.left = "auto";
+    style.right = `${innerWidth - (stand.left + stand.width)}px`;
+    style.bottom = `${innerHeight - stand.top + ABOVE}px`;
+    him._balloon._positionTip("top-left");
+  };
+  const onResize = () => corner();
   void (async () => {
     const [{ initAgent: start }, { default: clippy }] = await Promise.all([import("clippyjs"), import("clippyjs/agents/clippy")]);
     if (gone) return;
     const made = await start(clippy);
     if (gone) return made.dispose();
+    // a press would start clippyjs dragging him: a click is all he takes
+    made._el.removeEventListener("mousedown", made._mouseDownHandle);
+    // nor does clippyjs place him and his balloon on a resize, measuring as it goes: corner() does
+    removeEventListener("resize", made._resizeHandle);
     made._el.addEventListener("click", () => (chatNow.open() ? chatNow.close() : chatNow.openUp()));
     made._el.title = "Ask Clippy";
     const chat = document.createElement("div");
     chat.className = "clippy-chat";
     made._balloon._balloon.appendChild(chat);
-    made.show(false);
-    const { offsetWidth: width, offsetHeight: height } = made._el;
-    made.moveTo(innerWidth - EDGE - width, innerHeight - EDGE - height, 0);
+    made.show(true);
     setBox(chat);
     setAgent(made);
+    // the agent as it is made: a signal set is seen only after
+    corner(made);
+    addEventListener("resize", onResize);
   })();
   onCleanup(() => {
     gone = true;
+    removeEventListener("resize", onResize);
     agent()?.dispose();
   });
 
@@ -71,19 +103,12 @@ export function Clippy() {
         balloon._active = true;
         balloon._hidden = false;
         balloon._balloon.style.display = "block";
-        balloon.reposition();
+        beside(him);
         queueMicrotask(() => box()?.querySelector("textarea")?.focus());
       } else {
         balloon._active = false;
         balloon.hide(true);
       }
-    },
-  );
-  // what is in it changes its size: it stays beside him
-  createEffect(
-    () => [chatNow.view(), chatNow.attached()] as const,
-    () => {
-      if (chatNow.open()) queueMicrotask(() => agent()?._balloon.reposition());
     },
   );
   // thinking while the reader's own AI answers
@@ -97,7 +122,7 @@ export function Clippy() {
       him.play(him.hasAnimation("Thinking") ? "Thinking" : "Searching");
     },
   );
-  // an answer finished in front of him: a gesture, and with the balloon shut he says it
+  // an answer finished in front of him: a gesture
   let last: string | null | undefined;
   createEffect(
     () => {
@@ -110,11 +135,7 @@ export function Clippy() {
       last = finished?.id ?? null;
       const him = agent();
       if (first || !finished || !him) return;
-      if (chatNow.open()) return void him.play("Explain");
-      // the words the moment the answer is in: speak() would queue them
-      // behind his thinking, whose way out takes seconds; the gesture after
-      him.stop();
-      him._balloon.speak(() => undefined, said(finished.answer), false);
+      if (!chatNow.open()) him.stop();
       him.play("Explain");
     },
   );
