@@ -1,4 +1,5 @@
 import { For, Show } from "solid-js";
+import { nearNow } from "~/nearNow";
 import type { DraftView } from "~/data";
 import { Appear } from "~/components/Appear";
 import { leave } from "~/fold";
@@ -41,6 +42,9 @@ function Row(props: { comment: DraftView }) {
     if (away) showTab("code");
     const folded = reading.folded(props.comment.file);
     if (folded) reading.toggle(props.comment.file);
+    // its file's code drawn, wherever it is on the page, until the reader is there
+    void nearNow.reveal(props.comment.file);
+    setTimeout(() => nearNow.release(props.comment.file), 3_000);
     setTimeout(
       () => {
         const at = document.getElementById(placed() ? `pending-${props.comment.id}` : "unplaced");
