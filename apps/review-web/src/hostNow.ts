@@ -284,10 +284,16 @@ export const hostNow = {
   talkIn: (file: string): boolean => ready(comments, []).some((comment) => comment.file === file) || ready(pending, []).some((draft) => draft.file === file) || ready(drafts, []).some((draft) => draft.file === file),
 
   /** Whether comments wait on the reader in a file — the AI's drafts or the
-   *  ones pending in their review. Such a file shows its lines with their
-   *  threads: not folded away, not narrowed to what changed since it was
-   *  viewed, not read as a document, so every one of them can be found. */
+   *  ones pending in their review. Open, such a file shows its lines with
+   *  their threads: not narrowed to what changed since it was viewed, not
+   *  read as a document, so every one of them can be found; folded, it lists
+   *  them under its header (waitingOn). */
   waitingIn: (file: string): boolean => ready(pending, []).some((draft) => draft.file === file) || ready(drafts, []).some((draft) => draft.file === file),
+  /** The comments waiting on the reader in a file, wherever in it they are. */
+  waitingOn: (file: string): { readonly pending: ReadonlyArray<DraftView>; readonly drafts: ReadonlyArray<DraftView> } => ({
+    pending: ready(pending, []).filter((draft) => draft.file === file),
+    drafts: ready(drafts, []).filter((draft) => draft.file === file),
+  }),
 
   /** The lines picked for a comment, and whether the pointer is still dragging them out. */
   pick,
