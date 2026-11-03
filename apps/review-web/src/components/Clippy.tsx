@@ -14,22 +14,12 @@ import { selectionLabel, selectionShort } from "../chatText";
 // own Clippy, through clippyjs, loaded only when he is asked for — his
 // sprites come with the page, nothing is fetched from elsewhere.
 //
-// He moves the page as little as he can: a review page holds a great many
-// lines, and anything that changes the layout costs it a long pause. So he
-// is not dragged (clippyjs moves a dragged agent every 10 ms), he is put in
-// his corner once (and again only when the window is resized), and his
-// balloon is placed when it opens and when an answer is done, not as it
-// streams — set where he stands, never measured (clippyjs's own placing
-// measures the page four times over). His own animation only shifts his
-// sprite, which costs nothing.
+// He stands where CSS puts him, as the chat's pill does, and his balloon
+// above him; clippyjs's own placing (and dragging him, every 10 ms) measures
+// and moves him across the page, which on a review of many files costs it a
+// long pause each time. His own animation only shifts his sprite.
 
 type Agent = Awaited<ReturnType<typeof initAgent>>;
-
-const EDGE = 18;
-/** Above the review's actions once they float down into the corner, as the chat's pill stands (.chat-pill.lifted). */
-const LIFTED = 74;
-/** Between his head and the balloon's tip. */
-const ABOVE = 15;
 
 /** An answer as words in his balloon: no code fences, no markdown marks. */
 const plain = (answer: string): string =>
@@ -44,27 +34,9 @@ export function Clippy() {
   // the chat's own box in his balloon, beside the words he says
   const [box, setBox] = createSignal<HTMLDivElement | null>(null);
   let gone = false;
-  // where he stands, kept, so nothing need measure him again
-  let stand = { left: 0, top: 0, width: 0 };
-  /** in the corner, at once: one change to the page, not a walk across it */
-  const corner = (him: Agent | null = agent()) => {
-    if (!him) return;
-    const { offsetWidth: width, offsetHeight: height } = him._el;
-    stand = { left: Math.max(EDGE, innerWidth - EDGE - width), top: Math.max(EDGE, innerHeight - (floating() ? LIFTED : EDGE) - height), width };
-    him._el.style.left = `${stand.left}px`;
-    him._el.style.top = `${stand.top}px`;
-    if (chatNow.open()) beside(him);
-  };
-  /** the balloon over him, its tip at his head: pinned by its right and
-   *  bottom edges, so it grows upward with what is in it and is placed once */
-  const beside = (him: Agent) => {
-    const style = him._balloon._balloon.style;
-    style.top = style.left = "auto";
-    style.right = `${innerWidth - (stand.left + stand.width)}px`;
-    style.bottom = `${innerHeight - stand.top + ABOVE}px`;
-    him._balloon._positionTip("top-left");
-  };
-  const onResize = () => corner();
+  // where he stands: a wrapper in the corner that CSS places (.clippy), him
+  // and his balloon inside it, the balloon above him (.clippy-balloon)
+  let home: HTMLDivElement | undefined;
   void (async () => {
     const [{ initAgent: start }, { default: clippy }] = await Promise.all([import("clippyjs"), import("clippyjs/agents/clippy")]);
     if (gone) return;
@@ -72,8 +44,13 @@ export function Clippy() {
     if (gone) return made.dispose();
     // a press would start clippyjs dragging him: a click is all he takes
     made._el.removeEventListener("mousedown", made._mouseDownHandle);
-    // nor does clippyjs place him and his balloon on a resize, measuring as it goes: corner() does
+    // nor does clippyjs place him and his balloon, measuring as it goes: CSS does
     removeEventListener("resize", made._resizeHandle);
+    const balloon = made._balloon._balloon;
+    for (const placed of [made._el, balloon]) for (const property of ["position", "top", "left", "z-index"]) placed.style.removeProperty(property);
+    balloon.classList.add("clippy-balloon");
+    made._balloon._positionTip("top-left");
+    home!.append(made._el, balloon);
     made._el.addEventListener("click", () => (chatNow.open() ? chatNow.close() : chatNow.openUp()));
     made._el.title = "Ask Clippy";
     const chat = document.createElement("div");
@@ -82,18 +59,11 @@ export function Clippy() {
     made.show(true);
     setBox(chat);
     setAgent(made);
-    // the agent as it is made: a signal set is seen only after
-    corner(made);
-    addEventListener("resize", onResize);
   })();
   onCleanup(() => {
     gone = true;
-    removeEventListener("resize", onResize);
     agent()?.dispose();
   });
-
-  // up out of the way when the review's actions float into the corner, and down again
-  createEffect(floating, () => corner());
 
   // the balloon open as long as the chat is: his own words give way to it,
   // and his timers, which close a balloon once its words are said, are held
@@ -109,7 +79,6 @@ export function Clippy() {
         balloon._active = true;
         balloon._hidden = false;
         balloon._balloon.style.display = "block";
-        beside(him);
         queueMicrotask(() => box()?.querySelector("textarea")?.focus());
       } else {
         balloon._active = false;
@@ -147,13 +116,16 @@ export function Clippy() {
   );
 
   return (
-    <Show when={box()}>
-      {(mount) => (
-        <Portal mount={mount()}>
-          <Balloon />
-        </Portal>
-      )}
-    </Show>
+    // up out of the way when the review's actions float into the corner, as the chat's pill
+    <div class={["clippy", { lifted: floating() }]} ref={(element) => (home = element)}>
+      <Show when={box()}>
+        {(mount) => (
+          <Portal mount={mount()}>
+            <Balloon />
+          </Portal>
+        )}
+      </Show>
+    </div>
   );
 }
 

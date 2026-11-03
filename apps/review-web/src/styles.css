@@ -1066,7 +1066,10 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
    about 44px tall) once it floats down there, moving as it flies (floating.ts), its right edge with it */
 .chat-pill { position: fixed; right: max(18px, calc((100% - 1640px) / 2 + 24px)); bottom: 18px; transition: bottom 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 7; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--fg); font: 13px -apple-system, sans-serif; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
 .chat-panel { position: fixed; right: max(18px, calc((100% - 1640px) / 2 + 24px)); bottom: 18px; transition: bottom 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 7; width: min(440px, calc(100vw - 36px)); max-height: min(70vh, 680px); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); font: 13.5px/1.5 -apple-system, sans-serif; transform-origin: bottom right; }
-.chat-pill.lifted, .chat-panel.lifted { bottom: 74px; }
+.chat-pill.lifted, .chat-panel.lifted, .clippy.lifted { bottom: 74px; }
+/* Clippy (Clippy.tsx) where the pill would stand, his balloon above him, its tip at his head */
+.clippy { position: fixed; right: max(18px, calc((100% - 1640px) / 2 + 24px)); bottom: 18px; transition: bottom 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 7; }
+.clippy > .clippy-balloon { position: absolute; right: 0; bottom: calc(100% + 15px); }
 .chat-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); }
 .chat-ai { flex: 1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
 /* the earlier chats' menu as wide as its words, not daisyUI's 20rem */
