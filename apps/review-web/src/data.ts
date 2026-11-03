@@ -291,10 +291,13 @@ export interface YourReview {
 }
 
 /** The person's switches a page wears, as collagen keeps them. */
+/** An Office assistant clippyjs draws, by its id. */
+export type AssistantId = "clippy" | "bonzi" | "f1" | "genie" | "genius" | "links" | "merlin" | "peedy" | "rocky" | "rover";
+
 export interface PageSettings {
   readonly progressBar: boolean;
-  /** the ask-AI chat is Clippy */
-  readonly clippy: boolean;
+  /** the assistant the ask-AI chat is, and its name; null: the plain chat */
+  readonly assistant: { readonly id: AssistantId; readonly name: string } | null;
 }
 
 /** The review's own part of the page: its ticket, its why and its links,

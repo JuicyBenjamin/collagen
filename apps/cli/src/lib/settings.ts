@@ -1,4 +1,4 @@
-import type { LocalState, Settings } from "@collagen/p2p";
+import type { Assistant, LocalState, Settings } from "@collagen/p2p";
 
 /** The person's switches: on or off, each with a default, set on the
  *  settings page or by their agent for them (set-settings). One list, so
@@ -39,15 +39,28 @@ export const SETTINGS: ReadonlyArray<Setting> = [
     on: "a thin bar atop the review page fills as you scroll through it",
     off: "the review page shows no progress bar",
   },
-  // a gag, on no settings screen: a person finds it by asking their agent
-  {
-    key: "clippy",
-    default: false,
-    label: "clippy",
-    on: "the review page's ask-AI chat is Clippy: he sits in the corner, opens the chat when clicked, thinks while the AI works and says its answer",
-    off: "the review page's ask-AI chat is a plain pill in the corner",
-  },
 ];
+
+/** The assistants, by the names they went by. A gag on no settings screen:
+ *  a person finds it by asking their agent (set-settings assistant). */
+export const ASSISTANT_NAME: Record<Assistant, string> = {
+  clippy: "Clippy",
+  bonzi: "Bonzi",
+  f1: "F1",
+  genie: "Genie",
+  genius: "Genius",
+  links: "Links",
+  merlin: "Merlin",
+  peedy: "Peedy",
+  rocky: "Rocky",
+  rover: "Rover",
+};
+
+/** The state with the assistant chosen, or none (null): the plain chat again. */
+export const withAssistant = <S extends Pick<LocalState, "assistant">>(state: S, assistant: Assistant | null): S => {
+  const { assistant: _gone, ...rest } = state;
+  return (assistant === null ? rest : { ...rest, assistant }) as S;
+};
 
 /** A switch's value: what was set, or its default. */
 export const settingOf = (state: Pick<LocalState, "settings">, key: SettingKey): boolean =>
@@ -60,8 +73,8 @@ export const withSetting = <S extends Pick<LocalState, "settings">>(state: S, ke
 });
 
 /** Every switch and where it stands, a line each — for the agent. */
-export const describeSettings = (state: Pick<LocalState, "settings">): string =>
+export const describeSettings = (state: Pick<LocalState, "settings" | "assistant">): string =>
   SETTINGS.map((setting) => {
     const value = settingOf(state, setting.key);
     return `${setting.key}: ${value ? "on" : "off"}${value === setting.default ? " (default)" : ""} — ${value ? setting.on : setting.off}`;
-  }).join("\n");
+  }).join("\n") + (state.assistant ? `\nassistant: ${ASSISTANT_NAME[state.assistant]} — the review page's ask-AI chat is ${ASSISTANT_NAME[state.assistant]}` : "");

@@ -25,7 +25,7 @@ import { ReviewChat } from "./ReviewChat";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { checkedThemes } from "@collagen/review-web/themeData";
-import { settingOf } from "../lib/settings";
+import { ASSISTANT_NAME, settingOf } from "../lib/settings";
 import { marksOf, withViewed } from "../lib/viewedMarks";
 
 // The review page talks to this instance through Solid's server functions
@@ -165,8 +165,8 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
         ? store.update((state) => withViewed(state, ticketId, file, mark)).pipe(Effect.andThen(store.get), Effect.map((state) => marksOf(state, ticketId)))
         : store.get.pipe(Effect.map((state) => (ticketIdOk(ticketId) ? marksOf(state, ticketId) : {}))),
     pageSettings: SubscriptionRef.changes(store.state).pipe(
-      Stream.map((state) => ({ progressBar: settingOf(state, "progressBar"), clippy: settingOf(state, "clippy") })),
-      Stream.changesWith((before, after) => before.progressBar === after.progressBar && before.clippy === after.clippy),
+      Stream.map((state) => ({ progressBar: settingOf(state, "progressBar"), assistant: state.assistant ? { id: state.assistant, name: ASSISTANT_NAME[state.assistant] } : null })),
+      Stream.changesWith((before, after) => before.progressBar === after.progressBar && before.assistant?.id === after.assistant?.id),
     ),
     saveThemes: (given) => store.update((state) => ({ ...state, themes: checkedThemes(given) })).pipe(Effect.andThen(store.get), Effect.map((state) => state.themes ?? checkedThemes(null))),
     hover: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.hover(ticketId, file, line, col, commit)) : Effect.succeed(bad)),

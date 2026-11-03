@@ -11,7 +11,7 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, noteNow, NotPermitted, NotWritable, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, noteNow, NotPermitted, NotWritable, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Assistant, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, upsertRoom, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
@@ -60,7 +60,7 @@ import { McpInfo } from "./McpInfo";
 import { answerQuestion } from "./InvestigationView";
 import { investigationOf, JOB_KINDS, JOB_LABEL, jobHarness, jobLimitOf, modelFor, withHarness, withModel, type InvestigationRun } from "../lib/jobs";
 import { allow, KIND_LABEL, levelOf, notesFollowed, roomLevelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
-import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
+import { ASSISTANT_NAME, describeSettings, SETTINGS, withAssistant, withSetting } from "../lib/settings";
 import { actingWith } from "../lib/agents";
 import { harnessFor, Harnesses } from "./Harness";
 import { listenerFor, withWorked } from "../lib/worked";
@@ -907,9 +907,9 @@ export const RemoveTheme = Tool.make("remove-theme", {
 
 export const SetSettings = Tool.make("set-settings", {
   description:
-    `Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. ${SETTINGS.map((setting) => `${setting.key} (${setting.default ? "on" : "off"} by default): ${setting.on}`).join(". ")}. Applies live, and the settings page in their TUI shows the same switches — all but clippy, a gag on no screen: your user finds it by asking you for it.`,
-  // every switch the Settings schema has, so a new one is settable here as it lands
-  parameters: Settings,
+    `Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. ${SETTINGS.map((setting) => `${setting.key} (${setting.default ? "on" : "off"} by default): ${setting.on}`).join(". ")}. Applies live, and the settings page in their TUI shows the same switches. 'assistant' is a gag on no screen — your user finds it by asking you for it: the review page's ask-AI chat becomes that Office assistant, sitting in the corner, the chat in its balloon: ${Object.entries(ASSISTANT_NAME).map(([id, name]) => `${id} (${name})`).join(", ")}; null gives the plain chat back.`,
+  // every switch the Settings schema has, so a new one is settable here as it lands; and the assistant
+  parameters: Schema.Struct({ ...Settings.fields, assistant: Schema.optional(Schema.NullOr(Assistant)) }),
   success: Schema.String,
 });
 
@@ -3014,12 +3014,17 @@ const makeHandlers = Effect.gen(function* () {
         if (!without) return `failed: your user has no theme of their own named "${input.name}"\n${describeThemes(themes)}`;
         return yield* keepThemes(without);
       }),
-      "set-settings": (input: Settings) =>
+      "set-settings": (input: Settings & { assistant?: Assistant | null }) =>
         Effect.gen(function* () {
           const changes = SETTINGS.filter((setting) => input[setting.key] !== undefined);
-          if (changes.length > 0) yield* store.update((state) => changes.reduce((current, setting) => withSetting(current, setting.key, input[setting.key]!), state));
+          const assistant = input.assistant;
+          if (changes.length > 0 || assistant !== undefined)
+            yield* store.update((state) => {
+              const switched = changes.reduce((current, setting) => withSetting(current, setting.key, input[setting.key]!), state);
+              return assistant === undefined ? switched : withAssistant(switched, assistant);
+            });
           const now = describeSettings(yield* store.get);
-          return changes.length > 0 ? `set — applies now. Your user's switches:\n${now}` : now;
+          return changes.length > 0 || assistant !== undefined ? `set — applies now. Your user's switches:\n${now}` : now;
         }).pipe(Effect.withSpan("Mcp.setSettings")),
       "ask-why": Effect.fn("Mcp.askWhy")(function* (input: { file?: string; line?: number; pull?: number; project?: string; limit?: number }) {
         const { id } = yield* focusedRoom;

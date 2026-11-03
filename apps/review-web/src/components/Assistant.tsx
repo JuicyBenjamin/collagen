@@ -4,24 +4,40 @@ import type { initAgent } from "clippyjs";
 import { chatNow } from "../chatNow";
 import { floating } from "../floating";
 import { selectionLabel, selectionShort } from "../chatText";
+import type { AssistantId } from "../data";
 
-// The gag (set-settings clippy, on no settings screen): the ask-AI chat is
-// Clippy. He stands in the corner where its pill would; a click on him opens
-// the chat in his own yellow balloon — what you last asked and his answer,
-// and a box to ask the next thing — as the Office assistant asked "What
-// would you like to do?". While the reader's AI answers he thinks, and he
-// gestures when it is done. Microsoft's
-// own Clippy, through clippyjs, loaded only when he is asked for — his
-// sprites come with the page, nothing is fetched from elsewhere.
+// The gag (set-settings assistant, on no settings screen): the ask-AI chat
+// is an Office assistant — Clippy, or one of his friends clippyjs draws. It
+// stands in the corner where the chat's pill would; a click on it opens the
+// chat in its own yellow balloon — what you last asked and its answer, and a
+// box to ask the next thing — as the Office assistant asked "What would you
+// like to do?". While the reader's AI answers it thinks, and it gestures when
+// it is done. Microsoft's own, through clippyjs, each loaded only when it is
+// asked for — its sprites come with the page, nothing is fetched from
+// elsewhere.
 //
-// He stands where CSS puts him, as the chat's pill does, and his balloon
-// above him; clippyjs's own placing (and dragging him, every 10 ms) measures
-// and moves him across the page, which on a review of many files costs it a
-// long pause each time. His own animation only shifts his sprite.
+// It stands where CSS puts it, as the chat's pill does, and its balloon above
+// it; clippyjs's own placing (and dragging it, every 10 ms) measures and
+// moves it across the page, which on a review of many files costs it a long
+// pause each time. Its own animation only shifts its sprite.
 
 type Agent = Awaited<ReturnType<typeof initAgent>>;
 
-/** An answer as words in his balloon: no code fences, no markdown marks. */
+/** Each assistant's sprites and moves, each its own chunk of the page, loaded only when chosen. */
+const AGENTS: Record<AssistantId, () => Promise<{ default: Parameters<typeof initAgent>[0] }>> = {
+  clippy: () => import("clippyjs/agents/clippy"),
+  bonzi: () => import("clippyjs/agents/bonzi"),
+  f1: () => import("clippyjs/agents/f1"),
+  genie: () => import("clippyjs/agents/genie"),
+  genius: () => import("clippyjs/agents/genius"),
+  links: () => import("clippyjs/agents/links"),
+  merlin: () => import("clippyjs/agents/merlin"),
+  peedy: () => import("clippyjs/agents/peedy"),
+  rocky: () => import("clippyjs/agents/rocky"),
+  rover: () => import("clippyjs/agents/rover"),
+};
+
+/** An answer as words in its balloon: no code fences, no markdown marks. */
 const plain = (answer: string): string =>
   answer
     .replace(/```[\s\S]*?```/g, " (code) ")
@@ -29,32 +45,32 @@ const plain = (answer: string): string =>
     .replace(/[ \t]+/g, " ")
     .trim();
 
-export function Clippy() {
+export function Assistant(props: { id: AssistantId; name: string }) {
   const [agent, setAgent] = createSignal<Agent | null>(null);
-  // the chat's own box in his balloon, beside the words he says
+  // the chat's own box in its balloon, beside the words it says
   const [box, setBox] = createSignal<HTMLDivElement | null>(null);
   let gone = false;
-  // where he stands: a wrapper in the corner that CSS places (.clippy), him
-  // and his balloon inside it, the balloon above him (.clippy-balloon)
+  // where it stands: a wrapper in the corner that CSS places (.assistant),
+  // it and its balloon inside, the balloon above it (.assistant-balloon)
   let home: HTMLDivElement | undefined;
   void (async () => {
-    const [{ initAgent: start }, { default: clippy }] = await Promise.all([import("clippyjs"), import("clippyjs/agents/clippy")]);
+    const [{ initAgent: start }, { default: drawn }] = await Promise.all([import("clippyjs"), AGENTS[props.id]()]);
     if (gone) return;
-    const made = await start(clippy);
+    const made = await start(drawn);
     if (gone) return made.dispose();
-    // a press would start clippyjs dragging him: a click is all he takes
+    // a press would start clippyjs dragging it: a click is all it takes
     made._el.removeEventListener("mousedown", made._mouseDownHandle);
-    // nor does clippyjs place him and his balloon, measuring as it goes: CSS does
+    // nor does clippyjs place it and its balloon, measuring as it goes: CSS does
     removeEventListener("resize", made._resizeHandle);
     const balloon = made._balloon._balloon;
     for (const placed of [made._el, balloon]) for (const property of ["position", "top", "left", "z-index"]) placed.style.removeProperty(property);
-    balloon.classList.add("clippy-balloon");
+    balloon.classList.add("assistant-balloon");
     made._balloon._positionTip("top-left");
     home!.append(made._el, balloon);
     made._el.addEventListener("click", () => (chatNow.open() ? chatNow.close() : chatNow.openUp()));
-    made._el.title = "Ask Clippy";
+    made._el.title = `Ask ${props.name}`;
     const chat = document.createElement("div");
-    chat.className = "clippy-chat";
+    chat.className = "assistant-chat";
     made._balloon._balloon.appendChild(chat);
     made.show(true);
     setBox(chat);
@@ -65,13 +81,13 @@ export function Clippy() {
     agent()?.dispose();
   });
 
-  // the balloon open as long as the chat is: his own words give way to it,
-  // and his timers, which close a balloon once its words are said, are held
+  // the balloon open as long as the chat is: its own words give way to it,
+  // and its timers, which close a balloon once its words are said, are held
   createEffect(
     () => [agent(), chatNow.open()] as const,
-    ([him, open]) => {
-      if (!him) return;
-      const balloon = him._balloon;
+    ([made, open]) => {
+      if (!made) return;
+      const balloon = made._balloon;
       balloon._content.style.display = open ? "none" : "";
       box()!.style.display = open ? "" : "none";
       if (open) {
@@ -90,14 +106,14 @@ export function Clippy() {
   createEffect(
     () => chatNow.answering(),
     (busy) => {
-      const him = agent();
-      if (!him || !busy) return;
-      // stopping him would close the balloon: queued, while it is open
-      if (!chatNow.open()) him.stop();
-      him.play(him.hasAnimation("Thinking") ? "Thinking" : "Searching");
+      const agentNow = agent();
+      if (!agentNow || !busy) return;
+      // stopping it would close the balloon: queued, while it is open
+      if (!chatNow.open()) agentNow.stop();
+      agentNow.play(agentNow.hasAnimation("Thinking") ? "Thinking" : "Searching");
     },
   );
-  // an answer finished in front of him: a gesture
+  // an answer finished in front of it: a gesture
   let last: string | null | undefined;
   createEffect(
     () => {
@@ -108,16 +124,16 @@ export function Clippy() {
       const first = last === undefined;
       if (last === (finished?.id ?? null)) return;
       last = finished?.id ?? null;
-      const him = agent();
-      if (first || !finished || !him) return;
-      if (!chatNow.open()) him.stop();
-      him.play("Explain");
+      const agentNow = agent();
+      if (first || !finished || !agentNow) return;
+      if (!chatNow.open()) agentNow.stop();
+      agentNow.play("Explain");
     },
   );
 
   return (
     // up out of the way when the review's actions float into the corner, as the chat's pill
-    <div class={["clippy", { lifted: floating() }]} ref={(element) => (home = element)}>
+    <div class={["assistant", { lifted: floating() }]} ref={(element) => (home = element)}>
       <Show when={box()}>
         {(mount) => (
           <Portal mount={mount()}>
@@ -129,7 +145,7 @@ export function Clippy() {
   );
 }
 
-/** The chat in his balloon: the last thing asked and his answer to it, then
+/** The chat in its balloon: the last thing asked and its answer to it, then
  *  the box for the next — Enter asks, Esc closes. */
 function Balloon() {
   const question = chatNow.draft;
@@ -139,7 +155,7 @@ function Balloon() {
   };
   return (
     <form
-      class="clippy-form"
+      class="assistant-form"
       onSubmit={(event) => {
         event.preventDefault();
         if (!chatNow.answering()) void send();
@@ -150,11 +166,11 @@ function Balloon() {
     >
       <Show when={latest()}>
         {(turn) => (
-          <div class="clippy-said">
+          <div class="assistant-said">
             <p>
               <b>{turn().question}</b>
             </p>
-            <p class="clippy-answer">{turn().answer ? plain(turn().answer) : turn().state === "answering" ? (turn().doing ?? "Let me see…") : ""}</p>
+            <p class="assistant-answer">{turn().answer ? plain(turn().answer) : turn().state === "answering" ? (turn().doing ?? "Let me see…") : ""}</p>
           </div>
         )}
       </Show>
@@ -186,7 +202,7 @@ function Balloon() {
         }}
       />
       <Show when={chatNow.refused()}>{(why) => <p>{why()}</p>}</Show>
-      <div class="clippy-actions">
+      <div class="assistant-actions">
         <button type="button" class="btn btn-sm" data-theme="light" onClick={() => chatNow.close()}>
           Close
         </button>
