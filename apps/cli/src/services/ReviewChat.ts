@@ -65,6 +65,7 @@ const preamble = (review: { readonly title: string; readonly branch?: string; re
         ? `This folder is a clone of the project, but its working tree may be at another commit: read the review's code with \`git show ${review.commit}:<path>\`.`
         : `This folder is a clone of the project.`,
     `Answer what they ask, briefly, in plain text (code in fenced blocks). You read; you change nothing — no edits, no messages, nothing posted.`,
+    `If they ask you to comment on the code, you cannot post a comment, but collagen drafts it as theirs: for each comment, one line \`${DRAFT} <file>:<line> || <nit|suggest|wish|must> || <the comment, a sentence or two, as a colleague would say it>\`, the line as the review's code numbers it. Collagen puts each under its line as their draft, to accept, edit or decline; say nothing more about it.`,
     `If neither the code nor the review's why answers it — the reason is the author's, and nothing here says it — never guess: say so in a line, and end your answer with one last line \`${FORWARD} <the question, standalone, for the author>\`. Collagen may then ask the author's AI, which answers from the conversation the work was done in.`,
     `If they ask you to get the author's missing whys (the reasons the review does not give), you cannot ask anyone yourself, but collagen can, on their word: end your answer with one last line \`${WHYS}\`. Collagen then asks the author's AI at once, and each why goes onto the review where it is missing. Before that line, say in a line or two what is missing; never write the whys yourself.`,
   ].join("\n");
@@ -172,12 +173,9 @@ const insteadOf = (mode: "assume" | "critique", author: string): string =>
 
 /** An answer in the author's place, read: the words the reader sees, the
  *  guess to put on the author's why, and the draft comments to make. */
-export const insteadAnswer = (
-  answer: string,
-): { readonly answer: string; readonly assumed: { readonly what: string; readonly basis: string; readonly confidence: "high" | "medium" | "low" } | null; readonly drafts: ReadonlyArray<{ readonly file: string; readonly line: number; readonly strength: "nit" | "suggest" | "wish" | "must"; readonly body: string }> } => {
+export const insteadAnswer = (answer: string): { readonly answer: string; readonly assumed: { readonly what: string; readonly basis: string; readonly confidence: "high" | "medium" | "low" } | null; readonly drafts: ReadonlyArray<ChatDraft> } => {
   const kept: Array<string> = [];
   let assumed: { what: string; basis: string; confidence: "high" | "medium" | "low" } | null = null;
-  const drafts: Array<{ file: string; line: number; strength: "nit" | "suggest" | "wish" | "must"; body: string }> = [];
   for (const raw of answer.split("\n")) {
     const line = raw.trim().replace(/^`+|`+$/g, "").trim();
     if (line.startsWith(ASSUMED)) {
@@ -186,6 +184,21 @@ export const insteadAnswer = (
       if (what) assumed = { what, basis: (basis ?? "").replace(/^RESTS ON:\s*/, "") || "the code", confidence: confidence ?? "low" };
       continue;
     }
+    kept.push(raw);
+  }
+  const read = draftsOf(kept.join("\n"));
+  return { answer: read.answer, assumed, drafts: read.drafts };
+};
+
+/** A comment the reader asked their AI for, drafted as theirs. */
+type ChatDraft = { readonly file: string; readonly line: number; readonly strength: "nit" | "suggest" | "wish" | "must"; readonly body: string };
+
+/** An answer's draft comments, one \`DRAFT:\` line each, and the words without them. */
+export const draftsOf = (answer: string): { readonly answer: string; readonly drafts: ReadonlyArray<ChatDraft> } => {
+  const kept: Array<string> = [];
+  const drafts: Array<ChatDraft> = [];
+  for (const raw of answer.split("\n")) {
+    const line = raw.trim().replace(/^`+|`+$/g, "").trim();
     if (line.startsWith(DRAFT)) {
       const [where, strength, body] = line.slice(DRAFT.length).split("||").map((part) => part.trim());
       const at = /^(.+):(\d+)$/.exec(where ?? "");
@@ -195,7 +208,7 @@ export const insteadAnswer = (
     }
     kept.push(raw);
   }
-  return { answer: kept.join("\n").trim(), assumed, drafts };
+  return { answer: kept.join("\n").trim(), drafts };
 };
 
 /** A turn as kept, and back: what the page shows at once after a restart. */
@@ -345,10 +358,13 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
             ? { ...turn, state: "failed", doing: null }
             : code !== 0 && turn.answer.length === 0
               ? { ...turn, state: "failed", doing: null, error: stderr.filter((line) => line.trim()).slice(-1)[0]?.slice(0, 300) ?? `${chat.cmd} stopped (exit ${code})` }
-              : { ...turn, state: "done", doing: null },
+              : { ...turn, doing: null },
         );
+        // still answering while what it asked for is done: whoever waits on the answer reads the outcome, not its marker lines
+        yield* drafted(ticketId, turnId);
         yield* forwarded(ticketId, turnId);
         yield* actedInstead(ticketId, turnId);
+        yield* changeTurn(ticketId, turnId, (turn) => (turn.state === "answering" ? { ...turn, state: "done" } : turn));
         yield* keepTurns(ticketId);
       },
       (effect, ticketId, turnId, ai) =>
@@ -472,14 +488,14 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
       Effect.gen(function* () {
         const turn = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
         // the reader asked for the missing whys: their word, so it is asked at once, whatever the forwarding steering
-        const before = turn && turn.state === "done" ? whysOf(turn.answer) : null;
+        const before = turn && turn.state === "answering" ? whysOf(turn.answer) : null;
         if (turn && before !== null) {
           const id = yield* askAuthor(ticketId, turn, WHYS_QUESTION, true);
           const said = id ? "Asked for every why the review is missing: each goes onto the review where it is missing, as it comes." : "The ask for the missing whys could not be sent.";
           yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: [before, said].filter((part) => part.length > 0).join("\n\n"), ...(id ? { forward: { id, question: WHYS_QUESTION, state: "asked" as const } } : {}) }));
           return;
         }
-        const handed = turn && turn.state === "done" ? forwardOf(turn.answer) : null;
+        const handed = turn && turn.state === "answering" ? forwardOf(turn.answer) : null;
         if (!turn || !handed) return;
         const found = yield* reviewNamed(ticketId);
         // the person's own review too (single player): the conversation that did the work is asked
@@ -496,7 +512,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
     const actedInstead = (ticketId: string, turnId: string) =>
       Effect.gen(function* () {
         const turn = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
-        if (!turn?.about || turn.state !== "done") return;
+        if (!turn?.about || turn.state !== "answering") return;
         const read = insteadAnswer(turn.answer);
         const found = yield* reviewNamed(ticketId);
         const said: Array<string> = [];
@@ -504,11 +520,30 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
           const sent = yield* questions.assume(found.roomId, { id: turn.about.questionId, ticketId, ...read.assumed });
           said.push(sent.startsWith("failed") ? `The guess could not be sent: ${sent.replace(/^failed: /, "")}` : `Your AI's guess goes on ${found.review.authorName}'s review's why, for them to confirm, correct or reject.`);
         }
-        if (read.drafts.length > 0) {
-          const result = yield* draftComments(ticketId, read.drafts.map((draft) => ({ spot: { file: draft.file, line: draft.line, side: "RIGHT" as const }, body: draft.body, strength: draft.strength })));
-          said.push("error" in result ? `The comments could not be drafted: ${result.error}` : `${result.drafted.length} draft comment${result.drafted.length === 1 ? "" : "s"} on the page, under the lines they are about: yours to accept, edit or decline.`);
-        }
+        if (read.drafts.length > 0) said.push(yield* draftAll(ticketId, read.drafts));
         yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: [read.answer, ...said].filter((part) => part.length > 0).join("\n\n") }));
+      });
+
+    /** A chat's comments, drafted as the reader's: what came of them, in a line. */
+    const draftAll = (ticketId: string, drafts: ReadonlyArray<ChatDraft>) =>
+      Effect.gen(function* () {
+        const result = yield* draftComments(ticketId, drafts.map((draft) => ({ spot: { file: draft.file, line: draft.line, side: "RIGHT" as const }, body: draft.body, strength: draft.strength })));
+        if ("error" in result) return `The comments could not be drafted: ${result.error}`;
+        const kept = result.drafted.length > 0 ? `${result.drafted.length} draft comment${result.drafted.length === 1 ? "" : "s"} on the page, under the lines they are about: yours to accept, edit or decline.` : "";
+        const refused = result.refused.map((each) => `Not drafted: ${each.at}, ${each.why}.`);
+        return [kept, ...refused].filter((part) => part.length > 0).join("\n");
+      });
+
+    /** The comments the reader asked their own AI for: drafted as theirs. An
+     *  answer in the author's place drafts its own (actedInstead). */
+    const drafted = (ticketId: string, turnId: string) =>
+      Effect.gen(function* () {
+        const turn = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns.find((each) => each.id === turnId);
+        if (!turn || turn.about || turn.state !== "answering") return;
+        const read = draftsOf(turn.answer);
+        if (read.drafts.length === 0) return;
+        const said = yield* draftAll(ticketId, read.drafts);
+        yield* changeTurn(ticketId, turnId, (each) => ({ ...each, answer: [read.answer, said].filter((part) => part.length > 0).join("\n\n") }));
       });
 
     /** In the author's place: the reader's AI assumes the reason (or assumes
