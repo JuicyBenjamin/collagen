@@ -1,86 +1,209 @@
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup, Show } from "solid-js";
+import { Portal } from "@solidjs/web";
 import type { initAgent } from "clippyjs";
 import { chatNow } from "../chatNow";
+import { selectionLabel, selectionShort } from "../chatText";
 
 // The gag (set-settings clippy, on no settings screen): the ask-AI chat is
 // Clippy. He stands in the corner where its pill would; a click on him opens
-// the chat, and he steps aside of it while it is open. While the reader's AI
-// answers he thinks; once it has, he says the start of its answer. Microsoft's
+// the chat in his own yellow balloon — what you last asked and his answer,
+// and a box to ask the next thing — as the Office assistant asked "What
+// would you like to do?". While the reader's AI answers he thinks; when an
+// answer comes in with the balloon shut, he says the start of it. Microsoft's
 // own Clippy, through clippyjs, loaded only when he is asked for — his
 // sprites come with the page, nothing is fetched from elsewhere.
 
 type Agent = Awaited<ReturnType<typeof initAgent>>;
 
-/** How much of an answer he says: a balloon, not the whole reply. */
+/** How much of an answer he says with the balloon shut: a line, not the whole reply. */
 const SAYS = 160;
-/** From the window's edges, as the pill and the panel stand. */
 const EDGE = 18;
-const PANEL = 440;
 
-/** An answer as words he can say: no code, no markdown marks. */
-const spoken = (answer: string): string => {
-  const words = answer.replace(/```[\s\S]*?```/g, " ").replace(/[`*_#>[\]]/g, "").replace(/\s+/g, " ").trim();
+/** An answer as words in his balloon: no code fences, no markdown marks. */
+const plain = (answer: string): string =>
+  answer
+    .replace(/```[\s\S]*?```/g, " (code) ")
+    .replace(/[`*_#>[\]]/g, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+const said = (answer: string): string => {
+  const words = plain(answer).replace(/\s+/g, " ");
   return words.length > SAYS ? `${words.slice(0, SAYS - 1).trimEnd()}…` : words;
 };
 
 export function Clippy() {
-  let agent: Agent | undefined;
+  const [agent, setAgent] = createSignal<Agent | null>(null);
+  // the chat's own box in his balloon, beside the words he says
+  const [box, setBox] = createSignal<HTMLDivElement | null>(null);
   let gone = false;
-  /** where he stands: in the corner, or left of the open chat */
-  const place = (open: boolean) => {
-    if (!agent) return;
-    const { offsetWidth: width, offsetHeight: height } = agent._el;
-    const beside = open ? Math.min(PANEL, innerWidth - 2 * EDGE) + 12 : 0;
-    agent.moveTo(Math.max(EDGE, innerWidth - EDGE - beside - width), innerHeight - EDGE - height, 600);
-  };
   void (async () => {
     const [{ initAgent: start }, { default: clippy }] = await Promise.all([import("clippyjs"), import("clippyjs/agents/clippy")]);
     if (gone) return;
     const made = await start(clippy);
     if (gone) return made.dispose();
-    agent = made;
-    agent._el.addEventListener("click", () => (chatNow.open() ? chatNow.close() : chatNow.openUp()));
-    agent._el.title = "Ask Clippy";
-    agent.show(false);
-    place(chatNow.open());
+    made._el.addEventListener("click", () => (chatNow.open() ? chatNow.close() : chatNow.openUp()));
+    made._el.title = "Ask Clippy";
+    const chat = document.createElement("div");
+    chat.className = "clippy-chat";
+    made._balloon._balloon.appendChild(chat);
+    made.show(false);
+    const { offsetWidth: width, offsetHeight: height } = made._el;
+    made.moveTo(innerWidth - EDGE - width, innerHeight - EDGE - height, 0);
+    setBox(chat);
+    setAgent(made);
   })();
   onCleanup(() => {
     gone = true;
-    agent?.dispose();
+    agent()?.dispose();
   });
 
+  // the balloon open as long as the chat is: his own words give way to it,
+  // and his timers, which close a balloon once its words are said, are held
   createEffect(
-    () => chatNow.open(),
-    (open) => place(open),
+    () => [agent(), chatNow.open()] as const,
+    ([him, open]) => {
+      if (!him) return;
+      const balloon = him._balloon;
+      balloon._content.style.display = open ? "none" : "";
+      box()!.style.display = open ? "" : "none";
+      if (open) {
+        balloon.pause();
+        balloon._active = true;
+        balloon._hidden = false;
+        balloon._balloon.style.display = "block";
+        balloon.reposition();
+        queueMicrotask(() => box()?.querySelector("textarea")?.focus());
+      } else {
+        balloon._active = false;
+        balloon.hide(true);
+      }
+    },
+  );
+  // what is in it changes its size: it stays beside him
+  createEffect(
+    () => [chatNow.view(), chatNow.attached()] as const,
+    () => {
+      if (chatNow.open()) queueMicrotask(() => agent()?._balloon.reposition());
+    },
   );
   // thinking while the reader's own AI answers
   createEffect(
     () => chatNow.answering(),
     (busy) => {
-      if (!agent || !busy) return;
-      agent.stop();
-      agent.play(agent.hasAnimation("Thinking") ? "Thinking" : "Searching");
+      const him = agent();
+      if (!him || !busy) return;
+      // stopping him would close the balloon: queued, while it is open
+      if (!chatNow.open()) him.stop();
+      him.play(him.hasAnimation("Thinking") ? "Thinking" : "Searching");
     },
   );
-  // an answer the reader's AI finished while he was here: he says it. Not
-  // the ones there already when he came — only what happens in front of him.
-  let said: string | null | undefined;
+  // an answer finished in front of him: a gesture, and with the balloon shut he says it
+  let last: string | null | undefined;
   createEffect(
     () => {
-      const last = (chatNow.view()?.turns ?? []).filter((turn) => turn.from === undefined).at(-1);
-      return last && last.state === "done" && last.answer ? { id: last.id, answer: last.answer } : null;
+      const turn = (chatNow.view()?.turns ?? []).filter((each) => each.from === undefined).at(-1);
+      return turn && turn.state === "done" && turn.answer ? { id: turn.id, answer: turn.answer } : null;
     },
     (finished) => {
-      const first = said === undefined;
-      if (said === (finished?.id ?? null)) return;
-      said = finished?.id ?? null;
-      if (first || !finished || !agent) return;
+      const first = last === undefined;
+      if (last === (finished?.id ?? null)) return;
+      last = finished?.id ?? null;
+      const him = agent();
+      if (first || !finished || !him) return;
+      if (chatNow.open()) return void him.play("Explain");
       // the words the moment the answer is in: speak() would queue them
       // behind his thinking, whose way out takes seconds; the gesture after
-      agent.stop();
-      agent._balloon.speak(() => undefined, spoken(finished.answer), false);
-      agent.play("Explain");
+      him.stop();
+      him._balloon.speak(() => undefined, said(finished.answer), false);
+      him.play("Explain");
     },
   );
-  return null;
+
+  return (
+    <Show when={box()}>
+      {(mount) => (
+        <Portal mount={mount()}>
+          <Balloon />
+        </Portal>
+      )}
+    </Show>
+  );
+}
+
+/** The chat in his balloon: the last thing asked and his answer to it, then
+ *  the box for the next — Enter asks, Esc closes. */
+function Balloon() {
+  const question = chatNow.draft;
+  const latest = () => (chatNow.view()?.turns ?? []).filter((turn) => turn.from === undefined).at(-1);
+  const send = async () => {
+    if (await chatNow.ask(question())) chatNow.setDraft("");
+  };
+  return (
+    <form
+      class="clippy-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!chatNow.answering()) void send();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") chatNow.close();
+      }}
+    >
+      <Show when={latest()}>
+        {(turn) => (
+          <div class="clippy-said">
+            <p>
+              <b>{turn().question}</b>
+            </p>
+            <p class="clippy-answer">{turn().answer ? plain(turn().answer) : turn().state === "answering" ? (turn().doing ?? "Let me see…") : ""}</p>
+          </div>
+        )}
+      </Show>
+      <p>
+        <b>What would you like to know?</b>
+      </p>
+      <Show when={chatNow.attached()}>
+        {(selection) => (
+          <p title={selectionLabel(selection())}>
+            About {selectionShort(selection())}{" "}
+            <button type="button" class="btn btn-ghost btn-xs" data-theme="light" onClick={() => chatNow.detach()}>
+              not these
+            </button>
+          </p>
+        )}
+      </Show>
+      <textarea
+        class="textarea textarea-sm"
+        data-theme="light"
+        rows={2}
+        placeholder="Type your question here"
+        value={question()}
+        onInput={(event) => chatNow.setDraft(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            if (!chatNow.answering()) void send();
+          }
+        }}
+      />
+      <Show when={chatNow.refused()}>{(why) => <p>{why()}</p>}</Show>
+      <div class="clippy-actions">
+        <button type="button" class="btn btn-sm" data-theme="light" onClick={() => chatNow.close()}>
+          Close
+        </button>
+        <Show
+          when={chatNow.answering()}
+          fallback={
+            <button type="submit" class="btn btn-sm" data-theme="light" disabled={chatNow.sending() || question().trim().length === 0}>
+              Ask
+            </button>
+          }
+        >
+          <button type="button" class="btn btn-sm" data-theme="light" onClick={() => chatNow.stop()}>
+            Stop
+          </button>
+        </Show>
+      </div>
+    </form>
+  );
 }

@@ -1137,3 +1137,12 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .board-stack-item { position: absolute; left: 0; right: 0; top: calc(var(--mid) * var(--step)); }
 .board-stack.open .board-stack-item > .board-card { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
 .board-stack.open .board-stack-item.focused > .board-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 18px 40px rgba(0, 0, 0, 0.45); }
+
+/* Clippy's balloon holding the chat (Clippy.tsx): placed and scrolled; its look is clippyjs's own */
+.clippy-chat { width: 17rem; cursor: auto; font: 10pt "Microsoft Sans", "Segoe UI", Tahoma, sans-serif; }
+.clippy-form { display: grid; gap: 6px; }
+.clippy-form p { margin: 0; }
+.clippy-said { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid rgba(0, 0, 0, 0.2); }
+.clippy-answer { max-height: 14rem; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.clippy-form .textarea { width: 100%; min-height: 0; resize: none; }
+.clippy-actions { display: flex; justify-content: flex-end; gap: 6px; }

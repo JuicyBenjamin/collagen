@@ -45,7 +45,7 @@ export function Chat() {
       {/* the pill and the panel turn into each other (chatNow.openUp, close):
           the panel grows out of the pill, and shrinks back onto it, placed
           beneath as it starts to close — its words coming once it is the pill */}
-      {/* the gag (set-settings clippy): Clippy stands where the pill would, always */}
+      {/* the gag (set-settings clippy): Clippy stands where the pill would, always, and the chat is in his balloon */}
       <Show when={settingsNow.settings().clippy}>
         <Clippy />
       </Show>
@@ -63,7 +63,7 @@ export function Chat() {
         )}
       </InCorner>
       <InCorner
-        when={chatNow.open()}
+        when={!settingsNow.settings().clippy && chatNow.open()}
         enter={(element) => {
           const { from, flyFrom } = chatNow.turn;
           chatNow.turn.from = chatNow.turn.flyFrom = null;
