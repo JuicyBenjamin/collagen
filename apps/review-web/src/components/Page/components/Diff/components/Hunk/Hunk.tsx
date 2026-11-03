@@ -341,10 +341,12 @@ export function Hunk(props: {
                 // when this was its last file, closes with it); unmarking
                 // holds the header where it was clicked
                 const marking = state() !== "viewed";
+                // comments waiting on the reader keep it open: marked, it stays where it is
+                const folds = marking && !waiting();
                 const group = card();
-                void (marking ? glideToTop(head) : holdInPlace(head));
+                void (folds ? glideToTop(head) : holdInPlace(head));
                 let settle: () => void = () => undefined;
-                if (marking && !reading.folded(props.hunk.file)) {
+                if (folds && !reading.folded(props.hunk.file)) {
                   reading.foldsNow(props.hunk.file, true);
                   settle = await foldAway(group);
                 }
