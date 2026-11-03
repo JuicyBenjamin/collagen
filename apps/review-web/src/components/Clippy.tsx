@@ -2,6 +2,7 @@ import { createEffect, createSignal, onCleanup, Show } from "solid-js";
 import { Portal } from "@solidjs/web";
 import type { initAgent } from "clippyjs";
 import { chatNow } from "../chatNow";
+import { floating } from "../floating";
 import { selectionLabel, selectionShort } from "../chatText";
 
 // The gag (set-settings clippy, on no settings screen): the ask-AI chat is
@@ -25,6 +26,8 @@ import { selectionLabel, selectionShort } from "../chatText";
 type Agent = Awaited<ReturnType<typeof initAgent>>;
 
 const EDGE = 18;
+/** Above the review's actions once they float down into the corner, as the chat's pill stands (.chat-pill.lifted). */
+const LIFTED = 74;
 /** Between his head and the balloon's tip. */
 const ABOVE = 15;
 
@@ -47,7 +50,7 @@ export function Clippy() {
   const corner = (him: Agent | null = agent()) => {
     if (!him) return;
     const { offsetWidth: width, offsetHeight: height } = him._el;
-    stand = { left: Math.max(EDGE, innerWidth - EDGE - width), top: Math.max(EDGE, innerHeight - EDGE - height), width };
+    stand = { left: Math.max(EDGE, innerWidth - EDGE - width), top: Math.max(EDGE, innerHeight - (floating() ? LIFTED : EDGE) - height), width };
     him._el.style.left = `${stand.left}px`;
     him._el.style.top = `${stand.top}px`;
     if (chatNow.open()) beside(him);
@@ -88,6 +91,9 @@ export function Clippy() {
     removeEventListener("resize", onResize);
     agent()?.dispose();
   });
+
+  // up out of the way when the review's actions float into the corner, and down again
+  createEffect(floating, () => corner());
 
   // the balloon open as long as the chat is: his own words give way to it,
   // and his timers, which close a balloon once its words are said, are held
