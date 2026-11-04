@@ -114,23 +114,27 @@ export function ProjectsPage() {
         ) : (
           // idle: a borderless list like the overview's; the tab names it
           <box flexDirection="column">
+            {/* empty: what a project is, plainly, rather than "none" */}
             {rows.length === 0 ? (
-              <text fg={theme.dim} truncate wrapMode="none">
-                {"  "}none
-              </text>
+              // padded, not spaced: a narrow terminal wraps it, every line under the first
+              <box paddingLeft={2}>
+                <text fg={theme.dim} wrapMode="word">
+                  No projects yet: add a folder of code you work on, and its reviews and merges are read from your copy.
+                </text>
+              </box>
             ) : null}
             {rows.map((row, index) => {
-              const shared = row.holders.length >= 2;
               const selected = focused && index === sel;
               // not on this machine: dim, and it says so — the needed action
               // is visible before anyone presses anything
               const missing = row.mine === undefined;
               return (
                 <box key={row.name} flexDirection="column" flexShrink={0}>
-                  <text fg={selected ? theme.accent : shared && !missing ? theme.fg : theme.dim} truncate wrapMode="none">
+                  {/* yours reads plainly whether anyone else shares it; only one not on this machine is dim */}
+                  <text fg={selected ? theme.accent : missing ? theme.dim : theme.fg} truncate wrapMode="none">
                     {selected ? "› " : "  "}
                     {row.name}
-                    <span fg={theme.dim}> {row.holders.join(", ")}</span>
+                    <span fg={theme.dim}> · shared by {row.holders.join(", ")}</span>
                   </text>
                   {missing ? (
                     <text fg={selected ? theme.accent : theme.dim} truncate wrapMode="none">
