@@ -41,8 +41,9 @@ import { Outbox } from "./Outbox";
 import { ReviewRoutes, reviewData, unitCoverageNote } from "./ReviewView";
 import { fingerprints, viewedState } from "@collagen/review-web/marks";
 import { marksOf, withViewed } from "../lib/viewedMarks";
-import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, submitReview, type DraftInput } from "./ReviewTalk";
-import { whereOf } from "../lib/comments";
+import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, moveDraft, submitReview, talkView, type DraftInput } from "./ReviewTalk";
+import { whereOf, type Spot } from "../lib/comments";
+import type { Outdated } from "@collagen/review-web/data";
 import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
 import { ReviewServerRoutes } from "./ReviewServer";
@@ -966,10 +967,10 @@ export const ReviewComments = Tool.make("review-comments", {
   description: [
     "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line?, startLine?, side?, strength?, body, detail?}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. A remark about a file itself — its place, its name, that it should not exist, that it lacks a test — leaves out line (and startLine, side): it sits at the top of the file. 'body' is what a person reads, beside the code and on the host: plain words, a sentence or two, as a colleague would say it — no priority codes ([P2]), no rule or skill names, no run of identifiers. 'detail' is your longer reasoning, for the author's agent (it reads it in review-context); a person sees it only when they open it. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
     "Drafts stay on this machine. Your user reads them beside the code and accepts (into their review, as on GitHub), edits or declines each; their review is said when they finish it — in the room as theirs and, when the review is an open pull request someone else opened, on it as one review with their verdict (through their own gh; on their own pull request it stays in collagen, where it has readers); you call nothing else for that. Say in the chat what you found in a line or two and that the comments are drafts on the review page; do not repeat them there.",
-    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). Whether it also goes on the pull request is their repo-host steering's: at ask first the submit comes back unsent with the question for them — ask, then submit again with 'onHost' true (yes) or false (the room only); never set onHost without asking. 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. 'keep' (ids): a pending comment written on another commit is about the same lines at the review's commit now — read the diff first. A finish waits, nothing submitted, while comments in it were written on different commits: each kept or declined first. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
+    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). Whether it also goes on the pull request is their repo-host steering's: at ask first the submit comes back unsent with the question for them — ask, then submit again with 'onHost' true (yes) or false (the room only); never set onHost without asking. 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. A comment follows its code when the branch moves: its lines are read where they stand now. One whose code changed since (edited, taken out, out of the change) is OUTDATED — it sits on its file, with where it was and those lines as they were; never on other code. For one not said yet: 'keep' (ids) keeps it as a comment on the whole file; 'move' (ids: [one id], 'to': {file, line?, startLine?, side?}) puts it on the lines it now belongs to, read from the diff; 'decline' deletes it. A finish onto the pull request waits, nothing submitted, while any in it is outdated. 'list': the drafts, the comments pending in the review, and those said, each where its code stands now. Your user's take on the ticket itself still goes in post-review.",
   ].join("\n"),
   parameters: Schema.Struct({
-    action: Schema.Literals(["draft", "accept", "decline", "keep", "submit", "list"]),
+    action: Schema.Literals(["draft", "accept", "decline", "keep", "move", "submit", "list"]),
     ticketId: Schema.String,
     comments: Schema.optional(
       Schema.Array(
@@ -985,6 +986,15 @@ export const ReviewComments = Tool.make("review-comments", {
       ),
     ),
     ids: Schema.optional(Schema.Array(Schema.String)),
+    /** 'move': the lines the comment goes on, as a draft's are given */
+    to: Schema.optional(
+      Schema.Struct({
+        file: Schema.String,
+        line: Schema.optional(Schema.Number),
+        startLine: Schema.optional(Schema.Number),
+        side: Schema.optional(Schema.Literals(["new", "old"])),
+      }),
+    ),
     verdict: Schema.optional(Schema.Literals(["comment", "approve", "request-changes"])),
     body: Schema.optional(Schema.String),
     /** your user's answer, once asked, to "also on the pull request?" */
@@ -3102,8 +3112,9 @@ const makeHandlers = Effect.gen(function* () {
         return yield* pages.showMerges(roomId, project.name, input.number);
       }),
       "review-comments": Effect.fn("Mcp.reviewComments")(function* (input: {
-        action: "draft" | "accept" | "decline" | "keep" | "submit" | "list";
+        action: "draft" | "accept" | "decline" | "keep" | "move" | "submit" | "list";
         ticketId: string;
+        to?: { readonly file: string; readonly line?: number; readonly startLine?: number; readonly side?: "new" | "old" };
         comments?: ReadonlyArray<{ readonly file: string; readonly line?: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly strength?: Strength; readonly body: string; readonly detail?: string }>;
         ids?: ReadonlyArray<string>;
         verdict?: "comment" | "approve" | "request-changes";
@@ -3115,14 +3126,17 @@ const makeHandlers = Effect.gen(function* () {
         const ticket = all.get(input.ticketId);
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}: comments go on a review's code`;
+        // where a comment sits, as given: lines of the branch's code, or with no line the file itself
+        const spotGiven = (given: { readonly file: string; readonly line?: number; readonly startLine?: number; readonly side?: "new" | "old" }): Spot | null => {
+          if (given.line === undefined) return given.startLine === undefined && given.side === undefined ? { subject: "file", file: given.file } : null;
+          if (!Number.isInteger(given.line) || given.line <= 0 || (given.startLine !== undefined && !Number.isInteger(given.startLine))) return null;
+          const side = given.side === "old" ? ("LEFT" as const) : ("RIGHT" as const);
+          return { file: given.file, line: given.line, side, ...(given.startLine !== undefined && given.startLine !== given.line ? { startLine: given.startLine, startSide: side } : {}) };
+        };
         if (input.action === "draft") {
-          // where each sits, read once: lines of the branch's code, or with no line the file itself
           const items = (input.comments ?? []).flatMap((comment): ReadonlyArray<DraftInput> => {
-            const words = { body: comment.body, ...(comment.strength ? { strength: comment.strength } : {}), ...(comment.detail ? { detail: comment.detail } : {}) };
-            if (comment.line === undefined) return comment.startLine === undefined && comment.side === undefined ? [{ spot: { subject: "file", file: comment.file }, ...words }] : [];
-            if (!Number.isInteger(comment.line) || comment.line <= 0 || (comment.startLine !== undefined && !Number.isInteger(comment.startLine))) return [];
-            const side = comment.side === "old" ? ("LEFT" as const) : ("RIGHT" as const);
-            return [{ spot: { file: comment.file, line: comment.line, side, ...(comment.startLine !== undefined && comment.startLine !== comment.line ? { startLine: comment.startLine, startSide: side } : {}) }, ...words }];
+            const spot = spotGiven(comment);
+            return spot ? [{ spot, body: comment.body, ...(comment.strength ? { strength: comment.strength } : {}), ...(comment.detail ? { detail: comment.detail } : {}) }] : [];
           });
           if (items.length === 0) return "failed: pass 'comments' — each with file, body, and line (a whole number of the branch's code) unless it is about the whole file";
           const result = yield* draftComments(input.ticketId, items);
@@ -3143,34 +3157,52 @@ const makeHandlers = Effect.gen(function* () {
         if (input.action === "submit") {
           const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null, null, { agent: true, ...(input.onHost !== undefined ? { onHost: input.onHost } : {}) });
           if ("held" in result && result.held) {
-            const waiting = yield* draftsOf(input.ticketId);
-            const held = result.held.flatMap((id) => waiting.filter((draft) => draft.id === id)).map((draft) => `- ${draft.id} ${whereOf(draft)}, written at ${draft.commit.slice(0, 7)}`);
-            return `failed: NOT SUBMITTED — ${result.error} 'keep' (ids) confirms one where it sits at the review's commit now; 'decline' (ids) deletes it.\n${held.join("\n")}`;
+            const waiting = (yield* talkView(input.ticketId)).pending;
+            const held = result.held
+              .flatMap((id) => waiting.filter((draft) => draft.id === id))
+              .map((draft) => `- ${draft.id} ${draft.outdated ? `was on ${draft.outdated.was} of ${draft.file}: ${draft.outdated.why}` : `${whereOf(draft)}, written at ${draft.commit.slice(0, 7)}`}`);
+            return `failed: NOT SUBMITTED — ${result.error} 'keep' (ids) keeps one on its file; 'move' puts it on the lines it belongs to now; 'decline' (ids) deletes it.\n${held.join("\n")}`;
           }
           if ("error" in result) return result.error?.startsWith("NOT FINISHED") ? result.error : `failed: ${result.error} — the review stays pending`;
           return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request as your user, through their own gh${"changesRequested" in result && result.changesRequested ? ", requesting changes (a must comment in it)" : ""}${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
         }
         if (input.action === "keep") {
-          if (!ids) return "failed: pass 'ids' — the pending comments to keep where they sit at the review's commit now";
+          if (!ids) return "failed: pass 'ids' — the comments to keep where their code stands now (an outdated one, on its file)";
           const result = yield* keepDrafts(input.ticketId, ids);
-          return `${result.done} comment(s) kept where they sit at the review's commit now.${failures(result.failed)}`;
+          return `${result.done} comment(s) kept where their code stands now — an outdated one as a comment on its file.${failures(result.failed)}`;
+        }
+        if (input.action === "move") {
+          if (!ids || ids.length !== 1) return "failed: pass 'ids' with the one comment to move";
+          const spot = input.to ? spotGiven(input.to) : null;
+          if (!spot) return "failed: pass 'to' — file, and line (a whole number of the branch's code) unless it goes on the whole file";
+          const result = yield* moveDraft(input.ticketId, ids[0]!, spot);
+          return result.done === 1 ? `moved to ${whereOf(spot)}.` : `failed: ${result.failed[0]?.error ?? "not moved"}`;
         }
         if (input.action === "decline") {
           const dropped = yield* dropDrafts(input.ticketId, ids, "ai");
           return dropped === 0 ? "nothing declined: no such drafts waiting" : `${dropped} draft(s) declined — said nowhere`;
         }
-        const mine = yield* draftsOf(input.ticketId);
-        const said = (yield* SubscriptionRef.get(room.comments)).filter((comment) => comment.ticketId === input.ticketId);
+        // each where its code stands now, as the page shows them
+        const talk = yield* talkView(input.ticketId);
+        const hosted = new Map((yield* SubscriptionRef.get(room.comments)).filter((comment) => comment.ticketId === input.ticketId).map((comment) => [comment.id, comment]));
         // each one's strength apart from its words, read from the prefix they
-        // carry — and the AI's longer version, when it has one
-        const words = (comment: { readonly body: string; readonly detail?: string }) => {
+        // carry — the AI's longer version, when it has one — and, outdated, where it was
+        const words = (comment: { readonly body: string; readonly detail?: string; readonly outdated?: Outdated }) => {
           const read = readStrength(comment.body);
-          return { ...(read.strength ? { strength: read.strength } : {}), body: read.text, ...(comment.detail !== undefined ? { detail: comment.detail } : {}) };
+          return {
+            ...(read.strength ? { strength: read.strength } : {}),
+            body: read.text,
+            ...(comment.detail !== undefined ? { detail: comment.detail } : {}),
+            ...(comment.outdated ? { outdated: `was on ${comment.outdated.was}: ${comment.outdated.why}`, ...(comment.outdated.quote.length > 0 ? { wasCode: comment.outdated.quote.join("\n") } : {}) } : {}),
+          };
         };
         return toToon({
-          drafts: mine.filter((draft) => draft.status !== "pending").map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
-          pending: mine.filter((draft) => draft.status === "pending").map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
-          said: said.map((comment) => ({ by: comment.authorName, at: whereOf(comment), ...words(comment), ...(comment.host ? { onHost: comment.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) })),
+          drafts: talk.drafts.map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
+          pending: talk.pending.map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
+          said: talk.said.map((comment) => {
+            const record = hosted.get(comment.id);
+            return { by: comment.author.login, at: whereOf(comment), ...words(comment), ...(record?.host ? { onHost: record.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) };
+          }),
         });
       }, Effect.provideContext(talkContext)),
       "set-name": ({ name }: { name: string }) =>

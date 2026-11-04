@@ -134,11 +134,11 @@ export const dropDrafts = async (ticketId: string, ids: ReadonlyArray<string> | 
   return run((backend) => backend.drop(ticketId, ids, kind));
 };
 
-/** Confirm where a comment not said yet sits, at the commit the page shows
- *  now — after the branch moved under it. */
-export const repinDraft = async (ticketId: string, id: string, commit: string): Promise<DraftsResult> => {
+/** Keep a comment not said yet where its code stands now — one whose code
+ *  changed, on its file. */
+export const keepDraft = async (ticketId: string, id: string): Promise<DraftsResult> => {
   "use server";
-  return run((backend) => backend.repin(ticketId, id, commit));
+  return run((backend) => backend.keep(ticketId, id));
 };
 
 /** The merges page's read: one of a room's projects, `shown` of its

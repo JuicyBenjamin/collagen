@@ -20,7 +20,7 @@ export function Held(props: { comments: ReadonlyArray<DraftView> }) {
         <section class="held" aria-label="Comments to settle before submitting">
           <div class="held-box">
             <p class="held-head">
-              <strong>Not submitted yet.</strong> {props.comments.length === 1 ? "1 comment was" : `${props.comments.length} comments were`} written on another commit: keep or delete each first.
+              <strong>Not submitted yet.</strong> {props.comments.length === 1 ? "1 comment sits" : `${props.comments.length} comments sit`} on code that changed since it was written: keep or delete each first.
             </p>
             <ul>
               <For each={props.comments}>{(comment) => <Row comment={comment} />}</For>
@@ -70,8 +70,8 @@ function Row(props: { comment: DraftView }) {
       <span class="held-body">{readStrength(props.comment.body).text}</span>
       <span class="held-actions">
         <Show when={placed()}>
-          <button type="button" class="btn btn-xs" onClick={() => void settle(() => hostNow.repin(props.comment.id))} title="It is about these lines at the commit shown now">
-            Keep it here
+          <button type="button" class="btn btn-xs" onClick={() => void settle(() => hostNow.keep(props.comment.id))} title={props.comment.outdated ? "Keep it as a comment on the whole file" : "Keep it where its code stands now"}>
+            {props.comment.outdated ? "Keep on the file" : "Keep it here"}
           </button>
         </Show>
         <button type="button" class="btn btn-xs" onClick={() => void settle(() => hostNow.unpend([props.comment.id]))}>

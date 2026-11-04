@@ -305,7 +305,7 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
  *  (each comment said moves the page) reads none of its files twice. */
 const KEPT_FILES = 6_000;
 const kept = new Map<string, string | null>();
-const showAt = (path: string, commit: string, file: string) => {
+export const showAt = (path: string, commit: string, file: string) => {
   const key = `${path}\0${commit}:${file}`;
   if (kept.has(key)) return Effect.succeed(kept.get(key)!);
   return run("git", ["show", `${commit}:${file}`], path, 5_000).pipe(

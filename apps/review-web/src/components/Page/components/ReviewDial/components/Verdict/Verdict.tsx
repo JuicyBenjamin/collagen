@@ -36,10 +36,11 @@ export function Verdict(props: { verdict: VerdictValue; onDone: () => void }) {
   /** a must in the review asks for changes: the whole review does, the host having one verdict for all of it */
   const musts = () => hostNow.pending().filter((draft) => asksForChanges(draft.body)).length;
   const chosen = (): VerdictValue => (musts() > 0 ? "request-changes" : props.verdict);
-  /** pending comments written on another commit than the page shows: the
-   *  review waits until each is kept or deleted (with no pull request to put
-   *  them on, it does not) */
-  const held = () => (onHost() ? hostNow.pending().filter((draft) => !draft.posted && hostNow.moved(draft)) : []);
+  /** pending comments whose code changed since they were written, or of
+   *  another commit than the page shows: the review waits until each is kept
+   *  or deleted (with no pull request to put them on, it does not — the room
+   *  reads each where its code stands) */
+  const held = () => (onHost() ? hostNow.pending().filter((draft) => !draft.posted && (draft.outdated !== undefined || hostNow.moved(draft))) : []);
   // words are needed only where nothing else says it: a verdict or comments do
   const ready = () => !sending() && held().length === 0 && (submitted() || chosen() === "approve" || body().trim().length > 0 || count() > 0);
   // one finish at a time: a second click while one is on its way sends nothing

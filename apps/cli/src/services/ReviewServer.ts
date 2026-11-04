@@ -12,7 +12,7 @@ import type { Harnesses } from "./Harness";
 import { reviewChanges, ReviewPages } from "./ReviewLive";
 import { codePathOk, ReviewTypes, toolNamed } from "./ReviewTypes";
 import { commitOk, hostView, localHost, projectNameOk, reviewData, reviewHead, sinceViewed, ticketIdOk, treePathOk, webRoot, wholeFile } from "./ReviewView";
-import { acceptDrafts, addToReview, dropDrafts, editDraft, repinDraft, sayComment, submitReview, talkView } from "./ReviewTalk";
+import { acceptDrafts, addToReview, dropDrafts, editDraft, keepDrafts, sayComment, submitReview, talkView } from "./ReviewTalk";
 import { boardChanges, boardData, boardKindsOk, shortIdOk } from "./BoardView";
 import { IdentityService } from "./Identity";
 import { MergeHistory } from "./MergeHistory";
@@ -193,7 +193,7 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
     talk: (ticketId) => (ticketIdOk(ticketId) ? on(talkView(ticketId)) : Effect.succeed({ drafts: [], pending: [], said: [] })),
     accept: (ticketId, ids, edits) => (ticketIdOk(ticketId) && idsOk(ids) && editsOk(edits) ? on(acceptDrafts(ticketId, ids, edits)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     edit: (ticketId, id, body) => (ticketIdOk(ticketId) && idsOk([id]) && bodyOk(body) ? on(editDraft(ticketId, id, body)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
-    repin: (ticketId, id, commit) => (ticketIdOk(ticketId) && idsOk([id]) && commitOk(commit) ? on(repinDraft(ticketId, id, commit)) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
+    keep: (ticketId, id) => (ticketIdOk(ticketId) && idsOk([id]) ? on(keepDrafts(ticketId, [id])) : Effect.succeed({ done: 0, failed: [{ id: "", error: "bad request" }] })),
     take: (ticketId, findings, failed, comment) =>
       ticketIdOk(ticketId) && bodyOk(findings) && typeof failed === "boolean" && typeof comment === "boolean" ? on(takeReview(ticketId, findings, failed, comment)) : Effect.succeed(bad),
     parents: (ticketId) => (ticketIdOk(ticketId) ? on(parentsView(ticketId)) : Effect.succeed({ tickets: [], ticked: false })),
