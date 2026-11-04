@@ -5,9 +5,12 @@ import { parseDocument } from "~/markdown";
 import { changedBlocks } from "~/mdChanges";
 import { Markdown } from "~/components/Markdown";
 
-/** A Markdown file this diff changed, rendered: just the blocks it adds and
- *  takes out, each marked as code marks its lines; or, `whole`, the file as
- *  the branch has it, each block this diff changed marked beside it. */
+const TITLE = { added: "Added", removed: "Removed", edited: "Changed" } as const;
+
+/** A Markdown file this diff changed, rendered: just the blocks it adds,
+ *  takes out and edits — an edited one once, its words marked as a code
+ *  line changed in place — each marked as code marks its lines; or, `whole`,
+ *  the file as the branch has it, each block this diff changed marked beside it. */
 export function Rendered(props: { file: string; whole: boolean; read: () => Promise<WholeFileResult> }) {
   const [read, setRead] = createSignal<WholeFileResult | null>(null);
   void props.read().then(setRead);
@@ -40,7 +43,7 @@ export function Rendered(props: { file: string; whole: boolean; read: () => Prom
                   <Show when={change.gapBefore}>
                     <div class="md-gap" aria-label="Unchanged" />
                   </Show>
-                  <div class={{ "md-section": true, changed: change.kind === "added", went: change.kind === "removed" }} title={change.kind === "added" ? "Added" : "Removed"}>
+                  <div class={{ "md-section": true, changed: change.kind === "added", gone: change.kind === "removed", edited: change.kind === "edited" }} title={TITLE[change.kind]}>
                     <Markdown.Blocks of={change.blocks} />
                   </div>
                 </>
