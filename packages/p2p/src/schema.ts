@@ -922,6 +922,11 @@ export const Settings = Schema.Struct({
   /** absent = on: a thin bar atop the review page fills as the reader scrolls */
   progressBar: Schema.optional(Schema.Boolean),
 });
+
+/** The Office assistants clippyjs draws: one can be the review page's ask-AI
+ *  chat — a gag, set only by an agent (set-settings assistant). */
+export const Assistant = Schema.Literals(["clippy", "bonzi", "f1", "genie", "genius", "links", "merlin", "peedy", "rocky", "rover"]);
+export type Assistant = typeof Assistant.Type;
 export type Settings = typeof Settings.Type;
 
 /** Whose approval collagen waits for before it merges the pull request of a
@@ -987,6 +992,8 @@ export const LocalState = Schema.Struct({
   /** collagen's own model runs, latest last (see OwnRun) */
   ownRuns: Schema.optional(Schema.Array(OwnRun)),
   settings: Schema.optional(Settings),
+  /** absent: the ask-AI chat is a plain pill; one of them: it is that assistant */
+  assistant: Schema.optional(Assistant),
   /** absent = never merged for them */
   merging: Schema.optional(Merging),
   /** absent = collagen's own, and none of the person's yet */

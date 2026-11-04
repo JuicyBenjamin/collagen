@@ -89,6 +89,8 @@ export class ReviewBackend extends Context.Service<
     readonly setViewed: (ticketId: string, file: string, mark: unknown) => Effect.Effect<Marks>;
     /** the person's switches the page wears — now, then on every change, whoever made it */
     readonly pageSettings: Stream.Stream<PageSettings>;
+    /** the assistant the ask-AI chat is, or (null) the plain chat: checked, then kept (set-settings assistant) */
+    readonly setAssistant: (assistant: unknown) => Effect.Effect<void>;
     /** the reader's conversation with their AI on the review, whole — now, then on every change */
     readonly chat: (ticketId: string) => Stream.Stream<ChatView>;
     /** a room's board, by its short id: its tickets in to do, in progress and done — everything or one epic's, done lately or all of it */

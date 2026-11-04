@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { BoardData, BoardKind, ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { AssistantId, BoardData, BoardKind, ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { Mark, Marks } from "./marks";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
@@ -199,6 +199,14 @@ export const setMerge = async (ticketId: string, level: MergeFor | null): Promis
 export const setViewed = async (ticketId: string, file: string, mark: Mark | null): Promise<Marks> => {
   "use server";
   return run((backend) => backend.setViewed(ticketId, file, mark));
+};
+
+/** Make the ask-AI chat another Office assistant, or (null) the plain chat
+ *  again — as the person's agent does (set-settings assistant). Every open
+ *  page follows over its settings. */
+export const setAssistant = async (assistant: AssistantId | null): Promise<void> => {
+  "use server";
+  return run((backend) => backend.setAssistant(assistant));
 };
 
 /** Keep the page's themes in collagen — where the person's agent can choose

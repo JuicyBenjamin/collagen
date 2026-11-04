@@ -1,11 +1,11 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Effect, Fiber, Layer, Stream, SubscriptionRef } from "effect";
+import { Effect, Fiber, Layer, Schema, Stream, SubscriptionRef } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { ReviewBackend } from "@collagen/review-web/backend";
 import type { ChatSelection, CommentSpot, TicketNext } from "@collagen/review-web/data";
-import { heldBy, type ViewedMark } from "@collagen/p2p";
+import { Assistant, heldBy, type ViewedMark } from "@collagen/p2p";
 import { runningOn } from "../lib/running";
 import { nextStepOf } from "../lib/nextStep";
 import type { Harnesses } from "./Harness";
@@ -25,7 +25,7 @@ import { ReviewChat } from "./ReviewChat";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { checkedThemes } from "@collagen/review-web/themeData";
-import { settingOf } from "../lib/settings";
+import { ASSISTANT_NAME, settingOf, withAssistant } from "../lib/settings";
 import { marksOf, withViewed } from "../lib/viewedMarks";
 
 // The review page talks to this instance through Solid's server functions
@@ -165,9 +165,10 @@ const backend = (definitions: ReadonlyArray<{ readonly name: string; readonly ch
         ? store.update((state) => withViewed(state, ticketId, file, mark)).pipe(Effect.andThen(store.get), Effect.map((state) => marksOf(state, ticketId)))
         : store.get.pipe(Effect.map((state) => (ticketIdOk(ticketId) ? marksOf(state, ticketId) : {}))),
     pageSettings: SubscriptionRef.changes(store.state).pipe(
-      Stream.map((state) => ({ progressBar: settingOf(state, "progressBar") })),
-      Stream.changesWith((before, after) => before.progressBar === after.progressBar),
+      Stream.map((state) => ({ progressBar: settingOf(state, "progressBar"), assistant: state.assistant ? { id: state.assistant, name: ASSISTANT_NAME[state.assistant] } : null })),
+      Stream.changesWith((before, after) => before.progressBar === after.progressBar && before.assistant?.id === after.assistant?.id),
     ),
+    setAssistant: (given) => (given === null || Schema.is(Assistant)(given) ? store.update((state) => withAssistant(state, given)) : Effect.void),
     saveThemes: (given) => store.update((state) => ({ ...state, themes: checkedThemes(given) })).pipe(Effect.andThen(store.get), Effect.map((state) => state.themes ?? checkedThemes(null))),
     hover: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.hover(ticketId, file, line, col, commit)) : Effect.succeed(bad)),
     definition: (ticketId, file, line, col, commit) => (ticketIdOk(ticketId) && codePathOk(file) && lineOk(line, col) && commitOk(commit) ? on(types.definition(ticketId, file, line, col, commit)) : Effect.succeed(bad)),

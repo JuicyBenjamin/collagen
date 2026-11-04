@@ -10,6 +10,8 @@ import { ago } from "../when";
 import type { ChatTurn } from "../data";
 import { lasting } from "../lasting";
 import { ticketId } from "../ticket";
+import { settingsNow } from "../settingsNow";
+import { Assistant } from "./Assistant";
 
 /** The reader's conversation with their own AI on this review: an offer to
  *  ask under code they select, and a panel in the corner — their questions,
@@ -36,15 +38,20 @@ export function Chat() {
             onClick={() => chatNow.take()}
             title={`Ask your AI about ${selectionLabel(offer().selection)}`}
           >
-            Ask AI
+            {`Ask ${settingsNow.settings().assistant?.name ?? "AI"}`}
           </button>
         )}
       </Appear>
       {/* the pill and the panel turn into each other (chatNow.openUp, close):
           the panel grows out of the pill, and shrinks back onto it, placed
           beneath as it starts to close — its words coming once it is the pill */}
+      {/* the gag (set-settings assistant): an Office assistant stands where the pill would, always, and the chat is in its balloon */}
+      {/* keyed by which one: the same assistant sent again stays, a new one comes in its place */}
+      <Show when={settingsNow.settings().assistant?.id} keyed>
+        {(id) => <Assistant id={id} name={settingsNow.settings().assistant?.name ?? ""} />}
+      </Show>
       <InCorner
-        when={!chatNow.open() && chatNow.held()}
+        when={!settingsNow.settings().assistant && !chatNow.open() && chatNow.held()}
         enter={(element) => (chatNow.turn.intoPill ? arrive(element.firstElementChild, 0.24) : rise(element))}
         // the panel growing out of it covers it from the first frame
         leave={sink}
@@ -57,7 +64,7 @@ export function Chat() {
         )}
       </InCorner>
       <InCorner
-        when={chatNow.open()}
+        when={!settingsNow.settings().assistant && chatNow.open()}
         enter={(element) => {
           const { from, flyFrom } = chatNow.turn;
           chatNow.turn.from = chatNow.turn.flyFrom = null;

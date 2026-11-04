@@ -1066,7 +1066,10 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
    about 44px tall) once it floats down there, moving as it flies (floating.ts), its right edge with it */
 .chat-pill { position: fixed; right: max(18px, calc((100% - 1640px) / 2 + 24px)); bottom: 18px; transition: bottom 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 7; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--fg); font: 13px -apple-system, sans-serif; cursor: pointer; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28); }
 .chat-panel { position: fixed; right: max(18px, calc((100% - 1640px) / 2 + 24px)); bottom: 18px; transition: bottom 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 7; width: min(440px, calc(100vw - 36px)); max-height: min(70vh, 680px); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); font: 13.5px/1.5 -apple-system, sans-serif; transform-origin: bottom right; }
-.chat-pill.lifted, .chat-panel.lifted { bottom: 74px; }
+.chat-pill.lifted, .chat-panel.lifted, .assistant.lifted { bottom: 74px; }
+/* An Office assistant (Assistant.tsx) where the pill would stand, its balloon above it, its tip at its head */
+.assistant { position: fixed; right: max(18px, calc((100% - 1640px) / 2 + 24px)); bottom: 18px; transition: bottom 0.38s cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 7; }
+.assistant > .assistant-balloon { position: absolute; right: 0; bottom: calc(100% + 15px); }
 .chat-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); }
 .chat-ai { flex: 1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
 /* the earlier chats' menu as wide as its words, not daisyUI's 20rem */
@@ -1137,3 +1140,16 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 .board-stack-item { position: absolute; left: 0; right: 0; top: calc(var(--mid) * var(--step)); }
 .board-stack.open .board-stack-item > .board-card { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); }
 .board-stack.open .board-stack-item.focused > .board-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 18px 40px rgba(0, 0, 0, 0.45); }
+
+/* The assistant's balloon holding the chat (Assistant.tsx): placed and scrolled; its look is clippyjs's own */
+.assistant-chat { width: 17rem; cursor: auto; font: 10pt "Microsoft Sans", "Segoe UI", Tahoma, sans-serif; }
+/* one size whatever is said: the conversation takes what the box and buttons leave, and scrolls */
+.assistant-form { display: flex; flex-direction: column; gap: 6px; height: 22rem; }
+.assistant-form p { margin: 0; }
+.assistant-talk { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(0, 0, 0, 0.2); }
+.assistant-turn { display: grid; gap: 2px; }
+.assistant-asked { font-size: 8pt; color: rgba(0, 0, 0, 0.55); overflow-wrap: anywhere; }
+.assistant-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-form .textarea { width: 100%; min-height: 0; resize: none; }
+.assistant-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.assistant-pick { width: auto; margin-right: auto; }
