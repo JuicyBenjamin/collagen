@@ -21,7 +21,8 @@ import { RenameRoomPage } from "./rename-room/page";
 /** The route table: one page per route. Adding a route = a folder with a
  *  `page.tsx`, a `Route` member, and a line here. */
 const pages: { readonly [N in RouteName]: (route: Extract<Route, N | { readonly name: N }>) => ReactNode } = {
-  settings: () => <SettingsPage />,
+  settings: () => <SettingsPage scope="room" />,
+  "settings/global": () => <SettingsPage scope="global" />,
   you: () => <YouPage />,
   "rename-room": () => <RenameRoomPage />,
   "new-room": () => <NewRoomPage />,
