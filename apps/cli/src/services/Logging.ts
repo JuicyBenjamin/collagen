@@ -1,16 +1,24 @@
 import { appendFileSync } from "node:fs";
 import { Config, Context, Effect, Layer, Logger, Option, SubscriptionRef } from "effect";
 
-/** In-memory ring of recent log lines for the UI activity panel. */
+/** In-memory ring of recent log lines for the UI activity panel, and apart
+ *  from it the recent warnings and errors, so the activity's chatter never
+ *  pushes out what went wrong (room-connection reads them). */
 export class LogBuffer extends Context.Service<LogBuffer>()("cli/LogBuffer", {
   make: Effect.gen(function* () {
     const lines = yield* SubscriptionRef.make<ReadonlyArray<string>>([]);
+    const troubles = yield* SubscriptionRef.make<ReadonlyArray<string>>([]);
     // Loggers run synchronously — expose a sync append for the Logger layer,
     // running with the surrounding services captured here.
     const services = yield* Effect.context<never>();
-    const appendSync = (line: string) =>
-      Effect.runSyncWith(services)(SubscriptionRef.update(lines, (buffered) => [...buffered.slice(-49), line]));
-    return { lines, appendSync } as const;
+    const appendSync = (line: string, trouble: boolean) =>
+      Effect.runSyncWith(services)(
+        Effect.andThen(
+          SubscriptionRef.update(lines, (buffered) => [...buffered.slice(-49), line]),
+          trouble ? SubscriptionRef.update(troubles, (buffered) => [...buffered.slice(-19), line]) : Effect.void,
+        ),
+      );
+    return { lines, troubles, appendSync } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
@@ -40,7 +48,7 @@ export const LoggerLive = Layer.unwrap(
       };
       toFile(line);
       try {
-        buffer.appendSync(line);
+        buffer.appendSync(line, logLevel === "Warn" || logLevel === "Error" || logLevel === "Fatal");
       } catch (error) {
         toFile(`${date.toISOString()} [LOGGER] ui buffer append failed: ${String(error).slice(0, 200)}`);
       }

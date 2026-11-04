@@ -7,6 +7,7 @@ import { MergesPage } from "./room/merges/page";
 import { OutboxPage } from "./room/outbox/page";
 import { PeoplePage } from "./room/people/page";
 import { ProjectsPage } from "./room/projects/page";
+import { BoardPage } from "./room/board/page";
 import { OverviewPage } from "./room/overview/page";
 import { AttachPage } from "./room/attach/page";
 import { ReviewPage } from "./room/review/page";
@@ -20,7 +21,9 @@ import { RenameRoomPage } from "./rename-room/page";
 /** The route table: one page per route. Adding a route = a folder with a
  *  `page.tsx`, a `Route` member, and a line here. */
 const pages: { readonly [N in RouteName]: (route: Extract<Route, N | { readonly name: N }>) => ReactNode } = {
-  settings: () => <SettingsPage />,
+  // keyed by its tab: an agent taking the person to another tab opens it there
+  settings: (route) => <SettingsPage key={typeof route === "object" ? route.tab : "general"} scope="room" {...(typeof route === "object" ? { tab: route.tab } : {})} />,
+  "settings/global": (route) => <SettingsPage key={route.tab ?? "general"} scope="global" back={route.back} {...(route.tab ? { tab: route.tab } : {})} />,
   you: () => <YouPage />,
   "rename-room": () => <RenameRoomPage />,
   "new-room": () => <NewRoomPage />,
@@ -30,6 +33,7 @@ const pages: { readonly [N in RouteName]: (route: Extract<Route, N | { readonly 
   "room/merges": () => <MergesPage />,
   "room/projects": () => <ProjectsPage />,
   "room/people": () => <PeoplePage />,
+  "room/board": () => <BoardPage />,
   "room/ticket": (route) => <TicketPage ticketId={route.ticketId} route={route} />,
   "room/transcripts": (route) => <TranscriptsPage subject={route.subject} />,
   "room/transcript": (route) => <TranscriptPage path={route.path} file={route.file} />,

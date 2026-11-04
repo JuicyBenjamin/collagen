@@ -11,10 +11,13 @@ import { NET } from "../app/net";
 import { checkInvite } from "../lib/invite";
 import { branchLink, hostOf } from "./RepoHost";
 import { describeIdentity, gitAuthors, identityOf, ownIdentities } from "./Authorship";
-import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, noteNow, NotPermitted, NotWritable, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { type MergeFor, Harness as HarnessId, afterProblem, closedAs, conversationKey, epicForFiling, moveToEpic, claimReview, Confidence, DriveAction, emptyReview, finished, heldBy, ImportanceScore, InvestigationOutcome, isJudged, isClosed, isOwned, isTake, kindsForAgents, noteNow, NotPermitted, NotWritable, machineProblems, mergeReview, TicketKind, newProject, PROTOCOL_VERSION, Remedy, reviewStepId, Room, roomProjects, shortRoomId, ReviewMachine, takeIntent, ticketName, visibleTo, Settings, Assistant, Steering, SteeringKind, JobKind, GoalAnswer, GoalFollowUp, goalsOf, type InvestigationQuestion, InvestigationPace, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
 import { invitedRoomEntry, newRoomEntry, readProfileFile, upsertRoom, writeProfileFile } from "../config/profileFile";
 import { DiagnosticToolkit, diagnostics } from "../diagnostics";
 import { branchOf } from "../lib/gitInfo";
+import { boardEpics } from "../lib/board";
+import { agoText, troubleOf } from "../lib/roomHealth";
+import { LogBuffer } from "./Logging";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
 import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
@@ -38,13 +41,15 @@ import { Outbox } from "./Outbox";
 import { ReviewRoutes, reviewData, unitCoverageNote } from "./ReviewView";
 import { fingerprints, viewedState } from "@collagen/review-web/marks";
 import { marksOf, withViewed } from "../lib/viewedMarks";
-import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, submitReview, type DraftInput } from "./ReviewTalk";
-import { whereOf } from "../lib/comments";
+import { acceptDrafts, draftComments, draftsOf, dropDrafts, keepDrafts, moveDraft, submitReview, talkView, type DraftInput } from "./ReviewTalk";
+import { whereOf, type Spot } from "../lib/comments";
+import type { Outdated } from "@collagen/review-web/data";
 import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
+import { Places, type SettingsTab } from "./Places";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
-import { ReviewQuestions } from "./ReviewQuestions";
+import { ReviewQuestions, WHYS_QUESTION, type WhyGiven } from "./ReviewQuestions";
 import { chatInWords, ReviewChat } from "./ReviewChat";
 import { indexLine, noteInWords, notesIndex, notesOf } from "../lib/steeringNotes";
 import { filesOfWhy, GuidancePass } from "./GuidancePass";
@@ -56,8 +61,8 @@ import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { answerQuestion } from "./InvestigationView";
 import { investigationOf, JOB_KINDS, JOB_LABEL, jobHarness, jobLimitOf, modelFor, withHarness, withModel, type InvestigationRun } from "../lib/jobs";
-import { allow, KIND_LABEL, levelOf, notesFollowed, roomLevelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
-import { describeSettings, SETTINGS, withSetting } from "../lib/settings";
+import { allow, KIND_LABEL, levelOf, notesFollowed, roomLevelOf, STEERING_GROUPS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
+import { ASSISTANT_NAME, describeSettings, SETTINGS, withAssistant, withSetting } from "../lib/settings";
 import { actingWith } from "../lib/agents";
 import { harnessFor, Harnesses } from "./Harness";
 import { listenerFor, withWorked } from "../lib/worked";
@@ -485,15 +490,16 @@ export const AskAuthor = Tool.make("ask-author", {
   description: [
     "Ask the author's AI something about a review that its why does not answer (review-context said nothing on it): their collagen answers from the conversation the work was done in, as THEIR steering allows, and the answer comes back to your user's chat on the review page and onto the review's why, marked as read from their AI.",
     "Only when your user's forwarding steering lets you (set-steering kind forward), or on their word. 'question' in their words, standalone; 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows, when it is about code.",
+    "'whys: true' asks for every why the review is missing instead (decisions with no reason, changes no decision covers): their collagen finds each gap, and each why goes where its gap is on the review's why. 'question' is then optional.",
   ].join("\n"),
-  parameters: Schema.Struct({ ticketId: Schema.String, question: Schema.String, lines: Schema.optional(QuestionLinesInput), commit: Schema.optional(Schema.String) }),
+  parameters: Schema.Struct({ ticketId: Schema.String, question: Schema.optional(Schema.String), lines: Schema.optional(QuestionLinesInput), commit: Schema.optional(Schema.String), whys: Schema.optional(Schema.Boolean) }),
   success: Schema.String,
 });
 
 export const ReviewChatTool = Tool.make("review-chat", {
   description: [
     "Your user's chat on a review's page: their questions to their own AI about the review, and its answers — a conversation apart from this one. With only 'ticketId' it reads it: each question, the lines it was about and the answer, so you carry on from what they asked there instead of asking again.",
-    "'question' asks it, as your user would on the page: it answers read-only in their clone, the page shows it live, and this waits for the answer and gives it back. 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows. Usually you answer your user yourself; ask through it only when they want it kept on the review. 'stop' stops the answer under way; 'new' starts a new conversation, the one before it kept among the review's earlier chats (reading lists them). 'chat' with an earlier chat's id reads that one; 'reopen' with it goes back to it, the current one set aside in its place. Asking, stopping, starting over and going back only on your user's word.",
+    "'question' asks it, as your user would on the page: it answers read-only in their clone (a comment asked for becomes their draft), the page shows it live, and this waits for the answer and gives it back. 'lines' the lines it is about, as the diff shows them, and 'commit' the one the page shows. Usually you answer your user yourself; ask through it only when they want it kept on the review. 'stop' stops the answer under way; 'new' starts a new conversation, the one before it kept among the review's earlier chats (reading lists them). 'chat' with an earlier chat's id reads that one; 'reopen' with it goes back to it, the current one set aside in its place. Asking, stopping, starting over and going back only on your user's word.",
   ].join("\n"),
   parameters: Schema.Struct({
     ticketId: Schema.String,
@@ -560,6 +566,20 @@ export const GuidancePassTool = Tool.make("guidance-pass", {
   success: Schema.String,
 });
 
+export const JobProgressTool = Tool.make("job-progress", {
+  description:
+    "For a job collagen runs (research, an investigation, filing, answering, a guidance pass), when its prompt names its job id: say how far you are. First {job, step: 0, of: how many steps you will take, doing: what you start with}, then after each step {job, step, of, doing: what you do next}, a few words each. The people waiting on it see it, in their rooms, on the ticket and its review page. Never for your own work outside such a job.",
+  parameters: Schema.Struct({ job: Schema.String, step: Schema.Finite, of: Schema.optional(Schema.Finite), doing: Schema.String }),
+  success: Schema.String,
+});
+
+export const RoomConnection = Tool.make("room-connection", {
+  description:
+    "How a room is connected, when it seems stuck — a colleague missing, nothing arriving, waiting to be let in: what stands in the way and what to try, in one line; then you (net, protocol, reachable directly or behind a firewall), the room's log (open, writable), who is here and on which protocol, who is away, who is on the room but not let in, who waits to be let in, who was turned away, admits that failed, the swarm's connections, and this machine's recent warnings and errors. 'room' (short id or name) for another of your user's rooms; the one they look at by default. Read only.",
+  parameters: Schema.Struct({ room: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
 export const GetRoomAccess = Tool.make("get-room-access", {
   description:
     "Who may do what in the room your user is looking at. Collagen defines the permissions — invite, approve (let someone waiting in; your own invites let people straight in), remove, manage-roles — and each room defines its own roles: a name, a rank (a higher rank stands above a lower one; only someone ranked above may give, change or take a role, or act on its holders) and the permissions it holds; 'everyone' is the role every member holds. The owner (the room's creator) holds every permission. Lists the roles, who holds which, who is waiting to be let in, who was turned away and who was taken out.",
@@ -597,12 +617,14 @@ export const ReviewQuestionTool = Tool.make("review-question", {
   description: [
     "Answer a question a reader asked about your user's review (ask-author): with nothing, it lists the questions waiting on them. 'answer: true' is your user's yes — collagen finds the conversation the work was done in, and a job of theirs reads it and answers. 'decline' is their no, with their reason. 'reply' IS the answer — from the answering job, or from THIS conversation if it did the work — in plain words; add 'flaw' when answering shows something wrong with the change: their work steering then raises it with them or hands it to the conversation that built it.",
     "The reader is told, and the answer goes onto the review's why, marked as read from your user's AI. When the reader's AI already guessed at it (a guess on the why), 'verdict' settles that guess: confirmed (alone is enough), corrected or wrong (with 'reply', the real reason).",
+    "A question for every missing why is answered with 'whys' instead of 'reply': one entry per gap — {decision, why} for a decision that gave no reason, {where: [file:line-line], title, why} for changes no decision covers — each put where its gap is.",
   ].join("\n"),
   parameters: Schema.Struct({
     questionId: Schema.optional(Schema.String),
     answer: Schema.optional(Schema.Boolean),
     decline: Schema.optional(Schema.String),
     reply: Schema.optional(Schema.String),
+    whys: Schema.optional(Schema.Array(Schema.Struct({ decision: Schema.optional(Schema.String), where: Schema.optional(Schema.Array(Schema.String)), title: Schema.optional(Schema.String), why: Schema.String }))),
     flaw: Schema.optional(Schema.String),
     verdict: Schema.optional(Schema.Literals(["confirmed", "corrected", "wrong"])),
   }),
@@ -804,9 +826,31 @@ export const Epic = Tool.make("epic", {
   success: Schema.String,
 });
 
+/** What each steering kind does, as the agent reads it in set-steering — grouped there by the ticket that starts it (STEERING_GROUPS). */
+const KIND_FOR_AGENT: Record<SteeringKind, string> = {
+  review: "a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only",
+  guidance: "a pass on each review your user files: their AI checks it against the steering notes that apply and the conversation that built it fixes what falls short, before anyone else reads it — 'mine' only",
+  forward: "your user's chat on someone else's review page asking that review's author's AI what its why does not say (on a review of their own, it asks their own conversation that did the work instead) — 'mine' only",
+  answer: "their AI answering a question about a review of theirs, from the conversation the work was done in: 'others' when a colleague asks it, 'mine' when they asked it themselves",
+  close: "closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only",
+  host: "acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host",
+  investigate: "collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives",
+  report: "collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's",
+  run: "collagen running their AI for a job: researching a plan, proposal or bug when they ask for more info, and waking the conversation that worked on a ticket when something new comes on it",
+  work: "what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told",
+  deliver: "collagen delivering messages into their AI conversations",
+  notes: "steering notes: 'mine' is whether what your AI notes of how your user steers it, or changes in a note, goes into the room on its own; 'others' is whether your agents follow a note a colleague's AI added that no person has read yet",
+  admit: "letting people into a room, turning them away, and taking them out — what their role in the room allows; 'mine' only",
+};
+
 export const SetSteering = Tool.make("set-steering", {
   description:
-    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's), 'close' (closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only), 'review' (a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only), 'notes' (steering notes: 'mine' is whether what your AI notes of how your user steers it, or changes in a note, goes into the room on its own — just do it, act then tell, ask first, or never; 'others' is whether your agents follow a note a colleague's AI added that no person has read yet), 'guidance' (a pass on each review your user files: their AI checks it against the steering notes that apply and the conversation that built it fixes what falls short, before anyone else reads it — 'mine' only). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room. Kept on their machine; applies live.",
+    [
+      "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows.",
+      "'kind' is what it steers. FIND IT BY THE TICKET your user is talking about — a review, an investigation, a plan, proposal or bug — and what should happen on it; what no ticket starts is last. When two could fit, ask them which they mean rather than guess. 'master' is the default every kind follows until set — the one to set when they name no kind.",
+      ...STEERING_GROUPS.map((group) => `${group.title} (${group.about.charAt(0).toLowerCase()}${group.about.slice(1).replace(/\.$/, "")}): ${group.kinds.map((kind) => `'${kind}' (${KIND_FOR_AGENT[kind]})`).join(", ")}.`),
+      "'whose': 'mine' (what they or their own agents caused — single player; the default), 'others' (what another person in the room caused — multiplayer: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null puts the room back on its Default, the global setting. Called with nothing, it says how things stand, everywhere and in this room, by the same groups. Kept on their machine; applies live.",
+    ].join("\n"),
   parameters: Schema.Struct({
     level: Schema.optional(Schema.NullOr(Steering)),
     kind: Schema.optional(Schema.Union([Schema.Literal("master"), SteeringKind])),
@@ -887,9 +931,9 @@ export const RemoveTheme = Tool.make("remove-theme", {
 
 export const SetSettings = Tool.make("set-settings", {
   description:
-    `Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. ${SETTINGS.map((setting) => `${setting.key} (${setting.default ? "on" : "off"} by default): ${setting.on}`).join(". ")}. Applies live, and the settings page in their TUI shows the same switches.`,
-  // every switch the Settings schema has, so a new one is settable here as it lands
-  parameters: Settings,
+    `Your user's switches, and setting them for them: called with nothing it lists each one, on or off, and what that means; pass one by name to set it. Only when your user says so — they find something in the way, or ask for it back. ${SETTINGS.map((setting) => `${setting.key} (${setting.default ? "on" : "off"} by default): ${setting.on}`).join(". ")}. Applies live, and the settings page in their TUI shows the same switches. 'assistant' is a gag on no screen — your user finds it by asking you for it: the review page's ask-AI chat becomes that Office assistant, sitting in the corner, the chat in its balloon: ${Object.entries(ASSISTANT_NAME).map(([id, name]) => `${id} (${name})`).join(", ")}; null gives the plain chat back. Once one is there, its balloon can switch to another, or to none.`,
+  // every switch the Settings schema has, so a new one is settable here as it lands; and the assistant
+  parameters: Schema.Struct({ ...Settings.fields, assistant: Schema.optional(Schema.NullOr(Assistant)) }),
   success: Schema.String,
 });
 
@@ -921,10 +965,24 @@ export const AnswerQuestion = Tool.make("answer-question", {
   success: Schema.String,
 });
 
+export const OpenBoard = Tool.make("open-board", {
+  description:
+    "Open the room's board in your user's browser: its tickets in to do, in progress and done, the same as o on the terminal's board tab — all of it, or one epic's when 'epic' names one (its title or id; the board offers the epics with open tickets); every kind, or only those in 'kinds' (a line of work keeps its cards of those kinds). When your user asks to see the board, where things stand, how an epic is going, or only the bugs (say). It follows the room while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
+  parameters: Schema.Struct({ epic: Schema.optional(Schema.String), kinds: Schema.optional(Schema.Array(Schema.Literals(["investigation", "proposal", "bug", "plan", "task", "review"]))) }),
+  success: Schema.String,
+});
+
 export const OpenAudit = Tool.make("open-audit", {
   description:
     "Open the audit page in your user's browser: what collagen did and what it cost — tool calls, tokens per call over time, tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and their steering — the same as pressing A in the room. When your user asks to see collagen's numbers, its cost, or the audit. It updates itself while it is open. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
   parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
+export const OpenSettings = Tool.make("open-settings", {
+  description:
+    "Take your user to their settings in collagen's terminal, the same as pressing s in a room (S for the global ones), when they ask to see or find a setting. 'where': 'room' (the default) — the steering of the room they are in, which a room may set apart from the rest; 'global' — what every room takes until it sets its own, and everything else (AI runs, messages for you, the page's switches). 'tab': 'ai' (steering of their AI: by single player and multiplayer, then by the ticket kind that starts it), 'tools' (the repo host, auto-merge) or 'general' (the level every row follows until set; the default). It only takes them there: it changes no setting (set-steering, set-settings, set-jobs do).",
+  parameters: Schema.Struct({ where: Schema.optional(Schema.Literals(["room", "global"])), tab: Schema.optional(Schema.Literals(["general", "ai", "tools"])) }),
   success: Schema.String,
 });
 
@@ -939,10 +997,10 @@ export const ReviewComments = Tool.make("review-comments", {
   description: [
     "Comments on a review's code, where your user reads it: on the review page, under the lines they are about. When your user asks you to review a change (a review ticket), put each remark that is about particular code here as a DRAFT instead of in the chat — action 'draft' with ticketId and comments [{file, line?, startLine?, side?, strength?, body, detail?}]: the branch's line numbers as the diff shows them, a block of lines from startLine to line (in one hunk), side 'old' only for a removed line. A remark about a file itself — its place, its name, that it should not exist, that it lacks a test — leaves out line (and startLine, side): it sits at the top of the file. 'body' is what a person reads, beside the code and on the host: plain words, a sentence or two, as a colleague would say it — no priority codes ([P2]), no rule or skill names, no run of identifiers. 'detail' is your longer reasoning, for the author's agent (it reads it in review-context); a person sees it only when they open it. 'strength' says how strongly it asks for a change: nit (take it or leave it), suggest (worth considering), wish (they would like it changed), must (it has to change) — it becomes a prefix on the body ('nit: …'), as it reads on the host; give it whenever you can tell, leave it out for a plain remark. A review with a must in it is finished as requesting changes, and cannot approve. A suggested change is a ```suggestion block in the body holding the lines that should replace those lines. A comment the diff cannot place is refused with why; the rest are kept.",
     "Drafts stay on this machine. Your user reads them beside the code and accepts (into their review, as on GitHub), edits or declines each; their review is said when they finish it — in the room as theirs and, when the review is an open pull request someone else opened, on it as one review with their verdict (through their own gh; on their own pull request it stays in collagen, where it has readers); you call nothing else for that. Say in the chat what you found in a line or two and that the comments are drafts on the review page; do not repeat them there.",
-    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). Whether it also goes on the pull request is their repo-host steering's: at ask first the submit comes back unsent with the question for them — ask, then submit again with 'onHost' true (yes) or false (the room only); never set onHost without asking. 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. 'keep' (ids): a pending comment written on another commit is about the same lines at the review's commit now — read the diff first. A finish waits, nothing submitted, while comments in it were written on different commits: each kept or declined first. 'list': the drafts, the comments pending in the review, and those said. Your user's take on the ticket itself still goes in post-review.",
+    "On your user's word only: 'accept' (ids, or all when left out) puts drafts into their review; 'submit' finishes the review — every comment pending in it, with 'verdict' ('comment' unless they said approve or request-changes) and 'body' (their words on the whole, optional with comments or an approval). Whether it also goes on the pull request is their repo-host steering's: at ask first the submit comes back unsent with the question for them — ask, then submit again with 'onHost' true (yes) or false (the room only); never set onHost without asking. 'Looks good, post them' is accept, then submit. 'decline' (ids, or all): drop drafts; with ids, pending comments too. A comment follows its code when the branch moves: its lines are read where they stand now. One whose code changed since (edited, taken out, out of the change) is OUTDATED — it sits on its file, with where it was and those lines as they were; never on other code. For one not said yet: 'keep' (ids) keeps it as a comment on the whole file; 'move' (ids: [one id], 'to': {file, line?, startLine?, side?}) puts it on the lines it now belongs to, read from the diff; 'decline' deletes it. A finish onto the pull request waits, nothing submitted, while any in it is outdated. 'list': the drafts, the comments pending in the review, and those said, each where its code stands now. Your user's take on the ticket itself still goes in post-review.",
   ].join("\n"),
   parameters: Schema.Struct({
-    action: Schema.Literals(["draft", "accept", "decline", "keep", "submit", "list"]),
+    action: Schema.Literals(["draft", "accept", "decline", "keep", "move", "submit", "list"]),
     ticketId: Schema.String,
     comments: Schema.optional(
       Schema.Array(
@@ -958,6 +1016,15 @@ export const ReviewComments = Tool.make("review-comments", {
       ),
     ),
     ids: Schema.optional(Schema.Array(Schema.String)),
+    /** 'move': the lines the comment goes on, as a draft's are given */
+    to: Schema.optional(
+      Schema.Struct({
+        file: Schema.String,
+        line: Schema.optional(Schema.Number),
+        startLine: Schema.optional(Schema.Number),
+        side: Schema.optional(Schema.Literals(["new", "old"])),
+      }),
+    ),
     verdict: Schema.optional(Schema.Literals(["comment", "approve", "request-changes"])),
     body: Schema.optional(Schema.String),
     /** your user's answer, once asked, to "also on the pull request?" */
@@ -1066,6 +1133,8 @@ export const CollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  JobProgressTool,
+  RoomConnection,
   GetRoomAccess,
   SetRoomAccess,
   GuessReason,
@@ -1102,7 +1171,9 @@ export const CollagenToolkit = Toolkit.make(
   OpenInvestigation,
   AnswerQuestion,
   OpenAudit,
+  OpenBoard,
   OpenMerges,
+  OpenSettings,
   ReviewComments,
   AskWhy,
   SetName,
@@ -1138,6 +1209,8 @@ export const DevCollagenToolkit = Toolkit.make(
   GetNote,
   SteeringNoteTool,
   GuidancePassTool,
+  JobProgressTool,
+  RoomConnection,
   GetRoomAccess,
   SetRoomAccess,
   GuessReason,
@@ -1174,7 +1247,9 @@ export const DevCollagenToolkit = Toolkit.make(
   OpenInvestigation,
   AnswerQuestion,
   OpenAudit,
+  OpenBoard,
   OpenMerges,
+  OpenSettings,
   ReviewComments,
   AskWhy,
   SetName,
@@ -1207,7 +1282,9 @@ const makeHandlers = Effect.gen(function* () {
     /** The page's themes kept, and said back: every open page follows. */
     const keepThemes = (themes: PageThemes) => store.update((state) => ({ ...state, themes })).pipe(Effect.as(`set — every open page follows now.\n${describeThemes(themes)}`));
     const mcpInfo = yield* McpInfo;
+    const logBuffer = yield* LogBuffer;
     const pages = yield* ReviewPages;
+    const terminal = yield* Places;
     const { profile } = yield* CliArgs;
     const inbox = yield* Inbox;
     const outbox = yield* Outbox;
@@ -1301,7 +1378,9 @@ const makeHandlers = Effect.gen(function* () {
       const lookup = yield* nameLookup;
       const reviews = yield* SubscriptionRef.get(room.reviews);
       const all = yield* SubscriptionRef.get(room.tickets);
-      return ticketView(ticket, lookup, reviews.find((review) => review.ticketId === ticket.id), heldBy(ticket, all, identity.pubkey), all, identity.pubkey);
+      const peers = yield* SubscriptionRef.get(room.roster);
+      const awaiting = peers.flatMap((peer) => (peer.awaiting ?? []).filter((ask) => ask.ticketId === ticket.id).map((ask) => ({ who: peer.name, what: ask.what })));
+      return ticketView(ticket, lookup, reviews.find((review) => review.ticketId === ticket.id), heldBy(ticket, all, identity.pubkey), all, identity.pubkey, awaiting);
     });
 
     const sendToPeer = Effect.fn("Mcp.sendToPeer")(function* (input: {
@@ -2121,10 +2200,11 @@ const makeHandlers = Effect.gen(function* () {
             : `failed: ${who.person.name} is not online, so collagen cannot see their projects — pass 'project'`;
         return yield* reviewRequests.ask(roomId, { peer: who.person, project, ...(branch ? { branch } : {}), ...(link ? { link } : {}), ...(input.note ? { note: input.note } : {}), ...(input.review ? { review: input.review } : {}) });
       }),
-      "ask-author": Effect.fn("Mcp.askAuthor")(function* (input: { ticketId: string; question: string; lines?: QuestionLines; commit?: string }) {
-        if (!input.question.trim()) return "failed: 'question' in your user's words";
+      "ask-author": Effect.fn("Mcp.askAuthor")(function* (input: { ticketId: string; question?: string; lines?: QuestionLines; commit?: string; whys?: boolean }) {
+        const question = input.question?.trim() || (input.whys ? WHYS_QUESTION : "");
+        if (!question) return "failed: 'question' in your user's words, or whys: true for every missing why";
         const { id: roomId } = yield* focusedRoom;
-        return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question: input.question.trim(), ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) });
+        return yield* reviewQuestions.ask(roomId, { ticketId: input.ticketId, question, ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}), ...(input.whys ? { whys: true } : {}) });
       }),
       "review-chat": Effect.fn("Mcp.reviewChat")(function* (input: { ticketId: string; question?: string; lines?: QuestionLines; commit?: string; stop?: boolean; new?: boolean; chat?: string; reopen?: string }) {
         const now = () => reviewChat.view(input.ticketId).pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
@@ -2313,6 +2393,36 @@ const makeHandlers = Effect.gen(function* () {
         if (input.round === undefined || input.passed === undefined) return "failed: a report gives 'round' and 'passed' (and 'findings' when it falls short)";
         return yield* guidancePass.report(roomId, input.ticketId, input.round, input.passed, input.findings ?? []);
       }),
+      "job-progress": Effect.fn("Mcp.jobProgress")(function* (input: { job: string; step: number; of?: number; doing: string }) {
+        return yield* jobs.progress(input.job, input.step, input.of, input.doing);
+      }),
+      "room-connection": Effect.fn("Mcp.roomConnection")(function* (input: { room?: string }) {
+        const all = yield* rooms.summaries;
+        const query = input.room?.trim();
+        const hit = query ? all.find((summary) => summary.id === query || summary.shortId === query || sameName(summary.name, query)) : all.find((summary) => summary.focused);
+        if (!hit) return `failed: no room "${query}" among your user's — list-rooms names them`;
+        const state = yield* rooms.connectionOf(hit.id);
+        if (!state) return `failed: not in "${hit.name}" now`;
+        const trouble = troubleOf(state);
+        const list = (items: ReadonlyArray<string>) => (items.length === 0 ? "none" : items.join(", "));
+        const reach = state.firewalled === null ? "not known yet whether reachable directly" : state.firewalled ? "behind a firewall: not reachable directly" : "reachable directly";
+        const troubles = (yield* SubscriptionRef.get(logBuffer.troubles)).slice(-8).map((line) => `  ${line.slice(11, 19)} ${line.slice(25)}`);
+        return [
+          `${hit.name} [${hit.shortId}]`,
+          trouble ? `In the way: ${trouble.what} ${trouble.next}` : "Nothing in the way.",
+          `You: ${state.net} · protocol ${state.protocol} · ${reach}`,
+          `Log: ${state.logOpen ? (state.writable ? "open, writable" : "open, read only — not let in yet") : "not open"}`,
+          `Here: ${list(state.here.map((peer) => (peer.protocol === state.protocol ? peer.name : `${peer.name} (protocol ${peer.protocol})`)))}`,
+          `Away: ${list(state.away)}`,
+          ...(state.strangers.length > 0 ? [`On the room, not let in: ${list(state.strangers)}`] : []),
+          ...(state.waiting.length > 0 ? [`Waiting to be let in: ${list(state.waiting.map((waiter) => `${waiter.name} (${agoText(state.now, waiter.at)})`))}`] : []),
+          ...(state.declined.length > 0 ? [`Turned away: ${list(state.declined.map((turned) => (turned.reason ? `${turned.name} (${turned.reason})` : turned.name)))}`] : []),
+          ...(state.admitFailed.length > 0 ? [`Admits that failed: ${list(state.admitFailed.map((failure) => `${failure.name} — ${failure.why} (${agoText(state.now, failure.at)} ago)`))}`] : []),
+          ...(state.otherProtocol.length > 0 ? [`On another protocol, unread: ${list(state.otherProtocol.map((peer) => `${peer.key} (${peer.protocol})`))}`] : []),
+          `Swarm (every room): ${state.open} open, ${state.connecting} connecting`,
+          troubles.length > 0 ? `Recent warnings and errors on this machine, every room, UTC:\n${troubles.join("\n")}` : "No recent warnings or errors on this machine.",
+        ].join("\n");
+      }),
       "get-room-access": Effect.fn("Mcp.getRoomAccess")(function* () {
         const { name, room } = yield* focusedRoom;
         const nameOf = yield* nameLookup;
@@ -2406,7 +2516,7 @@ const makeHandlers = Effect.gen(function* () {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.assume(roomId, { id: input.questionId, ticketId: input.ticketId, what: input.what.trim(), basis: input.basis.trim() || "the code", confidence: input.confidence });
       }),
-      "review-question": Effect.fn("Mcp.reviewQuestion")(function* (input: { questionId?: string; answer?: boolean; decline?: string; reply?: string; flaw?: string; verdict?: "confirmed" | "corrected" | "wrong" }) {
+      "review-question": Effect.fn("Mcp.reviewQuestion")(function* (input: { questionId?: string; answer?: boolean; decline?: string; reply?: string; whys?: ReadonlyArray<WhyGiven>; flaw?: string; verdict?: "confirmed" | "corrected" | "wrong" }) {
         const { id: roomId } = yield* focusedRoom;
         return yield* reviewQuestions.respond(roomId, input);
       }),
@@ -2849,13 +2959,14 @@ const makeHandlers = Effect.gen(function* () {
               at === "master" ? STEERING_LABEL[set?.[cause] ?? "unset"] : `${STEERING_LABEL[levelOf(state, at, cause)]}${set?.[cause] === undefined ? " (follows the master)" : ""}`;
             // what this room sets itself, where it sets anything
             const here = (cause: "mine" | "others") => roomLevelOf(state, roomId, at, cause);
-            const inRoom = here("mine") || here("others") ? `; in "${roomName}": theirs ${here("mine") ? STEERING_LABEL[here("mine")!] : "follows everywhere"}, other people's ${here("others") ? STEERING_LABEL[here("others")!] : "follows everywhere"}` : "";
+            const inRoom = here("mine") || here("others") ? `; in "${roomName}": theirs ${here("mine") ? STEERING_LABEL[here("mine")!] : "default (the global setting)"}, other people's ${here("others") ? STEERING_LABEL[here("others")!] : "default (the global setting)"}` : "";
             return `- ${at === "master" ? "master" : `${at}: ${KIND_LABEL[at]}`} — theirs: ${shown("mine")}; other people's: ${shown("others")}${inRoom}`;
           };
           const changed = input.level !== undefined || input.tag !== undefined;
           return [
             `${changed ? "Steering set" : "Steering"} — your user's own, on this machine:`,
-            ...(["master", ...STEERING_KINDS] as const).map(row),
+            row("master"),
+            ...STEERING_GROUPS.flatMap((group) => [`${group.title}:`, ...group.kinds.map(row)]),
             `- a message for them goes to ${TAG_LABEL[tagRouteOf(state)]}${state.steering?.tag === undefined ? " (not chosen: the default)" : ""}`,
             "Not chosen: collagen does none of it outside itself in their name. Room-facing actions (messages, takes, settles, closes) remain your user's word — but for closing what finished work grew from, which follows close.",
           ].join("\n");
@@ -2947,12 +3058,17 @@ const makeHandlers = Effect.gen(function* () {
         if (!without) return `failed: your user has no theme of their own named "${input.name}"\n${describeThemes(themes)}`;
         return yield* keepThemes(without);
       }),
-      "set-settings": (input: Settings) =>
+      "set-settings": (input: Settings & { assistant?: Assistant | null }) =>
         Effect.gen(function* () {
           const changes = SETTINGS.filter((setting) => input[setting.key] !== undefined);
-          if (changes.length > 0) yield* store.update((state) => changes.reduce((current, setting) => withSetting(current, setting.key, input[setting.key]!), state));
+          const assistant = input.assistant;
+          if (changes.length > 0 || assistant !== undefined)
+            yield* store.update((state) => {
+              const switched = changes.reduce((current, setting) => withSetting(current, setting.key, input[setting.key]!), state);
+              return assistant === undefined ? switched : withAssistant(switched, assistant);
+            });
           const now = describeSettings(yield* store.get);
-          return changes.length > 0 ? `set — applies now. Your user's switches:\n${now}` : now;
+          return changes.length > 0 || assistant !== undefined ? `set — applies now. Your user's switches:\n${now}` : now;
         }).pipe(Effect.withSpan("Mcp.setSettings")),
       "ask-why": Effect.fn("Mcp.askWhy")(function* (input: { file?: string; line?: number; pull?: number; project?: string; limit?: number }) {
         const { id } = yield* focusedRoom;
@@ -3005,6 +3121,24 @@ const makeHandlers = Effect.gen(function* () {
         const done = yield* answerQuestion(input.ticketId, input.questionId, input.answer).pipe(Effect.provideContext(answerContext));
         return "error" in done ? `failed: ${done.error}` : input.answer === "yes" ? "answered yes: where it leads, it is a goal now, and started as their steering allows; open-investigation shows it" : "answered no";
       }),
+      "open-settings": Effect.fn("Mcp.openSettings")(function* (input: { where?: "room" | "global"; tab?: SettingsTab }) {
+        const global = input.where === "global";
+        const tab = input.tab ?? "general";
+        const gone = yield* terminal.go({ to: global ? "global-settings" : "settings", tab });
+        if (!gone) return `failed: no terminal of collagen's is open to show it in — it runs without its screen here. Tell your user: in a room, s opens its steering, S the global settings.`;
+        return `${global ? "The global settings are" : "The room's steering is"} on your user's screen, on ${tab === "ai" ? "AI" : tab === "tools" ? "Tools" : "General"}.`;
+      }),
+      "open-board": Effect.fn("Mcp.openBoard")(function* (input: { epic?: string; kinds?: ReadonlyArray<string> }) {
+        const { id: roomId, room } = yield* focusedRoom;
+        const query = input.epic?.trim();
+        const kinds = [...new Set(input.kinds ?? [])];
+        if (!query) return yield* pages.showBoard(roomId, null, kinds);
+        const tickets = [...(yield* SubscriptionRef.get(room.tickets)).values()];
+        const epics = boardEpics(tickets, identity.pubkey);
+        const hit = epics.find((entry) => entry.epic.id.startsWith(query) || sameName(entry.epic.title ?? entry.epic.goal, query));
+        if (!hit) return `failed: no epic "${query}" with open tickets — the board offers ${epics.map((entry) => `"${entry.epic.title ?? entry.epic.goal}"`).join(", ") || "none"}`;
+        return yield* pages.showBoard(roomId, hit.epic.id, kinds);
+      }),
       "open-audit": Effect.fn("Mcp.openAudit")(function* () {
         const { id: roomId } = yield* focusedRoom;
         return yield* pages.showAudit(roomId);
@@ -3019,8 +3153,9 @@ const makeHandlers = Effect.gen(function* () {
         return yield* pages.showMerges(roomId, project.name, input.number);
       }),
       "review-comments": Effect.fn("Mcp.reviewComments")(function* (input: {
-        action: "draft" | "accept" | "decline" | "keep" | "submit" | "list";
+        action: "draft" | "accept" | "decline" | "keep" | "move" | "submit" | "list";
         ticketId: string;
+        to?: { readonly file: string; readonly line?: number; readonly startLine?: number; readonly side?: "new" | "old" };
         comments?: ReadonlyArray<{ readonly file: string; readonly line?: number; readonly startLine?: number; readonly side?: "new" | "old"; readonly strength?: Strength; readonly body: string; readonly detail?: string }>;
         ids?: ReadonlyArray<string>;
         verdict?: "comment" | "approve" | "request-changes";
@@ -3032,14 +3167,17 @@ const makeHandlers = Effect.gen(function* () {
         const ticket = all.get(input.ticketId);
         if (!ticket || !visibleTo(ticket, all, identity.pubkey)) return `failed: no ticket ${input.ticketId} — check get-tickets`;
         if (ticket.kind !== "review") return `failed: "${ticket.goal}" is a ${ticket.kind}: comments go on a review's code`;
+        // where a comment sits, as given: lines of the branch's code, or with no line the file itself
+        const spotGiven = (given: { readonly file: string; readonly line?: number; readonly startLine?: number; readonly side?: "new" | "old" }): Spot | null => {
+          if (given.line === undefined) return given.startLine === undefined && given.side === undefined ? { subject: "file", file: given.file } : null;
+          if (!Number.isInteger(given.line) || given.line <= 0 || (given.startLine !== undefined && !Number.isInteger(given.startLine))) return null;
+          const side = given.side === "old" ? ("LEFT" as const) : ("RIGHT" as const);
+          return { file: given.file, line: given.line, side, ...(given.startLine !== undefined && given.startLine !== given.line ? { startLine: given.startLine, startSide: side } : {}) };
+        };
         if (input.action === "draft") {
-          // where each sits, read once: lines of the branch's code, or with no line the file itself
           const items = (input.comments ?? []).flatMap((comment): ReadonlyArray<DraftInput> => {
-            const words = { body: comment.body, ...(comment.strength ? { strength: comment.strength } : {}), ...(comment.detail ? { detail: comment.detail } : {}) };
-            if (comment.line === undefined) return comment.startLine === undefined && comment.side === undefined ? [{ spot: { subject: "file", file: comment.file }, ...words }] : [];
-            if (!Number.isInteger(comment.line) || comment.line <= 0 || (comment.startLine !== undefined && !Number.isInteger(comment.startLine))) return [];
-            const side = comment.side === "old" ? ("LEFT" as const) : ("RIGHT" as const);
-            return [{ spot: { file: comment.file, line: comment.line, side, ...(comment.startLine !== undefined && comment.startLine !== comment.line ? { startLine: comment.startLine, startSide: side } : {}) }, ...words }];
+            const spot = spotGiven(comment);
+            return spot ? [{ spot, body: comment.body, ...(comment.strength ? { strength: comment.strength } : {}), ...(comment.detail ? { detail: comment.detail } : {}) }] : [];
           });
           if (items.length === 0) return "failed: pass 'comments' — each with file, body, and line (a whole number of the branch's code) unless it is about the whole file";
           const result = yield* draftComments(input.ticketId, items);
@@ -3060,34 +3198,52 @@ const makeHandlers = Effect.gen(function* () {
         if (input.action === "submit") {
           const result = yield* submitReview(input.ticketId, input.verdict ?? "comment", input.body ?? "", null, null, null, { agent: true, ...(input.onHost !== undefined ? { onHost: input.onHost } : {}) });
           if ("held" in result && result.held) {
-            const waiting = yield* draftsOf(input.ticketId);
-            const held = result.held.flatMap((id) => waiting.filter((draft) => draft.id === id)).map((draft) => `- ${draft.id} ${whereOf(draft)}, written at ${draft.commit.slice(0, 7)}`);
-            return `failed: NOT SUBMITTED — ${result.error} 'keep' (ids) confirms one where it sits at the review's commit now; 'decline' (ids) deletes it.\n${held.join("\n")}`;
+            const waiting = (yield* talkView(input.ticketId)).pending;
+            const held = result.held
+              .flatMap((id) => waiting.filter((draft) => draft.id === id))
+              .map((draft) => `- ${draft.id} ${draft.outdated ? `was on ${draft.outdated.was} of ${draft.file}: ${draft.outdated.why}` : `${whereOf(draft)}, written at ${draft.commit.slice(0, 7)}`}`);
+            return `failed: NOT SUBMITTED — ${result.error} 'keep' (ids) keeps one on its file; 'move' puts it on the lines it belongs to now; 'decline' (ids) deletes it.\n${held.join("\n")}`;
           }
           if ("error" in result) return result.error?.startsWith("NOT FINISHED") ? result.error : `failed: ${result.error} — the review stays pending`;
           return `review finished: ${result.said} comment(s) said in the room as your user's${result.roomOnly ? ` — not on the pull request: ${result.roomOnly}` : `, and the review is on the pull request as your user, through their own gh${"changesRequested" in result && result.changesRequested ? ", requesting changes (a must comment in it)" : ""}${"url" in result && result.url ? `: ${result.url}` : ""}`}.`;
         }
         if (input.action === "keep") {
-          if (!ids) return "failed: pass 'ids' — the pending comments to keep where they sit at the review's commit now";
+          if (!ids) return "failed: pass 'ids' — the comments to keep where their code stands now (an outdated one, on its file)";
           const result = yield* keepDrafts(input.ticketId, ids);
-          return `${result.done} comment(s) kept where they sit at the review's commit now.${failures(result.failed)}`;
+          return `${result.done} comment(s) kept where their code stands now — an outdated one as a comment on its file.${failures(result.failed)}`;
+        }
+        if (input.action === "move") {
+          if (!ids || ids.length !== 1) return "failed: pass 'ids' with the one comment to move";
+          const spot = input.to ? spotGiven(input.to) : null;
+          if (!spot) return "failed: pass 'to' — file, and line (a whole number of the branch's code) unless it goes on the whole file";
+          const result = yield* moveDraft(input.ticketId, ids[0]!, spot);
+          return result.done === 1 ? `moved to ${whereOf(spot)}.` : `failed: ${result.failed[0]?.error ?? "not moved"}`;
         }
         if (input.action === "decline") {
           const dropped = yield* dropDrafts(input.ticketId, ids, "ai");
           return dropped === 0 ? "nothing declined: no such drafts waiting" : `${dropped} draft(s) declined — said nowhere`;
         }
-        const mine = yield* draftsOf(input.ticketId);
-        const said = (yield* SubscriptionRef.get(room.comments)).filter((comment) => comment.ticketId === input.ticketId);
+        // each where its code stands now, as the page shows them
+        const talk = yield* talkView(input.ticketId);
+        const hosted = new Map((yield* SubscriptionRef.get(room.comments)).filter((comment) => comment.ticketId === input.ticketId).map((comment) => [comment.id, comment]));
         // each one's strength apart from its words, read from the prefix they
-        // carry — and the AI's longer version, when it has one
-        const words = (comment: { readonly body: string; readonly detail?: string }) => {
+        // carry — the AI's longer version, when it has one — and, outdated, where it was
+        const words = (comment: { readonly body: string; readonly detail?: string; readonly outdated?: Outdated }) => {
           const read = readStrength(comment.body);
-          return { ...(read.strength ? { strength: read.strength } : {}), body: read.text, ...(comment.detail !== undefined ? { detail: comment.detail } : {}) };
+          return {
+            ...(read.strength ? { strength: read.strength } : {}),
+            body: read.text,
+            ...(comment.detail !== undefined ? { detail: comment.detail } : {}),
+            ...(comment.outdated ? { outdated: `was on ${comment.outdated.was}: ${comment.outdated.why}`, ...(comment.outdated.quote.length > 0 ? { wasCode: comment.outdated.quote.join("\n") } : {}) } : {}),
+          };
         };
         return toToon({
-          drafts: mine.filter((draft) => draft.status !== "pending").map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
-          pending: mine.filter((draft) => draft.status === "pending").map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
-          said: said.map((comment) => ({ by: comment.authorName, at: whereOf(comment), ...words(comment), ...(comment.host ? { onHost: comment.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) })),
+          drafts: talk.drafts.map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
+          pending: talk.pending.map((draft) => ({ id: draft.id, at: whereOf(draft), ...words(draft) })),
+          said: talk.said.map((comment) => {
+            const record = hosted.get(comment.id);
+            return { by: comment.author.login, at: whereOf(comment), ...words(comment), ...(record?.host ? { onHost: record.host.url } : {}), ...(comment.drafted ? { drafted: true } : {}) };
+          }),
         });
       }, Effect.provideContext(talkContext)),
       "set-name": ({ name }: { name: string }) =>

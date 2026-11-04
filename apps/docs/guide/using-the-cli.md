@@ -36,7 +36,7 @@ No files are written into your projects.
  you alice · ai codex
 
   ╭────╮ ╭─ room · dev room ──────────────────────────────────────────╮
-  │ WO │ │ › [1] overview   [2] projects   …   [5] outbox  ·  2 online  │
+  │ WO │ │ › [1] overview   [2] board   …   [6] outbox  ·  2 online  │
   ╰────╯ │                                                            │
  ▌╭────╮ │   ● you, bob                                               │
  ▌│ DR │ │   ○ carol                                                  │
@@ -93,6 +93,14 @@ No files are written into your projects.
   There is nothing to approve here: your agent acts on your word, and this is the
   receipt. Neither this tab nor **messages** carries a count: both are logs that only
   grow, so their size is not something a person acts on.
+- **board tab** — the same tickets as a board: to do, in progress, done. A ticket is to
+  do until a step of it is handed to its owner, in progress from then, and done once
+  every step is answered or it is closed (dropped ones say so); an epic follows its
+  tickets. `←→` move between columns, `↑↓` within one, `enter` opens the ticket (`esc`
+  comes back to the board), `o` opens the same board in your browser (on the tab bar
+  too). The row above it is what it is read through: the epic, which `enter` goes round,
+  and each kind, which `enter` shows or hides; `↑` from the board reaches it. On the
+  overview, `b` on an epic opens that epic's board.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.
@@ -106,7 +114,7 @@ what's natural there. Number keys work from anywhere.
 
 | Key | Action |
 | --- | --- |
-| `1` – `5` | Overview / projects / merges / messages / outbox tab |
+| `1` – `6` | Overview / projects / merges / messages / outbox / board tab |
 | `←` `→` on the tab bar | Switch tab; `←` past the first tab hovers the rail |
 | `↑` `↓` | Move within a section, or to the section above/below |
 | `enter` | Open / pick: a room in the rail, a ticket's page, a message's full text, `+ add project` |
@@ -116,7 +124,7 @@ what's natural there. Number keys work from anywhere.
 | `r` | Rail: rename the room under the cursor; everyone in it sees the new name (your agent: `rename-room`) |
 | `A` | The audit page in your browser: tool calls, tokens per call over time and the tools whose calls are growing, harnesses and models, collagen's own jobs, compactions, the room's tickets and steering. Your agent opens it with `open-audit`. |
 | `c` | Copy a new invite to the room: it lets one person in, within a week (your agent: `invite-to-room`) |
-| `s` | Settings, in three tabs (`↑` onto them, then `←` `→`; `1` – `3` or a click from anywhere), **General** (the level every row not set follows, and the page's switches), then by who acts in your name: **AI** (your AI, which collagen starts, wakes and hands work to) and **Tools** (what collagen does itself with no AI: the repo host). Each [steering](./conversations#steering-how-much-your-agent-does-on-its-own) row has two columns, everywhere and this room (`←` `→`); `space` changes the one under the cursor |
+| `s` | The [steering](./conversations#steering-how-much-your-agent-does-on-its-own) of the room you are in, alone: a level the room does not set says *Default*, with the global one it takes. `g` there — or `S` from anywhere in a room — opens the **global settings** (`esc` goes back where you came from): the steering every room takes until it sets its own, and everything else (AI runs, messages for you, the page's switches). Both in three tabs (`↑` onto them, then `←` `→`; `1` – `3` or a click from anywhere): **General** (the level every row not set follows), then by who acts in your name: **AI** (your AI, which collagen starts, wakes and hands work to) and **Tools** (what collagen does itself with no AI: the repo host). On AI and Tools the steering is in two parts — **Single player** (what you or your AI started) then **Multiplayer** (what someone else started, and may set off on your side) — each grouped by the ticket that starts it: **Reviews**, **Investigations**, **Plans, proposals and bugs**, and last what no ticket starts (messages, steering notes, the room). In a room, a row it does not set says **Default** and the global setting beside it. Your agent finds a steering by the same groups. `space` or `→` moves the row under the cursor to its next option, `←` back to the one before |
 | `i` | You: your name, your key, and the AI the rooms see you use |
 | `u` | Install the newer collagen the status line announces, then restart into it |
 | `esc` | Back to the tab bar |
@@ -140,16 +148,16 @@ Once Collagen runs, your agent (in any repo) has these tools:
 
 | Group | Tools |
 | --- | --- |
-| Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room`; `get-room-access` and `set-room-access` — who may do what: the room's roles, letting in or turning away someone waiting, and taking someone out |
+| Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room`; `get-room-access` and `set-room-access` — who may do what: the room's roles, letting in or turning away someone waiting, and taking someone out; `room-connection` — when a room seems stuck, what stands in the way and what to try, with who is here and on which protocol, the log, and recent warnings (the footer shows the same line) |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-ticket` — this conversation hears when a ticket moves, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `take-step` — a task step nobody has, made your user's; `get-tickets` and `get-ticket`, `ask-review` — a review with the why behind the change; `assume-review` — a review of someone else's pull request, its why inferred and marked as guesses; `claim-review` — the code's author answers those guesses and makes the review theirs; `request-review` — ask a colleague for a review of their work that has no ticket (or send them yours), filed by them from the conversation it was done in; `review-request` — the asks of your work, and your yes or no to one; `open-review` — a review's page in your browser, as `o` does, its chat starting from the conversation that opened it; `review-chat` — your user's chat on a review's page: read it, ask it, stop it or start it over; `get-notes` and `get-note` — how the room steers its AIs on a project, said once: the titles, then one note's description; `steering-note` — add, change, comment on, retire, restore or keep one, and a miss when one was not followed; `review-progress` — which of a review's files your user has viewed, and marking them viewed for them; `ask-author` — a question about a review its why does not answer, to the author's AI; `guess-reason` — when the author cannot answer, your user's AI's guess at why, onto their review's why as an assumption; `review-question` — answering one about your user's review, and settling a guess with a verdict; `open-investigation` — an investigation's page, as `o` does on one; `open-merges` — a project's merges page in your browser; `epic` — folders of tickets, shaped by anyone, only when asked |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks; `token-cost` — what collagen costs your AI in tokens, read from its own session logs ([how](../internals/token-cost)) |
-| Settings | `add-project`, `remove-project`, `order-projects` — the order you keep the projects in, listed or set, on your machine only; `set-steering` — how far collagen and your agent go in your name, the master and each kind, yours and other people's, everywhere or in this room; `set-jobs` — how many jobs run at once, and each job's harness and model; `set-name`, `set-settings` — your switches, listed or set; `set-merging` — whether collagen merges your reviewed pull requests for you, and `merge-review` — your yes to one, when your repo-host steering is ask first; `themes`, `set-theme`, `add-theme`, `edit-theme`, `remove-theme` — the theme every page wears (a review, the merges): listed, put on, added from a daisyUI theme generator link, edited (renamed, a colour at a time) or removed |
+| Settings | `open-settings` — your settings on your screen, the room's or the global ones, on a tab, as `s` and `S` do; `add-project`, `remove-project`, `order-projects` — the order you keep the projects in, listed or set, on your machine only; `set-steering` — how far collagen and your agent go in your name, the master and each kind, yours and other people's, everywhere or in this room; `set-jobs` — how many jobs run at once, and each job's harness and model; `set-name`, `set-settings` — your switches, listed or set; `set-merging` — whether collagen merges your reviewed pull requests for you, and `merge-review` — your yes to one, when your repo-host steering is ask first; `themes`, `set-theme`, `add-theme`, `edit-theme`, `remove-theme` — the theme every page wears (a review, the merges): listed, put on, added from a daisyUI theme generator link, edited (renamed, a colour at a time) or removed |
 | Scripting | `execute`, `search-tools`, `describe-scripting` — one small program instead of many round-trips |
 
 You use it by just asking your agent, e.g. *"check who's in my collagen room and ask
 alice why average() returns NaN in sandbox"*. Everything a person can configure in the TUI
-the agent can configure too; UI state (tabs, focus) is deliberately not exposed.
+the agent can configure too, and it can take you to a place (a review, the board, your settings); moving around inside a screen (cursors, focus) stays yours.
 
 Two rules hold on every machine. Nothing goes out on an agent's own initiative:
 `send-to-peer`, `create-ticket` and `settle-step` are things your agent does because you

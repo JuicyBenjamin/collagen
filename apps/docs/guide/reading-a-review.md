@@ -13,8 +13,12 @@ hint says so when a review is selected), on the **why** section of its page, or 
 full why page:
 
 ```
-http://127.0.0.1:<your instance's port>/review/<ticket id>
+http://127.0.0.1:<your instance's port>/room/<room>/ticket/<ticket>
 ```
+
+Every page lives under its room, by short ids: a ticket's page (a review, an
+investigation) at `/room/<room>/ticket/<ticket>`, the room's audit at
+`/room/<room>/audit`, its merges at `/room/<room>/merges/<project>`.
 
 It also opens by itself when your agent starts reading a review you were asked for — once,
 and only while the [switch](./using-the-cli#switches) for it is on (it is by default; your
@@ -345,12 +349,15 @@ neither. On **your own pull request** — the one you are signed in to `gh` as o
 nothing is posted to GitHub, where you would be its only reader: your comments stay in
 collagen, and the page says so. **Discard review** drops what is pending.
 
-A review is of one commit: the one the page shows. A comment written before the branch moved
-says **Written at …** under it, as its lines may not be the ones it meant; **Keep it here**
-confirms it where it shows now, or delete it. Until each is kept or deleted the review is not
-submitted: its panel lists them, each with a way to it, **Keep it here** and **Delete**, and
-**Submit review** waits. A comment
-whose line the diff no longer shows at all — its file gone or renamed — is listed at the top
+A comment stays with the code it was written on. When the branch moves, every comment — a
+draft, one pending in your review, one already said — follows its lines: three lines put in
+above it, and it sits three lines lower; its file renamed, and it follows the file. One whose
+lines were changed or taken out is never put on other code: it sits on its file, marked
+**Outdated** with where it was and those lines as they were. One not said yet you **Keep on the
+file**, or delete. Until each outdated one is kept or deleted the review is not submitted to
+the pull request: its panel lists them, each with a way to it, and **Submit review** waits.
+Your agent does the same with `review-comments`: `keep`, `move` (to the lines it now belongs
+on), or `decline`. A comment whose file the change no longer has at all is listed at the top
 of the page, to delete or decline there. Should a
 finish stop after GitHub has the review but before the room does, its comments stay marked
 **On GitHub**; the next finish tells the room first, without posting them twice — and

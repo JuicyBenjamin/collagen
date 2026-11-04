@@ -1,7 +1,7 @@
 #!/bin/bash
 # The review page: a review read by intent, not by filename. alice's project
 # is a real git repo with a branch off main; she asks for a review with the
-# why pointing at the lines it produced. The instance serves /review/<id>:
+# why pointing at the lines it produced. The instance serves /room/<room>/ticket/<ticket>:
 # the diff from her own clone (git diff main...branch), each hunk under the
 # decision whose `where` claims it, a fork beside the hunk it sits in, and
 # the hunk no decision claims under "not explained". Loopback only, and a
@@ -19,6 +19,8 @@ git -C "$R" config user.email e2e@collagen.test; git -C "$R" config user.name e2
 mkdir -p "$R/src"
 printf 'export const a = 1;\n' > "$R/src/export.ts"
 printf 'line\n%.0s' $(seq 1 30) > "$R/src/notes.txt"
+printf "lockfileVersion: '9.0'\n\npackages:\n\n  left-pad@1.3.0:\n    resolution: {}\n" > "$R/pnpm-lock.yaml"
+mkdir -p "$R/src/locales"; printf '{"save":"Save"}\n' > "$R/src/locales/en.json"; printf '{"save":"Sichern"}\n' > "$R/src/locales/de.json"
 git -C "$R" add -A; git -C "$R" commit -qm base
 git -C "$R" checkout -qb feat/stream-export
 printf 'export const a = 1;\nexport const stream = (rows) => rows.map(String);\n' > "$R/src/export.ts"
@@ -26,6 +28,11 @@ printf '/** A hundred rows a page. */\nexport function page(n: number): number {
 printf 'import { page } from "./page";\nimport { stream } from "./export";\nexport const first = stream([page(1)]);\n' > "$R/src/use.ts"
 printf 'import { describe, expect, it } from "vitest";\nimport { page } from "./page";\n\ndescribe("page", () => {\n  it("is a hundred rows", () => {\n    expect(page(1)).toBe(100);\n  });\n});\n' > "$R/src/page.test.ts"
 sed -i.bak '25s/line/changed, and nobody said why/' "$R/src/notes.txt"; rm -f "$R/src/notes.txt.bak"
+# what no person wrote: a lockfile moving a package, a test's snapshot
+printf "lockfileVersion: '9.0'\n\npackages:\n\n  left-pad@1.3.1:\n    resolution: {}\n" > "$R/pnpm-lock.yaml"
+mkdir -p "$R/src/__snapshots__"; printf 'exports[`page 1`] = `100`;\n' > "$R/src/__snapshots__/page.test.ts.snap"
+printf '{"save":"Save","cancel":"Cancel"}\n' > "$R/src/locales/en.json"
+mkdir -p "$R/db/migrations"; printf 'ALTER TABLE rows ADD COLUMN page INTEGER;\nALTER TABLE rows DROP COLUMN offset;\n' > "$R/db/migrations/002_page.sql"
 git -C "$R" add -A; git -C "$R" commit -qm change
 
 # the type hints need collagen's pinned TypeScript, normally installed on
@@ -47,16 +54,16 @@ ORIGIN=${A%/mcp}
 # build gives each a stable id), the arguments as JSON — a read is a GET
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn_url() { echo "$ORIGIN/review/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn_url() { echo "$ORIGIN/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 sfn() { node "$E2E/sfn.mjs" "$(sfn_url "$1" "$2")"; }
 # a live one's first few seconds, as it streams them: one event per value
 # a live state, as the page gets it: over its WebSocket (ReviewServer's
-# /review/_live), each value on a line, for $3 seconds (4)
+# /_live), each value on a line, for $3 seconds (4)
 sfn_live() {
   node -e '
     const [origin, name, args, seconds] = process.argv.slice(1);
     const topic = { toolStates: "tool", reviewChanges: "changes" }[name];
-    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/_live`, { headers: { Origin: origin } });
     socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic, subject: JSON.parse(args)[0] }));
     socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(JSON.stringify(message.value)); };
     setTimeout(() => process.exit(0), Number(seconds) * 1000);
@@ -67,6 +74,10 @@ echo "## the page's data: the diff from the clone, in units, the why beside them
 wait_until "the review's data is served" "\"units\"" sfn reviewData "[\"$TICKET\"]"
 DATA=$(sfn reviewData "[\"$TICKET\"]")
 expect "a decision carries what guided it to the page" "$DATA" '"guidedBy":\["CLAUDE.md"\]'
+expect "the lockfile is read apart, as the package it moves" "$DATA" '"lockfiles":\[\{"file":"pnpm-lock.yaml","packages":\[\{"name":"left-pad","before":\["1.3.0"\],"after":\["1.3.1"\]\}\]'
+expect "…the translations, as the key added, beside the language that did not keep up" "$DATA" '"translations":\[\{"set":"src/locales/\*.json","languages":\["de","en"\],"keys":\[\{"key":"cancel","texts":\{"en":\{"after":"Cancel"\},"de":\{\}'
+expect "…the migration, as what it does to the schema, the drop that loses data marked" "$DATA" '"migrations":\[\{"file":"db/migrations/002_page.sql","changes":\[\{"action":"add column","table":"rows","target":"page","detail":"INTEGER","losesData":false\},\{"action":"drop column","table":"rows","target":"offset","losesData":true\}\],"edited":false'
+expect "…and the snapshot, as what made it" "$DATA" '"generated":\[\{"file":"src/__snapshots__/page.test.ts.snap","by":"a test snapshot","added":1,"removed":0'
 shape() { python3 -c '
 import json, sys
 d = json.loads(sys.stdin.read()); g = d["grouped"]
@@ -75,7 +86,7 @@ for u in g["units"]:
     print("unit", u["title"], "by", u["by"], "hunks", " ".join(u["hunks"]), "decisions", " ".join(u["decisions"]), "forks", " ".join(f["id"] for f in u["forks"]), "unexplained", " ".join(u["unexplained"]))
 for t in g["tests"]:
     print("tests", t["file"] + ":", " | ".join(c["change"] + " " + " › ".join(c["under"] + [c["title"]]) for c in t["tests"]))
-tested = {t["file"] for t in g["tests"]}
+tested = {t["file"] for t in g["tests"] + g.get("stories", []) + g.get("lockfiles", []) + g.get("generated", []) + g.get("migrations", [])} | {h["file"] for h in g["hunks"] if any(h["id"] in s["hunks"] for s in g.get("translations", []))}
 every = [h for u in g["units"] for h in u["hunks"]]
 code = [h for h in g["hunks"] if h["file"] not in tested]
 print("hunks", len(every), "once" if len(every) == len(set(every)) == len(code) else "NOT ONCE")
@@ -105,11 +116,12 @@ expect "a unit titled by a file is refused" "$(call $A "$SA" ask-review "{\"tick
 expect "a unit with no line beneath its title is refused" "$(call $A "$SA" ask-review "{\"ticketId\":\"$TICKET\",\"units\":[{\"title\":\"Pages of a hundred\",\"what\":\" \",\"where\":[\"src/page.ts\"]}]}")" "has no 'what'"
 
 echo "## the page itself"
-PAGE=$(curl -s "$ORIGIN/review/$TICKET")
+TICKET_PAGE=$(page_of $A "$SA" "$TICKET")
+PAGE=$(curl -s "$TICKET_PAGE")
 expect "the page is served: the Solid app's document" "$PAGE" "<title>Review by intent</title>"
-ASSET=$(echo "$PAGE" | grep -oE '/review/assets/[A-Za-z0-9_.-]+\.js' | head -1)
+ASSET=$(echo "$PAGE" | grep -oE '/_build/assets/[A-Za-z0-9_.-]+\.js' | head -1)
 expect "…and its script, from the build, as JavaScript" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$ORIGIN$ASSET")" "^200 text/javascript"
-expect "nothing outside the build is served as an asset" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/review/assets/..%2Fpackage.json")" "^404$"
+expect "nothing outside the build is served as an asset" "$(curl -s -o /dev/null -w '%{http_code}' "$ORIGIN/_build/assets/..%2Fpackage.json")" "^404$"
 expect "a call naming another host is refused (DNS rebinding)" "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "$(sfn_url reviewData "[\"$TICKET\"]")")" "^403$"
 expect "an unknown ticket has no data" "$(sfn reviewData '["not-a-ticket"]')" "^null$"
 # a rebuilt page (its server bundle's file time moved) is taken up by the
@@ -123,7 +135,7 @@ expect "the server listens on loopback only" "$(lsof -nP -iTCP:${ORIGIN##*:} -sT
 echo "## types and definitions, from collagen's own TypeScript 7 over the branch"
 expect "the page follows the pinned TypeScript live: there, and ready" "$(sfn_live toolStates '["typescript"]')" "\"7\.[0-9.]+\".*\"ready\""
 expect "…a tool collagen does not have streams nothing" "$(sfn_live toolStates '["cobol"]' 2 | grep -c .)" "^0$"
-expect "installing from another origin is refused (Solid's same-origin guard)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'Origin: https://evil.example' --data '["typescript"]' "$ORIGIN/review/_server/$(sfn_id installTool)")" "^403$"
+expect "installing from another origin is refused (Solid's same-origin guard)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'Origin: https://evil.example' --data '["typescript"]' "$ORIGIN/_server/$(sfn_id installTool)")" "^403$"
 # the commit the page's diff is read at: types, peeks, the whole file and
 # what moved since are all of it
 SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
@@ -148,7 +160,7 @@ EV="$OUT/events.txt"; rm -f "$EV"
 # over the page's WebSocket, as the page follows it: each value a line, for 40 seconds
 node -e '
   const [origin, ticket] = process.argv.slice(1);
-  const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+  const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/_live`, { headers: { Origin: origin } });
   socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic: "changes", subject: ticket }));
   socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(`value: ${JSON.stringify(message.value)}`); };
   setTimeout(() => process.exit(0), 40000);
@@ -189,7 +201,7 @@ expect "…a commit the page names but the clone lacks is refused, not swapped f
 kill $CURL 2>/dev/null
 # o on a review open where its tab cannot be brought forward opens one
 # marked ?take, which the old tab hands over to: the marker serves the page
-expect "a tab marked to take over is the same page" "$(curl -s "$ORIGIN/review/$TICKET?take")" "<title>Review by intent</title>"
+expect "a tab marked to take over is the same page" "$(curl -s "$TICKET_PAGE?take")" "<title>Review by intent</title>"
 
 echo "## PHP: Intelephense over the branch, the clone's vendor/ linked in"
 # the clone's own Composer install: untracked, as vendor/ always is
@@ -214,7 +226,7 @@ PHPAT=$(git -C "$R" rev-parse HEAD)
 colof() { awk -v w="$3" -v n="$2" 'NR == n { print index($0, w) - 1 }' "$R/$1"; }
 expect "the page can see the pinned Intelephense is there" "$(sfn_live toolStates '["php"]')" "\"php\".*\"PHP\".*\"Intelephense\".*\"ready\""
 # the page starts its server as it opens, so the project is read before the first hover
-expect "opening the page starts its PHP server" "$(node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id warmTypes)" "[\"$TICKET\",\"php\",\"$PHPAT\"]")" "^null$"
+expect "opening the page starts its PHP server" "$(node "$E2E/sfn.mjs" post "$ORIGIN/_server/$(sfn_id warmTypes)" "[\"$TICKET\",\"php\",\"$PHPAT\"]")" "^null$"
 # until it has read the project an answer is partial, with how far it has
 # read; the page asks again by itself until it is whole (it ends on its markdown)
 wait_until "hovering a method of the branch's own interface: its name and signature" "Rows::fetch.*public function fetch\\(int \\\$limit\\): array.*\"\\}$" sfn hoverAt "[\"$TICKET\",\"src/Exporter.php\",13,$(colof src/Exporter.php 13 fetch),\"$PHPAT\"]"
@@ -230,7 +242,7 @@ expect "…and peeks as the package's file" "$(sfn definitionAt "[\"$TICKET\",\"
 expect "peeking a PHP function says it is built into PHP" "$(sfn definitionAt "[\"$TICKET\",\"src/Exporter.php\",14,$(colof src/Exporter.php 14 strlen),\"$PHPAT\"]")" "\"where\":\"builtin\",\"builtInto\":\"PHP\""
 
 echo "## live updates on one WebSocket, opened only by the page itself"
-upgrade() { curl -s -o /dev/null -w "%{http_code}" --max-time 2 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$@" "$ORIGIN/review/_live"; }
+upgrade() { curl -s -o /dev/null -w "%{http_code}" --max-time 2 -H "Connection: Upgrade" -H "Upgrade: websocket" -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" "$@" "$ORIGIN/_live"; }
 expect "the page's own origin gets its socket" "$(upgrade -H "Origin: $ORIGIN")" "^101$"
 expect "another site cannot open one — a socket is not held to the same-origin rule" "$(upgrade -H "Origin: http://evil.example")" "^403$"
 expect "…nor can a request naming no origin" "$(upgrade)" "^403$"
@@ -241,5 +253,5 @@ MERGED=$(sfn reviewData "[\"$TICKET\"]")
 expect "an empty diff is no diff, never empty blocks" "$MERGED" '"grouped":null'
 expect "…and the reason names what is missing" "$MERGED" '"source":\{"kind":"none","detail":"feat/stream-export has no changes against main"\}'
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $TICKET_PAGE"; summary; exit; fi
 kill_all; summary

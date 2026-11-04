@@ -48,6 +48,8 @@ export async function foldAway(card: Element | null): Promise<() => void> {
   ]);
   return () => {
     for (const property of ["height", "box-sizing"]) card.style.removeProperty(property);
+    // a part still drawn (the card did not fold after all) reads again as it was
+    for (const element of parts) for (const property of ["height", "overflow", "opacity"]) element.style.removeProperty(property);
   };
 }
 

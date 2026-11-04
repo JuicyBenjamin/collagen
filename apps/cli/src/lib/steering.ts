@@ -133,7 +133,7 @@ export const KIND_LABEL: Record<SteeringKind, string> = {
   work: "work handed to your agent",
   host: "the repo host (reviews, comments, merges in your name)",
   deliver: "delivering into your AI conversations",
-  run: "running your AI for a job (researching a ticket)",
+  run: "running your AI for a job: researching a plan, proposal or bug when you ask for more info, and waking the conversation that worked on a ticket when something new comes on it",
   investigate: "starting your AI on an investigation (as one is filed, or asked of you)",
   report: "telling the conversation that filed an investigation what was found",
   close: "closing what a finished ticket grew from (its plan, proposal or bug), when its review is accepted or merged",
@@ -144,6 +144,18 @@ export const KIND_LABEL: Record<SteeringKind, string> = {
   admit: "letting people into a room, turning them away, and taking them out — what your role in the room allows",
   notes: "steering notes: what your AI adds or changes in the room's notes on its own (you), and following a note a colleague's AI added that no person has read yet (others)",
 };
+
+/** The steering kinds by the kind of ticket whose happenings start them, so
+ *  a person — and their AI, asked to turn one on — finds a steering by the
+ *  ticket it is about: what a review, an investigation, a plan does on your
+ *  side. What no ticket kind starts (messages, notes, the room) is last. The
+ *  settings page and set-steering both read it. */
+export const STEERING_GROUPS: ReadonlyArray<{ readonly title: string; readonly about: string; readonly kinds: ReadonlyArray<SteeringKind> }> = [
+  { title: "Reviews", about: "What happens on a review ticket: one you file, one asked of you, one you read.", kinds: ["review", "guidance", "forward", "answer", "close", "host"] },
+  { title: "Investigations", about: "What happens on an investigation ticket: as it is filed, and as it finds things.", kinds: ["investigate", "report"] },
+  { title: "Plans, proposals and bugs", about: "What happens on a plan, proposal or bug ticket that needs more info.", kinds: ["run"] },
+  { title: "Not from a ticket", about: "Messages, steering notes and the room itself, whatever the ticket.", kinds: ["work", "deliver", "notes", "admit"] },
+];
 
 export const TAG_LABEL: Record<TagRoute, string> = {
   none: "nowhere: you ask for it",

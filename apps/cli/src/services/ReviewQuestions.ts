@@ -5,6 +5,8 @@ import { Clock, Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
 import { encode as toToon } from "@toon-format/toon";
 import { deriveThreadId, roomProjects, type Conversation, type QuestionLines, type ReviewAnswer, type ReviewContext, type ReviewGuess, type ReviewQuestionHeld, type ReviewQuestionStage, type RoomMessage, type Verdict } from "@collagen/p2p";
 import { MOST_READ, readable } from "../lib/reviewRequests";
+import { missingWhys, type MissingWhy } from "../lib/missingWhys";
+import { parseDiff } from "../lib/reviewView";
 import { nextQuestion, type QuestionEvent } from "../lib/questionMachine";
 import { allow, levelOf, type Cause } from "../lib/steering";
 import { sameName } from "../lib/names";
@@ -74,6 +76,34 @@ const answeringPrompt = (held: ReviewQuestionHeld, title: string, files: Readonl
     .filter((part) => part.length > 0)
     .join("\n\n");
 
+/** What an answering job is told when the reader asks for every missing
+ *  why: each gap, and one why for each, from the conversation. */
+const whysPrompt = (held: ReviewQuestionHeld, title: string, files: ReadonlyArray<string>, diff: string | null, person: string, server: string, gaps: ReadonlyArray<MissingWhy> | null): string =>
+  [
+    `${held.fromName} is reading ${person}'s review "${title}" and asks for the whys it is missing. You give them for ${person}, from the conversation the work was done in: what was decided there and why, never a guess.`,
+    `Read: ${files.join(", ")}${diff ? `, and the change itself, ${diff}` : ""}. The review's why is in the ${server} review-context tool, ticketId "${held.ticketId}".`,
+    gaps
+      ? `What is missing:\n${gaps.map((gap) => ("decision" in gap ? `- decision ${gap.decision} ("${gap.title}") gives no reason` : `- no decision covers the change at ${gap.where}`)).join("\n")}`
+      : `Find what is missing yourself: decisions that give no reason, and changes no decision covers.`,
+    `Answer with the ${server} review-question tool: {questionId: "${held.id}", whys: [{decision: "<id>", why: …} for a decision, {where: ["<file:line-line>"], title: what it does in a few words, why: …} for a change — changes that share one reason in one entry]}. Each why briefly, in plain words, as the conversation says it. Leave out a gap the conversation says nothing about. Read only: you change nothing.`,
+  ]
+    .filter((part) => part.length > 0)
+    .join("\n\n");
+
+/** The question a whys ask carries: what an older author's collagen, which
+ *  reads it as one question, answers. */
+export const WHYS_QUESTION = "What are the whys this review is missing: the reasons for decisions that give none, and for the changes no decision covers?";
+
+/** One why the author's AI gives for a gap (review-question whys). */
+export interface WhyGiven {
+  /** the decision that gave no reason */
+  readonly decision?: string;
+  /** or the changes no decision covered */
+  readonly where?: ReadonlyArray<string>;
+  readonly title?: string;
+  readonly why: string;
+}
+
 /** What the person's tool says to a question (review-question). */
 export interface Respond {
   readonly questionId?: string;
@@ -83,6 +113,8 @@ export interface Respond {
   /** the answer itself — from the answering job, or written with them */
   readonly reply?: string;
   readonly flaw?: string;
+  /** on a question for every missing why: one for each gap */
+  readonly whys?: ReadonlyArray<WhyGiven>;
   /** on a reader's AI's guess at it: whether it holds */
   readonly verdict?: Verdict;
 }
@@ -95,6 +127,8 @@ export interface AskAuthor {
   readonly question: string;
   readonly lines?: QuestionLines;
   readonly commit?: string;
+  /** every missing why, not one question */
+  readonly whys?: boolean;
 }
 
 /** Who answers a question about the person's own review: the conversation
@@ -247,8 +281,15 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         // answering, and the asker told so, before the job can run: it may answer at once
         const answering = yield* move(held, on, { conversations: chosen });
         if (!answering) return `failed: it is ${held.stage} — it cannot be answered from there`;
+        const gaps = held.whys && work.diff ? missingWhys(found.review, parseDiff(work.diff)) : null;
+        if (gaps && gaps.length === 0) {
+          yield* move(answering, "answered");
+          yield* tellAsker(held, "answered", "", { answer: "Nothing is missing: every decision gives its reason, and a decision covers every change." });
+          return "answered: the review's why is missing nothing";
+        }
         yield* tellAsker(held, "answering");
-        const said = yield* jobs.file({ roomId: held.roomId, requestId: held.id, title: `answer ${held.fromName} on "${title}"`, prompt: answeringPrompt(held, title, copied, diffFile, person, server), cwd: found.path ?? homedir(), reads: [dir] }, "answering");
+        const prompt = held.whys ? whysPrompt(held, title, copied, diffFile, person, server, gaps) : answeringPrompt(held, title, copied, diffFile, person, server);
+        const said = yield* jobs.file({ roomId: held.roomId, requestId: held.id, title: held.whys ? `give ${held.fromName} the whys of "${title}"` : `answer ${held.fromName} on "${title}"`, prompt, cwd: found.path ?? homedir(), reads: [dir], cause: causeOf(held), onTicket: held.ticketId }, "answering");
         if (said.startsWith("failed")) {
           yield* move(answering, "ended");
           yield* tellAsker(held, "waiting");
@@ -276,6 +317,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
             question: question.question,
             ...(question.lines ? { lines: question.lines } : {}),
             ...(question.commit ? { commit: question.commit } : {}),
+            ...(question.whys ? { whys: true } : {}),
             stage: "new",
             ts: message.ts,
           };
@@ -326,6 +368,37 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           basis: `read from ${yield* SubscriptionRef.get(nameRef)}'s AI, from the conversation the work was done in, answering ${held.fromName}'s question — not told by them`,
         };
         yield* rewrite(held.roomId, { ...found.review, decisions: [...found.review.decisions, decision], ts: yield* Clock.currentTimeMillis });
+      });
+
+    /** The whys given for the gaps, each where its gap is: on the decision
+     *  that gave no reason, or a decision of its own for changes none
+     *  covered — marked as read from the author's AI. Says what went where. */
+    const whysOntoTheWhy = (held: ReviewQuestionHeld, given: ReadonlyArray<WhyGiven>) =>
+      Effect.gen(function* () {
+        const found = yield* reviewOf(held.roomId, held.ticketId);
+        if (!found) return null;
+        const basis = `read from ${yield* SubscriptionRef.get(nameRef)}'s AI, from the conversation the work was done in, answering ${held.fromName}'s ask for the missing whys — not told by them`;
+        const filled: Array<string> = [];
+        const decisions = found.review.decisions.map((decision) => {
+          const why = given.find((each) => each.decision === decision.id)?.why.trim();
+          if (!why || decision.userWhy?.trim() || decision.agentWhy?.trim()) return decision;
+          filled.push(decision.title ?? decision.what);
+          return { ...decision, agentWhy: why, basis };
+        });
+        const ids = new Set(decisions.map((decision) => decision.id));
+        let next = decisions.length + 1;
+        const added: Array<(typeof decisions)[number]> = [];
+        for (const each of given.filter((candidate) => !candidate.decision && (candidate.where?.length ?? 0) > 0 && candidate.why.trim())) {
+          while (ids.has(`d${next}`)) next++;
+          ids.add(`d${next}`);
+          const why = each.why.trim();
+          const title = each.title?.trim() || (why.length > 60 ? `${why.slice(0, 57).trimEnd()}…` : why);
+          added.push({ id: `d${next}`, title, what: why, agentWhy: why, where: each.where!, basis });
+          filled.push(title);
+        }
+        if (filled.length === 0) return [];
+        yield* rewrite(held.roomId, { ...found.review, decisions: [...decisions, ...added], ts: yield* Clock.currentTimeMillis });
+        return filled;
       });
 
     /** A flaw the answer found: raised with the author, or handed to the
@@ -415,6 +488,16 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
           yield* tellAsker(held, "answered", "", { answer: `${yield* SubscriptionRef.get(nameRef)} confirms the reason your AI assumed: ${held.guess.what}` });
           return `confirmed; ${held.fromName} is told, and the guess on the review's why is marked confirmed.`;
         }
+        if (input.whys !== undefined) {
+          if (!held.whys) return "failed: this question asks one thing: reply with the answer";
+          if (refused("answered")) return refused("answered")!;
+          const filled = yield* whysOntoTheWhy(held, input.whys);
+          if (filled === null) return `failed: no review ${held.ticketId} of your user's in this room`;
+          yield* move(held, "answered");
+          const answer = filled.length === 0 ? "The conversation that did the work says nothing of the missing whys." : `${filled.length === 1 ? "1 why" : `${filled.length} whys`} on the review: ${filled.join("; ")}.`;
+          yield* tellAsker(held, "answered", "", { answer });
+          return `answered; ${held.fromName} is told, and ${filled.length === 1 ? "1 why is" : `${filled.length} whys are`} on the review's why, marked as read from your user's AI.`;
+        }
         if (input.reply !== undefined) {
           const reply = input.reply.trim();
           if (!reply) return "failed: reply with what the conversation says";
@@ -479,7 +562,7 @@ export class ReviewQuestions extends Context.Service<ReviewQuestions>()("cli/Rev
         if (!found) return `failed: no review ticket ${input.ticketId} in this room`;
         const author = found.review.authorName;
         const id = input.id ?? crypto.randomUUID();
-        const question = { id, ticketId: input.ticketId, question: input.question, ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}) };
+        const question = { id, ticketId: input.ticketId, question: input.question, ...(input.lines ? { lines: input.lines } : {}), ...(input.commit ? { commit: input.commit } : {}), ...(input.whys ? { whys: true } : {}) };
         // single player: the person's own review — the conversation of theirs that did the work answers, as their own answering steering says, and nothing goes to the room
         if (found.ticket.createdBy === identity.pubkey) {
           const me = yield* SubscriptionRef.get(nameRef);

@@ -1,9 +1,9 @@
-import type { AuditPage, ChatView, InvestigationPage, PageSettings, ToolId, ToolState } from "./data";
+import type { AuditPage, TicketNext, ChatView, InvestigationPage, PageSettings, ToolId, ToolState } from "./data";
 import type { PageThemes } from "./themeData";
 import type { Marks } from "./marks";
 
 // The page's live updates — the review moving, a language server's state —
-// all on one WebSocket to collagen (ReviewServer's /review/_live). A browser
+// all on one WebSocket to collagen (ReviewServer's /_live). A browser
 // lets a page hold only six connections to a host; a stream held open on
 // each would take them all with a few tabs, and the next page, a file read
 // or a reload would wait for one with no end and no error. A WebSocket is
@@ -24,7 +24,7 @@ let nextId = 0;
 /** The page's socket, opened when a stream first needs it. */
 const ensureSocket = (): WebSocket => {
   if (socket && socket.readyState <= WebSocket.OPEN) return socket;
-  const opened = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/review/_live`);
+  const opened = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/_live`);
   opened.addEventListener("message", (event: MessageEvent<string>) => {
     try {
       const message = JSON.parse(event.data) as { readonly id: string; readonly value?: unknown; readonly end?: true };
@@ -68,7 +68,9 @@ export function overSocket(topic: "investigation", subject: string): AsyncIterab
 /** a room's audit: subject "<roomId>:<days>" */
 export function overSocket(topic: "audit", subject: string): AsyncIterable<AuditPage | null>;
 export function overSocket(topic: "chat", subject: string): AsyncIterable<ChatView>;
-export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat", subject: string): AsyncIterable<unknown> {
+export function overSocket(topic: "next", subject: string): AsyncIterable<TicketNext>;
+export function overSocket(topic: "board", subject: string): AsyncIterable<string>;
+export function overSocket(topic: "changes" | "tool" | "themes" | "settings" | "viewed" | "investigation" | "audit" | "chat" | "next" | "board", subject: string): AsyncIterable<unknown> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<unknown> {
       const id = `s${++nextId}`;

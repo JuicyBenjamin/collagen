@@ -1,5 +1,5 @@
 import { Context, Effect, Stream } from "effect";
-import type { AuditPage, ChatAsked, ChatSelection, ChatView, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
+import type { AuditPage, BoardData, BoardKind, TicketNext, ChatAsked, ChatSelection, ChatView, CommentSpot, InvestigationPage, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, PageSettings, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "../data";
 import type { PageThemes } from "../themeData";
 import type { Marks } from "../marks";
 
@@ -52,8 +52,8 @@ export class ReviewBackend extends Context.Service<
     readonly edit: (ticketId: string, id: string, body: string) => Effect.Effect<DraftsResult>;
     /** drop drafts or pending comments (by id; or, with null, all of a kind); how many went */
     readonly drop: (ticketId: string, ids: ReadonlyArray<string> | null, kind: "ai" | "pending") => Effect.Effect<number>;
-    /** a comment not said yet, confirmed where it sits at `commit` — the one the page shows now */
-    readonly repin: (ticketId: string, id: string, commit: string) => Effect.Effect<DraftsResult>;
+    /** a comment not said yet, kept where its code stands now — one whose code changed, on its file */
+    readonly keep: (ticketId: string, id: string) => Effect.Effect<DraftsResult>;
     /** the reader's take on a review, said in the room as theirs; `failed` rejects it, `comment` approves nothing */
     readonly take: (ticketId: string, findings: string, failed: boolean, comment: boolean) => Effect.Effect<HostWrite>;
     /** a review the reader filed, closed: accepted as done, or dropped */
@@ -89,8 +89,16 @@ export class ReviewBackend extends Context.Service<
     readonly setViewed: (ticketId: string, file: string, mark: unknown) => Effect.Effect<Marks>;
     /** the person's switches the page wears — now, then on every change, whoever made it */
     readonly pageSettings: Stream.Stream<PageSettings>;
+    /** the assistant the ask-AI chat is, or (null) the plain chat: checked, then kept (set-settings assistant) */
+    readonly setAssistant: (assistant: unknown) => Effect.Effect<void>;
     /** the reader's conversation with their AI on the review, whole — now, then on every change */
     readonly chat: (ticketId: string) => Stream.Stream<ChatView>;
+    /** a room's board, by its short id: its tickets in to do, in progress and done — everything or one epic's, done lately or all of it */
+    readonly board: (roomShort: string, epic: string | null, allDone: boolean, kinds: ReadonlyArray<BoardKind>) => Effect.Effect<BoardData | null>;
+    /** the board's state as a token, current first, then each time it moves */
+    readonly boardChanges: (roomShort: string) => Stream.Stream<string>;
+    /** what a ticket waits on: the jobs running on it (the reader's own, and those peers share) and who it waits on next — now, then on every change */
+    readonly next: (ticketId: string) => Stream.Stream<TicketNext>;
     /** ask their AI — about lines they selected, or not — at `commit`, the one the page shows */
     readonly ask: (ticketId: string, question: string, selection: ChatSelection | null, commit: string | null) => Effect.Effect<ChatAsked>;
     /** ask the review's author's AI what an answer could not settle (the reader's word) */

@@ -29,21 +29,21 @@ TICKET=$(call $A "$SA" ask-review "{\"title\":\"Stream the export\",\"project\":
 ORIGIN=${A%/mcp}
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn_url() { echo "$ORIGIN/review/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn_url() { echo "$ORIGIN/_server/${3:-data}/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 sfn() { node "$E2E/sfn.mjs" "$(sfn_url "$1" "$2")"; }
 # the chat as the page gets it: over its WebSocket (ReviewServer's
-# /review/_live), each value on a line, for $3 seconds (2)
+# /_live), each value on a line, for $3 seconds (2)
 sfn_live() {
   node -e '
     const [origin, name, args, seconds] = process.argv.slice(1);
     const topic = { chatLive: "chat" }[name];
-    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/review/_live`, { headers: { Origin: origin } });
+    const socket = new WebSocket(`${origin.replace(/^http/, "ws")}/_live`, { headers: { Origin: origin } });
     socket.onopen = () => socket.send(JSON.stringify({ open: "e2e", topic, subject: JSON.parse(args)[0] }));
     socket.onmessage = (event) => { const message = JSON.parse(String(event.data)); if (!message.end) console.log(JSON.stringify(message.value)); };
     setTimeout(() => process.exit(0), Number(seconds) * 1000);
   ' "$ORIGIN" "$1" "$2" "${3:-2}"
 }
-post() { node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
+post() { node "$E2E/sfn.mjs" post "$ORIGIN/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
 
 wait_until "the review's data is served" '"commit"' sfn reviewData "[\"$TICKET\"]"
 SHOWN=$(sfn reviewData "[\"$TICKET\"]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
@@ -90,6 +90,6 @@ said() { sfn_live chatLive "[\"$TICKET\"]" | grep -c "$1"; }
 wait_until "the turns are gone" "^0$" said "back again"
 expect "…and her state no longer points at the old conversation" "$(chat_id)" "^$"
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $(page_of $A "$SA" "$TICKET")"; summary; exit; fi
 kill_all
 summary

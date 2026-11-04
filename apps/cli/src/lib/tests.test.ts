@@ -35,7 +35,7 @@ describe("the tests in a file", () => {
   });
 
   it("a test file by name or folder", () => {
-    expect(["a/Outbox.test.ts", "a/x.spec.tsx", "tests/Feature/Foo.php", "src/__tests__/x.js", "src/testing.ts", "src/latest/x.ts", "ui/Foo.test.stories.tsx", "src/contest.tsx", "a.test/x.ts"].map(isTest)).toEqual([true, true, true, true, false, false, true, false, false]);
+    expect(["a/Outbox.test.ts", "a/x.spec.tsx", "tests/Feature/Foo.php", "src/__tests__/x.js", "src/testing.ts", "src/latest/x.ts", "ui/Foo.test.stories.tsx", "src/contest.tsx", "a.test/x.ts"].map(isTest)).toEqual([true, true, true, true, false, false, false, false, false]);
   });
 });
 

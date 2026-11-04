@@ -35,6 +35,13 @@ async function rpc(body, session) {
 }
 const init = await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake-claude", version: "0" } } });
 await rpc({ jsonrpc: "2.0", method: "notifications/initialized" }, init.sid);
+// a job is told its id to say how far it is: two steps, held a while when
+// $FAKE_CLAUDE_HOLD says so, for a scenario to see it running
+const jobId = /job-progress tool, job "([^"]+)"/.exec(prompt)?.[1];
+const step = (at, doing) => (jobId ? rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "job-progress", arguments: { job: jobId, step: at, of: 2, doing } } }, init.sid) : Promise.resolve());
+await step(1, "reading the conversation");
+if (process.env.FAKE_CLAUDE_HOLD) await new Promise((resolve) => setTimeout(resolve, Number(process.env.FAKE_CLAUDE_HOLD)));
+await step(2, "answering");
 const questionId = /questionId: "([^"]+)"/.exec(prompt)?.[1];
 if (questionId) {
   const negative = /negative/i.test(/The question: (.*)/.exec(prompt)?.[1] ?? "");

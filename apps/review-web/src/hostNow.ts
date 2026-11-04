@@ -1,5 +1,5 @@
 import { action, createMemo, createOptimistic, createSignal, isPending, NotReadyError, refresh, type Accessor, type SourceAccessor } from "solid-js";
-import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, repinDraft, sendComment, submitReview, talkView } from "./api";
+import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, keepDraft, sendComment, submitReview, talkView } from "./api";
 import type { CommentSpot, DiffSide, DraftsResult, DraftView, HostUser, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
 import { diffNow } from "./diffNow";
 import { onceEach } from "./sameComment";
@@ -242,13 +242,9 @@ export const hostNow = {
     const at = diffNow.commit();
     return at !== null && at !== undefined && draft.commit !== at;
   },
-  /** Confirm a comment where it shows now, at the commit the page shows. */
-  repin: action(function* (id: string) {
-    const commit = diffNow.commit();
-    if (!commit) return;
-    setPending((current) => current.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
-    setDrafts((current) => current.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
-    const result = (yield repinDraft(ticketId, id, commit)) as DraftsResult;
+  /** Keep a comment not said yet where its code stands now — one whose code changed, on its file. */
+  keep: action(function* (id: string) {
+    const result = (yield keepDraft(ticketId, id)) as DraftsResult;
     note([id], result.failed);
     if (talk) refresh(talk);
   }),
@@ -284,10 +280,16 @@ export const hostNow = {
   talkIn: (file: string): boolean => ready(comments, []).some((comment) => comment.file === file) || ready(pending, []).some((draft) => draft.file === file) || ready(drafts, []).some((draft) => draft.file === file),
 
   /** Whether comments wait on the reader in a file — the AI's drafts or the
-   *  ones pending in their review. Such a file shows its lines with their
-   *  threads: not folded away, not narrowed to what changed since it was
-   *  viewed, not read as a document, so every one of them can be found. */
+   *  ones pending in their review. Open, such a file shows its lines with
+   *  their threads: not narrowed to what changed since it was viewed, not
+   *  read as a document, so every one of them can be found; folded, it lists
+   *  them under its header (waitingOn). */
   waitingIn: (file: string): boolean => ready(pending, []).some((draft) => draft.file === file) || ready(drafts, []).some((draft) => draft.file === file),
+  /** The comments waiting on the reader in a file, wherever in it they are. */
+  waitingOn: (file: string): { readonly pending: ReadonlyArray<DraftView>; readonly drafts: ReadonlyArray<DraftView> } => ({
+    pending: ready(pending, []).filter((draft) => draft.file === file),
+    drafts: ready(drafts, []).filter((draft) => draft.file === file),
+  }),
 
   /** The lines picked for a comment, and whether the pointer is still dragging them out. */
   pick,

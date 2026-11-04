@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Effect, Semaphore, SubscriptionRef } from "effect";
 import { actingFields, type DraftComment, type ReviewComment } from "@collagen/p2p";
-import type { DraftsResult, DraftView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "@collagen/review-web/data";
+import type { DraftsResult, DraftView, HostWrite, LineComment, Outdated, SubmitResult, TalkView, Verdict } from "@collagen/review-web/data";
 import { forPeople } from "@collagen/review-web/forPeople";
 import { sameComment } from "@collagen/review-web/sameComment";
 import { asksForChanges, readStrength, withStrength, type Strength } from "@collagen/review-web/strength";
@@ -11,6 +11,7 @@ import { allow, withHost, type Permit } from "../lib/steering";
 import { placeComment, whereOf, type Spot } from "../lib/comments";
 import { IdentityService } from "./Identity";
 import { hostOf, type RepoHost } from "./RepoHost";
+import { followComments, type Followed } from "./ReviewFollow";
 import { hostLink, reviewHunks, reviewNamed } from "./ReviewView";
 import { StateStore } from "./StateStore";
 
@@ -44,6 +45,16 @@ const spotOf = (comment: Spot): Spot =>
   comment.subject === "file"
     ? { subject: "file", file: comment.file }
     : { file: comment.file, line: comment.line, side: comment.side, ...(comment.startLine !== undefined ? { startLine: comment.startLine, startSide: comment.startSide ?? comment.side } : {}) };
+
+/** A record where it stands now (ReviewFollow): its spot and commit those
+ *  followed to, outdated when its code changed; as it was when nothing moved. */
+const placedAt = <T extends Spot & { readonly commit: string }>(record: T, followed: Followed | undefined): T & { readonly outdated?: Outdated } => {
+  if (!followed) return record;
+  const { subject: _subject, line: _line, side: _side, startLine: _startLine, startSide: _startSide, ...rest } = record as T & { subject?: unknown; line?: unknown; side?: unknown; startLine?: unknown; startSide?: unknown };
+  return { ...rest, ...followed.spot, commit: followed.commit, ...(followed.outdated ? { outdated: followed.outdated } : {}) } as unknown as T & { readonly outdated?: Outdated };
+};
+/** What following a record needs of it. */
+const toFollow = (record: Spot & { readonly id: string; readonly commit: string }) => ({ id: record.id, commit: record.commit, spot: spotOf(record) });
 
 /** Words with nothing in them but, at most, a strength. */
 const saysNothing = (body: string) => readStrength(body).text.trim().length === 0;
@@ -371,6 +382,12 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
     return { ok: true as const, said: recovered + pending.length, roomOnly: to.roomOnly } satisfies SubmitResult;
   }
 
+  // on the host a comment needs a line of the commit reviewed: each where its
+  // code stands now; one whose code changed waits to be kept on its file,
+  // moved or deleted (said in the room only, each is followed as it is read)
+  const follow = yield* followComments(found, pending.map(toFollow));
+  const placed = pending.map((draft) => placedAt(draft, follow.followed.get(draft.id)));
+
   // one must in the review asks for changes: the review does, the host having
   // one verdict for all of it — and an approval cannot go with it
   const musts = pending.filter((draft) => asksForChanges(draft.body)).length;
@@ -379,19 +396,22 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   // the comments say what should change; with none, the words must
   if (asked === "request-changes" && text.length === 0 && pending.length === 0) return { error: `Say what should change — ${to.host.name} asks for it.` } satisfies SubmitResult;
   if (verdict === "comment" && text.length === 0 && pending.length === 0) return { error: "Write something, or add comments to your review first." } satisfies SubmitResult;
-  // the one commit the review is of; every comment in it written there
-  const written = [...new Set(pending.map((draft) => draft.commit))];
-  let at = commit ?? (written.length === 1 ? written[0]! : null);
+  // the one commit the review is of — the branch's now, once its comments are followed there; every comment in it there
+  const written = [...new Set(placed.map((draft) => draft.commit))];
+  let at = follow.head ?? commit ?? (written.length === 1 ? written[0]! : null);
   if (at === null && written.length === 0) {
     const diff = yield* reviewHunks(found);
     if ("error" in diff) return { error: `cannot read the review's code here: ${diff.error}` } satisfies SubmitResult;
     at = diff.commit;
   }
-  // held back, all of it, until each is kept where it sits now or deleted
-  const elsewhere = at === null ? pending : pending.filter((draft) => draft.commit !== at);
+  // held back, all of it, until each whose code changed is kept on its file, moved, or deleted
+  const elsewhere = at === null ? placed : placed.filter((draft) => draft.outdated !== undefined || draft.commit !== at);
   if (at === null || elsewhere.length > 0)
     return {
-      error: `${elsewhere.length} comment(s) in your review were written on ${at === null ? "different commits" : `another commit than ${commit ? "the one the page shows" : "the others"} (${short(at)})`}: keep or delete each, then finish the review.`,
+      error:
+        at !== null && elsewhere.every((draft) => draft.outdated !== undefined)
+          ? `${elsewhere.length} comment(s) in your review are on code that changed since they were written: keep each on its file, move it to other lines, or delete it, then finish the review.`
+          : `${elsewhere.length} comment(s) in your review were written on ${at === null ? "different commits" : `another commit than ${commit ? "the one the page shows" : "the others"} (${short(at)})`}: keep or delete each, then finish the review.`,
       held: elsewhere.map((draft) => draft.id),
     } satisfies SubmitResult;
   const sent = yield* withHost(
@@ -400,13 +420,13 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
       verdict: asked,
       body: text,
       commit: at,
-      comments: pending.map((draft) => ({ ...spotOf(draft), body: draft.body })),
+      comments: placed.map((draft) => ({ ...spotOf(draft), body: draft.body })),
     }),
   );
   if ("error" in sent) return sent satisfies SubmitResult;
   // each pending comment with its copy on the host, matched by where it sits and what it says
   const unclaimed = [...sent.comments];
-  const posted = pending.map((draft): DraftComment => {
+  const posted = placed.map(({ outdated: _outdated, ...draft }): DraftComment => {
     const index = unclaimed.findIndex((hosted) => sameComment(hosted, draft));
     const copy = index === -1 ? undefined : unclaimed.splice(index, 1)[0];
     return { ...draft, status: "posted", ...(copy ? { host: { id: Number(copy.id), url: copy.url } } : {}) };
@@ -420,39 +440,50 @@ const submitOnce = Effect.fn("ReviewTalk.submit")(function* (ticketId: string, v
   return { ok: true as const, said: recovered + pending.length, ...(sent.url ? { url: sent.url } : {}), ...(asked !== verdict ? { changesRequested: true as const } : {}) } satisfies SubmitResult;
 });
 
-/** Confirm where a comment not said yet sits, at the commit the page shows
- *  now — after the branch moved under it. */
-export const repinDraft = (ticketId: string, id: string, commit: string) => one(ticketId, repinOnce(ticketId, id, commit));
-const repinOnce = Effect.fn("ReviewTalk.repin")(function* (ticketId: string, id: string, commit: string) {
-  if (!(yield* draftsOf(ticketId)).some((draft) => draft.id === id && !isPosted(draft))) return { done: 0, failed: [{ id, error: "no such comment waiting" }] } satisfies DraftsResult;
-  yield* setDrafts(ticketId, (drafts) => drafts.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
-  return { done: 1, failed: [] } satisfies DraftsResult;
-});
-
-/** Confirm where comments not said yet sit, at the review's commit now — the
- *  agent's way to keep them, as the page's "Keep it here" is the reader's:
- *  one whose lines the diff there does not show is refused, to delete. */
+/** Keep comments not said yet where their code stands now: each followed to
+ *  the branch's commit (ReviewFollow), and one whose code changed kept on its
+ *  file — the agent's 'keep' and the page's "Keep on the file". One whose file
+ *  the change no longer has is refused, to delete. */
 export const keepDrafts = (ticketId: string, ids: ReadonlyArray<string>) => one(ticketId, keepOnce(ticketId, ids));
 const keepOnce = Effect.fn("ReviewTalk.keep")(function* (ticketId: string, ids: ReadonlyArray<string>) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { done: 0, failed: ids.map((id) => ({ id, error: `no review ticket ${ticketId} in your rooms` })) } satisfies DraftsResult;
   const diff = yield* reviewHunks(found);
   if ("error" in diff) return { done: 0, failed: ids.map((id) => ({ id, error: `cannot read the review's code here: ${diff.error}` })) } satisfies DraftsResult;
-  const mine = yield* draftsOf(ticketId);
-  const failed: Array<{ readonly id: string; readonly error: string }> = [];
-  const kept = new Set<string>();
-  for (const id of ids) {
-    const draft = mine.find((candidate) => candidate.id === id && !isPosted(candidate));
-    const why = draft ? placeComment(diff.hunks, spotOf(draft)) : "no such comment waiting";
-    if (why) failed.push({ id, error: why });
-    else kept.add(id);
+  const mine = (yield* draftsOf(ticketId)).filter((draft) => ids.includes(draft.id) && !isPosted(draft));
+  const follow = yield* followComments(found, mine.map(toFollow));
+  const failed: Array<{ readonly id: string; readonly error: string }> = ids.filter((id) => !mine.some((draft) => draft.id === id)).map((id) => ({ id, error: "no such comment waiting" }));
+  const kept = new Map<string, DraftComment>();
+  for (const draft of mine) {
+    const { outdated: _outdated, ...now } = placedAt(draft, follow.followed.get(draft.id));
+    const why = placeComment(diff.hunks, spotOf(now));
+    if (why) failed.push({ id: draft.id, error: `${why} — delete it` });
+    else kept.set(draft.id, { ...now, commit: diff.commit });
   }
-  if (kept.size > 0) yield* setDrafts(ticketId, (drafts) => drafts.map((draft) => (kept.has(draft.id) ? { ...draft, commit: diff.commit } : draft)));
+  if (kept.size > 0) yield* setDrafts(ticketId, (drafts) => drafts.map((draft) => kept.get(draft.id) ?? draft));
   return { done: kept.size, failed } satisfies DraftsResult;
 });
 
+/** Put a comment not said yet on other lines of the review's code now — one
+ *  whose code changed, moved to where it belongs. Refused where the diff
+ *  cannot place it, as a new comment would be. */
+export const moveDraft = (ticketId: string, id: string, spot: Spot) => one(ticketId, moveOnce(ticketId, id, spot));
+const moveOnce = Effect.fn("ReviewTalk.move")(function* (ticketId: string, id: string, spot: Spot) {
+  const found = yield* reviewNamed(ticketId);
+  if (!found) return { done: 0, failed: [{ id, error: `no review ticket ${ticketId} in your rooms` }] } satisfies DraftsResult;
+  const draft = (yield* draftsOf(ticketId)).find((candidate) => candidate.id === id && !isPosted(candidate));
+  if (!draft) return { done: 0, failed: [{ id, error: "no such comment waiting" }] } satisfies DraftsResult;
+  const diff = yield* reviewHunks(found);
+  if ("error" in diff) return { done: 0, failed: [{ id, error: `cannot read the review's code here: ${diff.error}` }] } satisfies DraftsResult;
+  const why = placeComment(diff.hunks, spot);
+  if (why) return { done: 0, failed: [{ id, error: why }] } satisfies DraftsResult;
+  const moved = placedAt(draft, { spot: spotOf(spot), commit: diff.commit });
+  yield* setDrafts(ticketId, (drafts) => drafts.map((candidate) => (candidate.id === id ? moved : candidate)));
+  return { done: 1, failed: [] } satisfies DraftsResult;
+});
+
 /** A comment said in the room, as the page shows one. */
-const asShown = (comment: ReviewComment): LineComment & { readonly hostId?: string } => ({
+const asShown = (comment: ReviewComment & { readonly outdated?: Outdated }): LineComment & { readonly hostId?: string } => ({
   id: comment.id,
   author: { login: comment.authorName },
   body: comment.body,
@@ -462,9 +493,10 @@ const asShown = (comment: ReviewComment): LineComment & { readonly hostId?: stri
   ...(comment.drafted ? { drafted: true as const } : {}),
   ...(comment.detail !== undefined ? { detail: comment.detail } : {}),
   ...(comment.host ? { hostId: String(comment.host.id) } : {}),
+  ...(comment.outdated ? { outdated: comment.outdated } : {}),
 });
 
-const asDraft = (draft: DraftComment): DraftView => ({
+const asDraft = (draft: DraftComment & { readonly outdated?: Outdated }): DraftView => ({
   id: draft.id,
   commit: draft.commit,
   ...(isPosted(draft) ? { posted: true as const } : {}),
@@ -472,15 +504,24 @@ const asDraft = (draft: DraftComment): DraftView => ({
   body: draft.body,
   ...(draft.detail !== undefined ? { detail: draft.detail } : {}),
   ...(draft.drafted ? { drafted: true as const } : {}),
+  ...(draft.outdated ? { outdated: draft.outdated } : {}),
 });
 
 /** The comments on a review collagen holds, for the page: the AI's drafts and
- *  the pending review here, and what has been said in the room. */
+ *  the pending review here, and what has been said in the room — each where
+ *  its code stands on the branch now (ReviewFollow). */
 export const talkView = Effect.fn("ReviewTalk.view")(function* (ticketId: string) {
   const found = yield* reviewNamed(ticketId);
   if (!found) return { drafts: [], pending: [], said: [] } satisfies TalkView;
   const mine = yield* draftsOf(ticketId);
-  const said = (yield* SubscriptionRef.get(found.room.comments)).filter((comment) => comment.ticketId === ticketId).map(asShown);
+  const said = (yield* SubscriptionRef.get(found.room.comments)).filter((comment) => comment.ticketId === ticketId);
+  // one on the host already stays as it went there
+  const { followed } = yield* followComments(found, [...mine.filter((draft) => !isPosted(draft)), ...said].map(toFollow));
+  const now = <T extends Spot & { readonly id: string; readonly commit: string }>(record: T) => placedAt(record, followed.get(record.id));
   // half said (on the host, not yet in the room) still reads as pending: finishing again completes it
-  return { drafts: mine.filter(isAi).map(asDraft), pending: mine.filter((draft) => isPending(draft) || isPosted(draft)).map(asDraft), said } satisfies TalkView;
+  return {
+    drafts: mine.filter(isAi).map((draft) => asDraft(now(draft))),
+    pending: mine.filter((draft) => isPending(draft) || isPosted(draft)).map((draft) => asDraft(now(draft))),
+    said: said.map((comment) => asShown(now(comment))),
+  } satisfies TalkView;
 });

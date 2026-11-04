@@ -72,9 +72,10 @@ Each AI conversation is told once, on its first call, to ask you to choose. Set 
 settings page (`s`) or ask your agent (`set-steering`); the status line shows the general
 level. A row not chosen follows the general level.
 
-Each level can also be set for **one room**: the settings page's second column, or
-`set-steering` with `room`. A room's own level wins there; where it has none, the room
-follows everywhere. A work room can ask first while your own side project just does it. Questions only ever come through your agent:
+Each level can also be set for **one room**: `s` in that room, or `set-steering` with
+`room`. A room's own level wins there; where it has none, the row says **Default** and the
+global setting beside it, which the room follows. Choosing a level in a room never changes
+the global one, and changing a global one leaves every room that chose its own as it is. A work room can ask first while your own side project just does it. Questions only ever come through your agent:
 the TUI and the review page never ask you anything. A colleague was once surprised to find
 their agent had implemented every change a review asked for without running it by them —
 autonomy is opted into, per person, per kind. The levels are kept on your machine.

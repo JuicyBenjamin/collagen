@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { excludedFromEpic, heldBy, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
@@ -13,10 +13,13 @@ import { BRANCH_STACK, EPIC_MARK, GLYPH, KIND_GLYPH, LEGEND, STACK } from "../..
 import { roomStackPlaces, type StackPlace } from "../../../../../lib/stack";
 import { atRest, epicProgress, marksLabel, progressShort, rowTitle, summarize, type TicketSummary } from "../../../../../lib/ticketSummary";
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
-import { identityAtom, membersAtom, reviewsAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
+import { identityAtom, jobsAtom, membersAtom, reviewsAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
+import { runningOn, runningShort, SPINNER } from "../../../../../lib/running";
 import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
 import { closedLine, endedMark, fitTabs, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
 import { openInvestigationPageAtom, openReviewPageAtom } from "../../../review/atoms";
+import { openBoardPageAtom } from "../../../board/atoms";
+import { roomAtom } from "../../../../atoms";
 
 /** Shared tickets — every ticket the room has that its author has not
  *  closed, whoever made it and whoever it is for — or, on a kind's tab, the
@@ -39,6 +42,7 @@ export function Tickets() {
   const members = AsyncResult.getOrElse(useAtomValue(membersAtom), () => [] as const);
   const trace = AsyncResult.getOrElse(useAtomValue(traceAtom), () => [] as const);
   const reviews = AsyncResult.getOrElse(useAtomValue(reviewsAtom), () => [] as const);
+  const jobs = AsyncResult.getOrElse(useAtomValue(jobsAtom), () => [] as const);
   // what a newer collagen wrote here that this build cannot read: a ticket
   // among them gets a row of its own, the rest a count — both say to update
   const unseen = AsyncResult.getOrElse(useAtomValue(unseenAtom), () => [] as const);
@@ -47,6 +51,8 @@ export function Tickets() {
   const { navigate } = useRouter();
   const openReviewPage = useAtomSet(openReviewPageAtom);
   const openInvestigationPage = useAtomSet(openInvestigationPageAtom);
+  const openBoardPage = useAtomSet(openBoardPageAtom);
+  const roomId = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" })).id;
   const [cursor, setCursor] = useState(0);
   // an epic shows its tickets until someone folds it, for this session
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
@@ -58,6 +64,20 @@ export function Tickets() {
   const setShowClosed = useAtomSet(showClosedAtom);
 
   const me = identity?.pubkey ?? "";
+  // a job running on a ticket, yours or one a peer shares: its row turns a
+  // spinner, and says how far it is — the frame only moves while one runs;
+  const anyRunning = jobs.some((view) => view.state === "running") || peers.some((peer) => (peer.running ?? []).length > 0);
+  const [frame, setFrame] = useState(0);
+  useEffect(() => {
+    if (!anyRunning) return;
+    const timer = setInterval(() => setFrame((at) => (at + 1) % SPINNER.length), 120);
+    return () => clearInterval(timer);
+  }, [anyRunning]);
+  // else an ask on it waiting on someone's hands: said, so it never looks like it waits on nothing
+  const runningText = (ticketId: string): string | null => {
+    const hands = peers.filter((peer) => (peer.awaiting ?? []).some((ask) => ask.ticketId === ticketId)).map((peer) => peer.name);
+    return runningShort(runningOn(ticketId, jobs, peers), SPINNER[frame]!) ?? (hands.length > 0 ? `awaiting ${hands.join(", ")} by hand` : null);
+  };
   const nameFor = (key: string): string =>
     key === me ? "you" : (peers.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8));
 
@@ -133,9 +153,9 @@ export function Tickets() {
     0,
     ...epics.flatMap((block) => [
       cells(progressShort(epicProgress(block.epic.ticket, byId))),
-      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket), places.get(row.ticket.id), row.ticket.preparing === true))) : []),
+      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket), places.get(row.ticket.id), row.ticket.preparing === true, runningText(row.ticket.id)))) : []),
     ]),
-    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined, places.get(row.ticket.id), row.ticket.preparing === true))))),
+    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined, places.get(row.ticket.id), row.ticket.preparing === true, runningText(row.ticket.id)))))),
     ...closedGroups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(closedInfo(row.ticket))))),
     ...[...groups, ...closedGroups].flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket)))))),
     ...epics.flatMap((block) => block.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket))))),
@@ -168,7 +188,7 @@ export function Tickets() {
     <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(nextTab) => (setTab(nextTab), setCursor(0))} />
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? " · o in browser" : ""} · ${LEGEND} · ? the rest`}
+      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? " · o in browser" : ""}${current?.ticket.kind === "epic" ? " · b its board in browser" : ""} · ${LEGEND} · ? the rest`}
       flexDirection="column"
       flexShrink={1}
       minHeight={0}
@@ -193,6 +213,8 @@ export function Tickets() {
         // straight from the list to the diff read by intent, in the browser
         if (key.name === "o" && current?.ticket.kind === "review") return openReviewPage({ ticketId: current.ticket.id }), true;
         if (key.name === "o" && current?.ticket.kind === "investigation") return openInvestigationPage({ ticketId: current.ticket.id }), true;
+        // an epic's board, in the browser: its tickets in to do, in progress and done
+        if (key.name === "b" && current?.ticket.kind === "epic" && roomId) return openBoardPage({ roomId, epic: current.ticket.id, kinds: [] }), true;
         // the closed ones, shown or not
         if (key.name === "h") return setShowClosed(!showClosed), true;
         // one key to what a ticket hangs from
@@ -231,6 +253,7 @@ export function Tickets() {
                 projects={projects.size > 1}
                 goalOf={nameOf}
                 places={places}
+                runningText={runningText}
                 related={(ticket) => related(ticket, true, block.grew.has(ticket.id))}
                 ghosts={(ticket) => ghosts(ticket, epicHere.get(block.epic.ticket.id)!)}
               />
@@ -259,6 +282,7 @@ export function Tickets() {
                           ticket={row.ticket}
                           summary={row.summary}
                           place={places.get(row.ticket.id)}
+                          running={runningText(row.ticket.id)}
                           selected={focused && on(row.ticket.id)}
                           nameFor={nameFor}
                           indent={indent}
@@ -298,6 +322,7 @@ export function Tickets() {
                           ticket={row.ticket}
                           summary={row.summary}
                           place={places.get(row.ticket.id)}
+                          running={runningText(row.ticket.id)}
                           selected={focused && on(row.ticket.id)}
                           nameFor={nameFor}
                           indent={indent}
@@ -402,6 +427,7 @@ function EpicView({
   related,
   ghosts,
   places,
+  runningText,
 }: {
   block: EpicBlock<Row>;
   open: boolean;
@@ -425,6 +451,8 @@ function EpicView({
   ghosts: (t: Ticket) => ReadonlyArray<Relative>;
   /** each stacked review's place in its stack */
   places: ReadonlyMap<string, StackPlace>;
+  /** a job running on a row's ticket, in a few cells */
+  runningText: (ticketId: string) => string | null;
 }) {
   const selected = selectedKey === block.epic.ticket.id;
   return (
@@ -457,6 +485,7 @@ function EpicView({
                   ticket={row.ticket}
                   summary={row.summary}
                   place={places.get(row.ticket.id)}
+                  running={runningText(row.ticket.id)}
                   selected={selectedKey === row.ticket.id}
                   nameFor={nameFor}
                   indent={indent}
@@ -520,6 +549,7 @@ const rowInfo = (
   excluded: boolean | undefined,
   place: StackPlace | undefined,
   preparing = false,
+  running: string | null = null,
 ): ReadonlyArray<Part> => {
   // waiting on the row it is drawn under says so in one word; waiting on one
   // elsewhere (another group, or a second of two) names it
@@ -527,6 +557,8 @@ const rowInfo = (
   const on = elsewhere.length > 0 ? clip(goalOf(elsewhere[0]!) ?? elsewhere[0]!.slice(0, 8), AFTER_MAX) : "";
   const people = marksLabel(summary);
   return [
+    // a job running on it: first, so it shows however narrow the column
+    ...(running ? [{ text: running }] : []),
     ...(place ? [{ text: `${BRANCH_STACK} ${place.at} of ${place.of}` }] : []),
     ...(excluded ? [{ text: "excluded" }] : []),
     // your own review in its guidance pass: only you see it, being made ready
@@ -667,6 +699,7 @@ function TicketRow({
   relationWidth,
   related = [],
   info,
+  running,
 }: {
   ticket: Ticket;
   summary: TicketSummary;
@@ -697,6 +730,8 @@ function TicketRow({
   related?: ReadonlyArray<Part>;
   /** the status in place of its own (a closed row's: how it ended) */
   info?: ReadonlyArray<Part>;
+  /** a job running on it, in a few cells */
+  running?: string | null;
 }) {
   const yours = summary.state === "needs-you";
   // waiting on another ticket: only its author sees the row, dim, saying on what
@@ -727,7 +762,7 @@ function TicketRow({
         {project ? <span fg={theme.dim}>{project} · </span> : null}
         {ticket.title ? ticket.title : <span fg={theme.dim}>{rowTitle(ticket)}</span>}
       </text>
-      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded, place, ticket.preparing === true)} width={infoWidth} />
+      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded, place, ticket.preparing === true, running ?? null)} width={infoWidth} />
       <Info parts={related} width={relationWidth} />
     </box>
   );

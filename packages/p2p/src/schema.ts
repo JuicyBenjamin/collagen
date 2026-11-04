@@ -31,6 +31,19 @@ export type AiStatus = typeof AiStatus.Type;
  *  many there are. `pnpm lint` checks it (scripts/check-protocol.mjs). */
 export const PROTOCOL_VERSION = "13";
 
+/** A job collagen runs for someone on a ticket of the room, as the sender
+ *  shares it while it runs: what kind, how far it says it is, since when.
+ *  Live in the profile only — never on the log. */
+export const RunningJob = Schema.Struct({
+  ticketId: Schema.String,
+  kind: Schema.String,
+  step: Schema.optional(Schema.Finite),
+  of: Schema.optional(Schema.Finite),
+  doing: Schema.optional(Schema.String),
+  since: Schema.Finite,
+});
+export type RunningJob = typeof RunningJob.Type;
+
 export const SharedProfile = Schema.Struct({
   name: Schema.String,
   /** PROTOCOL_VERSION of the sender. */
@@ -43,6 +56,13 @@ export const SharedProfile = Schema.Struct({
   /** Connected to this room but working in another one: present for
    *  messages, not counted as online, nothing auto-runs for them. */
   away: Schema.Boolean,
+  /** the jobs running for the sender on this room's tickets — what those
+   *  waiting on them see. Optional: an older build sends none and reads past it. */
+  running: Schema.optional(Schema.Array(RunningJob)),
+  /** what waits on the sender by hand, on this room's tickets: an ask their
+   *  steering left to them (a question about their review) — so the asker
+   *  sees it waits on a person, not on nothing */
+  awaiting: Schema.optional(Schema.Array(Schema.Struct({ ticketId: Schema.String, what: Schema.String }))),
 });
 export type SharedProfile = typeof SharedProfile.Type;
 
@@ -101,6 +121,11 @@ export const ReviewQuestion = Schema.Struct({
   lines: Schema.optional(QuestionLines),
   /** the commit the reader's page showed */
   commit: Schema.optional(Schema.String),
+  /** not one question but every why the review is missing: the author's
+   *  collagen finds the gaps and its AI fills each one on the review's why.
+   *  No protocol bump: only the asker writes a message, nobody rewrites it,
+   *  and an older author reads it as the plain question it also carries. */
+  whys: Schema.optional(Schema.Boolean),
 });
 export type ReviewQuestion = typeof ReviewQuestion.Type;
 
@@ -697,6 +722,8 @@ export const QueuedJob = Schema.Struct({
   id: Schema.String,
   kind: JobKind,
   ticketId: Schema.String,
+  /** the room's ticket it works on, when `ticketId` names the ask it answers instead (a question, a review request) */
+  onTicket: Schema.optional(Schema.String),
   title: Schema.String,
   harness: Schema.String,
   model: Schema.optional(Schema.String),
@@ -804,6 +831,8 @@ export const ReviewQuestionHeld = Schema.Struct({
   question: Schema.String,
   lines: Schema.optional(QuestionLines),
   commit: Schema.optional(Schema.String),
+  /** every missing why, not one question (ReviewQuestion.whys) */
+  whys: Schema.optional(Schema.Boolean),
   stage: Schema.Literals(["new", "waiting", "asking", "answering", "answered", "declined", "addressing"]),
   /** the conversations the work was found in, the one at the top first */
   conversations: Schema.optional(Schema.Array(Conversation)),
@@ -893,6 +922,11 @@ export const Settings = Schema.Struct({
   /** absent = on: a thin bar atop the review page fills as the reader scrolls */
   progressBar: Schema.optional(Schema.Boolean),
 });
+
+/** The Office assistants clippyjs draws: one can be the review page's ask-AI
+ *  chat — a gag, set only by an agent (set-settings assistant). */
+export const Assistant = Schema.Literals(["clippy", "bonzi", "f1", "genie", "genius", "links", "merlin", "peedy", "rocky", "rover"]);
+export type Assistant = typeof Assistant.Type;
 export type Settings = typeof Settings.Type;
 
 /** Whose approval collagen waits for before it merges the pull request of a
@@ -958,6 +992,8 @@ export const LocalState = Schema.Struct({
   /** collagen's own model runs, latest last (see OwnRun) */
   ownRuns: Schema.optional(Schema.Array(OwnRun)),
   settings: Schema.optional(Settings),
+  /** absent: the ask-AI chat is a plain pill; one of them: it is that assistant */
+  assistant: Schema.optional(Assistant),
   /** absent = never merged for them */
   merging: Schema.optional(Merging),
   /** absent = collagen's own, and none of the person's yet */

@@ -31,7 +31,7 @@ expect "its agent reads them back" "$(call $A "$SA" review-context "{\"ticketId\
 ORIGIN=${A%/mcp}
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn() { node "$E2E/sfn.mjs" "$ORIGIN/review/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn() { node "$E2E/sfn.mjs" "$ORIGIN/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 
 echo "## the page lists them"
 wait_until "the review's data is served" '"shows"' sfn reviewData "[\"$TICKET\"]"
@@ -39,5 +39,5 @@ DATA=$(sfn reviewData "[\"$TICKET\"]")
 expect "the page, marked as running on its author's machine" "$DATA" '"id":"s1","title":"Export page","url":"http://localhost:5173/export","local":true'
 expect "the staging page, not local" "$DATA" '"id":"s2","title":"On staging","url":"https://staging.example.com/export","local":false'
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $(page_of $A "$SA" "$TICKET")"; summary; exit; fi
 kill_all; summary

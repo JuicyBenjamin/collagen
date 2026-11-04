@@ -124,6 +124,25 @@ export interface TestCase {
 
 /** A test file of the diff: its tests that changed, its hunks in no test
  *  (imports, helpers, setup), and the decisions and forks pointing into it. */
+/** A job running on a ticket right now — the reader's own, or one a peer
+ *  shares while it runs: whose, what kind, how far it says it is. */
+export interface RunningJob {
+  /** "you", or the peer's name */
+  readonly who: string;
+  readonly kind: string;
+  readonly step?: number;
+  readonly of?: number;
+  readonly doing?: string;
+  readonly since: number;
+}
+
+/** What a ticket waits on now: the jobs running on it, and who it waits on
+ *  next and for what — "Awaiting alice: a review", or by hand. */
+export interface TicketNext {
+  readonly running: ReadonlyArray<RunningJob>;
+  readonly next: { readonly who: string; readonly what: string; readonly manual: boolean } | null;
+}
+
 export interface TestFile {
   readonly file: string;
   readonly tests: ReadonlyArray<TestCase>;
@@ -132,6 +151,52 @@ export interface TestFile {
   /** decision ids */
   readonly decisions: ReadonlyArray<string>;
   readonly forks: ReadonlyArray<Fork>;
+}
+
+/** A lockfile of the diff, read as the packages its change moves; its
+ *  lines one step away. `packages` is null for a format collagen does not
+ *  read, whose lines are all there is. */
+export interface LockFile {
+  readonly file: string;
+  readonly packages: ReadonlyArray<{ readonly name: string; readonly before: ReadonlyArray<string>; readonly after: ReadonlyArray<string> }> | null;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
+/** A file a tool wrote or a test recorded: what made it, how much moved;
+ *  its lines one step away. */
+export interface GeneratedFile {
+  readonly file: string;
+  /** what made it: "protoc", "a test snapshot", "a code generator" */
+  readonly by: string;
+  readonly added: number;
+  readonly removed: number;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
+/** One set of translation files — the same file in each language — read as
+ *  the keys its change moves, each language side by side; its lines one
+ *  step away. `keys` is null when a file of it cannot be read. */
+export interface TranslationSet {
+  /** its path, the language left out: "src/locales/*.json" */
+  readonly set: string;
+  /** every language it has, the changed ones and the rest */
+  readonly languages: ReadonlyArray<string>;
+  readonly keys: ReadonlyArray<{ readonly key: string; readonly texts: Readonly<Record<string, { readonly before?: string; readonly after?: string }>> }> | null;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
+}
+
+/** A migration of the diff, read as what it does to the schema; its lines
+ *  one step away. `changes` is null for a kind collagen does not read. */
+export interface MigrationFile {
+  readonly file: string;
+  readonly changes: ReadonlyArray<{ readonly action: string; readonly table: string; readonly target?: string; readonly detail?: string; readonly losesData: boolean }> | null;
+  /** it existed before the change and was edited: it may have run somewhere already */
+  readonly edited: boolean;
+  /** hunk ids */
+  readonly hunks: ReadonlyArray<string>;
 }
 
 export interface Grouped {
@@ -143,6 +208,14 @@ export interface Grouped {
   /** the diff's Storybook files, apart from the code and the tests: each
    *  story a case, by its name (a story's picture is not in a review) */
   readonly stories?: ReadonlyArray<TestFile>;
+  /** the diff's lockfiles, apart from the code: each read as the packages it moves */
+  readonly lockfiles?: ReadonlyArray<LockFile>;
+  /** the diff's generated files and snapshots, apart from the code: each one line, what made it */
+  readonly generated?: ReadonlyArray<GeneratedFile>;
+  /** the diff's translation files, apart from the code: each set as the keys it moves, every language side by side */
+  readonly translations?: ReadonlyArray<TranslationSet>;
+  /** the diff's migrations, apart from the code: each as what it does to the schema */
+  readonly migrations?: ReadonlyArray<MigrationFile>;
   readonly hunks: ReadonlyArray<Hunk>;
   /** per decision id, its pointers that matched no change: the code there
    *  did not move, or the why is older than the branch */
@@ -217,9 +290,14 @@ export interface YourReview {
   readonly comments?: number;
 }
 
+/** An Office assistant clippyjs draws, by its id. */
+export type AssistantId = "clippy" | "bonzi" | "f1" | "genie" | "genius" | "links" | "merlin" | "peedy" | "rocky" | "rover";
+
 /** The person's switches a page wears, as collagen keeps them. */
 export interface PageSettings {
   readonly progressBar: boolean;
+  /** the assistant the ask-AI chat is, and its name; null: the plain chat */
+  readonly assistant: { readonly id: AssistantId; readonly name: string } | null;
 }
 
 /** The review's own part of the page: its ticket, its why and its links,
@@ -433,9 +511,24 @@ export interface OnFile {
 /** Where a comment sits on the review's code: on lines, or on a whole file. */
 export type CommentSpot = OnLines | OnFile;
 
+/** A comment whose code changed since it was written: the branch moved, and
+ *  the lines it was on were edited, taken out, or left the change. It stays,
+ *  on its file, never moved onto other code — with where it was and those
+ *  lines as they were. */
+export interface Outdated {
+  /** where it was, in words: "line +120", "lines +12 to +15" */
+  readonly was: string;
+  /** what became of its lines */
+  readonly why: string;
+  /** its lines as they were when it was written; none when they cannot be read */
+  readonly quote: ReadonlyArray<string>;
+}
+
 /** A comment on the pull request's code: on a line, a block of lines, or a
  *  whole file (`CommentSpot`). */
 export type LineComment = CommentSpot & {
+  /** its code changed since it was written: it sits on its file */
+  readonly outdated?: Outdated;
   /** the host's id for it, or collagen's own for one said only in the room */
   readonly id: string;
   readonly author: HostUser;
@@ -481,8 +574,10 @@ export interface HostNote {
  *  or pending in their review — said with the rest when they finish it. */
 export type DraftView = CommentSpot & {
   readonly id: string;
-  /** the commit it was written at — its lines are that commit's */
+  /** the commit its lines are of: the branch's now, once followed there */
   readonly commit: string;
+  /** its code changed since it was written: it sits on its file, to keep there, move or delete */
+  readonly outdated?: Outdated;
   readonly body: string;
   /** the AI's longer version, one step away from the words shown */
   readonly detail?: string;
@@ -947,3 +1042,50 @@ export interface ChatEarlier {
 
 /** What asking said: under way, or refused in words. */
 export type ChatAsked = { readonly ok: true } | { readonly error: string };
+
+/** A kind a board's tickets can be filtered to. */
+export type BoardKind = "investigation" | "proposal" | "bug" | "plan" | "task" | "review";
+
+/** A ticket on the board: what it is and whose, and whether it is the
+ *  reader's to act on now. */
+export interface BoardCard {
+  readonly id: string;
+  readonly kind: BoardKind | "epic";
+  /** the kind's glyph, as the terminal draws it */
+  readonly glyph: string;
+  readonly title: string;
+  /** the line beneath the title */
+  readonly goal: string;
+  /** whose it is: "you", or the author's name */
+  readonly author: string;
+  readonly mine: boolean;
+  /** a step of the reader's is up, or it is theirs to close */
+  readonly yours: boolean;
+  /** closed as dropped */
+  readonly dropped: boolean;
+}
+
+/** boardData(roomId) — a room's tickets in to do, in progress and done, as
+ *  the terminal's board has them; null for a room this instance is not in. */
+export interface BoardData {
+  readonly room: string;
+  /** the epics it can be read through, those with open tickets, the most open first */
+  readonly epics: ReadonlyArray<{ readonly id: string; readonly title: string; readonly open: number }>;
+  /** the epic it is read through now; null: everything */
+  readonly epic: string | null;
+  /** the kinds it can be filtered to, in the lists' order: those on the
+   *  board without a filter, and any chosen; each with how many it shows */
+  readonly kinds: ReadonlyArray<{ readonly kind: BoardKind; readonly glyph: string; readonly label: string; readonly count: number }>;
+  /** the kinds it is filtered to now; empty: every kind */
+  readonly chosen: ReadonlyArray<BoardKind>;
+  readonly lanes: ReadonlyArray<{
+    readonly column: "todo" | "doing" | "done";
+    readonly label: string;
+    /** each a line of work — what grew from what — the latest first */
+    readonly stacks: ReadonlyArray<ReadonlyArray<BoardCard>>;
+    /** done tickets left off, finished before the recent ones */
+    readonly older: number;
+  }>;
+  /** tickets a newer collagen wrote that this build cannot place, said in a line */
+  readonly unread: string | null;
+}

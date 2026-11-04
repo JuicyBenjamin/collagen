@@ -2,16 +2,20 @@ import { existsSync, readFileSync } from "node:fs";
 import { extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Layer, SubscriptionRef } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
-import { closedAs, isClosed, noteNow, roomProjects, visibleTo, type NoteTurn, type ReviewComment, type ReviewContext, type SteeringNote, type Ticket } from "@collagen/p2p";
+import { HttpRouter, HttpServerResponse, type HttpServerRequest } from "effect/http";
+import { closedAs, isClosed, noteNow, roomProjects, shortRoomId, visibleTo, type NoteTurn, type ReviewComment, type ReviewContext, type SteeringNote, type Ticket } from "@collagen/p2p";
 import { defaultBranchOf, gitDir, repoWebUrl } from "../lib/gitInfo";
 import { firstRef, run } from "../lib/gitRun";
 import type { HostView, HostWrite, ReviewPageData, ReviewPageHead, SinceResult, Verdict, WholeFileResult, YourReview } from "@collagen/review-web/data";
 import { parseDiff } from "../lib/reviewView";
+import { boardPath, TICKET_SHORT } from "../lib/pageAddress";
 import { yourFinish } from "../lib/review";
 import { importsAmong } from "../lib/imports";
 import { groupByUnit, uncovered, type Imports } from "../lib/units";
 import { isStory, isTest } from "../lib/tests";
+import { isLockfile } from "../lib/lockfiles";
+import { isTranslation, languageOf } from "../lib/translations";
+import { isMigration } from "../lib/migrations";
 import { roomEdges, stackOf, type Edge } from "../lib/stack";
 import { IdentityService } from "./Identity";
 import { hostOf, type HostPull, type RepoHost } from "./RepoHost";
@@ -287,7 +291,7 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
     if (!ticket) continue;
     const review = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
     if (!review) return null;
-    const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ room: handle.room, ticket })) : null;
+    const stack = review.branch ? stackOf(review.branch, review.base ?? "main", yield* reviewEdges({ roomId: handle.id, room: handle.room, ticket })) : null;
     // where it runs comes with the head: its section stands from the first paint
     const shows = shownShows(review.shows, review.author === me);
     const head = headOf(ticket, review, me, yield* saidBy(handle.room, ticketId, me), yield* noteTitles(handle.room));
@@ -295,6 +299,26 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
   }
   return null;
 });
+
+/** A file as a commit has it, from the clone at `path`; null when it is not
+ *  there. Kept once read: a commit never changes, so a review read again
+ *  (each comment said moves the page) reads none of its files twice. */
+const KEPT_FILES = 6_000;
+const kept = new Map<string, string | null>();
+export const showAt = (path: string, commit: string, file: string) => {
+  const key = `${path}\0${commit}:${file}`;
+  if (kept.has(key)) return Effect.succeed(kept.get(key)!);
+  return run("git", ["show", `${commit}:${file}`], path, 5_000).pipe(
+    Effect.tap((text) =>
+      Effect.sync(() => {
+        if (kept.size >= KEPT_FILES) kept.delete(kept.keys().next().value!);
+        kept.set(key, text);
+      }),
+    ),
+  );
+};
+/** Files read at once: one git apiece, a few at a time, not one after another. */
+const AT_ONCE = 12;
 
 export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: string) {
   const rooms = yield* Rooms;
@@ -316,15 +340,29 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const hunks = diff === null ? [] : parseDiff(diff);
     let imports: Imports = new Map();
     const tests = new Map<string, { after: ReadonlyArray<string> | null; before: ReadonlyArray<string> | null }>();
+    const unchangedTranslations: Array<string> = [];
     if (project && commit && hunks.length > 0) {
       const files = [...new Set(hunks.map((hunk) => hunk.file))];
-      const texts = new Map<string, string | null>();
-      for (const file of files) texts.set(file, yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
+      const texts = new Map(yield* Effect.forEach(files, (file) => showAt(project.path, commit, file).pipe(Effect.map((text) => [file, text] as const)), { concurrency: AT_ONCE }));
       imports = importsAmong(files, (file) => texts.get(file) ?? null);
       const lines = (text: string | null | undefined) => (text == null || text.includes("\0") ? null : text.replace(/\n$/, "").split("\n"));
-      for (const file of files.filter((file) => isTest(file) || isStory(file))) {
-        const before = forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
-        tests.set(file, { after: lines(texts.get(file)), before: forked ? (lines(before) ?? []) : null });
+      // both ends of a test, story or lockfile, to read what changed in it; the rest only as it is now (what made it)
+      const both = (file: string) => isTest(file) || isStory(file) || isLockfile(file) || isTranslation(file) || isMigration(file);
+      const befores = new Map(
+        yield* Effect.forEach(files.filter((file) => both(file) && forked), (file) => showAt(project.path, forked!, file).pipe(Effect.map((text) => [file, text] as const)), { concurrency: AT_ONCE }),
+      );
+      for (const file of files) tests.set(file, { after: lines(texts.get(file)), before: both(file) && forked ? (lines(befores.get(file)) ?? []) : null });
+      // the languages of a translation set the change leaves as they are, read as they are: what did not keep up shows
+      const sets = new Set(files.filter(isTranslation).map((file) => languageOf(file).set));
+      if (sets.size > 0) {
+        const tree = (yield* run("git", ["ls-tree", "-r", "--name-only", commit], project.path, 5_000)) ?? "";
+        const unchanged = tree.split("\n").filter((file) => isTranslation(file) && !files.includes(file) && sets.has(languageOf(file).set));
+        const read = yield* Effect.forEach(unchanged, (file) => showAt(project.path, commit, file), { concurrency: AT_ONCE });
+        unchanged.forEach((file, index) => {
+          const text = lines(read[index]);
+          tests.set(file, { after: text, before: text });
+          unchangedTranslations.push(file);
+        });
       }
     }
     const me = (yield* IdentityService).identity.pubkey;
@@ -335,7 +373,7 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
       review: { ...head.review, ...(shows ? { shows } : {}) },
       source,
       ...(source.kind === "clone" && commit ? { commit } : {}),
-      grouped: diff === null ? null : groupByUnit(review, hunks, imports, (file) => tests.get(file) ?? { after: null, before: null }),
+      grouped: diff === null ? null : groupByUnit(review, hunks, imports, (file) => tests.get(file) ?? { after: null, before: null }, unchangedTranslations),
     } satisfies ReviewPageData;
   }
   return null;
@@ -383,10 +421,10 @@ const shown = ({ branch: _branch, base: _base, merged: _merged, ...pull }: HostP
 /** The room's own open reviews of the same project as stack edges: each
  *  names its branch and the base it builds on — only those the reader may
  *  see (a review waiting on another is its author's alone until then). */
-const reviewEdges = (found: { readonly room: { readonly tickets: SubscriptionRef.SubscriptionRef<ReadonlyMap<string, Ticket>>; readonly reviews: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewContext>> }; readonly ticket: Ticket }) =>
+const reviewEdges = (found: { readonly roomId: string; readonly room: { readonly tickets: SubscriptionRef.SubscriptionRef<ReadonlyMap<string, Ticket>>; readonly reviews: SubscriptionRef.SubscriptionRef<ReadonlyArray<ReviewContext>> }; readonly ticket: Ticket }) =>
   Effect.gen(function* () {
     const { identity } = yield* IdentityService;
-    return roomEdges(yield* SubscriptionRef.get(found.room.tickets), yield* SubscriptionRef.get(found.room.reviews), identity.pubkey, found.ticket.project);
+    return roomEdges(yield* SubscriptionRef.get(found.room.tickets), yield* SubscriptionRef.get(found.room.reviews), identity.pubkey, found.ticket.project, found.roomId);
   });
 
 /** The review on its host, for the page: who is signed in, its pull request
@@ -456,71 +494,122 @@ const TYPES: Record<string, string> = {
   ".map": "application/json",
 };
 
+/** Where a page is, as the server found it: written into the document, so
+ *  the page draws what it is at once (review-web place.ts) — a ticket's
+ *  page by the ticket's kind, with no read first. */
+type Place =
+  | { readonly page: "review" | "investigation" | "ticket"; readonly kind: string; readonly room: string; readonly roomShort: string; readonly ticket: string }
+  | { readonly page: "audit" | "board"; readonly room: string; readonly roomShort: string }
+  | { readonly page: "merges"; readonly room: string; readonly roomShort: string; readonly project: string | null };
+
+/** The one document every page is, with its place in it. */
+const pageAt = (place: Place) => {
+  const root = webRoot();
+  if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
+  const said = JSON.stringify(place).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8").replace("</head>", `<meta name="collagen-place" content="${said}">\n</head>`));
+};
+
+/** One of the person's rooms, by its short id. */
+const roomByShort = (short: string | undefined) =>
+  Effect.gen(function* () {
+    const rooms = yield* Rooms;
+    return short === undefined ? undefined : (yield* SubscriptionRef.get(rooms.handles)).find((handle) => shortRoomId(handle.id) === short);
+  });
+
+/** A page only for this machine: refused from anywhere else. */
+const local = <E, R>(handler: (request: HttpServerRequest.HttpServerRequest) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) => (request: HttpServerRequest.HttpServerRequest) =>
+  localHost(request.headers["host"]) ? handler(request) : Effect.succeed(HttpServerResponse.text("forbidden", { status: 403 }));
+
+const SHORT_ID = /^[0-9a-f]{8}$/;
+
 export const ReviewRoutes = Layer.mergeAll(
-  // the page: one document for every ticket; it reads its id from the url
-  HttpRouter.add("GET", "/review/:ticketId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      if (!ticketIdOk(ticketId)) return notFound("no ticket");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // a ticket's page, whatever its kind: the review page, the investigation
+  // page, or — a kind with no page yet — the page saying so
+  HttpRouter.add(
+    "GET",
+    "/room/:room/ticket/:ticket",
+    local(() =>
+      Effect.gen(function* () {
+        const { room, ticket } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        if (!handle || !ticket || !ticketIdOk(ticket) || ticket.length < TICKET_SHORT) return notFound("no such ticket in your rooms");
+        const found = [...(yield* SubscriptionRef.get(handle.room.tickets)).values()].filter((each) => each.id.startsWith(ticket));
+        if (found.length !== 1) return notFound(found.length === 0 ? "no such ticket in this room" : "more than one ticket starts so: use more of its id");
+        const kind = found[0]!.kind;
+        return pageAt({ page: kind === "review" || kind === "investigation" ? kind : "ticket", kind, room: handle.id, roomShort: room!, ticket: found[0]!.id });
+      }),
+    ),
   ),
-  // an investigation: the same document, for one investigation ticket
-  HttpRouter.add("GET", "/investigation/:ticketId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { ticketId } = yield* HttpRouter.params;
-      if (!ticketIdOk(ticketId)) return notFound("no ticket");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // a room's audit
+  HttpRouter.add(
+    "GET",
+    "/room/:room/audit",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        return handle ? pageAt({ page: "audit", room: handle.id, roomShort: room! }) : notFound("no such room");
+      }),
+    ),
   ),
-  // a room's audit: the same document
-  HttpRouter.add("GET", "/audit/:roomId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { roomId } = yield* HttpRouter.params;
-      if (!ticketIdOk(roomId)) return notFound("no room");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // a room's merges, which go on to a project's, and a project's
+  HttpRouter.add(
+    "GET",
+    "/room/:room/merges",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        return handle ? pageAt({ page: "merges", room: handle.id, roomShort: room!, project: null }) : notFound("no such room");
+      }),
+    ),
   ),
-  // a project's merges: the same document, for one of a room's projects
-  HttpRouter.add("GET", "/merges/:roomId/:project", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { roomId, project } = yield* HttpRouter.params;
-      if (!ticketIdOk(roomId) || !projectNameOk(project)) return notFound("no project");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  HttpRouter.add(
+    "GET",
+    "/room/:room/merges/:project",
+    local(() =>
+      Effect.gen(function* () {
+        const { room, project } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        if (!handle || !projectNameOk(project)) return notFound("no such project");
+        return pageAt({ page: "merges", room: handle.id, roomShort: room!, project });
+      }),
+    ),
   ),
-  // a room's merges: the same document, which goes on to a project's
-  HttpRouter.add("GET", "/merges/:roomId", (request) =>
-    Effect.gen(function* () {
-      if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
-      const { roomId } = yield* HttpRouter.params;
-      if (!ticketIdOk(roomId)) return notFound("no room");
-      const root = webRoot();
-      if (!root) return HttpServerResponse.text(NOT_BUILT, { status: 503 });
-      return HttpServerResponse.html(readFileSync(join(root, "index.html"), "utf8"));
-    }),
+  // a room's board: its tickets in to do, in progress and done (services/BoardView)
+  HttpRouter.add(
+    "GET",
+    "/room/:room/board",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = yield* roomByShort(room);
+        return handle ? pageAt({ page: "board", room: handle.id, roomShort: room! }) : notFound("no such room");
+      }),
+    ),
+  ),
+  // the room itself: its board
+  HttpRouter.add(
+    "GET",
+    "/room/:room",
+    local(() =>
+      Effect.gen(function* () {
+        const { room } = yield* HttpRouter.params;
+        const handle = room && SHORT_ID.test(room) ? yield* roomByShort(room) : undefined;
+        return handle ? HttpServerResponse.redirect(boardPath(handle.id)) : notFound("no such room");
+      }),
+    ),
   ),
   // its hashed assets, by bare file name only — nothing outside the bundle
-  HttpRouter.add("GET", "/review/assets/:file", (request) =>
+  HttpRouter.add("GET", "/_build/assets/:file", (request) =>
     Effect.gen(function* () {
       if (!localHost(request.headers["host"])) return HttpServerResponse.text("forbidden", { status: 403 });
       const { file } = yield* HttpRouter.params;
       const root = webRoot();
       const type = file ? TYPES[extname(file)] : undefined;
       if (!root || !file || !/^[\w.-]+$/.test(file) || !type) return notFound("no such asset");
-      const path = join(root, "assets", file);
+      const path = join(root, "_build", "assets", file);
       if (!existsSync(path)) return notFound("no such asset");
       return HttpServerResponse.uint8Array(readFileSync(path), { contentType: type, headers: { "cache-control": "public, max-age=31536000, immutable" } });
     }),

@@ -1,5 +1,5 @@
 import { GET } from "@solidjs/web/server-functions";
-import type { ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
+import type { AssistantId, BoardData, BoardKind, ChatAsked, ChatSelection, CommentSpot, MergeFor, MergeView, DefinitionResult, DraftsResult, Finish, HostView, HostWrite, HoverResult, MergeHistory, MergeProjects, ReviewPageData, ReviewPageHead, SinceResult, Parents, SubmitResult, TalkView, TicketRef, ToolId, ToolState, Verdict, WholeFileResult } from "./data";
 import type { Mark, Marks } from "./marks";
 import type { PageThemes } from "./themeData";
 import { run, stream } from "./server/backend";
@@ -14,6 +14,12 @@ import { run, stream } from "./server/backend";
 export const reviewHead = GET(async (ticketId: string): Promise<ReviewPageHead | null> => {
   "use server";
   return run((backend) => backend.head(ticketId));
+});
+
+/** A room's board, by its short id: its tickets in to do, in progress and done. */
+export const boardData = GET(async (roomShort: string, epic: string | null, allDone: boolean, kinds: ReadonlyArray<BoardKind>): Promise<BoardData | null> => {
+  "use server";
+  return run((backend) => backend.board(roomShort, epic, allDone, kinds));
 });
 
 export const reviewData = GET(async (ticketId: string): Promise<ReviewPageData | null> => {
@@ -128,11 +134,11 @@ export const dropDrafts = async (ticketId: string, ids: ReadonlyArray<string> | 
   return run((backend) => backend.drop(ticketId, ids, kind));
 };
 
-/** Confirm where a comment not said yet sits, at the commit the page shows
- *  now — after the branch moved under it. */
-export const repinDraft = async (ticketId: string, id: string, commit: string): Promise<DraftsResult> => {
+/** Keep a comment not said yet where its code stands now — one whose code
+ *  changed, on its file. */
+export const keepDraft = async (ticketId: string, id: string): Promise<DraftsResult> => {
   "use server";
-  return run((backend) => backend.repin(ticketId, id, commit));
+  return run((backend) => backend.keep(ticketId, id));
 };
 
 /** The merges page's read: one of a room's projects, `shown` of its
@@ -143,7 +149,7 @@ export const mergeHistory = GET(async (roomId: string, project: string, shown: n
   return run((backend) => backend.merges(roomId, project, shown, fresh));
 });
 
-/** A room's projects held here, in the reader's order: where /merges/<roomId> goes. */
+/** A room's projects held here, in the reader's order: where /room/<room>/merges goes. */
 export const mergeProjects = GET(async (roomId: string): Promise<MergeProjects | null> => {
   "use server";
   return run((backend) => backend.mergeProjects(roomId));
@@ -193,6 +199,14 @@ export const setMerge = async (ticketId: string, level: MergeFor | null): Promis
 export const setViewed = async (ticketId: string, file: string, mark: Mark | null): Promise<Marks> => {
   "use server";
   return run((backend) => backend.setViewed(ticketId, file, mark));
+};
+
+/** Make the ask-AI chat another Office assistant, or (null) the plain chat
+ *  again — as the person's agent does (set-settings assistant). Every open
+ *  page follows over its settings. */
+export const setAssistant = async (assistant: AssistantId | null): Promise<void> => {
+  "use server";
+  return run((backend) => backend.setAssistant(assistant));
 };
 
 /** Keep the page's themes in collagen — where the person's agent can choose

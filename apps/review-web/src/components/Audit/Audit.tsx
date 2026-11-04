@@ -1,4 +1,6 @@
 import { createEffect, createMemo, createSignal, Errored, For } from "solid-js";
+import { Corner } from "~/components/Corner";
+import { place } from "~/place";
 import { lasting } from "~/lasting";
 import { overSocket } from "~/liveSocket";
 import { Arrives } from "~/components/Arrives";
@@ -23,16 +25,8 @@ import { Tokens } from "./components/Tokens";
 // TanStack Charts. Live over the page's socket: the instance sends the page
 // again as the logs, the room's tickets or the person's steering move.
 
-/** /audit/<roomId> — the page's one argument; null on any other page. */
-export const auditPlace: string | null = (() => {
-  const [first, id] = location.pathname.split("/").filter(Boolean);
-  if (first !== "audit") return null;
-  try {
-    return decodeURIComponent(id ?? "");
-  } catch {
-    return "";
-  }
-})();
+/** The room whose audit this is; null on any other page. */
+export const auditPlace: string | null = place?.page === "audit" ? place.room : null;
 
 const PERIODS = [7, 30, 90] as const;
 
@@ -67,6 +61,7 @@ export function Audit(props: { roomId: string }) {
             )}
           </For>
         </div>
+        <Corner />
       </header>
       <Errored
         fallback={(error) => (

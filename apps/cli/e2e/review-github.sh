@@ -39,8 +39,8 @@ ask "{\"title\":\"Export docs\",\"project\":\"sandbox\",\"branch\":\"feat/docs\"
 ORIGIN=${A%/mcp}
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
 sfn_id() { grep -oE "registerServerReference\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/'; }
-sfn() { node "$E2E/sfn.mjs" "$ORIGIN/review/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
-post() { node "$E2E/sfn.mjs" post "$ORIGIN/review/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
+sfn() { node "$E2E/sfn.mjs" "$ORIGIN/_server/data/$(sfn_id "$1")?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+post() { node "$E2E/sfn.mjs" post "$ORIGIN/_server/$(sfn_id "$1")" "$2" ${3:+"$3"}; }
 # where a comment sits, as the page sends it: a file, a line and a side, and where a block starts
 # (built here: a {…} written inside "$(…)" is brace-expanded by macOS's bash 3.2)
 at() { printf '{"file":"%s","line":%s,"side":"%s"%s}' "$1" "$2" "$3" "${4:+,\"startLine\":$4,\"startSide\":\"$3\"}"; }
@@ -169,16 +169,16 @@ post addToReview "[\"$TICKET\",$(at src/page.ts 1 RIGHT),\"second thoughts\",\"$
 expect "discarding the review drops what is pending in it" "$(post dropDrafts "[\"$TICKET\",null,\"pending\"]")" "^1$"
 expect "…nothing left" "$(talk "$TICKET")" '^\{"drafts":\[\],"pending":\[\]'
 
-echo "## a comment written at another commit waits on the reader before it is said"
+echo "## a comment whose code cannot be followed waits on the reader before it is said"
 OLD=0123456789abcdef0123456789abcdef01234567
 post addToReview "[\"$TICKET\",$(at src/export.ts 2 RIGHT),\"from before\",\"$OLD\"]" > /dev/null
 N=$(calls | wc -l)
-expect "finishing at the commit the page shows refuses it, saying why" "$(submit "$TICKET" comment "" "\"$SHOWN\"")" '"error":"1 comment\(s\) in your review were written on another commit than the one the page shows'
+expect "finishing at the commit the page shows refuses it, saying why" "$(submit "$TICKET" comment "" "\"$SHOWN\"")" '"error":"1 comment\(s\) in your review are on code that changed since they were written: keep each on its file, move it to other lines, or delete it'
 expect "…nothing posted" "$(calls | sed -n "$((N + 1)),\$p" | grep -c POST)" "^0$"
 TALK=$(talk "$TICKET")
-expect "…still pending, saying where it was written" "$TALK" "\"pending\":\[\{\"id\":\"[0-9a-f-]+\",\"commit\":\"$OLD\""
+expect "…still pending, on its file, outdated: where it was and why" "$TALK" "\"pending\":\[\{\"id\":\"[0-9a-f-]+\",\"commit\":\"$SHOWN\",\"subject\":\"file\",\"file\":\"src/export.ts\",\"body\":\"from before\",\"outdated\":\{\"was\":\"line \+2\",\"why\":\"the commit it was written on is no longer in your clone\",\"quote\":\[\]\}"
 MID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["pending"][0]["id"])' <<< "$TALK")
-expect "the reader confirms where it sits" "$(post repinDraft "[\"$TICKET\",\"$MID\",\"$SHOWN\"]")" '^\{"done":1,"failed":\[\]\}$'
+expect "the reader keeps it on its file" "$(post keepDraft "[\"$TICKET\",\"$MID\"]")" '^\{"done":1,"failed":\[\]\}$'
 
 echo "## two tabs finish the same review at once: it is said once"
 REVIEWS() { calls | grep -c '"POST","repos/acme/sandbox/pulls/7/reviews"'; }
@@ -339,5 +339,5 @@ expect "…GitHub never asked to post" "$(calls | sed -n "$((N + 1)),\$p" | grep
 expect "a comment typed on its page is said in the room too" "$(post sendComment "[\"$BARE\",$(at src/export.ts 1 RIGHT),\"typed here\",\"$SHOWN\",null]")" '"ok":true,"comment":\{"id":"[0-9a-f-]+","author":\{"login":"alice"\},"body":"typed here"'
 expect "…and read back on the page" "$(talk "$BARE")" '"body":"room only".*"body":"typed here"'
 
-if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $ORIGIN/review/$TICKET"; summary; exit; fi
+if [ "${KEEP:-0}" = "1" ]; then echo "KEEP: $(page_of $A "$SA" "$TICKET")"; summary; exit; fi
 kill_all; summary

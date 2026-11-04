@@ -4,6 +4,7 @@ import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTa
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { answeredInvestigations, findingsText, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
+import type { RoomState } from "../lib/roomHealth";
 import { AgentRunner } from "./AgentRunner";
 import { Jobs } from "./Jobs";
 import { levelOf } from "../lib/steering";
@@ -70,6 +71,23 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     const handles = yield* SubscriptionRef.make<ReadonlyArray<RoomHandle>>([]);
     const scopes = new Map<string, Scope.Closeable>();
 
+    /** The jobs running for this person on a room's tickets, as the room is
+     *  told them: never a guidance pass, nor a ticket still being prepared —
+     *  both are the author's alone. */
+    const runningIn = (roomId: string) =>
+      Effect.gen(function* () {
+        const handle = (yield* SubscriptionRef.get(handles)).find((live) => live.id === roomId);
+        const tickets = handle ? yield* SubscriptionRef.get(handle.room.tickets) : new Map<string, Ticket>();
+        return (yield* SubscriptionRef.get(jobs.views))
+          .filter((view) => view.state === "running" && view.roomId === roomId && view.kind !== "guidance" && tickets.has(view.onTicket ?? view.ticketId) && tickets.get(view.onTicket ?? view.ticketId)?.preparing !== true)
+          .map((view) => ({
+            ticketId: view.onTicket ?? view.ticketId,
+            kind: view.kind,
+            since: view.startedAt ?? view.queuedAt,
+            ...(view.progress ? { step: view.progress.step, doing: view.progress.doing, ...(view.progress.of !== undefined ? { of: view.progress.of } : {}) } : {}),
+          }));
+      });
+
     const profileFor = (roomId: string) =>
       Effect.gen(function* () {
         const state = yield* store.get;
@@ -80,6 +98,10 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           protocol: PROTOCOL_VERSION,
           projects: roomProjects(state, roomId).map((project) => ({ name: project.name, path: project.path })),
           away: (yield* SubscriptionRef.get(focused)) !== roomId,
+          running: yield* runningIn(roomId),
+          awaiting: ((yield* store.get).reviewQuestions ?? [])
+            .filter((held) => held.roomId === roomId && held.from !== identity.pubkey && (held.stage === "waiting" || held.stage === "asking"))
+            .map((held) => ({ ticketId: held.ticketId, what: held.whys ? "the missing whys" : "a question about it" })),
         };
       });
 
@@ -584,6 +606,42 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       return out;
     });
 
+    /** How one room's connection stands now (lib/roomHealth): who is here
+     *  and who away, who waits to be let in, the log, the swarm. Null for a
+     *  room we are not in. */
+    const connectionOf = (id: string) =>
+      Effect.gen(function* () {
+        const handle = (yield* SubscriptionRef.get(handles)).find((live) => live.id === id);
+        if (!handle) return null;
+        const room = handle.room;
+        const peers = yield* SubscriptionRef.get(room.roster);
+        const known = yield* SubscriptionRef.get(room.members);
+        const rules = yield* SubscriptionRef.get(room.acl);
+        const said = yield* room.connection;
+        const nameOf = (key: string) => known.find((member) => member.key === key)?.name ?? peers.find((peer) => peer.key === key)?.name ?? key.slice(0, 8);
+        const here = new Set(peers.map((peer) => peer.key));
+        const state: RoomState = {
+          now: yield* Clock.currentTimeMillis,
+          net: NET,
+          protocol: PROTOCOL_VERSION,
+          firewalled: said.swarm.firewalled,
+          logOpen: said.logOpen,
+          writable: yield* SubscriptionRef.get(room.writable),
+          awaiting: (yield* SubscriptionRef.get(room.awaiting)) !== null,
+          refusal: yield* SubscriptionRef.get(room.refusal),
+          here: peers.map((peer) => ({ name: peer.name, protocol: peer.protocol })),
+          away: known.filter((member) => member.key !== identity.pubkey && !here.has(member.key) && !rules.removed.has(member.key)).map((member) => member.name),
+          strangers: said.strangers.map((stranger) => stranger.name || stranger.key.slice(0, 8)),
+          otherProtocol: [...said.swarm.otherProtocol].map(([key, protocol]) => ({ key: key.slice(0, 8), protocol })),
+          waiting: [...rules.waiting.values()].map((waiter) => ({ name: waiter.name, at: waiter.at })),
+          declined: [...rules.declined].map(([key, turned]) => ({ name: nameOf(key), ...(turned.reason ? { reason: turned.reason } : {}) })),
+          admitFailed: said.admitFailed.map((failure) => ({ name: nameOf(failure.key), why: failure.why, at: failure.at })),
+          open: said.swarm.open,
+          connecting: said.swarm.connecting,
+        };
+        return state;
+      });
+
     /** `summaries`, live: re-evaluated whenever a room opens, focus moves, a
      *  message lands or is picked up, or any room's roster/name changes. */
     const pulse = <A>(stream: Stream.Stream<A>): Stream.Stream<void> => Stream.map(stream, () => undefined);
@@ -617,7 +675,13 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     // Our presence and profile in every room follow the shared state.
     const tick = <A>(stream: Stream.Stream<A>) => stream.pipe(Stream.drop(1), Stream.map(() => undefined));
     yield* Stream.mergeAll(
-      [tick(SubscriptionRef.changes(store.state)), tick(SubscriptionRef.changes(aiStatus.current)), tick(SubscriptionRef.changes(nameRef))],
+      [
+        tick(SubscriptionRef.changes(store.state)),
+        tick(SubscriptionRef.changes(aiStatus.current)),
+        tick(SubscriptionRef.changes(nameRef)),
+        // a job starting, saying how far it is, or ending: those waiting on it see it
+        tick(SubscriptionRef.changes(jobs.views).pipe(Stream.map((views) => JSON.stringify(views.filter((view) => view.state === "running").map((view) => [view.id, view.progress?.step, view.progress?.doing]))), Stream.changes)),
+      ],
       { concurrency: "unbounded" },
     ).pipe(
       Stream.tap(() => broadcastAll),
@@ -625,7 +689,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
       Effect.forkScoped,
     );
 
-    return { handles, focused, current, setFocus, join, leave, summaries, summaryChanges, watch } as const;
+    return { handles, focused, current, setFocus, join, leave, summaries, summaryChanges, watch, connectionOf } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);

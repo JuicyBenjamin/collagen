@@ -6,9 +6,11 @@ import { App } from "./App";
 import { MergesApp, mergesPlace, MergesRoom } from "./Merges";
 import { Investigation, investigationPlace } from "./components/Investigation";
 import { Audit, auditPlace } from "./components/Audit";
+import { BoardApp, boardPlace } from "./components/Board";
 import { startHandoff } from "./handoff";
 import { settingsNow } from "./settingsNow";
 import { themeNow } from "./themeNow";
+import { place } from "./place";
 import "./themes.css";
 import "./styles.css";
 
@@ -26,22 +28,29 @@ document.head.append(theme);
 // every page wears the theme chosen, and follows it as it changes
 themeNow.start();
 
-// one document for every page: /review/<ticketId>, /investigation/<ticketId>, /audit/<roomId>,
-// /merges/<roomId>/<project>, and a room's /merges/<roomId>, which goes on
-// to a project's
+// one document for every page, under its room: /room/<room>/ticket/<ticket>
+// (the review or the investigation page, by the ticket's kind), /room/<room>/audit,
+// /room/<room>/merges/<project>, the room's /room/<room>/merges, which goes on
+// to a project's, and its board, /room/<room>/board — what it is, collagen
+// wrote into it (place.ts)
 const merges = mergesPlace;
 const investigation = investigationPlace;
 const audit = auditPlace;
-if (merges === null && investigation === null && audit === null) {
+const board = boardPlace;
+if (merges === null && investigation === null && audit === null && board === null) {
   startHandoff();
   settingsNow.start();
 }
 render(
   () =>
-    investigation !== null ? (
+    place?.page === "ticket" ? (
+      <p class="failed">A {place.kind} has no page yet.</p>
+    ) : investigation !== null ? (
       <Investigation ticketId={investigation} />
     ) : audit !== null ? (
       <Audit roomId={audit} />
+    ) : board !== null ? (
+      <BoardApp roomShort={board} />
     ) : merges === null ? (
       <App />
     ) : merges.project === null ? (

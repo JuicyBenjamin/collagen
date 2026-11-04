@@ -7,7 +7,7 @@ import { RESTART_EXIT_CODE } from "../../services/Updates";
 import { Panel } from "../../components/Panel";
 import { captureAtom, focusAtom, leftEdgeAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
-import { useRouter, type Route } from "../../app/router";
+import { to, useRouter, type Route } from "../../app/router";
 import { roomAtom } from "../atoms";
 import { openAuditPageAtom } from "./review/atoms";
 import { installAppUpdateAtom } from "./atoms";
@@ -18,7 +18,7 @@ import { Keys } from "./components/Keys/Keys";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { StatusLine } from "./components/StatusLine/StatusLine";
 import { TabBar } from "./components/TabBar/TabBar";
-import { useTabs } from "./tabs";
+import { TABS, useTabs } from "./tabs";
 
 /** Room layout: status line · the rooms sidebar beside the room panel (tab
  *  bar + the active tab as children) · footer. Owns
@@ -38,7 +38,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   // the trail of names above a route: overview › ticket › transcripts › …
   const trailOf = (destination: Route): ReadonlyArray<string> =>
     typeof destination === "string"
-      ? [destination === "room/merges" ? "merges" : "overview"]
+      ? [destination === "room/merges" ? "merges" : destination === "room/board" ? "board" : "overview"]
       : destination.name === "room/ticket"
         ? [...trailOf(destination.back ?? "room/overview"), goalOf(destination.ticketId)]
         : destination.name === "room/transcripts"
@@ -49,13 +49,17 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
               ? [...trailOf(destination.back), "why"]
               : destination.name === "room/people"
                 ? [...trailOf(destination.back), "people"]
-                : [...trailOf(destination.back), destination.file];
+                : destination.name === "settings/global"
+                  ? [...trailOf(destination.back), "global settings"]
+                  : destination.name === "settings"
+                    ? ["settings"]
+                  : [...trailOf(destination.back), destination.file];
   const crumb =
     page === null
       ? null
       : page.name === "room/ticket"
-        ? // opened from an epic's page, back to it — its list under the cursor; from the merges, back to them
-          { trail: trailOf(page.back ?? "room/overview"), label: goalOf(page.ticketId), back: page.back ?? ("room/overview" as const), focus: page.back === "room/merges" ? "merges" : page.back ? "ticket-parts" : "tickets" }
+        ? // opened from an epic's page, back to it — its list under the cursor; from the merges or the board, back to them
+          { trail: trailOf(page.back ?? "room/overview"), label: goalOf(page.ticketId), back: page.back ?? ("room/overview" as const), focus: page.back === "room/merges" ? "merges" : page.back === "room/board" ? "board" : page.back ? "ticket-parts" : "tickets" }
         : page.name === "room/transcripts"
           ? { trail: trailOf(page.back), label: "transcripts", back: page.back, focus: typeof page.back === "object" ? "ticket-diagnostics" : "tickets" }
           : page.name === "room/attach"
@@ -64,7 +68,11 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
               ? { trail: trailOf(page.back), label: "why", back: page.back, focus: "ticket-review" }
               : page.name === "room/people"
                 ? { trail: trailOf(page.back), label: "people", back: page.back, focus: "people" }
-                : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
+                : page.name === "settings/global"
+                  ? { trail: trailOf(page.back), label: "global settings", back: page.back, focus: "tabs" }
+                  : page.name === "settings"
+                    ? { trail: [], label: "settings", back: "room/overview" as const, focus: "tabs" }
+                  : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
   const goBack = () => {
     if (!crumb) return;
     navigate(crumb.back);
@@ -105,14 +113,14 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "q") return onExit();
     // shift: the audit page, in the browser
     if (key.name === "a" && key.shift) return room.id ? openAudit({ roomId: room.id }) : undefined;
+    // shift: the global settings, straight from wherever in the room
+    if (key.name === "s" && key.shift) return navigate(to.globalSettings(route));
     if (key.name === "s") return navigate("settings");
     if (key.name === "i") return navigate("you");
     if (key.name === "u") return installUpdate({});
-    if (key.name === "1") return jump("room/overview");
-    if (key.name === "2") return jump("room/projects");
-    if (key.name === "3") return jump("room/merges");
-    if (key.name === "4") return jump("room/messages");
-    if (key.name === "5") return jump("room/outbox");
+    // a tab by its number on the bar
+    const numbered = /^[1-9]$/.test(key.name) ? TABS[Number(key.name) - 1] : undefined;
+    if (numbered) return jump(numbered);
     if (key.name === "escape") {
       // inside a page (ticket, transcripts), esc is "back"; on a tab, back to the tab bar
       if (crumb) return goBack();

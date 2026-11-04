@@ -1,4 +1,6 @@
 import { createEffect, createMemo, Errored, For, Show } from "solid-js";
+import { Corner } from "~/components/Corner";
+import { place } from "~/place";
 import { lasting } from "~/lasting";
 import { overSocket } from "~/liveSocket";
 import { Arrives } from "~/components/Arrives";
@@ -15,16 +17,8 @@ import { Questions } from "./components/Questions";
 // page whenever the investigation moves (a run posts, a goal is added), so
 // no read holds one of the browser's few connections.
 
-/** /investigation/<ticketId> — the page's one argument; null on any other page. */
-export const investigationPlace: string | null = (() => {
-  const [first, id] = location.pathname.split("/").filter(Boolean);
-  if (first !== "investigation") return null;
-  try {
-    return decodeURIComponent(id ?? "");
-  } catch {
-    return "";
-  }
-})();
+/** The investigation this page is; null on any other page. */
+export const investigationPlace: string | null = place?.page === "investigation" ? place.ticket : null;
 
 export function Investigation(props: { ticketId: string }) {
   // the page itself, held open over the socket while the page is: drawn
@@ -70,6 +64,12 @@ Investigation.Skeleton = () => (
     <nav />
     <main class="inv-main">
       <header class="inv-header">
+        <div class="inv-top">
+          <p class="inv-kind">
+            <Masked>Investigation</Masked>
+          </p>
+          <Corner />
+        </div>
         <h1>
           <Masked>Delta DB in collagen</Masked>
         </h1>

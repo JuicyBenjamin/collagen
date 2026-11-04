@@ -11,6 +11,7 @@ import {
 } from "solid-js";
 import { ago } from "./when";
 import { Corner } from "./components/Corner";
+import { mergesHref, place, ticketHref } from "./place";
 import { KindIcon } from "./components/KindIcon";
 import { enter, leave } from "./fold";
 import { mergeHistory, mergeProjects } from "./api";
@@ -23,23 +24,10 @@ import type { MergeEntry, MergeHistory, MergeProjects, MergeTicket, ProjectHisto
 // reader's order. One read, from one moment (the host's merges and the
 // room's tickets together); read again when the reader asks. Merges are not
 // pushed to the instance, so nothing here moves on its own. A room's
-// address, /merges/<roomId>, goes on to its first project's.
+// address, /room/<room>/merges, goes on to its first project's.
 
-/** /merges/<roomId>/<project>, or a room's /merges/<roomId> — the page's
- *  arguments; null on any other page. */
-export const mergesPlace: { readonly room: string; readonly project: string | null } | null = (() => {
-  const [first, room, project] = location.pathname.split("/").filter(Boolean);
-  if (first !== "merges") return null;
-  try {
-    return { room: decodeURIComponent(room ?? ""), project: project === undefined ? null : decodeURIComponent(project) };
-  } catch {
-    return { room: "", project: null };
-  }
-})();
-
-/** A project's merges page, at one of its merges when `number` names it. */
-const projectUrl = (roomId: string, project: string, number?: number) =>
-  `/merges/${encodeURIComponent(roomId)}/${encodeURIComponent(project)}${number === undefined ? "" : `#${number}`}`;
+/** A room's merges, or one project's — the page's arguments; null on any other page. */
+export const mergesPlace: { readonly room: string; readonly project: string | null } | null = place?.page === "merges" ? { room: place.room, project: place.project } : null;
 
 /** #<number>: the merge the page opens at, its why open. */
 const target: number | null = (() => {
@@ -83,7 +71,7 @@ export function MergesRoom(props: { roomId: string }) {
         project = undefined;
       }
       const to = project ?? read.projects[0];
-      if (to !== undefined) location.replace(projectUrl(props.roomId, to, named && project ? Number(named[2]) : undefined));
+      if (to !== undefined) location.replace(mergesHref(to, named && project ? Number(named[2]) : undefined));
     },
   );
   return (
@@ -97,6 +85,7 @@ export function MergesRoom(props: { roomId: string }) {
           <main class="merges-page">
             <header>
               <h1>Merges</h1>
+              <Corner />
               <p class="meta">{data().room}</p>
             </header>
             <p class="merges-none">No projects here</p>
@@ -214,7 +203,7 @@ function Page(props: {
         <For each={props.data.projects}>
           {(project) => (
             <a
-              href={projectUrl(props.roomId, project)}
+              href={mergesHref(project)}
               class={{ on: project === props.data.history.project }}
               aria-current={project === props.data.history.project ? "page" : undefined}
             >
@@ -337,7 +326,7 @@ function Lineage(props: { ticket: MergeTicket; open: boolean }) {
       <div class="lineage-row">
         <KindIcon kind={ticket().kind} />
         <Show when={ticket().kind === "review"} fallback={<span class="lineage-name">{ticket().name}</span>}>
-          <a class="lineage-name" href={`/review/${encodeURIComponent(ticket().id)}`}>
+          <a class="lineage-name" href={ticketHref(ticket().id)}>
             {ticket().name}
           </a>
         </Show>

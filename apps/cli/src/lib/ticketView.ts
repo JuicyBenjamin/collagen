@@ -1,4 +1,5 @@
 import { closedAs, goalsOf, epicBecause, epicOf, epicParts, epicStatus, excludedFromEpic, finished, isClosed, readySteps, visibleTo, type Conversation, type ReviewContext, type Ticket } from "@collagen/p2p";
+import { nextLine, nextStepOf } from "./nextStep";
 import type { StackPlace } from "./stack";
 import { finishLine, reviewHeadline, yourFinish } from "./review";
 import { rowTitle } from "./ticketSummary";
@@ -32,7 +33,16 @@ export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, held
  *  review ticket also says where the code is and how much why came with it —
  *  the why itself is not here on purpose: it is read on demand, when the
  *  person asks (review-context), not poured into every listing. */
-export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, review?: ReviewContext, heldBy: ReadonlyArray<string> = [], all: ReadonlyMap<string, Ticket> = new Map(), me = "") => ({
+export const ticketView = (
+  ticket: Ticket,
+  nameFor: (key: string) => string,
+  review?: ReviewContext,
+  heldBy: ReadonlyArray<string> = [],
+  all: ReadonlyMap<string, Ticket> = new Map(),
+  me = "",
+  /** asks on it that wait on someone's hands, as peers share them */
+  awaiting: ReadonlyArray<{ readonly who: string; readonly what: string }> = [],
+) => ({
   id: ticket.id,
   project: ticket.project,
   kind: ticket.kind,
@@ -54,6 +64,11 @@ export const ticketView = (ticket: Ticket, nameFor: (key: string) => string, rev
   ...(ticket.after && ticket.after.length > 0 ? { after: ticket.after.join(" ") } : {}),
   /** still waiting: only its author is shown it, nobody is nudged, until these are answered */
   ...(heldBy.length > 0 ? { waitingOn: `${heldBy.join(" ")} — hidden from everyone but its author until answered` } : {}),
+  /** who it waits on next, and for what — the same line the review page and the TUI show */
+  ...(() => {
+    const next = nextStepOf(ticket, all, heldBy, awaiting, (key) => (key === me ? "you" : nameFor(key)));
+    return next ? { next: nextLine(next) } : {};
+  })(),
   ...(ticket.whenClosed ? { whenClosed: ticket.whenClosed } : {}),
   /** the epic it was put in, if any */
   ...epicLine(ticket, all),

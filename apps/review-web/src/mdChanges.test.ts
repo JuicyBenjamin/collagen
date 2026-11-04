@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { DiffLine, Hunk } from "./data";
+import type { Block, Inline } from "./markdown";
 import { changedBlocks, oldSource } from "./mdChanges";
 
 const hunk = (newStart: number, newLines: number, lines: ReadonlyArray<DiffLine>): Hunk => ({ id: `doc.md#${newStart}`, file: "doc.md", header: "", newStart, newLines, lines });
-const words = (blocks: ReturnType<typeof changedBlocks>) => blocks.map((block) => `${block.kind}${block.gapBefore ? " after a gap" : ""}: ${JSON.stringify(block.blocks).match(/"text":"([^"]+)"/)?.[1]}`);
+/** What a block reads as, words taken out as [-…-], put in as {+…+}, bold as *…*. */
+const text = (nodes: ReadonlyArray<Inline>): string =>
+  nodes
+    .map((node) => (node.kind === "text" ? node.text : node.kind === "went" ? `[-${text(node.children)}-]` : node.kind === "came" ? `{+${text(node.children)}+}` : node.kind === "strong" ? `*${text(node.children)}*` : ""))
+    .join("");
+const blockText = (block: Block): string =>
+  block.kind === "p" || block.kind === "heading" ? text(block.children) : block.kind === "list" ? block.items.flatMap((item) => item.blocks.map(blockText)).join(" ") : "";
+const read = (blocks: ReturnType<typeof changedBlocks>) => blocks.map((block) => `${block.kind}${block.gapBefore ? " after a gap" : ""}: ${block.blocks.map(blockText).join(" ")}`);
 
 // before: "# Title", "", "Old intro.", "", "Kept.", "", "Gone."
 const NOW = "# Title\n\nNew intro.\n\nKept.\n";
@@ -27,20 +35,33 @@ describe("a changed Markdown file read as what changed", () => {
     expect(oldSource(NOW, DIFF)).toBe("# Title\n\nOld intro.\n\nKept.\n\nGone.");
   });
 
-  it("shows a rewritten paragraph as the old one out, the new one in, and skips what stayed", () => {
-    expect(words(changedBlocks(NOW, DIFF))).toEqual(["removed after a gap: Old intro.", "added: New intro.", "removed after a gap: Gone."]);
+  it("shows an edited paragraph once, the words it took out and put in marked, and skips what stayed", () => {
+    expect(read(changedBlocks(NOW, DIFF))).toEqual(["edited after a gap: [-Old-]{+New+} intro.", "removed after a gap: Gone."]);
   });
 
-  it("an old list goes before the new one when an item inside it was rewritten", () => {
-    const now = "- one\n- TWO\n- three\n";
+  it("weighs a list item by item: one reworded item reads alone, as an edit, its formatting kept", () => {
+    const now = "- one\n- reads **every** ticket's step\n- three\n";
     const diff = [
       hunk(1, 3, [
         { kind: " ", text: "- one", old: 1, new: 1 },
-        { kind: "-", text: "- two", old: 2 },
-        { kind: "+", text: "- TWO", new: 2 },
+        { kind: "-", text: "- reads **one** ticket's step", old: 2 },
+        { kind: "+", text: "- reads **every** ticket's step", new: 2 },
         { kind: " ", text: "- three", old: 3, new: 3 },
       ]),
     ];
-    expect(changedBlocks(now, diff).map((block) => block.kind)).toEqual(["removed", "added"]);
+    expect(read(changedBlocks(now, diff))).toEqual(["edited after a gap: reads [-*one*-]{+*every*+} ticket's step"]);
+  });
+
+  it("keeps an item rewritten past recognising as one out and one in, and items added side by side as one list", () => {
+    const now = "1. one\n2. something else entirely\n3. new\n";
+    const diff = [
+      hunk(1, 3, [
+        { kind: " ", text: "1. one", old: 1, new: 1 },
+        { kind: "-", text: "2. two", old: 2 },
+        { kind: "+", text: "2. something else entirely", new: 2 },
+        { kind: "+", text: "3. new", new: 3 },
+      ]),
+    ];
+    expect(read(changedBlocks(now, diff))).toEqual(["removed after a gap: two", "added: something else entirely new"]);
   });
 });

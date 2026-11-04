@@ -1,6 +1,7 @@
 import { For, Show } from "solid-js";
 import type { InvestigationPage } from "~/data";
 import { KindIcon } from "~/components/KindIcon";
+import { Corner } from "~/components/Corner";
 
 /** The investigation: its title and whether it is open, the question as
  *  asked, who opened it, and, as labelled facts, how far its goals are,
@@ -8,10 +9,13 @@ import { KindIcon } from "~/components/KindIcon";
 export function Header(props: { page: InvestigationPage }) {
   return (
     <header class="inv-header">
-      <p class="inv-kind">
-        <KindIcon kind="investigation" />
-        Investigation
-      </p>
+      <div class="inv-top">
+        <p class="inv-kind">
+          <KindIcon kind="investigation" />
+          Investigation
+        </p>
+        <Corner />
+      </div>
       <div class="inv-title">
         <h1>{props.page.title}</h1>
         <span class="badge badge-outline">{props.page.open ? "Open" : "Closed"}</span>

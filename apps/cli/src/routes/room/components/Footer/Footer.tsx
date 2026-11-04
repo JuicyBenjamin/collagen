@@ -9,9 +9,11 @@ import { captureAtom } from "../../../../components/focus";
 import { theme } from "../../../../app/theme";
 import { IS_RELEASE, VERSION } from "../../../../app/version";
 import { roomAtom } from "../../../atoms";
-import { inviteAtom, logsAtom, mcpUrlAtom } from "./atoms";
+import { inviteAtom, logsAtom, mcpUrlAtom, troubleAtom } from "./atoms";
 
-/** Pinned footer: a fixed 3-line activity log, the MCP url, the room's line
+/** Pinned footer: a fixed 3-line activity log — or, while something keeps
+ *  the room from working, what it is and what to try above its last two
+ *  lines — the MCP url, the room's line
  *  (c makes an invite and copies it). Every line is single-line on purpose — a wrapped line
  *  here changes the footer's height and reflows the whole screen. The key
  *  legend lives inside the room panel (Keys), next to what it describes. */
@@ -20,6 +22,7 @@ export function Footer() {
   const renderer = useRenderer();
   const captured = useAtomValue(captureAtom);
   const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
+  const trouble = AsyncResult.getOrElse(useAtomValue(troubleAtom), () => null);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const [copied, setCopied] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
@@ -51,10 +54,21 @@ export function Footer() {
   return (
     <>
       <box marginTop={1} flexDirection="column" flexShrink={0}>
-        <text fg={theme.dim}>activity</text>
-        {[0, 1, 2].map((index) => (
+        {trouble ? (
+          <>
+            <text fg={theme.warn} truncate wrapMode="none">
+              {trouble.what}
+            </text>
+            <text fg={theme.fg} truncate wrapMode="none">
+              {trouble.next}
+            </text>
+          </>
+        ) : (
+          <text fg={theme.dim}>activity</text>
+        )}
+        {(trouble ? [0, 1] : [0, 1, 2]).map((index) => (
           <text key={index} fg={theme.dim} truncate wrapMode="none">
-            {logs.slice(-3)[index] ?? " "}
+            {logs.slice(trouble ? -2 : -3)[index] ?? " "}
           </text>
         ))}
       </box>

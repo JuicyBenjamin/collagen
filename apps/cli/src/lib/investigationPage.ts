@@ -2,7 +2,7 @@ import { closedAs, goalsOf, QUESTION_GOAL, type AnswerBlock, type GoalAnswer, ty
 import type { AnswerView, FollowUpView, GoalView, InvestigationPage } from "@collagen/review-web/data";
 import { modelOfLabel } from "./agents";
 
-// An investigation as its page reads it (review-web, /investigation/<id>):
+// An investigation as its page reads it (review-web, its ticket's page):
 // the goals in their groups, each person's answer as the blocks their run
 // chose, the full findings only where they say more, and who answered with
 // which model — everything the page shows, from the ticket and its brief.

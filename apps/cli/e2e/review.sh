@@ -81,8 +81,8 @@ expect "…it says how much of the review that was" "$ABOUT" "1 of 2 decisions, 
 expect "asking about something the why never mentions says so" "$(call $B "$SB" review-context "{\"ticketId\":\"$TICKET\",\"about\":\"the database\"}")" "nothing in the why mentions .{1,3}the database"
 
 echo "## the page opens when a reader starts on the review — once, and only if they want it"
-opened() { cat "$OUT/$1.opened" 2>/dev/null | grep -c "/review/$TICKET" ; }
-expect "bob starting on the review opened its page in his browser" "$WHY" "review page opened: http://127.0.0.1:[0-9]+/review/$TICKET"
+opened() { cat "$OUT/$1.opened" 2>/dev/null | grep -c "/ticket/${TICKET:0:8}" ; }
+expect "bob starting on the review opened its page in his browser" "$WHY" "review page opened: http://127.0.0.1:[0-9]+/room/[0-9a-f]{8}/ticket/${TICKET:0:8}"
 expect "…once: reading the why again does not hand it to him again" "$(opened bob)" "^1$"
 expect "alice's own reads of her review open nothing" "$(call $A "$SA" review-context "{\"ticketId\":\"$TICKET\"}" | grep -c 'review page opened')" "^0$"
 expect "the switches, listed: on unless switched off" "$(call $B "$SB" set-settings '{}')" "openReviewPage: on \(default\)"

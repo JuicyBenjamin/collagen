@@ -62,6 +62,7 @@ const roomsStub = (sent: Array<Sent>) =>
         createInvite: () => Effect.succeed("devnet-testroom.invite"),
         useInvite: () => Effect.succeed("in" as const),
         writable,
+        connection: Effect.succeed({ logOpen: true, onTopic: 0, strangers: [], admitFailed: [], swarm: { open: 0, connecting: 0, firewalled: null, otherProtocol: new Map() } }),
         rename: (_name: string) => Effect.void,
         drives: Stream.fromPubSub(drives),
         sendDrive: (_key: string, _action: DriveAction) => Effect.succeed(undefined),
@@ -111,6 +112,7 @@ const roomsStub = (sent: Array<Sent>) =>
         summaries: Effect.succeed([]),
         summaryChanges: Stream.empty,
         watch: <A,>(select: (h: RoomHandle) => Stream.Stream<A>) => select(handle),
+        connectionOf: () => Effect.succeed(null),
       };
     }),
   );

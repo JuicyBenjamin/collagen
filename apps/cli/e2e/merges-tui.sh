@@ -7,8 +7,8 @@
 # PATH), ↓ reaches its review, under what it grew from, enter opens its page, esc comes back
 # to the merges with the cursor where it was, `o` there opens the ticket's
 # review page, and `o` on a merge the project's merges as a web page
-# (review-web, /merges/<roomId>/<project>), whose data is read here as the
-# page reads it; the room's address goes on to it (/merges/<roomId>).
+# (review-web, /room/<room>/merges/<project>), whose data is read here as the
+# page reads it; the room's address goes on to it (/room/<room>/merges).
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 # the web page is a Solid app served from its build; build it if this checkout has not
@@ -57,15 +57,17 @@ expect "the host was asked what was merged into main" "$(grep -c '"base=main"' "
 expect "the cursor reached the list" "$KEYS" "merges"
 expect "enter on the ticket's line opened its page" "$KEYS" "ticket-steps"
 expect "p handed the pull request to the browser" "$(head -1 "$OUT/opened" 2>/dev/null)" "^https://github.com/acme/sandbox/pull/6$"
-expect "o on the ticket's line handed its review page to the browser" "$(cat "$OUT/opened" 2>/dev/null)" "/review/"
+expect "o on the ticket's line handed its review page to the browser" "$(cat "$OUT/opened" 2>/dev/null)" "/room/[0-9a-f]{8}/ticket/[0-9a-f]{8}"
 echo "## the project's merges as a web page"
 WEB=$(grep -oE 'http://[^ ]+/merges/[^ ]+' "$OUT/opened" 2>/dev/null | head -1)
-expect "o on a merge handed the project's merges page to the browser, at that merge" "$WEB" "^${A%/mcp}/merges/[0-9A-Za-z-]+/sandbox#6$"
-PAGE=${WEB%%#*}; ROOM=$(echo "$PAGE" | sed -E 's#.*/merges/([^/]+)/.*#\1#')
+expect "o on a merge handed the project's merges page to the browser, at that merge" "$WEB" "^${A%/mcp}/room/[0-9a-f]{8}/merges/sandbox#6$"
+PAGE=${WEB%%#*}
+# the room's full id, for the page's reads, is in the page collagen served — never in its address
+ROOM=$(curl -s "$PAGE" | python3 -c 'import html,json,re,sys; print(json.loads(html.unescape(re.search(r"<meta name=\"collagen-place\" content=\"([^\"]*)\"", sys.stdin.read()).group(1)))["room"])')
 expect "the page is served" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$PAGE")" "^200 text/html"
 expect "…and the room's, which goes on to a project's" "$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "${PAGE%/*}")" "^200 text/html"
 SERVER_ENTRY="$ROOT/../review-web/dist/server/entry.js"
-sfn() { node "$E2E/sfn.mjs" "${A%/mcp}/review/_server/data/$(grep -oE "registerServerReference\\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
+sfn() { node "$E2E/sfn.mjs" "${A%/mcp}/_server/data/$(grep -oE "registerServerReference\\(\"$1-[0-9a-f]+\"" "$SERVER_ENTRY" | head -1 | sed -E 's/.*"(.*)"/\1/')?args=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$2")"; }
 expect "the room's projects here, for its tabs and where its address goes" "$(sfn mergeProjects "[\"$ROOM\"]" | python3 -c 'import json,sys; print(*json.load(sys.stdin)["projects"])')" "^sandbox$"
 HISTORY=$(sfn mergeHistory "[\"$ROOM\",\"sandbox\",50,false]")
 expect "its data: into main, the latest first" "$(echo "$HISTORY" | python3 -c 'import json,sys; d=json.load(sys.stdin)["history"]; print(d["base"], *[m["number"] for m in d["merges"]])')" "^main 6 5 1000 "
@@ -80,8 +82,8 @@ expect "…#5 from no ticket" "$(echo "$HISTORY" | python3 -c 'import json,sys; 
 expect "a project not here has none" "$(sfn mergeHistory "[\"$ROOM\",\"elsewhere\",50,false]" | python3 -c 'import json,sys; print(json.load(sys.stdin)["history"]["none"])')" "^not here$"
 expect "a room not here has no history" "$(sfn mergeHistory '["not-a-room","sandbox",50,false]')" "^null$"
 echo "## her agent takes her there too"
-expect "open-merges opens the project's merges page, at a merge" "$(call $A "$SA" open-merges '{"project":"SANDBOX","number":6}')" "^merges page opened: ${A%/mcp}/merges/[0-9A-Za-z-]+/sandbox#6$"
-expect "…her first project's when none is named" "$(call $A "$SA" open-merges '{}')" "^merges page opened: ${A%/mcp}/merges/[0-9A-Za-z-]+/sandbox$"
+expect "open-merges opens the project's merges page, at a merge" "$(call $A "$SA" open-merges '{"project":"SANDBOX","number":6}')" "^merges page opened: ${A%/mcp}/room/[0-9a-f]{8}/merges/sandbox#6$"
+expect "…her first project's when none is named" "$(call $A "$SA" open-merges '{}')" "^merges page opened: ${A%/mcp}/room/[0-9a-f]{8}/merges/sandbox$"
 expect "…a project not hers here is refused" "$(call $A "$SA" open-merges '{"project":"nope"}')" "^failed: no project of your user's named"
 touch "$OUT/merges-tui.done"
 

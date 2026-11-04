@@ -23,7 +23,7 @@ const line = (grouped: ReturnType<typeof groupByUnit>) => grouped.units.map((sec
 const routesA = hunk("src/routes.ts", 0, 10);
 const routesB = hunk("src/routes.ts", 1, 400);
 const page = hunk("src/page.ts", 2, 1);
-const pageTest = hunk("src/page.test.ts", 3, 1);
+const pageTest: Hunk = { ...hunk("src/page.test.ts", 3, 1), lines: ['it("pins the page", () => {', "  expect(pin()).toBe(true);", "});"].map((text, index) => ({ kind: "+" as const, text, new: 1 + index })) };
 const rows = hunk("src/rows.ts", 4, 1);
 const notes = hunk("notes.txt", 5, 1);
 
@@ -54,6 +54,13 @@ describe("a review in units", () => {
     expect(onlyTests.outside).toEqual([]);
     expect(onlyTests.looseForks).toEqual([]);
     expect(onlyTests.unmatched).toEqual({});
+  });
+
+  it("a test file with no test in it is code: no tab lists what it does not count", () => {
+    const helper = hunk("src/tests/fixtures.ts", 6, 1);
+    const grouped = groupByUnit({ decisions: [], forks: [] }, [pageTest, helper], new Map());
+    expect(grouped.tests.map((file) => file.file)).toEqual(["src/page.test.ts"]);
+    expect(line(grouped)).toEqual(["Not explained [unexplained]: src/tests/fixtures.ts#6"]);
   });
 
   it("what nothing points at is one 'Not explained', read last — never a unit named after a file", () => {

@@ -3,6 +3,7 @@ import { Context, Effect, Layer, Option, Stream, SubscriptionRef } from "effect"
 import { ChildProcessSpawner } from "effect/process";
 import { focusTab } from "../lib/focusTab";
 import { openerOverride, openInBrowser } from "../lib/opener";
+import { auditPath, boardPath, mergesPath, ticketPath } from "../lib/pageAddress";
 import { settingOf } from "../lib/settings";
 import { McpInfo } from "./McpInfo";
 import { StateStore } from "./StateStore";
@@ -23,6 +24,7 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
     const mcp = yield* McpInfo;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const store = yield* StateStore;
+    const rooms = yield* Rooms;
     const open = new Map<string, number>();
     // reviews whose page this process opened on its own: once each, so a
     // reader who closed it is not handed it again on every read of the why
@@ -34,18 +36,35 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
      *  otherwise a new tab (marked to take over from an open one, which
      *  hands it the reader's place). Says what happened, url included, for a
      *  machine with no browser to open. */
-    /** One of this instance's pages: /review/<ticketId>, /investigation/<ticketId> or /merges/<roomId>. */
-    const pageUrl = (page: "review" | "investigation" | "merges" | "audit", id: string) =>
-      Effect.map(mcp.awaitUrl, (mcpUrl) => `${mcpUrl.replace(/\/mcp$/, "")}/${page}/${encodeURIComponent(id)}`);
+    /** One of this instance's pages, by its address under its room (lib/pageAddress). */
+    const pageUrl = (path: string) => Effect.map(mcp.awaitUrl, (mcpUrl) => `${mcpUrl.replace(/\/mcp$/, "")}${path}`);
+    /** A ticket's page, in the room that holds it; null when no room of theirs does. */
+    const ticketUrl = (ticketId: string) =>
+      Effect.gen(function* () {
+        for (const handle of yield* SubscriptionRef.get(rooms.handles)) if ((yield* SubscriptionRef.get(handle.room.tickets)).has(ticketId)) return yield* pageUrl(ticketPath(handle.id, ticketId));
+        return null;
+      });
     const launch = (url: string) => openInBrowser(url).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
     const show = Effect.fn("ReviewPages.show")(function* (ticketId: string) {
-      const url = yield* pageUrl("review", ticketId);
+      const url = yield* ticketUrl(ticketId);
+      if (url === null) return `failed: no ticket ${ticketId} in your rooms`;
       const already = isOpen(ticketId);
       if (already && Option.isNone(yield* openerOverride) && (yield* Effect.promise(() => focusTab(url)))) return `review page brought forward: ${url}`;
       return (yield* launch(already ? `${url}?take` : url)) ? `review page opened: ${url}` : `review page: ${url} (could not open a browser — paste it into one)`;
     });
 
+    /** Open a room's board in the person's browser: its tickets in to do,
+     *  in progress and done, as the terminal's board has them — one epic's,
+     *  and only some kinds, when given. */
+    const showBoard = Effect.fn("ReviewPages.showBoard")(function* (roomId: string, epic: string | null = null, kinds: ReadonlyArray<string> = []) {
+      // by its short id (lib/pageAddress): the full one is the invite, and a url stays in the browser's history
+      const view = [...(epic ? [`epic=${epic.slice(0, 8)}`] : []), ...(kinds.length > 0 ? [`kinds=${kinds.join(",")}`] : [])].join("&");
+      const url = `${yield* pageUrl(boardPath(roomId))}${view ? `#${view}` : ""}`;
+      return (yield* launch(url)) ? `board opened: ${url}` : `board: ${url} (could not open a browser — paste it into one)`;
+    });
+
     return {
+      showBoard,
       opened: (id: string) => open.set(id, (open.get(id) ?? 0) + 1),
       closed: (id: string) => {
         const count = (open.get(id) ?? 1) - 1;
@@ -55,26 +74,26 @@ export class ReviewPages extends Context.Service<ReviewPages>()("cli/ReviewPages
       /** Is a page for this review open in a browser right now? */
       isOpen,
       show,
-      /** Open an investigation's page (review-web, /investigation/<id>) in
+      /** Open an investigation's page (review-web, its ticket's address) in
        *  the person's browser. Says what happened, url included. */
       showInvestigation: Effect.fn("ReviewPages.showInvestigation")(function* (ticketId: string) {
-        const url = yield* pageUrl("investigation", ticketId);
+        const url = yield* ticketUrl(ticketId);
+        if (url === null) return `failed: no ticket ${ticketId} in your rooms`;
         return (yield* launch(url)) ? `investigation page opened: ${url}` : `investigation page: ${url} (could not open a browser — paste it into one)`;
       }),
-      /** Open a room's audit page (review-web, /audit/<roomId>) in the
+      /** Open a room's audit page (review-web, /room/<room>/audit) in the
        *  person's browser. Says what happened, url included. */
       showAudit: Effect.fn("ReviewPages.showAudit")(function* (roomId: string) {
-        const url = yield* pageUrl("audit", roomId);
+        const url = yield* pageUrl(auditPath(roomId));
         return (yield* launch(url)) ? `audit page opened: ${url}` : `audit page: ${url} (could not open a browser — paste it into one)`;
       }),
       /** Open a project's merges page (review-web,
-       *  /merges/<roomId>/<project>) in the person's browser — at one of
+       *  /room/<room>/merges/<project>) in the person's browser — at one of
        *  its merges, its decisions open, when `at` names it; with no
        *  project, the room's, which goes on to the person's first. Says
        *  what happened, url included. */
       showMerges: Effect.fn("ReviewPages.showMerges")(function* (roomId: string, project?: string, at?: number) {
-        const room = yield* pageUrl("merges", roomId);
-        const url = project === undefined ? room : `${room}/${encodeURIComponent(project)}${at === undefined ? "" : `#${at}`}`;
+        const url = yield* pageUrl(mergesPath(roomId, project, at));
         return (yield* launch(url)) ? `merges page opened: ${url}` : `merges page: ${url} (could not open a browser — paste it into one)`;
       }),
       /** The person's agent has started on a review: its page opens, unless
