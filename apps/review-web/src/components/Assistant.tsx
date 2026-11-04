@@ -1,6 +1,7 @@
-import { createEffect, createSignal, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 import { Portal } from "@solidjs/web";
 import type { initAgent } from "clippyjs";
+import { setAssistant } from "../api";
 import { chatNow } from "../chatNow";
 import { floating } from "../floating";
 import { selectionLabel, selectionShort } from "../chatText";
@@ -11,7 +12,7 @@ import type { AssistantId } from "../data";
 // stands in the corner where the chat's pill would; a click on it opens the
 // chat in its own yellow balloon — what you last asked and its answer, and a
 // box to ask the next thing — as the Office assistant asked "What would you
-// like to do?". While the reader's AI answers it thinks, and it gestures when
+// like to do?" — and in it another assistant to have, or none. While the reader's AI answers it thinks, and it gestures when
 // it is done. Microsoft's own, through clippyjs, each loaded only when it is
 // asked for — its sprites come with the page, nothing is fetched from
 // elsewhere.
@@ -23,18 +24,19 @@ import type { AssistantId } from "../data";
 
 type Agent = Awaited<ReturnType<typeof initAgent>>;
 
-/** Each assistant's sprites and moves, each its own chunk of the page, loaded only when chosen. */
-const AGENTS: Record<AssistantId, () => Promise<{ default: Parameters<typeof initAgent>[0] }>> = {
-  clippy: () => import("clippyjs/agents/clippy"),
-  bonzi: () => import("clippyjs/agents/bonzi"),
-  f1: () => import("clippyjs/agents/f1"),
-  genie: () => import("clippyjs/agents/genie"),
-  genius: () => import("clippyjs/agents/genius"),
-  links: () => import("clippyjs/agents/links"),
-  merlin: () => import("clippyjs/agents/merlin"),
-  peedy: () => import("clippyjs/agents/peedy"),
-  rocky: () => import("clippyjs/agents/rocky"),
-  rover: () => import("clippyjs/agents/rover"),
+/** Each assistant: the name it went by, and its sprites and moves, each its
+ *  own chunk of the page, loaded only when chosen. */
+const AGENTS: Record<AssistantId, { readonly name: string; readonly load: () => Promise<{ default: Parameters<typeof initAgent>[0] }> }> = {
+  clippy: { name: "Clippy", load: () => import("clippyjs/agents/clippy") },
+  bonzi: { name: "Bonzi", load: () => import("clippyjs/agents/bonzi") },
+  f1: { name: "F1", load: () => import("clippyjs/agents/f1") },
+  genie: { name: "Genie", load: () => import("clippyjs/agents/genie") },
+  genius: { name: "Genius", load: () => import("clippyjs/agents/genius") },
+  links: { name: "Links", load: () => import("clippyjs/agents/links") },
+  merlin: { name: "Merlin", load: () => import("clippyjs/agents/merlin") },
+  peedy: { name: "Peedy", load: () => import("clippyjs/agents/peedy") },
+  rocky: { name: "Rocky", load: () => import("clippyjs/agents/rocky") },
+  rover: { name: "Rover", load: () => import("clippyjs/agents/rover") },
 };
 
 /** An answer as words in its balloon: no code fences, no markdown marks. */
@@ -54,7 +56,7 @@ export function Assistant(props: { id: AssistantId; name: string }) {
   // it and its balloon inside, the balloon above it (.assistant-balloon)
   let home: HTMLDivElement | undefined;
   void (async () => {
-    const [{ initAgent: start }, { default: drawn }] = await Promise.all([import("clippyjs"), AGENTS[props.id]()]);
+    const [{ initAgent: start }, { default: drawn }] = await Promise.all([import("clippyjs"), AGENTS[props.id].load()]);
     if (gone) return;
     const made = await start(drawn);
     if (gone) return made.dispose();
@@ -137,7 +139,7 @@ export function Assistant(props: { id: AssistantId; name: string }) {
       <Show when={box()}>
         {(mount) => (
           <Portal mount={mount()}>
-            <Balloon />
+            <Balloon id={props.id} />
           </Portal>
         )}
       </Show>
@@ -146,8 +148,9 @@ export function Assistant(props: { id: AssistantId; name: string }) {
 }
 
 /** The chat in its balloon: the last thing asked and its answer to it, then
- *  the box for the next — Enter asks, Esc closes. */
-function Balloon() {
+ *  the box for the next — Enter asks, Esc closes — and, as Office's own had,
+ *  another assistant to have instead, or none. */
+function Balloon(props: { id: AssistantId }) {
   const question = chatNow.draft;
   const latest = () => (chatNow.view()?.turns ?? []).filter((turn) => turn.from === undefined).at(-1);
   const send = async () => {
@@ -203,6 +206,19 @@ function Balloon() {
       />
       <Show when={chatNow.refused()}>{(why) => <p>{why()}</p>}</Show>
       <div class="assistant-actions">
+        <select
+          class="select select-sm assistant-pick"
+          data-theme="light"
+          title="Another assistant"
+          value={props.id}
+          onChange={(event) => {
+            const chosen = event.currentTarget.value;
+            void setAssistant(chosen === "" ? null : (chosen as AssistantId)).catch(() => undefined);
+          }}
+        >
+          <For each={Object.entries(AGENTS)}>{([id, agent]) => <option value={id}>{agent.name}</option>}</For>
+          <option value="">No assistant</option>
+        </select>
         <button type="button" class="btn btn-sm" data-theme="light" onClick={() => chatNow.close()}>
           Close
         </button>

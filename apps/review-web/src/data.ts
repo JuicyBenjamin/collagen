@@ -290,10 +290,10 @@ export interface YourReview {
   readonly comments?: number;
 }
 
-/** The person's switches a page wears, as collagen keeps them. */
 /** An Office assistant clippyjs draws, by its id. */
 export type AssistantId = "clippy" | "bonzi" | "f1" | "genie" | "genius" | "links" | "merlin" | "peedy" | "rocky" | "rover";
 
+/** The person's switches a page wears, as collagen keeps them. */
 export interface PageSettings {
   readonly progressBar: boolean;
   /** the assistant the ask-AI chat is, and its name; null: the plain chat */
