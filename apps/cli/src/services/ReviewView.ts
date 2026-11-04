@@ -300,6 +300,26 @@ export const reviewHead = Effect.fn("ReviewView.head")(function* (ticketId: stri
   return null;
 });
 
+/** A file as a commit has it, from the clone at `path`; null when it is not
+ *  there. Kept once read: a commit never changes, so a review read again
+ *  (each comment said moves the page) reads none of its files twice. */
+const KEPT_FILES = 6_000;
+const kept = new Map<string, string | null>();
+const showAt = (path: string, commit: string, file: string) => {
+  const key = `${path}\0${commit}:${file}`;
+  if (kept.has(key)) return Effect.succeed(kept.get(key)!);
+  return run("git", ["show", `${commit}:${file}`], path, 5_000).pipe(
+    Effect.tap((text) =>
+      Effect.sync(() => {
+        if (kept.size >= KEPT_FILES) kept.delete(kept.keys().next().value!);
+        kept.set(key, text);
+      }),
+    ),
+  );
+};
+/** Files read at once: one git apiece, a few at a time, not one after another. */
+const AT_ONCE = 12;
+
 export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: string) {
   const rooms = yield* Rooms;
   const store = yield* StateStore;
@@ -323,25 +343,26 @@ export const reviewData = Effect.fn("ReviewView.data")(function* (ticketId: stri
     const unchangedTranslations: Array<string> = [];
     if (project && commit && hunks.length > 0) {
       const files = [...new Set(hunks.map((hunk) => hunk.file))];
-      const texts = new Map<string, string | null>();
-      for (const file of files) texts.set(file, yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
+      const texts = new Map(yield* Effect.forEach(files, (file) => showAt(project.path, commit, file).pipe(Effect.map((text) => [file, text] as const)), { concurrency: AT_ONCE }));
       imports = importsAmong(files, (file) => texts.get(file) ?? null);
       const lines = (text: string | null | undefined) => (text == null || text.includes("\0") ? null : text.replace(/\n$/, "").split("\n"));
-      for (const file of files) {
-        // both ends of a test, story or lockfile, to read what changed in it; the rest only as it is now (what made it)
-        const both = isTest(file) || isStory(file) || isLockfile(file) || isTranslation(file) || isMigration(file);
-        const before = both && forked ? yield* run("git", ["show", `${forked}:${file}`], project.path, 5_000) : null;
-        tests.set(file, { after: lines(texts.get(file)), before: both && forked ? (lines(before) ?? []) : null });
-      }
+      // both ends of a test, story or lockfile, to read what changed in it; the rest only as it is now (what made it)
+      const both = (file: string) => isTest(file) || isStory(file) || isLockfile(file) || isTranslation(file) || isMigration(file);
+      const befores = new Map(
+        yield* Effect.forEach(files.filter((file) => both(file) && forked), (file) => showAt(project.path, forked!, file).pipe(Effect.map((text) => [file, text] as const)), { concurrency: AT_ONCE }),
+      );
+      for (const file of files) tests.set(file, { after: lines(texts.get(file)), before: both(file) && forked ? (lines(befores.get(file)) ?? []) : null });
       // the languages of a translation set the change leaves as they are, read as they are: what did not keep up shows
       const sets = new Set(files.filter(isTranslation).map((file) => languageOf(file).set));
       if (sets.size > 0) {
         const tree = (yield* run("git", ["ls-tree", "-r", "--name-only", commit], project.path, 5_000)) ?? "";
-        for (const file of tree.split("\n").filter((file) => isTranslation(file) && !files.includes(file) && sets.has(languageOf(file).set))) {
-          const text = lines(yield* run("git", ["show", `${commit}:${file}`], project.path, 5_000));
+        const unchanged = tree.split("\n").filter((file) => isTranslation(file) && !files.includes(file) && sets.has(languageOf(file).set));
+        const read = yield* Effect.forEach(unchanged, (file) => showAt(project.path, commit, file), { concurrency: AT_ONCE });
+        unchanged.forEach((file, index) => {
+          const text = lines(read[index]);
           tests.set(file, { after: text, before: text });
           unchangedTranslations.push(file);
-        }
+        });
       }
     }
     const me = (yield* IdentityService).identity.pubkey;

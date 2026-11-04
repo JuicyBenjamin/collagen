@@ -1,15 +1,19 @@
 import { Appear } from "~/components/Appear";
 import { hostNow } from "~/hostNow";
+import { nearNow } from "~/nearNow";
 
 /** What the reader's AI drafted on this change, waiting on the reader: how
  *  many, a way to the first, and all of them posted or declined at once —
  *  each also sits beside its code, to take one by one. */
 export function DraftsBar() {
   const waiting = () => hostNow.drafts();
-  const first = () => {
+  const first = async () => {
     // the first under a line; with none, the list of those on no line shown
     const draft = waiting().find((candidate) => !hostNow.unplaced().includes(candidate));
+    // its file's code drawn first, wherever it is on the page
+    if (draft) await nearNow.reveal(draft.file);
     document.getElementById(draft ? `draft-${draft.id}` : "unplaced")?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (draft) setTimeout(() => nearNow.release(draft.file), 2_000);
   };
   return (
     <Appear when={waiting().length > 0}>
