@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.26.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.25.0-alpha...p2p-v0.26.0-alpha) (2026-11-04)
+
+
+### Features
+
+* a running job shows how far it is, to everyone waiting on it ([eee1bac](https://github.com/JuicyBenjamin/collagen/commit/eee1bac9f90591f556ea06cc701031299bacaa3a))
+* **cli:** a room's tickets read as a board, to do, in progress, done, in terminal and browser ([95cdc41](https://github.com/JuicyBenjamin/collagen/commit/95cdc413a1dec49d9f511e72297dddc6fc5d5c41))
+* every ticket says what it waits on next ([f5393fb](https://github.com/JuicyBenjamin/collagen/commit/f5393fbeec52fef5cd6d4267067c391987e103fc))
+* **review:** a hidden Clippy for the ask-AI chat ([e7d42c9](https://github.com/JuicyBenjamin/collagen/commit/e7d42c97aaf636f5b684396b545d876ce8a5288c))
+* **review:** any of clippyjs's Office assistants can be the ask-AI chat ([de4e273](https://github.com/JuicyBenjamin/collagen/commit/de4e273e7feead6ae1837cc0966dedd3b6dec7a0))
+* room-connection says what keeps a room from working ([94b96ae](https://github.com/JuicyBenjamin/collagen/commit/94b96aee8c8be04f7210f0453d483acb2f654b0a))
+
+
+### Bug Fixes
+
+* **review:** asking for the missing whys fills them on the review ([14b0895](https://github.com/JuicyBenjamin/collagen/commit/14b089518268e690e0dcf9851943b3857d321232))
+
 ## [0.25.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.24.0-alpha...p2p-v0.25.0-alpha) (2026-11-01)
 
 
