@@ -1,5 +1,52 @@
 # Changelog
 
+## [0.26.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.25.0-alpha...cli-v0.26.0-alpha) (2026-11-04)
+
+
+### Features
+
+* a running job shows how far it is, to everyone waiting on it ([eee1bac](https://github.com/JuicyBenjamin/collagen/commit/eee1bac9f90591f556ea06cc701031299bacaa3a))
+* **board:** a line of work opens from the middle like a game menu, kinds filter the board ([9c91a2c](https://github.com/JuicyBenjamin/collagen/commit/9c91a2c9fc4ab3c0d5db54d10d4f27a43a22ee37))
+* **board:** epics are views, what grew from what stacks, done stays recent ([848dacb](https://github.com/JuicyBenjamin/collagen/commit/848dacba1f5dbe8e0141ef8b9a61a1d8df7b3061))
+* **cli:** a room's tickets read as a board, to do, in progress, done, in terminal and browser ([95cdc41](https://github.com/JuicyBenjamin/collagen/commit/95cdc413a1dec49d9f511e72297dddc6fc5d5c41))
+* every ticket says what it waits on next ([f5393fb](https://github.com/JuicyBenjamin/collagen/commit/f5393fbeec52fef5cd6d4267067c391987e103fc))
+* **mcp:** open-settings takes the person to their settings in the terminal, the room's or the global ones, on a tab ([199380f](https://github.com/JuicyBenjamin/collagen/commit/199380ff986625d6f94c412232ee1cb3e2f4f8d5))
+* **review:** a comment follows its code when the branch moves, and one whose lines changed is outdated, never on other code ([28de560](https://github.com/JuicyBenjamin/collagen/commit/28de5601bbf7b2f4572680caa0b018ccc34d37b4))
+* **review:** a hidden Clippy for the ask-AI chat ([e7d42c9](https://github.com/JuicyBenjamin/collagen/commit/e7d42c97aaf636f5b684396b545d876ce8a5288c))
+* **review:** any of clippyjs's Office assistants can be the ask-AI chat ([de4e273](https://github.com/JuicyBenjamin/collagen/commit/de4e273e7feead6ae1837cc0966dedd3b6dec7a0))
+* **review:** every page lives under its room ([6ea72af](https://github.com/JuicyBenjamin/collagen/commit/6ea72af610a90d9c40bf7d8cf0fdb2fc06f4dda8))
+* **review:** generated files and snapshots fold to a line ([4006814](https://github.com/JuicyBenjamin/collagen/commit/4006814163d4dd957cc41846999e563878c11e0d))
+* **review:** lockfiles read as the packages they move ([3ab437b](https://github.com/JuicyBenjamin/collagen/commit/3ab437bc70a216ec686da4ce62bcc0867b3b91bf))
+* **review:** migrations read as what they do to the schema ([3a0c4bf](https://github.com/JuicyBenjamin/collagen/commit/3a0c4bf70f56cfd3bbb8819dc6e366ebad4370ca))
+* **review:** the assistant's balloon switches to another assistant, or none ([ef1937b](https://github.com/JuicyBenjamin/collagen/commit/ef1937b14844d43c119fe08f7667bb08806db61b))
+* **review:** translations read as keys, every language side by side ([6cf71cf](https://github.com/JuicyBenjamin/collagen/commit/6cf71cfca5a716ddab410d70e9a41c11f1073ad0))
+* room-connection says what keeps a room from working ([94b96ae](https://github.com/JuicyBenjamin/collagen/commit/94b96aee8c8be04f7210f0453d483acb2f654b0a))
+* **steering:** settings and set-steering group each steering under the ticket kind that starts it ([d76bbf8](https://github.com/JuicyBenjamin/collagen/commit/d76bbf8b7cab47772b6093efc9e07048f349ceba))
+* **tui:** ← and → step a setting through its options, back and forth ([60e0bad](https://github.com/JuicyBenjamin/collagen/commit/60e0badc00ab0464d6e3647ee738431a45b2e986))
+* **tui:** o opens the board in the browser, and b an epic's from the overview ([522a949](https://github.com/JuicyBenjamin/collagen/commit/522a94965f47a300ee6317ddad0fab00fb5c8acc))
+* **tui:** S opens the global settings from anywhere in a room, and esc goes back where it came from ([6d14ed9](https://github.com/JuicyBenjamin/collagen/commit/6d14ed91971aae545fe85217fce584e27435b4cf))
+* **tui:** s shows the room's steering alone, global settings in a place of their own ([1afebaa](https://github.com/JuicyBenjamin/collagen/commit/1afebaa249c087e1fc20e1222ed90a2db9c60407))
+* **tui:** single player settings together, then multiplayer, each by ticket kind; a room's unset level says Default and what it is ([6a94383](https://github.com/JuicyBenjamin/collagen/commit/6a943834ba2fb97f9b91bc986bf4f064911242c9))
+* **tui:** steering rows say single player or multiplayer, and a level a room inherits is dim, said once ([3b3b084](https://github.com/JuicyBenjamin/collagen/commit/3b3b084cf8f8ce724dd6dc776cc59be6a80256fa))
+* **tui:** steering settings say which rows are single player and which multiplayer ([a172acb](https://github.com/JuicyBenjamin/collagen/commit/a172acbed75be568751360b5bb484682292dbb87))
+* **tui:** the board's tab second, its epic and kinds in a row above it ([21a7cb8](https://github.com/JuicyBenjamin/collagen/commit/21a7cb8077ba3ee9d358ee5401185af5a36267e7))
+* **tui:** the projects tab says what a project is when there are none, whose each is, and your own never looks disabled ([cc0f854](https://github.com/JuicyBenjamin/collagen/commit/cc0f854b3432d5dc292f7aa327d06702e22aca78))
+
+
+### Bug Fixes
+
+* **cli:** names in the file-kinds readers say what they hold ([5a04ec5](https://github.com/JuicyBenjamin/collagen/commit/5a04ec55103ebdd7554cc0839077515c9a238802))
+* **review:** a comment asked of the review page's chat becomes the reader's draft ([7fb2d2c](https://github.com/JuicyBenjamin/collagen/commit/7fb2d2ccd79e144b6e99aa806cf40cf904a7e1b7))
+* **review:** a question about your own review is answered as yours ([a96bfbc](https://github.com/JuicyBenjamin/collagen/commit/a96bfbc46249e2ad08a7a987c1b55e556252b1ab))
+* **review:** a story file named as a test is a story ([cb13ad9](https://github.com/JuicyBenjamin/collagen/commit/cb13ad996dbb4711eadd5dc835b3c276c507b3a9))
+* **review:** a test file with no test in it is code ([a7c1f05](https://github.com/JuicyBenjamin/collagen/commit/a7c1f052c6b0fe981434615d81e03068e347bc28))
+* **review:** asking for the missing whys fills them on the review ([14b0895](https://github.com/JuicyBenjamin/collagen/commit/14b089518268e690e0dcf9851943b3857d321232))
+
+
+### Performance
+
+* **review:** a big review loads in a second or two and draws only what is near ([bda9ba7](https://github.com/JuicyBenjamin/collagen/commit/bda9ba7b4e3322416053f88f502ce736314e62b2))
+
 ## [0.25.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.24.0-alpha...cli-v0.25.0-alpha) (2026-11-01)
 
 
