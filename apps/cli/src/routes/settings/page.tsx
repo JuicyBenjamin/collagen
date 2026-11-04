@@ -3,7 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import type { JobKind, LocalState, MergeFor, Steering } from "@collagen/p2p";
-import { useRouter } from "../../app/router";
+import { to, useRouter, type Route } from "../../app/router";
 import { clip } from "../../lib/columns";
 import { theme } from "../../app/theme";
 import { FollowScroll } from "../../components/FollowScroll";
@@ -44,7 +44,7 @@ const cell = (text: string) => capital(text).padEnd(COLUMN).slice(0, COLUMN);
  *  g there opens the global settings, everything else with them. Each change
  *  applies the moment it is made (your agent can make them too:
  *  set-steering, set-jobs, set-settings, set-merging). */
-export function SettingsPage({ scope }: { scope: Scope }) {
+export function SettingsPage({ scope, back = "room/overview" }: { scope: Scope; back?: Route }) {
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { navigate } = useRouter();
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
@@ -99,8 +99,8 @@ export function SettingsPage({ scope }: { scope: Scope }) {
 
   useKeyboard((key) => {
     // the global page is reached from the room's, and goes back to it
-    if (key.name === "escape") return navigate(here ? "room/overview" : "settings");
-    if (key.name === "g" && here && row.kind !== "model") return navigate("settings/global");
+    if (key.name === "escape") return navigate(here ? "room/overview" : back);
+    if (key.name === "g" && here && row.kind !== "model") return navigate(to.globalSettings("settings"));
     if (key.name === "tab") return switchTab(key.shift ? -1 : 1);
     if (onBar) {
       if (key.name === "left") return switchTab(-1);
@@ -273,7 +273,7 @@ export function SettingsPage({ scope }: { scope: Scope }) {
       <text fg={theme.dim}>{onBar ? "" : capital(help())}</text>
       <text fg={theme.dim}>
         {onBar ? "←→ switch tab · 1-3 jump · ↓ into the settings" : "↑↓ row (↑ at the top: the tabs) · 1-3 tab · ←→ or space changes it"}
-        {here ? " · g global settings · esc back" : " · esc the room's steering"}
+        {here ? " · g global settings · esc back" : back === "settings" ? " · esc the room's steering" : " · esc back"}
       </text>
     </box>
   );

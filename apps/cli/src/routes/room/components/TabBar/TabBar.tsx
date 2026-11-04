@@ -37,7 +37,7 @@ export function TabBar() {
       // one row, always: a page that grows must not push the bar off its line
       flexShrink={0}
       // o first on the merges tab: a long hint loses its middle
-      hint={`${active === "room/merges" || active === "room/board" ? "o in browser · " : ""}←→ switch tab · ↓ into the tab · 1-6 jump · A audit · c copy invite · s settings · i you · q quit`}
+      hint={`${active === "room/merges" || active === "room/board" ? "o in browser · " : ""}←→ switch tab · ↓ into the tab · 1-6 jump · A audit · c copy invite · s settings · S global · i you · q quit`}
       onKey={(key) => {
         const index = TABS.indexOf(active);
         if (key.name === "left" && index > 0) return jump(TABS[index - 1]!), true;

@@ -7,7 +7,7 @@ import { RESTART_EXIT_CODE } from "../../services/Updates";
 import { Panel } from "../../components/Panel";
 import { captureAtom, focusAtom, leftEdgeAtom } from "../../components/focus";
 import { keyDebug } from "../../components/keys";
-import { useRouter, type Route } from "../../app/router";
+import { to, useRouter, type Route } from "../../app/router";
 import { roomAtom } from "../atoms";
 import { openAuditPageAtom } from "./review/atoms";
 import { installAppUpdateAtom } from "./atoms";
@@ -49,7 +49,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
               ? [...trailOf(destination.back), "why"]
               : destination.name === "room/people"
                 ? [...trailOf(destination.back), "people"]
-                : [...trailOf(destination.back), destination.file];
+                : destination.name === "settings/global"
+                  ? [...trailOf(destination.back), "global settings"]
+                  : [...trailOf(destination.back), destination.file];
   const crumb =
     page === null
       ? null
@@ -64,7 +66,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
               ? { trail: trailOf(page.back), label: "why", back: page.back, focus: "ticket-review" }
               : page.name === "room/people"
                 ? { trail: trailOf(page.back), label: "people", back: page.back, focus: "people" }
-                : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
+                : page.name === "settings/global"
+                  ? { trail: trailOf(page.back), label: "global settings", back: page.back, focus: "tabs" }
+                  : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
   const goBack = () => {
     if (!crumb) return;
     navigate(crumb.back);
@@ -105,6 +109,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "q") return onExit();
     // shift: the audit page, in the browser
     if (key.name === "a" && key.shift) return room.id ? openAudit({ roomId: room.id }) : undefined;
+    // shift: the global settings, straight from wherever in the room
+    if (key.name === "s" && key.shift) return navigate(to.globalSettings(route));
     if (key.name === "s") return navigate("settings");
     if (key.name === "i") return navigate("you");
     if (key.name === "u") return installUpdate({});
