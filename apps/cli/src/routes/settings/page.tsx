@@ -3,7 +3,7 @@ import { useKeyboard } from "@opentui/react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import type { JobKind, LocalState, MergeFor, Steering } from "@collagen/p2p";
-import { useRouter } from "../../app/router";
+import { to, useRouter, type Route } from "../../app/router";
 import { clip } from "../../lib/columns";
 import { theme } from "../../app/theme";
 import { FollowScroll } from "../../components/FollowScroll";
@@ -13,28 +13,25 @@ import { levelOf, masterOf, roomLevelOf, STEERING_HELP, STEERING_LABEL, STEERING
 import { JOB_LABEL, jobLimitOf, mostUsedHarness, withHarness, withModel } from "../../lib/jobs";
 import { roomAtom } from "../atoms";
 import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
-import { CAUSE_WORDS, namesKind, pickable, TAG_CHOICES, ROWS, STEER_WORDS, TABS, TAG_WORDS, type Row, type Scope, type Tab } from "./rows";
+import { CAUSE_WORDS, pickable, TAG_CHOICES, ROWS, STEER_WORDS, TABS, TAG_WORDS, type Row, type Scope, type Tab } from "./rows";
 
 /** The width of a row's words, and of each column after them. */
-const WORDS = 28;
+const WORDS = 33;
 /** A steering row's name, before whose doing it is. */
 const KIND = 16;
 const COLUMN = 24;
 /** The job limit round: 1 → 4 and back. */
 const JOB_LIMITS = [1, 2, 3, 4];
 
+/** The option `by` one along a round of them, from `current`: → the next, ← the one before, wrapping. */
+const step = <T,>(order: ReadonlyArray<T>, current: T, by: 1 | -1): T => order[(order.indexOf(current) + by + order.length) % order.length]!;
 /** A round of levels: not chosen first (following the general level, or —
- *  in a room — everywhere), then up from never. */
-const nextLevel = (level: Steering | undefined): Steering | null => {
-  const order: ReadonlyArray<Steering | null> = [null, ...STEERING_ORDER];
-  return order[(order.indexOf(level ?? null) + 1) % order.length]!;
-};
+ *  in a room — its Default), then up from never. */
+const nextLevel = (level: Steering | undefined, by: 1 | -1): Steering | null => step<Steering | null>([null, ...STEERING_ORDER], level ?? null, by);
 const everywhereOf = (state: LocalState | null, at: SteeringAt, cause: Cause): Steering | undefined =>
   at === "master" ? state?.steering?.master?.[cause] : state?.steering?.kinds?.[at]?.[cause];
-const nextMerge = (level: MergeFor | undefined, allowNone: boolean): MergeFor | null => {
-  const order: ReadonlyArray<MergeFor | null> = allowNone ? [null, ...MERGE_LEVELS] : MERGE_LEVELS;
-  return order[(order.indexOf(level ?? (allowNone ? null : "off")) + 1) % order.length]!;
-};
+const nextMerge = (level: MergeFor | undefined, allowNone: boolean, by: 1 | -1): MergeFor | null =>
+  step<MergeFor | null>(allowNone ? [null, ...MERGE_LEVELS] : MERGE_LEVELS, level ?? (allowNone ? null : "off"), by);
 /** Every label, value and line on the page starts with a capital, whatever
  *  shared words it is built from — one rule, so none reads as a slip. */
 const capital = (text: string): string => text.replace(/[A-Za-z]/, (letter) => letter.toUpperCase());
@@ -47,7 +44,7 @@ const cell = (text: string) => capital(text).padEnd(COLUMN).slice(0, COLUMN);
  *  g there opens the global settings, everything else with them. Each change
  *  applies the moment it is made (your agent can make them too:
  *  set-steering, set-jobs, set-settings, set-merging). */
-export function SettingsPage({ scope }: { scope: Scope }) {
+export function SettingsPage({ scope, back = "room/overview" }: { scope: Scope; back?: Route }) {
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { navigate } = useRouter();
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
@@ -78,27 +75,32 @@ export function SettingsPage({ scope }: { scope: Scope }) {
   const switchTab = (by: 1 | -1) => showTab(TABS[(TABS.findIndex((each) => each.id === tab) + by + TABS.length) % TABS.length]!.id);
 
   const change = (update: (previous: LocalState) => LocalState) => updateState({ update });
-  /** space or enter on the cell under the cursor */
-  const act = () => {
+  /** The cell under the cursor moved along its options: space, enter and → to the next, ← to the one before. */
+  const act = (by: 1 | -1) => {
     if (row.kind === "steer")
       return change((previous) =>
-        here ? withLevel(previous, row.at, row.cause, nextLevel(roomLevelOf(previous, room.id, row.at, row.cause)), room.id) : withLevel(previous, row.at, row.cause, nextLevel(everywhereOf(previous, row.at, row.cause))),
+        here
+          ? withLevel(previous, row.at, row.cause, nextLevel(roomLevelOf(previous, room.id, row.at, row.cause), by), room.id)
+          : withLevel(previous, row.at, row.cause, nextLevel(everywhereOf(previous, row.at, row.cause), by)),
       );
     if (row.kind === "merge")
-      return change((previous) => (here ? withMergeFor(previous, { room: room.id }, nextMerge(previous.merging?.rooms?.[room.id], true)) : withMergeFor(previous, { default: true }, nextMerge(previous.merging?.default, false))));
-    if (row.kind === "tag") return change((previous) => withTagRoute(previous, TAG_CHOICES[(TAG_CHOICES.indexOf(tagRouteOf(previous)) + 1) % TAG_CHOICES.length]!));
+      return change((previous) =>
+        here ? withMergeFor(previous, { room: room.id }, nextMerge(previous.merging?.rooms?.[room.id], true, by)) : withMergeFor(previous, { default: true }, nextMerge(previous.merging?.default, false, by)),
+      );
+    if (row.kind === "tag") return change((previous) => withTagRoute(previous, step(TAG_CHOICES, tagRouteOf(previous), by)));
+    // on or off: either way is the other
     if (row.kind === "switch") return change((previous) => withSetting(previous, row.key, !settingOf(previous, row.key)));
-    if (row.kind === "jobLimit") return change((previous) => ({ ...previous, jobLimit: JOB_LIMITS[(JOB_LIMITS.indexOf(jobLimitOf(previous)) + 1) % JOB_LIMITS.length]! }));
+    if (row.kind === "jobLimit") return change((previous) => ({ ...previous, jobLimit: step(JOB_LIMITS, jobLimitOf(previous), by) }));
     if (row.kind === "harness") {
       const round: ReadonlyArray<string | null> = [null, ...choices.filter((choice): choice is string => choice !== null)];
-      return change((previous) => withHarness(previous, row.job, round[(round.indexOf(previous.harnesses?.[row.job] ?? null) + 1) % round.length] ?? null));
+      return change((previous) => withHarness(previous, row.job, step(round, previous.harnesses?.[row.job] ?? null, by)));
     }
   };
 
   useKeyboard((key) => {
     // the global page is reached from the room's, and goes back to it
-    if (key.name === "escape") return navigate(here ? "room/overview" : "settings");
-    if (key.name === "g" && here && row.kind !== "model") return navigate("settings/global");
+    if (key.name === "escape") return navigate(here ? "room/overview" : back);
+    if (key.name === "g" && here && row.kind !== "model") return navigate(to.globalSettings("settings"));
     if (key.name === "tab") return switchTab(key.shift ? -1 : 1);
     if (onBar) {
       if (key.name === "left") return switchTab(-1);
@@ -113,18 +115,21 @@ export function SettingsPage({ scope }: { scope: Scope }) {
     if (key.name === "up") return move(-1);
     // typing a model: the arrows and space are the field's
     if (row.kind === "model") return;
-    if (key.name === "space" || key.name === "return" || key.name === "enter") return act();
+    if (key.name === "space" || key.name === "return" || key.name === "enter" || key.name === "right") return act(1);
+    if (key.name === "left") return act(-1);
   });
 
   /** A steering row's cell: the level that applies on this page, and
-   *  whether it is set here (bright) or taken from above it (dim) — in a
-   *  room, from global, which it says; globally, from the General tab. */
+   *  whether it is set here (bright) or taken from above it (dim). In a
+   *  room, one it does not set is its Default — the global setting, shown
+   *  beside it, so choosing it there changes nothing global; globally, a
+   *  row not set follows the General tab. */
   const steerCell = (at: SteeringAt, cause: Cause): { readonly text: string; readonly set: boolean } => {
     const known = state ?? { steering: undefined };
     const roomId = here ? room.id : undefined;
     const applies = at === "master" ? masterOf(known, cause, roomId) : levelOf(known, at, cause, roomId);
     const set = here ? roomLevelOf(known, room.id, at, cause) !== undefined : everywhereOf(state, at, cause) !== undefined;
-    return { text: here && !set ? `${STEERING_LABEL[applies]} · global` : STEERING_LABEL[applies], set };
+    return { text: here && !set ? `Default (${STEERING_LABEL[applies]})` : STEERING_LABEL[applies], set };
   };
 
   const line = (each: Row, index: number) => {
@@ -146,14 +151,6 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         );
       case "space":
         return <text key={each.id} id={each.id}>{" "}</text>;
-      case "columns":
-        return (
-          <text key={each.id} id={each.id} fg={theme.dim} wrapMode="none">
-            {"".padEnd(WORDS)}
-            {/* the room this page is for, by its name */}
-            {here ? (room.name ? `In ${clip(room.name, 40)}` : "This room") : "Every room"}
-          </text>
-        );
       case "note":
         return (
           <text key={each.id} id={each.id} fg={theme.dim}>
@@ -164,7 +161,8 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         const value = steerCell(each.at, each.cause);
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(`${(namesKind(each) ? capital(STEER_WORDS[each.at]) : "").padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
+            {/* the General rows say whose doing; the rest sit under Single player or Multiplayer, and under their ticket kind */}
+            {words(each.at === "master" ? `${(each.unnamed ? "" : capital(STEER_WORDS.master)).padEnd(KIND)}${CAUSE_WORDS[each.cause]}` : `  ${capital(STEER_WORDS[each.at])}`)}
             <span fg={mark(value.set)}>{cell(value.text)}</span>
           </text>
         );
@@ -174,8 +172,8 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         const everywhere = state?.merging?.default ?? "off";
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words("auto-merge")}
-            <span fg={mark(!here || mergeRoom !== undefined)}>{cell(mergeRoom ?? (here ? `${everywhere} · global` : everywhere))}</span>
+            {words("  auto-merge")}
+            <span fg={mark(!here || mergeRoom !== undefined)}>{cell(mergeRoom ?? (here ? `Default (${everywhere})` : everywhere))}</span>
           </text>
         );
       }
@@ -235,7 +233,7 @@ export function SettingsPage({ scope }: { scope: Scope }) {
       const known = state ?? { steering: undefined };
       const roomId = here ? room.id : undefined;
       const applies = STEERING_HELP[row.at === "master" ? masterOf(known, row.cause, roomId) : levelOf(known, row.at, row.cause, roomId)];
-      return `${about}: ${applies}${here ? " (from global)" : row.at === "master" ? "" : " (as General)"}`;
+      return `${about}: ${applies}${here ? " (this room's default: your global setting)" : row.at === "master" ? "" : " (as General)"}`;
     }
     if (row.kind === "tag") {
       const route = state ? tagRouteOf(state) : "existing";
@@ -274,8 +272,8 @@ export function SettingsPage({ scope }: { scope: Scope }) {
       </FollowScroll>
       <text fg={theme.dim}>{onBar ? "" : capital(help())}</text>
       <text fg={theme.dim}>
-        {onBar ? "←→ switch tab · 1-3 jump · ↓ into the settings" : "↑↓ row (↑ at the top: the tabs) · 1-3 tab · space changes it"}
-        {here ? " · g global settings · esc back" : " · esc the room's steering"}
+        {onBar ? "←→ switch tab · 1-3 jump · ↓ into the settings" : "↑↓ row (↑ at the top: the tabs) · 1-3 tab · ←→ or space changes it"}
+        {here ? " · g global settings · esc back" : back === "settings" ? " · esc the room's steering" : " · esc back"}
       </text>
     </box>
   );

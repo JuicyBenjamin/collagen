@@ -1,6 +1,6 @@
 import type { JobKind, SteeringKind, TagRoute } from "@collagen/p2p";
 import type { SettingKey } from "../../lib/settings";
-import type { Cause, SteeringAt } from "../../lib/steering";
+import { STEERING_GROUPS, type Cause, type SteeringAt } from "../../lib/steering";
 
 /** The settings page's tabs: first the general level every row not set
  *  follows, with the page's own switches; then, by who acts in your name,
@@ -19,7 +19,8 @@ export type Scope = "room" | "global";
 
 /** One line on the page. */
 export type Row =
-  | { readonly id: string; readonly kind: "steer"; readonly at: SteeringAt; readonly cause: Cause }
+  /** `unnamed`: the second row of its kind, right under the first, which names it */
+  | { readonly id: string; readonly kind: "steer"; readonly at: SteeringAt; readonly cause: Cause; readonly unnamed?: true }
   | { readonly id: string; readonly kind: "tag" }
   | { readonly id: string; readonly kind: "switch"; readonly key: SettingKey; readonly name?: string; readonly says?: { readonly on: string; readonly off: string } }
   /** a group's name, over the rows that set it */
@@ -31,8 +32,6 @@ export type Row =
   | { readonly id: string; readonly kind: "heading"; readonly text: string }
   /** a dim line under a heading: what the rows below are about, in a sentence */
   | { readonly id: string; readonly kind: "note"; readonly text: string; readonly indent?: number }
-  /** the column's name, right above the rows that have it */
-  | { readonly id: string; readonly kind: "columns" }
   | { readonly id: string; readonly kind: "space" };
 
 /** Each steering row's name, a word or two: the line under the list says the rest. */
@@ -53,8 +52,8 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   admit: "letting in",
 };
 
-/** Whose doing a steering row is about: yours, or another person's. */
-export const CAUSE_WORDS: Record<Cause, string> = { mine: "You", others: "Others" };
+/** Whose doing a steering row is about: yours (single player), or another person's (multiplayer). */
+export const CAUSE_WORDS: Record<Cause, string> = { mine: "Single player", others: "Multiplayer" };
 
 /** Each job's row name. */
 export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks", answering: "answers", chat: "chat", guidance: "guidance pass" };
@@ -82,22 +81,46 @@ export const TAG_WORDS: Record<TagRoute, string> = {
  *  yet, so only these two do what they say (an agent may still set others). */
 export const TAG_CHOICES: ReadonlyArray<TagRoute> = ["existing", "none"];
 
-const steer = (at: SteeringAt): ReadonlyArray<Row> => [
-  { id: `steer:${at}:mine`, kind: "steer", at, cause: "mine" },
-  { id: `steer:${at}:others`, kind: "steer", at, cause: "others" },
-];
+/** A kind's steering rows: for your own doing (single player), another
+ *  person's (multiplayer), or both, the second right under the first. */
+const steer = (at: SteeringAt, causes: ReadonlyArray<Cause> = ["mine", "others"]): ReadonlyArray<Row> =>
+  causes.map((cause, index): Row => ({ id: `steer:${at}:${cause}`, kind: "steer", at, cause, ...(index > 0 ? { unnamed: true as const } : {}) }));
+/** Whose doing each kind can be: most both; some only ever yours or only another's. */
+const CAUSES: Partial<Record<SteeringKind, ReadonlyArray<Cause>>> = {
+  // only your own tickets close: nobody else's doing closes them
+  close: ["mine"],
+  // a review of your work is asked by someone else
+  review: ["others"],
+  // your chat asking a review's author's AI
+  forward: ["mine"],
+  // a pass on reviews you file
+  guidance: ["mine"],
+  // who comes into a room, and who is taken out
+  admit: ["mine"],
+};
 const job = (kind: JobKind): ReadonlyArray<Row> => [
   { id: `label:${kind}`, kind: "label", text: JOB_WORDS[kind] },
   { id: `about:${kind}`, kind: "note", text: JOB_ABOUT[kind], indent: 4 },
   { id: `harness:${kind}`, kind: "harness", job: kind },
   { id: `model:${kind}`, kind: "model", job: kind },
 ];
-const AI_KINDS: ReadonlyArray<SteeringKind> = ["work", "deliver", "run", "investigate", "report"];
 
 /** An empty line. Space says what belongs together: a row's lines sit
  *  close, groups of rows a line apart, sections two (skill: alignment). */
 let spaces = 0;
 const space = (): Row => ({ id: `space:${spaces++}`, kind: "space" });
+
+/** On the room's page, once: what its Default is. */
+const inRoom = (scope: Scope): ReadonlyArray<string> => (scope === "room" ? ["Default: your global setting (g), until you choose one for this room."] : []);
+
+/** One side's steering rows (single player or multiplayer), by the ticket
+ *  kind that starts them: each kind's name over its rows, none where no row
+ *  of it is on that side. The repo host is Tools' alone (`tools`). */
+const byTicket = (cause: Cause, tools: boolean): ReadonlyArray<ReadonlyArray<Row>> =>
+  STEERING_GROUPS.flatMap((group) => {
+    const kinds = group.kinds.filter((kind) => (kind === "host") === tools && (CAUSES[kind] ?? ["mine", "others"]).includes(cause));
+    return kinds.length === 0 ? [] : [[{ id: `label:${cause}:${group.title}`, kind: "label", text: group.title } satisfies Row, ...kinds.flatMap((kind) => steer(kind, [cause]))]];
+  });
 
 /** A section: its title, then what it is about, then its groups of rows,
  *  each a line apart from the next. */
@@ -108,7 +131,7 @@ const section = (title: string, about: ReadonlyArray<string>, ...groups: Readonl
 ];
 /** Sections two lines apart. */
 const sections = (...parts: ReadonlyArray<ReadonlyArray<Row>>): ReadonlyArray<Row> => parts.flatMap((part, index) => (index === 0 ? part : [space(), space(), ...part]));
-const COLUMNS: Row = { id: "columns", kind: "columns" };
+
 
 /** The rows of each tab, for a scope: the room's page holds its steering
  *  and auto-merge alone — what a room can set — and the global page
@@ -116,26 +139,18 @@ const COLUMNS: Row = { id: "columns", kind: "columns" };
 const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ai: sections(
     section(
-      "Steering",
+      "Single player",
       [
         scope === "room" ? "Your AI acting for you in this room: how far collagen goes with it before asking you." : "Your AI acting for you: how far collagen goes with it before asking you, in every room that sets nothing of its own.",
-        "You: started by you or your AI, like a ticket you filed.",
-        "Others: started by someone else, like their ticket naming you, or their message.",
+        "What you or your AI started.",
+        ...inRoom(scope),
       ],
-      [COLUMNS, ...steer("work")],
-      ...AI_KINDS.filter((kind) => kind !== "work").map(steer),
-      // only your own tickets close: nobody else's doing closes them, so one row
-      [{ id: "steer:close:mine", kind: "steer", at: "close", cause: "mine" }],
-      // a review of your work is asked by someone else: one row
-      [{ id: "steer:review:others", kind: "steer", at: "review", cause: "others" }],
-      // your chat asking a review's author's AI: only your own doing
-      [{ id: "steer:forward:mine", kind: "steer", at: "forward", cause: "mine" }],
-      steer("answer"),
-      steer("notes"),
-      // a pass on reviews you file: only your own doing
-      [{ id: "steer:guidance:mine", kind: "steer", at: "guidance", cause: "mine" }],
-      // who comes into a room, and who is taken out: only your own doing
-      [{ id: "steer:admit:mine", kind: "steer", at: "admit", cause: "mine" }],
+      ...byTicket("mine", false),
+    ),
+    section(
+      "Multiplayer",
+      ["What someone else started: what they may set off on your side."],
+      ...byTicket("others", false),
       ...(scope === "global"
         ? [
             [
@@ -161,14 +176,22 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ),
   tools: sections(
     section(
-      "Steering",
-      ["What collagen does with your accounts itself, with no AI, like posting a review or merging.", "You: your own doing, like your approval.", "Others: a colleague's doing, like their approval merging your pull request."],
-      [COLUMNS, ...steer("host")],
-      [{ id: "merge", kind: "merge" }],
+      "Single player",
+      ["What collagen does with your accounts itself, with no AI, like posting a review or merging.", "Your own doing, like your approval.", ...inRoom(scope)],
+      ...byTicket("mine", true).map((group) => [...group, { id: "merge", kind: "merge" } satisfies Row]),
     ),
+    section("Multiplayer", ["A colleague's doing, like their approval merging your pull request."], ...byTicket("others", true)),
   ),
   general: sections(
-    section("Steering", [scope === "room" ? "The level every row on AI and Tools follows in this room until you set it." : "The level every row on AI and Tools follows until you set it."], [COLUMNS, ...steer("master")]),
+    section(
+      "Steering",
+      [
+        scope === "room" ? "The level every row on AI and Tools follows in this room until you set it." : "The level every row on AI and Tools follows until you set it.",
+        "Single player: what you or your AI started. Multiplayer: what someone else started.",
+        ...inRoom(scope),
+      ],
+      [...steer("master")],
+    ),
     ...(scope === "global"
       ? [
           section("Reviews", [], [
@@ -181,12 +204,6 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
 });
 
 export const ROWS: Record<Scope, Record<Tab, ReadonlyArray<Row>>> = { room: rowsOf("room"), global: rowsOf("global") };
-
-/** Kinds with a row for your own doing: theirs names the kind; a kind
- *  that is only others' names it on its one row. */
-const WITH_MINE = new Set(Object.values(ROWS.global).flatMap((rows) => rows.flatMap((row) => (row.kind === "steer" && row.cause === "mine" ? [row.at] : []))));
-/** Whether a steering row says which kind it is: the first row of its kind. */
-export const namesKind = (row: Extract<Row, { kind: "steer" }>): boolean => row.cause === "mine" || !WITH_MINE.has(row.at);
 
 /** Rows the cursor can rest on. */
 export const pickable = (row: Row): boolean => row.kind === "steer" || row.kind === "tag" || row.kind === "switch" || row.kind === "jobLimit" || row.kind === "harness" || row.kind === "model" || row.kind === "merge";
