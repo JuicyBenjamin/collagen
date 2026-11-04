@@ -117,14 +117,16 @@ export function SettingsPage({ scope }: { scope: Scope }) {
   });
 
   /** A steering row's cell: the level that applies on this page, and
-   *  whether it is set here (bright) or taken from above it (dim) — in a
-   *  room, from global, as the page says once; globally, from the General tab. */
+   *  whether it is set here (bright) or taken from above it (dim). In a
+   *  room, one it does not set is its Default — the global setting, shown
+   *  beside it, so choosing it there changes nothing global; globally, a
+   *  row not set follows the General tab. */
   const steerCell = (at: SteeringAt, cause: Cause): { readonly text: string; readonly set: boolean } => {
     const known = state ?? { steering: undefined };
     const roomId = here ? room.id : undefined;
     const applies = at === "master" ? masterOf(known, cause, roomId) : levelOf(known, at, cause, roomId);
     const set = here ? roomLevelOf(known, room.id, at, cause) !== undefined : everywhereOf(state, at, cause) !== undefined;
-    return { text: STEERING_LABEL[applies], set };
+    return { text: here && !set ? `Default (${STEERING_LABEL[applies]})` : STEERING_LABEL[applies], set };
   };
 
   const line = (each: Row, index: number) => {
@@ -156,7 +158,8 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         const value = steerCell(each.at, each.cause);
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(`${(each.unnamed ? "" : capital(STEER_WORDS[each.at])).padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
+            {/* the General rows say whose doing; the rest sit under Single player or Multiplayer, and under their ticket kind */}
+            {words(each.at === "master" ? `${(each.unnamed ? "" : capital(STEER_WORDS.master)).padEnd(KIND)}${CAUSE_WORDS[each.cause]}` : `  ${capital(STEER_WORDS[each.at])}`)}
             <span fg={mark(value.set)}>{cell(value.text)}</span>
           </text>
         );
@@ -166,8 +169,8 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         const everywhere = state?.merging?.default ?? "off";
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words("auto-merge")}
-            <span fg={mark(!here || mergeRoom !== undefined)}>{cell(mergeRoom ?? everywhere)}</span>
+            {words("  auto-merge")}
+            <span fg={mark(!here || mergeRoom !== undefined)}>{cell(mergeRoom ?? (here ? `Default (${everywhere})` : everywhere))}</span>
           </text>
         );
       }
@@ -227,7 +230,7 @@ export function SettingsPage({ scope }: { scope: Scope }) {
       const known = state ?? { steering: undefined };
       const roomId = here ? room.id : undefined;
       const applies = STEERING_HELP[row.at === "master" ? masterOf(known, row.cause, roomId) : levelOf(known, row.at, row.cause, roomId)];
-      return `${about}: ${applies}${here ? " (not set in this room: your global setting)" : row.at === "master" ? "" : " (as General)"}`;
+      return `${about}: ${applies}${here ? " (this room's default: your global setting)" : row.at === "master" ? "" : " (as General)"}`;
     }
     if (row.kind === "tag") {
       const route = state ? tagRouteOf(state) : "existing";

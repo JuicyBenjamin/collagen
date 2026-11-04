@@ -110,8 +110,17 @@ const job = (kind: JobKind): ReadonlyArray<Row> => [
 let spaces = 0;
 const space = (): Row => ({ id: `space:${spaces++}`, kind: "space" });
 
-/** On the room's page, once: what a dim level is. */
-const inRoom = (scope: Scope): ReadonlyArray<string> => (scope === "room" ? ["Dim: not set in this room, so it follows your global settings (g)."] : []);
+/** On the room's page, once: what its Default is. */
+const inRoom = (scope: Scope): ReadonlyArray<string> => (scope === "room" ? ["Default: your global setting (g), until you choose one for this room."] : []);
+
+/** One side's steering rows (single player or multiplayer), by the ticket
+ *  kind that starts them: each kind's name over its rows, none where no row
+ *  of it is on that side. The repo host is Tools' alone (`tools`). */
+const byTicket = (cause: Cause, tools: boolean): ReadonlyArray<ReadonlyArray<Row>> =>
+  STEERING_GROUPS.flatMap((group) => {
+    const kinds = group.kinds.filter((kind) => (kind === "host") === tools && (CAUSES[kind] ?? ["mine", "others"]).includes(cause));
+    return kinds.length === 0 ? [] : [[{ id: `label:${cause}:${group.title}`, kind: "label", text: group.title } satisfies Row, ...kinds.flatMap((kind) => steer(kind, [cause]))]];
+  });
 
 /** A section: its title, then what it is about, then its groups of rows,
  *  each a line apart from the next. */
@@ -129,30 +138,29 @@ const sections = (...parts: ReadonlyArray<ReadonlyArray<Row>>): ReadonlyArray<Ro
  *  everything, its steering what every room takes until it sets its own. */
 const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ai: sections(
-    section("Steering", [
-      scope === "room" ? "Your AI acting for you in this room: how far collagen goes with it before asking you." : "Your AI acting for you: how far collagen goes with it before asking you, in every room that sets nothing of its own.",
-      "Single player: started by you or your AI. Multiplayer: started by someone else, what they may set off on your side.",
-      ...inRoom(scope),
-    ]),
-    // by the ticket kind that starts them, the repo host left to Tools
-    ...STEERING_GROUPS.map((group) => {
-      const kinds = group.kinds.filter((kind) => kind !== "host");
-      return section(
-        group.title,
-        [group.about],
-        steer(kinds[0]!, CAUSES[kinds[0]!]),
-        ...kinds.slice(1).map((kind) => steer(kind, CAUSES[kind])),
-        ...(scope === "global" && group.title === "Not from a ticket"
-          ? [
-              [
-                { id: "label:tag", kind: "label", text: "messages for you" },
-                { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
-                { id: "tag", kind: "tag" },
-              ] satisfies ReadonlyArray<Row>,
-            ]
-          : []),
-      );
-    }),
+    section(
+      "Single player",
+      [
+        scope === "room" ? "Your AI acting for you in this room: how far collagen goes with it before asking you." : "Your AI acting for you: how far collagen goes with it before asking you, in every room that sets nothing of its own.",
+        "What you or your AI started.",
+        ...inRoom(scope),
+      ],
+      ...byTicket("mine", false),
+    ),
+    section(
+      "Multiplayer",
+      ["What someone else started: what they may set off on your side."],
+      ...byTicket("others", false),
+      ...(scope === "global"
+        ? [
+            [
+              { id: "label:tag", kind: "label", text: "messages for you" },
+              { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
+              { id: "tag", kind: "tag" },
+            ] satisfies ReadonlyArray<Row>,
+          ]
+        : []),
+    ),
     ...(scope === "global" ? [section(
       "AI runs",
       ["When collagen runs your AI itself: the harness and model each kind of run uses."],
@@ -168,15 +176,11 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ),
   tools: sections(
     section(
-      "Reviews",
-      [
-        "What collagen does with your accounts itself, with no AI, like posting a review or merging.",
-        "Single player: your own doing, like your approval. Multiplayer: a colleague's doing, like their approval merging your pull request.",
-        ...inRoom(scope),
-      ],
-      [...steer("host")],
-      [{ id: "merge", kind: "merge" }],
+      "Single player",
+      ["What collagen does with your accounts itself, with no AI, like posting a review or merging.", "Your own doing, like your approval.", ...inRoom(scope)],
+      ...byTicket("mine", true).map((group) => [...group, { id: "merge", kind: "merge" } satisfies Row]),
     ),
+    section("Multiplayer", ["A colleague's doing, like their approval merging your pull request."], ...byTicket("others", true)),
   ),
   general: sections(
     section(
