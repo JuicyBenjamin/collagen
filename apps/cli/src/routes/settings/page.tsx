@@ -23,18 +23,15 @@ const COLUMN = 24;
 /** The job limit round: 1 → 4 and back. */
 const JOB_LIMITS = [1, 2, 3, 4];
 
+/** The option `by` one along a round of them, from `current`: → the next, ← the one before, wrapping. */
+const step = <T,>(order: ReadonlyArray<T>, current: T, by: 1 | -1): T => order[(order.indexOf(current) + by + order.length) % order.length]!;
 /** A round of levels: not chosen first (following the general level, or —
- *  in a room — everywhere), then up from never. */
-const nextLevel = (level: Steering | undefined): Steering | null => {
-  const order: ReadonlyArray<Steering | null> = [null, ...STEERING_ORDER];
-  return order[(order.indexOf(level ?? null) + 1) % order.length]!;
-};
+ *  in a room — its Default), then up from never. */
+const nextLevel = (level: Steering | undefined, by: 1 | -1): Steering | null => step<Steering | null>([null, ...STEERING_ORDER], level ?? null, by);
 const everywhereOf = (state: LocalState | null, at: SteeringAt, cause: Cause): Steering | undefined =>
   at === "master" ? state?.steering?.master?.[cause] : state?.steering?.kinds?.[at]?.[cause];
-const nextMerge = (level: MergeFor | undefined, allowNone: boolean): MergeFor | null => {
-  const order: ReadonlyArray<MergeFor | null> = allowNone ? [null, ...MERGE_LEVELS] : MERGE_LEVELS;
-  return order[(order.indexOf(level ?? (allowNone ? null : "off")) + 1) % order.length]!;
-};
+const nextMerge = (level: MergeFor | undefined, allowNone: boolean, by: 1 | -1): MergeFor | null =>
+  step<MergeFor | null>(allowNone ? [null, ...MERGE_LEVELS] : MERGE_LEVELS, level ?? (allowNone ? null : "off"), by);
 /** Every label, value and line on the page starts with a capital, whatever
  *  shared words it is built from — one rule, so none reads as a slip. */
 const capital = (text: string): string => text.replace(/[A-Za-z]/, (letter) => letter.toUpperCase());
@@ -78,20 +75,25 @@ export function SettingsPage({ scope }: { scope: Scope }) {
   const switchTab = (by: 1 | -1) => showTab(TABS[(TABS.findIndex((each) => each.id === tab) + by + TABS.length) % TABS.length]!.id);
 
   const change = (update: (previous: LocalState) => LocalState) => updateState({ update });
-  /** space or enter on the cell under the cursor */
-  const act = () => {
+  /** The cell under the cursor moved along its options: space, enter and → to the next, ← to the one before. */
+  const act = (by: 1 | -1) => {
     if (row.kind === "steer")
       return change((previous) =>
-        here ? withLevel(previous, row.at, row.cause, nextLevel(roomLevelOf(previous, room.id, row.at, row.cause)), room.id) : withLevel(previous, row.at, row.cause, nextLevel(everywhereOf(previous, row.at, row.cause))),
+        here
+          ? withLevel(previous, row.at, row.cause, nextLevel(roomLevelOf(previous, room.id, row.at, row.cause), by), room.id)
+          : withLevel(previous, row.at, row.cause, nextLevel(everywhereOf(previous, row.at, row.cause), by)),
       );
     if (row.kind === "merge")
-      return change((previous) => (here ? withMergeFor(previous, { room: room.id }, nextMerge(previous.merging?.rooms?.[room.id], true)) : withMergeFor(previous, { default: true }, nextMerge(previous.merging?.default, false))));
-    if (row.kind === "tag") return change((previous) => withTagRoute(previous, TAG_CHOICES[(TAG_CHOICES.indexOf(tagRouteOf(previous)) + 1) % TAG_CHOICES.length]!));
+      return change((previous) =>
+        here ? withMergeFor(previous, { room: room.id }, nextMerge(previous.merging?.rooms?.[room.id], true, by)) : withMergeFor(previous, { default: true }, nextMerge(previous.merging?.default, false, by)),
+      );
+    if (row.kind === "tag") return change((previous) => withTagRoute(previous, step(TAG_CHOICES, tagRouteOf(previous), by)));
+    // on or off: either way is the other
     if (row.kind === "switch") return change((previous) => withSetting(previous, row.key, !settingOf(previous, row.key)));
-    if (row.kind === "jobLimit") return change((previous) => ({ ...previous, jobLimit: JOB_LIMITS[(JOB_LIMITS.indexOf(jobLimitOf(previous)) + 1) % JOB_LIMITS.length]! }));
+    if (row.kind === "jobLimit") return change((previous) => ({ ...previous, jobLimit: step(JOB_LIMITS, jobLimitOf(previous), by) }));
     if (row.kind === "harness") {
       const round: ReadonlyArray<string | null> = [null, ...choices.filter((choice): choice is string => choice !== null)];
-      return change((previous) => withHarness(previous, row.job, round[(round.indexOf(previous.harnesses?.[row.job] ?? null) + 1) % round.length] ?? null));
+      return change((previous) => withHarness(previous, row.job, step(round, previous.harnesses?.[row.job] ?? null, by)));
     }
   };
 
@@ -113,7 +115,8 @@ export function SettingsPage({ scope }: { scope: Scope }) {
     if (key.name === "up") return move(-1);
     // typing a model: the arrows and space are the field's
     if (row.kind === "model") return;
-    if (key.name === "space" || key.name === "return" || key.name === "enter") return act();
+    if (key.name === "space" || key.name === "return" || key.name === "enter" || key.name === "right") return act(1);
+    if (key.name === "left") return act(-1);
   });
 
   /** A steering row's cell: the level that applies on this page, and
@@ -269,7 +272,7 @@ export function SettingsPage({ scope }: { scope: Scope }) {
       </FollowScroll>
       <text fg={theme.dim}>{onBar ? "" : capital(help())}</text>
       <text fg={theme.dim}>
-        {onBar ? "←→ switch tab · 1-3 jump · ↓ into the settings" : "↑↓ row (↑ at the top: the tabs) · 1-3 tab · space changes it"}
+        {onBar ? "←→ switch tab · 1-3 jump · ↓ into the settings" : "↑↓ row (↑ at the top: the tabs) · 1-3 tab · ←→ or space changes it"}
         {here ? " · g global settings · esc back" : " · esc the room's steering"}
       </text>
     </box>
