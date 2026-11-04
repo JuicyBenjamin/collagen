@@ -511,9 +511,24 @@ export interface OnFile {
 /** Where a comment sits on the review's code: on lines, or on a whole file. */
 export type CommentSpot = OnLines | OnFile;
 
+/** A comment whose code changed since it was written: the branch moved, and
+ *  the lines it was on were edited, taken out, or left the change. It stays,
+ *  on its file, never moved onto other code — with where it was and those
+ *  lines as they were. */
+export interface Outdated {
+  /** where it was, in words: "line +120", "lines +12 to +15" */
+  readonly was: string;
+  /** what became of its lines */
+  readonly why: string;
+  /** its lines as they were when it was written; none when they cannot be read */
+  readonly quote: ReadonlyArray<string>;
+}
+
 /** A comment on the pull request's code: on a line, a block of lines, or a
  *  whole file (`CommentSpot`). */
 export type LineComment = CommentSpot & {
+  /** its code changed since it was written: it sits on its file */
+  readonly outdated?: Outdated;
   /** the host's id for it, or collagen's own for one said only in the room */
   readonly id: string;
   readonly author: HostUser;
@@ -559,8 +574,10 @@ export interface HostNote {
  *  or pending in their review — said with the rest when they finish it. */
 export type DraftView = CommentSpot & {
   readonly id: string;
-  /** the commit it was written at — its lines are that commit's */
+  /** the commit its lines are of: the branch's now, once followed there */
   readonly commit: string;
+  /** its code changed since it was written: it sits on its file, to keep there, move or delete */
+  readonly outdated?: Outdated;
   readonly body: string;
   /** the AI's longer version, one step away from the words shown */
   readonly detail?: string;

@@ -1,5 +1,5 @@
 import { action, createMemo, createOptimistic, createSignal, isPending, NotReadyError, refresh, type Accessor, type SourceAccessor } from "solid-js";
-import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, repinDraft, sendComment, submitReview, talkView } from "./api";
+import { acceptDrafts, addToReview, dropDrafts, editDraft, hostView, keepDraft, sendComment, submitReview, talkView } from "./api";
 import type { CommentSpot, DiffSide, DraftsResult, DraftView, HostUser, HostView, HostWrite, LineComment, SubmitResult, TalkView, Verdict } from "./data";
 import { diffNow } from "./diffNow";
 import { onceEach } from "./sameComment";
@@ -242,13 +242,9 @@ export const hostNow = {
     const at = diffNow.commit();
     return at !== null && at !== undefined && draft.commit !== at;
   },
-  /** Confirm a comment where it shows now, at the commit the page shows. */
-  repin: action(function* (id: string) {
-    const commit = diffNow.commit();
-    if (!commit) return;
-    setPending((current) => current.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
-    setDrafts((current) => current.map((draft) => (draft.id === id ? { ...draft, commit } : draft)));
-    const result = (yield repinDraft(ticketId, id, commit)) as DraftsResult;
+  /** Keep a comment not said yet where its code stands now — one whose code changed, on its file. */
+  keep: action(function* (id: string) {
+    const result = (yield keepDraft(ticketId, id)) as DraftsResult;
     note([id], result.failed);
     if (talk) refresh(talk);
   }),

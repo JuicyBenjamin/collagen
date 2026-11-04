@@ -101,6 +101,7 @@ export function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
         {(part) => (part.kind === "text" ? <Markdown text={part.text} /> : <Suggestion code={part.code} replaces={replaces()} />)}
       </For>
       <Detail text={shown().detail} />
+      <OutdatedNote comment={props.comment} />
     </div>
   );
 }
@@ -108,18 +109,45 @@ export function Comment(props: { comment: LineComment; codeOf: CodeOf }) {
 /** A comment the reader's AI drafted, waiting on the reader: its words (a
  *  suggestion in them shown as one), and Add to review — pending in their
  *  review, said when they finish it — Edit, or Decline. */
-/** A comment not said yet, written at another commit than the one the page
- *  shows: where it sits may have moved. The reader confirms it here or
- *  deletes it — until then, finishing the review refuses it. */
+/** A comment not said yet, its lines of another commit than the one the page
+ *  shows (the page not caught up with the branch yet): where it sits may not
+ *  be where it meant. Kept where its code stands now, or deleted — until
+ *  then, finishing the review refuses it. */
 function Moved(props: { comment: DraftView }) {
   return (
-    <Show when={hostNow.moved(props.comment)}>
+    <Show when={!props.comment.outdated && hostNow.moved(props.comment)}>
       <p class="moved-note">
         Written at {props.comment.commit.slice(0, 7)} — the code has moved since, so these lines may not be the ones it meant.
-        <button type="button" class="link" onClick={() => void hostNow.repin(props.comment.id)} title="It is about these lines at the commit shown now">
+        <button type="button" class="link" onClick={() => void hostNow.keep(props.comment.id)} title="Keep it where its code stands now">
           Keep it here
         </button>
       </p>
+    </Show>
+  );
+}
+
+/** A comment whose code changed since it was written: on its file now, never
+ *  on other lines — where it was, what became of them, and those lines as
+ *  they were. One not said yet is kept on the file (`keep`) or deleted. */
+function OutdatedNote(props: { comment: LineComment | DraftView; keep?: boolean }) {
+  const fence = (outdated: NonNullable<DraftView["outdated"]>) => `\`\`\`${props.comment.file.split(".").pop() ?? ""}\n${outdated.quote.join("\n")}\n\`\`\``;
+  return (
+    <Show when={props.comment.outdated}>
+      {(outdated) => (
+        <div class="outdated">
+          <p class="moved-note">
+            Outdated: it was on {outdated().was}, and {outdated().why}.
+            <Show when={props.keep}>
+              <button type="button" class="link" onClick={() => void hostNow.keep(props.comment.id)} title="Keep it as a comment on the whole file">
+                Keep on the file
+              </button>
+            </Show>
+          </p>
+          <Show when={outdated().quote.length > 0}>
+            <Markdown text={fence(outdated())} />
+          </Show>
+        </div>
+      )}
     </Show>
   );
 }
@@ -160,6 +188,7 @@ export function Draft(props: { draft: DraftView; codeOf: CodeOf }) {
       </Show>
       <Detail text={shown().detail} />
       <Moved comment={props.draft} />
+      <OutdatedNote comment={props.draft} keep />
       <Show when={hostNow.refusal(props.draft.id)}>{(why) => <p class="host-error">Not posted: {why()}</p>}</Show>
       <div class="composer-actions">
         <button type="button" class="btn btn-sm" disabled={busy()} onClick={() => void hostNow.decline([props.draft.id])}>
@@ -212,6 +241,7 @@ export function Pending(props: { comment: DraftView; codeOf: CodeOf }) {
       <Detail text={shown().detail} />
       <Show when={!props.comment.posted} fallback={<p class="moved-note">On the pull request already — finish the review again to say it in the room.</p>}>
         <Moved comment={props.comment} />
+        <OutdatedNote comment={props.comment} keep />
       </Show>
       <Show when={hostNow.refusal(props.comment.id)}>{(why) => <p class="host-error">{why()}</p>}</Show>
       <Show when={!props.comment.posted}>
