@@ -16,7 +16,7 @@ import { aiChoicesAtom, stateAtom, updateStateAtom } from "../room/atoms";
 import { CAUSE_WORDS, pickable, TAG_CHOICES, ROWS, STEER_WORDS, TABS, TAG_WORDS, type Row, type Scope, type Tab } from "./rows";
 
 /** The width of a row's words, and of each column after them. */
-const WORDS = 28;
+const WORDS = 33;
 /** A steering row's name, before whose doing it is. */
 const KIND = 16;
 const COLUMN = 24;
@@ -118,13 +118,13 @@ export function SettingsPage({ scope }: { scope: Scope }) {
 
   /** A steering row's cell: the level that applies on this page, and
    *  whether it is set here (bright) or taken from above it (dim) — in a
-   *  room, from global, which it says; globally, from the General tab. */
+   *  room, from global, as the page says once; globally, from the General tab. */
   const steerCell = (at: SteeringAt, cause: Cause): { readonly text: string; readonly set: boolean } => {
     const known = state ?? { steering: undefined };
     const roomId = here ? room.id : undefined;
     const applies = at === "master" ? masterOf(known, cause, roomId) : levelOf(known, at, cause, roomId);
     const set = here ? roomLevelOf(known, room.id, at, cause) !== undefined : everywhereOf(state, at, cause) !== undefined;
-    return { text: here && !set ? `${STEERING_LABEL[applies]} · global` : STEERING_LABEL[applies], set };
+    return { text: STEERING_LABEL[applies], set };
   };
 
   const line = (each: Row, index: number) => {
@@ -146,14 +146,6 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         );
       case "space":
         return <text key={each.id} id={each.id}>{" "}</text>;
-      case "columns":
-        return (
-          <text key={each.id} id={each.id} fg={theme.dim} wrapMode="none">
-            {"".padEnd(WORDS)}
-            {/* the room this page is for, by its name */}
-            {here ? (room.name ? `In ${clip(room.name, 40)}` : "This room") : "Every room"}
-          </text>
-        );
       case "note":
         return (
           <text key={each.id} id={each.id} fg={theme.dim}>
@@ -175,7 +167,7 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         return (
           <text key={each.id} id={each.id} wrapMode="none">
             {words("auto-merge")}
-            <span fg={mark(!here || mergeRoom !== undefined)}>{cell(mergeRoom ?? (here ? `${everywhere} · global` : everywhere))}</span>
+            <span fg={mark(!here || mergeRoom !== undefined)}>{cell(mergeRoom ?? everywhere)}</span>
           </text>
         );
       }
@@ -235,7 +227,7 @@ export function SettingsPage({ scope }: { scope: Scope }) {
       const known = state ?? { steering: undefined };
       const roomId = here ? room.id : undefined;
       const applies = STEERING_HELP[row.at === "master" ? masterOf(known, row.cause, roomId) : levelOf(known, row.at, row.cause, roomId)];
-      return `${about}: ${applies}${here ? " (from global)" : row.at === "master" ? "" : " (as General)"}`;
+      return `${about}: ${applies}${here ? " (not set in this room: your global setting)" : row.at === "master" ? "" : " (as General)"}`;
     }
     if (row.kind === "tag") {
       const route = state ? tagRouteOf(state) : "existing";

@@ -32,8 +32,6 @@ export type Row =
   | { readonly id: string; readonly kind: "heading"; readonly text: string }
   /** a dim line under a heading: what the rows below are about, in a sentence */
   | { readonly id: string; readonly kind: "note"; readonly text: string; readonly indent?: number }
-  /** the column's name, right above the rows that have it */
-  | { readonly id: string; readonly kind: "columns" }
   | { readonly id: string; readonly kind: "space" };
 
 /** Each steering row's name, a word or two: the line under the list says the rest. */
@@ -54,8 +52,8 @@ export const STEER_WORDS: Record<SteeringAt, string> = {
   admit: "letting in",
 };
 
-/** Whose doing a steering row is about: yours, or another person's. */
-export const CAUSE_WORDS: Record<Cause, string> = { mine: "You", others: "Others" };
+/** Whose doing a steering row is about: yours (single player), or another person's (multiplayer). */
+export const CAUSE_WORDS: Record<Cause, string> = { mine: "Single player", others: "Multiplayer" };
 
 /** Each job's row name. */
 export const JOB_WORDS: Record<JobKind, string> = { wake: "wake-ups", research: "research", investigation: "investigations", filing: "review asks", answering: "answers", chat: "chat", guidance: "guidance pass" };
@@ -112,6 +110,9 @@ const job = (kind: JobKind): ReadonlyArray<Row> => [
 let spaces = 0;
 const space = (): Row => ({ id: `space:${spaces++}`, kind: "space" });
 
+/** On the room's page, once: what a dim level is. */
+const inRoom = (scope: Scope): ReadonlyArray<string> => (scope === "room" ? ["Dim: not set in this room, so it follows your global settings (g)."] : []);
+
 /** A section: its title, then what it is about, then its groups of rows,
  *  each a line apart from the next. */
 const section = (title: string, about: ReadonlyArray<string>, ...groups: ReadonlyArray<ReadonlyArray<Row>>): ReadonlyArray<Row> => [
@@ -121,8 +122,7 @@ const section = (title: string, about: ReadonlyArray<string>, ...groups: Readonl
 ];
 /** Sections two lines apart. */
 const sections = (...parts: ReadonlyArray<ReadonlyArray<Row>>): ReadonlyArray<Row> => parts.flatMap((part, index) => (index === 0 ? part : [space(), space(), ...part]));
-/** The column's name over a group of rows: its own id in each section, a tab holding more than one. */
-const columns = (section: string): Row => ({ id: `columns:${section}`, kind: "columns" });
+
 
 /** The rows of each tab, for a scope: the room's page holds its steering
  *  and auto-merge alone — what a room can set — and the global page
@@ -131,7 +131,8 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ai: sections(
     section("Steering", [
       scope === "room" ? "Your AI acting for you in this room: how far collagen goes with it before asking you." : "Your AI acting for you: how far collagen goes with it before asking you, in every room that sets nothing of its own.",
-      "You: single player, started by you or your AI. Others: multiplayer, started by someone else.",
+      "Single player: started by you or your AI. Multiplayer: started by someone else, what they may set off on your side.",
+      ...inRoom(scope),
     ]),
     // by the ticket kind that starts them, the repo host left to Tools
     ...STEERING_GROUPS.map((group) => {
@@ -139,7 +140,7 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
       return section(
         group.title,
         [group.about],
-        [columns(group.title), ...steer(kinds[0]!, CAUSES[kinds[0]!])],
+        steer(kinds[0]!, CAUSES[kinds[0]!]),
         ...kinds.slice(1).map((kind) => steer(kind, CAUSES[kind])),
         ...(scope === "global" && group.title === "Not from a ticket"
           ? [
@@ -170,9 +171,10 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
       "Reviews",
       [
         "What collagen does with your accounts itself, with no AI, like posting a review or merging.",
-        "You: single player, your own doing, like your approval. Others: multiplayer, a colleague's doing, like their approval merging your pull request.",
+        "Single player: your own doing, like your approval. Multiplayer: a colleague's doing, like their approval merging your pull request.",
+        ...inRoom(scope),
       ],
-      [columns("Reviews"), ...steer("host")],
+      [...steer("host")],
       [{ id: "merge", kind: "merge" }],
     ),
   ),
@@ -181,9 +183,10 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
       "Steering",
       [
         scope === "room" ? "The level every row on AI and Tools follows in this room until you set it." : "The level every row on AI and Tools follows until you set it.",
-        "You: single player, what you or your AI started. Others: multiplayer, what someone else started.",
+        "Single player: what you or your AI started. Multiplayer: what someone else started.",
+        ...inRoom(scope),
       ],
-      [columns("general"), ...steer("master")],
+      [...steer("master")],
     ),
     ...(scope === "global"
       ? [
