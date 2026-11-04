@@ -51,6 +51,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
                 ? [...trailOf(destination.back), "people"]
                 : destination.name === "settings/global"
                   ? [...trailOf(destination.back), "global settings"]
+                  : destination.name === "settings"
+                    ? ["settings"]
                   : [...trailOf(destination.back), destination.file];
   const crumb =
     page === null
@@ -68,6 +70,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
                 ? { trail: trailOf(page.back), label: "people", back: page.back, focus: "people" }
                 : page.name === "settings/global"
                   ? { trail: trailOf(page.back), label: "global settings", back: page.back, focus: "tabs" }
+                  : page.name === "settings"
+                    ? { trail: [], label: "settings", back: "room/overview" as const, focus: "tabs" }
                   : { trail: trailOf(page.back), label: page.file, back: page.back, focus: "transcript-files" };
   const goBack = () => {
     if (!crumb) return;

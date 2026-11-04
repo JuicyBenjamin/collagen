@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
+import type { SettingsTab } from "../services/Places";
 
 /** A route that carries parameters. */
 export interface TicketRoute {
@@ -32,10 +33,17 @@ export interface PeopleRoute {
   /** Where esc / ← go — the overview it was opened from. */
   readonly back: Route;
 }
+/** The room's steering on a tab — an agent taking the person there (open-settings). */
+export interface SettingsRoute {
+  readonly name: "settings";
+  readonly tab: SettingsTab;
+}
 export interface GlobalSettingsRoute {
   readonly name: "settings/global";
   /** Where esc goes — the room's steering (g), or the room page S opened it from. */
   readonly back: Route;
+  /** the tab it opens on; the first when not said */
+  readonly tab?: SettingsTab;
 }
 export interface TranscriptRoute {
   readonly name: "room/transcript";
@@ -48,7 +56,7 @@ export interface TranscriptRoute {
 /** Where the configured app can be. Plain routes are strings; a route with
  *  parameters is an object. `room/*` routes render inside the room layout
  *  (see routes/index.tsx for the table that maps each to its page). */
-export type Route = "settings" | GlobalSettingsRoute | "you" | "rename-room" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | "room/board" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
+export type Route = "settings" | SettingsRoute | GlobalSettingsRoute | "you" | "rename-room" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | "room/board" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
 
 export type RouteName = Route extends infer R ? (R extends string ? R : R extends { readonly name: infer N } ? N : never) : never;
 
@@ -62,7 +70,8 @@ export const to = {
   attach: (ticketId: string, back: Route): Route => ({ name: "room/attach", ticketId, back }),
   review: (ticketId: string, back: Route): Route => ({ name: "room/review", ticketId, back }),
   people: (back: Route): Route => ({ name: "room/people", back }),
-  globalSettings: (back: Route): Route => ({ name: "settings/global", back }),
+  settings: (tab: SettingsTab): Route => ({ name: "settings", tab }),
+  globalSettings: (back: Route, tab?: SettingsTab): Route => ({ name: "settings/global", back, ...(tab ? { tab } : {}) }),
 } as const;
 
 interface Router {

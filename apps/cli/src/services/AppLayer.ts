@@ -15,6 +15,7 @@ import { configDir, IdentityService } from "./Identity";
 import { Inbox } from "./Inbox";
 import { LogBuffer, LoggerLive } from "./Logging";
 import { McpInfo } from "./McpInfo";
+import { Places } from "./Places";
 import { McpLive } from "./Mcp";
 import { MergerDaemon } from "./Merger";
 import { Outbox } from "./Outbox";
@@ -93,6 +94,7 @@ export const AppLayer = Layer.mergeAll(Daemons, McpLive, MergerDaemon).pipe(
   Layer.provideMerge(HarnessesLive),
   Layer.provideMerge(Inbox.layer),
   Layer.provideMerge(McpInfo.layer),
+  Layer.provideMerge(Places.layer),
   Layer.provideMerge(StateStore.layer),
   Layer.provideMerge(IdentityService.layer),
   Layer.provideMerge(LoggerLive),

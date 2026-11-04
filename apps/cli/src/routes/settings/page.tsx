@@ -44,15 +44,15 @@ const cell = (text: string) => capital(text).padEnd(COLUMN).slice(0, COLUMN);
  *  g there opens the global settings, everything else with them. Each change
  *  applies the moment it is made (your agent can make them too:
  *  set-steering, set-jobs, set-settings, set-merging). */
-export function SettingsPage({ scope, back = "room/overview" }: { scope: Scope; back?: Route }) {
+export function SettingsPage({ scope, back = "room/overview", tab: opening }: { scope: Scope; back?: Route; tab?: Tab }) {
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "" }));
   const { navigate } = useRouter();
   const state = AsyncResult.getOrElse(useAtomValue(stateAtom), () => null);
   const choices = AsyncResult.getOrElse(useAtomValue(aiChoicesAtom), (): ReadonlyArray<string | null> => [null]);
   const updateState = useAtomSet(updateStateAtom);
-  const [tab, setTab] = useState<Tab>(TABS[0]!.id);
+  const [tab, setTab] = useState<Tab>(opening ?? TABS[0]!.id);
   const rows = ROWS[scope][tab];
-  const [cursor, setCursor] = useState(() => ROWS[scope][TABS[0]!.id].findIndex(pickable));
+  const [cursor, setCursor] = useState(() => ROWS[scope][opening ?? TABS[0]!.id].findIndex(pickable));
   const here = scope === "room";
   // on the tab bar, as in the room: ↑ from the first row reaches it, ←→ switch tabs there
   const [onBar, setOnBar] = useState(false);

@@ -46,6 +46,7 @@ import { whereOf, type Spot } from "../lib/comments";
 import type { Outdated } from "@collagen/review-web/data";
 import { readStrength, type Strength } from "@collagen/review-web/strength";
 import { ReviewPages } from "./ReviewLive";
+import { Places, type SettingsTab } from "./Places";
 import { ReviewServerRoutes } from "./ReviewServer";
 import { askWhy } from "./AskWhy";
 import { ReviewQuestions, WHYS_QUESTION, type WhyGiven } from "./ReviewQuestions";
@@ -978,6 +979,13 @@ export const OpenAudit = Tool.make("open-audit", {
   success: Schema.String,
 });
 
+export const OpenSettings = Tool.make("open-settings", {
+  description:
+    "Take your user to their settings in collagen's terminal, the same as pressing s in a room (S for the global ones), when they ask to see or find a setting. 'where': 'room' (the default) — the steering of the room they are in, which a room may set apart from the rest; 'global' — what every room takes until it sets its own, and everything else (AI runs, messages for you, the page's switches). 'tab': 'ai' (steering of their AI: by single player and multiplayer, then by the ticket kind that starts it), 'tools' (the repo host, auto-merge) or 'general' (the level every row follows until set; the default). It only takes them there: it changes no setting (set-steering, set-settings, set-jobs do).",
+  parameters: Schema.Struct({ where: Schema.optional(Schema.Literals(["room", "global"])), tab: Schema.optional(Schema.Literals(["general", "ai", "tools"])) }),
+  success: Schema.String,
+});
+
 export const OpenMerges = Tool.make("open-merges", {
   description:
     "Open a project's merges page in your user's browser — what was merged into its default branch, the latest first, each linked to its pull request with the collagen tickets it came from and their why, tabs for the room's other projects — the same as pressing o on their merges tab. 'project' is one of the current room's projects on this machine (any case); left out, their first in the order they keep (order-projects). 'number' opens it at that pull request's merge, its why unfolded. When your user asks to see a project's merges or history. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -1165,6 +1173,7 @@ export const CollagenToolkit = Toolkit.make(
   OpenAudit,
   OpenBoard,
   OpenMerges,
+  OpenSettings,
   ReviewComments,
   AskWhy,
   SetName,
@@ -1240,6 +1249,7 @@ export const DevCollagenToolkit = Toolkit.make(
   OpenAudit,
   OpenBoard,
   OpenMerges,
+  OpenSettings,
   ReviewComments,
   AskWhy,
   SetName,
@@ -1274,6 +1284,7 @@ const makeHandlers = Effect.gen(function* () {
     const mcpInfo = yield* McpInfo;
     const logBuffer = yield* LogBuffer;
     const pages = yield* ReviewPages;
+    const terminal = yield* Places;
     const { profile } = yield* CliArgs;
     const inbox = yield* Inbox;
     const outbox = yield* Outbox;
@@ -3109,6 +3120,13 @@ const makeHandlers = Effect.gen(function* () {
       "answer-question": Effect.fn("Mcp.answerQuestion")(function* (input: { ticketId: string; questionId: string; answer: "yes" | "no" }) {
         const done = yield* answerQuestion(input.ticketId, input.questionId, input.answer).pipe(Effect.provideContext(answerContext));
         return "error" in done ? `failed: ${done.error}` : input.answer === "yes" ? "answered yes: where it leads, it is a goal now, and started as their steering allows; open-investigation shows it" : "answered no";
+      }),
+      "open-settings": Effect.fn("Mcp.openSettings")(function* (input: { where?: "room" | "global"; tab?: SettingsTab }) {
+        const global = input.where === "global";
+        const tab = input.tab ?? "general";
+        const gone = yield* terminal.go({ to: global ? "global-settings" : "settings", tab });
+        if (!gone) return `failed: no terminal of collagen's is open to show it in — it runs without its screen here. Tell your user: in a room, s opens its steering, S the global settings.`;
+        return `${global ? "The global settings are" : "The room's steering is"} on your user's screen, on ${tab === "ai" ? "AI" : tab === "tools" ? "Tools" : "General"}.`;
       }),
       "open-board": Effect.fn("Mcp.openBoard")(function* (input: { epic?: string; kinds?: ReadonlyArray<string> }) {
         const { id: roomId, room } = yield* focusedRoom;

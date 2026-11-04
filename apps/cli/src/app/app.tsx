@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Option } from "effect";
 import { invitedRoomEntry, newRoomEntry, upsertActiveRoom, writeProfileFile } from "../config/profileFile";
+import { FollowPlaces } from "./places";
 import { RouterProvider } from "./router";
 import { setCliArgs } from "./runtime";
 import { SessionProvider, type Session } from "./session";
@@ -57,6 +58,8 @@ export function App({
   return (
     <SessionProvider session={session}>
       <RouterProvider initial="room/overview">
+        {/* where the person's agent takes them (open-settings) */}
+        <FollowPlaces />
         <RootLayout live>
           <RouterView onExit={onExit} />
         </RootLayout>
