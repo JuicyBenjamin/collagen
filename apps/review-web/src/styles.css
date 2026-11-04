@@ -1143,10 +1143,13 @@ a.lineage-name:hover { color: var(--accent); text-decoration: underline; }
 
 /* The assistant's balloon holding the chat (Assistant.tsx): placed and scrolled; its look is clippyjs's own */
 .assistant-chat { width: 17rem; cursor: auto; font: 10pt "Microsoft Sans", "Segoe UI", Tahoma, sans-serif; }
-.assistant-form { display: grid; gap: 6px; }
+/* one size whatever is said: the conversation takes what the box and buttons leave, and scrolls */
+.assistant-form { display: flex; flex-direction: column; gap: 6px; height: 22rem; }
 .assistant-form p { margin: 0; }
-.assistant-said { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid rgba(0, 0, 0, 0.2); }
-.assistant-answer { max-height: 14rem; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-talk { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(0, 0, 0, 0.2); }
+.assistant-turn { display: grid; gap: 2px; }
+.assistant-asked { font-size: 8pt; color: rgba(0, 0, 0, 0.55); overflow-wrap: anywhere; }
+.assistant-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-form .textarea { width: 100%; min-height: 0; resize: none; }
 .assistant-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .assistant-pick { width: auto; margin-right: auto; }

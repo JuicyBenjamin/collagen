@@ -5,6 +5,7 @@ import { setAssistant } from "../api";
 import { chatNow } from "../chatNow";
 import { floating } from "../floating";
 import { selectionLabel, selectionShort } from "../chatText";
+import { enter } from "../fold";
 import type { AssistantId } from "../data";
 
 // The gag (set-settings assistant, on no settings screen): the ask-AI chat
@@ -147,15 +148,27 @@ export function Assistant(props: { id: AssistantId; name: string }) {
   );
 }
 
-/** The chat in its balloon: the last thing asked and its answer to it, then
+/** The chat in its balloon, of a size that stays: the conversation so far,
+ *  scrolled, each answer said as its own words under what was asked; then
  *  the box for the next — Enter asks, Esc closes — and, as Office's own had,
  *  another assistant to have instead, or none. */
 function Balloon(props: { id: AssistantId }) {
   const question = chatNow.draft;
-  const latest = () => (chatNow.view()?.turns ?? []).filter((turn) => turn.from === undefined).at(-1);
+  const turns = () => (chatNow.view()?.turns ?? []).filter((turn) => turn.from === undefined);
+  // kept at the newest words while the reader is there; scrolled up, left where they read
+  let talk: HTMLDivElement | undefined;
+  let atEnd = true;
+  // asking takes them to the answer
   const send = async () => {
+    atEnd = true;
     if (await chatNow.ask(question())) chatNow.setDraft("");
   };
+  createEffect(
+    () => [chatNow.open(), turns().length, turns().at(-1)?.answer, turns().at(-1)?.doing] as const,
+    ([open]) => {
+      if (open && atEnd && talk) queueMicrotask(() => talk && (talk.scrollTop = talk.scrollHeight));
+    },
+  );
   return (
     <form
       class="assistant-form"
@@ -167,16 +180,31 @@ function Balloon(props: { id: AssistantId }) {
         if (event.key === "Escape") chatNow.close();
       }}
     >
-      <Show when={latest()}>
-        {(turn) => (
-          <div class="assistant-said">
-            <p>
-              <b>{turn().question}</b>
-            </p>
-            <p class="assistant-answer">{turn().answer ? plain(turn().answer) : turn().state === "answering" ? (turn().doing ?? "Let me see…") : ""}</p>
-          </div>
-        )}
-      </Show>
+      <div
+        class="assistant-talk"
+        ref={(element) => (talk = element)}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          atEnd = element.scrollHeight - element.scrollTop - element.clientHeight < 8;
+        }}
+      >
+        <For each={turns()} keyed={(turn) => turn.id}>
+          {(turn) => (
+            <div class="assistant-turn" ref={enter}>
+              <p class="assistant-asked">You asked: {turn().question}</p>
+              <p class="assistant-answer">
+                {turn().answer
+                  ? plain(turn().answer)
+                  : turn().state === "answering"
+                    ? (turn().doing ?? "Let me see…")
+                    : turn().state === "failed"
+                      ? (turn().error ?? "That went wrong.")
+                      : "Stopped."}
+              </p>
+            </div>
+          )}
+        </For>
+      </div>
       <p>
         <b>What would you like to know?</b>
       </p>
