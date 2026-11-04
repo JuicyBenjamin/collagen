@@ -82,17 +82,34 @@ export const TAG_WORDS: Record<TagRoute, string> = {
  *  yet, so only these two do what they say (an agent may still set others). */
 export const TAG_CHOICES: ReadonlyArray<TagRoute> = ["existing", "none"];
 
-const steer = (at: SteeringAt): ReadonlyArray<Row> => [
-  { id: `steer:${at}:mine`, kind: "steer", at, cause: "mine" },
-  { id: `steer:${at}:others`, kind: "steer", at, cause: "others" },
-];
+/** One steering row: a kind, for your own doing or another person's. */
+const steer = (at: SteeringAt, cause: Cause): ReadonlyArray<Row> => [{ id: `steer:${at}:${cause}`, kind: "steer", at, cause }];
+const both = (at: SteeringAt): ReadonlyArray<Row> => [...steer(at, "mine"), ...steer(at, "others")];
 const job = (kind: JobKind): ReadonlyArray<Row> => [
   { id: `label:${kind}`, kind: "label", text: JOB_WORDS[kind] },
   { id: `about:${kind}`, kind: "note", text: JOB_ABOUT[kind], indent: 4 },
   { id: `harness:${kind}`, kind: "harness", job: kind },
   { id: `model:${kind}`, kind: "model", job: kind },
 ];
-const AI_KINDS: ReadonlyArray<SteeringKind> = ["work", "deliver", "run", "investigate", "report"];
+/** Single player is your own AIs working for you, on what you or they
+ *  started; multiplayer is where another person comes in — their doing, or
+ *  an act of yours that reaches them (asking their AI, letting them in). */
+const SINGLE: ReadonlyArray<SteeringKind> = ["work", "deliver", "run", "investigate", "report", "close", "answer", "notes", "guidance"];
+const MULTI: ReadonlyArray<readonly [SteeringKind, Cause]> = [
+  ["work", "others"],
+  ["deliver", "others"],
+  ["run", "others"],
+  ["investigate", "others"],
+  ["report", "others"],
+  // a review of your work is asked by someone else
+  ["review", "others"],
+  // your chat asking a review's author's AI
+  ["forward", "mine"],
+  ["answer", "others"],
+  ["notes", "others"],
+  // who comes into a room, and who is taken out
+  ["admit", "mine"],
+];
 
 /** An empty line. Space says what belongs together: a row's lines sit
  *  close, groups of rows a line apart, sections two (skill: alignment). */
@@ -108,7 +125,8 @@ const section = (title: string, about: ReadonlyArray<string>, ...groups: Readonl
 ];
 /** Sections two lines apart. */
 const sections = (...parts: ReadonlyArray<ReadonlyArray<Row>>): ReadonlyArray<Row> => parts.flatMap((part, index) => (index === 0 ? part : [space(), space(), ...part]));
-const COLUMNS: Row = { id: "columns", kind: "columns" };
+/** The column's name over a group of rows: its own id in each section, a tab holding more than one. */
+const columns = (section: string): Row => ({ id: `columns:${section}`, kind: "columns" });
 
 /** The rows of each tab, for a scope: the room's page holds its steering
  *  and auto-merge alone — what a room can set — and the global page
@@ -116,26 +134,19 @@ const COLUMNS: Row = { id: "columns", kind: "columns" };
 const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ai: sections(
     section(
-      "Steering",
+      "Single player",
       [
         scope === "room" ? "Your AI acting for you in this room: how far collagen goes with it before asking you." : "Your AI acting for you: how far collagen goes with it before asking you, in every room that sets nothing of its own.",
-        "You: started by you or your AI, like a ticket you filed.",
-        "Others: started by someone else, like their ticket naming you, or their message.",
+        "Your own AIs at work: started by you or your AI, like a ticket you filed.",
       ],
-      [COLUMNS, ...steer("work")],
-      ...AI_KINDS.filter((kind) => kind !== "work").map(steer),
-      // only your own tickets close: nobody else's doing closes them, so one row
-      [{ id: "steer:close:mine", kind: "steer", at: "close", cause: "mine" }],
-      // a review of your work is asked by someone else: one row
-      [{ id: "steer:review:others", kind: "steer", at: "review", cause: "others" }],
-      // your chat asking a review's author's AI: only your own doing
-      [{ id: "steer:forward:mine", kind: "steer", at: "forward", cause: "mine" }],
-      steer("answer"),
-      steer("notes"),
-      // a pass on reviews you file: only your own doing
-      [{ id: "steer:guidance:mine", kind: "steer", at: "guidance", cause: "mine" }],
-      // who comes into a room, and who is taken out: only your own doing
-      [{ id: "steer:admit:mine", kind: "steer", at: "admit", cause: "mine" }],
+      [columns("single"), ...steer(SINGLE[0]!, "mine")],
+      ...SINGLE.slice(1).map((kind) => steer(kind, "mine")),
+    ),
+    section(
+      "Multiplayer",
+      ["Where someone else comes in: started by them, like their ticket naming you or their message, or reaching them, like asking their AI."],
+      [columns("multi"), ...steer(MULTI[0]![0], MULTI[0]![1])],
+      ...MULTI.slice(1).map(([kind, cause]) => steer(kind, cause)),
       ...(scope === "global"
         ? [
             [
@@ -161,14 +172,22 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ),
   tools: sections(
     section(
-      "Steering",
-      ["What collagen does with your accounts itself, with no AI, like posting a review or merging.", "You: your own doing, like your approval.", "Others: a colleague's doing, like their approval merging your pull request."],
-      [COLUMNS, ...steer("host")],
+      "Single player",
+      ["What collagen does with your accounts itself, with no AI, like posting a review or merging.", "Your own doing, like your approval."],
+      [columns("single"), ...steer("host", "mine")],
       [{ id: "merge", kind: "merge" }],
     ),
+    section("Multiplayer", ["A colleague's doing, like their approval merging your pull request."], [columns("multi"), ...steer("host", "others")]),
   ),
   general: sections(
-    section("Steering", [scope === "room" ? "The level every row on AI and Tools follows in this room until you set it." : "The level every row on AI and Tools follows until you set it."], [COLUMNS, ...steer("master")]),
+    section(
+      "Steering",
+      [
+        scope === "room" ? "The level every row on AI and Tools follows in this room until you set it." : "The level every row on AI and Tools follows until you set it.",
+        "You: what you or your AI started. Others: what someone else started.",
+      ],
+      [columns("general"), ...both("master")],
+    ),
     ...(scope === "global"
       ? [
           section("Reviews", [], [
@@ -181,12 +200,6 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
 });
 
 export const ROWS: Record<Scope, Record<Tab, ReadonlyArray<Row>>> = { room: rowsOf("room"), global: rowsOf("global") };
-
-/** Kinds with a row for your own doing: theirs names the kind; a kind
- *  that is only others' names it on its one row. */
-const WITH_MINE = new Set(Object.values(ROWS.global).flatMap((rows) => rows.flatMap((row) => (row.kind === "steer" && row.cause === "mine" ? [row.at] : []))));
-/** Whether a steering row says which kind it is: the first row of its kind. */
-export const namesKind = (row: Extract<Row, { kind: "steer" }>): boolean => row.cause === "mine" || !WITH_MINE.has(row.at);
 
 /** Rows the cursor can rest on. */
 export const pickable = (row: Row): boolean => row.kind === "steer" || row.kind === "tag" || row.kind === "switch" || row.kind === "jobLimit" || row.kind === "harness" || row.kind === "model" || row.kind === "merge";
