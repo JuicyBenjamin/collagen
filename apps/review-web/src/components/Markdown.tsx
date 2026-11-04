@@ -15,6 +15,8 @@ function Inlines(props: { of: ReadonlyArray<Inline> }) {
           <Match when={node.kind === "sub" && node}>{(inline) => <sub><Inlines of={inline().children} /></sub>}</Match>
           <Match when={node.kind === "sup" && node}>{(inline) => <sup><Inlines of={inline().children} /></sup>}</Match>
           <Match when={node.kind === "code" && node}>{(inline) => <code>{inline().text}</code>}</Match>
+          <Match when={node.kind === "came" && node}>{(inline) => <span class="came"><Inlines of={inline().children} /></span>}</Match>
+          <Match when={node.kind === "went" && node}>{(inline) => <span class="went"><Inlines of={inline().children} /></span>}</Match>
           <Match when={node.kind === "link" && node}>
             {(inline) => (
               <a href={inline().href} target="_blank" rel="noreferrer noopener">
@@ -100,7 +102,13 @@ function Blocks(props: { of: ReadonlyArray<Block> }) {
                     </tr>
                   </thead>
                   <tbody>
-                    <For each={table().rows}>{(row) => <tr><For each={row}>{(cell) => <td><Inlines of={cell} /></td>}</For></tr>}</For>
+                    <For each={table().rows}>
+                      {(row, index) => (
+                        <tr class={table().marks ? `md-row-${table().marks![index()]}` : undefined}>
+                          <For each={row}>{(cell) => <td><Inlines of={cell} /></td>}</For>
+                        </tr>
+                      )}
+                    </For>
                   </tbody>
                 </table>
               </div>

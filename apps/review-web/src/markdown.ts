@@ -16,7 +16,12 @@ export type Inline =
   | { readonly kind: "code"; readonly text: string }
   | { readonly kind: "link"; readonly href: string; readonly children: ReadonlyArray<Inline> }
   | { readonly kind: "image"; readonly src: string; readonly alt: string }
-  | { readonly kind: "br" };
+  | { readonly kind: "br" }
+  /** words a diff added to a block, or took out of it (mdChanges) */
+  | { readonly kind: "came" | "went"; readonly children: ReadonlyArray<Inline> };
+
+/** A table row a diff added, took out, or edited in place. */
+export type RowMark = "came" | "went" | "edited";
 
 export interface Item {
   readonly checked?: boolean;
@@ -29,7 +34,13 @@ export type Block =
   | { readonly kind: "code"; readonly lang: Language; readonly text: string }
   | { readonly kind: "quote"; readonly blocks: ReadonlyArray<Block> }
   | { readonly kind: "list"; readonly start: number | undefined; readonly items: ReadonlyArray<Item> }
-  | { readonly kind: "table"; readonly head: ReadonlyArray<ReadonlyArray<Inline>>; readonly rows: ReadonlyArray<ReadonlyArray<ReadonlyArray<Inline>>> }
+  | {
+      readonly kind: "table";
+      readonly head: ReadonlyArray<ReadonlyArray<Inline>>;
+      readonly rows: ReadonlyArray<ReadonlyArray<ReadonlyArray<Inline>>>;
+      /** each row a diff added, took out or edited (mdChanges) */
+      readonly marks?: ReadonlyArray<RowMark>;
+    }
   | { readonly kind: "hr" }
   | { readonly kind: "details"; readonly open: boolean; readonly summary: ReadonlyArray<Inline>; readonly blocks: ReadonlyArray<Block> }
   | { readonly kind: "fields"; readonly fields: ReadonlyArray<{ readonly name: string; readonly value: string }> };
@@ -145,6 +156,8 @@ const one = (token: Token): ReadonlyArray<Inline> => {
 
 const LEXING = { gfm: true, breaks: true } as const;
 
+const itemOf = (item: Tokens.ListItem): Item => ({ ...(item.task ? { checked: !!item.checked } : {}), blocks: blocks(item.tokens) });
+
 const blocks = (tokens: ReadonlyArray<Token>): ReadonlyArray<Block> =>
   tokens.flatMap((token): ReadonlyArray<Block> => {
     switch (token.type) {
@@ -167,7 +180,7 @@ const blocks = (tokens: ReadonlyArray<Token>): ReadonlyArray<Block> =>
           {
             kind: "list",
             start: list.ordered ? (list.start === "" ? 1 : list.start) : undefined,
-            items: list.items.map((item) => ({ ...(item.task ? { checked: !!item.checked } : {}), blocks: blocks(item.tokens) })),
+            items: list.items.map(itemOf),
           },
         ];
       }
@@ -261,22 +274,35 @@ export const frontMatter = (source: string): { readonly fields: ReadonlyArray<{ 
 
 /** A Markdown file as blocks, each with its lines. A single newline is a
  *  space here, as in a file and unlike a comment. Front matter is its
- *  fields, never a rule and a heading. */
-export const parseDocument = (source: string): ReadonlyArray<Section> => {
+ *  fields, never a rule and a heading. `items`: a list is a section per
+ *  item, each a list of one numbered as it stands, so a diff can tell the
+ *  item it changed from the ones beside it. */
+export const parseDocument = (source: string, options: { readonly items?: boolean } = {}): ReadonlyArray<Section> => {
   const front = frontMatter(source);
   const head: ReadonlyArray<Section> = front ? [{ blocks: [{ kind: "fields", fields: front.fields }], from: 1, to: front.lines }] : [];
   const body = front ? source.split("\n").slice(front.lines).join("\n") : source;
-  return [...head, ...parseBody(body, front ? front.lines + 1 : 1)];
+  return [...head, ...parseBody(body, front ? front.lines + 1 : 1, options.items ?? false)];
 };
 
-const parseBody = (source: string, first: number): ReadonlyArray<Section> => {
+/** The lines raw text spans from `from`, both ends in: the blank lines it can carry after it are not its. */
+const spanOf = (raw: string, from: number): Section["to"] => from + raw.replace(/\n+$/, "").split("\n").length - 1;
+
+const parseBody = (source: string, first: number, items: boolean): ReadonlyArray<Section> => {
   let line = first;
   return new Lexer({ gfm: true }).lex(source).flatMap((token): ReadonlyArray<Section> => {
     const from = line;
-    const breaks = token.raw.split("\n").length - 1;
-    line += breaks;
+    line += token.raw.split("\n").length - 1;
+    if (items && token.type === "list") {
+      const list = token as Tokens.List;
+      const start = list.ordered ? (list.start === "" ? 1 : list.start) : undefined;
+      let at = from;
+      return list.items.map((item, index): Section => {
+        const itemFrom = at;
+        at += item.raw.split("\n").length - 1;
+        return { blocks: [{ kind: "list", start: start === undefined ? undefined : start + index, items: [itemOf(item)] }], from: itemFrom, to: spanOf(item.raw, itemFrom) };
+      });
+    }
     const made = blocks([token]);
-    // a block's raw text can carry the blank lines after it
-    return made.length > 0 ? [{ blocks: made, from, to: from + token.raw.replace(/\n+$/, "").split("\n").length - 1 }] : [];
+    return made.length > 0 ? [{ blocks: made, from, to: spanOf(token.raw, from) }] : [];
   });
 };
