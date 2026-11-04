@@ -164,7 +164,7 @@ export function SettingsPage({ scope }: { scope: Scope }) {
         const value = steerCell(each.at, each.cause);
         return (
           <text key={each.id} id={each.id} wrapMode="none">
-            {words(`${(each.at === "master" && each.cause === "others" ? "" : capital(STEER_WORDS[each.at])).padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
+            {words(`${(each.unnamed ? "" : capital(STEER_WORDS[each.at])).padEnd(KIND)}${CAUSE_WORDS[each.cause]}`)}
             <span fg={mark(value.set)}>{cell(value.text)}</span>
           </text>
         );

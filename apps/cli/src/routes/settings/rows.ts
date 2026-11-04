@@ -1,6 +1,6 @@
 import type { JobKind, SteeringKind, TagRoute } from "@collagen/p2p";
 import type { SettingKey } from "../../lib/settings";
-import type { Cause, SteeringAt } from "../../lib/steering";
+import { STEERING_GROUPS, type Cause, type SteeringAt } from "../../lib/steering";
 
 /** The settings page's tabs: first the general level every row not set
  *  follows, with the page's own switches; then, by who acts in your name,
@@ -19,7 +19,8 @@ export type Scope = "room" | "global";
 
 /** One line on the page. */
 export type Row =
-  | { readonly id: string; readonly kind: "steer"; readonly at: SteeringAt; readonly cause: Cause }
+  /** `unnamed`: the second row of its kind, right under the first, which names it */
+  | { readonly id: string; readonly kind: "steer"; readonly at: SteeringAt; readonly cause: Cause; readonly unnamed?: true }
   | { readonly id: string; readonly kind: "tag" }
   | { readonly id: string; readonly kind: "switch"; readonly key: SettingKey; readonly name?: string; readonly says?: { readonly on: string; readonly off: string } }
   /** a group's name, over the rows that set it */
@@ -82,33 +83,28 @@ export const TAG_WORDS: Record<TagRoute, string> = {
  *  yet, so only these two do what they say (an agent may still set others). */
 export const TAG_CHOICES: ReadonlyArray<TagRoute> = ["existing", "none"];
 
-/** One steering row: a kind, for your own doing or another person's. */
-const steer = (at: SteeringAt, cause: Cause): ReadonlyArray<Row> => [{ id: `steer:${at}:${cause}`, kind: "steer", at, cause }];
-const both = (at: SteeringAt): ReadonlyArray<Row> => [...steer(at, "mine"), ...steer(at, "others")];
+/** A kind's steering rows: for your own doing (single player), another
+ *  person's (multiplayer), or both, the second right under the first. */
+const steer = (at: SteeringAt, causes: ReadonlyArray<Cause> = ["mine", "others"]): ReadonlyArray<Row> =>
+  causes.map((cause, index): Row => ({ id: `steer:${at}:${cause}`, kind: "steer", at, cause, ...(index > 0 ? { unnamed: true as const } : {}) }));
+/** Whose doing each kind can be: most both; some only ever yours or only another's. */
+const CAUSES: Partial<Record<SteeringKind, ReadonlyArray<Cause>>> = {
+  // only your own tickets close: nobody else's doing closes them
+  close: ["mine"],
+  // a review of your work is asked by someone else
+  review: ["others"],
+  // your chat asking a review's author's AI
+  forward: ["mine"],
+  // a pass on reviews you file
+  guidance: ["mine"],
+  // who comes into a room, and who is taken out
+  admit: ["mine"],
+};
 const job = (kind: JobKind): ReadonlyArray<Row> => [
   { id: `label:${kind}`, kind: "label", text: JOB_WORDS[kind] },
   { id: `about:${kind}`, kind: "note", text: JOB_ABOUT[kind], indent: 4 },
   { id: `harness:${kind}`, kind: "harness", job: kind },
   { id: `model:${kind}`, kind: "model", job: kind },
-];
-/** Single player is your own AIs working for you, on what you or they
- *  started; multiplayer is where another person comes in — their doing, or
- *  an act of yours that reaches them (asking their AI, letting them in). */
-const SINGLE: ReadonlyArray<SteeringKind> = ["work", "deliver", "run", "investigate", "report", "close", "answer", "notes", "guidance"];
-const MULTI: ReadonlyArray<readonly [SteeringKind, Cause]> = [
-  ["work", "others"],
-  ["deliver", "others"],
-  ["run", "others"],
-  ["investigate", "others"],
-  ["report", "others"],
-  // a review of your work is asked by someone else
-  ["review", "others"],
-  // your chat asking a review's author's AI
-  ["forward", "mine"],
-  ["answer", "others"],
-  ["notes", "others"],
-  // who comes into a room, and who is taken out
-  ["admit", "mine"],
 ];
 
 /** An empty line. Space says what belongs together: a row's lines sit
@@ -133,30 +129,29 @@ const columns = (section: string): Row => ({ id: `columns:${section}`, kind: "co
  *  everything, its steering what every room takes until it sets its own. */
 const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ai: sections(
-    section(
-      "Single player",
-      [
-        scope === "room" ? "Your AI acting for you in this room: how far collagen goes with it before asking you." : "Your AI acting for you: how far collagen goes with it before asking you, in every room that sets nothing of its own.",
-        "Your own AIs at work: started by you or your AI, like a ticket you filed.",
-      ],
-      [columns("single"), ...steer(SINGLE[0]!, "mine")],
-      ...SINGLE.slice(1).map((kind) => steer(kind, "mine")),
-    ),
-    section(
-      "Multiplayer",
-      ["Where someone else comes in: started by them, like their ticket naming you or their message, or reaching them, like asking their AI."],
-      [columns("multi"), ...steer(MULTI[0]![0], MULTI[0]![1])],
-      ...MULTI.slice(1).map(([kind, cause]) => steer(kind, cause)),
-      ...(scope === "global"
-        ? [
-            [
-              { id: "label:tag", kind: "label", text: "messages for you" },
-              { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
-              { id: "tag", kind: "tag" },
-            ] satisfies ReadonlyArray<Row>,
-          ]
-        : []),
-    ),
+    section("Steering", [
+      scope === "room" ? "Your AI acting for you in this room: how far collagen goes with it before asking you." : "Your AI acting for you: how far collagen goes with it before asking you, in every room that sets nothing of its own.",
+      "You: single player, started by you or your AI. Others: multiplayer, started by someone else.",
+    ]),
+    // by the ticket kind that starts them, the repo host left to Tools
+    ...STEERING_GROUPS.map((group) => {
+      const kinds = group.kinds.filter((kind) => kind !== "host");
+      return section(
+        group.title,
+        [group.about],
+        [columns(group.title), ...steer(kinds[0]!, CAUSES[kinds[0]!])],
+        ...kinds.slice(1).map((kind) => steer(kind, CAUSES[kind])),
+        ...(scope === "global" && group.title === "Not from a ticket"
+          ? [
+              [
+                { id: "label:tag", kind: "label", text: "messages for you" },
+                { id: "about:tag", kind: "note", text: "When a message comes for you: wake the conversation that worked on its ticket, or keep it in your inbox.", indent: 4 },
+                { id: "tag", kind: "tag" },
+              ] satisfies ReadonlyArray<Row>,
+            ]
+          : []),
+      );
+    }),
     ...(scope === "global" ? [section(
       "AI runs",
       ["When collagen runs your AI itself: the harness and model each kind of run uses."],
@@ -172,21 +167,23 @@ const rowsOf = (scope: Scope): Record<Tab, ReadonlyArray<Row>> => ({
   ),
   tools: sections(
     section(
-      "Single player",
-      ["What collagen does with your accounts itself, with no AI, like posting a review or merging.", "Your own doing, like your approval."],
-      [columns("single"), ...steer("host", "mine")],
+      "Reviews",
+      [
+        "What collagen does with your accounts itself, with no AI, like posting a review or merging.",
+        "You: single player, your own doing, like your approval. Others: multiplayer, a colleague's doing, like their approval merging your pull request.",
+      ],
+      [columns("Reviews"), ...steer("host")],
       [{ id: "merge", kind: "merge" }],
     ),
-    section("Multiplayer", ["A colleague's doing, like their approval merging your pull request."], [columns("multi"), ...steer("host", "others")]),
   ),
   general: sections(
     section(
       "Steering",
       [
         scope === "room" ? "The level every row on AI and Tools follows in this room until you set it." : "The level every row on AI and Tools follows until you set it.",
-        "You: what you or your AI started. Others: what someone else started.",
+        "You: single player, what you or your AI started. Others: multiplayer, what someone else started.",
       ],
-      [columns("general"), ...both("master")],
+      [columns("general"), ...steer("master")],
     ),
     ...(scope === "global"
       ? [

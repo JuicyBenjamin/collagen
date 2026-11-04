@@ -60,7 +60,7 @@ import { Updates } from "./Updates";
 import { McpInfo } from "./McpInfo";
 import { answerQuestion } from "./InvestigationView";
 import { investigationOf, JOB_KINDS, JOB_LABEL, jobHarness, jobLimitOf, modelFor, withHarness, withModel, type InvestigationRun } from "../lib/jobs";
-import { allow, KIND_LABEL, levelOf, notesFollowed, roomLevelOf, STEERING_KINDS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
+import { allow, KIND_LABEL, levelOf, notesFollowed, roomLevelOf, STEERING_GROUPS, STEERING_LABEL, TAG_LABEL, tagRouteOf, unchosen, UNCHOSEN_LINE, withLevel, withTagRoute, workLine, type SteeringAt } from "../lib/steering";
 import { ASSISTANT_NAME, describeSettings, SETTINGS, withAssistant, withSetting } from "../lib/settings";
 import { actingWith } from "../lib/agents";
 import { harnessFor, Harnesses } from "./Harness";
@@ -825,9 +825,31 @@ export const Epic = Tool.make("epic", {
   success: Schema.String,
 });
 
+/** What each steering kind does, as the agent reads it in set-steering — grouped there by the ticket that starts it (STEERING_GROUPS). */
+const KIND_FOR_AGENT: Record<SteeringKind, string> = {
+  review: "a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only",
+  guidance: "a pass on each review your user files: their AI checks it against the steering notes that apply and the conversation that built it fixes what falls short, before anyone else reads it — 'mine' only",
+  forward: "your user's chat on someone else's review page asking that review's author's AI what its why does not say (on a review of their own, it asks their own conversation that did the work instead) — 'mine' only",
+  answer: "their AI answering a question about a review of theirs, from the conversation the work was done in: 'others' when a colleague asks it, 'mine' when they asked it themselves",
+  close: "closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only",
+  host: "acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host",
+  investigate: "collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives",
+  report: "collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's",
+  run: "collagen running their AI for a job: researching a plan, proposal or bug when they ask for more info, and waking the conversation that worked on a ticket when something new comes on it",
+  work: "what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told",
+  deliver: "collagen delivering messages into their AI conversations",
+  notes: "steering notes: 'mine' is whether what your AI notes of how your user steers it, or changes in a note, goes into the room on its own; 'others' is whether your agents follow a note a colleague's AI added that no person has read yet",
+  admit: "letting people into a room, turning them away, and taking them out — what their role in the room allows; 'mine' only",
+};
+
 export const SetSteering = Tool.make("set-steering", {
   description:
-    "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows. 'kind' is what it steers: 'master' (the default every kind follows until set — the one to set when they name no kind), 'work' (what you may start on your own with what collagen hands you: a step, a take, a message — it only shapes what you are told), 'host' (acting on the repo host in their name: their review and comments posted on the pull request, merging it — through their own gh, one level for every host), 'deliver' (collagen delivering messages into their AI conversations), 'run' (collagen running their AI for a job, such as researching a ticket), 'investigate' (collagen starting their AI on an investigation: as they file one, and, for others', as one asked of them arrives), 'report' (collagen telling the conversation that filed an investigation what was found, as each take comes back — mine: their own AI's findings, others': a colleague's), 'close' (closing what a finished ticket of theirs grew from — its plan, proposal or bug — when its review is accepted or merged: never leaves it open, ask asks them, act closes it and tells them, auto just closes it; 'mine' only), 'review' (a colleague asking for a review of their work that has no ticket: collagen finds the conversation it was done in and their AI files the review ticket from it — 'others' only), 'notes' (steering notes: 'mine' is whether what your AI notes of how your user steers it, or changes in a note, goes into the room on its own — just do it, act then tell, ask first, or never; 'others' is whether your agents follow a note a colleague's AI added that no person has read yet), 'guidance' (a pass on each review your user files: their AI checks it against the steering notes that apply and the conversation that built it fixes what falls short, before anyone else reads it — 'mine' only). 'whose': 'mine' (what they or their own agents caused — the default), 'others' (what another person in the room caused: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room. Kept on their machine; applies live.",
+    [
+      "Your user's STEERING — how far collagen and you may go on your own, in their name. Only when your user says so: it is their setting, never yours to raise. Levels: 'never' (not done on its own and nobody asks: only their own word does it), 'ask' (ask first: you ask them before it is done), 'act' (act, then tell), 'auto' (just do it); null gives a level back to what it follows.",
+      "'kind' is what it steers. FIND IT BY THE TICKET your user is talking about — a review, an investigation, a plan, proposal or bug — and what should happen on it; what no ticket starts is last. When two could fit, ask them which they mean rather than guess. 'master' is the default every kind follows until set — the one to set when they name no kind.",
+      ...STEERING_GROUPS.map((group) => `${group.title} (${group.about.charAt(0).toLowerCase()}${group.about.slice(1).replace(/\.$/, "")}): ${group.kinds.map((kind) => `'${kind}' (${KIND_FOR_AGENT[kind]})`).join(", ")}.`),
+      "'whose': 'mine' (what they or their own agents caused — single player; the default), 'others' (what another person in the room caused — multiplayer: never follows theirs, so raise it only when they say so), or 'both'. Until a kind is chosen, collagen does none of it outside itself. 'tag': where a message for them goes — 'none' (nowhere: they ask for it), 'existing' (a conversation that holds its thread), 'existing-or-new', 'new' (starting a conversation is not built yet: these deliver to one that exists); null gives it back. Whatever the level, what is said in the room for them (a message, a take, a settle, a close) stays their word. 'room: true' sets it for the room your user is looking at only — that room's level for the kind (or its general level, kind 'master') stands over everywhere's there; null gives the room back to following everywhere. Called with nothing, it says how things stand, everywhere and in this room, by the same groups. Kept on their machine; applies live.",
+    ].join("\n"),
   parameters: Schema.Struct({
     level: Schema.optional(Schema.NullOr(Steering)),
     kind: Schema.optional(Schema.Union([Schema.Literal("master"), SteeringKind])),
@@ -2932,7 +2954,8 @@ const makeHandlers = Effect.gen(function* () {
           const changed = input.level !== undefined || input.tag !== undefined;
           return [
             `${changed ? "Steering set" : "Steering"} — your user's own, on this machine:`,
-            ...(["master", ...STEERING_KINDS] as const).map(row),
+            row("master"),
+            ...STEERING_GROUPS.flatMap((group) => [`${group.title}:`, ...group.kinds.map(row)]),
             `- a message for them goes to ${TAG_LABEL[tagRouteOf(state)]}${state.steering?.tag === undefined ? " (not chosen: the default)" : ""}`,
             "Not chosen: collagen does none of it outside itself in their name. Room-facing actions (messages, takes, settles, closes) remain your user's word — but for closing what finished work grew from, which follows close.",
           ].join("\n");
