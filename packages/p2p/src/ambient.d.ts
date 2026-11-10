@@ -8,4 +8,5 @@ declare module "corestore";
 declare module "autobase";
 declare module "hyperbee";
 declare module "protomux";
+declare module "protomux-wakeup";
 declare module "compact-encoding";

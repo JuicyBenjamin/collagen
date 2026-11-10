@@ -323,7 +323,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (log || attaching) return;
         attaching = true;
         const child = yield* Scope.fork(scope);
-        const opened = yield* openRoomLog(swarm.store, config.roomName, key, encryption).pipe(
+        const opened = yield* openRoomLog(swarm.store, config.roomName, key, encryption, "room", swarm.wakeup).pipe(
           Effect.provideService(Scope.Scope, child),
         );
         yield* adopt(opened, child, key ? "opened" : "created");
@@ -490,7 +490,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       Effect.gen(function* () {
         const child = yield* Scope.fork(scope);
         // from an encrypted log (someone taken out): a log in an epoch of its own
-        const next = yield* openRoomLog(swarm.store, config.roomName, null, "new", old.encryptionKey === null ? "beside" : "epoch").pipe(Effect.provideService(Scope.Scope, child));
+        const next = yield* openRoomLog(swarm.store, config.roomName, null, "new", old.encryptionKey === null ? "beside" : "epoch", swarm.wakeup).pipe(Effect.provideService(Scope.Scope, child));
         const key = next.encryptionKey;
         if (key === null) return yield* Scope.close(child, Exit.void);
         const carried: Array<LogOp> = [
