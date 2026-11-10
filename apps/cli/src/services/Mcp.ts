@@ -35,6 +35,7 @@ import { Jobs } from "./Jobs";
 import { projectKey, sharedProject } from "../lib/projects";
 import { inProjectOrder, projectOrderOf, withProjectOrder } from "../lib/projectOrder";
 import { Scripting } from "./Scripting";
+import { PersonService } from "./Person";
 import { Rooms, type RoomHandle } from "./Rooms";
 import { StateStore } from "./StateStore";
 import { Outbox } from "./Outbox";
@@ -1052,6 +1053,33 @@ export const SetName = Tool.make("set-name", {
   success: Schema.String,
 });
 
+export const ShareIdentity = Tool.make("share-identity", {
+  description:
+    "Make another machine one of your user's own devices: the same person in every room, on two machines. Half of a handshake — your user asks this here, naming the other machine as it shows in the room they are looking at, and asks take-identity on that machine, naming this one. Either alone does nothing; the two must be asked within five minutes, in either order. Only the parent device can share (devices says which). Only when your user asks.",
+  parameters: Schema.Struct({ person: Schema.String }),
+  success: Schema.String,
+});
+
+export const TakeIdentity = Tool.make("take-identity", {
+  description:
+    "Make this machine one of another person's devices: from then on it is them, in every room. The other half of share-identity — your user asks this here, naming the machine whose identity to take as it shows in the room they are looking at, and asks share-identity there, naming this one. Not for a machine that is already someone's device, or has devices of its own. Only when your user asks.",
+  parameters: Schema.Struct({ person: Schema.String }),
+  success: Schema.String,
+});
+
+export const Devices = Tool.make("devices", {
+  description: "Your user's devices: which machine is which, what each is called, which is this one and which is the parent (the one that takes devices in, puts them out, and hands that part on). Read only.",
+  parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
+export const SetDevice = Tool.make("set-device", {
+  description:
+    "Change one of your user's devices, named as devices lists it. 'name': call it something else ('name', the new one) — any of their devices may. 'put-out': it is no longer theirs, and nothing it does counts as them — the parent's to do, and not undone. 'hand-over': it becomes the parent, and this one an ordinary device — the parent's to do. Only when your user asks.",
+  parameters: Schema.Struct({ action: Schema.Literals(["name", "put-out", "hand-over"]), device: Schema.String, name: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
 export const RenameRoom = Tool.make("rename-room", {
   description: "Rename the CURRENT room for everyone in it (the name is shared state, broadcast last-writer-wins). Applies live.",
   parameters: Schema.Struct({ name: Schema.String }),
@@ -1177,6 +1205,10 @@ export const CollagenToolkit = Toolkit.make(
   ReviewComments,
   AskWhy,
   SetName,
+  ShareIdentity,
+  TakeIdentity,
+  Devices,
+  SetDevice,
   RenameRoom,
   ListRooms,
   CreateRoom,
@@ -1253,6 +1285,10 @@ export const DevCollagenToolkit = Toolkit.make(
   ReviewComments,
   AskWhy,
   SetName,
+  ShareIdentity,
+  TakeIdentity,
+  Devices,
+  SetDevice,
   RenameRoom,
   ListRooms,
   CreateRoom,
@@ -1295,6 +1331,7 @@ const makeHandlers = Effect.gen(function* () {
     const guidancePass = yield* GuidancePass;
     const scripting = yield* Scripting;
     const { identity, nameRef, setName } = yield* IdentityService;
+    const person = yield* PersonService;
     // what the review's comments run on (drafts here, the room's log, who is saying them)
     const talkContext = yield* Effect.context<IdentityService | Rooms | StateStore | MergeHistory | Harnesses>();
     // what answering an investigation's question runs on, as the page's buttons do
@@ -1332,6 +1369,20 @@ const makeHandlers = Effect.gen(function* () {
       const meta = yield* SubscriptionRef.get(handle.room.meta);
       return { id: handle.id, name: meta.name, room: handle.room };
     });
+
+    /** A device as it is named: what it is called, or the start of its key until it is. */
+    const deviceLabel = (device: { readonly key: string; readonly name: string }) => device.name || device.key.slice(0, 8);
+
+    /** Someone connected in the room your user looks at, by name: a handshake needs them here now. */
+    const presentPeer = (name: string) =>
+      Effect.gen(function* () {
+        const { room } = yield* focusedRoom;
+        const peers = (yield* SubscriptionRef.get(room.roster)).filter((peer) => peer.key !== identity.pubkey);
+        const resolved = resolveName(name, [peers], (peer) => peer.key);
+        return resolved._tag === "found"
+          ? { key: resolved.value.key, name: resolved.value.name }
+          : { text: noPeerNamed(name, resolved, peers.length > 0 ? `connected now: ${peers.map((peer) => peer.name).join(", ")}` : "nobody else is connected in this room") };
+      });
 
     /** A person's key as their name: mine, a peer's, a member the log remembers. */
     const nameLookup = Effect.gen(function* () {
@@ -3254,6 +3305,54 @@ const makeHandlers = Effect.gen(function* () {
           yield* setName(displayName);
           return `display name is now "${displayName}" — peers see it on the next profile broadcast`;
         }).pipe(Effect.withSpan("Mcp.setName")),
+      "share-identity": Effect.fn("Mcp.shareIdentity")(function* (input: { person: string }) {
+        const found = yield* presentPeer(input.person);
+        if (found.text !== undefined) return found.text;
+        const outcome = yield* person.share(found.key);
+        return outcome === "not-parent"
+          ? "failed: only the parent device shares your user's identity — devices says which it is"
+          : `offered to ${found.name} — it becomes one of your user's devices once take-identity is asked there, naming this machine, within five minutes`;
+      }),
+      "take-identity": Effect.fn("Mcp.takeIdentity")(function* (input: { person: string }) {
+        const found = yield* presentPeer(input.person);
+        if (found.text !== undefined) return found.text;
+        const outcome = yield* person.take(found.key);
+        return outcome === "already-linked"
+          ? "failed: this machine is already one of someone's devices, or has devices of its own"
+          : `asked ${found.name} — this machine becomes one of theirs once share-identity is asked there, naming this machine, within five minutes`;
+      }),
+      devices: () =>
+        Effect.gen(function* () {
+          const mine = yield* SubscriptionRef.get(person.state);
+          return mine.devices
+            .map((device) => `${deviceLabel(device)}${device.key === mine.device ? " — this one" : ""}${device.key === mine.parent ? " — parent" : ""}`)
+            .join("\n");
+        }).pipe(Effect.withSpan("Mcp.devices")),
+      "set-device": Effect.fn("Mcp.setDevice")(function* (input: { action: "name" | "put-out" | "hand-over"; device: string; name?: string }) {
+        const mine = yield* SubscriptionRef.get(person.state);
+        const resolved = resolveName(input.device, [mine.devices.map((device) => ({ key: device.key, name: deviceLabel(device) }))], (device) => device.key);
+        if (resolved._tag !== "found") return `failed: no device of your user's is called ${input.device.trim()} — theirs: ${mine.devices.map(deviceLabel).join(", ")}`;
+        const device = resolved.value;
+        const called = input.name?.trim() ?? "";
+        if (input.action === "name" && called.length === 0) return "failed: say what to call it ('name')";
+        const outcome = yield* input.action === "name" ? person.name(device.key, called) : input.action === "put-out" ? person.putOut(device.key) : person.handOver(device.key);
+        switch (outcome) {
+          case "named":
+            return `${device.name} is now called ${called}`;
+          case "out":
+            return `${device.name} is no longer one of your user's devices`;
+          case "handed":
+            return `${device.name} is the parent now`;
+          case "not-parent":
+            return "failed: only the parent device does that — devices says which it is";
+          case "is-parent":
+            return `failed: ${device.name} is the parent — hand that on first (hand-over)`;
+          case "not-a-device":
+            return `failed: ${device.name} is not one of your user's devices`;
+          case "not-writable":
+            return "failed: this machine cannot write to your user's own log yet — try again in a moment";
+        }
+      }),
       "rename-room": ({ name }: { name: string }) =>
         Effect.gen(function* () {
           const roomName = name.trim();

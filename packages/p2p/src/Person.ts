@@ -181,6 +181,18 @@ export const makePerson = Effect.gen(function* () {
 
   yield* swarm.listen(IDENTITY_TOPIC, { greet: () => Effect.void, onPeerGone: () => Effect.void, onFrame });
   if (config.stored) yield* attach(config.stored.logKey, { key: config.stored.encryptionKey });
+  // a frame to a peer just connected can be lost: while a share or a take waits, say it again
+  yield* Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    for (const [peer, until] of offers) {
+      if (until > now) yield* send(peer, { kind: "identity-offer", person });
+      else offers.delete(peer);
+    }
+    for (const [peer, want] of wants) {
+      if (want.until > now) yield* send(peer, { kind: "identity-want" });
+      else wants.delete(peer);
+    }
+  }).pipe(Effect.schedule(Schedule.spaced("3 seconds")), Effect.forkScoped);
   // an ask to write can be lost with a connection: keep asking our other devices
   yield* Effect.suspend(() => Effect.forEach([...devicesOf(folded, person).devices.keys()], askToWrite, { discard: true })).pipe(Effect.schedule(Schedule.spaced("10 seconds")), Effect.forkScoped);
 
