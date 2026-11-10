@@ -18,3 +18,4 @@ export * from "./Room";
 export * from "./note";
 export * from "./acl";
 export * from "./devices";
+export * from "./PersonLog";
