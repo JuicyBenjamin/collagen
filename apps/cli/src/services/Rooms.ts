@@ -1,3 +1,4 @@
+import { PersonService } from "./Person";
 import { joinedRoom } from "../lib/merging";
 import { Clock, Context, Effect, Exit, Layer, Scope, Stream, SubscriptionRef } from "effect";
 import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTake, parseInvite, permitted, postReview, roomProjects, settleStep, shortRoomId, stepThreadId, visibleTo, type Conversation, type RoomMessage, type Ticket } from "@collagen/p2p";
@@ -66,6 +67,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     const runner = yield* AgentRunner;
     const jobs = yield* Jobs;
     const swarm = yield* Swarm;
+    const person = yield* PersonService;
 
     const focused = yield* SubscriptionRef.make(initial.id);
     const handles = yield* SubscriptionRef.make<ReadonlyArray<RoomHandle>>([]);
@@ -480,6 +482,19 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
               upsertRoom(profile, { ...kept, logKey, ...(encryptionKey ? { encryptionKey } : {}) });
             }),
           ),
+          // …and told to the person's other devices, which open the room with them
+          Stream.tap(({ logKey, encryptionKey }) =>
+            encryptionKey ? SubscriptionRef.get(room.meta).pipe(Effect.flatMap((meta) => person.rememberRoom({ id: handle.id, name: meta.name, logKey, encryptionKey }))) : Effect.void,
+          ),
+          Stream.runDrain,
+          Effect.forkScoped,
+        );
+        // The room knows a person's devices as them from their device acts:
+        // ours go on its log as soon as we can write there, and again
+        // whenever they change (a device taken in, put out, named).
+        yield* Stream.merge(SubscriptionRef.changes(person.state), SubscriptionRef.changes(room.writable)).pipe(
+          Stream.mapEffect(() => SubscriptionRef.get(person.state)),
+          Stream.tap((mine) => room.carryDevices(mine.acts)),
           Stream.runDrain,
           Effect.forkScoped,
         );
@@ -526,6 +541,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
 
     // every room this profile knows comes up at start
     yield* Effect.forEach(knownRooms, open, { discard: true });
+    yield* SubscriptionRef.changes(person.state).pipe(Stream.tap(() => sameRooms), Stream.runDrain, Effect.forkScoped);
     yield* Effect.addFinalizer(() =>
       Effect.forEach([...scopes.values()], (scope) => Scope.close(scope, Exit.void), { discard: true }),
     );
@@ -553,6 +569,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     /** Join (or create) a room live. */
     const join = Effect.fn("Rooms.join")(function* (entry: RoomEntry, focus: boolean) {
       yield* Effect.sync(() => upsertRoom(profile, entry));
+      // said to the person's other devices at once: a room left before is theirs again
+      yield* person.rememberRoom({ id: entry.id, name: entry.name, ...(entry.logKey && entry.encryptionKey ? { logKey: entry.logKey, encryptionKey: entry.encryptionKey } : {}) });
       const handle = yield* open(entry);
       if (focus) yield* setFocus(entry.id);
       return handle;
@@ -577,8 +595,31 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         const profileFile = readProfileFile(profile);
         writeProfileFile(profile, { rooms: (profileFile.rooms ?? []).filter((roomEntry) => roomEntry.id !== id) });
       });
+      yield* person.forgetRoom(id);
       yield* Effect.log(`left room [${shortRoomId(id)}]`);
       return "left";
+    });
+
+    // One person, the same rooms on every device. Their own log says which:
+    // a room it names that is not open here is opened with the keys it
+    // holds (the room lets a member's device in), a room it says was left is
+    // left here, and a room open here that it has never heard of is told.
+    const sameRooms = Effect.gen(function* () {
+      const mine = yield* SubscriptionRef.get(person.state);
+      if (!mine.writable) return;
+      const live = new Set((yield* SubscriptionRef.get(handles)).map((handle) => handle.id));
+      for (const room of mine.rooms) {
+        if (live.has(room.id) || !room.logKey || !room.encryptionKey) continue;
+        yield* Effect.log(`room [${shortRoomId(room.id)}] entered on another device — opening it here`);
+        yield* Effect.sync(() => upsertRoom(profile, { id: room.id, name: room.name, logKey: room.logKey!, encryptionKey: room.encryptionKey! }));
+        yield* open({ id: room.id, name: room.name, logKey: room.logKey, encryptionKey: room.encryptionKey });
+      }
+      for (const id of mine.left) if (live.has(id)) yield* leave(id);
+      const told = new Set([...mine.rooms.map((room) => room.id), ...mine.left]);
+      for (const entry of readProfileFile(profile).rooms ?? []) {
+        if (told.has(entry.id) || !entry.logKey || !entry.encryptionKey) continue;
+        yield* person.rememberRoom({ id: entry.id, name: entry.name, logKey: entry.logKey, encryptionKey: entry.encryptionKey });
+      }
     });
 
     const summaries: Effect.Effect<ReadonlyArray<RoomSummary>> = Effect.gen(function* () {

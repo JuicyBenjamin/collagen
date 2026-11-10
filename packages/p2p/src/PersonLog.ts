@@ -31,6 +31,8 @@ export const PersonOp = Schema.Union([
   Schema.Struct({ op: Schema.Literal("room"), room: PersonRoom }),
   /** a room left */
   Schema.Struct({ op: Schema.Literal("leave"), id: Schema.String }),
+  /** what the person is called: one name, on every device */
+  Schema.Struct({ op: Schema.Literal("name"), name: Schema.String }),
 ]);
 export type PersonOp = typeof PersonOp.Type;
 
@@ -40,6 +42,10 @@ export interface PersonView {
   readonly devices: ReadonlyArray<DeviceEntry>;
   /** the rooms they are in now */
   readonly rooms: ReadonlyArray<PersonRoom>;
+  /** the rooms they left: a device that still has one open closes it */
+  readonly left: ReadonlyArray<string>;
+  /** what they are called, once a device said */
+  readonly name: string | null;
 }
 
 export interface PersonLog {
@@ -82,9 +88,14 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
       // the last said in the log stands — one order on every device, no clock asked
       case "room":
         await view.put(`room/${personOp.room.id}`, personOp.room);
+        await view.del(`left/${personOp.room.id}`);
         break;
       case "leave":
         await view.del(`room/${personOp.id}`);
+        await view.put(`left/${personOp.id}`, personOp.id);
+        break;
+      case "name":
+        await view.put("meta/name", personOp.name);
         break;
     }
   }
@@ -136,7 +147,8 @@ export const openPersonLog = (
       });
 
     const read: Effect.Effect<PersonView> = Effect.gen(function* () {
-      return { devices: yield* rows("device", DeviceEntry), rooms: yield* rows("room", PersonRoom) };
+      const named = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: unknown } | null>);
+      return { devices: yield* rows("device", DeviceEntry), rooms: yield* rows("room", PersonRoom), left: yield* rows("left", Schema.String), name: typeof named?.value === "string" ? named.value : null };
     });
 
     const changes = Stream.callback<void>((queue) =>

@@ -39,7 +39,15 @@ export interface PersonState {
   readonly device: string;
   readonly parent: string;
   readonly devices: ReadonlyArray<{ readonly key: string; readonly name: string }>;
+  /** the acts about their devices, in log order: what each room they are in is given */
+  readonly acts: ReadonlyArray<DeviceEntry>;
+  /** the rooms their devices are in, and the ones they left */
   readonly rooms: ReadonlyArray<PersonRoom>;
+  readonly left: ReadonlyArray<string>;
+  /** what the person is called on every device, once one of them said */
+  readonly name: string | null;
+  /** whether this device can write to the person's log (false while alone: there is none) */
+  readonly writable: boolean;
 }
 
 /** Why an act about devices was not made. */
@@ -57,7 +65,7 @@ export const makePerson = Effect.gen(function* () {
   const swarm = yield* Swarm;
   const config = yield* PersonConfig;
   const scope = yield* Scope.Scope;
-  const me = swarm.identity.pubkey;
+  const me = swarm.identity.device;
 
   let person = config.stored?.person ?? me;
   let log: PersonLog | null = null;
@@ -70,11 +78,11 @@ export const makePerson = Effect.gen(function* () {
   /** writers already let into the log from here */
   const letIn = new Set<string>();
 
-  const stateNow = (rooms: ReadonlyArray<PersonRoom>): PersonState => {
+  const stateNow = (rooms: ReadonlyArray<PersonRoom>, left: ReadonlyArray<string>, called: string | null = null): PersonState => {
     const mine = devicesOf(folded, person);
-    return { person, device: me, parent: mine.parent, devices: [...mine.devices].map(([key, name]) => ({ key, name })), rooms };
+    return { person, device: me, parent: mine.parent, devices: [...mine.devices].map(([key, name]) => ({ key, name })), acts: entries, rooms, left, name: called, writable: log?.writable() ?? false };
   };
-  const state = yield* SubscriptionRef.make(stateNow([]));
+  const state = yield* SubscriptionRef.make(stateNow([], []));
 
   const send = (key: string, frame: Frame) => swarm.write(key, IDENTITY_TOPIC, frame).pipe(Effect.catchTag("PeerNotConnected", () => Effect.void));
 
@@ -83,7 +91,7 @@ export const makePerson = Effect.gen(function* () {
     const view = yield* log.read;
     entries = view.devices;
     folded = foldDevices(entries);
-    yield* SubscriptionRef.set(state, stateNow(view.rooms));
+    yield* SubscriptionRef.set(state, stateNow(view.rooms, view.left, view.name));
   });
 
   /** Ask one of our devices to let this one write to our log (nothing to ask once it can). */
@@ -242,7 +250,15 @@ export const makePerson = Effect.gen(function* () {
     return typeof made === "string" ? made : ("handed" as const);
   });
 
-  return { state, share, take, name, putOut, handOver } as const;
+  /** A room this person is in, for their other devices to open: said again when its keys or name change. Nothing to say while alone. */
+  const rememberRoom = (room: PersonRoom) => Effect.suspend(() => (log && log.writable() ? log.append({ op: "room", room }).pipe(Effect.ignore) : Effect.void));
+  /** A room this person left: their other devices leave it too. */
+  const forgetRoom = (id: string) => Effect.suspend(() => (log && log.writable() ? log.append({ op: "leave", id }).pipe(Effect.ignore) : Effect.void));
+
+  /** What the person is called, for every device of theirs. Nothing to say while alone. */
+  const rememberName = (called: string) => Effect.suspend(() => (log && log.writable() ? log.append({ op: "name", name: called }).pipe(Effect.ignore) : Effect.void));
+
+  return { state, share, take, name, putOut, handOver, rememberRoom, forgetRoom, rememberName } as const;
 });
 
 export type Person = Effect.Success<typeof makePerson>;

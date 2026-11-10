@@ -44,7 +44,7 @@ const node = async (name: string): Promise<Node> => {
   const hooks = new Map<string, TopicHooks>();
   let saved: PersonStored | null = null;
   const swarm = {
-    identity: { name, profile: name, keyPair, pubkey: key },
+    identity: { name, profile: name, keyPair, pubkey: key, device: key },
     store,
     wakeup,
     listen: (topicHex: string, topicHooks: TopicHooks) => Effect.sync(() => void hooks.set(topicHex, topicHooks)),

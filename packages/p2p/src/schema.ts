@@ -4,6 +4,7 @@ import { DraftComment, ReviewComment, ReviewContext } from "./review";
 import { GoalAnswer, Ticket } from "./ticket";
 import { NoteTurn, SteeringNote } from "./note";
 import { AclEntry } from "./acl";
+import { DeviceEntry } from "./devices";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
 // (swarm frames, state files) is Schema-validated at the edge.
@@ -29,7 +30,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  Once per release: it is main's (the released) version, or one past it —
  *  every change on the way to the next release shares that one bump, however
  *  many there are. `pnpm lint` checks it (scripts/check-protocol.mjs). */
-export const PROTOCOL_VERSION = "13";
+export const PROTOCOL_VERSION = "14";
 
 /** A job collagen runs for someone on a ticket of the room, as the sender
  *  shares it while it runs: what kind, how far it says it is, since when.
@@ -463,6 +464,8 @@ export const LogOp = Schema.Union([
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("comment"), comment: ReviewComment }),
   /** A signed act about who may do what in the room (acl.ts) — kept in log order, once per id. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("acl"), entry: AclEntry }),
+  /** A signed act about whose device a key is (devices.ts) — kept in the same order as the acl acts, once per id. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("device"), entry: DeviceEntry }),
   /** A steering note on a project — written once by its id; what changes it is turns. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("note"), note: SteeringNote }),
   /** One act on a steering note (change, comment, retire, restore, miss, keep) — the first write of an id stands. */

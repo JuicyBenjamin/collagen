@@ -3303,6 +3303,7 @@ const makeHandlers = Effect.gen(function* () {
           if (displayName.length === 0) return "failed: empty name";
           yield* Effect.sync(() => writeProfileFile(profile, { name: displayName }));
           yield* setName(displayName);
+          yield* person.rememberName(displayName);
           return `display name is now "${displayName}" — peers see it on the next profile broadcast`;
         }).pipe(Effect.withSpan("Mcp.setName")),
       "share-identity": Effect.fn("Mcp.shareIdentity")(function* (input: { person: string }) {
@@ -3324,9 +3325,11 @@ const makeHandlers = Effect.gen(function* () {
       devices: () =>
         Effect.gen(function* () {
           const mine = yield* SubscriptionRef.get(person.state);
-          return mine.devices
+          const listed = mine.devices
             .map((device) => `${deviceLabel(device)}${device.key === mine.device ? " — this one" : ""}${device.key === mine.parent ? " — parent" : ""}`)
             .join("\n");
+          // a machine that just took an identity on is that person from its next start
+          return mine.person === identity.pubkey ? listed : `${listed}\nRestart collagen on this machine: it acts as them from then.`;
         }).pipe(Effect.withSpan("Mcp.devices")),
       "set-device": Effect.fn("Mcp.setDevice")(function* (input: { action: "name" | "put-out" | "hand-over"; device: string; name?: string }) {
         const mine = yield* SubscriptionRef.get(person.state);

@@ -1,7 +1,7 @@
 import crypto from "hypercore-crypto";
 import b4a from "b4a";
 import { Schema } from "effect";
-import { canonical } from "./acl";
+import { canonical } from "./signing";
 
 // One person, several devices. A person is known by the key of the device
 // they started on; every device has a key of its own, and signed acts say

@@ -1,6 +1,8 @@
 import crypto from "hypercore-crypto";
 import b4a from "b4a";
 import { Schema } from "effect";
+import { canonical } from "./signing";
+import { DeviceEntry, foldDevices, NO_DEVICES, personOf, type Devices } from "./devices";
 
 // Who may do what in a room. Collagen defines the permissions; each room
 // defines its own roles — a name, a rank, the permissions it holds — as on
@@ -59,18 +61,6 @@ export const AclEntry = Schema.Struct({
 });
 export type AclEntry = typeof AclEntry.Type;
 
-/** A value as one string, its keys sorted: the same whatever order a decode gave them. */
-export const canonical = (value: unknown): string =>
-  Array.isArray(value)
-    ? `[${value.map(canonical).join(",")}]`
-    : value !== null && typeof value === "object"
-      ? `{${Object.keys(value)
-          .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
-          .sort()
-          .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
-          .join(",")}}`
-      : JSON.stringify(value);
-
 /** What is signed: the act, its id, who and when, bound to the room — an act cannot be replayed in another. */
 const signed = (roomName: string, entry: Omit<AclEntry, "sig">) => b4a.from(`collagen-acl|${roomName}|${canonical({ id: entry.id, by: entry.by, at: entry.at, act: entry.act })}`);
 
@@ -103,9 +93,26 @@ export interface Acl {
   readonly waiting: ReadonlyMap<string, { readonly name: string; readonly inviteId: string; readonly at: number }>;
   readonly declined: ReadonlyMap<string, { readonly by: string; readonly reason?: string; readonly at: number }>;
   readonly removed: ReadonlyMap<string, { readonly by: string; readonly reason?: string; readonly at: number }>;
+  /** whose device every key is, as the room's log has it (devices.ts) */
+  readonly devices: Devices;
 }
 
-export const EMPTY_ACL: Acl = { owner: null, roles: new Map([[EVERYONE.id, EVERYONE]]), held: new Map(), admitted: new Set(), waiting: new Map(), declined: new Map(), removed: new Map() };
+/** What the room's log keeps in one order: acts about who may do what, and
+ *  acts about whose device a key is. A person's device signs for them, so
+ *  which person signed is read off the device acts that came before. */
+export const SignedAct = Schema.Union([AclEntry, DeviceEntry]);
+export type SignedAct = typeof SignedAct.Type;
+export const isDeviceAct = (entry: SignedAct): entry is DeviceEntry => "person" in entry;
+
+/** Every key that is `key`'s person now: their devices, or just `key` for someone no device act is about; none once `key` was put out. */
+export const devicesFor = (devices: Devices, key: string): ReadonlyArray<string> => {
+  const person = personOf(devices, key);
+  if (person === null) return [];
+  const mine = devices.persons.get(person);
+  return mine ? [...mine.devices.keys()] : [person];
+};
+
+export const EMPTY_ACL: Acl = { owner: null, roles: new Map([[EVERYONE.id, EVERYONE]]), held: new Map(), admitted: new Set(), waiting: new Map(), declined: new Map(), removed: new Map(), devices: NO_DEVICES };
 
 /** Whether `identity` holds `permission`: the owner holds them all; anyone else through their roles and everyone's. */
 export const permitted = (acl: Acl, identity: string, permission: Permission): boolean =>
@@ -117,9 +124,10 @@ export const rankOf = (acl: Acl, identity: string): number =>
   identity === acl.owner ? Number.POSITIVE_INFINITY : Math.max(0, ...(acl.held.get(identity) ?? []).map((id) => acl.roles.get(id)?.rank ?? 0));
 
 /** The room's acts folded in log order: each counts only when it is signed by
- *  the identity it names, and that identity held the permission for it at
- *  that point. An act that does not count changes nothing. */
-export const foldAcl = (roomName: string, entries: ReadonlyArray<AclEntry>): Acl => {
+ *  the key it names, and the person that key was a device of at that point
+ *  held the permission for it then. An act that does not count changes
+ *  nothing; neither does one from a device put out before it. */
+export const foldAcl = (roomName: string, entries: ReadonlyArray<SignedAct>): Acl => {
   let owner: string | null = null;
   const roles = new Map<string, RoomRole>([[EVERYONE.id, EVERYONE]]);
   const held = new Map<string, ReadonlyArray<string>>();
@@ -128,11 +136,20 @@ export const foldAcl = (roomName: string, entries: ReadonlyArray<AclEntry>): Acl
   const declined = new Map<string, { by: string; reason?: string; at: number }>();
   const removed = new Map<string, { by: string; reason?: string; at: number }>();
   const seen = new Set<string>();
-  const now = (): Acl => ({ owner, roles, held, admitted, waiting, declined, removed });
+  const deviceActs: Array<DeviceEntry> = [];
+  let devices: Devices = NO_DEVICES;
+  const now = (): Acl => ({ owner, roles, held, admitted, waiting, declined, removed, devices });
   for (const entry of entries) {
+    if (isDeviceAct(entry)) {
+      deviceActs.push(entry);
+      devices = foldDevices(deviceActs);
+      continue;
+    }
     if (seen.has(entry.id) || !verifyAcl(roomName, entry)) continue;
     seen.add(entry.id);
-    const by = entry.by;
+    // the person the signing device was then
+    const by = personOf(devices, entry.by);
+    if (by === null) continue;
     const act = entry.act;
     const may = (permission: Permission) => permitted(now(), by, permission);
     const above = (rank: number) => rank < rankOf(now(), by);

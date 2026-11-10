@@ -1,42 +1,42 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { hostname } from "node:os";
-import { join } from "node:path";
-import { Context, Effect, Layer } from "effect";
-import { makePerson, PersonConfig, type PersonStored } from "@collagen/p2p";
+import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+import { makePerson, PersonConfig } from "@collagen/p2p";
 import { NET } from "../app/net";
 import { CliArgs } from "./CliArgs";
-import { configDir } from "./Identity";
-
-/** Where this device keeps how to open its person's own log again. A file of
- *  its own: the identity file is rewritten whole on start. */
-const storedPath = (profile: string) => join(configDir, `person-${profile}.json`);
-
-const readStored = (profile: string): PersonStored | null => {
-  try {
-    const kept = JSON.parse(readFileSync(storedPath(profile), "utf8")) as Partial<PersonStored>;
-    return typeof kept.person === "string" && typeof kept.logKey === "string" && typeof kept.encryptionKey === "string" ? { person: kept.person, logKey: kept.logKey, encryptionKey: kept.encryptionKey } : null;
-  } catch {
-    return null;
-  }
-};
+import { IdentityService } from "./Identity";
+import { writeProfileFile } from "../config/profileFile";
+import { readPersonFile, writePersonFile } from "../config/personFile";
 
 /** The person this device is: alone, or one of several devices (p2p Person). */
 export class PersonService extends Context.Service<PersonService>()("cli/Person", {
   make: Effect.gen(function* () {
     const { profile } = yield* CliArgs;
-    return yield* makePerson.pipe(
+    const { nameRef, setName } = yield* IdentityService;
+    const made = yield* makePerson.pipe(
       Effect.provideService(PersonConfig, {
         net: NET,
-        stored: readStored(profile),
-        save: (stored) =>
-          Effect.sync(() => {
-            if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true });
-            writeFileSync(storedPath(profile), JSON.stringify(stored), { mode: 0o600 });
-          }),
+        stored: readPersonFile(profile),
+        save: (stored) => Effect.sync(() => writePersonFile(profile, stored)),
         // a run with a profile of its own is told apart by it: two of them on one machine share a hostname
         deviceName: profile === "default" ? hostname() : `${hostname()} (${profile})`,
       }),
     );
+    // one person, one name: the first device to share the log says its own,
+    // and every device takes the name the log holds
+    yield* SubscriptionRef.changes(made.state).pipe(
+      Stream.tap((mine) =>
+        Effect.gen(function* () {
+          const here = yield* SubscriptionRef.get(nameRef);
+          if (mine.name === null) return mine.writable && mine.device === mine.parent ? yield* made.rememberName(here) : undefined;
+          if (mine.name === here) return;
+          yield* Effect.sync(() => writeProfileFile(profile, { name: mine.name! }));
+          yield* setName(mine.name);
+        }),
+      ),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
+    return made;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
