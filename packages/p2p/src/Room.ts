@@ -713,6 +713,9 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             return PubSub.publish(fetchRequests, { from: key, attachmentId: frame.attachmentId }).pipe(Effect.asVoid);
           case "attachment":
             return PubSub.publish(attachmentsIn, { from: key, attachment: frame }).pipe(Effect.asVoid);
+          // two devices becoming one person: not a room's to hear (Person.ts)
+          default:
+            return Effect.void;
         }
       },
     };

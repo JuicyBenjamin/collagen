@@ -401,7 +401,20 @@ export type AttachmentFrame = typeof AttachmentFrame.Type;
  *  remembered: presence, log bootstrap, remote control, transcripts.
  *  Everything that must outlive a connection (messages, tickets, the room
  *  name, membership) is a LogOp on the room's shared log instead. */
-export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, WaitingFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
+/** Two devices becoming one person (Person.ts). Each side must have been told
+ *  to by its own person, naming the other, or its frames are not heard. */
+/** "I want to become one of your devices" — the device taking an identity on, to the one sharing it. */
+export const IdentityWantFrame = Schema.Struct({ kind: Schema.Literal("identity-want") });
+/** "Become one of this person's devices" — the parent, to the device it shares with. */
+export const IdentityOfferFrame = Schema.Struct({ kind: Schema.Literal("identity-offer"), person: Schema.String });
+/** "I do" — with the device's own signed consent (devices.ts signConsent) and what it is called. */
+export const IdentityTakeFrame = Schema.Struct({ kind: Schema.Literal("identity-take"), person: Schema.String, consent: Schema.String, name: Schema.String });
+/** The person's own log, for the device just taken in: its key and the key that reads it, sealed for that device. */
+export const IdentityKeysFrame = Schema.Struct({ kind: Schema.Literal("identity-keys"), person: Schema.String, sealed: Schema.String });
+/** "Let my writer core into our log" — one of a person's devices to another. */
+export const PersonJoinFrame = Schema.Struct({ kind: Schema.Literal("person-join"), writer: Schema.String });
+
+export const Frame = Schema.Union([IdentityWantFrame, IdentityOfferFrame, IdentityTakeFrame, IdentityKeysFrame, PersonJoinFrame, ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, WaitingFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
 export type TranscriptRequestFrame = typeof TranscriptRequestFrame.Type;
 export type TranscriptFrame = typeof TranscriptFrame.Type;
 export type Frame = typeof Frame.Type;

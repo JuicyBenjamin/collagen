@@ -104,6 +104,8 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
     const wakeup = new ProtomuxWakeup();
     yield* Effect.addFinalizer(() => Effect.sync(() => void wakeup.destroy()));
     const hooksByTopic = new Map<string, TopicHooks>();
+    /** the topics we announce and look up (rooms); the rest are only listened on */
+    const announced = new Set<string>();
     /** peers whose build is the odd one out, and the protocol it speaks (said once) */
     const mismatched = new Map<string, string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -227,7 +229,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
           Effect.ignore,
         ),
       );
-      for (const topicHex of hooksByTopic.keys()) joinTopic(topicHex);
+      for (const topicHex of announced) joinTopic(topicHex);
     };
 
     const joinTopic = (topicHex: string) => {
@@ -314,11 +316,13 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           hooksByTopic.set(topicHex, hooks);
+          announced.add(topicHex);
           joinTopic(topicHex);
         }),
         () =>
           Effect.gen(function* () {
             hooksByTopic.delete(topicHex);
+            announced.delete(topicHex);
             const discovery = discoveries.get(topicHex);
             discoveries.delete(topicHex);
             if (discovery) yield* Effect.promise(() => discovery.destroy() as Promise<void>).pipe(Effect.timeout("5 seconds"), Effect.ignore);
@@ -328,6 +332,15 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       yield* Effect.forEach([...connByKey.keys()], greetKnownTopics, { discard: true });
       return topicHex;
     });
+
+    /** Hear frames addressed to `topicHex` without announcing or looking it
+     *  up: for what two peers already connected say to each other outside
+     *  any room. Scoped. */
+    const listen = (topicHex: string, hooks: TopicHooks) =>
+      Effect.acquireRelease(
+        Effect.sync(() => void hooksByTopic.set(topicHex, hooks)),
+        () => Effect.sync(() => void hooksByTopic.delete(topicHex)),
+      );
 
     /** Send one frame to one peer, addressed to a room. Failures other than
      *  "not connected" are logged, not fatal — a peer mid-teardown behaves
@@ -361,6 +374,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       /** Given to every log this identity opens (openRoomLog), so all of them wake peers over the swarm's connections. */
       wakeup,
       join,
+      listen,
       write,
       health,
     } as const;
