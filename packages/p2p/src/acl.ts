@@ -60,7 +60,7 @@ export const AclEntry = Schema.Struct({
 export type AclEntry = typeof AclEntry.Type;
 
 /** A value as one string, its keys sorted: the same whatever order a decode gave them. */
-const canonical = (value: unknown): string =>
+export const canonical = (value: unknown): string =>
   Array.isArray(value)
     ? `[${value.map(canonical).join(",")}]`
     : value !== null && typeof value === "object"
