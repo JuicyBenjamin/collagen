@@ -292,7 +292,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       const roomLog = log;
       if (!roomLog) return null;
       const count = (yield* SubscriptionRef.get(members)).length;
-      const frame: Frame = { kind: "log-info", key: roomLog.key, members: count };
+      const frame: Frame = { kind: "log-info", key: roomLog.key, members: count, ...(roomLog.encryptionKey !== null ? { encrypted: true as const } : {}) };
       return frame;
     });
 
@@ -648,6 +648,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
               // member hands over; an encrypted room never yields its log
               if (joining && !log) return;
               if (gated()) return;
+              // an encrypted log is not opened from being told where it is:
+              // opened without its key it reads as nothing, for good. Ours
+              // (from before encryption) says where the room moved, sealed
+              // for us, and we follow it there.
+              if (frame.encrypted) return yield* askToJoin(key);
               if (log && log.key !== frame.key) {
                 // Two logs for one room: both sides started one (e.g. a room
                 // from before logs existed). A log nobody else is on yields

@@ -219,6 +219,10 @@ export const LogInfoFrame = Schema.Struct({
   /** How many members that log has — lets two sides that each started a log
    *  agree on which one to keep (a log nobody else is on yields). */
   members: Schema.Finite,
+  /** The log is encrypted: knowing where it is opens nothing. Whoever hears
+   *  this without the key that reads it leaves it be — a member follows the
+   *  room there from its old log, a newcomer comes with an invite. */
+  encrypted: Schema.optional(Schema.Literal(true)),
 });
 /** "Admit my writer core to the room's log" — a joiner asks a member. */
 export const JoinLogFrame = Schema.Struct({
