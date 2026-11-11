@@ -300,7 +300,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
     const adapters = yield* Adapters;
     const harnesses = yield* Harnesses;
     const questions = yield* ReviewQuestions;
-    const me = (yield* IdentityService).identity.pubkey;
+    const self = (yield* IdentityService).identity;
     // the page's live view reads the room: what it needs, held from here
     const roomContext = yield* Effect.context<Rooms | StateStore>();
     const mcp = yield* McpInfo;
@@ -419,9 +419,9 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
               notesIndex(yield* SubscriptionRef.get(found.room.notes), yield* SubscriptionRef.get(found.room.noteTurns), found.ticket.project, {
                 moment: "chat",
                 files: [...found.review.decisions, ...(found.review.units ?? [])].flatMap((part) => part.where).map((place) => place.replace(/:[\d,\-–]+$/, "")),
-                me,
+                me: self.pubkey,
                 others: notesFollowed(yield* store.get, found.roomId),
-                nameOf: (key) => (key === me ? "your user" : (members.find((member) => member.key === key)?.name ?? key.slice(0, 12))),
+                nameOf: (key) => (key === self.pubkey ? "your user" : (members.find((member) => member.key === key)?.name ?? key.slice(0, 12))),
               }) ?? "",
             ]
               .filter(Boolean)
@@ -682,7 +682,7 @@ export class ReviewChat extends Context.Service<ReviewChat>()("cli/ReviewChat", 
             const turns = (yield* SubscriptionRef.get(chats)).get(ticketId)?.turns ?? [];
             const found = yield* reviewNamed(ticketId).pipe(Effect.provideContext(roomContext));
             // the person's own review: "you", answered by the conversation of theirs that did the work
-            const author = found ? (found.ticket.createdBy === me ? OWN : found.review.authorName) : null;
+            const author = found ? (found.ticket.createdBy === self.pubkey ? OWN : found.review.authorName) : null;
             return JSON.stringify({ ai, cannot: cannot(ai), author, turns, earlier: earlierOf(state, ticketId) } satisfies ChatView);
           }),
         ),

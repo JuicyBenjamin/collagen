@@ -3328,8 +3328,7 @@ const makeHandlers = Effect.gen(function* () {
           const listed = mine.devices
             .map((device) => `${deviceLabel(device)}${device.key === mine.device ? " — this one" : ""}${device.key === mine.parent ? " — parent" : ""}`)
             .join("\n");
-          // a machine that just took an identity on is that person from its next start
-          return mine.person === identity.pubkey ? listed : `${listed}\nRestart collagen on this machine: it acts as them from then.`;
+          return listed;
         }).pipe(Effect.withSpan("Mcp.devices")),
       "set-device": Effect.fn("Mcp.setDevice")(function* (input: { action: "name" | "put-out" | "hand-over"; device: string; name?: string }) {
         const mine = yield* SubscriptionRef.get(person.state);

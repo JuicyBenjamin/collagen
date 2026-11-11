@@ -60,7 +60,7 @@ export interface RoomSummary {
 export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
   make: Effect.gen(function* () {
     const { profile } = yield* CliArgs;
-    const { identity, room: initial, knownRooms, nameRef } = yield* IdentityService;
+    const { identity, room: initial, knownRooms, nameRef, become, setName } = yield* IdentityService;
     const store = yield* StateStore;
     const aiStatus = yield* AiStatus;
     const inbox = yield* Inbox;
@@ -495,6 +495,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         yield* Stream.merge(SubscriptionRef.changes(person.state), SubscriptionRef.changes(room.writable)).pipe(
           Stream.mapEffect(() => SubscriptionRef.get(person.state)),
           Stream.tap((mine) => room.carryDevices(mine.acts)),
+          // …and our name as it stands now: one that changed while we could not write here is said once we can
+          Stream.tap(() => room.updateProfile),
           Stream.runDrain,
           Effect.forkScoped,
         );
@@ -541,7 +543,34 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
 
     // every room this profile knows comes up at start
     yield* Effect.forEach(knownRooms, open, { discard: true });
-    yield* SubscriptionRef.changes(person.state).pipe(Stream.tap(() => sameRooms), Stream.runDrain, Effect.forkScoped);
+
+    /** This device became someone else's (it took their identity on): every
+     *  room is closed and opened again as them — a room knows who it is from
+     *  the moment it opens. */
+    const becomePerson = (key: string, called: string | null) =>
+      Effect.gen(function* () {
+        yield* Effect.log(`this device is ${key.slice(0, 8)} from now — opening its rooms again as them`);
+        const live = yield* SubscriptionRef.get(handles);
+        yield* become(key);
+        // under their name too, before a room hears who this is
+        if (called !== null) {
+          yield* Effect.sync(() => writeProfileFile(profile, { name: called }));
+          yield* setName(called);
+        }
+        yield* SubscriptionRef.set(handles, []);
+        for (const handle of live) {
+          const scope = scopes.get(handle.id);
+          scopes.delete(handle.id);
+          if (scope) yield* Scope.close(scope, Exit.void);
+        }
+        const entries = readProfileFile(profile).rooms ?? [];
+        yield* Effect.forEach(live.flatMap((handle) => entries.filter((entry) => entry.id === handle.id)), open, { discard: true });
+      });
+    yield* SubscriptionRef.changes(person.state).pipe(
+      Stream.tap((mine) => (mine.person === identity.pubkey ? sameRooms : becomePerson(mine.person, mine.name).pipe(Effect.andThen(sameRooms)))),
+      Stream.runDrain,
+      Effect.forkScoped,
+    );
     yield* Effect.addFinalizer(() =>
       Effect.forEach([...scopes.values()], (scope) => Scope.close(scope, Exit.void), { discard: true }),
     );
@@ -708,8 +737,11 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     /** A stream that follows the focused room: `select` picks a stream off
      *  the room, and it re-subscribes whenever focus moves. */
     const watch = <A>(select: (h: RoomHandle) => Stream.Stream<A>): Stream.Stream<A> =>
-      SubscriptionRef.changes(focused).pipe(
-        Stream.mapEffect(() => current),
+      // …and whenever the rooms are opened again (this device became someone's): the room it held is closed
+      Stream.merge(SubscriptionRef.changes(focused), SubscriptionRef.changes(handles)).pipe(
+        Stream.mapEffect(() => Effect.all([SubscriptionRef.get(focused), SubscriptionRef.get(handles)]).pipe(Effect.map(([id, live]) => live.find((handle) => handle.id === id) ?? null))),
+        Stream.filter((handle): handle is RoomHandle => handle !== null),
+        Stream.changes,
         Stream.switchMap(select),
       );
 

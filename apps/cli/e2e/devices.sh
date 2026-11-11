@@ -6,7 +6,6 @@
 source "$(dirname "$0")/lib.sh"
 kill_all; fresh_logs; prep_profiles; testnet
 
-restarts() { call "$1" "$2" devices '{}' | grep -c Restart; }
 count_devices() { call "$1" "$2" devices '{}' | wc -l | tr -d ' '; }
 
 start alice; start bob
@@ -25,13 +24,8 @@ echo "## C. the other side asked too: one person, two devices"
 expect "bob's machine asks" "$(call $B "$SB" take-identity '{"person":"alice"}')" "asked alice"
 wait_until "alice has two devices" "bob" call $A "$SA" devices '{}'
 wait_until "bob's machine lists both, and is not the parent" "this one$" call $B "$SB" devices '{}'
-expect "a machine that is someone's device takes no other identity" "$(call $B "$SB" take-identity '{"person":"alice"}')" "already one of someone's devices"
-expect "…and shares nothing: it is not the parent" "$(call $B "$SB" share-identity '{"person":"alice"}')" "only the parent device"
 
-echo "## C2. from its next start, bob's machine is alice — in the room it was in, and in her other one"
-expect "until then it says so" "$(call $B "$SB" devices '{}')" "Restart collagen on this machine"
-stop bob; start bob; SB=$(mcp $B)
-wait_until "it no longer asks for a restart" "^0$" restarts $B "$SB"
+echo "## C2. at once, with no restart, bob's machine is alice — in the room it was in, and in her other one"
 wait_until "the room alice made elsewhere opens on it" "work" call $B "$SB" list-rooms '{}'
 call $B "$SB" switch-room "{\"room\":\"work\"}" > /dev/null
 wait_until "it is let in to write there, with no invite" "renamed to" call $B "$SB" rename-room '{"name":"work shared"}'
@@ -43,6 +37,8 @@ start carol --room st-test3
 SC=$(mcp $C); wait_for_peer $C "$SC" alice; admitted carol
 wait_until "carol sees alice" "name: alice" call $C "$SC" list-room '{}'
 expect "…and nobody called bob" "$(call $C "$SC" list-room '{}' | grep -c 'name: bob')" "^0$"
+expect "a machine that is someone's device takes no other identity" "$(call $B "$SB" take-identity '{"person":"carol"}')" "already one of someone's devices"
+expect "…and shares nothing: it is not the parent" "$(call $B "$SB" share-identity '{"person":"carol"}')" "only the parent device"
 wait_until "the room's members are alice and carol" "Members: (alice, carol|carol, alice)$" call $C "$SC" get-room-access '{}'
 call $B "$SB" create-ticket '{"title":"t1 from the laptop","goal":"t1 from the laptop","project":"sandbox","steps":[{"id":"s1","owner":"alice","intent":"note","description":"a note"}]}' > /dev/null
 wait_until "a ticket filed on bob's machine is alice's, on her own machine" "t1 from the laptop" goals $A "$SA"

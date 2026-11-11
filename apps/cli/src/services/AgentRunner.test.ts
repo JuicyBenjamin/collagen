@@ -121,6 +121,7 @@ const identityStub = Layer.effect(
       knownRooms: [{ id: "testroom", name: "test room" }],
       nameRef,
       setName: (name: string) => SubscriptionRef.set(nameRef, name),
+      become: () => Effect.void,
     };
   }),
 );

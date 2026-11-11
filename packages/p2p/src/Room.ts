@@ -1057,7 +1057,14 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       sendAttachment,
       /** Re-broadcast the local profile to all present peers (after a settings change). */
       updateProfile: Effect.gen(function* () {
-        yield* broadcast({ kind: "profile", profile: yield* config.getProfile });
+        const profile = yield* config.getProfile;
+        yield* broadcast({ kind: "profile", profile });
+        // a new name goes on the log too: it is what those who are offline, and the members' list, read
+        const roomLog = log;
+        if (!roomLog || !roomLog.writable()) return;
+        if ((yield* SubscriptionRef.get(members)).find((member) => member.key === me)?.name === profile.name) return;
+        yield* roomLog.append({ op: "member", key: me, name: profile.name, ts: yield* Clock.currentTimeMillis }).pipe(Effect.ignore);
+        yield* refresh;
       }).pipe(Effect.withSpan("Room.broadcastProfile")),
       /** The log's key once known (persist it: it's how we reopen the room alone). */
       logKey,

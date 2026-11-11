@@ -92,7 +92,12 @@ export class IdentityService extends Context.Service<IdentityService>()("cli/Ide
     // the caller's job (the settings screen writes the profile file).
     const nameRef = yield* SubscriptionRef.make(name);
     const setName = (newName: string) => SubscriptionRef.set(nameRef, newName);
-    return { identity, room, knownRooms: rooms, nameRef, setName } as const;
+    /** This device took someone's identity on: from here it is them. Everything reads `identity.pubkey` when it uses it, so it follows; the rooms are opened again as them (Rooms). */
+    const become = (person: string): Effect.Effect<void> =>
+      Effect.sync(() => {
+        identity.pubkey = person;
+      });
+    return { identity, room, knownRooms: rooms, nameRef, setName, become } as const;
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make);
