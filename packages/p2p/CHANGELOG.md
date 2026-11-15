@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.27.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.26.0-alpha...p2p-v0.27.0-alpha) (2026-11-15)
+
+
+### Features
+
+* **cli:** a machine that takes an identity on is that person at once ([64b7c9b](https://github.com/JuicyBenjamin/collagen/commit/64b7c9be7a974e2676e33828f032e19e0a408fbb))
+* **cli:** collagen connect-device &lt;code&gt; and collagen join &lt;invite&gt; ([d8f0679](https://github.com/JuicyBenjamin/collagen/commit/d8f0679281d41cf742a1a5e1c2604668c0a7c320))
+* **mcp:** share-identity and take-identity make two machines one person ([2dddaeb](https://github.com/JuicyBenjamin/collagen/commit/2dddaeb19eeed8350a9a0cc2bb413162e2f2aab9))
+* **p2p:** a device put out is locked out, of the rooms and of the person's log ([b587f13](https://github.com/JuicyBenjamin/collagen/commit/b587f13e53015c1c4f07537cee489e6692a6d8c7))
+* **p2p:** a person's own log, shared by their devices ([aa3185c](https://github.com/JuicyBenjamin/collagen/commit/aa3185c54ff052073155eac275faff21a466b23d))
+* **p2p:** a room knows a person's devices as that person ([9bc0699](https://github.com/JuicyBenjamin/collagen/commit/9bc06996a3fe53f18b44e3dfb55ee28229ccd247))
+* **p2p:** signed acts say which devices are one person's ([ee62357](https://github.com/JuicyBenjamin/collagen/commit/ee62357f7da7cec736ba545fd9c7116a8ff8f17a))
+* **p2p:** two devices become one person by a handshake both sides make ([50a145f](https://github.com/JuicyBenjamin/collagen/commit/50a145feca348c133585bcfbf29fba0fea883462))
+
+
+### Bug Fixes
+
+* **p2p:** a newcomer is let in to write when the room's creator is offline ([a78dbd8](https://github.com/JuicyBenjamin/collagen/commit/a78dbd8e9d986f879bf657e7acf8667516f6f263))
+* **p2p:** a room's log is opened once, and an invite is done with once it let us in ([13cc1a1](https://github.com/JuicyBenjamin/collagen/commit/13cc1a18e0f7f6799f00dd40bb092b1744592ccf))
+* **p2p:** an encrypted log is never opened from being told where it is ([e273115](https://github.com/JuicyBenjamin/collagen/commit/e273115cdbf2b0a7c5bbed51993ea9dc3a698fb0))
+
 ## [0.26.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.25.0-alpha...p2p-v0.26.0-alpha) (2026-11-04)
 
 
