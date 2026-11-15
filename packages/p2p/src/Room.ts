@@ -255,7 +255,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (current) => (name.ts > current.ts ? name : current));
       yield* SubscriptionRef.set(writable, log.writable());
-      yield* SubscriptionRef.set(mine, view.messages.filter((logged) => logged.message.to === me));
+      // for us: under the key we are known by, or the one this device had before it became ours
+      yield* SubscriptionRef.set(mine, view.messages.filter((logged) => logged.message.to === me || personAt(logged.message.to) === me));
       // records from a build speaking another protocol version never reach
       // the app as they are. Those we know how to read are rewritten into the
       // current shape for everyone; our own that an earlier build evicted
