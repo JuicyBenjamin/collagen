@@ -115,11 +115,13 @@ const identityStub = Layer.effect(
         profile: "testprof",
         keyPair: { publicKey: Buffer.alloc(32), secretKey: Buffer.alloc(64) },
         pubkey: "aa".repeat(32),
+        device: "aa".repeat(32),
       },
       room: { id: "testroom", name: "test room" },
       knownRooms: [{ id: "testroom", name: "test room" }],
       nameRef,
       setName: (name: string) => SubscriptionRef.set(nameRef, name),
+      become: () => Effect.void,
     };
   }),
 );

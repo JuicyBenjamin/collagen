@@ -5,6 +5,7 @@ import { nameOption, profileOption, roomOption, stripArgSeparator } from "./conf
 import { AppLayer } from "./services/AppLayer";
 import { cliArgsLayer } from "./services/CliArgs";
 import { VERSION } from "./app/version";
+import { runCommand } from "./commands";
 
 // Headless mode: the full app (room, MCP server, agent spawner) without the
 // TUI. For development and for running collagen on machines with no terminal
@@ -13,7 +14,10 @@ const command = Command.make("collagen-headless", { profile: profileOption, name
   Layer.launch(AppLayer.pipe(Layer.provide(cliArgsLayer(args)))),
 );
 
-Command.runWith(command, { version: VERSION })(stripArgSeparator(process.argv.slice(2))).pipe(
+const startWith = await runCommand(stripArgSeparator(process.argv.slice(2)));
+if (startWith === null) process.exit(process.exitCode ?? 0);
+
+Command.runWith(command, { version: VERSION })(startWith).pipe(
   Effect.provide(NodeServices.layer),
   NodeRuntime.runMain,
 );

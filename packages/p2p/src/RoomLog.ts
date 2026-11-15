@@ -9,7 +9,7 @@ import { ReviewComment, strictlySupersedes, supersedes } from "./review";
 import { ReviewContext } from "./review";
 import { Ticket, contributes, mergeTicket } from "./ticket";
 import { NoteTurn, SteeringNote } from "./note";
-import { AclEntry } from "./acl";
+import { SignedAct } from "./acl";
 import { migrateOp, migrateRow, readTicket } from "./migrate";
 
 /** The room as derived from its log. Read whole — rooms are small. */
@@ -25,8 +25,8 @@ export interface LogView {
   readonly comments: ReadonlyArray<ReviewComment>;
   /** The why behind each review ticket, one per ticket. */
   readonly reviews: ReadonlyArray<ReviewContext>;
-  /** Signed acts about who may do what, in log order (foldAcl reads them). */
-  readonly acl: ReadonlyArray<AclEntry>;
+  /** Signed acts about who may do what, and about whose device a key is, in log order (foldAcl reads them). */
+  readonly acl: ReadonlyArray<SignedAct>;
   /** Steering notes on the room's projects, as first written. */
   readonly notes: ReadonlyArray<SteeringNote>;
   /** Every turn on them; a note now is noteNow(note, turns). */
@@ -217,7 +217,8 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
         if (!current || logOp.ts > current.value.ts) await view.put("meta/name", { name: logOp.name, ts: logOp.ts });
         break;
       }
-      case "acl": {
+      case "acl":
+      case "device": {
         // in log order, once per id: who may do what is decided by that order (foldAcl)
         if (await view.get(`aclid/${logOp.entry.id}`)) break;
         const count = (await view.get("state/acls"))?.value ?? 0;
@@ -369,6 +370,11 @@ export const openRoomLog = (
    *  room) — straight into its own namespace: looking into the room's would
    *  wait forever on the open log's storage lock. */
   place: "room" | "beside" | "epoch" = "room",
+  /** The swarm's wakeup channel (Swarm.wakeup): how peers hear which writers
+   *  have written. Left out, the log wakes nobody — only a log that never
+   *  meets a peer may. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  wakeup?: any,
 ): Effect.Effect<RoomLog, never, import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const base = yield* Effect.acquireRelease(
@@ -377,6 +383,7 @@ export const openRoomLog = (
           place === "beside" ? store.namespace(`${roomName}/encrypted`) : place === "epoch" ? await freeEpoch(store, roomName) : await namespaceFor(store, roomName, bootstrap);
         const autobase = new Autobase(namespace, bootstrap ? b4a.from(bootstrap, "hex") : null, {
           valueEncoding: "json",
+          ...(wakeup ? { wakeup } : {}),
           ...(encryption === "new" ? { encrypt: true } : typeof encryption === "object" ? { encryptionKey: b4a.from(encryption.key, "hex") } : {}),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           open: (viewStore: any) =>
@@ -432,7 +439,7 @@ export const openRoomLog = (
       const attachments = (yield* rows("attachment", Attachment)).map((row) => row.value);
       const comments = (yield* rows("comment", ReviewComment)).map((row) => row.value);
       const reviews = (yield* rows("review", ReviewContext)).map((row) => row.value);
-      const acl = (yield* rows("acl", AclEntry)).map((row) => row.value);
+      const acl = (yield* rows("acl", SignedAct)).map((row) => row.value);
       const notes = (yield* rows("note", SteeringNote)).map((row) => row.value);
       const noteTurns = (yield* rows("note-turn", NoteTurn)).map((row) => row.value);
       const name = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: { name: string; ts: number } } | null>);

@@ -35,7 +35,7 @@ export const MergerDaemon = Layer.effectDiscard(
     const outbox = yield* Outbox;
     const inbox = yield* Inbox;
     const runner = yield* AgentRunner;
-    const me = (yield* IdentityService).identity.pubkey;
+    const self = (yield* IdentityService).identity;
     // one pass at a time: a merge is never tried twice at once
     const one = yield* Semaphore.make(1);
     // what each review was last told it waits on, so the agent hears a reason once
@@ -43,8 +43,8 @@ export const MergerDaemon = Layer.effectDiscard(
 
     const tell = (roomId: string, ticket: Ticket, trace: ReadonlyArray<RoomMessage>, what: string, findings: string) =>
       Effect.gen(function* () {
-        const threadId = myThreadFor(ticket, trace, me, me);
-        const message: RoomMessage = { id: crypto.randomUUID(), threadId, from: me, fromName: "collagen", to: me, project: ticket.project, intent: `ticket-update:${what}`, findings, ts: yield* Clock.currentTimeMillis, ticketId: ticket.id };
+        const threadId = myThreadFor(ticket, trace, self.pubkey, self.pubkey);
+        const message: RoomMessage = { id: crypto.randomUUID(), threadId, from: self.pubkey, fromName: "collagen", to: self.pubkey, project: ticket.project, intent: `ticket-update:${what}`, findings, ts: yield* Clock.currentTimeMillis, ticketId: ticket.id };
         yield* inbox.push(roomId, message);
         yield* Effect.forkChild(runner.runThread(threadId));
       });
@@ -58,11 +58,11 @@ export const MergerDaemon = Layer.effectDiscard(
           const reviews = yield* SubscriptionRef.get(room.reviews);
           const roster = yield* SubscriptionRef.get(room.roster);
           const members = yield* SubscriptionRef.get(room.members);
-          const nameOf = (key: string) => (key === me ? "you" : (roster.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8)));
+          const nameOf = (key: string) => (key === self.pubkey ? "you" : (roster.find((peer) => peer.key === key)?.name ?? members.find((member) => member.key === key)?.name ?? key.slice(0, 8)));
           for (const ticket of tickets.values()) {
-            if (ticket.kind !== "review" || ticket.createdBy !== me || closedAs(ticket) !== null) continue;
+            if (ticket.kind !== "review" || ticket.createdBy !== self.pubkey || closedAs(ticket) !== null) continue;
             const level = mergeForOf(state, handle.id, ticket.id);
-            if (!("merge" in ticketReadiness(ticket, me, level, nameOf))) continue;
+            if (!("merge" in ticketReadiness(ticket, self.pubkey, level, nameOf))) continue;
             const review = reviews.find((candidate) => candidate.ticketId === ticket.id);
             const project = roomProjects(state, handle.id).find((candidate) => candidate.name.trim().toLowerCase() === ticket.project.trim().toLowerCase());
             const link = review ? hostLink(review, project) : undefined;

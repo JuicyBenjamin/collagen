@@ -6,6 +6,7 @@ import { Effect, Exit, Scope } from "effect";
 import Corestore from "corestore";
 import Autobase from "autobase";
 import Hyperbee from "hyperbee";
+import ProtomuxWakeup from "protomux-wakeup";
 import b4a from "b4a";
 import { openRoomLog, protocolForTests, type RoomLog } from "./RoomLog";
 import type { Ticket } from "./ticket";
@@ -586,4 +587,50 @@ describe("RoomLog", () => {
       expect((await Effect.runPromise(again.read)).tickets).toHaveLength(1);
     });
   });
+  it("a newcomer let in by a member, while the room's creator is offline, gets to write", async () => {
+    // each peer as the swarm sets it up: a store, one wakeup channel for its logs, both on every connection
+    const scope = await Effect.runPromise(Scope.make());
+    const peer = async (key: string | null) => {
+      const dir = mkdtempSync(join(tmpdir(), "collagen-log-"));
+      dirs.push(dir);
+      const store = new Corestore(dir);
+      await store.ready();
+      stores.push(store);
+      const wakeup = new ProtomuxWakeup();
+      const log = await Effect.runPromise(openRoomLog(store, "room", key, "none", "room", wakeup).pipe(Effect.provideService(Scope.Scope, scope)));
+      return { store, wakeup, log };
+    };
+    type Peer = Awaited<ReturnType<typeof peer>>;
+    const connect = (one: Peer, other: Peer) => {
+      const out = one.store.replicate(true);
+      const back = other.store.replicate(false);
+      out.on("error", () => {});
+      back.on("error", () => {});
+      out.pipe(back).pipe(out);
+      one.wakeup.addStream(out);
+      other.wakeup.addStream(back);
+      return () => void out.destroy();
+    };
+    const soon = async (check: () => boolean) => {
+      for (let tries = 0; tries < 100 && !check(); tries++) await new Promise((resolve) => setTimeout(resolve, 100));
+      return check();
+    };
+    try {
+      const creator = await peer(null);
+      const member = await peer(creator.log.key);
+      const creatorLeaves = connect(creator, member);
+      await Effect.runPromise(creator.log.append({ op: "add-writer", key: member.log.writerKey }));
+      expect(await soon(() => member.log.writable())).toBe(true);
+      await Effect.runPromise(member.log.append({ op: "member", key: "b".repeat(64), name: "member", ts: 1 }));
+      creatorLeaves();
+
+      const newcomer = await peer(creator.log.key);
+      const disconnect = connect(member, newcomer);
+      await Effect.runPromise(member.log.append({ op: "add-writer", key: newcomer.log.writerKey }));
+      expect(await soon(() => newcomer.log.writable())).toBe(true);
+      disconnect();
+    } finally {
+      await Effect.runPromise(Scope.close(scope, Exit.void));
+    }
+  }, 30_000);
 });

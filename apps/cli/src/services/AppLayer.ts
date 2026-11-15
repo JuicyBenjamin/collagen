@@ -21,6 +21,7 @@ import { MergerDaemon } from "./Merger";
 import { Outbox } from "./Outbox";
 import { registerAll } from "./Registrar";
 import { Rooms } from "./Rooms";
+import { PersonService } from "./Person";
 import { Scripting } from "./Scripting";
 import { StateStore } from "./StateStore";
 import { Transcripts } from "./Transcripts";
@@ -86,6 +87,7 @@ export const AppLayer = Layer.mergeAll(Daemons, McpLive, MergerDaemon).pipe(
   Layer.provideMerge(Scripting.layer),
 ).pipe(
   Layer.provideMerge(Rooms.layer),
+  Layer.provideMerge(PersonService.layer),
   Layer.provideMerge(SwarmLive),
   Layer.provideMerge(Jobs.layer),
   Layer.provideMerge(AgentRunner.layer),

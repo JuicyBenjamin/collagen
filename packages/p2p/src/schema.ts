@@ -4,6 +4,7 @@ import { DraftComment, ReviewComment, ReviewContext } from "./review";
 import { GoalAnswer, Ticket } from "./ticket";
 import { NoteTurn, SteeringNote } from "./note";
 import { AclEntry } from "./acl";
+import { DeviceEntry } from "./devices";
 
 // Wire + persisted shapes. Everything that crosses a process boundary
 // (swarm frames, state files) is Schema-validated at the edge.
@@ -29,7 +30,7 @@ export type AiStatus = typeof AiStatus.Type;
  *  Once per release: it is main's (the released) version, or one past it —
  *  every change on the way to the next release shares that one bump, however
  *  many there are. `pnpm lint` checks it (scripts/check-protocol.mjs). */
-export const PROTOCOL_VERSION = "13";
+export const PROTOCOL_VERSION = "14";
 
 /** A job collagen runs for someone on a ticket of the room, as the sender
  *  shares it while it runs: what kind, how far it says it is, since when.
@@ -219,6 +220,10 @@ export const LogInfoFrame = Schema.Struct({
   /** How many members that log has — lets two sides that each started a log
    *  agree on which one to keep (a log nobody else is on yields). */
   members: Schema.Finite,
+  /** The log is encrypted: knowing where it is opens nothing. Whoever hears
+   *  this without the key that reads it leaves it be — a member follows the
+   *  room there from its old log, a newcomer comes with an invite. */
+  encrypted: Schema.optional(Schema.Literal(true)),
 });
 /** "Admit my writer core to the room's log" — a joiner asks a member. */
 export const JoinLogFrame = Schema.Struct({
@@ -397,7 +402,27 @@ export type AttachmentFrame = typeof AttachmentFrame.Type;
  *  remembered: presence, log bootstrap, remote control, transcripts.
  *  Everything that must outlive a connection (messages, tickets, the room
  *  name, membership) is a LogOp on the room's shared log instead. */
-export const Frame = Schema.Union([ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, WaitingFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
+/** Two devices becoming one person (Person.ts). Each side must have been told
+ *  to by its own person, naming the other, or its frames are not heard. */
+/** "I want to become one of your devices" — the device taking an identity on, to the one sharing it. */
+export const IdentityWantFrame = Schema.Struct({ kind: Schema.Literal("identity-want") });
+/** "Become one of this person's devices" — the parent, to the device it shares with. */
+export const IdentityOfferFrame = Schema.Struct({ kind: Schema.Literal("identity-offer"), person: Schema.String });
+/** "I do" — with the device's own signed consent (devices.ts signConsent) and what it is called. */
+export const IdentityTakeFrame = Schema.Struct({
+  kind: Schema.Literal("identity-take"),
+  person: Schema.String,
+  consent: Schema.String,
+  name: Schema.String,
+  /** the device came with a device code (deviceCode.ts): which one, and its proof that it holds it */
+  code: Schema.optional(Schema.Struct({ id: Schema.String, proof: Schema.String })),
+});
+/** The person's own log, for the device just taken in: its key and the key that reads it, sealed for that device. */
+export const IdentityKeysFrame = Schema.Struct({ kind: Schema.Literal("identity-keys"), person: Schema.String, sealed: Schema.String });
+/** "Let my writer core into our log" — one of a person's devices to another. */
+export const PersonJoinFrame = Schema.Struct({ kind: Schema.Literal("person-join"), writer: Schema.String });
+
+export const Frame = Schema.Union([IdentityWantFrame, IdentityOfferFrame, IdentityTakeFrame, IdentityKeysFrame, PersonJoinFrame, ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, WaitingFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
 export type TranscriptRequestFrame = typeof TranscriptRequestFrame.Type;
 export type TranscriptFrame = typeof TranscriptFrame.Type;
 export type Frame = typeof Frame.Type;
@@ -446,6 +471,8 @@ export const LogOp = Schema.Union([
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("comment"), comment: ReviewComment }),
   /** A signed act about who may do what in the room (acl.ts) — kept in log order, once per id. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("acl"), entry: AclEntry }),
+  /** A signed act about whose device a key is (devices.ts) — kept in the same order as the acl acts, once per id. */
+  Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("device"), entry: DeviceEntry }),
   /** A steering note on a project — written once by its id; what changes it is turns. */
   Schema.Struct({ protocol: Schema.optional(Schema.String), replays: Schema.optional(Schema.String), op: Schema.Literal("note"), note: SteeringNote }),
   /** One act on a steering note (change, comment, retire, restore, miss, keep) — the first write of an id stands. */

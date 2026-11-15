@@ -2,6 +2,7 @@ import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 import Hyperswarm from "hyperswarm";
 import DHT from "hyperdht";
 import Corestore from "corestore";
+import ProtomuxWakeup from "protomux-wakeup";
 import Protomux from "protomux";
 import c from "compact-encoding";
 import b4a from "b4a";
@@ -95,7 +96,16 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       Effect.promise(() => store.ready() as Promise<void>),
       () => Effect.promise(() => store.close() as Promise<void>).pipe(Effect.ignore),
     );
+    // How a room's log tells a peer which writers have written: one channel
+    // for every log, on every connection. Without it a peer hears only of
+    // the writers its signed copy of the log names — so a newcomer let in
+    // while the room's creator is offline never learns the member who let
+    // them in wrote anything, and waits to be admitted forever.
+    const wakeup = new ProtomuxWakeup();
+    yield* Effect.addFinalizer(() => Effect.sync(() => void wakeup.destroy()));
     const hooksByTopic = new Map<string, TopicHooks>();
+    /** the topics we announce and look up (rooms); the rest are only listened on */
+    const announced = new Set<string>();
     /** peers whose build is the odd one out, and the protocol it speaks (said once) */
     const mismatched = new Map<string, string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,6 +165,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       // the muxer Corestore attaches, so both ride the same framing.
       const mux = Protomux.from(conn);
       store.replicate(conn);
+      wakeup.addStream(conn);
       const channel = mux.createChannel({ protocol: "collagen/1" });
       if (channel === null) {
         runFork(Effect.logWarning(`duplicate collagen channel on ${who} — ignoring this connection`));
@@ -218,7 +229,7 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
           Effect.ignore,
         ),
       );
-      for (const topicHex of hooksByTopic.keys()) joinTopic(topicHex);
+      for (const topicHex of announced) joinTopic(topicHex);
     };
 
     const joinTopic = (topicHex: string) => {
@@ -305,11 +316,13 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           hooksByTopic.set(topicHex, hooks);
+          announced.add(topicHex);
           joinTopic(topicHex);
         }),
         () =>
           Effect.gen(function* () {
             hooksByTopic.delete(topicHex);
+            announced.delete(topicHex);
             const discovery = discoveries.get(topicHex);
             discoveries.delete(topicHex);
             if (discovery) yield* Effect.promise(() => discovery.destroy() as Promise<void>).pipe(Effect.timeout("5 seconds"), Effect.ignore);
@@ -319,6 +332,15 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       yield* Effect.forEach([...connByKey.keys()], greetKnownTopics, { discard: true });
       return topicHex;
     });
+
+    /** Hear frames addressed to `topicHex` without announcing or looking it
+     *  up: for what two peers already connected say to each other outside
+     *  any room. Scoped. */
+    const listen = (topicHex: string, hooks: TopicHooks) =>
+      Effect.acquireRelease(
+        Effect.sync(() => void hooksByTopic.set(topicHex, hooks)),
+        () => Effect.sync(() => void hooksByTopic.delete(topicHex)),
+      );
 
     /** Send one frame to one peer, addressed to a room. Failures other than
      *  "not connected" are logged, not fatal — a peer mid-teardown behaves
@@ -349,7 +371,10 @@ export class Swarm extends Context.Service<Swarm>()("p2p/Swarm", {
       identity: config.identity,
       /** This identity's Corestore — rooms keep their logs in namespaces of it. */
       store,
+      /** Given to every log this identity opens (openRoomLog), so all of them wake peers over the swarm's connections. */
+      wakeup,
       join,
+      listen,
       write,
       health,
     } as const;

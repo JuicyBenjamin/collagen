@@ -43,7 +43,7 @@ export class GuidancePass extends Context.Service<GuidancePass>()("cli/GuidanceP
     const inbox = yield* Inbox;
     const runner = yield* AgentRunner;
     const { identity, nameRef } = yield* IdentityService;
-    const me = identity.pubkey;
+    const self = identity;
 
     const handleOf = (roomId: string) => SubscriptionRef.get(rooms.handles).pipe(Effect.map((all) => all.find((handle) => handle.id === roomId)));
 
@@ -54,7 +54,7 @@ export class GuidancePass extends Context.Service<GuidancePass>()("cli/GuidanceP
         if (!handle) return null;
         const ticket = (yield* SubscriptionRef.get(handle.room.tickets)).get(ticketId);
         const why = (yield* SubscriptionRef.get(handle.room.reviews)).find((candidate) => candidate.ticketId === ticketId);
-        if (!ticket || !why || ticket.createdBy !== me) return null;
+        if (!ticket || !why || ticket.createdBy !== self.pubkey) return null;
         const files = filesOfWhy(why);
         const notes = notesOf(yield* SubscriptionRef.get(handle.room.notes), yield* SubscriptionRef.get(handle.room.noteTurns), ticket.project).filter(
           (now) => !now.retired && (!now.words.where || now.words.where.length === 0 || files.some((file) => appliesTo(now.words.where, file))),
@@ -89,7 +89,7 @@ export class GuidancePass extends Context.Service<GuidancePass>()("cli/GuidanceP
         const threadId = threadOf(ticket.id);
         yield* store.update((now) => ({ ...now, threads: { ...now.threads, [threadId]: { ai: builder.ai, sessionId: builder.id, since: now.threads?.[threadId]?.since ?? Date.now() } } }));
         const myName = yield* SubscriptionRef.get(nameRef);
-        const message: RoomMessage = { id: crypto.randomUUID(), threadId, from: me, fromName: myName, to: me, project: ticket.project, intent, findings, ts: yield* Clock.currentTimeMillis, ticketId: ticket.id };
+        const message: RoomMessage = { id: crypto.randomUUID(), threadId, from: self.pubkey, fromName: myName, to: self.pubkey, project: ticket.project, intent, findings, ts: yield* Clock.currentTimeMillis, ticketId: ticket.id };
         yield* inbox.push(roomId, message);
         yield* Effect.forkChild(runner.runThread(threadId));
         return true;
