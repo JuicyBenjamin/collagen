@@ -319,15 +319,19 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     let attaching = false;
     let restoredOwn = false;
     const attachLog = (key: string | null, encryption: LogEncryption): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        if (log || attaching) return;
+      Effect.suspend(() => {
+        if (log || attaching) return Effect.void;
         attaching = true;
-        const child = yield* Scope.fork(scope);
-        const opened = yield* openRoomLog(swarm.store, config.roomName, key, encryption).pipe(
-          Effect.provideService(Scope.Scope, child),
-        );
-        yield* adopt(opened, child, key ? "opened" : "created");
-      }).pipe(Effect.ensuring(Effect.sync(() => void (attaching = false))));
+        // only the caller that took the flag gives it back: one turned away
+        // that reset it let a third in, and the log was opened twice after all
+        return Effect.gen(function* () {
+          const child = yield* Scope.fork(scope);
+          const opened = yield* openRoomLog(swarm.store, config.roomName, key, encryption, "room", swarm.wakeup).pipe(
+            Effect.provideService(Scope.Scope, child),
+          );
+          yield* adopt(opened, child, key ? "opened" : "created");
+        }).pipe(Effect.ensuring(Effect.sync(() => void (attaching = false))));
+      });
 
     /** Make `opened` the room's log and follow it: read it, say who we are,
      *  let in who asked, tell everyone allowed where it is. */
@@ -335,6 +339,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       Effect.gen(function* () {
         log = opened;
         logScope = child;
+        // the invite that let us in is done with: shown again while we follow
+        // the room to a new key, it would get us the old log's keys back from
+        // a member still on it — and we would open that one, and stay
+        joining = null;
         // the key that reads it first: whoever keeps the two together reads it when the log's key moves
         yield* SubscriptionRef.set(encryptionKey, opened.encryptionKey);
         yield* SubscriptionRef.set(logKey, opened.key);
@@ -490,7 +498,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       Effect.gen(function* () {
         const child = yield* Scope.fork(scope);
         // from an encrypted log (someone taken out): a log in an epoch of its own
-        const next = yield* openRoomLog(swarm.store, config.roomName, null, "new", old.encryptionKey === null ? "beside" : "epoch").pipe(Effect.provideService(Scope.Scope, child));
+        const next = yield* openRoomLog(swarm.store, config.roomName, null, "new", old.encryptionKey === null ? "beside" : "epoch", swarm.wakeup).pipe(Effect.provideService(Scope.Scope, child));
         const key = next.encryptionKey;
         if (key === null) return yield* Scope.close(child, Exit.void);
         const carried: Array<LogOp> = [

@@ -369,6 +369,11 @@ export const openRoomLog = (
    *  room) — straight into its own namespace: looking into the room's would
    *  wait forever on the open log's storage lock. */
   place: "room" | "beside" | "epoch" = "room",
+  /** The swarm's wakeup channel (Swarm.wakeup): how peers hear which writers
+   *  have written. Left out, the log wakes nobody — only a log that never
+   *  meets a peer may. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  wakeup?: any,
 ): Effect.Effect<RoomLog, never, import("effect").Scope.Scope> =>
   Effect.gen(function* () {
     const base = yield* Effect.acquireRelease(
@@ -377,6 +382,7 @@ export const openRoomLog = (
           place === "beside" ? store.namespace(`${roomName}/encrypted`) : place === "epoch" ? await freeEpoch(store, roomName) : await namespaceFor(store, roomName, bootstrap);
         const autobase = new Autobase(namespace, bootstrap ? b4a.from(bootstrap, "hex") : null, {
           valueEncoding: "json",
+          ...(wakeup ? { wakeup } : {}),
           ...(encryption === "new" ? { encrypt: true } : typeof encryption === "object" ? { encryptionKey: b4a.from(encryption.key, "hex") } : {}),
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           open: (viewStore: any) =>
