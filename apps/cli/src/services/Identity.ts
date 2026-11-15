@@ -15,6 +15,10 @@ const RoomEntry = Schema.Struct({
    *  Must match config/profileFile RoomEntry: this file is re-encoded on
    *  start, so any field missing here is silently erased. */
   logKey: Schema.optional(Schema.String),
+  /** the key that reads the room's log */
+  encryptionKey: Schema.optional(Schema.String),
+  /** the invite we are joining with, until a member has let us in */
+  invite: Schema.optional(Schema.String),
   creator: Schema.optional(Schema.Boolean),
 });
 
