@@ -1062,8 +1062,15 @@ export const ShareIdentity = Tool.make("share-identity", {
 
 export const TakeIdentity = Tool.make("take-identity", {
   description:
-    "Make this machine one of another person's devices: from then on it is them, in every room. The other half of share-identity — your user asks this here, naming the machine whose identity to take as it shows in the room they are looking at, and asks share-identity there, naming this one. Not for a machine that is already someone's device, or has devices of its own. Only when your user asks.",
-  parameters: Schema.Struct({ person: Schema.String }),
+    "Make this machine one of another person's devices: from then on it is them, in every room, at once. With 'code': the device code made on their parent machine (device-code there, or its key in the TUI) — the two need no room in common, and nothing more is asked there. Or with 'person', the other half of share-identity: your user asks this here, naming the machine whose identity to take as it shows in the room they are looking at, and asks share-identity there, naming this one. Not for a machine that is already someone's device, or has devices of its own. Only when your user asks. A person does the same with `collagen connect-device <code>`.",
+  parameters: Schema.Struct({ person: Schema.optional(Schema.String), code: Schema.optional(Schema.String) }),
+  success: Schema.String,
+});
+
+export const DeviceCode = Tool.make("device-code", {
+  description:
+    "A code that makes another machine one of your user's own devices: entered there (`collagen connect-device <code>`, or take-identity with 'code'), that machine is them in every room. Good for one machine, for ten minutes; the two need no room in common. Only the parent device makes one (devices says which). Hand the code to your user and nobody else. Only when your user asks.",
+  parameters: Tool.EmptyParams,
   success: Schema.String,
 });
 
@@ -1207,6 +1214,7 @@ export const CollagenToolkit = Toolkit.make(
   SetName,
   ShareIdentity,
   TakeIdentity,
+  DeviceCode,
   Devices,
   SetDevice,
   RenameRoom,
@@ -1287,6 +1295,7 @@ export const DevCollagenToolkit = Toolkit.make(
   SetName,
   ShareIdentity,
   TakeIdentity,
+  DeviceCode,
   Devices,
   SetDevice,
   RenameRoom,
@@ -3314,7 +3323,29 @@ const makeHandlers = Effect.gen(function* () {
           ? "failed: only the parent device shares your user's identity — devices says which it is"
           : `offered to ${found.name} — it becomes one of your user's devices once take-identity is asked there, naming this machine, within five minutes`;
       }),
-      "take-identity": Effect.fn("Mcp.takeIdentity")(function* (input: { person: string }) {
+      "device-code": () =>
+        person.makeCode().pipe(
+          Effect.map((made) =>
+            made === "not-parent"
+              ? "failed: only the parent device makes a device code — devices says which it is"
+              : `a device code — it makes one machine one of your user's devices, within ten minutes. On that machine: collagen connect-device <code>\n${made.code}`,
+          ),
+          Effect.withSpan("Mcp.deviceCode"),
+        ),
+      "take-identity": Effect.fn("Mcp.takeIdentity")(function* (input: { person?: string; code?: string }) {
+        if (input.code?.trim()) {
+          switch (yield* person.useCode(input.code)) {
+            case "not-a-code":
+              return "failed: that is not a device code";
+            case "other-net":
+              return "failed: that code is from another net — a release and a run from source do not meet";
+            case "already-linked":
+              return "failed: this machine is already one of someone's devices, or has devices of its own";
+            case "asked":
+              return "looking for the machine that made the code — this machine becomes one of theirs as soon as it answers (collagen open there, the code under ten minutes old); devices shows it";
+          }
+        }
+        if (!input.person?.trim()) return "failed: say whose identity to take — 'code' (a device code) or 'person'";
         const found = yield* presentPeer(input.person);
         if (found.text !== undefined) return found.text;
         const outcome = yield* person.take(found.key);

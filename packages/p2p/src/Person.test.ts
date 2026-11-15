@@ -48,7 +48,14 @@ const node = async (name: string): Promise<Node> => {
     store,
     wakeup,
     listen: (topicHex: string, topicHooks: TopicHooks) => Effect.sync(() => void hooks.set(topicHex, topicHooks)),
-    join: (topic: Buffer, topicHooks: TopicHooks) => Effect.sync(() => (hooks.set(b4a.toString(topic, "hex"), topicHooks), b4a.toString(topic, "hex"))),
+    // on a topic, a node is told of every connected peer that is on it too — as discovery does
+    join: (topic: Buffer, topicHooks: TopicHooks) =>
+      Effect.suspend(() => {
+        const topicHex = b4a.toString(topic, "hex");
+        hooks.set(topicHex, topicHooks);
+        const there = [...nodes.values()].filter((other) => other.key !== key && linked.has(pairKey(key, other.key)) && other.hooks.has(topicHex));
+        return Effect.forEach(there, (other) => Effect.all([topicHooks.greet(other.key), other.hooks.get(topicHex)!.greet(key)]), { discard: true }).pipe(Effect.as(topicHex));
+      }),
     write: (to: string, topicHex: string, frame: Frame) =>
       Effect.suspend(() => {
         const there = nodes.get(to);
@@ -76,6 +83,10 @@ const connect = (one: Node, other: Node) => {
   out.pipe(back).pipe(out);
   one.wakeup.addStream(out);
   other.wakeup.addStream(back);
+  for (const [topicHex, mine] of one.hooks) {
+    const theirs = other.hooks.get(topicHex);
+    if (theirs) void Effect.runPromise(Effect.all([mine.greet(other.key), theirs.greet(one.key)]));
+  }
 };
 const stateOf = (of: Node) => Effect.runPromise(SubscriptionRef.get(of.person.state));
 const soon = async (check: () => Promise<boolean>) => {
@@ -142,5 +153,31 @@ describe("two devices becoming one person", () => {
     expect(await soon(async () => (await Effect.runPromise(laptop.person.putOut(desk.key))) === "out")).toBe(true);
     expect(await soon(async () => (await stateOf(desk)).devices.length === 1)).toBe(true);
     expect((await stateOf(desk)).devices[0]!.key).toBe(laptop.key);
+  }, 60_000);
+
+  it("a device code makes a machine with no room in common one of the person's devices — once, and only with the code", async () => {
+    scope = await Effect.runPromise(Scope.make());
+    const desk = await node("desk");
+    const laptop = await node("laptop");
+    const second = await node("second");
+    const guesser = await node("guesser");
+    const made = await Effect.runPromise(desk.person.makeCode());
+    if (typeof made === "string") throw new Error(made);
+    // not a code, and a code whose secret was guessed: nothing
+    expect(await Effect.runPromise(guesser.person.useCode("hello"))).toBe("not-a-code");
+    expect(await Effect.runPromise(guesser.person.useCode(`${made.code.slice(0, -4)}0000`))).toBe("asked");
+    connect(desk, guesser);
+    // the laptop enters the code, and the two find each other
+    expect(await Effect.runPromise(laptop.person.useCode(made.code))).toBe("asked");
+    connect(desk, laptop);
+    expect(await soon(async () => (await stateOf(laptop)).person === desk.key && (await stateOf(laptop)).devices.length === 2)).toBe(true);
+    expect(laptop.saved()?.person).toBe(desk.key);
+    expect((await stateOf(guesser)).person).toBe(guesser.key);
+    // the same code again, on another machine: it let one device in
+    expect(await Effect.runPromise(second.person.useCode(made.code))).toBe("asked");
+    connect(desk, second);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect((await stateOf(second)).person).toBe(second.key);
+    expect((await stateOf(desk)).devices).toHaveLength(2);
   }, 60_000);
 });

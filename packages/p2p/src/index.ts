@@ -20,3 +20,4 @@ export * from "./acl";
 export * from "./devices";
 export * from "./PersonLog";
 export * from "./Person";
+export * from "./deviceCode";

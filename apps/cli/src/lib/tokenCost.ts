@@ -77,6 +77,7 @@ const KINDS: Record<string, CallKind> = {
   "set-name": "setup",
   "share-identity": "setup",
   "take-identity": "setup",
+  "device-code": "setup",
   devices: "setup",
   "set-device": "setup",
   "rename-room": "setup",

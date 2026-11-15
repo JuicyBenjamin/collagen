@@ -8,6 +8,7 @@ import { VERSION } from "./app/version";
 import { nameOption, profileOption, roomOption, stripArgSeparator } from "./config/args";
 import { readProfileFile, storedRoom } from "./config/profileFile";
 import { setCliArgs } from "./app/runtime";
+import { runCommand } from "./commands";
 
 const command = Command.make("collagen", { profile: profileOption, name: nameOption, room: roomOption }, (args) =>
   Effect.gen(function* () {
@@ -67,7 +68,12 @@ const command = Command.make("collagen", { profile: profileOption, name: nameOpt
   ),
 );
 
-Command.runWith(command, { version: VERSION })(stripArgSeparator(process.argv.slice(2))).pipe(
+// `collagen join <invite>` and `collagen connect-device <code>` come first:
+// done by a collagen already running, or here — and then the app starts
+const startWith = await runCommand(stripArgSeparator(process.argv.slice(2)));
+if (startWith === null) process.exit(process.exitCode ?? 0);
+
+Command.runWith(command, { version: VERSION })(startWith).pipe(
   Effect.provide(NodeServices.layer),
   NodeRuntime.runMain,
 );

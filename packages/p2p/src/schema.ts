@@ -409,7 +409,14 @@ export const IdentityWantFrame = Schema.Struct({ kind: Schema.Literal("identity-
 /** "Become one of this person's devices" — the parent, to the device it shares with. */
 export const IdentityOfferFrame = Schema.Struct({ kind: Schema.Literal("identity-offer"), person: Schema.String });
 /** "I do" — with the device's own signed consent (devices.ts signConsent) and what it is called. */
-export const IdentityTakeFrame = Schema.Struct({ kind: Schema.Literal("identity-take"), person: Schema.String, consent: Schema.String, name: Schema.String });
+export const IdentityTakeFrame = Schema.Struct({
+  kind: Schema.Literal("identity-take"),
+  person: Schema.String,
+  consent: Schema.String,
+  name: Schema.String,
+  /** the device came with a device code (deviceCode.ts): which one, and its proof that it holds it */
+  code: Schema.optional(Schema.Struct({ id: Schema.String, proof: Schema.String })),
+});
 /** The person's own log, for the device just taken in: its key and the key that reads it, sealed for that device. */
 export const IdentityKeysFrame = Schema.Struct({ kind: Schema.Literal("identity-keys"), person: Schema.String, sealed: Schema.String });
 /** "Let my writer core into our log" — one of a person's devices to another. */

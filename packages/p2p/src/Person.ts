@@ -3,6 +3,7 @@ import { Clock, Context, Effect, Exit, Schedule, Scope, Stream, SubscriptionRef 
 import b4a from "b4a";
 import { devicesOf, foldDevices, NO_DEVICES, personOf, signConsent, signDevice, type DeviceAct, type DeviceEntry, type Devices } from "./devices";
 import { openSealed, sealFor } from "./invite";
+import { checkDeviceCode, DEVICE_CODE_LIFETIME_MS, deviceCodeTopic, formatDeviceCode, newDeviceCode, parseDeviceCode, proveDeviceCode, type DeviceCode } from "./deviceCode";
 import { openPersonLog, type PersonLog, type PersonRoom } from "./PersonLog";
 import type { LogEncryption } from "./RoomLog";
 import type { Frame } from "./schema";
@@ -51,7 +52,7 @@ export interface PersonState {
 }
 
 /** Why an act about devices was not made. */
-export type PersonRefusal = "not-parent" | "not-a-device" | "already-linked" | "is-parent" | "not-writable";
+export type PersonRefusal = "not-parent" | "not-a-device" | "already-linked" | "is-parent" | "not-writable" | "not-a-code" | "other-net";
 
 /** How long a share or a take waits for the other side to be told. */
 export const HANDSHAKE_PATIENCE_MS = 5 * 60_000;
@@ -77,8 +78,17 @@ export const makePerson = Effect.gen(function* () {
   const wants = new Map<string, { readonly until: number; person: string | null }>();
   /** writers already let into the log from here */
   const letIn = new Set<string>();
+  /** device codes we made, by id: the half that checks one, until when, and the scope that keeps us findable for it */
+  const codes = new Map<string, { readonly publicKey: string; readonly until: number; readonly findable: Scope.Closeable }>();
+  /** the device code we came with, until when */
+  let entered: { readonly code: DeviceCode; readonly until: number; readonly findable: Scope.Closeable } | null = null;
+  // Whose we are is the acts' to say, not a peer's: handed a log, this device
+  // is its person only once that log names it one of their devices. Kept
+  // from before, it was already so.
+  let confirmed = true;
 
   const stateNow = (rooms: ReadonlyArray<PersonRoom>, left: ReadonlyArray<string>, called: string | null = null): PersonState => {
+    if (!confirmed) return { person: me, device: me, parent: me, devices: [{ key: me, name: "" }], acts: [], rooms: [], left: [], name: null, writable: false };
     const mine = devicesOf(folded, person);
     return { person, device: me, parent: mine.parent, devices: [...mine.devices].map(([key, name]) => ({ key, name })), acts: entries, rooms, left, name: called, writable: log?.writable() ?? false };
   };
@@ -91,6 +101,11 @@ export const makePerson = Effect.gen(function* () {
     const view = yield* log.read;
     entries = view.devices;
     folded = foldDevices(entries);
+    if (!confirmed && devicesOf(folded, person).devices.has(me)) {
+      confirmed = true;
+      yield* config.save({ person, logKey: log.key, encryptionKey: log.encryptionKey });
+      yield* Effect.log(`this device is now one of ${person.slice(0, 8)}'s`);
+    }
     yield* SubscriptionRef.set(state, stateNow(view.rooms, view.left, view.name));
   });
 
@@ -112,7 +127,7 @@ export const makePerson = Effect.gen(function* () {
       log = opened;
       logScope = child;
       letIn.clear();
-      yield* config.save({ person, logKey: opened.key, encryptionKey: opened.encryptionKey });
+      if (confirmed) yield* config.save({ person, logKey: opened.key, encryptionKey: opened.encryptionKey });
       yield* refresh;
       yield* opened.changes.pipe(Stream.tap(() => refresh), Stream.runDrain, Effect.forkIn(child));
       yield* swarm.join(personTopic(opened.key, config.net), hooks).pipe(Effect.provideService(Scope.Scope, child));
@@ -153,26 +168,45 @@ export const makePerson = Effect.gen(function* () {
         }
         case "identity-take": {
           const opened = log;
-          if (!opened || frame.person !== person || !armed(offers.get(from), now)) return;
+          if (!opened || frame.person !== person) return;
+          const held = frame.code ? codes.get(frame.code.id) : undefined;
+          const byCode = held !== undefined && frame.code !== undefined && armed(held.until, now) && checkDeviceCode(person, frame.code.id, held.publicKey, from, frame.code.proof);
+          const keysFor = () => {
+            const sealed = sealFor(from, b4a.from(JSON.stringify({ logKey: opened.key, encryptionKey: opened.encryptionKey })));
+            return sealed ? send(from, { kind: "identity-keys", person, sealed }) : Effect.void;
+          };
+          // already ours (its first keys were lost on the way): the keys again, no second act
+          if (devicesOf(folded, person).devices.has(from) && from !== me) return yield* keysFor();
+          if (!byCode && !armed(offers.get(from), now)) return;
           const made = yield* asParent({ kind: "link", device: from, name: frame.name, consent: frame.consent });
           // the fold has the last word: a consent that does not prove out, a device already someone's
           if (typeof made === "string" || personOf(folded, from) !== person) return yield* Effect.logWarning(`${from.slice(0, 8)} was not taken in as a device`);
           offers.delete(from);
-          const sealed = sealFor(from, b4a.from(JSON.stringify({ logKey: opened.key, encryptionKey: opened.encryptionKey })));
-          if (sealed) yield* send(from, { kind: "identity-keys", person, sealed });
+          // a code lets one device in
+          if (byCode && frame.code) {
+            codes.delete(frame.code.id);
+            yield* Scope.close(held.findable, Exit.void);
+          }
+          yield* keysFor();
           return yield* Effect.log(`${from.slice(0, 8)} is now one of this person's devices`);
         }
         case "identity-keys": {
           const want = wants.get(from);
-          if (!want || !armed(want.until, now) || want.person !== frame.person) return;
+          const named = want !== undefined && armed(want.until, now) && want.person === frame.person;
+          const coded = entered !== null && armed(entered.until, now) && entered.code.person === frame.person;
+          if ((!named && !coded) || person !== me) return;
           const opened = openSealed(frame.sealed, swarm.identity.keyPair);
           if (!opened) return;
           const keys = JSON.parse(b4a.toString(opened)) as { logKey?: unknown; encryptionKey?: unknown };
           if (typeof keys.logKey !== "string" || typeof keys.encryptionKey !== "string") return;
           wants.delete(from);
+          if (entered) {
+            yield* Scope.close(entered.findable, Exit.void);
+            entered = null;
+          }
           person = frame.person;
+          confirmed = false;
           yield* attach(keys.logKey, { key: keys.encryptionKey });
-          yield* Effect.log(`this device is now one of ${person.slice(0, 8)}'s`);
           return yield* askToWrite(from);
         }
         case "person-join": {
@@ -195,6 +229,15 @@ export const makePerson = Effect.gen(function* () {
     for (const [peer, until] of offers) {
       if (until > now) yield* send(peer, { kind: "identity-offer", person });
       else offers.delete(peer);
+    }
+    for (const [id, held] of codes) {
+      if (held.until > now) continue;
+      codes.delete(id);
+      yield* Scope.close(held.findable, Exit.void);
+    }
+    if (entered && entered.until <= now) {
+      yield* Scope.close(entered.findable, Exit.void);
+      entered = null;
     }
     for (const [peer, want] of wants) {
       if (want.until > now) yield* send(peer, { kind: "identity-want" });
@@ -221,6 +264,41 @@ export const makePerson = Effect.gen(function* () {
     if (person !== me || devicesOf(folded, me).devices.size > 1) return "already-linked" as const;
     wants.set(peer, { until: (yield* Clock.currentTimeMillis) + HANDSHAKE_PATIENCE_MS, person: null });
     yield* send(peer, { kind: "identity-want" });
+    return "asked" as const;
+  });
+
+  /** A device code: whoever enters it on another machine becomes one of our
+   *  devices. Making it is our half of the handshake — good for one device,
+   *  for ten minutes. Only the parent can. */
+  const makeCode = Effect.fn("Person.makeCode")(function* () {
+    if (devicesOf(folded, person).parent !== me) return "not-parent" as const;
+    if (!log) yield* attach(null, "new");
+    const made = newDeviceCode(person, config.net);
+    const findable = yield* Scope.fork(scope);
+    yield* swarm.join(deviceCodeTopic(made.code), { greet: () => Effect.void, onPeerGone: () => Effect.void, onFrame: () => Effect.void }).pipe(Effect.provideService(Scope.Scope, findable));
+    codes.set(made.code.id, { publicKey: made.publicKey, until: (yield* Clock.currentTimeMillis) + DEVICE_CODE_LIFETIME_MS, findable });
+    return { code: formatDeviceCode(made.code) } as const;
+  });
+
+  /** Enter a device code made on another machine: this device becomes one
+   *  of that person's. Not for a device that is already someone's, or has
+   *  devices of its own. */
+  const useCode = Effect.fn("Person.useCode")(function* (text: string) {
+    const code = parseDeviceCode(text);
+    if (!code) return "not-a-code" as const;
+    if (code.net !== config.net) return "other-net" as const;
+    if (person !== me || devicesOf(folded, me).devices.size > 1) return "already-linked" as const;
+    if (entered) yield* Scope.close(entered.findable, Exit.void);
+    const findable = yield* Scope.fork(scope);
+    entered = { code, until: (yield* Clock.currentTimeMillis) + DEVICE_CODE_LIFETIME_MS, findable };
+    // whoever is on the code's topic is asked; only the one that made it can answer
+    const ask = (key: string) =>
+      Effect.suspend(() =>
+        entered?.code.id === code.id
+          ? send(key, { kind: "identity-take", person: code.person, consent: signConsent(code.person, me, swarm.identity.keyPair), name: config.deviceName, code: { id: code.id, proof: proveDeviceCode(code, me) } })
+          : Effect.void,
+      );
+    yield* swarm.join(deviceCodeTopic(code), { greet: ask, onPeerGone: () => Effect.void, onFrame: () => Effect.void }).pipe(Effect.provideService(Scope.Scope, findable));
     return "asked" as const;
   });
 
@@ -258,7 +336,7 @@ export const makePerson = Effect.gen(function* () {
   /** What the person is called, for every device of theirs. Nothing to say while alone. */
   const rememberName = (called: string) => Effect.suspend(() => (log && log.writable() ? log.append({ op: "name", name: called }).pipe(Effect.ignore) : Effect.void));
 
-  return { state, share, take, name, putOut, handOver, rememberRoom, forgetRoom, rememberName } as const;
+  return { state, share, take, makeCode, useCode, name, putOut, handOver, rememberRoom, forgetRoom, rememberName } as const;
 });
 
 export type Person = Effect.Success<typeof makePerson>;
