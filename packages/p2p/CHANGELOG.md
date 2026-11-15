@@ -1,5 +1,152 @@
 # Changelog
 
+## [0.28.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.27.0-alpha...p2p-v0.28.0-alpha) (2026-11-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* protocol 13. A kind is a literal on a shared record; peers on 12 keep what 13 writes unseen until they update.
+* **p2p:** a reviewer can comment on a whole file, here and on GitHub
+* **p2p:** a task can be filed with nobody asked, and taken by whoever picks it up
+* **p2p:** a review, a settle, a filing and a message say which agent made it, model and effort too
+* **p2p:** a ticket closed as done counts toward its epic
+* **cli:** protocol 9 — the room's log gains comment records. A peer on protocol 8 keeps entries written by 9 aside until it updates.
+
+### Features
+
+* a new chat keeps the one before it, among the review's earlier chats ([613f034](https://github.com/JuicyBenjamin/collagen/commit/613f0340d1c21279ee3f7d12fd12936368e8ba67))
+* a question the author cannot answer yet says why, and offers a reading instead ([47885b2](https://github.com/JuicyBenjamin/collagen/commit/47885b206303c254c6da27e3de6f7ff58717bfff))
+* a reader's AI can guess the reason, and critique it, when the author cannot say ([7dbfc85](https://github.com/JuicyBenjamin/collagen/commit/7dbfc856ee531f8febaf2e967c332c100f091508))
+* a review can be asked for work that has no ticket, and its author's collagen files it ([36d39db](https://github.com/JuicyBenjamin/collagen/commit/36d39dbea235fbb293a87b3ed893cc0bdb5bbf4c))
+* a review is prepared before anyone else reads it — the guidance pass ([eae3448](https://github.com/JuicyBenjamin/collagen/commit/eae3448aa3110b08ee760159cd0cc1e8e34063ff))
+* a review's chat outlives a restart, re-entering the same conversation ([7a7f82e](https://github.com/JuicyBenjamin/collagen/commit/7a7f82e3b536d527ed2588bfdc6ecda4bd5679cc))
+* a run's question comes with what a yes would look into, and your yes starts it ([3800194](https://github.com/JuicyBenjamin/collagen/commit/38001948e31885e677d8dd5a1959da47c1eb52b6))
+* a running job shows how far it is, to everyone waiting on it ([eee1bac](https://github.com/JuicyBenjamin/collagen/commit/eee1bac9f90591f556ea06cc701031299bacaa3a))
+* a steering level of never: nothing on its own, nobody asks, only your own word ([a92cdde](https://github.com/JuicyBenjamin/collagen/commit/a92cdde8829d550e578c25a72a2ca2b0ef14a9fd))
+* an investigation has a page you read at a glance ([80fc7c0](https://github.com/JuicyBenjamin/collagen/commit/80fc7c0fae8b4e3bcc90bd6ea47cb6d27f5bd2f9))
+* an investigation splits into goals, checked in groups, one by one or all at once ([55c22f8](https://github.com/JuicyBenjamin/collagen/commit/55c22f86f16263f0646876abf9e5a94ab29996e7))
+* an investigation's findings come back to the conversation that filed it, as your report steering says ([3550c7b](https://github.com/JuicyBenjamin/collagen/commit/3550c7b1ab47d8e3a021d88d57edaeeafbc369ad))
+* ask a review's author's AI what its why does not say ([e080b14](https://github.com/JuicyBenjamin/collagen/commit/e080b14f5ddba128b72ca949ae271c28fa70ca29))
+* **cli:** a comment reads as a person would say it, the AI's long version a click away ([2115dd2](https://github.com/JuicyBenjamin/collagen/commit/2115dd2b07c4920832e2dffae917663457555444))
+* **cli:** a decision names the skill or agent file that guided it ([581493c](https://github.com/JuicyBenjamin/collagen/commit/581493c42796cb04bee1c1afc4cec8903e67e468))
+* **cli:** a guess can be withdrawn, so an assumed review is amended, never refiled ([c1deed9](https://github.com/JuicyBenjamin/collagen/commit/c1deed9f0d5d5297a571e2ab538f35fa12adbc2f))
+* **cli:** a machine that takes an identity on is that person at once ([64b7c9b](https://github.com/JuicyBenjamin/collagen/commit/64b7c9be7a974e2676e33828f032e19e0a408fbb))
+* **cli:** a proposal is an idea owed to no one; a plan is how it gets done ([712dbcc](https://github.com/JuicyBenjamin/collagen/commit/712dbccf55fbf134b887a8a0a24ad08b8ad55f7f))
+* **cli:** a review can show how its change works, a machine played in a tab of its own ([1dcd8b7](https://github.com/JuicyBenjamin/collagen/commit/1dcd8b75f0714ccbb194e5cd8214c26d8f8d386b))
+* **cli:** a review is written, then finished, as on GitHub ([a5a7d65](https://github.com/JuicyBenjamin/collagen/commit/a5a7d6586cd35d1f136e980e6c00eca756301e55))
+* **cli:** a review shows where its change runs: the pages to open, beside the diff ([708300f](https://github.com/JuicyBenjamin/collagen/commit/708300ff2aa9287a5a3105fd0e2a98e2f005100c))
+* **cli:** a review's page opens when its reader starts on it, behind a switch ([effdb50](https://github.com/JuicyBenjamin/collagen/commit/effdb50880df0b1aac8fb51069ad055454ca3fd6))
+* **cli:** a room's tickets read as a board, to do, in progress, done, in terminal and browser ([95cdc41](https://github.com/JuicyBenjamin/collagen/commit/95cdc413a1dec49d9f511e72297dddc6fc5d5c41))
+* **cli:** collagen connect-device &lt;code&gt; and collagen join &lt;invite&gt; ([d8f0679](https://github.com/JuicyBenjamin/collagen/commit/d8f0679281d41cf742a1a5e1c2604668c0a7c320))
+* **cli:** collagen counts what its own courier runs spend, and runs it lean ([a84d941](https://github.com/JuicyBenjamin/collagen/commit/a84d9411e5150c3934d99e98400d14eb7dffc846))
+* **cli:** collagen merges your reviewed pull request once approved as you say, and work goes on ([94876e5](https://github.com/JuicyBenjamin/collagen/commit/94876e57a18b678a9eafdf4e02da3e13d4df0084))
+* **cli:** each AI conversation keeps its own place in a thread ([3186378](https://github.com/JuicyBenjamin/collagen/commit/3186378989d0a7ce3438543eb3c7b9b8b1eda983))
+* **cli:** epics follow the agreed rules — explicit, counted, ordered, closed when resolved ([3936bba](https://github.com/JuicyBenjamin/collagen/commit/3936bba52de55795f249e9a6a7168224150009a0))
+* **cli:** epics, a folder of tickets shaped by anyone in the room ([f54fe51](https://github.com/JuicyBenjamin/collagen/commit/f54fe511d17d840893bb8f260c8c9e58269ea79a))
+* **cli:** every decision has a short title, and a review leads with its purpose ([d308181](https://github.com/JuicyBenjamin/collagen/commit/d308181a49c4fd94c87d76c524b730e5ac657e33))
+* **cli:** every ticket has a short title, and its goal is the line beneath ([c48dada](https://github.com/JuicyBenjamin/collagen/commit/c48dada7849020e773b5182c881b41ddc283a79e))
+* **cli:** every web page wears the reader's theme, switched from any of them ([5b95d48](https://github.com/JuicyBenjamin/collagen/commit/5b95d48e9d2bea9c10e307235ac7f1be9d94af84))
+* **cli:** jobs pick up again after a restart, and Codex jobs count their spend ([6542fb1](https://github.com/JuicyBenjamin/collagen/commit/6542fb1eb9d0de389cc1abd0e517338d238d4a00))
+* **cli:** projects stand in the order you put them, kept on your device ([b5fe4a4](https://github.com/JuicyBenjamin/collagen/commit/b5fe4a4a8762a023fcab49da8d90236fa08a85c3))
+* **cli:** repeated uses of one change are one review item, marked viewed together ([cd85736](https://github.com/JuicyBenjamin/collagen/commit/cd8573671eba84e2bff6f957a76b1d1a4f529aa1))
+* **cli:** review someone else's pull request from your AI's assumptions ([ac0338d](https://github.com/JuicyBenjamin/collagen/commit/ac0338d8b20db6c11d2b085179e7653b10156be4))
+* **cli:** review units read by purpose, each change under a why ([b286dde](https://github.com/JuicyBenjamin/collagen/commit/b286dde82690b016180625187e02edc0ed0a7f4a))
+* **cli:** steering — the person's dial for how much their agent does on its own ([99ec3e2](https://github.com/JuicyBenjamin/collagen/commit/99ec3e2ac87979d5eb5dd5665727c95ce13ebf75))
+* **cli:** tests are reviewed in a tab of their own, each judged by its title ([bc23be8](https://github.com/JuicyBenjamin/collagen/commit/bc23be8ee38544e1db2991147e4109902f8978ec))
+* **cli:** the app tells the person what the ticket kinds are for ([cd4d17f](https://github.com/JuicyBenjamin/collagen/commit/cd4d17f7ddc2758ed80caf4d3588915cc35e7609))
+* **cli:** the code's author takes an assumed review over and answers each guess ([3bc118c](https://github.com/JuicyBenjamin/collagen/commit/3bc118c9a9f6c32d0eead5ee5b38676fade70d0d))
+* **cli:** the code's author's agent is told of guesses about their code, and answers them itself ([53b543d](https://github.com/JuicyBenjamin/collagen/commit/53b543d42968fd46b8bff4a3e91033363d7ab181))
+* **cli:** the review page is themed with daisyUI, a theme picked or made by the reader ([3b7c0d0](https://github.com/JuicyBenjamin/collagen/commit/3b7c0d071cfe1ee5d932dd011289c19e7098e432))
+* **cli:** the review page reads a change in units, each change once ([63dcc3e](https://github.com/JuicyBenjamin/collagen/commit/63dcc3e3e590fcc2a368bc50897ffdc52012bfd0))
+* **cli:** your AI drafts review comments beside the code, you accept them ([6e1a339](https://github.com/JuicyBenjamin/collagen/commit/6e1a33994e9fb02765e2c42ad50b74019cfc3ab7))
+* closing what finished work grew from is a steering row ([48b89ee](https://github.com/JuicyBenjamin/collagen/commit/48b89ee98122fa9c8604aeaee7c5c3a933f069b0))
+* collagen acts outside itself only as the person's steering allows ([a8bfe9a](https://github.com/JuicyBenjamin/collagen/commit/a8bfe9a42f449011d05a417b3b96b716eff66445))
+* collagen runs your AI for jobs, one at a time, with the model you choose ([744fb35](https://github.com/JuicyBenjamin/collagen/commit/744fb3569950e177de3da3f51a36878d05bdd2bd))
+* encrypted rooms, joined by invites that let one person in ([68466c4](https://github.com/JuicyBenjamin/collagen/commit/68466c4d75fa95bcd7fe3f254fdd973dfd2f2da5))
+* every AI act names the conversation that did it ([5122dfc](https://github.com/JuicyBenjamin/collagen/commit/5122dfc4914a227319cd8ae9bae59d1a0778a12a))
+* every ticket says what it waits on next ([f5393fb](https://github.com/JuicyBenjamin/collagen/commit/f5393fbeec52fef5cd6d4267067c391987e103fc))
+* investigation tickets: a question in, findings out, your AI on it ([36c8941](https://github.com/JuicyBenjamin/collagen/commit/36c89419aa90075949273623d9b15b56610ae1e8))
+* **mcp:** share-identity and take-identity make two machines one person ([2dddaeb](https://github.com/JuicyBenjamin/collagen/commit/2dddaeb19eeed8350a9a0cc2bb413162e2f2aab9))
+* news reaches the AI conversation you're in ([ac2eddd](https://github.com/JuicyBenjamin/collagen/commit/ac2eddd66b115c7f743b87f3a713b6d6318429a4))
+* **p2p:** a device put out is locked out, of the rooms and of the person's log ([b587f13](https://github.com/JuicyBenjamin/collagen/commit/b587f13e53015c1c4f07537cee489e6692a6d8c7))
+* **p2p:** a person's own log, shared by their devices ([aa3185c](https://github.com/JuicyBenjamin/collagen/commit/aa3185c54ff052073155eac275faff21a466b23d))
+* **p2p:** a review, a settle, a filing and a message say which agent made it, model and effort too ([db9dade](https://github.com/JuicyBenjamin/collagen/commit/db9dade2d7c371060fa984e1488776bb0bfdc1b1))
+* **p2p:** a reviewer can comment on a whole file, here and on GitHub ([ebd3012](https://github.com/JuicyBenjamin/collagen/commit/ebd3012c467001f271b331aa14c711f2dfe6b819))
+* **p2p:** a room knows a person's devices as that person ([9bc0699](https://github.com/JuicyBenjamin/collagen/commit/9bc06996a3fe53f18b44e3dfb55ee28229ccd247))
+* **p2p:** a ticket grown out of a part of an epic joins it, and progress counts pieces of work ([5fb7c0f](https://github.com/JuicyBenjamin/collagen/commit/5fb7c0f6bf4733895b38310d19d62c3111f5ce5d))
+* **p2p:** signed acts say which devices are one person's ([ee62357](https://github.com/JuicyBenjamin/collagen/commit/ee62357f7da7cec736ba545fd9c7116a8ff8f17a))
+* **p2p:** the bug kind, and a log that leaves a newer build's records alone ([84ee190](https://github.com/JuicyBenjamin/collagen/commit/84ee190d4aa92170e6b222d19474a546b1da89c6))
+* **p2p:** tickets in order — a ticket after another opens to readers once that one is answered ([e15495b](https://github.com/JuicyBenjamin/collagen/commit/e15495bf3b61481b5667dee57a0b44f6226b6d00))
+* **p2p:** two devices become one person by a handshake both sides make ([50a145f](https://github.com/JuicyBenjamin/collagen/commit/50a145feca348c133585bcfbf29fba0fea883462))
+* **review-web:** a reading progress bar atop the review page ([3ae7a63](https://github.com/JuicyBenjamin/collagen/commit/3ae7a638ca8d28cc0cf627148a504608e7101a53))
+* **review:** a hidden Clippy for the ask-AI chat ([e7d42c9](https://github.com/JuicyBenjamin/collagen/commit/e7d42c97aaf636f5b684396b545d876ce8a5288c))
+* **review:** any of clippyjs's Office assistants can be the ask-AI chat ([de4e273](https://github.com/JuicyBenjamin/collagen/commit/de4e273e7feead6ae1837cc0966dedd3b6dec7a0))
+* room-connection says what keeps a room from working ([94b96ae](https://github.com/JuicyBenjamin/collagen/commit/94b96aee8c8be04f7210f0453d483acb2f654b0a))
+* settings in tabs, steering per room, the AI per job ([4828fea](https://github.com/JuicyBenjamin/collagen/commit/4828feae19250a80268efafca03c6644e68a4fd6))
+* steering notes — how a room steers its AIs, said once ([38d640a](https://github.com/JuicyBenjamin/collagen/commit/38d640ad9967063cab078e959a50bf3f89ff26f8))
+* steering notes read like tickets: titles first, one note whole on demand ([79d4da7](https://github.com/JuicyBenjamin/collagen/commit/79d4da7604c87f70f246fb7924fd1b07ee7ba4de))
+* the review page's chat and the conversation that opened it see each other ([6802c28](https://github.com/JuicyBenjamin/collagen/commit/6802c285442a88a93c512042c0d834e8e6f8aa1a))
+* the review page's chat has its own harness and model ([3915d6a](https://github.com/JuicyBenjamin/collagen/commit/3915d6a50259a68c6a693c690a5af1a114cdcc26))
+* viewed marks are kept by your collagen, where your AI can read them ([2810e2a](https://github.com/JuicyBenjamin/collagen/commit/2810e2a0ef27f67f0f618785491b7ac2229112bd))
+* what a ticket grew from is ticked to close with it, unless you say not ([b836e30](https://github.com/JuicyBenjamin/collagen/commit/b836e30e7882f681f77fed269face2d387d1356a))
+* who may do what in a room — roles, approval, removal ([30206ef](https://github.com/JuicyBenjamin/collagen/commit/30206ef69c2722ef35dc6d7c764c404fd1e312ab))
+* your steering decides when collagen starts your AI on an investigation ([4654ab0](https://github.com/JuicyBenjamin/collagen/commit/4654ab0cb78c3af92faa75058328c81c015563d5))
+
+
+### Bug Fixes
+
+* a follow-up is answered inside its goal, not filed as a new investigation ([a3eb36f](https://github.com/JuicyBenjamin/collagen/commit/a3eb36f52db7af6f5b091b9c6a56e25b97de4027))
+* approving a stacked review opens the next one to that reader ([acf3b28](https://github.com/JuicyBenjamin/collagen/commit/acf3b280c606171954b3c448ea3e023449908974))
+* **cli:** 'filed together' goes by when tickets were filed, not last revised ([b583e2e](https://github.com/JuicyBenjamin/collagen/commit/b583e2e444a3c8e8b9f5b1bd9b837b589af3919a))
+* **cli:** a bug report's fields can be withdrawn; search what the reader sees; count unknown rows ([2588eb0](https://github.com/JuicyBenjamin/collagen/commit/2588eb057d31807457538b99ee02fb7b4f2e41f2))
+* **cli:** a finish is said once, holds the review while it goes, and nothing gets stuck ([fa143c9](https://github.com/JuicyBenjamin/collagen/commit/fa143c90d8e2d7d2052d3eab4acb500e506b1ea7))
+* **cli:** a finished review is said once, under who is signed in now, at one commit ([25857db](https://github.com/JuicyBenjamin/collagen/commit/25857dbcb1cdbce8ccc3164ab3726dde4902a376))
+* **cli:** a message wakes a conversation once, and the courier sends only the line ([90b3a3d](https://github.com/JuicyBenjamin/collagen/commit/90b3a3df05f4544dff2ad5fb69a625b31e43a929))
+* **cli:** an assumed review says so in one line, and claims nothing about its author ([ba92001](https://github.com/JuicyBenjamin/collagen/commit/ba9200163518010f93b0ff80063de3aa760f9251))
+* **cli:** an epic's explanation never names a ticket its reader may not see ([5470271](https://github.com/JuicyBenjamin/collagen/commit/5470271a551d65d53cb9e98413dc40d1fb383106))
+* **cli:** epic ops have unique ids, gates and readers see the real state and reason ([82546fe](https://github.com/JuicyBenjamin/collagen/commit/82546fe36d540e8023c0d71432f31b102477ad53))
+* **cli:** kinds follow the work: epics, proposals, bugs, plans, tasks, reviews ([9c7c7dd](https://github.com/JuicyBenjamin/collagen/commit/9c7c7dd21e3f99f90610b723b82c3b53d840079e))
+* **cli:** review-context searches a proposal's outline; two stale sentences ([e584f31](https://github.com/JuicyBenjamin/collagen/commit/e584f311793faeac94d1adeee4149788e8c5bd80))
+* **cli:** the outbox names an epic by its title too ([6688c53](https://github.com/JuicyBenjamin/collagen/commit/6688c5368c7a8f06f87968f6d59e053f434e1ab4))
+* **cli:** titles merge the same however copies are grouped, and stay on one line ([e75152a](https://github.com/JuicyBenjamin/collagen/commit/e75152aff5dd0a44ff356edda30dd04015673687))
+* **p2p:** a build that evicted our own why puts it back from our history ([0f1e282](https://github.com/JuicyBenjamin/collagen/commit/0f1e28256ccdc06dcfa7f5f2dfa90a94fe2ea94b))
+* **p2p:** a kept row is keyed by its entry's content, so a replay retires only its own ([3582554](https://github.com/JuicyBenjamin/collagen/commit/35825542f35cd200d4cce0384b1feb80dfbbf422))
+* **p2p:** a newcomer is let in to write when the room's creator is offline ([a78dbd8](https://github.com/JuicyBenjamin/collagen/commit/a78dbd8e9d986f879bf657e7acf8667516f6f263))
+* **p2p:** a replay can retire only its own row — the marker is recomputed, never trusted ([ff46ca1](https://github.com/JuicyBenjamin/collagen/commit/ff46ca18135d7f7fbcea637b2d673aa86681bbe6))
+* **p2p:** a replay retires exactly the raw row it came from, after it applied ([c89428a](https://github.com/JuicyBenjamin/collagen/commit/c89428ad50970a280006fe3836352fd587b140e7))
+* **p2p:** a room's log is opened once, and an invite is done with once it let us in ([13cc1a1](https://github.com/JuicyBenjamin/collagen/commit/13cc1a18e0f7f6799f00dd40bb092b1744592ccf))
+* **p2p:** a task can be filed with nobody asked, and taken by whoever picks it up ([397238e](https://github.com/JuicyBenjamin/collagen/commit/397238ee941352522038f3db91fd555cc7f71163))
+* **p2p:** a ticket changed a moment ago is never shown as it was before ([f391f4c](https://github.com/JuicyBenjamin/collagen/commit/f391f4c9de3b6150ce628281e36c619ffd96fd5f))
+* **p2p:** a ticket closed as done counts toward its epic ([652c55a](https://github.com/JuicyBenjamin/collagen/commit/652c55aec7497479a5205237e61982dd39451119))
+* **p2p:** an encrypted log is never opened from being told where it is ([e273115](https://github.com/JuicyBenjamin/collagen/commit/e273115cdbf2b0a7c5bbed51993ea9dc3a698fb0))
+* **p2p:** keep a newer build's records raw and replay them after the update; show them as unknown ([8cdc210](https://github.com/JuicyBenjamin/collagen/commit/8cdc210dfecee3b42939d43e6ddd4761512428d4))
+* **p2p:** keep every newer entry in order and replay them all; the bug report answers 'about' ([a375007](https://github.com/JuicyBenjamin/collagen/commit/a3750073eef037613336fb5492e32633beb948d9))
+* **p2p:** one review wins at one moment, and an author's edit keeps a guess's answer ([5d0785f](https://github.com/JuicyBenjamin/collagen/commit/5d0785f932b6c83d0cce994c881f0cb3b6f382ab))
+* **p2p:** rejoining a room in a running app no longer cuts you off ([6be893a](https://github.com/JuicyBenjamin/collagen/commit/6be893ab8ce1d30c418b53408bf035b87510a37c))
+* **p2p:** the same body under two protocols is two kept rows ([941108a](https://github.com/JuicyBenjamin/collagen/commit/941108a1730fa98e67a18a802a9cdaab0136ebbd))
+* **review:** asking for the missing whys fills them on the review ([14b0895](https://github.com/JuicyBenjamin/collagen/commit/14b089518268e690e0dcf9851943b3857d321232))
+
+## [0.27.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.26.0-alpha...p2p-v0.27.0-alpha) (2026-11-15)
+
+
+### Features
+
+* **cli:** a machine that takes an identity on is that person at once ([64b7c9b](https://github.com/JuicyBenjamin/collagen/commit/64b7c9be7a974e2676e33828f032e19e0a408fbb))
+* **cli:** collagen connect-device &lt;code&gt; and collagen join &lt;invite&gt; ([d8f0679](https://github.com/JuicyBenjamin/collagen/commit/d8f0679281d41cf742a1a5e1c2604668c0a7c320))
+* **mcp:** share-identity and take-identity make two machines one person ([2dddaeb](https://github.com/JuicyBenjamin/collagen/commit/2dddaeb19eeed8350a9a0cc2bb413162e2f2aab9))
+* **p2p:** a device put out is locked out, of the rooms and of the person's log ([b587f13](https://github.com/JuicyBenjamin/collagen/commit/b587f13e53015c1c4f07537cee489e6692a6d8c7))
+* **p2p:** a person's own log, shared by their devices ([aa3185c](https://github.com/JuicyBenjamin/collagen/commit/aa3185c54ff052073155eac275faff21a466b23d))
+* **p2p:** a room knows a person's devices as that person ([9bc0699](https://github.com/JuicyBenjamin/collagen/commit/9bc06996a3fe53f18b44e3dfb55ee28229ccd247))
+* **p2p:** signed acts say which devices are one person's ([ee62357](https://github.com/JuicyBenjamin/collagen/commit/ee62357f7da7cec736ba545fd9c7116a8ff8f17a))
+* **p2p:** two devices become one person by a handshake both sides make ([50a145f](https://github.com/JuicyBenjamin/collagen/commit/50a145feca348c133585bcfbf29fba0fea883462))
+
+
+### Bug Fixes
+
+* **p2p:** a newcomer is let in to write when the room's creator is offline ([a78dbd8](https://github.com/JuicyBenjamin/collagen/commit/a78dbd8e9d986f879bf657e7acf8667516f6f263))
+* **p2p:** a room's log is opened once, and an invite is done with once it let us in ([13cc1a1](https://github.com/JuicyBenjamin/collagen/commit/13cc1a18e0f7f6799f00dd40bb092b1744592ccf))
+* **p2p:** an encrypted log is never opened from being told where it is ([e273115](https://github.com/JuicyBenjamin/collagen/commit/e273115cdbf2b0a7c5bbed51993ea9dc3a698fb0))
+
 ## [0.26.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.25.0-alpha...p2p-v0.26.0-alpha) (2026-11-04)
 
 
