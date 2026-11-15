@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.27.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.26.0-alpha...cli-v0.27.0-alpha) (2026-11-15)
+
+
+### Features
+
+* **cli:** a machine that takes an identity on is that person at once ([64b7c9b](https://github.com/JuicyBenjamin/collagen/commit/64b7c9be7a974e2676e33828f032e19e0a408fbb))
+* **cli:** collagen connect-device &lt;code&gt; and collagen join &lt;invite&gt; ([d8f0679](https://github.com/JuicyBenjamin/collagen/commit/d8f0679281d41cf742a1a5e1c2604668c0a7c320))
+* **mcp:** share-identity and take-identity make two machines one person ([2dddaeb](https://github.com/JuicyBenjamin/collagen/commit/2dddaeb19eeed8350a9a0cc2bb413162e2f2aab9))
+* **p2p:** a device put out is locked out, of the rooms and of the person's log ([b587f13](https://github.com/JuicyBenjamin/collagen/commit/b587f13e53015c1c4f07537cee489e6692a6d8c7))
+* **p2p:** a room knows a person's devices as that person ([9bc0699](https://github.com/JuicyBenjamin/collagen/commit/9bc06996a3fe53f18b44e3dfb55ee28229ccd247))
+
+
+### Bug Fixes
+
+* **cli:** the invite you start with is not erased before it is used ([8225ad1](https://github.com/JuicyBenjamin/collagen/commit/8225ad1ab6bce2b16e3cf78d81dee5c52cc9a478))
+* **cli:** the published collagen starts: the wakeup channel is a dependency, not bundled ([5995b7a](https://github.com/JuicyBenjamin/collagen/commit/5995b7a887b568378caa8e971dec2337d93d5605))
+* **p2p:** a newcomer is let in to write when the room's creator is offline ([a78dbd8](https://github.com/JuicyBenjamin/collagen/commit/a78dbd8e9d986f879bf657e7acf8667516f6f263))
+
 ## [0.26.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.25.0-alpha...cli-v0.26.0-alpha) (2026-11-04)
 
 
