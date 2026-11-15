@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.27.0-alpha...cli-v0.28.0-alpha) (2026-11-15)
+
+
+### Chores
+
+* **cli:** Synchronize collagen versions
+
 ## [0.27.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.26.0-alpha...cli-v0.27.0-alpha) (2026-11-15)
 
 
