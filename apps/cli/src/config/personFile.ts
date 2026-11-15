@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { PersonStored } from "@collagen/p2p";
@@ -14,7 +14,9 @@ const personPath = (profile: string) => join(configDir, `person-${profile}.json`
 export const readPersonFile = (profile: string): PersonStored | null => {
   try {
     const kept = JSON.parse(readFileSync(personPath(profile), "utf8")) as Partial<PersonStored>;
-    return typeof kept.person === "string" && typeof kept.logKey === "string" && typeof kept.encryptionKey === "string" ? { person: kept.person, logKey: kept.logKey, encryptionKey: kept.encryptionKey } : null;
+    return typeof kept.person === "string" && typeof kept.logKey === "string" && typeof kept.encryptionKey === "string"
+      ? { person: kept.person, logKey: kept.logKey, encryptionKey: kept.encryptionKey, ...(typeof kept.space === "string" ? { space: kept.space } : {}) }
+      : null;
   } catch {
     return null;
   }
@@ -24,3 +26,6 @@ export const writePersonFile = (profile: string, stored: PersonStored): void => 
   if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true });
   writeFileSync(personPath(profile), JSON.stringify(stored), { mode: 0o600 });
 };
+
+/** This device was put out: it keeps nothing of the person it was. */
+export const forgetPersonFile = (profile: string): void => rmSync(personPath(profile), { force: true });

@@ -33,6 +33,8 @@ export const PersonOp = Schema.Union([
   Schema.Struct({ op: Schema.Literal("leave"), id: Schema.String }),
   /** what the person is called: one name, on every device */
   Schema.Struct({ op: Schema.Literal("name"), name: Schema.String }),
+  /** the log moved to a new key (a device was put out): where, and the key that reads it sealed for each device that stays */
+  Schema.Struct({ op: Schema.Literal("moved"), to: Schema.String, sealed: Schema.Record(Schema.String, Schema.String) }),
 ]);
 export type PersonOp = typeof PersonOp.Type;
 
@@ -46,6 +48,8 @@ export interface PersonView {
   readonly left: ReadonlyArray<string>;
   /** what they are called, once a device said */
   readonly name: string | null;
+  /** where the log moved, once it did: the first move stands */
+  readonly moved: { readonly to: string; readonly sealed: Readonly<Record<string, string>> } | null;
 }
 
 export interface PersonLog {
@@ -56,6 +60,8 @@ export interface PersonLog {
   readonly writerKey: string;
   readonly writable: () => boolean;
   readonly append: (op: PersonOp) => Effect.Effect<void, LogAppendFailed>;
+  /** Several entries as one batch — a log moved to a new key arrives whole. */
+  readonly appendAll: (ops: ReadonlyArray<PersonOp>) => Effect.Effect<void, LogAppendFailed>;
   readonly read: Effect.Effect<PersonView>;
   /** Fires after the view changed or our writer status did. */
   readonly changes: Stream.Stream<void>;
@@ -97,6 +103,9 @@ async function apply(nodes: ReadonlyArray<{ value: unknown }>, view: any, host: 
       case "name":
         await view.put("meta/name", personOp.name);
         break;
+      case "moved":
+        if (!(await view.get("meta/moved"))) await view.put("meta/moved", { to: personOp.to, sealed: personOp.sealed });
+        break;
     }
   }
 }
@@ -110,7 +119,8 @@ const UPDATE_PATIENCE = "5 seconds";
 export const openPersonLog = (
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   store: any,
-  person: string,
+  /** where in the store this log lives: one place per log, so a person's log and the one it moved to never share a writer core */
+  space: string,
   bootstrap: string | null,
   /** a new log makes its key; one that exists is read with the key its devices hold */
   encryption: Exclude<LogEncryption, "none">,
@@ -120,7 +130,7 @@ export const openPersonLog = (
   Effect.gen(function* () {
     const base = yield* Effect.acquireRelease(
       Effect.promise(async () => {
-        const autobase = new Autobase(store.namespace(`person/${person}`), bootstrap ? b4a.from(bootstrap, "hex") : null, {
+        const autobase = new Autobase(store.namespace(`person/${space}`), bootstrap ? b4a.from(bootstrap, "hex") : null, {
           valueEncoding: "json",
           ...(wakeup ? { wakeup } : {}),
           ...(encryption === "new" ? { encrypt: true } : { encryptionKey: b4a.from(encryption.key, "hex") }),
@@ -148,7 +158,14 @@ export const openPersonLog = (
 
     const read: Effect.Effect<PersonView> = Effect.gen(function* () {
       const named = yield* Effect.promise(() => base.view.get("meta/name") as Promise<{ value: unknown } | null>);
-      return { devices: yield* rows("device", DeviceEntry), rooms: yield* rows("room", PersonRoom), left: yield* rows("left", Schema.String), name: typeof named?.value === "string" ? named.value : null };
+      const movedRow = yield* Effect.promise(() => base.view.get("meta/moved") as Promise<{ value: { to: string; sealed: Record<string, string> } } | null>);
+      return {
+        devices: yield* rows("device", DeviceEntry),
+        rooms: yield* rows("room", PersonRoom),
+        left: yield* rows("left", Schema.String),
+        name: typeof named?.value === "string" ? named.value : null,
+        moved: movedRow ? { to: movedRow.value.to, sealed: movedRow.value.sealed } : null,
+      };
     });
 
     const changes = Stream.callback<void>((queue) =>
@@ -159,12 +176,13 @@ export const openPersonLog = (
       }),
     );
 
-    const append = (personOp: PersonOp) =>
-      Effect.tryPromise({ try: () => base.append(personOp) as Promise<void>, catch: (cause) => new LogAppendFailed({ cause }) }).pipe(
+    const appendAll = (personOps: ReadonlyArray<PersonOp>) =>
+      Effect.tryPromise({ try: () => base.append([...personOps]) as Promise<void>, catch: (cause) => new LogAppendFailed({ cause }) }).pipe(
         Effect.andThen(
           Effect.tryPromise({ try: () => base.update() as Promise<void>, catch: (cause) => new LogAppendFailed({ cause }) }).pipe(Effect.timeoutOption(UPDATE_PATIENCE), Effect.asVoid),
         ),
       );
+    const append = (personOp: PersonOp) => appendAll([personOp]);
 
     return {
       key: b4a.toString(base.key, "hex"),
@@ -172,6 +190,7 @@ export const openPersonLog = (
       writerKey: b4a.toString(base.local.key, "hex"),
       writable: () => base.writable as boolean,
       append,
+      appendAll,
       read,
       changes,
     };

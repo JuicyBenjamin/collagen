@@ -217,7 +217,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       // members are people: a device that joined before it became someone's is them now, once
       const people = new Map<string, (typeof view.members)[number]>();
       for (const member of view.members) {
-        const person = personOf(rules.devices, member.key);
+        // the row under the key a person is known by is theirs, though the device that key was may be put out
+        const person = rules.devices.persons.has(member.key) && !rules.devices.owner.has(member.key) ? member.key : personOf(rules.devices, member.key);
         if (person === null) continue;
         const before = people.get(person);
         // the row written under the person's own key says their name
@@ -995,6 +996,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (lacking.length === 0) return;
         yield* roomLog.appendAll(lacking.map((entry): LogOp => ({ op: "device", entry }))).pipe(Effect.ignore);
         yield* refresh;
+        // a device put out still holds this room's key: the room moves to
+        // one it is not given, as when someone is taken out
+        const putOut = new Set(lacking.flatMap((entry) => (entry.act.kind === "unlink" ? [entry.act.device] : [])));
+        if (putOut.size === 0 || moving || roomLog.encryptionKey === null) return;
+        moving = true;
+        // nobody is taken out: the new key is sealed for the devices each person has now, and those no longer include it
+        yield* moveRoom(roomLog, yield* roomLog.read, new Set()).pipe(
+          Effect.catchCause((cause) => Effect.logError(`moving the room to a new key failed: ${String(cause)}`)),
+          Effect.ensuring(Effect.sync(() => void (moving = false))),
+        );
       });
 
     return {

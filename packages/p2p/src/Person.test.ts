@@ -66,7 +66,7 @@ const node = async (name: string): Promise<Node> => {
   const person = await Effect.runPromise(
     makePerson.pipe(
       Effect.provideService(Swarm, swarm as never),
-      Effect.provideService(PersonConfig, { net: "devnet", stored: null, save: (stored) => Effect.sync(() => void (saved = stored)), deviceName: name }),
+      Effect.provideService(PersonConfig, { net: "devnet", stored: null, save: (stored) => Effect.sync(() => void (saved = stored)), forget: Effect.sync(() => void (saved = null)), deviceName: name }),
       Effect.provideService(Scope.Scope, scope),
     ),
   );
@@ -151,8 +151,10 @@ describe("two devices becoming one person", () => {
     expect(await Effect.runPromise(desk.person.handOver(laptop.key))).toBe("handed");
     expect(await soon(async () => (await stateOf(laptop)).parent === laptop.key)).toBe(true);
     expect(await soon(async () => (await Effect.runPromise(laptop.person.putOut(desk.key))) === "out")).toBe(true);
-    expect(await soon(async () => (await stateOf(desk)).devices.length === 1)).toBe(true);
-    expect((await stateOf(desk)).devices[0]!.key).toBe(laptop.key);
+    // the machine put out is its own person again, and keeps nothing of theirs
+    expect(await soon(async () => desk.saved() === null && (await stateOf(desk)).devices.length === 1)).toBe(true);
+    expect((await stateOf(desk)).devices[0]!.key).toBe(desk.key);
+    expect(desk.saved()).toBe(null);
   }, 60_000);
 
   it("a device code makes a machine with no room in common one of the person's devices — once, and only with the code", async () => {
@@ -180,4 +182,33 @@ describe("two devices becoming one person", () => {
     expect((await stateOf(second)).person).toBe(second.key);
     expect((await stateOf(desk)).devices).toHaveLength(2);
   }, 60_000);
+
+  it("putting a device out moves the person's log to a key it is not given: the others follow, it reads nothing after", async () => {
+    scope = await Effect.runPromise(Scope.make());
+    const desk = await node("desk");
+    const laptop = await node("laptop");
+    const phone = await node("phone");
+    connect(desk, laptop);
+    connect(desk, phone);
+    connect(laptop, phone);
+    for (const other of [laptop, phone]) {
+      await Effect.runPromise(other.person.take(desk.key));
+      await Effect.runPromise(desk.person.share(other.key));
+    }
+    expect(await soon(async () => (await stateOf(laptop)).devices.length === 3 && (await stateOf(phone)).devices.length === 3)).toBe(true);
+    const before = desk.saved()?.logKey;
+    expect(await soon(async () => (await Effect.runPromise(desk.person.putOut(phone.key))) === "out")).toBe(true);
+    // a new log, and the laptop is on it with the desk
+    expect(desk.saved()?.logKey).not.toBe(before);
+    expect(await soon(async () => laptop.saved()?.logKey === desk.saved()?.logKey)).toBe(true);
+    expect(await soon(async () => (await stateOf(phone)).person === phone.key)).toBe(true);
+    // what is said from here reaches the laptop, not the phone
+    expect(await soon(async () => (await Effect.runPromise(desk.person.name(laptop.key, "after the move"))) === "named")).toBe(true);
+    expect(await soon(async () => (await names(laptop)).includes("after the move"))).toBe(true);
+    expect(await soon(async () => (await stateOf(laptop)).devices.length === 2)).toBe(true);
+    expect((await stateOf(phone)).devices).toHaveLength(1);
+    // and the laptop can still write to it
+    expect(await soon(async () => (await Effect.runPromise(laptop.person.name(desk.key, "the desk"))) === "named")).toBe(true);
+    expect(await soon(async () => (await names(desk)).includes("the desk"))).toBe(true);
+  }, 90_000);
 });

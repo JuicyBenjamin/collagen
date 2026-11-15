@@ -4,7 +4,7 @@ import { Effect, Layer, Option, SubscriptionRef } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { keyPairFromSeed, makePerson, PersonConfig, pubkeyHex, randomSeedHex, Swarm, SwarmConfig, type PersonState } from "@collagen/p2p";
 import { NET } from "./app/net";
-import { readPersonFile, writePersonFile } from "./config/personFile";
+import { forgetPersonFile, readPersonFile, writePersonFile } from "./config/personFile";
 import { invitedRoomEntry, readProfileFile, upsertActiveRoom, writeProfileFile } from "./config/profileFile";
 import { checkInvite } from "./lib/invite";
 import { loadDevBootstrap } from "./services/DevBootstrap";
@@ -91,7 +91,7 @@ const connectDevice = (profile: string, code: string) =>
       }).pipe(Effect.timeoutOption(FIND_PATIENCE));
       return Option.getOrNull(linked);
     }).pipe(
-      Effect.provideService(PersonConfig, { net: NET, stored: readPersonFile(profile), save: (kept) => Effect.sync(() => writePersonFile(profile, kept)), deviceName: nameFor(profile) }),
+      Effect.provideService(PersonConfig, { net: NET, stored: readPersonFile(profile), save: (kept) => Effect.sync(() => writePersonFile(profile, kept)), forget: Effect.sync(() => forgetPersonFile(profile)), deviceName: nameFor(profile) }),
       Effect.provide(swarm),
       Effect.scoped,
     );

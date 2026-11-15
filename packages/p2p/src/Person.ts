@@ -22,6 +22,8 @@ export interface PersonStored {
   readonly person: string;
   readonly logKey: string;
   readonly encryptionKey: string;
+  /** where in the store that log lives; absent for a log kept before logs moved (it lives under the person's key) */
+  readonly space?: string;
 }
 
 export class PersonConfig extends Context.Service<PersonConfig, {
@@ -29,6 +31,8 @@ export class PersonConfig extends Context.Service<PersonConfig, {
   /** what was kept from before; null for a device that is its own person, alone */
   readonly stored: PersonStored | null;
   readonly save: (stored: PersonStored) => Effect.Effect<void>;
+  /** this device was put out: it is its own person again, and keeps nothing of theirs */
+  readonly forget: Effect.Effect<void>;
   /** what this device is called when it is taken in, until someone names it */
   readonly deviceName: string;
 }>()("p2p/PersonConfig") {}
@@ -69,6 +73,10 @@ export const makePerson = Effect.gen(function* () {
   const me = swarm.identity.device;
 
   let person = config.stored?.person ?? me;
+  /** where in the store the log we hold lives */
+  let space = config.stored?.space ?? person;
+  /** the log is being changed for another (it moved): one change at a time */
+  let switching = false;
   let log: PersonLog | null = null;
   let logScope: Scope.Closeable | null = null;
   let folded: Devices = NO_DEVICES;
@@ -103,8 +111,39 @@ export const makePerson = Effect.gen(function* () {
     folded = foldDevices(entries);
     if (!confirmed && devicesOf(folded, person).devices.has(me)) {
       confirmed = true;
-      yield* config.save({ person, logKey: log.key, encryptionKey: log.encryptionKey });
+      yield* config.save({ person, logKey: log.key, encryptionKey: log.encryptionKey, space });
       yield* Effect.log(`this device is now one of ${person.slice(0, 8)}'s`);
+    }
+    // put out: this device is its own person again, and lets go of theirs
+    // (the device the person started on as well: its key is still what they are known by, but it is not them any more)
+    if (confirmed && folded.gone.has(me)) {
+      yield* Effect.logWarning(`this device was put out: it is no longer one of ${person.slice(0, 8)}'s`);
+      const held = logScope;
+      log = null;
+      logScope = null;
+      person = me;
+      space = me;
+      folded = NO_DEVICES;
+      entries = [];
+      yield* config.forget;
+      yield* SubscriptionRef.set(state, stateNow([], []));
+      // not from inside the log's own fibre: closing it would end this
+      if (held) yield* Scope.close(held, Exit.void).pipe(Effect.forkIn(scope));
+      return;
+    }
+    // the log moved to a new key (a device was put out): follow it with the key sealed for us
+    if (view.moved && view.moved.to !== log.key && !switching) {
+      const sealed = view.moved.sealed[me];
+      const opened = sealed ? openSealed(sealed, swarm.identity.keyPair) : null;
+      if (opened) {
+        switching = true;
+        const moved = view.moved;
+        return yield* attach(moved.to, { key: b4a.toString(opened, "hex") }, moved.to).pipe(
+          Effect.ensuring(Effect.sync(() => void (switching = false))),
+          Effect.forkIn(scope),
+          Effect.asVoid,
+        );
+      }
     }
     yield* SubscriptionRef.set(state, stateNow(view.rooms, view.left, view.name));
   });
@@ -119,15 +158,16 @@ export const makePerson = Effect.gen(function* () {
   };
 
   /** Open the person's log (make it, when `key` is null) and follow it. */
-  const attach = (key: string | null, encryption: Exclude<LogEncryption, "none">) =>
+  const attach: (key: string | null, encryption: Exclude<LogEncryption, "none">, at: string) => Effect.Effect<PersonLog> = (key, encryption, at) =>
     Effect.gen(function* () {
       if (logScope) yield* Scope.close(logScope, Exit.void);
       const child = yield* Scope.fork(scope);
-      const opened = yield* openPersonLog(swarm.store, person, key, encryption, swarm.wakeup).pipe(Effect.provideService(Scope.Scope, child));
+      const opened = yield* openPersonLog(swarm.store, at, key, encryption, swarm.wakeup).pipe(Effect.provideService(Scope.Scope, child));
       log = opened;
       logScope = child;
+      space = at;
       letIn.clear();
-      if (confirmed) yield* config.save({ person, logKey: opened.key, encryptionKey: opened.encryptionKey });
+      if (confirmed) yield* config.save({ person, logKey: opened.key, encryptionKey: opened.encryptionKey, space });
       yield* refresh;
       yield* opened.changes.pipe(Stream.tap(() => refresh), Stream.runDrain, Effect.forkIn(child));
       yield* swarm.join(personTopic(opened.key, config.net), hooks).pipe(Effect.provideService(Scope.Scope, child));
@@ -206,7 +246,7 @@ export const makePerson = Effect.gen(function* () {
           }
           person = frame.person;
           confirmed = false;
-          yield* attach(keys.logKey, { key: keys.encryptionKey });
+          yield* attach(keys.logKey, { key: keys.encryptionKey }, keys.logKey);
           return yield* askToWrite(from);
         }
         case "person-join": {
@@ -222,7 +262,7 @@ export const makePerson = Effect.gen(function* () {
     });
 
   yield* swarm.listen(IDENTITY_TOPIC, { greet: () => Effect.void, onPeerGone: () => Effect.void, onFrame });
-  if (config.stored) yield* attach(config.stored.logKey, { key: config.stored.encryptionKey });
+  if (config.stored) yield* attach(config.stored.logKey, { key: config.stored.encryptionKey }, space);
   // a frame to a peer just connected can be lost: while a share or a take waits, say it again
   yield* Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -251,7 +291,7 @@ export const makePerson = Effect.gen(function* () {
    *  they take it — told to on their side, naming us. Only the parent can. */
   const share = Effect.fn("Person.share")(function* (peer: string) {
     if (devicesOf(folded, person).parent !== me) return "not-parent" as const;
-    if (!log) yield* attach(null, "new");
+    if (!log) yield* attach(null, "new", person);
     offers.set(peer, (yield* Clock.currentTimeMillis) + HANDSHAKE_PATIENCE_MS);
     yield* send(peer, { kind: "identity-offer", person });
     return "offered" as const;
@@ -272,7 +312,7 @@ export const makePerson = Effect.gen(function* () {
    *  for ten minutes. Only the parent can. */
   const makeCode = Effect.fn("Person.makeCode")(function* () {
     if (devicesOf(folded, person).parent !== me) return "not-parent" as const;
-    if (!log) yield* attach(null, "new");
+    if (!log) yield* attach(null, "new", person);
     const made = newDeviceCode(person, config.net);
     const findable = yield* Scope.fork(scope);
     yield* swarm.join(deviceCodeTopic(made.code), { greet: () => Effect.void, onPeerGone: () => Effect.void, onFrame: () => Effect.void }).pipe(Effect.provideService(Scope.Scope, findable));
@@ -302,10 +342,43 @@ export const makePerson = Effect.gen(function* () {
     return "asked" as const;
   });
 
+  /** Move the person's log to a new key, sealed for the devices that are
+   *  theirs now: one just put out holds the old key, and reads nothing
+   *  written from here. The log as it stands is carried over whole. */
+  const moveLog = Effect.gen(function* () {
+    const old = log;
+    if (!old || switching) return;
+    switching = true;
+    yield* Effect.gen(function* () {
+      const view = yield* old.read;
+      const at = `${person}/${randomUUID()}`;
+      const making = yield* Scope.fork(scope);
+      const next = yield* openPersonLog(swarm.store, at, null, "new", swarm.wakeup).pipe(Effect.provideService(Scope.Scope, making));
+      yield* next
+        .appendAll([
+          ...view.devices.map((entry) => ({ op: "device" as const, entry })),
+          ...view.rooms.map((room) => ({ op: "room" as const, room })),
+          ...view.left.map((id) => ({ op: "leave" as const, id })),
+          ...(view.name !== null ? [{ op: "name" as const, name: view.name }] : []),
+        ])
+        .pipe(Effect.orDie);
+      const moved = { to: next.key, key: next.encryptionKey };
+      yield* Scope.close(making, Exit.void);
+      const sealed: Record<string, string> = {};
+      for (const device of devicesOf(folded, person).devices.keys()) {
+        const box = sealFor(device, b4a.from(moved.key, "hex"));
+        if (box) sealed[device] = box;
+      }
+      yield* old.append({ op: "moved", to: moved.to, sealed }).pipe(Effect.orDie);
+      yield* attach(moved.to, { key: moved.key }, at);
+      yield* Effect.log(`moved this person's log to a new key (${Object.keys(sealed).length} device(s))`);
+    }).pipe(Effect.ensuring(Effect.sync(() => void (switching = false))));
+  });
+
   /** Call one of our devices something; any of them may. */
   const name = Effect.fn("Person.name")(function* (device: string, called: string) {
     if (!devicesOf(folded, person).devices.has(device)) return "not-a-device" as const;
-    if (!log) yield* attach(null, "new");
+    if (!log) yield* attach(null, "new", person);
     const made = yield* act({ kind: "name", device, name: called }, null);
     return typeof made === "string" ? made : ("named" as const);
   });
@@ -316,7 +389,9 @@ export const makePerson = Effect.gen(function* () {
     if (!mine.devices.has(device)) return "not-a-device" as const;
     if (device === mine.parent) return "is-parent" as const;
     const made = yield* asParent({ kind: "unlink", device });
-    return typeof made === "string" ? made : ("out" as const);
+    if (typeof made === "string") return made;
+    yield* moveLog;
+    return "out" as const;
   });
 
   /** Hand the parent's part to another of our devices. The parent's to do; it is an ordinary device after. */

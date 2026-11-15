@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import crypto from "hypercore-crypto";
 import b4a from "b4a";
-import { foldAcl, permitted, signAcl, type AclAct, type AclEntry } from "./acl";
+import { devicesFor, foldAcl, permitted, signAcl, type AclAct, type AclEntry } from "./acl";
 import { signConsent, signDevice } from "./devices";
 
 const ROOM = "room-1";
@@ -89,5 +89,20 @@ describe("who may do what in a room", () => {
     const after = foldAcl(ROOM, [found, link, letIn, unlink, takeOut]);
     expect(after.admitted.has(newcomer.key)).toBe(true);
     expect(after.removed.has(member.key)).toBe(false);
+  });
+
+  it("a person is still themselves when the device they started on is put out: the key names them, their devices are the ones left", () => {
+    const laptop = person();
+    const link = signDevice({ id: "d1", person: owner.key, by: owner.key, at: 1, after: null, act: { kind: "link", device: laptop.key, name: "laptop", consent: signConsent(owner.key, laptop.key, laptop.pair) } }, owner.pair);
+    const handed = signDevice({ id: "d2", person: owner.key, by: owner.key, at: 2, after: "d1", act: { kind: "parent", device: laptop.key } }, owner.pair);
+    const out = signDevice({ id: "d3", person: owner.key, by: laptop.key, at: 3, after: "d2", act: { kind: "unlink", device: owner.key } }, laptop.pair);
+    const acl = foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out]);
+    // the room's owner is the person, and the laptop holds what they hold
+    expect(acl.owner).toBe(owner.key);
+    expect(devicesFor(acl.devices, owner.key)).toEqual([laptop.key]);
+    expect(permitted(foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out, act(laptop, { kind: "remove", identity: member.key })]), owner.key, "remove")).toBe(true);
+    expect(foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out, act(laptop, { kind: "remove", identity: member.key })]).removed.has(member.key)).toBe(true);
+    // what the old device signs now counts for nothing
+    expect(foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out, act(owner, { kind: "remove", identity: member.key })]).removed.has(member.key)).toBe(false);
   });
 });

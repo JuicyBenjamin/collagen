@@ -5,7 +5,7 @@ import { NET } from "../app/net";
 import { CliArgs } from "./CliArgs";
 import { IdentityService } from "./Identity";
 import { writeProfileFile } from "../config/profileFile";
-import { readPersonFile, writePersonFile } from "../config/personFile";
+import { forgetPersonFile, readPersonFile, writePersonFile } from "../config/personFile";
 
 /** The person this device is: alone, or one of several devices (p2p Person). */
 export class PersonService extends Context.Service<PersonService>()("cli/Person", {
@@ -17,6 +17,7 @@ export class PersonService extends Context.Service<PersonService>()("cli/Person"
         net: NET,
         stored: readPersonFile(profile),
         save: (stored) => Effect.sync(() => writePersonFile(profile, stored)),
+        forget: Effect.sync(() => forgetPersonFile(profile)),
         // a run with a profile of its own is told apart by it: two of them on one machine share a hostname
         deviceName: profile === "default" ? hostname() : `${hostname()} (${profile})`,
       }),

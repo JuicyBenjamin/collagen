@@ -58,6 +58,16 @@ expect "alice no longer shares" "$(call $A "$SA" share-identity '{"person":"caro
 wait_until "the new parent puts the old one out" "no longer one of your user's devices" call $B "$SB" set-device "{\"action\":\"put-out\",\"device\":\"$ALICES\"}"
 wait_until "…and has one device left" "^1$" count_devices $B "$SB"
 
+echo "## E2. the machine put out is locked out: the room moved to a key it is not given"
+await_log bob "moved the room to its encrypted log"
+wait_until "it is its own one device again" "^1$" count_devices $A "$SA"
+call $B "$SB" create-ticket '{"title":"t2 after the put-out","goal":"t2 after the put-out","project":"sandbox","steps":[{"id":"s1","owner":"alice","intent":"note","description":"after"}]}' > /dev/null
+wait_until "carol follows the room and reads what comes after" "t2 after the put-out" goals $C "$SC"
+await_log alice "not among its members"
+sleep 3
+expect "the machine put out reads nothing written after" "$(goals $A "$SA" 2>&1 | grep -c 't2 after the put-out')" "^0$"
+expect "…and to carol the room still has alice in it, once" "$(call $C "$SC" get-room-access '{}' | grep -E '^Members')" "Members: (alice, carol|carol, alice)$"
+
 echo "## F. it holds over a restart"
 stop bob; start bob; SB=$(mcp $B)
 wait_until "bob's machine is still the parent" "this one — parent" call $B "$SB" devices '{}'

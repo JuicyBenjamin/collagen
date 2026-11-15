@@ -106,6 +106,11 @@ export const isDeviceAct = (entry: SignedAct): entry is DeviceEntry => "person" 
 
 /** Every key that is `key`'s person now: their devices, or just `key` for someone no device act is about; none once `key` was put out. */
 export const devicesFor = (devices: Devices, key: string): ReadonlyArray<string> => {
+  // the key a person is known by names them, whatever became of the device
+  // it once was: put out, it is no longer among their devices, and they are
+  // still who the room's members and roles name
+  const named = devices.persons.get(key);
+  if (named && !devices.owner.has(key)) return [...named.devices.keys()];
   const person = personOf(devices, key);
   if (person === null) return [];
   const mine = devices.persons.get(person);
