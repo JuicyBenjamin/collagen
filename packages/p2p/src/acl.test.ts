@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import crypto from "hypercore-crypto";
 import b4a from "b4a";
-import { foldAcl, permitted, signAcl, type AclAct, type AclEntry } from "./acl";
+import { devicesFor, foldAcl, permitted, signAcl, type AclAct, type AclEntry } from "./acl";
+import { signConsent, signDevice } from "./devices";
 
 const ROOM = "room-1";
 const person = () => {
@@ -70,5 +71,38 @@ describe("who may do what in a room", () => {
     const early = act(member, { kind: "remove", identity: newcomer.key });
     const acl = foldAcl(ROOM, [...base, early, act(owner, { kind: "grant", identity: member.key, roles: ["mod"] })]);
     expect(acl.removed.has(newcomer.key)).toBe(false);
+  });
+
+  it("a person's device signs as them — from when it was taken in, until it is put out", () => {
+    const laptop = person();
+    const link = signDevice({ id: "d1", person: owner.key, by: owner.key, at: 1, after: null, act: { kind: "link", device: laptop.key, name: "laptop", consent: signConsent(owner.key, laptop.key, laptop.pair) } }, owner.pair);
+    const unlink = signDevice({ id: "d2", person: owner.key, by: owner.key, at: 2, after: "d1", act: { kind: "unlink", device: laptop.key } }, owner.pair);
+    const found = act(owner, { kind: "found" });
+    const letIn = act(laptop, { kind: "admit", identity: newcomer.key });
+    const takeOut = act(laptop, { kind: "remove", identity: member.key });
+    // before the laptop is the owner's, it is a stranger: its word removes nobody
+    expect(foldAcl(ROOM, [found, takeOut, link]).removed.has(member.key)).toBe(false);
+    // as the owner's device it holds what the owner holds
+    const linked = foldAcl(ROOM, [found, link, takeOut]);
+    expect(linked.removed.get(member.key)?.by).toBe(owner.key);
+    // what it did while it was theirs stands after it is put out; what it signs after does not
+    const after = foldAcl(ROOM, [found, link, letIn, unlink, takeOut]);
+    expect(after.admitted.has(newcomer.key)).toBe(true);
+    expect(after.removed.has(member.key)).toBe(false);
+  });
+
+  it("a person is still themselves when the device they started on is put out: the key names them, their devices are the ones left", () => {
+    const laptop = person();
+    const link = signDevice({ id: "d1", person: owner.key, by: owner.key, at: 1, after: null, act: { kind: "link", device: laptop.key, name: "laptop", consent: signConsent(owner.key, laptop.key, laptop.pair) } }, owner.pair);
+    const handed = signDevice({ id: "d2", person: owner.key, by: owner.key, at: 2, after: "d1", act: { kind: "parent", device: laptop.key } }, owner.pair);
+    const out = signDevice({ id: "d3", person: owner.key, by: laptop.key, at: 3, after: "d2", act: { kind: "unlink", device: owner.key } }, laptop.pair);
+    const acl = foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out]);
+    // the room's owner is the person, and the laptop holds what they hold
+    expect(acl.owner).toBe(owner.key);
+    expect(devicesFor(acl.devices, owner.key)).toEqual([laptop.key]);
+    expect(permitted(foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out, act(laptop, { kind: "remove", identity: member.key })]), owner.key, "remove")).toBe(true);
+    expect(foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out, act(laptop, { kind: "remove", identity: member.key })]).removed.has(member.key)).toBe(true);
+    // what the old device signs now counts for nothing
+    expect(foldAcl(ROOM, [act(owner, { kind: "found" }), link, handed, out, act(owner, { kind: "remove", identity: member.key })]).removed.has(member.key)).toBe(false);
   });
 });

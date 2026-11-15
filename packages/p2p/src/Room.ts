@@ -14,7 +14,8 @@ import {
   type TranscriptRequestFrame,
 } from "./schema";
 import { NotPermitted, NotWritable, PeerNotConnected } from "./errors";
-import { EMPTY_ACL, EVERYONE, foldAcl, permitted, rankOf, signAcl, type Acl, type AclAct, type RoomRole } from "./acl";
+import { devicesFor, EMPTY_ACL, EVERYONE, foldAcl, isDeviceAct, permitted, rankOf, signAcl, type Acl, type AclAct, type RoomRole } from "./acl";
+import { personOf, type DeviceEntry } from "./devices";
 import type { Conversation } from "./acting";
 import type { ReviewComment, ReviewContext } from "./review";
 import type { NoteTurn, SteeringNote } from "./note";
@@ -69,7 +70,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     const config = yield* RoomConfig;
     const swarm = yield* Swarm;
     const scope = yield* Effect.scope;
+    // the person, as tickets, messages and roles name them — and this device,
+    // which is what connects, signs and is sealed for (the same key for
+    // someone on one device)
     const me = swarm.identity.pubkey;
+    const device = swarm.identity.device;
 
     // Presence (ephemeral, from greets) …
     const roster = yield* SubscriptionRef.make<ReadonlyArray<Peer>>([]);
@@ -136,7 +141,11 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     // who may be in an encrypted room: its members and whoever an invite let
     // in. Anyone else on the topic (an old invite, a stray peer) hears
     // nothing from us but a refusal, and is never let in.
-    const known = new Set<string>([me]);
+    const known = new Set<string>([device]);
+    // who may do what, and whose device each key is, as last read
+    let rules: Acl = EMPTY_ACL;
+    /** The person a connected key is: whoever took it in as a device, else itself. */
+    const personAt = (key: string) => personOf(rules.devices, key) ?? key;
     // peers on the topic we do not let in (yet): kept out of the roster
     const strangers = new Map<string, Peer>();
     // who we asked to let us in with our invite (only their keys are taken)
@@ -155,7 +164,24 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     // the view as last read, for what follows a refresh (moving the room)
     let lastView: LogView | null = null;
     let logScope: Scope.Closeable | null = null;
-    const publishRoster = Effect.suspend(() => SubscriptionRef.set(roster, [...peers.values()]));
+    // the roster is people: someone here on two devices is one entry, under
+    // the key they are known by; our own other devices are not someone else
+    const publishRoster = Effect.suspend(() => {
+      const people = new Map<string, Peer>();
+      for (const [key, peer] of peers) {
+        const person = personAt(key);
+        if (person !== me && !people.has(person)) people.set(person, { ...peer, key: person });
+      }
+      return SubscriptionRef.set(roster, [...people.values()]);
+    });
+    /** The connected devices of a person: what a frame for them is sent to. */
+    const devicesHere = (person: string) => [...peers.keys()].filter((key) => personAt(key) === person);
+    const sendToPerson = (person: string, frame: Frame) =>
+      Effect.gen(function* () {
+        const here = devicesHere(person);
+        if (here.length === 0) return yield* new PeerNotConnected({ peerKey: person });
+        yield* Effect.forEach(here, (key) => send(key, frame).pipe(Effect.catchTag("PeerNotConnected", () => Effect.void)), { discard: true });
+      });
 
     let topicHex = "";
     const send = (key: string, frame: Frame) => swarm.write(key, topicHex, frame);
@@ -187,22 +213,37 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         `log view: ${view.tickets.length} ticket(s) · ${view.messages.length} message(s) · ${view.members.length} member(s) · writable=${String(log.writable())}`,
       );
       yield* SubscriptionRef.set(tickets, new Map(view.tickets.map((ticket) => [ticket.id, ticket])));
-      yield* SubscriptionRef.set(members, view.members);
-      const rules = foldAcl(config.roomName, view.acl);
+      rules = foldAcl(config.roomName, view.acl);
+      // members are people: a device that joined before it became someone's is them now, once
+      const people = new Map<string, (typeof view.members)[number]>();
+      for (const member of view.members) {
+        // the row under the key a person is known by is theirs, though the device that key was may be put out
+        const person = rules.devices.persons.has(member.key) && !rules.devices.owner.has(member.key) ? member.key : personOf(rules.devices, member.key);
+        if (person === null) continue;
+        const before = people.get(person);
+        // the row written under the person's own key says their name
+        if (!before || member.key === person) people.set(person, { ...member, key: person });
+      }
+      yield* SubscriptionRef.set(members, [...people.values()]);
       yield* SubscriptionRef.set(acl, rules);
-      // who belongs: its members and whoever an invite let in — never someone
-      // still waiting to be let in, nor anyone taken out
-      for (const member of view.members) known.add(member.key);
-      for (const invite of view.invites) if (invite.usedBy) known.add(invite.usedBy);
-      for (const identity of [...rules.removed.keys(), ...[...rules.waiting.keys()].filter((identity) => !rules.admitted.has(identity))]) known.delete(identity);
+      // who belongs: its members and whoever an invite let in, on every device
+      // that is theirs — never someone still waiting to be let in, anyone
+      // taken out, or a device its person put out
+      const waits = [...rules.waiting.keys()].filter((identity) => !rules.admitted.has(identity));
+      for (const key of [...view.members.map((member) => member.key), ...view.invites.flatMap((invite) => (invite.usedBy ? [invite.usedBy] : []))])
+        for (const theirs of devicesFor(rules.devices, key)) known.add(theirs);
+      // taken out: the person on every device that is theirs — and any device its own person put out
+      const out = new Set<string>([...rules.removed.keys()].flatMap((identity) => [identity, ...devicesFor(rules.devices, identity)]));
+      for (const key of rules.devices.gone.keys()) out.add(key);
+      for (const key of [...out, ...waits]) known.delete(key);
       // someone taken out is not talked to from now: out of the roster, said nothing more
-      for (const identity of rules.removed.keys())
-        if (peers.has(identity)) {
-          peers.delete(identity);
-          greeted.delete(identity);
-          announced.delete(identity);
-          yield* publishRoster;
+      for (const key of out)
+        if (peers.delete(key)) {
+          greeted.delete(key);
+          announced.delete(key);
         }
+      // whose device a key is may have changed: the roster is people
+      yield* publishRoster;
       lastView = view;
       yield* SubscriptionRef.set(trace, view.messages.map((logged) => logged.message));
       yield* SubscriptionRef.set(attachments, view.attachments);
@@ -214,7 +255,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       const name = view.name;
       if (name) yield* SubscriptionRef.update(meta, (current) => (name.ts > current.ts ? name : current));
       yield* SubscriptionRef.set(writable, log.writable());
-      yield* SubscriptionRef.set(mine, view.messages.filter((logged) => logged.message.to === me));
+      // for us: under the key we are known by, or the one this device had before it became ours
+      yield* SubscriptionRef.set(mine, view.messages.filter((logged) => logged.message.to === me || personAt(logged.message.to) === me));
       // records from a build speaking another protocol version never reach
       // the app as they are. Those we know how to read are rewritten into the
       // current shape for everyone; our own that an earlier build evicted
@@ -262,7 +304,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       Effect.gen(function* () {
         const roomLog = yield* requireLog;
         const now = yield* Clock.currentTimeMillis;
-        const entry = signAcl(config.roomName, { id: randomUUID(), by: me, at: now, act }, swarm.identity.keyPair);
+        const entry = signAcl(config.roomName, { id: randomUUID(), by: device, at: now, act }, swarm.identity.keyPair);
         yield* roomLog.append({ op: "acl", entry }).pipe(Effect.orDie);
         yield* refresh;
         return entry;
@@ -280,7 +322,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       const label = config.roomLabel;
       // the creator founds the room: its owner, from the first act on the log
       if (config.log.creator && foldAcl(config.roomName, view.acl).owner === null && log.encryptionKey !== null) {
-        const entry = signAcl(config.roomName, { id: randomUUID(), by: me, at: now, act: { kind: "found" } }, swarm.identity.keyPair);
+        const entry = signAcl(config.roomName, { id: randomUUID(), by: device, at: now, act: { kind: "found" } }, swarm.identity.keyPair);
         yield* log.append({ op: "acl", entry }).pipe(Effect.ignore);
       }
       if (config.log.creator && view.name === null && label.ts > 0) {
@@ -389,7 +431,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         const invite = joining;
         if (!invite || log) return Effect.void;
         redeemAsked.add(key);
-        return send(key, { kind: "redeem", inviteId: invite.id, proof: proveInvite(invite, me) }).pipe(Effect.catchTag("PeerNotConnected", () => Effect.void));
+        return send(key, { kind: "redeem", inviteId: invite.id, proof: proveInvite(invite, device) }).pipe(Effect.catchTag("PeerNotConnected", () => Effect.void));
       });
 
     /** A newcomer shows an invite: check it against the log, let them in once
@@ -412,6 +454,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (!checkProof(config.roomName, invite.id, invite.publicKey, from, proof)) return yield* refuse("the invite does not prove out");
         if (invite.usedBy !== null && invite.usedBy !== from) return yield* refuse("this invite has been used — ask for a new one");
         const rules = foldAcl(config.roomName, view.acl);
+        if (personOf(rules.devices, from) === null) return yield* refuse("this device is no longer one of its person's");
         if (rules.removed.has(from)) return yield* refuse("you were taken out of this room");
         if (rules.declined.has(from)) return yield* refuse(`you were not let in${rules.declined.get(from)?.reason ? `: ${rules.declined.get(from)!.reason}` : ""}`);
         // an invite from someone who may not invite (any more) lets nobody in
@@ -425,7 +468,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
           if (invite.usedBy === null) yield* roomLog.append({ op: "redeemed", id: invite.id, identity: from, by: me, ts: now }).pipe(Effect.ignore);
           if (!rules.waiting.has(from)) {
             const name = strangers.get(from)?.name ?? peers.get(from)?.name ?? from.slice(0, 8);
-            yield* roomLog.append({ op: "acl", entry: signAcl(config.roomName, { id: randomUUID(), by: me, at: now, act: { kind: "request", identity: from, name, inviteId } }, swarm.identity.keyPair) }).pipe(Effect.ignore);
+            yield* roomLog.append({ op: "acl", entry: signAcl(config.roomName, { id: randomUUID(), by: device, at: now, act: { kind: "request", identity: from, name, inviteId } }, swarm.identity.keyPair) }).pipe(Effect.ignore);
             yield* refresh;
             yield* Effect.log(`${from.slice(0, 8)} is waiting to be let in`);
           }
@@ -478,7 +521,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
      *  Not among its members then, we cannot: we say so, and stay put. */
     const follow = (moved: NonNullable<LogView["moved"]>): Effect.Effect<void> =>
       Effect.gen(function* () {
-        const sealed = moved.sealed[me];
+        const sealed = moved.sealed[device];
         const opened = sealed ? openSealed(sealed, swarm.identity.keyPair) : null;
         if (!opened) {
           const why = "this room moved to a new key while you were not among its members — ask one of them for an invite";
@@ -503,7 +546,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         if (key === null) return yield* Scope.close(child, Exit.void);
         const carried: Array<LogOp> = [
           // who may do what goes first, in its order, so the new log decides as the old one did
-          ...view.acl.map((entry): LogOp => ({ op: "acl", entry })),
+          ...view.acl.map((entry): LogOp => (isDeviceAct(entry) ? { op: "device", entry } : { op: "acl", entry })),
           // everyone's name, the ones taken out included: their removal keeps them out, and they are still named
           ...view.members.map((member): LogOp => ({ op: "member", key: member.key, name: member.name, ts: member.ts })),
           ...view.invites.filter((invite) => invite.usedBy === null || !without.has(invite.usedBy)).flatMap((invite): ReadonlyArray<LogOp> => [
@@ -524,8 +567,10 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         const sealed: Record<string, string> = {};
         // the new key for everyone who stays — and for whoever an invite let in who has not joined yet
         const rules = foldAcl(config.roomName, view.acl);
-        const stay = [me, ...view.members.map((member) => member.key), ...rules.admitted, ...view.invites.flatMap((invite) => (invite.usedBy !== null && !rules.waiting.has(invite.usedBy) ? [invite.usedBy] : []))];
-        for (const identity of new Set(stay.filter((identity) => !without.has(identity) && !rules.removed.has(identity)))) {
+        const staying = [me, ...view.members.map((member) => member.key), ...rules.admitted, ...view.invites.flatMap((invite) => (invite.usedBy !== null && !rules.waiting.has(invite.usedBy) ? [invite.usedBy] : []))];
+        // sealed for each device of everyone who stays: a person's key opens nothing on their second device
+        const stay = [device, ...staying.filter((identity) => !without.has(identity) && !rules.removed.has(identity) && !without.has(personOf(rules.devices, identity) ?? "") && !rules.removed.has(personOf(rules.devices, identity) ?? "")).flatMap((identity) => devicesFor(rules.devices, identity))];
+        for (const identity of new Set(stay)) {
           const box = sealFor(identity, b4a.from(key, "hex"));
           if (box) sealed[identity] = box;
         }
@@ -704,15 +749,18 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
                 : Effect.void,
             );
           case "drive":
-            return PubSub.publish(driveRequests, { from: key, action: frame.action }).pipe(Effect.asVoid);
+            return PubSub.publish(driveRequests, { from: personAt(key), action: frame.action }).pipe(Effect.asVoid);
           case "transcript-request":
-            return PubSub.publish(transcriptRequests, { from: key, request: frame }).pipe(Effect.asVoid);
+            return PubSub.publish(transcriptRequests, { from: personAt(key), request: frame }).pipe(Effect.asVoid);
           case "transcript":
-            return PubSub.publish(transcripts, { from: key, transcript: frame }).pipe(Effect.asVoid);
+            return PubSub.publish(transcripts, { from: personAt(key), transcript: frame }).pipe(Effect.asVoid);
           case "fetch-attachment":
-            return PubSub.publish(fetchRequests, { from: key, attachmentId: frame.attachmentId }).pipe(Effect.asVoid);
+            return PubSub.publish(fetchRequests, { from: personAt(key), attachmentId: frame.attachmentId }).pipe(Effect.asVoid);
           case "attachment":
-            return PubSub.publish(attachmentsIn, { from: key, attachment: frame }).pipe(Effect.asVoid);
+            return PubSub.publish(attachmentsIn, { from: personAt(key), attachment: frame }).pipe(Effect.asVoid);
+          // two devices becoming one person: not a room's to hear (Person.ts)
+          default:
+            return Effect.void;
         }
       },
     };
@@ -772,15 +820,14 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     /** Ask a peer to act as itself (testing; only mock peers obey). Ephemeral:
      *  the peer must be present. */
     const sendDrive = Effect.fn("Room.sendDrive")(function* (peerKey: string, action: DriveAction) {
-      if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
-      yield* send(peerKey, { kind: "drive", action });
+      yield* sendToPerson(peerKey, { kind: "drive", action });
     });
 
     /** Ask everyone present for their agent's conversation on these threads.
      *  Whether anyone answers is that person's call, in their outbox. */
     const requestTranscripts = Effect.fn("Room.requestTranscripts")(function* (request: Omit<TranscriptRequestFrame, "kind">) {
       yield* broadcast({ kind: "transcript-request", ...request });
-      return peers.size;
+      return new Set([...peers.keys()].map(personAt).filter((person) => person !== me)).size;
     });
 
     /** Put an attachment reference on the log (the file stays with us). */
@@ -813,22 +860,19 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
 
     /** Hand a fetched attachment's bytes to the one who asked. */
     const sendAttachment = Effect.fn("Room.sendAttachment")(function* (peerKey: string, attachment: Omit<AttachmentFrame, "kind">) {
-      if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
-      yield* send(peerKey, { kind: "attachment", ...attachment });
+      yield* sendToPerson(peerKey, { kind: "attachment", ...attachment });
     });
 
     /** Ask an attachment's holder for the file. Ephemeral: they must be present. */
     const fetchAttachment = Effect.fn("Room.fetchAttachment")(function* (holderKey: string, attachmentId: string) {
-      if (!peers.has(holderKey)) return yield* new PeerNotConnected({ peerKey: holderKey });
-      yield* send(holderKey, { kind: "fetch-attachment", attachmentId });
+      yield* sendToPerson(holderKey, { kind: "fetch-attachment", attachmentId });
     });
 
     /** Hand one transcript slice to the peer who asked — their person said so.
      *  Ephemeral:
      *  they must be present. */
     const sendTranscript = Effect.fn("Room.sendTranscript")(function* (peerKey: string, transcript: Omit<TranscriptFrame, "kind">) {
-      if (!peers.has(peerKey)) return yield* new PeerNotConnected({ peerKey });
-      yield* send(peerKey, { kind: "transcript", ...transcript });
+      yield* sendToPerson(peerKey, { kind: "transcript", ...transcript });
     });
 
     /** Join with an invite after all: a room we list but were never let into
@@ -941,9 +985,34 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       return (yield* SubscriptionRef.get(tickets)).get(ticket.id) ?? ticket;
     });
 
+    /** Put a person's device acts on the room's log, the ones it lacks: how
+     *  the room knows their devices as them. Signed by their own devices, so
+     *  anyone in the room may carry them. Nothing happens until we can write. */
+    const carryDevices = (acts: ReadonlyArray<DeviceEntry>) =>
+      Effect.gen(function* () {
+        const roomLog = log;
+        if (!roomLog || !roomLog.writable() || acts.length === 0) return;
+        const has = new Set((yield* roomLog.read).acl.map((entry) => entry.id));
+        const lacking = acts.filter((entry) => !has.has(entry.id));
+        if (lacking.length === 0) return;
+        yield* roomLog.appendAll(lacking.map((entry): LogOp => ({ op: "device", entry }))).pipe(Effect.ignore);
+        yield* refresh;
+        // a device put out still holds this room's key: the room moves to
+        // one it is not given, as when someone is taken out
+        const putOut = new Set(lacking.flatMap((entry) => (entry.act.kind === "unlink" ? [entry.act.device] : [])));
+        if (putOut.size === 0 || moving || roomLog.encryptionKey === null) return;
+        moving = true;
+        // nobody is taken out: the new key is sealed for the devices each person has now, and those no longer include it
+        yield* moveRoom(roomLog, yield* roomLog.read, new Set()).pipe(
+          Effect.catchCause((cause) => Effect.logError(`moving the room to a new key failed: ${String(cause)}`)),
+          Effect.ensuring(Effect.sync(() => void (moving = false))),
+        );
+      });
+
     return {
-      /** Peers present right now + changes (emits current value on subscribe). */
+      /** People present right now + changes (emits current value on subscribe). */
       roster,
+      carryDevices,
       /** Everyone ever admitted to the log, by key, with the name they gave. */
       members,
       /** The room's shared display name (last-writer-wins across members). */
@@ -1000,7 +1069,14 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       sendAttachment,
       /** Re-broadcast the local profile to all present peers (after a settings change). */
       updateProfile: Effect.gen(function* () {
-        yield* broadcast({ kind: "profile", profile: yield* config.getProfile });
+        const profile = yield* config.getProfile;
+        yield* broadcast({ kind: "profile", profile });
+        // a new name goes on the log too: it is what those who are offline, and the members' list, read
+        const roomLog = log;
+        if (!roomLog || !roomLog.writable()) return;
+        if ((yield* SubscriptionRef.get(members)).find((member) => member.key === me)?.name === profile.name) return;
+        yield* roomLog.append({ op: "member", key: me, name: profile.name, ts: yield* Clock.currentTimeMillis }).pipe(Effect.ignore);
+        yield* refresh;
       }).pipe(Effect.withSpan("Room.broadcastProfile")),
       /** The log's key once known (persist it: it's how we reopen the room alone). */
       logKey,

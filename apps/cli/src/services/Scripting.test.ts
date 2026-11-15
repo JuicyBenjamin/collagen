@@ -98,6 +98,7 @@ const roomsStub = (sent: Array<Sent>) =>
         messages: Stream.fromPubSub(inbound).pipe(Stream.map((message) => ({ seq: 0, message }))),
         sendTo,
         updateProfile: Effect.void,
+        carryDevices: () => Effect.void,
       };
       const handle: RoomHandle = { id: "testroom", room };
       const handles = yield* SubscriptionRef.make<ReadonlyArray<RoomHandle>>([handle]);

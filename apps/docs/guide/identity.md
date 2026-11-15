@@ -1,68 +1,64 @@
 # Identity & devices
 
-## Today
+## You are a key
 
-Your identity is a keypair generated on first run, stored per profile at
-`~/.config/collagen/identity-<profile>.json`, plus a display name. There is no login or
-logout — whoever runs the CLI with access to that file *is* you.
+Your identity is a keypair made on first run, kept per profile at
+`~/.config/collagen/identity-<profile>.json`, plus a display name. There is no login:
+whoever runs collagen with that file is you. Tickets, messages and a room's roles name
+you by that key.
 
-That's fine for a prototype and wrong for the product. The rest of this page is the
-planned model.
+## One person, several machines <Badge type="tip" text="live" />
 
-::: info Planned
-Everything below is planned work — not implemented yet. See [Status](/status).
-:::
+You can be the same person on a second machine. Each machine keeps a key of its own;
+signed acts say which machines are yours, and every room you are in reads them. To the
+others you are one person: one entry in the roster, one member, whichever machine you
+are at.
 
-## Logging out
+**Add a machine.** On the machine you already use, open **You** (`i`) and press
+`ctrl+d`: a device code is on your clipboard. On the other machine:
 
-Logging out makes the machine forget you without destroying your identity:
-
-- your identity seed is removed from disk (or encrypted at rest behind a passphrase),
-- Collagen leaves your rooms and stops announcing your key,
-- the TUI drops to a logged-out state offering **log in** or **create identity**.
-
-A logged-out machine holds nothing that can impersonate you.
-
-## Logging back in
-
-Your identity *is* your seed, so logging in means proving you have it. Plan:
-
-- On identity creation, Collagen shows a **recovery phrase** (mnemonic encoding of the
-  seed). You store it like any credential.
-- **Log in** = enter the phrase → same keypair → same identity. Peers see you as the same
-  person: your key is what they know you by, rooms recognize you, and your ticket
-  history and thread sessions re-attach.
-
-## A second device
-
-Same recovery phrase on a second machine = same identity there. That's the v1 answer:
-one key, portable via phrase.
-
-The nicer model — which the Pear/Holepunch ecosystem supports and Keet uses — is
-**device pairing**:
-
-- your **identity key** never leaves the first device,
-- each new device generates its own **device key**,
-- pairing (a short-lived invite code between your devices) makes the identity key sign
-  the device key,
-- peers accept any device key with a valid signature chain to your identity.
-
-```mermaid
-flowchart TD
-  ID["identity key\n(created once)"]
-  D1["laptop\ndevice key"]
-  D2["desktop\ndevice key"]
-  ID -->|signs| D1
-  ID -->|signs| D2
-  D1 & D2 -->|"both speak as *you*"| P["peers"]
+```sh
+collagen connect-device <code>
 ```
 
-Device pairing gives per-device revocation (lost laptop ≠ lost identity) and avoids ever
-re-typing the root secret. Plan: ship phrase-based login first, evolve to device keys.
+It comes up as you, in your rooms, under your name. The code lets one machine in, for
+ten minutes; the two need no room in common. If collagen is already running on the other
+machine, the same command hands the code to it and it becomes you at once.
 
-## Open questions
+Your agent can do both halves: `device-code` makes the code, `take-identity` with
+`code` uses it. Two machines already in one room can also do it by name —
+`share-identity` on one, `take-identity` on the other, each naming the other, within
+five minutes. Either half alone does nothing.
 
-- Passphrase-encrypt the seed at rest even while logged in?
-- What happens to a device's running agent sessions on logout — kill or let finish?
-- Display-name changes vs. key identity: names are cosmetic and per-broadcast today;
-  keep it that way.
+**What your machines share.** Your rooms (one entered or left on one machine is
+entered or left on the others, a machine that was off included), your name, and the
+list of your devices. They share it through a log only your devices can read.
+
+**What they do not share.** Your agent's conversations stay on the machine they are in:
+a message for you reaches every machine, and wakes only a conversation that listens for
+it. [Steering](./conversations#steering-how-much-your-agent-does-on-its-own) is per
+machine too, so a new machine does nothing in your name until you turn it up there.
+
+## The parent device
+
+One of your devices is the parent: the one you started on, until you hand that on. Only
+the parent makes device codes, puts a device out, and hands the parent's part to another
+device (`set-device`, or ask your agent). `devices` lists them: which is this one, which
+the parent. Any device can rename any device.
+
+**Putting a device out** is for a machine you no longer have. Nothing it does counts as
+you from then; every room you are in moves to a key it is not given, and so does the
+log your devices share. It keeps what it had already read, and reads nothing after.
+It is not undone.
+
+**Handing the parent's part on** makes another device the parent and this one ordinary;
+the new parent can then put the old one out. Do it before you retire the machine you
+started on.
+
+## What is not there yet
+
+- **A lost parent.** With the parent gone and its part not handed on, nobody can add or
+  put out devices for you; the ones you have keep working. There is no recovery phrase.
+- **Earlier work.** Tickets a machine filed as someone else before it became yours stay
+  under that earlier key. Add a machine before you work on it.
+- **Logging out.** A machine cannot yet forget you on its own; put it out from the parent.
