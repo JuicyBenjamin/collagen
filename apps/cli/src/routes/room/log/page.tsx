@@ -8,6 +8,7 @@ import { theme } from "../../../app/theme";
 import { clamp } from "../../../lib/math";
 import { logEntry, type LogEntry } from "../../../lib/logLine";
 import { timeOf } from "../../../lib/when";
+import { cells } from "../../../lib/columns";
 import { standingAtom } from "../atoms";
 import { logsAtom } from "./atoms";
 
@@ -27,6 +28,7 @@ export function LogPage() {
 
   const entries = lines.map(logEntry);
   const last = entries.length - 1;
+  const timeWidth = Math.max(0, ...entries.map((entry) => (entry.at === null ? 0 : cells(timeOf(entry.at)))));
   const sel = held === null ? last : clamp(held, 0, last);
   const at = (index: number) => {
     const to = clamp(index, 0, last);
@@ -74,7 +76,7 @@ export function LogPage() {
           ) : (
             <FollowScroll ref={list} follow={held === null ? "end" : { id: rowId(sel) }} flexGrow={1}>
               {entries.map((entry, index) => (
-                <LogRow key={index} id={rowId(index)} entry={entry} selected={focused && index === sel} />
+                <LogRow key={index} id={rowId(index)} entry={entry} selected={focused && index === sel} timeWidth={timeWidth} />
               ))}
             </FollowScroll>
           )
@@ -87,13 +89,14 @@ export function LogPage() {
 const rowId = (index: number): string => `log-line-${index}`;
 
 /** One line: when, in the person's own time, then what — whole, wrapped
- *  under itself; a warning or an error in the warn colour. */
-function LogRow({ id, entry, selected }: { id: string; entry: LogEntry; selected: boolean }) {
+ *  under itself; the times end on one column, whatever the clock's style
+ *  ("2:15:08 PM" is a cell shorter than "11:28:37 AM"); a warning or an error in the warn colour. */
+function LogRow({ id, entry, selected, timeWidth }: { id: string; entry: LogEntry; selected: boolean; timeWidth: number }) {
   return (
     <box id={id} flexDirection="row" flexShrink={0}>
       <text fg={selected ? theme.accent : theme.dim} wrapMode="none" flexShrink={0}>
         {selected ? "› " : "  "}
-        {entry.at === null ? "        " : timeOf(entry.at)}
+        {(entry.at === null ? "" : timeOf(entry.at)).padStart(timeWidth)}
       </text>
       <text fg={entry.trouble ? theme.warn : selected ? theme.fg : theme.dim} flexShrink={1} minWidth={0} marginLeft={2}>
         {entry.text}

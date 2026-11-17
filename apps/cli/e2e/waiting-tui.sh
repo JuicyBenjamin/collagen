@@ -12,7 +12,10 @@ PTY="$OUT/waiting-tui.out"; MARKS="$OUT/waiting-tui.marks"; LOG="$OUT/waiting-tu
 rm -f "$PTY" "$MARKS" "$OUT"/waiting-tui.go* "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 gate() { while [ ! -f "$OUT/waiting-tui.$1" ]; do sleep 0.5; done; }
-( gate go; wait_pty "$PTY" "waiting" > /dev/null; sleep 1; mark M0_title
+# until the screen itself says it: the pty stream carries a line in pieces,
+# and "waiting" alone is on screen before anyone waits
+on_screen() { local i; for i in $(seq 1 60); do python3 "$E2E/render.py" "$PTY" /dev/null "${ROWS:-40}" "${COLS:-120}" FINAL 2>/dev/null | grep -q "$1" && return 0; sleep 0.5; done; wait_pty "$PTY" "waiting" > /dev/null; }
+( gate go; on_screen "1 waiting (w)"; sleep 1; mark M0_title
   printf 'w'; sleep 2; mark M1_waiting
   printf '\r'; sleep 3; mark M2_let_in
   printf '\033'; sleep 1; mark M3_back
@@ -64,8 +67,8 @@ if [ "$HAVE_PYTE" = yes ]; then
   expect "enter lets her in, and says so" "$SCREEN" "carol is handed an invite"
   expect "nothing is beside the room's name any more" "$(render M3_back | grep -c 'waiting (w)')" "^0$"
   SCREEN=$(render M4_log)
-  expect "l opens the log, on its newest line" "$SCREEN" "› [0-9]{2}[:.][0-9]{2}[:.][0-9]{2}"
-  expect "home reaches its first line" "$(render M5_log_home | grep -E '› [0-9]{2}[:.][0-9]{2}[:.][0-9]{2}')" "dev testnet detected"
+  expect "l opens the log, on its newest line" "$SCREEN" "› +[0-9]{1,2}[:.][0-9]{2}[:.][0-9]{2}"
+  expect "home reaches its first line" "$(render M5_log_home | grep -E '› +[0-9]{1,2}[:.][0-9]{2}[:.][0-9]{2}')" "dev testnet detected"
   expect "esc goes back to the tabs" "$(render M6_back)" "\[1\] overview"
   expect "her agent's open-log put the log on screen" "$(render M7_agent_log)" "‹ overview +› +log"
   expect "…and open-waiting who wants in" "$(render M8_agent_waiting)" "‹ overview +› +waiting"
