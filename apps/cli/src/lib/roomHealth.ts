@@ -13,6 +13,8 @@ export interface RoomState {
   readonly firewalled: boolean | null;
   readonly logOpen: boolean;
   readonly writable: boolean;
+  /** we hold an invite to show a member: without one, and without the log, nobody is asked to let us in */
+  readonly invited: boolean;
   /** our invite was heard and waits on someone allowed to let us in */
   readonly awaiting: boolean;
   /** why our invite was turned down, when it was */
@@ -64,6 +66,11 @@ export const troubleOf = (state: RoomState): Trouble | null => {
     const first = state.otherProtocol[0]!;
     return { what: `A peer (${first.key}) speaks collagen protocol ${first.protocol}, you speak ${state.protocol}: nothing of theirs is read.`, next: "The older side updates: npm i -g @collagen/cli" };
   }
+  if (!state.logOpen && !state.invited)
+    return {
+      what: "You have no invite to this room, so nobody is asked to let you in.",
+      next: nobody ? "Ask a member for one, then: collagen join <invite>" : "Ask a member for one (collagen join <invite>), or to let you in from their side: they see you at the door.",
+    };
   if (!state.logOpen)
     return {
       what: "The room's log has not opened yet.",
@@ -81,4 +88,13 @@ export const troubleOf = (state: RoomState): Trouble | null => {
   if (nobody && state.away.length > 0 && state.open === 0 && state.connecting === 0)
     return { what: `No member of the room is connected (${state.away.join(", ")} away).`, next: `What is written waits for them.${unreachable}` };
   return null;
+};
+
+/** Why you cannot write to the room yet, in a few words for the tab bar; null once you can. */
+export const doorLine = (state: RoomState): string | null => {
+  if (state.writable) return null;
+  if (state.refusal !== null) return "your invite was turned down";
+  if (state.awaiting) return "waiting to be let in";
+  if (!state.logOpen && !state.invited) return "no invite: ask a member for one";
+  return state.here.length === 0 && !state.logOpen ? "waiting for a member to be online" : "a member is letting you in";
 };

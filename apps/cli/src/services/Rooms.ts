@@ -704,6 +704,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           protocol: PROTOCOL_VERSION,
           firewalled: said.swarm.firewalled,
           logOpen: said.logOpen,
+          invited: said.invited,
           writable: yield* SubscriptionRef.get(room.writable),
           awaiting: (yield* SubscriptionRef.get(room.awaiting)) !== null,
           refusal: yield* SubscriptionRef.get(room.refusal),

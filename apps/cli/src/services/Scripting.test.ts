@@ -62,7 +62,7 @@ const roomsStub = (sent: Array<Sent>) =>
         createInvite: () => Effect.succeed("devnet-testroom.invite"),
         useInvite: () => Effect.succeed("in" as const),
         writable,
-        connection: Effect.succeed({ logOpen: true, onTopic: 0, strangers: [], admitFailed: [], swarm: { open: 0, connecting: 0, firewalled: null, otherProtocol: new Map() } }),
+        connection: Effect.succeed({ logOpen: true, invited: false, onTopic: 0, strangers: [], admitFailed: [], swarm: { open: 0, connecting: 0, firewalled: null, otherProtocol: new Map() } }),
         rename: (_name: string) => Effect.void,
         drives: Stream.fromPubSub(drives),
         sendDrive: (_key: string, _action: DriveAction) => Effect.succeed(undefined),
@@ -99,6 +99,7 @@ const roomsStub = (sent: Array<Sent>) =>
         sendTo,
         updateProfile: Effect.void,
         carryDevices: () => Effect.void,
+        letInAtDoor: () => Effect.void,
       };
       const handle: RoomHandle = { id: "testroom", room };
       const handles = yield* SubscriptionRef.make<ReadonlyArray<RoomHandle>>([handle]);
