@@ -57,8 +57,6 @@ No files are written into your projects.
   ╰────╯ │                                                            │
          │ ←→ switch tab · ↓ into the tab · 1/2 jump · a cycle ai · … │
          ╰────────────────────────────────────────────────────────────╯
-         activity
-           ← bob [sandbox/flag-issue]
          mcp: http://127.0.0.1:44040/mcp
          room: dev room [b5cf1d1c] · c copies an invite
 ```
@@ -115,7 +113,17 @@ No files are written into your projects.
 - **key legend** — the last line inside the room panel: what the keys do in the hovered
   section. On the tickets list it also spells out the verdicts (`✓` no changes, `↻`
   changes asked, `✕` failed), and `?` the rest.
-- **footer** — a short activity log, the MCP url, the room, and `c` for an invite.
+- **beside the room's name** — in the warning colour, on the panel's top edge: what
+  keeps the room from working, in a few words (`no invite: ask a member for one`), and
+  how many people want in when your role may let them (`2 waiting (w)`).
+- **waiting** (`w`, from anywhere in a room) — who wants in: those whose invite waits on
+  a yes, then those at the door with no invite. `enter` lets the one under the cursor
+  in; `t` turns away one who asked with an invite. `esc` goes back to where you were.
+- **log** (`l`, from anywhere in a room) — what keeps the room from working and what to
+  try, in full, above what this collagen has been doing: every line whole, the newest
+  last, in your own time. `↑↓`, `pgup`/`pgdn`, `home`/`end` scroll it; it stays on the
+  newest line until you move off it.
+- **footer** — the MCP url, the room, and `c` for an invite.
 
 ### Navigation
 
@@ -159,7 +167,7 @@ Once Collagen runs, your agent (in any repo) has these tools:
 
 | Group | Tools |
 | --- | --- |
-| Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room`; `get-room-access` and `set-room-access` — who may do what: the room's roles, letting in or turning away someone waiting, and taking someone out; `room-connection` — when a room seems stuck, what stands in the way and what to try, with who is here and on which protocol, the log, and recent warnings (the footer shows the same line) |
+| Room | `list-room`, `list-rooms`, `switch-room`, `create-room`, `join-room`, `leave-room`, `rename-room`; `get-room-access` and `set-room-access` — who may do what: the room's roles, letting in or turning away someone waiting, and taking someone out; `room-connection` — when a room seems stuck, what stands in the way and what to try, with who is here and on which protocol, the log, and recent warnings (the room's name shows the same in a few words, the log page in full); `get-log` — collagen's own log, the last lines or only its warnings and errors; `open-waiting` and `open-log` — who wants in, and the log, on your screen, as `w` and `l` do |
 | Messages | `send-to-peer`, `pending-threads`, `get-messages`, `await-messages`, `adopt-thread`, `watch-ticket` — this conversation hears when a ticket moves, `watch-room` |
 | Tickets | `create-ticket`, `settle-step`, `take-step` — a task step nobody has, made your user's; `get-tickets` and `get-ticket`, `ask-review` — a review with the why behind the change; `assume-review` — a review of someone else's pull request, its why inferred and marked as guesses; `claim-review` — the code's author answers those guesses and makes the review theirs; `request-review` — ask a colleague for a review of their work that has no ticket (or send them yours), filed by them from the conversation it was done in; `review-request` — the asks of your work, and your yes or no to one; `open-review` — a review's page in your browser, as `o` does, its chat starting from the conversation that opened it; `review-chat` — your user's chat on a review's page: read it, ask it, stop it or start it over; `get-notes` and `get-note` — how the room steers its AIs on a project, said once: the titles, then one note's description; `steering-note` — add, change, comment on, retire, restore or keep one, and a miss when one was not followed; `review-progress` — which of a review's files your user has viewed, and marking them viewed for them; `ask-author` — a question about a review its why does not answer, to the author's AI; `guess-reason` — when the author cannot answer, your user's AI's guess at why, onto their review's why as an assumption; `review-question` — answering one about your user's review, and settling a guess with a verdict; `open-investigation` — an investigation's page, as `o` does on one; `open-merges` — a project's merges page in your browser; `epic` — folders of tickets, shaped by anyone, only when asked |
 | Diagnostics | `request-transcripts`, `list-transcripts` — the agents' conversations around a ticket, each handed over by its person; `attach-files`, `fetch-attachments` — files on a ticket, held by their owner, fetched on request; `review-context` — the why behind a review ticket, read when your person asks; `token-cost` — what collagen costs your AI in tokens, read from its own session logs ([how](../internals/token-cost)) |

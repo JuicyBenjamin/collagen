@@ -987,6 +987,27 @@ export const OpenSettings = Tool.make("open-settings", {
   success: Schema.String,
 });
 
+export const OpenWaiting = Tool.make("open-waiting", {
+  description:
+    "Take your user to who wants into the room they are looking at, in collagen's terminal, the same as pressing w in a room: those whose invite waits on a yes, and those at the door with no invite, where enter lets one in. When they ask to see who is waiting. It only takes them there: it lets nobody in (set-room-access let-in does; get-room-access lists the same people for you).",
+  parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
+export const OpenLog = Tool.make("open-log", {
+  description:
+    "Take your user to collagen's log in its terminal, the same as pressing l in a room: what keeps the room from working and what to try, above what this collagen has been doing, line by line. When they ask to see the log. To read it yourself, get-log.",
+  parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
+export const GetLog = Tool.make("get-log", {
+  description:
+    "Read this collagen's own log, what your user sees on its log page (l in a room): what it has been doing on this machine, across every room, oldest first, the last 'lines' of them (40 by default, 500 kept at most). 'troubles: true' gives only the warnings and errors, which are kept apart so chatter never pushes them out. Times are UTC. For why a room is stuck, start with room-connection; this is what led up to it. Read only.",
+  parameters: Schema.Struct({ lines: Schema.optional(Schema.Finite), troubles: Schema.optional(Schema.Boolean) }),
+  success: Schema.String,
+});
+
 export const OpenMerges = Tool.make("open-merges", {
   description:
     "Open a project's merges page in your user's browser — what was merged into its default branch, the latest first, each linked to its pull request with the collagen tickets it came from and their why, tabs for the room's other projects — the same as pressing o on their merges tab. 'project' is one of the current room's projects on this machine (any case); left out, their first in the order they keep (order-projects). 'number' opens it at that pull request's merge, its why unfolded. When your user asks to see a project's merges or history. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -1209,6 +1230,9 @@ export const CollagenToolkit = Toolkit.make(
   OpenBoard,
   OpenMerges,
   OpenSettings,
+  OpenWaiting,
+  OpenLog,
+  GetLog,
   ReviewComments,
   AskWhy,
   SetName,
@@ -1290,6 +1314,9 @@ export const DevCollagenToolkit = Toolkit.make(
   OpenBoard,
   OpenMerges,
   OpenSettings,
+  OpenWaiting,
+  OpenLog,
+  GetLog,
   ReviewComments,
   AskWhy,
   SetName,
@@ -3199,6 +3226,24 @@ const makeHandlers = Effect.gen(function* () {
         if (!gone) return `failed: no terminal of collagen's is open to show it in — it runs without its screen here. Tell your user: in a room, s opens its steering, S the global settings.`;
         return `${global ? "The global settings are" : "The room's steering is"} on your user's screen, on ${tab === "ai" ? "AI" : tab === "tools" ? "Tools" : "General"}.`;
       }),
+      "open-waiting": Effect.fn("Mcp.openWaiting")(function* () {
+        const gone = yield* terminal.go({ to: "waiting" });
+        if (!gone) return "failed: no terminal of collagen's is open to show it in — it runs without its screen here. get-room-access lists who is waiting; tell your user: in a room, w shows them.";
+        return "Who wants into the room is on your user's screen: enter lets the one under the cursor in.";
+      }),
+      "open-log": Effect.fn("Mcp.openLog")(function* () {
+        const gone = yield* terminal.go({ to: "log" });
+        if (!gone) return "failed: no terminal of collagen's is open to show it in — it runs without its screen here. get-log reads it; tell your user: in a room, l shows it.";
+        return "The log is on your user's screen.";
+      }),
+      "get-log": Effect.fn("Mcp.getLog")(function* (input: { lines?: number; troubles?: boolean }) {
+        const kept = yield* SubscriptionRef.get(input.troubles ? logBuffer.troubles : logBuffer.lines);
+        const wanted = input.lines === undefined ? 40 : Math.floor(input.lines);
+        if (!(wanted > 0)) return "failed: 'lines' is how many of the last lines to read";
+        if (kept.length === 0) return input.troubles ? "No warnings or errors on this machine since collagen started." : "Nothing in the log yet.";
+        const shown = kept.slice(-wanted);
+        return [`${shown.length} of ${kept.length} ${input.troubles ? "warnings and errors" : "lines"} kept, oldest first, UTC:`, ...shown].join("\n");
+      }),
       "open-board": Effect.fn("Mcp.openBoard")(function* (input: { epic?: string; kinds?: ReadonlyArray<string> }) {
         const { id: roomId, room } = yield* focusedRoom;
         const query = input.epic?.trim();
@@ -3614,7 +3659,8 @@ export const McpLive = Layer.unwrap(
             }),
           ),
         ),
-        { disableListenLog: true },
+        // no line per request: every tool call an agent makes would crowd what collagen did out of its log
+        { disableListenLog: true, disableLogger: true },
       ).pipe(Layer.provide(NodeHttpServer.layer(() => createServer(), { port, host: "127.0.0.1" })));
 
     const port = portForProfile(profile);

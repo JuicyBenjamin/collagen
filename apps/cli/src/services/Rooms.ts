@@ -5,7 +5,7 @@ import { PROTOCOL_VERSION, Room, RoomConfig, Swarm, actionableSteps, gated, isTa
 import { readProfileFile, upsertActiveRoom, upsertRoom, writeProfileFile, type RoomEntry } from "../config/profileFile";
 import { answeredInvestigations, findingsText, investigationAnsweredText, isParticipant, myThreadFor, reviewChanges, reviewUpdateText, stepChanges, stepUpdateText, stepUpdateWhat, weighInText } from "../lib/ticketUpdates";
 import { NET } from "../app/net";
-import type { RoomState } from "../lib/roomHealth";
+import { waitersOf, type RoomState } from "../lib/roomHealth";
 import { AgentRunner } from "./AgentRunner";
 import { Jobs } from "./Jobs";
 import { levelOf } from "../lib/steering";
@@ -668,7 +668,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
         const meta = yield* SubscriptionRef.get(handle.room.meta);
         const awaiting = yield* SubscriptionRef.get(handle.room.awaiting);
         const rules = yield* SubscriptionRef.get(handle.room.acl);
-        const waiting = permitted(rules, identity.pubkey, "approve") ? rules.waiting.size : 0;
+        // those whose invite waits on a yes, and those at the door with none
+        const waiting = permitted(rules, identity.pubkey, "approve") ? waitersOf(rules.waiting, (yield* handle.room.connection).strangers, (key) => rules.removed.has(key) || rules.declined.has(key)).length : 0;
         out.push({
           id: handle.id,
           shortId: shortRoomId(handle.id),
@@ -713,6 +714,8 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           strangers: said.strangers.map((stranger) => stranger.name || stranger.key.slice(0, 8)),
           otherProtocol: [...said.swarm.otherProtocol].map(([key, protocol]) => ({ key: key.slice(0, 8), protocol })),
           waiting: [...rules.waiting.values()].map((waiter) => ({ name: waiter.name, at: waiter.at })),
+          waiters: waitersOf(rules.waiting, said.strangers, (key) => rules.removed.has(key) || rules.declined.has(key)),
+          mayLetIn: permitted(rules, identity.pubkey, "approve"),
           declined: [...rules.declined].map(([key, turned]) => ({ name: nameOf(key), ...(turned.reason ? { reason: turned.reason } : {}) })),
           admitFailed: said.admitFailed.map((failure) => ({ name: nameOf(failure.key), why: failure.why, at: failure.at })),
           open: said.swarm.open,

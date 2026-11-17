@@ -4,6 +4,10 @@
 // raw UTC stamp shown to a person (skills/dates-and-times). Every date the
 // TUI shows goes through here. What an agent reads stays UTC.
 
+/** The person's time of day for an instant, to the second: "14:05:09". */
+export const timeOf = (instant: number): string =>
+  Temporal.Instant.fromEpochMilliseconds(instant).toZonedDateTimeISO(Temporal.Now.timeZoneId()).toLocaleString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
 /** The person's date and time for an instant: "3 Oct, 14:05" — the year too
  *  when it is not this one. */
 export const dateTimeOf = (instant: number): string => {

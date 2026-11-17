@@ -41,7 +41,7 @@ as the diff is read.
 
 It is served by your own running collagen, beside the MCP server, on **loopback only** —
 nothing about the code leaves your machine, and a request that names another host is
-refused. The url also goes to the activity log, for a machine with no browser to open.
+refused. The url also goes to the log (`l`), for a machine with no browser to open.
 
 ## What it shows
 
