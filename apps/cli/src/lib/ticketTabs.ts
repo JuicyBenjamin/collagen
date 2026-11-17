@@ -1,20 +1,32 @@
 import { closedAs, epicOf, KIND_ORDER, ticketName, visibleTo, type Ticket, type TicketKind } from "@collagen/p2p";
 import { cells } from "./columns";
-import { ENDED, EPIC_MARK, KIND_GLYPH } from "./glyphs";
+import { ENDED, EPIC_MARK, GLYPH, KIND_GLYPH } from "./glyphs";
 
-// The ticket list's tabs: every ticket, or one kind at a time — each kind's
-// tab carrying its glyph, so the mark on the rows is learned from the tab.
+// The ticket list's tabs: every ticket, the ones that are yours to act on
+// now, or one kind at a time — each kind's tab carrying its glyph, so the
+// mark on the rows is learned from the tab.
 
-export type TicketTab = "all" | TicketKind;
+export type TicketTab = "all" | "yours" | TicketKind;
 
-/** The tabs in the order work moves through the kinds, after "all tickets". */
-export const TICKET_TABS: ReadonlyArray<TicketTab> = ["all", ...KIND_ORDER];
+/** "all tickets", what wants you, then the kinds in the order work moves through them. */
+export const TICKET_TABS: ReadonlyArray<TicketTab> = ["all", "yours", ...KIND_ORDER];
 
 /** A kind's glyph: an epic's crown, the others their own. */
 export const kindGlyph = (kind: TicketKind): string => (kind === "epic" ? EPIC_MARK : KIND_GLYPH[kind]);
 
 /** "all tickets", or "✦ proposals" — a kind's glyph and its plural. */
-export const tabLabel = (tab: TicketTab): string => (tab === "all" ? "all tickets" : `${kindGlyph(tab)} ${tab}s`);
+export const tabLabel = (tab: TicketTab): string => (tab === "all" ? "all tickets" : tab === "yours" ? `${GLYPH.yours} yours` : `${kindGlyph(tab)} ${tab}s`);
+
+/** A tab that is not the open one, when the row is short of room: "all", or its glyph. */
+const tabMark = (tab: TicketTab): string => (tab === "all" ? "all" : tab === "yours" ? GLYPH.yours : kindGlyph(tab));
+
+/** Whether a ticket's row is one the typed filter keeps: every word typed is
+ *  somewhere in what the row says — its title, who filed it, its project —
+ *  whatever the case. Nothing typed keeps every row. */
+export const keptByFilter = (typed: string, said: ReadonlyArray<string>): boolean => {
+  const row = said.join("\n").toLowerCase();
+  return typed.toLowerCase().split(/\s+/).filter((word) => word.length > 0).every((word) => row.includes(word));
+};
 
 /** What a ticket hangs from: the epic it is in and the ticket it grew out
  *  of — only what `me` may see: a ticket still waiting on another is its
@@ -78,7 +90,7 @@ export interface DrawnTab {
 export function fitTabs(tab: TicketTab, counts: ReadonlyMap<TicketTab, number>, width: number | undefined): { readonly tabs: ReadonlyArray<DrawnTab>; readonly gap: number; readonly before: boolean; readonly after: boolean } {
   const countOf = (ticketTab: TicketTab) => counts.get(ticketTab) ?? 0;
   const full = TICKET_TABS.map((ticketTab): DrawnTab => ({ tab: ticketTab, open: ticketTab === tab, text: `${tabLabel(ticketTab)} ${countOf(ticketTab)}` }));
-  const short = TICKET_TABS.map((ticketTab): DrawnTab => ({ tab: ticketTab, open: ticketTab === tab, text: ticketTab === tab ? `${tabLabel(ticketTab)} ${countOf(ticketTab)}` : `${ticketTab === "all" ? "all" : kindGlyph(ticketTab)} ${countOf(ticketTab)}` }));
+  const short = TICKET_TABS.map((ticketTab): DrawnTab => ({ tab: ticketTab, open: ticketTab === tab, text: ticketTab === tab ? `${tabLabel(ticketTab)} ${countOf(ticketTab)}` : `${tabMark(ticketTab)} ${countOf(ticketTab)}` }));
   const span = (row: ReadonlyArray<DrawnTab>, gap: number) => row.reduce((total, drawn, index) => total + cells(drawn.text) + (index > 0 ? gap : 0), 0);
   if (width === undefined || span(full, 3) <= width) return { tabs: full, gap: 3, before: false, after: false };
   if (span(short, 2) <= width) return { tabs: short, gap: 2, before: false, after: false };
