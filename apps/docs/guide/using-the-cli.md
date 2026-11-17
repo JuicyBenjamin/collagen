@@ -58,7 +58,7 @@ No files are written into your projects.
          │ ←→ switch tab · ↓ into the tab · 1/2 jump · a cycle ai · … │
          ╰────────────────────────────────────────────────────────────╯
          mcp: http://127.0.0.1:44040/mcp
-         room: dev room [b5cf1d1c] · c copies an invite
+         room: dev room [b5cf1d1c] · c copy invite
 ```
 
 - **rooms rail** (left) — one avatar per room. Pill = the room you're in, dot = messages

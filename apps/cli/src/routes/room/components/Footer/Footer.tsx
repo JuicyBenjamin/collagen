@@ -56,7 +56,7 @@ export function Footer() {
       </text>
       <text fg={theme.dim} truncate wrapMode="none" maxWidth="100%">
         room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] ·{" "}
-        {copied ? <span fg={theme.ok}>invite copied — it lets one person in, within a week</span> : refused ? <span fg={theme.warn}>no invite: {refused}</span> : <span fg={theme.dim}>c copies an invite</span>}
+        {copied ? <span fg={theme.ok}>invite copied · one person, one week</span> : refused ? <span fg={theme.warn}>no invite: {refused}</span> : <span fg={theme.dim}>c copy invite</span>}
       </text>
     </box>
   );
