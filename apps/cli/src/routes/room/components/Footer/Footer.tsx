@@ -49,11 +49,12 @@ export function Footer() {
   });
 
   return (
-    <box marginTop={1} flexDirection="column" flexShrink={0}>
-      <text fg={theme.dim} truncate wrapMode="none">
+    // centred under the screen: with the log on its own page these two lines are all there is
+    <box marginTop={1} flexDirection="column" flexShrink={0} alignItems="center">
+      <text fg={theme.dim} truncate wrapMode="none" maxWidth="100%">
         collagen {VERSION}{IS_RELEASE ? "" : " · devnet"} · mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
       </text>
-      <text fg={theme.dim} truncate wrapMode="none">
+      <text fg={theme.dim} truncate wrapMode="none" maxWidth="100%">
         room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] ·{" "}
         {copied ? <span fg={theme.ok}>invite copied — it lets one person in, within a week</span> : refused ? <span fg={theme.warn}>no invite: {refused}</span> : <span fg={theme.dim}>c copies an invite</span>}
       </text>
