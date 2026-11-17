@@ -19,7 +19,7 @@ import { boardEpics } from "../lib/board";
 import { agoText, troubleOf } from "../lib/roomHealth";
 import { LogBuffer } from "./Logging";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
-import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
+import { assumedGaps, reviewGaps, ticketGoalGap, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
 import { roomStackPlaces } from "../lib/stack";
 import type { PageThemes, QuestionLines } from "@collagen/p2p";
@@ -168,7 +168,7 @@ export const DescribeScripting = Tool.make("describe-scripting", {
 
 export const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. 'title' is its headline in every list — a few words, 60 characters at most, what it is for; 'goal' is the line beneath it. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps have an intent verb, a full description, optional 'needs' (ids of steps that must settle first), and an 'owner' (a peer name from list-room, or yourself) — or none, when your user asks nobody in particular: that step sits in the room, delivered to no one, until someone takes it (take-step) or settles it. When an owned step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
+    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. 'title' is its headline in every list — a few words, 60 characters at most, what it is for; 'goal' is the line beneath it, one line (240 characters at most). It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps have an intent verb, a full description, optional 'needs' (ids of steps that must settle first), and an 'owner' (a peer name from list-room, or yourself) — or none, when your user asks nobody in particular: that step sits in the room, delivered to no one, until someone takes it (take-step) or settles it. When an owned step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
   parameters: Schema.Struct({
     /** the headline the lists show: a few words, 60 characters at most */
     title: Schema.String,
@@ -1135,7 +1135,7 @@ export const LeaveRoom = Tool.make("leave-room", {
 
 export const GetTickets = Tool.make("get-tickets", {
   description:
-    `The open tickets in the room the user is looking at, one row each: id, kind, title, the line beneath it, status (open, answered — every step done, ready for its author to close —, held — waiting on another ticket —, or closed; an epic's with how far along it is), whose move it is, and its epic. A list to find a ticket in: its steps, results and why are get-ticket's. 'kind' narrows it to one kind; 'closed: true' lists the closed ones instead, for history. Relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text. The kinds, and what each wants of you — ${kindsForAgents()}. Your user sees the same kinds explained in their TUI (? on the overview).`,
+    `The open tickets in the room the user is looking at, one row each: id, kind, project, title, the line beneath it, status (open, answered — every step done, ready for its author to close —, held — waiting on another ticket —, or closed; an epic's with how far along it is), whose move it is, its epic, and when anything last happened on it (UTC). A list to find a ticket in: its steps, results and why are get-ticket's. 'kind' narrows it to one kind; 'closed: true' lists the closed ones instead, for history. Relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text. The kinds, and what each wants of you — ${kindsForAgents()}. Your user sees the same kinds explained in their TUI (? on the overview).`,
   parameters: Schema.Struct({ kind: Schema.optional(TicketKind), closed: Schema.optional(Schema.Boolean) }),
   success: Schema.String,
 });
@@ -1681,6 +1681,8 @@ const makeHandlers = Effect.gen(function* () {
             const gap = ticketTitleGap(input.title);
             if (gap) return gap;
           }
+          const goalGap = ticketGoalGap(input.goal);
+          if (goalGap) return goalGap;
           const ticketMoves = input.title !== undefined || input.goal !== undefined || input.from !== undefined || input.after !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
           // the merge override alone is the author's, on this machine: nothing for the room
           if (!whyMoves && !ticketMoves && kind === "review" && input.merge !== undefined && existing?.author === identity.pubkey) {
@@ -1803,6 +1805,8 @@ const makeHandlers = Effect.gen(function* () {
         // after what the kind itself asks for, so its own refusals come first
         const titleGap = ticketTitleGap(input.title);
         if (titleGap) return titleGap;
+        const goalGap = ticketGoalGap(input.goal);
+        if (goalGap) return goalGap;
         const tickets = yield* SubscriptionRef.get(room.tickets);
         const after = input.after && input.after.length > 0 ? [...new Set(input.after)] : undefined;
         if (after) {
@@ -2190,6 +2194,8 @@ const makeHandlers = Effect.gen(function* () {
         }
         const titleGap = ticketTitleGap(input.title);
         if (titleGap) return titleGap;
+        const goalGap = ticketGoalGap(input.goal);
+        if (goalGap) return goalGap;
         const id = crypto.randomUUID();
         const ticket: Ticket = {
           id,
@@ -2820,6 +2826,8 @@ const makeHandlers = Effect.gen(function* () {
           case "create": {
             const titleGap = ticketTitleGap(input.title);
             if (titleGap) return titleGap.replace("the ticket's headline", "the epic's headline");
+            const goalGap = ticketGoalGap(input.goal ?? undefined);
+            if (goalGap) return goalGap;
             const title = input.title!.trim();
             const goal = input.goal?.trim() || title;
             const now = yield* Clock.currentTimeMillis;
@@ -2875,6 +2883,8 @@ const makeHandlers = Effect.gen(function* () {
             if (epic.createdBy !== identity.pubkey) return `failed: "${ticketName(epic)}" is its author's to rename — your user can ask them (send-to-peer, with this epicId)`;
             const titleGap = ticketTitleGap(input.title);
             if (titleGap) return titleGap.replace("the ticket's headline", "the epic's headline");
+            const goalGap = ticketGoalGap(input.goal ?? undefined);
+            if (goalGap) return goalGap;
             const title = input.title!.trim();
             const now = yield* Clock.currentTimeMillis;
             // the line beneath goes with it unless a new one is given: a goal that
