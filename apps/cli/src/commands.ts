@@ -115,7 +115,9 @@ export const runCommand = async (argv: ReadonlyArray<string>): Promise<ReadonlyA
     const running = await askRunning(profile, "join-room", { invite: typed.value });
     if (running !== null) return say(running), null;
     writeProfileFile(profile, { name: nameFor(profile) });
-    upsertActiveRoom(profile, readProfileFile(profile).rooms?.find((room) => room.id === check.invite.roomName) ?? invitedRoomEntry(check.invite.roomName, typed.value));
+    // a room already listed and never let into takes the invite; one we are in is just looked at
+    const listed = readProfileFile(profile).rooms?.find((room) => room.id === check.invite.roomName);
+    upsertActiveRoom(profile, listed ? (listed.logKey ? listed : { ...listed, invite: typed.value.trim() }) : invitedRoomEntry(check.invite.roomName, typed.value));
     return typed.rest;
   }
   const running = await askRunning(profile, "take-identity", { code: typed.value });
