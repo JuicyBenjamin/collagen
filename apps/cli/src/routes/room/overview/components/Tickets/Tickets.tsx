@@ -561,7 +561,7 @@ function EpicView({
 }
 
 /** The footer while the filter is typed. */
-const FILTER_HINT = "type to narrow the list · enter keeps it · esc clears it";
+const FILTER_HINT = "type to filter · enter keep · esc clear";
 
 /** Before the name, on every row: the cursor, the ▸, the tree, the glyph —
  *  two columns each. */
