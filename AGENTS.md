@@ -19,6 +19,18 @@ is your job, not only the change you were asked for.
   matter of taste: say what you found and what you would do, and let the
   person decide. Its own branch when it is not part of the work at hand.
 
+## A key says what it does, nothing more
+
+A key hint is the key and a bare verb, with its object only when the verb
+alone is unclear: `c copy invite`, `enter open`, `esc back`, `o in browser`.
+Never a sentence about the key (`c copies an invite`), never where it leads
+or why (`esc back to the list`, `enter reads the why, every decision and
+how it was steered`), never what some other key or an agent can do.
+
+The same goes for every label, status and message a person reads: say the
+fact, not the explanation. If it can lose half its words and say the same,
+it must. Skill: `say-less`.
+
 ## Commits
 
 A commit is its human author's alone. Never add a `Co-Authored-By` trailer
