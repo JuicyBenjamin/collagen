@@ -36,8 +36,12 @@ from deletion and force pushes — and only ever moves by a merge.
    into `main` (`gh pr create --base main --head release`), its CI watched,
    merged on the person's word with `gh pr merge <n> --merge` — never a
    rebase or a squash, which give every commit a new id on `main` and leave
-   `release` disagreeing with it. Release-please then opens its version
-   pull request on `main`; publishing it is the person's (it goes out).
+   `release` disagreeing with it. That merge is the last word asked of the
+   person: release-please then opens its version pull request on `main`,
+   which merges itself and publishes (`.github/workflows/release.yml`) —
+   so say, before asking for the merge, that it goes out to everyone. Do
+   not stop at the version pull request to ask again; confirm on npm that
+   it went out.
 6. **After a release, `release` catches up with `main`.** Once
    release-please's version commit is on `main`, merge `main` into `release`
    (`gh api -X POST repos/<owner>/<repo>/merges -f base=release -f head=main`),

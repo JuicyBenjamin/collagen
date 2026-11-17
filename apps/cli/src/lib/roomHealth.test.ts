@@ -7,6 +7,7 @@ const healthy: RoomState = {
   protocol: "13",
   firewalled: false,
   logOpen: true,
+  invited: false,
   writable: true,
   awaiting: false,
   refusal: null,

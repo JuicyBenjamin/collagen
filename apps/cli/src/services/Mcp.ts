@@ -589,7 +589,7 @@ export const GetRoomAccess = Tool.make("get-room-access", {
 
 export const SetRoomAccess = Tool.make("set-room-access", {
   description: [
-    "Change who may do what in the room your user is looking at, as their role there allows (get-room-access). 'action': 'role' makes or changes a role ('name', 'rank', 'permissions' — any of invite, approve, remove, manage-roles; the role 'everyone' is every member's, and taking 'approve' from it means newcomers wait for someone who holds it); 'unrole' takes a role away ('name'); 'grant' sets a person's roles ('person', 'roles' by name — [] takes them all); 'let-in' lets someone waiting in ('person'); 'turn-away' does not ('person', 'reason'); 'remove' takes someone out ('person', 'reason'): nothing more is sent to them and the room moves to a new key they are not given, so they read nothing written after.",
+    "Change who may do what in the room your user is looking at, as their role there allows (get-room-access). 'action': 'role' makes or changes a role ('name', 'rank', 'permissions' — any of invite, approve, remove, manage-roles; the role 'everyone' is every member's, and taking 'approve' from it means newcomers wait for someone who holds it); 'unrole' takes a role away ('name'); 'grant' sets a person's roles ('person', 'roles' by name — [] takes them all); 'let-in' lets someone waiting in ('person') — or someone at the door: on the room with no invite, as get-room-access lists them, who is handed one and comes in with it; 'turn-away' does not ('person', 'reason'); 'remove' takes someone out ('person', 'reason'): nothing more is sent to them and the room moves to a new key they are not given, so they read nothing written after.",
     "'said: true' only when your user asked for this in their words. Letting in, turning away and removing otherwise follow their steering for it (set-steering kind admit): not chosen or never, not done; ask first, ask them, then call again with 'said: true'. Roles change only on their word.",
   ].join("\n"),
   parameters: Schema.Struct({
@@ -2489,6 +2489,7 @@ const makeHandlers = Effect.gen(function* () {
         const rules = yield* SubscriptionRef.get(room.acl);
         const members = yield* SubscriptionRef.get(room.members);
         const roles = [...rules.roles.values()].sort((first, second) => second.rank - first.rank);
+        const atDoor = (yield* room.connection).strangers;
         const holders = (roleId: string) => [...rules.held].filter(([, ids]) => ids.includes(roleId)).map(([identity]) => nameOf(identity));
         return [
           `"${name}" — owner: ${rules.owner ? nameOf(rules.owner) : "none on the log yet (a room from before roles: its creator becomes owner when they next open it)"}`,
@@ -2496,6 +2497,7 @@ const makeHandlers = Effect.gen(function* () {
           ...roles.map((role) => `- ${role.name} (rank ${role.rank}): ${role.permissions.length > 0 ? role.permissions.join(", ") : "no permissions"}${role.id === "everyone" ? " — every member" : holders(role.id).length > 0 ? ` — ${holders(role.id).join(", ")}` : " — nobody yet"}`),
           `Members: ${members.filter((member) => !rules.removed.has(member.key)).map((member) => member.name).join(", ") || "none"}`,
           rules.waiting.size > 0 ? `Waiting to be let in: ${[...rules.waiting].map(([, ask]) => ask.name).join(", ")} (set-room-access let-in or turn-away)` : "Nobody is waiting to be let in.",
+          ...(atDoor.length > 0 ? [`At the door, with no invite: ${atDoor.map((stranger) => stranger.name || stranger.key.slice(0, 8)).join(", ")} (set-room-access let-in lets one in)`] : []),
           ...(rules.declined.size > 0 ? [`Turned away: ${[...rules.declined.keys()].map(nameOf).join(", ")}`] : []),
           ...(rules.removed.size > 0 ? [`Taken out: ${[...rules.removed].map(([identity, out]) => `${nameOf(identity)}${out.reason ? ` (${out.reason})` : ""}`).join(", ")}`] : []),
         ].join("\n");
@@ -2554,6 +2556,15 @@ const makeHandlers = Effect.gen(function* () {
             return yield* done(room.grant(who.key, ids.map((role) => role!.id)), `${who.name}'s roles are now: ${ids.map((role) => role!.name).join(", ") || "only everyone's"}.`);
           }
           case "let-in": {
+            // someone at the door, on the room with no invite: they are handed one, and come in with it
+            const atDoor = (yield* room.connection).strangers.find((stranger) => sameName(stranger.name, input.person ?? ""));
+            if (atDoor)
+              return yield* room.letInAtDoor(atDoor.key).pipe(
+                Effect.as(`let ${atDoor.name} in: they were at the door with no invite, and are handed one now.`),
+                Effect.catchTag("PeerNotConnected", () => Effect.succeed(`failed: ${atDoor.name} is no longer connected — ask again once they are back`)),
+                Effect.catchTag("NotPermitted", (refusal) => Effect.succeed(`failed: your user's role in "${roomName}" does not allow it (${refusal.permission}) — get-room-access shows what each role holds`)),
+                Effect.catchTag("NotWritable", () => Effect.succeed(`failed: your user is not let in to write to "${roomName}" yet`)),
+              );
             const who = yield* personOf;
             if (who._tag === "refused") return who.text;
             return yield* done(room.admit(who.key), `let ${who.name} in: they get the room's keys the next time they ask (within seconds while they are online).`);

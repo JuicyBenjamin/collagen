@@ -596,7 +596,15 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
     });
 
     /** Join (or create) a room live. */
-    const join = Effect.fn("Rooms.join")(function* (entry: RoomEntry, focus: boolean) {
+    const join = Effect.fn("Rooms.join")(function* (asked: RoomEntry, focus: boolean) {
+      // a room already listed, joined again with an invite: it is the same
+      // room, now with the invite — in the file, and in the room that is
+      // open, which would otherwise never hear of it and wait for good
+      const listed = readProfileFile(profile).rooms?.find((room) => room.id === asked.id);
+      const entry: RoomEntry = listed && asked.invite ? { ...listed, invite: asked.invite } : asked;
+      const live = (yield* SubscriptionRef.get(handles)).find((handle) => handle.id === entry.id);
+      const invite = entry.invite ? parseInvite(entry.invite) : null;
+      if (live && invite) yield* live.room.useInvite(invite);
       yield* Effect.sync(() => upsertRoom(profile, entry));
       // said to the person's other devices at once: a room left before is theirs again
       yield* person.rememberRoom({ id: entry.id, name: entry.name, ...(entry.logKey && entry.encryptionKey ? { logKey: entry.logKey, encryptionKey: entry.encryptionKey } : {}) });
@@ -696,6 +704,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
           protocol: PROTOCOL_VERSION,
           firewalled: said.swarm.firewalled,
           logOpen: said.logOpen,
+          invited: said.invited,
           writable: yield* SubscriptionRef.get(room.writable),
           awaiting: (yield* SubscriptionRef.get(room.awaiting)) !== null,
           refusal: yield* SubscriptionRef.get(room.refusal),

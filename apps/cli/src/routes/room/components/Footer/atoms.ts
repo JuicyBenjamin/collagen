@@ -1,5 +1,5 @@
 import { Effect, Schedule, Stream, SubscriptionRef } from "effect";
-import { troubleOf, type Trouble } from "../../../../lib/roomHealth";
+import { doorLine, troubleOf, type Trouble } from "../../../../lib/roomHealth";
 import { LogBuffer } from "../../../../services/Logging";
 import { McpInfo } from "../../../../services/McpInfo";
 import { Rooms } from "../../../../services/Rooms";
@@ -24,6 +24,20 @@ export const troubleAtom = runtimeAtom.atom(
         return state ? troubleOf(state) : null;
       });
       return Stream.fromEffectSchedule(read, Schedule.spaced("2 seconds")).pipe(Stream.changesWith((first: Trouble | null, second: Trouble | null) => first?.what === second?.what && first?.next === second?.next));
+    }),
+  ),
+);
+
+/** Why you cannot write to the room being looked at yet, in a few words; null once you can. */
+export const doorAtom = runtimeAtom.atom(
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const rooms = yield* Rooms;
+      const read = Effect.gen(function* () {
+        const state = yield* rooms.connectionOf((yield* rooms.current).id);
+        return state ? doorLine(state) : null;
+      });
+      return Stream.fromEffectSchedule(read, Schedule.spaced("2 seconds")).pipe(Stream.changes);
     }),
   ),
 );

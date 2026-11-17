@@ -21,7 +21,7 @@ import type { ReviewComment, ReviewContext } from "./review";
 import type { NoteTurn, SteeringNote } from "./note";
 import type { Ticket } from "./ticket";
 import { deriveThreadId, roomTopic, type Net } from "./topic";
-import { checkProof, formatInvite, INVITE_LIFETIME_MS, newInvite, openSealed, proveInvite, sealFor, type Invite } from "./invite";
+import { checkProof, formatInvite, INVITE_LIFETIME_MS, newInvite, openSealed, parseInvite, proveInvite, sealFor, type Invite } from "./invite";
 import { openRoomLog, type LogEncryption, type LogView, type RoomLog, type Unseen } from "./RoomLog";
 import type { LogOp, ReviewAnswer, ReviewAsk, ReviewAskStatus, ReviewGuess, ReviewQuestion } from "./schema";
 import b4a from "b4a";
@@ -738,6 +738,13 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
             });
           case "redeem":
             return redeem(key, frame.inviteId, frame.proof);
+          case "invite":
+            // a member lets us in from their side: an invite for this room, when we hold none and are not in
+            return Effect.suspend(() => {
+              const invite = log || joining ? null : parseInvite(frame.text);
+              if (!invite || invite.roomName !== config.roomName || invite.net !== config.net) return Effect.void;
+              return Effect.log(`${key.slice(0, 8)} is letting us in`).pipe(Effect.andThen(useInvite(invite)), Effect.asVoid);
+            });
           case "keys":
             return SubscriptionRef.set(awaiting, null).pipe(Effect.andThen(takeKeys(key, frame.logKey, frame.encryptionKey)));
           case "waiting":
@@ -885,6 +892,16 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
         return Effect.forEach([...connected], redeemWith, { discard: true }).pipe(Effect.as("joining" as const));
       });
 
+    /** Let in someone who is on the room's topic and holds no invite: an
+     *  invite made for them, handed over the connection — theirs to use at
+     *  once. For those who may let people in. */
+    const letInAtDoor: (key: string) => Effect.Effect<void, NotPermitted | NotWritable | PeerNotConnected> = (key) =>
+      Effect.gen(function* () {
+        if (!permitted(yield* SubscriptionRef.get(acl), me, "approve")) return yield* new NotPermitted({ roomId: config.roomName, permission: "approve" });
+        if (!strangers.has(key)) return yield* new PeerNotConnected({ peerKey: key });
+        yield* send(key, { kind: "invite", text: yield* createInvite() });
+      });
+
     /** A new invite to this room: its public half goes on the log, the text
      *  to hand someone comes back. It lets one person in, within a week. */
     const createInvite = Effect.fn("Room.createInvite")(function* () {
@@ -1012,6 +1029,7 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
     return {
       /** People present right now + changes (emits current value on subscribe). */
       roster,
+      letInAtDoor,
       carryDevices,
       /** Everyone ever admitted to the log, by key, with the name they gave. */
       members,
@@ -1106,6 +1124,8 @@ export class Room extends Context.Service<Room>()("p2p/Room", {
       connection: Effect.gen(function* () {
         return {
           logOpen: log !== null,
+          /** we hold an invite to show: without one, and without the log, nobody is asked to let us in */
+          invited: joining !== null,
           onTopic: connected.size,
           strangers: [...strangers.values()].map((peer) => ({ key: peer.key, name: peer.name })),
           admitFailed: [...admitFailures].map(([key, failure]) => ({ key, ...failure })),
