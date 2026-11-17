@@ -106,7 +106,7 @@ export function ReviewPage({ ticketId }: { ticketId: string }) {
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
       <Focusable
         id="ticket-review"
-        hint="↑↓ scroll · pgup/pgdn screen · home/end · o the diff by decision, in your browser · ← / esc back to the ticket"
+        hint="↑↓ scroll · pgup/pgdn screen · home/end · o in browser · esc back"
         flexDirection="column"
         flexGrow={1}
         flexShrink={1}

@@ -64,9 +64,9 @@ export function OutboxPage() {
         id="outbox"
         hint={
           expanded !== null
-            ? "↑↓ scroll · pgup/pgdn · home/end · ← / enter back to the list"
+            ? "↑↓ scroll · pgup/pgdn · home/end · enter back"
             : all.length > 0
-              ? "↑↓ select · pgup/pgdn · home/end · enter the text it sent · ←→ switch tab"
+              ? "↑↓ select · pgup/pgdn · home/end · enter read · ←→ switch tab"
               : "←→ switch tab"
         }
         flexDirection="column"

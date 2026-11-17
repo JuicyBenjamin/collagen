@@ -215,7 +215,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
       {review ? (
         <Focusable
           id="ticket-review"
-          hint={`enter reads the why — every decision, how it was steered, and the forks · o ${ticket.kind === "investigation" ? "what it found" : "the diff by decision"}, in your browser · esc back to the list`}
+          hint="enter why · o in browser · esc back"
           flexDirection="column"
           flexShrink={0}
           onKey={(key) => {
@@ -244,7 +244,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
       <box flexShrink={0}>
         <Focusable
           id="ticket-steps"
-          hint={`↑↓ select step${open ? " · t take it" : ""} · ↓ past the last goes to the conversation · esc back to the list`}
+          hint={`↑↓ select${open ? " · t take" : ""} · esc back`}
           flexDirection="column"
           flexGrow={1}
           flexShrink={0}
@@ -284,7 +284,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
       {attachments.length > 0 ? (
         <Focusable
           id="ticket-attachments"
-          hint="↑↓ select · y fetch the file from its holder · enter read a fetched transcript · esc back to the list"
+          hint="↑↓ select · y fetch · enter read · esc back"
           flexDirection="column"
           flexShrink={0}
           onKey={(key) => {
@@ -333,7 +333,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
           until you scroll up. */}
       <Focusable
         id="ticket-conversation"
-        hint="↑↓ scroll · esc back to the list"
+        hint="↑↓ scroll · esc back"
         flexDirection="column"
         flexGrow={1}
         flexShrink={1}
@@ -374,7 +374,7 @@ export function TicketPage({ ticketId, route }: { ticketId: string; route: Ticke
       {/* foot: diagnostics — one line, flush at the bottom, result beneath */}
       <Focusable
         id="ticket-diagnostics"
-        hint="←→ pick · enter run · esc back to the list"
+        hint="←→ pick · enter run · esc back"
         flexDirection="column"
         flexShrink={0}
         marginTop={1}

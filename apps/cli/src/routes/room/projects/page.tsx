@@ -46,7 +46,7 @@ export function ProjectsPage() {
   const sel = clamp(cursor, 0, last);
   // the hint names only what the row under the cursor does
   const current = rows[sel];
-  const action = current === undefined ? "enter add a project" : current.mine ? "d remove" : "enter point collagen at your copy";
+  const action = current === undefined ? "enter add project" : current.mine ? "d remove" : "enter locate copy";
 
   const startPicking = (as?: string) => {
     setPicking(as === undefined ? {} : { as });
@@ -84,7 +84,7 @@ export function ProjectsPage() {
   return (
     <Focusable
       id="projects"
-      hint={`↑↓ select${current ? " · shift ↑↓ move" : ""} · ${action} · arrows move between sections · esc`}
+      hint={`↑↓ select${current ? " · shift ↑↓ move" : ""} · ${action}`}
       flexDirection="column"
       marginTop={1}
       flexGrow={1}
