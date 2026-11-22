@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { troubleOf, type RoomState } from "./roomHealth";
+import { troubleOf, waitersOf, type RoomState } from "./roomHealth";
 
 const healthy: RoomState = {
   now: 100_000,
@@ -16,6 +16,8 @@ const healthy: RoomState = {
   strangers: [],
   otherProtocol: [],
   waiting: [],
+  waiters: [],
+  mayLetIn: true,
   declined: [],
   admitFailed: [],
   open: 1,
@@ -31,6 +33,7 @@ describe("what keeps a room from working", () => {
     expect(troubleOf({ ...healthy, awaiting: true, logOpen: false, writable: false })).toEqual({
       what: "Waiting for a member to let you in — 1 member connected.",
       next: "Ask someone who may let people in to open collagen and let you in.",
+      brief: "waiting to be let in",
     });
     expect(troubleOf({ ...healthy, awaiting: true, here: [], firewalled: true })?.next).toBe(
       "Nobody from the room is online: ask a member to open collagen. This machine is not reachable directly, so a member on an open network has to be online.",
@@ -48,5 +51,26 @@ describe("what keeps a room from working", () => {
   it("is nobody connected only when the swarm has no connection at all", () => {
     expect(troubleOf({ ...healthy, here: [], open: 0 })?.what).toBe("No member of the room is connected (mille away).");
     expect(troubleOf({ ...healthy, here: [], open: 1 })).toBe(null);
+  });
+});
+
+describe("who wants into a room", () => {
+  it("is those whose invite waits on a yes, first asked first, then those at the door: nobody twice, nobody turned away", () => {
+    const asked = new Map([
+      ["key-nina", { name: "nina", at: 2_000 }],
+      ["key-omar", { name: "omar", at: 1_000 }],
+    ]);
+    const atDoor = [
+      { key: "key-nina", name: "nina" },
+      { key: "key-pia", name: "pia" },
+      { key: "key-turned", name: "quinn" },
+      { key: "0123456789abcdef", name: "" },
+    ];
+    expect(waitersOf(asked, atDoor, (key) => key === "key-turned")).toEqual([
+      { key: "key-omar", name: "omar", at: 1_000 },
+      { key: "key-nina", name: "nina", at: 2_000 },
+      { key: "key-pia", name: "pia", at: null },
+      { key: "0123456789abcdef", name: "01234567", at: null },
+    ]);
   });
 });

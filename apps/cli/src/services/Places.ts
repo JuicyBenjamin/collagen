@@ -4,11 +4,13 @@ import { Context, Effect, Layer, PubSub, Stream, SubscriptionRef } from "effect"
 export type SettingsTab = "general" | "ai" | "tools";
 
 /** A place in the terminal the person's agent takes them to: the room's
- *  steering, or the global settings, on a tab. `at` tells one ask from the
+ *  steering or the global settings, on a tab; who waits to be let into the
+ *  room; the log. `at` tells one ask from the
  *  next, so the same place asked twice is gone to twice. */
 export interface Place {
-  readonly to: "settings" | "global-settings";
-  readonly tab: SettingsTab;
+  readonly to: "settings" | "global-settings" | "waiting" | "log";
+  /** the settings tab; the first when not said */
+  readonly tab?: SettingsTab;
   readonly at: number;
 }
 
