@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.28.0-alpha...p2p-v0.29.0-alpha) (2026-11-22)
+
+
+### Features
+
+* **cli:** someone at the door with no invite is told so, and a member can let them in ([26aeab3](https://github.com/JuicyBenjamin/collagen/commit/26aeab34da5d0c10cc97e383f531e265fd1dc1b3))
+
 ## [0.28.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/p2p-v0.27.0-alpha...p2p-v0.28.0-alpha) (2026-11-15)
 
 
