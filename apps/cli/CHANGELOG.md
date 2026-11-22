@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.29.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.28.0-alpha...cli-v0.29.0-alpha) (2026-11-22)
+
+
+### Features
+
+* **cli:** get-tickets says each ticket's project and when it last moved; a goal stays one line ([088dfc2](https://github.com/JuicyBenjamin/collagen/commit/088dfc2197f0627fc3ba0e3c6817f90011f2cac3))
+* **cli:** someone at the door with no invite is told so, and a member can let them in ([26aeab3](https://github.com/JuicyBenjamin/collagen/commit/26aeab34da5d0c10cc97e383f531e265fd1dc1b3))
+* **cli:** the footer's two lines sit centred ([b53b39e](https://github.com/JuicyBenjamin/collagen/commit/b53b39ea27b4f9304b9a883abc48f8c20450e490))
+* **cli:** the ticket list has a tab for what is yours, narrows by typing, and says how long a ticket has sat ([13b9e59](https://github.com/JuicyBenjamin/collagen/commit/13b9e59e8fdb9044e7f0a71bb41b11f0e7515143))
+* **cli:** who is waiting sits beside the room's name, with a page for them and one for the log ([8357224](https://github.com/JuicyBenjamin/collagen/commit/835722479bba485d0acfc469e3211238f08482a1))
+
+
+### Bug Fixes
+
+* **cli:** an invite reaches a room that is already in your list ([bb75944](https://github.com/JuicyBenjamin/collagen/commit/bb759444d9722f79d32b3dc26727fa4b8cecb1d7))
+* **cli:** key hints say the key and what it does, nothing more ([fce2249](https://github.com/JuicyBenjamin/collagen/commit/fce22491b3cfe1c0f381100b374a3d84ad3daeb8))
+* **cli:** the filter's hint is three keys and three verbs ([6b09a02](https://github.com/JuicyBenjamin/collagen/commit/6b09a0249ad10fdc8888621dd3f01544f0217bdf))
+* **cli:** the footer says c copy invite ([316a1d0](https://github.com/JuicyBenjamin/collagen/commit/316a1d07f634fcc4a464fed52cae6d7c23a0cf28))
+* **cli:** the note beside the room's name stays where it is drawn ([583cac0](https://github.com/JuicyBenjamin/collagen/commit/583cac05416c715611dbd015ac5d27b386f77f82))
+
 ## [0.28.0-alpha](https://github.com/JuicyBenjamin/collagen/compare/cli-v0.27.0-alpha...cli-v0.28.0-alpha) (2026-11-15)
 
 
