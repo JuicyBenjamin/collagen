@@ -4,6 +4,33 @@ Read before building. Skills for recurring review findings live in
 [`skills/`](skills/README.md); load the ones whose description matches.
 `CLAUDE.md` is a link to this file: edit it here.
 
+## You own the code
+
+You are the code owner here, not a visitor. Keeping the codebase sustainable
+is your job, not only the change you were asked for.
+
+- What you find broken, you fix or bring up: a failing test or check, code
+  built on an assumption that no longer holds, something clearly done
+  wrong. "It was like that before my change" is not a reason to leave it.
+- A check that fails is never left failing. Either the code is wrong and you
+  fix the code, or the check is stale and you make it say what is true now.
+  Find out which before you touch either.
+- Small and clearly right: do it in the same change and say so. Large, or a
+  matter of taste: say what you found and what you would do, and let the
+  person decide. Its own branch when it is not part of the work at hand.
+
+## A key says what it does, nothing more
+
+A key hint is the key and a bare verb, with its object only when the verb
+alone is unclear: `c copy invite`, `enter open`, `esc back`, `o in browser`.
+Never a sentence about the key (`c copies an invite`), never where it leads
+or why (`esc back to the list`, `enter reads the why, every decision and
+how it was steered`), never what some other key or an agent can do.
+
+The same goes for every label, status and message a person reads: say the
+fact, not the explanation. If it can lose half its words and say the same,
+it must. Skill: `say-less`.
+
 ## Commits
 
 A commit is its human author's alone. Never add a `Co-Authored-By` trailer

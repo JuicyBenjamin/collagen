@@ -1,4 +1,4 @@
-import { Effect, Stream, SubscriptionRef } from "effect";
+import { Effect, Schedule, Stream, SubscriptionRef } from "effect";
 import { type LocalState } from "@collagen/p2p";
 import { AiStatus } from "../../services/AiStatus";
 import { Attachments } from "../../services/Attachments";
@@ -8,6 +8,7 @@ import { Rooms } from "../../services/Rooms";
 import { StateStore } from "../../services/StateStore";
 import { Updates } from "../../services/Updates";
 import { runtimeAtom } from "../../app/runtime";
+import { doorLine, troubleOf, type Trouble, type Waiter } from "../../lib/roomHealth";
 import { aiChoices } from "../../services/Adapters";
 import { Jobs } from "../../services/Jobs";
 
@@ -77,11 +78,34 @@ export const traceAtom = runtimeAtom.atom(
   })),
 );
 
-/** Whether we can write to the focused room's log yet (a member admits us). */
-export const admittedAtom = runtimeAtom.atom(
-  Stream.unwrap(Effect.gen(function* () {
-    return (yield* Rooms).watch((handle) => SubscriptionRef.changes(handle.room.writable));
-  })),
+/** How the room being looked at stands, for a person: what is in the way,
+ *  and who wants in. */
+export interface Standing {
+  /** what keeps the room from working, in a few words: beside its name */
+  readonly brief: string | null;
+  /** the same in full, with what to try: on the log page */
+  readonly trouble: Trouble | null;
+  readonly waiters: ReadonlyArray<Waiter>;
+  /** our role here may let them in */
+  readonly mayLetIn: boolean;
+}
+
+/** The focused room's standing, read every two seconds (the same reading
+ *  room-connection gives an AI) and told only when it changed. */
+export const standingAtom = runtimeAtom.atom(
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const rooms = yield* Rooms;
+      const read = Effect.gen(function* () {
+        const state = yield* rooms.connectionOf((yield* rooms.current).id);
+        if (!state) return null;
+        const trouble = troubleOf(state);
+        const standing: Standing = { brief: doorLine(state) ?? trouble?.brief ?? null, trouble, waiters: state.waiters, mayLetIn: state.mayLetIn };
+        return standing;
+      });
+      return Stream.fromEffectSchedule(read, Schedule.spaced("2 seconds")).pipe(Stream.changesWith((first: Standing | null, second: Standing | null) => JSON.stringify(first) === JSON.stringify(second)));
+    }),
+  ),
 );
 
 /** What has gone out of this machine, across rooms, newest first. */

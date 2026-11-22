@@ -13,6 +13,18 @@ import { actedBy } from "./agents";
 /** A decision's title is a headline, not a sentence: longer is refused. */
 export const TITLE_MAX = 60;
 
+/** A ticket's goal is the one line beneath its title in every list. */
+export const GOAL_MAX = 240;
+
+/** Why a ticket's goal cannot stand, or null: it is a line, not the
+ *  description — a ticket once went out with its whole account there, and
+ *  every list carried it. */
+export const ticketGoalGap = (goal: string | undefined): string | null => {
+  const trimmed = goal?.trim() ?? "";
+  if (trimmed.length <= GOAL_MAX) return null;
+  return `failed: the goal is ${trimmed.length} characters ("${trimmed.slice(0, 40)}…") — it is the one line beneath the title in every list, ${GOAL_MAX} characters at most; the rest belongs in the summary, the decisions or the steps' descriptions`;
+};
+
 /** A review's summary heads its page: a sentence or two, no more. */
 export const SUMMARY_MAX = 200;
 

@@ -42,6 +42,10 @@ explaining is the goal, not a risk.
 - **Nothing shown because the data has it.** Ids, queue order, "answered" on
   something that is plainly answered, the same model on every card: say it
   once where it helps, or not at all.
+- **A key hint is the key and a bare verb.** `c copy invite`, `enter open`,
+  `esc back` — the object only when the verb alone is unclear. Not a
+  sentence about the key ("c copies an invite"), not where it leads ("esc
+  back to the list"), not what else could be done.
 - **The terminal has no room.** A label there is a word or two: a count and
   a noun ("2 relations"), never a phrase ("2 grew from it", "in ♛ epic"). A
   glyph that the tabs already teach needs no word beside it.
@@ -59,6 +63,10 @@ need instructions — but what an agent is told to tell the person is a line.
 - The investigation page's first draft showed goal ids, an "Answered" pill
   on every answered goal, "one run after the first", the model on every
   card, "Grew into", and joined everything with dots.
+
+- The footer said "c copies an invite", and a ticket's hint "enter reads the
+  why — every decision, how it was steered, and the forks". Now "c copy
+  invite" and "enter why".
 
 ## Checklist
 

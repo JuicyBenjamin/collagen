@@ -6,6 +6,8 @@ import { MessagesPage } from "./room/messages/page";
 import { MergesPage } from "./room/merges/page";
 import { OutboxPage } from "./room/outbox/page";
 import { PeoplePage } from "./room/people/page";
+import { WaitingPage } from "./room/waiting/page";
+import { LogPage } from "./room/log/page";
 import { ProjectsPage } from "./room/projects/page";
 import { BoardPage } from "./room/board/page";
 import { OverviewPage } from "./room/overview/page";
@@ -33,6 +35,8 @@ const pages: { readonly [N in RouteName]: (route: Extract<Route, N | { readonly 
   "room/merges": () => <MergesPage />,
   "room/projects": () => <ProjectsPage />,
   "room/people": () => <PeoplePage />,
+  "room/waiting": () => <WaitingPage />,
+  "room/log": () => <LogPage />,
   "room/board": () => <BoardPage />,
   "room/ticket": (route) => <TicketPage ticketId={route.ticketId} route={route} />,
   "room/transcripts": (route) => <TranscriptsPage subject={route.subject} />,

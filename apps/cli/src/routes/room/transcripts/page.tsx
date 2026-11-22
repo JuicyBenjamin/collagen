@@ -33,7 +33,7 @@ export function TranscriptsPage({ subject }: { subject: string }) {
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
       <Focusable
         id="transcript-files"
-        hint="↑↓ pick · enter open · ← / esc back to the ticket"
+        hint="↑↓ pick · enter open · esc back"
         flexDirection="column"
         flexShrink={0}
         onKey={(key) => {

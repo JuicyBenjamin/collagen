@@ -422,7 +422,11 @@ export const IdentityKeysFrame = Schema.Struct({ kind: Schema.Literal("identity-
 /** "Let my writer core into our log" — one of a person's devices to another. */
 export const PersonJoinFrame = Schema.Struct({ kind: Schema.Literal("person-join"), writer: Schema.String });
 
-export const Frame = Schema.Union([IdentityWantFrame, IdentityOfferFrame, IdentityTakeFrame, IdentityKeysFrame, PersonJoinFrame, ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, WaitingFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
+/** "Come in with this" — a member, to someone on the room's topic who holds
+ *  no invite: an invite made for them, to use as if it had been sent. */
+export const InviteFrame = Schema.Struct({ kind: Schema.Literal("invite"), text: Schema.String });
+
+export const Frame = Schema.Union([InviteFrame, IdentityWantFrame, IdentityOfferFrame, IdentityTakeFrame, IdentityKeysFrame, PersonJoinFrame, ProfileFrame, LogInfoFrame, JoinLogFrame, RedeemFrame, KeysFrame, RefusedFrame, WaitingFrame, DriveFrame, TranscriptRequestFrame, TranscriptFrame, FetchAttachmentFrame, AttachmentFrame]);
 export type TranscriptRequestFrame = typeof TranscriptRequestFrame.Type;
 export type TranscriptFrame = typeof TranscriptFrame.Type;
 export type Frame = typeof Frame.Type;

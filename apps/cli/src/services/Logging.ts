@@ -1,6 +1,9 @@
 import { appendFileSync } from "node:fs";
 import { Config, Context, Effect, Layer, Logger, Option, SubscriptionRef } from "effect";
 
+/** How many lines the activity keeps: enough to read back what led to now. */
+const KEPT = 500;
+
 /** In-memory ring of recent log lines for the UI activity panel, and apart
  *  from it the recent warnings and errors, so the activity's chatter never
  *  pushes out what went wrong (room-connection reads them). */
@@ -14,7 +17,7 @@ export class LogBuffer extends Context.Service<LogBuffer>()("cli/LogBuffer", {
     const appendSync = (line: string, trouble: boolean) =>
       Effect.runSyncWith(services)(
         Effect.andThen(
-          SubscriptionRef.update(lines, (buffered) => [...buffered.slice(-49), line]),
+          SubscriptionRef.update(lines, (buffered) => [...buffered.slice(-(KEPT - 1)), line]),
           trouble ? SubscriptionRef.update(troubles, (buffered) => [...buffered.slice(-19), line]) : Effect.void,
         ),
       );

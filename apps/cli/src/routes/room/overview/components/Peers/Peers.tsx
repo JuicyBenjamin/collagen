@@ -26,7 +26,7 @@ export function Peers() {
   return (
     <Focusable
       id="people"
-      hint="enter people · arrows move between sections"
+      hint="enter people"
       // never squeezed by the list below it: a shrunk box draws its lines over each other
       flexShrink={0}
       onKey={(key) => {

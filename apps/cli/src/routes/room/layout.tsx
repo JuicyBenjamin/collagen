@@ -10,7 +10,7 @@ import { keyDebug } from "../../components/keys";
 import { to, useRouter, type Route } from "../../app/router";
 import { roomAtom } from "../atoms";
 import { openAuditPageAtom } from "./review/atoms";
-import { installAppUpdateAtom } from "./atoms";
+import { installAppUpdateAtom, standingAtom } from "./atoms";
 import { ticketsAtom } from "./overview/components/Tickets/atoms";
 import { Crumb } from "./components/Crumb/Crumb";
 import { Footer } from "./components/Footer/Footer";
@@ -49,6 +49,10 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
               ? [...trailOf(destination.back), "why"]
               : destination.name === "room/people"
                 ? [...trailOf(destination.back), "people"]
+                : destination.name === "room/waiting"
+                  ? [...trailOf(destination.back), "waiting"]
+                  : destination.name === "room/log"
+                    ? [...trailOf(destination.back), "log"]
                 : destination.name === "settings/global"
                   ? [...trailOf(destination.back), "global settings"]
                   : destination.name === "settings"
@@ -68,6 +72,8 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
               ? { trail: trailOf(page.back), label: "why", back: page.back, focus: "ticket-review" }
               : page.name === "room/people"
                 ? { trail: trailOf(page.back), label: "people", back: page.back, focus: "people" }
+                : page.name === "room/waiting" || page.name === "room/log"
+                  ? { trail: trailOf(page.back), label: page.name === "room/log" ? "log" : "waiting", back: page.back, focus: typeof page.back === "string" ? "tabs" : "crumb" }
                 : page.name === "settings/global"
                   ? { trail: trailOf(page.back), label: "global settings", back: page.back, focus: "tabs" }
                   : page.name === "settings"
@@ -91,6 +97,10 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "…" }));
   const roomName = room.name;
   const openAudit = useAtomSet(openAuditPageAtom);
+  const standing = AsyncResult.getOrElse(useAtomValue(standingAtom), () => null);
+  // beside the room's name: what is in the way, and who wants in when we may let them
+  const waiting = standing?.mayLetIn ? standing.waiters.length : 0;
+  const note = [...(standing?.brief ? [standing.brief] : []), ...(waiting > 0 ? [`${waiting} waiting (w)`] : [])].join(" · ");
   const installUpdate = useAtomSet(installAppUpdateAtom);
   const installed = useAtomValue(installAppUpdateAtom);
 
@@ -117,6 +127,9 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
     if (key.name === "s" && key.shift) return navigate(to.globalSettings(route));
     if (key.name === "s") return navigate("settings");
     if (key.name === "i") return navigate("you");
+    // who wants in, and the log: from wherever in the room, back to where it was
+    if (key.name === "w") return navigate(to.waiting(route));
+    if (key.name === "l") return navigate(to.log(route));
     if (key.name === "u") return installUpdate({});
     // a tab by its number on the bar
     const numbered = /^[1-9]$/.test(key.name) ? TABS[Number(key.name) - 1] : undefined;
@@ -133,7 +146,7 @@ export function RoomLayout({ children, onExit }: { children: ReactNode; onExit: 
       <StatusLine />
       <box flexDirection="row" marginTop={1} flexGrow={1} flexShrink={1}>
         <Sidebar />
-        <Panel title={crumb ? `${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : page?.name === "room/review" ? "why" : page?.name === "room/people" ? "people" : "transcript"}` : roomName} grow>
+        <Panel title={crumb ? `${roomName} › ${page?.name === "room/ticket" ? "ticket" : page?.name === "room/transcripts" ? "transcripts" : page?.name === "room/attach" ? "attach" : page?.name === "room/review" ? "why" : page?.name === "room/people" ? "people" : page?.name === "room/waiting" ? "waiting" : page?.name === "room/log" ? "log" : "transcript"}` : roomName} {...(note ? { note } : {})} grow>
           {crumb ? <Crumb trail={crumb.trail} label={crumb.label} onBack={goBack} /> : <TabBar />}
           {children}
           <Keys />

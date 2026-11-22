@@ -1,8 +1,10 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/reactivity";
 import { excludedFromEpic, heldBy, ticketName, visibleTo, type Ticket } from "@collagen/p2p";
+import { useKeyboard } from "@opentui/react";
 import { Focusable } from "../../../../../components/Focusable";
+import { captureAtom } from "../../../../../components/focus";
 import { FollowScroll } from "../../../../../components/FollowScroll";
 import { isEnter } from "../../../../../components/keys";
 import { theme } from "../../../../../app/theme";
@@ -15,8 +17,9 @@ import { atRest, epicProgress, marksLabel, progressShort, rowTitle, summarize, t
 import { drawnOrder, epicBlocks, groupTickets, kindHeading, type EpicBlock, type Row } from "../../../../../lib/ticketGroups";
 import { identityAtom, jobsAtom, membersAtom, reviewsAtom, rosterAtom, traceAtom, unseenAtom } from "../../../atoms";
 import { runningOn, runningShort, SPINNER } from "../../../../../lib/running";
-import { showClosedAtom, ticketTabAtom, ticketsAtom } from "./atoms";
-import { closedLine, endedMark, fitTabs, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
+import { showClosedAtom, ticketFilterAtom, ticketTabAtom, ticketsAtom } from "./atoms";
+import { waited } from "../../../../../lib/when";
+import { closedLine, endedMark, fitTabs, keptByFilter, relationsOf, relativesOf, TICKET_TABS, type Relative, type TicketTab } from "../../../../../lib/ticketTabs";
 import { openInvestigationPageAtom, openReviewPageAtom } from "../../../review/atoms";
 import { openBoardPageAtom } from "../../../board/atoms";
 import { roomAtom } from "../../../../atoms";
@@ -34,7 +37,10 @@ import { roomAtom } from "../../../../atoms";
  *  — the author's recorded decision, close-ticket — leaves this list and
  *  stays on the log with its steps as they were, where agents still read it
  *  and later tickets refer back to it. Nothing is deleted. ↑↓ select, enter
- *  opens the ticket's page. The `›` is the cursor, nothing else. */
+ *  opens the ticket's page. The `›` is the cursor, nothing else. `/` narrows
+ *  the list to the rows that say what is typed — title, who filed it,
+ *  project — on whichever tab is open; the "yours" tab lists what is this
+ *  person's to act on now, whatever its kind. */
 export function Tickets() {
   const tickets = AsyncResult.getOrElse(useAtomValue(ticketsAtom), () => [] as const);
   const identity = AsyncResult.getOrElse(useAtomValue(identityAtom), () => null);
@@ -62,6 +68,35 @@ export function Tickets() {
   const setTab = useAtomSet(ticketTabAtom);
   const showClosed = useAtomValue(showClosedAtom);
   const setShowClosed = useAtomSet(showClosedAtom);
+  const filter = useAtomValue(ticketFilterAtom);
+  const setFilter = useAtomSet(ticketFilterAtom);
+  const setCaptured = useAtomSet(captureAtom);
+  // while the filter is typed the keyboard is its own: letters are text, not keys
+  const [typing, setTyping] = useState(false);
+  // one key press reaches every listener, and a listener set up by an earlier
+  // one in the same press hears it too: the `/` that opens the filter is not
+  // its first letter, and the key that closes it is nobody else's — so both
+  // ends take effect once the press is over
+  const opening = useRef(false);
+  const startTyping = () => {
+    opening.current = true;
+    setTimeout(() => (opening.current = false), 0);
+    setTyping(true);
+    setCaptured(FILTER_HINT);
+  };
+  const stopTyping = () => {
+    setTyping(false);
+    setTimeout(() => setCaptured(null), 0);
+  };
+  useKeyboard((key) => {
+    if (!typing || opening.current) return;
+    if (key.name === "escape") return setFilter(""), stopTyping();
+    if (isEnter(key)) return stopTyping();
+    setCursor(0);
+    // from what is there now, not what was drawn: pasted text arrives as many keys at once
+    if (key.name === "backspace" || key.name === "delete") return setFilter((typed) => typed.slice(0, -1));
+    if (key.sequence.length === 1 && key.sequence >= " " && key.sequence !== "\u007f") setFilter((typed) => typed + key.sequence);
+  });
 
   const me = identity?.pubkey ?? "";
   // a job running on a ticket, yours or one a peer shares: its row turns a
@@ -93,14 +128,16 @@ export function Tickets() {
   const places = roomStackPlaces(byId, reviews, me);
   const visible = tickets.filter((ticket) => visibleTo(ticket, byId, me)).map((ticket) => ({ ticket, summary: summarize(ticket, trace, me, heldBy(ticket, byId, me), byId) }));
   const open = visible.filter((row) => row.summary.state !== "closed");
-  const inTab = (row: Row) => tab === "all" || row.ticket.kind === tab;
-  const rows = open.filter(inTab);
+  const inTab = (row: Row) => tab === "all" || (tab === "yours" ? row.summary.state === "needs-you" : row.ticket.kind === tab);
+  const kept = (row: Row) => keptByFilter(filter, [rowTitle(row.ticket), nameFor(row.ticket.createdBy), row.ticket.project]);
+  const rows = open.filter(inTab).filter(kept);
   // every ticket: open epics first, each holding its tickets, the rest by
   // project and kind; a kind's tab: by project alone, its epic said on the row
-  const { epics, rest } = tab === "all" ? epicBlocks(rows, byId) : { epics: [] as ReadonlyArray<EpicBlock<Row>>, rest: rows };
+  // (narrowed by typing, the rows that are kept stand alone: no epic to sit under)
+  const { epics, rest } = tab === "all" && filter === "" ? epicBlocks(rows, byId) : { epics: [] as ReadonlyArray<EpicBlock<Row>>, rest: rows };
   const groups = groupTickets(rest);
   // the closed ones, when asked for: set apart below, by project and kind
-  const closedGroups = showClosed ? groupTickets(visible.filter((row) => row.summary.state === "closed" && inTab(row))) : [];
+  const closedGroups = showClosed ? groupTickets(visible.filter((row) => row.summary.state === "closed" && (tab === "all" || row.ticket.kind === tab) && kept(row))) : [];
   const unfolded = new Set(epics.map((block) => block.epic.ticket.id).filter((id) => !folded.has(id)));
   // what a row is to the row above it, in its own column: a child under
   // the ticket it grew out of; else its epic (unless drawn inside it),
@@ -131,7 +168,7 @@ export function Tickets() {
   for (const group of closedGroups) {
     const all = group.kinds.flatMap((kindGroup) => kindGroup.rows);
     for (const row of all) withGhosts(row, idsOf(all));
-  }  const counts = new Map<TicketTab, number>(TICKET_TABS.map((ticketTab) => [ticketTab, ticketTab === "all" ? open.length : open.filter((row) => row.ticket.kind === ticketTab).length]));
+  }  const counts = new Map<TicketTab, number>(TICKET_TABS.map((ticketTab) => [ticketTab, ticketTab === "all" ? open.length : ticketTab === "yours" ? open.filter((row) => row.summary.state === "needs-you").length : open.filter((row) => row.ticket.kind === ticketTab).length]));
   const needsYou = rows.filter((row) => row.summary.state === "needs-you").length;
   const projects = new Set(rows.filter((row) => row.ticket.kind !== "epic").map((row) => row.ticket.project));
   // one lead column for the whole list, as wide as its longest lead
@@ -153,9 +190,9 @@ export function Tickets() {
     0,
     ...epics.flatMap((block) => [
       cells(progressShort(epicProgress(block.epic.ticket, byId))),
-      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket), places.get(row.ticket.id), row.ticket.preparing === true, runningText(row.ticket.id)))) : []),
+      ...(unfolded.has(block.epic.ticket.id) ? block.rows.map((row) => partsWidth(rowInfo(row.summary, undefined, nameOf, excludedFromEpic(row.ticket), places.get(row.ticket.id), row.ticket.preparing === true, runningText(row.ticket.id), age(row.ticket)))) : []),
     ]),
-    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined, places.get(row.ticket.id), row.ticket.preparing === true, runningText(row.ticket.id)))))),
+    ...groups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(rowInfo(row.summary, kindGroup.parent.get(row.ticket.id), nameOf, undefined, places.get(row.ticket.id), row.ticket.preparing === true, runningText(row.ticket.id), age(row.ticket)))))),
     ...closedGroups.flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.map((row) => partsWidth(closedInfo(row.ticket))))),
     ...[...groups, ...closedGroups].flatMap((group) => group.kinds.flatMap((kindGroup) => kindGroup.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket)))))),
     ...epics.flatMap((block) => block.rows.flatMap((row) => relativesOf(row.ticket, byId, me).map((relative) => cells(ghostStatus(relative.ticket))))),
@@ -185,10 +222,19 @@ export function Tickets() {
 
   return (
     <box flexDirection="column" marginTop={1} flexShrink={1} minHeight={0}>
-    <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(nextTab) => (setTab(nextTab), setCursor(0))} />
+    <KindTabs tab={tab} counts={counts} extra={unknownTickets.length} needsYou={needsYou > 0} width={pane} onTab={(nextTab) => (setTab(nextTab), setCursor(0))} onFilter={startTyping} />
+    {typing || filter !== "" ? (
+      <text wrapMode="none" truncate flexShrink={0}>
+        <span fg={theme.dim}>{"  / "}</span>
+        <span fg={theme.fg}>{filter}</span>
+        {typing ? <span fg={theme.accent}>▏</span> : null}
+      </text>
+    ) : null}
     <Focusable
       id="tickets"
-      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? " · o in browser" : ""}${current?.ticket.kind === "epic" ? " · b its board in browser" : ""} · ${LEGEND} · ? the rest`}
+      // the row is as wide as the legend allows: `/ filter` is said where the
+      // row under the cursor has no key of its own, and always on the tabs and on `?`
+      hint={`↑↓ select · enter open${current?.ticket.kind === "epic" ? ` · space ${unfolded.has(current.ticket.id) ? "fold" : "unfold"}` : ""}${current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? " · o in browser" : ""}${current?.ticket.kind === "epic" ? " · b its board in browser" : ""}${current?.ticket.kind === "epic" || current?.ticket.kind === "review" || current?.ticket.kind === "investigation" ? "" : " · / filter"} · ${LEGEND} · ? the rest`}
       flexDirection="column"
       flexShrink={1}
       minHeight={0}
@@ -215,6 +261,8 @@ export function Tickets() {
         if (key.name === "o" && current?.ticket.kind === "investigation") return openInvestigationPage({ ticketId: current.ticket.id }), true;
         // an epic's board, in the browser: its tickets in to do, in progress and done
         if (key.name === "b" && current?.ticket.kind === "epic" && roomId) return openBoardPage({ roomId, epic: current.ticket.id, kinds: [] }), true;
+        // narrow the list by typing; the text typed before is there to go on from
+        if (key.sequence === "/") return startTyping(), true;
         // the closed ones, shown or not
         if (key.name === "h") return setShowClosed(!showClosed), true;
         // one key to what a ticket hangs from
@@ -270,7 +318,7 @@ export function Tickets() {
                 {group.kinds.map((kindGroup) => (
                   <box key={kindGroup.kind} flexDirection="column" flexShrink={0}>
                     {/* on a kind's tab the tab says the kind: no heading for it */}
-                    {tab === "all" ? (
+                    {tab === "all" || tab === "yours" ? (
                       <text fg={theme.dim} truncate wrapMode="none">
                         {groups.length > 1 ? "    " : "  "}
                         {kindHeading(kindGroup.kind)}
@@ -369,18 +417,19 @@ export function Tickets() {
  *  so the glyphs on the rows are learned here, and how many are open. A
  *  section like the room's tab bar: hover it, ←→ switch, ↓ into the list,
  *  which shows only that tab's tickets. */
-function KindTabs({ tab, counts, extra, needsYou, width, onTab }: { tab: TicketTab; counts: ReadonlyMap<TicketTab, number>; extra: number; needsYou: boolean; width: number | undefined; onTab: (tab: TicketTab) => void }) {
+function KindTabs({ tab, counts, extra, needsYou, width, onTab, onFilter }: { tab: TicketTab; counts: ReadonlyMap<TicketTab, number>; extra: number; needsYou: boolean; width: number | undefined; onTab: (tab: TicketTab) => void; onFilter: () => void }) {
   // the row fits the pane, the open tab always whole (lib/ticketTabs)
   const shown = fitTabs(tab, new Map([...counts].map(([ticketTab, count]) => [ticketTab, count + (ticketTab === "all" ? extra : 0)])), width === undefined ? undefined : width - 2);
   return (
     <Focusable
       id="ticket-tabs"
       flexShrink={0}
-      hint="←→ switch tab · ↓ into its tickets"
+      hint="←→ switch tab · / filter · ↓ into its tickets"
       onKey={(key) => {
         const index = TICKET_TABS.indexOf(tab);
         if (key.name === "left" && index > 0) return onTab(TICKET_TABS[index - 1]!), true;
         if (key.name === "right" && index < TICKET_TABS.length - 1) return onTab(TICKET_TABS[index + 1]!), true;
+        if (key.sequence === "/") return onFilter(), true;
         // ← past the first and → past the last are not ours: the rail, the projects
         return false;
       }}
@@ -396,7 +445,7 @@ function KindTabs({ tab, counts, extra, needsYou, width, onTab }: { tab: TicketT
               <span key={shownTab.tab} fg={shownTab.open ? (focused ? theme.accent : theme.fg) : count === 0 && shownTab.tab !== "all" ? theme.dim : theme.fg}>
                 {shownTab.text.slice(0, shownTab.text.lastIndexOf(" "))}
               </span>,
-              <span key={`${shownTab.tab}-n`} fg={shownTab.open && needsYou ? theme.warn : theme.dim}>{shownTab.text.slice(shownTab.text.lastIndexOf(" "))}</span>,
+              <span key={`${shownTab.tab}-n`} fg={(shownTab.tab === "yours" ? count > 0 : shownTab.open && needsYou) ? theme.warn : theme.dim}>{shownTab.text.slice(shownTab.text.lastIndexOf(" "))}</span>,
             ];
           })}
           {shown.after ? <span fg={theme.dim}>{" ›"}</span> : null}
@@ -511,6 +560,9 @@ function EpicView({
   );
 }
 
+/** The footer while the filter is typed. */
+const FILTER_HINT = "type to filter · enter keep · esc clear";
+
 /** Before the name, on every row: the cursor, the ▸, the tree, the glyph —
  *  two columns each. */
 const HEAD = 8;
@@ -550,6 +602,7 @@ const rowInfo = (
   place: StackPlace | undefined,
   preparing = false,
   running: string | null = null,
+  waitedFor = "",
 ): ReadonlyArray<Part> => {
   // waiting on the row it is drawn under says so in one word; waiting on one
   // elsewhere (another group, or a second of two) names it
@@ -565,8 +618,13 @@ const rowInfo = (
     ...(preparing ? [{ text: "being prepared" }] : []),
     ...(summary.held.length > 0 ? [{ text: `${on ? `${STACK.waits} after "${on}"` : `${STACK.waits} waiting`}${elsewhere.length > 1 ? ` +${elsewhere.length - 1}` : ""}` }] : []),
     ...(people.length > 0 ? [{ text: people, warn: summary.state === "needs-you" }] : []),
+    // last, so it is the first to go when the column is short
+    ...(waitedFor ? [{ text: waitedFor }] : []),
   ];
 };
+
+/** How long a ticket has sat since anything last happened on it; nothing under a day. */
+const age = (ticket: Ticket): string => waited(ticket.updatedAt, Date.now());
 
 /** Folded, an epic says after its title how many it holds and how many are
  *  yours — there is room beside a title, and its info column keeps the progress. */
@@ -762,7 +820,7 @@ function TicketRow({
         {project ? <span fg={theme.dim}>{project} · </span> : null}
         {ticket.title ? ticket.title : <span fg={theme.dim}>{rowTitle(ticket)}</span>}
       </text>
-      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded, place, ticket.preparing === true, running ?? null)} width={infoWidth} />
+      <Info parts={info ?? rowInfo(summary, under, goalOf, excluded, place, ticket.preparing === true, running ?? null, age(ticket))} width={infoWidth} />
       <Info parts={related} width={relationWidth} />
     </box>
   );

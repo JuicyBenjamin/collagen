@@ -16,7 +16,7 @@ import { attachFilesAtom } from "../atoms";
 import { ticketsAtom } from "../overview/components/Tickets/atoms";
 import { transcriptFilesAtom } from "../transcripts/atoms";
 
-const PATH_HINT = "enter add the file · esc cancel";
+const PATH_HINT = "enter add · esc cancel";
 
 /** Pick files you hold to attach to this ticket: the first row takes a path
  *  (a screenshot, a document, a log — anything on this machine); beneath it,
@@ -69,7 +69,7 @@ export function AttachPage({ ticketId, back }: { ticketId: string; back: Route }
       </text>
       <Focusable
         id="attach-files"
-        hint="↑↓ pick · space mark · enter on the path row types a path, elsewhere attaches the marked ones · ← / esc back to the ticket"
+        hint="↑↓ pick · space mark · enter attach · esc back"
         flexDirection="column"
         flexShrink={0}
         marginTop={1}

@@ -6,7 +6,7 @@ import { Places } from "../services/Places";
 import { to, useRouter } from "./router";
 import { runtimeAtom } from "./runtime";
 
-/** The place the person's agent last asked to take them to (open-settings). */
+/** The place the person's agent last asked to take them to (open-settings, open-waiting, open-log). */
 const placeAtom = runtimeAtom.atom(
   Stream.unwrap(
     Effect.gen(function* () {
@@ -24,7 +24,7 @@ export function FollowPlaces() {
     if (!place) return;
     // from the global settings already, back stays where it was before them
     const back = typeof route === "object" && route.name === "settings/global" ? route.back : route;
-    navigate(place.to === "settings" ? to.settings(place.tab) : to.globalSettings(back, place.tab));
+    navigate(place.to === "waiting" ? to.waiting(route) : place.to === "log" ? to.log(route) : place.to === "settings" ? to.settings(place.tab ?? "general") : to.globalSettings(back, place.tab));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- each ask once, told from the last by its time
   }, [place?.at]);
   return null;

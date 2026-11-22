@@ -65,7 +65,7 @@ export function TranscriptPage({ path, file }: { path: string; file: string }) {
     <box flexDirection="column" marginTop={1} flexGrow={1} flexShrink={1} overflow="hidden">
       <Focusable
         id="transcript-lines"
-        hint="↑↓ turn · pgup/pgdn screen · home/end · enter unfold / fold · ← / esc back to the list"
+        hint="↑↓ turn · pgup/pgdn screen · home/end · enter fold · esc back"
         flexDirection="column"
         flexGrow={1}
         flexShrink={1}

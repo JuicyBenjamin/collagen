@@ -33,6 +33,18 @@ export interface PeopleRoute {
   /** Where esc / ← go — the overview it was opened from. */
   readonly back: Route;
 }
+/** Who wants into the room: those waiting on a yes, and those at the door. */
+export interface WaitingRoute {
+  readonly name: "room/waiting";
+  /** Where esc / ← go — where it was opened from. */
+  readonly back: Route;
+}
+/** What this collagen has been doing, line by line. */
+export interface LogRoute {
+  readonly name: "room/log";
+  /** Where esc / ← go — where it was opened from. */
+  readonly back: Route;
+}
 /** The room's steering on a tab — an agent taking the person there (open-settings). */
 export interface SettingsRoute {
   readonly name: "settings";
@@ -56,11 +68,14 @@ export interface TranscriptRoute {
 /** Where the configured app can be. Plain routes are strings; a route with
  *  parameters is an object. `room/*` routes render inside the room layout
  *  (see routes/index.tsx for the table that maps each to its page). */
-export type Route = "settings" | SettingsRoute | GlobalSettingsRoute | "you" | "rename-room" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | "room/board" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute;
+export type Route = "settings" | SettingsRoute | GlobalSettingsRoute | "you" | "rename-room" | "new-room" | "room/overview" | "room/messages" | "room/outbox" | "room/merges" | "room/projects" | "room/board" | TicketRoute | TranscriptsRoute | TranscriptRoute | AttachRoute | ReviewRoute | PeopleRoute | WaitingRoute | LogRoute;
 
 export type RouteName = Route extends infer R ? (R extends string ? R : R extends { readonly name: infer N } ? N : never) : never;
 
 export const routeName = (route: Route): RouteName => (typeof route === "string" ? route : route.name);
+
+/** Where a page opened from anywhere goes back to: never to itself or its like. */
+const aside = (from: Route): Route => (typeof from === "object" && (from.name === "room/waiting" || from.name === "room/log") ? from.back : from);
 
 /** Constructors for the routes that carry parameters. */
 export const to = {
@@ -70,6 +85,9 @@ export const to = {
   attach: (ticketId: string, back: Route): Route => ({ name: "room/attach", ticketId, back }),
   review: (ticketId: string, back: Route): Route => ({ name: "room/review", ticketId, back }),
   people: (back: Route): Route => ({ name: "room/people", back }),
+  // opened from the page itself, it keeps where that one goes back to
+  waiting: (back: Route): Route => ({ name: "room/waiting", back: aside(back) }),
+  log: (back: Route): Route => ({ name: "room/log", back: aside(back) }),
   settings: (tab: SettingsTab): Route => ({ name: "settings", tab }),
   globalSettings: (back: Route, tab?: SettingsTab): Route => ({ name: "settings/global", back, ...(tab ? { tab } : {}) }),
 } as const;

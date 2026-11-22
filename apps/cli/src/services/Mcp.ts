@@ -19,7 +19,7 @@ import { boardEpics } from "../lib/board";
 import { agoText, troubleOf } from "../lib/roomHealth";
 import { LogBuffer } from "./Logging";
 import { noPeerNamed, personNamed, projectSpelling, resolveName, roomRollCall, sameName, type Person } from "../lib/names";
-import { assumedGaps, reviewGaps, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
+import { assumedGaps, reviewGaps, ticketGoalGap, ticketTitleGap, unitTitleGap, type DecisionInput, type ForkInput } from "../lib/review";
 import { ticketRow, ticketView } from "../lib/ticketView";
 import { roomStackPlaces } from "../lib/stack";
 import type { PageThemes, QuestionLines } from "@collagen/p2p";
@@ -168,7 +168,7 @@ export const DescribeScripting = Tool.make("describe-scripting", {
 
 export const CreateTicket = Tool.make("create-ticket", {
   description:
-    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. 'title' is its headline in every list — a few words, 60 characters at most, what it is for; 'goal' is the line beneath it. It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps have an intent verb, a full description, optional 'needs' (ids of steps that must settle first), and an 'owner' (a peer name from list-room, or yourself) — or none, when your user asks nobody in particular: that step sits in the room, delivered to no one, until someone takes it (take-step) or settles it. When an owned step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
+    "Create a shared ticket your user asked for: a structured record of a cross-peer task that every peer in the room holds a merged copy of. Only when your user wants one — never on your own initiative. 'title' is its headline in every list — a few words, 60 characters at most, what it is for; 'goal' is the line beneath it, one line (240 characters at most). It reaches the room at once, and the collagen TUI's outbox shows them what went. Steps have an intent verb, a full description, optional 'needs' (ids of steps that must settle first), and an 'owner' (a peer name from list-room, or yourself) — or none, when your user asks nobody in particular: that step sits in the room, delivered to no one, until someone takes it (take-step) or settles it. When an owned step becomes actionable (its needs settled), it is delivered to its owner as a message on the thread between you and them about this project; the owner's agent relays it to its person, who decides whether and how it gets done and settles it with settle-step, which unblocks the next steps. Want a review gate? Add a final step you own that needs the work step. 'after' names tickets (ids from get-tickets) this one waits on: until they are answered nobody but your user is shown it or nudged about it. Prefer this over a chain of send-to-peer for multi-step work — the intermediate state stays inspectable by everyone.",
   parameters: Schema.Struct({
     /** the headline the lists show: a few words, 60 characters at most */
     title: Schema.String,
@@ -589,7 +589,7 @@ export const GetRoomAccess = Tool.make("get-room-access", {
 
 export const SetRoomAccess = Tool.make("set-room-access", {
   description: [
-    "Change who may do what in the room your user is looking at, as their role there allows (get-room-access). 'action': 'role' makes or changes a role ('name', 'rank', 'permissions' — any of invite, approve, remove, manage-roles; the role 'everyone' is every member's, and taking 'approve' from it means newcomers wait for someone who holds it); 'unrole' takes a role away ('name'); 'grant' sets a person's roles ('person', 'roles' by name — [] takes them all); 'let-in' lets someone waiting in ('person'); 'turn-away' does not ('person', 'reason'); 'remove' takes someone out ('person', 'reason'): nothing more is sent to them and the room moves to a new key they are not given, so they read nothing written after.",
+    "Change who may do what in the room your user is looking at, as their role there allows (get-room-access). 'action': 'role' makes or changes a role ('name', 'rank', 'permissions' — any of invite, approve, remove, manage-roles; the role 'everyone' is every member's, and taking 'approve' from it means newcomers wait for someone who holds it); 'unrole' takes a role away ('name'); 'grant' sets a person's roles ('person', 'roles' by name — [] takes them all); 'let-in' lets someone waiting in ('person') — or someone at the door: on the room with no invite, as get-room-access lists them, who is handed one and comes in with it; 'turn-away' does not ('person', 'reason'); 'remove' takes someone out ('person', 'reason'): nothing more is sent to them and the room moves to a new key they are not given, so they read nothing written after.",
     "'said: true' only when your user asked for this in their words. Letting in, turning away and removing otherwise follow their steering for it (set-steering kind admit): not chosen or never, not done; ask first, ask them, then call again with 'said: true'. Roles change only on their word.",
   ].join("\n"),
   parameters: Schema.Struct({
@@ -987,6 +987,27 @@ export const OpenSettings = Tool.make("open-settings", {
   success: Schema.String,
 });
 
+export const OpenWaiting = Tool.make("open-waiting", {
+  description:
+    "Take your user to who wants into the room they are looking at, in collagen's terminal, the same as pressing w in a room: those whose invite waits on a yes, and those at the door with no invite, where enter lets one in. When they ask to see who is waiting. It only takes them there: it lets nobody in (set-room-access let-in does; get-room-access lists the same people for you).",
+  parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
+export const OpenLog = Tool.make("open-log", {
+  description:
+    "Take your user to collagen's log in its terminal, the same as pressing l in a room: what keeps the room from working and what to try, above what this collagen has been doing, line by line. When they ask to see the log. To read it yourself, get-log.",
+  parameters: Tool.EmptyParams,
+  success: Schema.String,
+});
+
+export const GetLog = Tool.make("get-log", {
+  description:
+    "Read this collagen's own log, what your user sees on its log page (l in a room): what it has been doing on this machine, across every room, oldest first, the last 'lines' of them (40 by default, 500 kept at most). 'troubles: true' gives only the warnings and errors, which are kept apart so chatter never pushes them out. Times are UTC. For why a room is stuck, start with room-connection; this is what led up to it. Read only.",
+  parameters: Schema.Struct({ lines: Schema.optional(Schema.Finite), troubles: Schema.optional(Schema.Boolean) }),
+  success: Schema.String,
+});
+
 export const OpenMerges = Tool.make("open-merges", {
   description:
     "Open a project's merges page in your user's browser — what was merged into its default branch, the latest first, each linked to its pull request with the collagen tickets it came from and their why, tabs for the room's other projects — the same as pressing o on their merges tab. 'project' is one of the current room's projects on this machine (any case); left out, their first in the order they keep (order-projects). 'number' opens it at that pull request's merge, its why unfolded. When your user asks to see a project's merges or history. Nothing leaves this machine: the page is served by their own collagen, on loopback.",
@@ -1135,7 +1156,7 @@ export const LeaveRoom = Tool.make("leave-room", {
 
 export const GetTickets = Tool.make("get-tickets", {
   description:
-    `The open tickets in the room the user is looking at, one row each: id, kind, title, the line beneath it, status (open, answered — every step done, ready for its author to close —, held — waiting on another ticket —, or closed; an epic's with how far along it is), whose move it is, and its epic. A list to find a ticket in: its steps, results and why are get-ticket's. 'kind' narrows it to one kind; 'closed: true' lists the closed ones instead, for history. Relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text. The kinds, and what each wants of you — ${kindsForAgents()}. Your user sees the same kinds explained in their TUI (? on the overview).`,
+    `The open tickets in the room the user is looking at, one row each: id, kind, project, title, the line beneath it, status (open, answered — every step done, ready for its author to close —, held — waiting on another ticket —, or closed; an epic's with how far along it is), whose move it is, its epic, and when anything last happened on it (UTC). A list to find a ticket in: its steps, results and why are get-ticket's. 'kind' narrows it to one kind; 'closed: true' lists the closed ones instead, for history. Relay what is there, never fill gaps from your own head. Returns TOON (compact YAML/CSV-style) text. The kinds, and what each wants of you — ${kindsForAgents()}. Your user sees the same kinds explained in their TUI (? on the overview).`,
   parameters: Schema.Struct({ kind: Schema.optional(TicketKind), closed: Schema.optional(Schema.Boolean) }),
   success: Schema.String,
 });
@@ -1209,6 +1230,9 @@ export const CollagenToolkit = Toolkit.make(
   OpenBoard,
   OpenMerges,
   OpenSettings,
+  OpenWaiting,
+  OpenLog,
+  GetLog,
   ReviewComments,
   AskWhy,
   SetName,
@@ -1290,6 +1314,9 @@ export const DevCollagenToolkit = Toolkit.make(
   OpenBoard,
   OpenMerges,
   OpenSettings,
+  OpenWaiting,
+  OpenLog,
+  GetLog,
   ReviewComments,
   AskWhy,
   SetName,
@@ -1681,6 +1708,8 @@ const makeHandlers = Effect.gen(function* () {
             const gap = ticketTitleGap(input.title);
             if (gap) return gap;
           }
+          const goalGap = ticketGoalGap(input.goal);
+          if (goalGap) return goalGap;
           const ticketMoves = input.title !== undefined || input.goal !== undefined || input.from !== undefined || input.after !== undefined || input.whenClosed !== undefined || (input.peers?.length ?? 0) > 0;
           // the merge override alone is the author's, on this machine: nothing for the room
           if (!whyMoves && !ticketMoves && kind === "review" && input.merge !== undefined && existing?.author === identity.pubkey) {
@@ -1803,6 +1832,8 @@ const makeHandlers = Effect.gen(function* () {
         // after what the kind itself asks for, so its own refusals come first
         const titleGap = ticketTitleGap(input.title);
         if (titleGap) return titleGap;
+        const goalGap = ticketGoalGap(input.goal);
+        if (goalGap) return goalGap;
         const tickets = yield* SubscriptionRef.get(room.tickets);
         const after = input.after && input.after.length > 0 ? [...new Set(input.after)] : undefined;
         if (after) {
@@ -2190,6 +2221,8 @@ const makeHandlers = Effect.gen(function* () {
         }
         const titleGap = ticketTitleGap(input.title);
         if (titleGap) return titleGap;
+        const goalGap = ticketGoalGap(input.goal);
+        if (goalGap) return goalGap;
         const id = crypto.randomUUID();
         const ticket: Ticket = {
           id,
@@ -2489,6 +2522,7 @@ const makeHandlers = Effect.gen(function* () {
         const rules = yield* SubscriptionRef.get(room.acl);
         const members = yield* SubscriptionRef.get(room.members);
         const roles = [...rules.roles.values()].sort((first, second) => second.rank - first.rank);
+        const atDoor = (yield* room.connection).strangers;
         const holders = (roleId: string) => [...rules.held].filter(([, ids]) => ids.includes(roleId)).map(([identity]) => nameOf(identity));
         return [
           `"${name}" — owner: ${rules.owner ? nameOf(rules.owner) : "none on the log yet (a room from before roles: its creator becomes owner when they next open it)"}`,
@@ -2496,6 +2530,7 @@ const makeHandlers = Effect.gen(function* () {
           ...roles.map((role) => `- ${role.name} (rank ${role.rank}): ${role.permissions.length > 0 ? role.permissions.join(", ") : "no permissions"}${role.id === "everyone" ? " — every member" : holders(role.id).length > 0 ? ` — ${holders(role.id).join(", ")}` : " — nobody yet"}`),
           `Members: ${members.filter((member) => !rules.removed.has(member.key)).map((member) => member.name).join(", ") || "none"}`,
           rules.waiting.size > 0 ? `Waiting to be let in: ${[...rules.waiting].map(([, ask]) => ask.name).join(", ")} (set-room-access let-in or turn-away)` : "Nobody is waiting to be let in.",
+          ...(atDoor.length > 0 ? [`At the door, with no invite: ${atDoor.map((stranger) => stranger.name || stranger.key.slice(0, 8)).join(", ")} (set-room-access let-in lets one in)`] : []),
           ...(rules.declined.size > 0 ? [`Turned away: ${[...rules.declined.keys()].map(nameOf).join(", ")}`] : []),
           ...(rules.removed.size > 0 ? [`Taken out: ${[...rules.removed].map(([identity, out]) => `${nameOf(identity)}${out.reason ? ` (${out.reason})` : ""}`).join(", ")}`] : []),
         ].join("\n");
@@ -2554,6 +2589,15 @@ const makeHandlers = Effect.gen(function* () {
             return yield* done(room.grant(who.key, ids.map((role) => role!.id)), `${who.name}'s roles are now: ${ids.map((role) => role!.name).join(", ") || "only everyone's"}.`);
           }
           case "let-in": {
+            // someone at the door, on the room with no invite: they are handed one, and come in with it
+            const atDoor = (yield* room.connection).strangers.find((stranger) => sameName(stranger.name, input.person ?? ""));
+            if (atDoor)
+              return yield* room.letInAtDoor(atDoor.key).pipe(
+                Effect.as(`let ${atDoor.name} in: they were at the door with no invite, and are handed one now.`),
+                Effect.catchTag("PeerNotConnected", () => Effect.succeed(`failed: ${atDoor.name} is no longer connected — ask again once they are back`)),
+                Effect.catchTag("NotPermitted", (refusal) => Effect.succeed(`failed: your user's role in "${roomName}" does not allow it (${refusal.permission}) — get-room-access shows what each role holds`)),
+                Effect.catchTag("NotWritable", () => Effect.succeed(`failed: your user is not let in to write to "${roomName}" yet`)),
+              );
             const who = yield* personOf;
             if (who._tag === "refused") return who.text;
             return yield* done(room.admit(who.key), `let ${who.name} in: they get the room's keys the next time they ask (within seconds while they are online).`);
@@ -2809,6 +2853,8 @@ const makeHandlers = Effect.gen(function* () {
           case "create": {
             const titleGap = ticketTitleGap(input.title);
             if (titleGap) return titleGap.replace("the ticket's headline", "the epic's headline");
+            const goalGap = ticketGoalGap(input.goal ?? undefined);
+            if (goalGap) return goalGap;
             const title = input.title!.trim();
             const goal = input.goal?.trim() || title;
             const now = yield* Clock.currentTimeMillis;
@@ -2864,6 +2910,8 @@ const makeHandlers = Effect.gen(function* () {
             if (epic.createdBy !== identity.pubkey) return `failed: "${ticketName(epic)}" is its author's to rename — your user can ask them (send-to-peer, with this epicId)`;
             const titleGap = ticketTitleGap(input.title);
             if (titleGap) return titleGap.replace("the ticket's headline", "the epic's headline");
+            const goalGap = ticketGoalGap(input.goal ?? undefined);
+            if (goalGap) return goalGap;
             const title = input.title!.trim();
             const now = yield* Clock.currentTimeMillis;
             // the line beneath goes with it unless a new one is given: a goal that
@@ -3187,6 +3235,24 @@ const makeHandlers = Effect.gen(function* () {
         const gone = yield* terminal.go({ to: global ? "global-settings" : "settings", tab });
         if (!gone) return `failed: no terminal of collagen's is open to show it in — it runs without its screen here. Tell your user: in a room, s opens its steering, S the global settings.`;
         return `${global ? "The global settings are" : "The room's steering is"} on your user's screen, on ${tab === "ai" ? "AI" : tab === "tools" ? "Tools" : "General"}.`;
+      }),
+      "open-waiting": Effect.fn("Mcp.openWaiting")(function* () {
+        const gone = yield* terminal.go({ to: "waiting" });
+        if (!gone) return "failed: no terminal of collagen's is open to show it in — it runs without its screen here. get-room-access lists who is waiting; tell your user: in a room, w shows them.";
+        return "Who wants into the room is on your user's screen: enter lets the one under the cursor in.";
+      }),
+      "open-log": Effect.fn("Mcp.openLog")(function* () {
+        const gone = yield* terminal.go({ to: "log" });
+        if (!gone) return "failed: no terminal of collagen's is open to show it in — it runs without its screen here. get-log reads it; tell your user: in a room, l shows it.";
+        return "The log is on your user's screen.";
+      }),
+      "get-log": Effect.fn("Mcp.getLog")(function* (input: { lines?: number; troubles?: boolean }) {
+        const kept = yield* SubscriptionRef.get(input.troubles ? logBuffer.troubles : logBuffer.lines);
+        const wanted = input.lines === undefined ? 40 : Math.floor(input.lines);
+        if (!(wanted > 0)) return "failed: 'lines' is how many of the last lines to read";
+        if (kept.length === 0) return input.troubles ? "No warnings or errors on this machine since collagen started." : "Nothing in the log yet.";
+        const shown = kept.slice(-wanted);
+        return [`${shown.length} of ${kept.length} ${input.troubles ? "warnings and errors" : "lines"} kept, oldest first, UTC:`, ...shown].join("\n");
       }),
       "open-board": Effect.fn("Mcp.openBoard")(function* (input: { epic?: string; kinds?: ReadonlyArray<string> }) {
         const { id: roomId, room } = yield* focusedRoom;
@@ -3603,7 +3669,8 @@ export const McpLive = Layer.unwrap(
             }),
           ),
         ),
-        { disableListenLog: true },
+        // no line per request: every tool call an agent makes would crowd what collagen did out of its log
+        { disableListenLog: true, disableLogger: true },
       ).pipe(Layer.provide(NodeHttpServer.layer(() => createServer(), { port, host: "127.0.0.1" })));
 
     const port = portForProfile(profile);

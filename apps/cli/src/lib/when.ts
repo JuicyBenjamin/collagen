@@ -4,6 +4,10 @@
 // raw UTC stamp shown to a person (skills/dates-and-times). Every date the
 // TUI shows goes through here. What an agent reads stays UTC.
 
+/** The person's time of day for an instant, to the second: "14:05:09". */
+export const timeOf = (instant: number): string =>
+  Temporal.Instant.fromEpochMilliseconds(instant).toZonedDateTimeISO(Temporal.Now.timeZoneId()).toLocaleString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
 /** The person's date and time for an instant: "3 Oct, 14:05" — the year too
  *  when it is not this one. */
 export const dateTimeOf = (instant: number): string => {
@@ -11,4 +15,13 @@ export const dateTimeOf = (instant: number): string => {
   const at = Temporal.Instant.fromEpochMilliseconds(instant).toZonedDateTimeISO(zone);
   const thisYear = at.year === Temporal.Now.zonedDateTimeISO(zone).year;
   return at.toLocaleString(undefined, { day: "numeric", month: "short", ...(thisYear ? {} : { year: "numeric" }), hour: "numeric", minute: "2-digit" });
+};
+
+const DAY = 24 * 60 * 60 * 1000;
+
+/** How long since an instant, once it is a day or more: "3 d", from two
+ *  weeks on "5 w". Nothing under a day — what moved today needs no age. */
+export const waited = (instant: number, now: number): string => {
+  const days = Math.floor((now - instant) / DAY);
+  return days < 1 ? "" : days < 14 ? `${days} d` : `${Math.floor(days / 7)} w`;
 };

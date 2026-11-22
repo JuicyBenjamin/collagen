@@ -204,7 +204,7 @@ The latest such conversation is the one woken. Collagen learns how to reach a Cl
 conversation from its own calls (the process at the other end of the call, and its
 socket), never from what an agent types; one it has not seen yet waits in the inbox.
 
-The footer's activity log says which of these happened, every time: `→ inbox` (waiting to
+The log (`l` in a room) says which of these happened, every time: `→ inbox` (waiting to
 be pulled, and why), `→ courier` (a line into your Claude Code conversation), `→ codex
 queue` (a line into your Codex thread).
 

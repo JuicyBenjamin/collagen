@@ -100,7 +100,7 @@ export function EpicPage({
 
       <Focusable
         id="ticket-parts"
-        hint="↑↓ select · enter opens a ticket · your agent adds, orders, excludes and takes tickets out (the epic tool) · esc back to the list"
+        hint="↑↓ select · enter open · esc back"
         flexDirection="column"
         flexShrink={0}
         onKey={(key) => {

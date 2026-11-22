@@ -9,20 +9,17 @@ import { captureAtom } from "../../../../components/focus";
 import { theme } from "../../../../app/theme";
 import { IS_RELEASE, VERSION } from "../../../../app/version";
 import { roomAtom } from "../../../atoms";
-import { inviteAtom, logsAtom, mcpUrlAtom, troubleAtom } from "./atoms";
+import { inviteAtom, mcpUrlAtom } from "./atoms";
 
-/** Pinned footer: a fixed 3-line activity log — or, while something keeps
- *  the room from working, what it is and what to try above its last two
- *  lines — the MCP url, the room's line
- *  (c makes an invite and copies it). Every line is single-line on purpose — a wrapped line
+/** Pinned footer: the MCP url and the room's line (c makes an invite and
+ *  copies it). What collagen has been doing is the log page (l); what
+ *  keeps the room from working sits beside the room's name. Every line is single-line on purpose — a wrapped line
  *  here changes the footer's height and reflows the whole screen. The key
  *  legend lives inside the room panel (Keys), next to what it describes. */
 export function Footer() {
   const room = AsyncResult.getOrElse(useAtomValue(roomAtom), () => ({ id: "", name: "…" }));
   const renderer = useRenderer();
   const captured = useAtomValue(captureAtom);
-  const logs = AsyncResult.getOrElse(useAtomValue(logsAtom), () => [] as const);
-  const trouble = AsyncResult.getOrElse(useAtomValue(troubleAtom), () => null);
   const mcpUrl = AsyncResult.getOrElse(useAtomValue(mcpUrlAtom), () => Option.none<string>());
   const [copied, setCopied] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
@@ -52,35 +49,15 @@ export function Footer() {
   });
 
   return (
-    <>
-      <box marginTop={1} flexDirection="column" flexShrink={0}>
-        {trouble ? (
-          <>
-            <text fg={theme.warn} truncate wrapMode="none">
-              {trouble.what}
-            </text>
-            <text fg={theme.fg} truncate wrapMode="none">
-              {trouble.next}
-            </text>
-          </>
-        ) : (
-          <text fg={theme.dim}>activity</text>
-        )}
-        {(trouble ? [0, 1] : [0, 1, 2]).map((index) => (
-          <text key={index} fg={theme.dim} truncate wrapMode="none">
-            {logs.slice(trouble ? -2 : -3)[index] ?? " "}
-          </text>
-        ))}
-      </box>
-      <box flexDirection="column" flexShrink={0}>
-        <text fg={theme.dim} truncate wrapMode="none">
-          collagen {VERSION}{IS_RELEASE ? "" : " · devnet"} · mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
-        </text>
-        <text fg={theme.dim} truncate wrapMode="none">
-          room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] ·{" "}
-          {copied ? <span fg={theme.ok}>invite copied — it lets one person in, within a week</span> : refused ? <span fg={theme.warn}>no invite: {refused}</span> : <span fg={theme.dim}>c copies an invite</span>}
-        </text>
-      </box>
-    </>
+    // centred under the screen: with the log on its own page these two lines are all there is
+    <box marginTop={1} flexDirection="column" flexShrink={0} alignItems="center">
+      <text fg={theme.dim} truncate wrapMode="none" maxWidth="100%">
+        collagen {VERSION}{IS_RELEASE ? "" : " · devnet"} · mcp: {Option.getOrElse(mcpUrl, () => "starting…")}
+      </text>
+      <text fg={theme.dim} truncate wrapMode="none" maxWidth="100%">
+        room: <span fg={theme.fg}>{room.name}</span> [{shortRoomId(room.id)}] ·{" "}
+        {copied ? <span fg={theme.ok}>invite copied · one person, one week</span> : refused ? <span fg={theme.warn}>no invite: {refused}</span> : <span fg={theme.dim}>c copy invite</span>}
+      </text>
+    </box>
   );
 }

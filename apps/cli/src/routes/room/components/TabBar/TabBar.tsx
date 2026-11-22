@@ -5,7 +5,7 @@ import { focusAtom, nearestFocusable } from "../../../../components/focus";
 import { isEnter } from "../../../../components/keys";
 import { theme } from "../../../../app/theme";
 import { roomAtom } from "../../../atoms";
-import { admittedAtom, rosterAtom } from "../../atoms";
+import { rosterAtom } from "../../atoms";
 import { boardEpicAtom, boardKindsAtom, openBoardPageAtom } from "../../board/atoms";
 import { mergesShownAtom, openMergesPageAtom } from "../../merges/atoms";
 import { TAB_LABEL, TABS, useTabs } from "../../tabs";
@@ -21,7 +21,6 @@ export function TabBar() {
   const { active, jump } = useTabs();
   const setFocus = useAtomSet(focusAtom);
   const peers = AsyncResult.getOrElse(useAtomValue(rosterAtom), () => [] as const);
-  const admitted = AsyncResult.getOrElse(useAtomValue(admittedAtom), () => true);
   const openMergesPage = useAtomSet(openMergesPageAtom);
   const mergesShown = useAtomValue(mergesShownAtom).shown;
   const openBoardPage = useAtomSet(openBoardPageAtom);
@@ -37,7 +36,7 @@ export function TabBar() {
       // one row, always: a page that grows must not push the bar off its line
       flexShrink={0}
       // o first on the merges tab: a long hint loses its middle
-      hint={`${active === "room/merges" || active === "room/board" ? "o in browser · " : ""}←→ switch tab · ↓ into the tab · 1-6 jump · A audit · c copy invite · s settings · S global · i you · q quit`}
+      hint={`${active === "room/merges" || active === "room/board" ? "o in browser · " : ""}←→ switch tab · ↓ into the tab · 1-6 jump · l log · A audit · c copy invite · s settings · S global · i you · q quit`}
       onKey={(key) => {
         const index = TABS.indexOf(active);
         if (key.name === "left" && index > 0) return jump(TABS[index - 1]!), true;
@@ -70,7 +69,6 @@ export function TabBar() {
           <text truncate wrapMode="none" flexShrink={1} minWidth={0}>
             <span fg={theme.dim}>  ·  </span>
             <span fg={theme.fg}>{online} online</span>
-            {admitted ? null : <span fg={theme.warn}> · waiting for a member to admit you</span>}
           </text>
         </box>
       )}
