@@ -22,3 +22,6 @@ export const ticketTabAtom = Atom.keepAlive(Atom.make<TicketTab>("all"));
 
 /** Whether closed tickets are listed too, below the open ones. */
 export const showClosedAtom = Atom.keepAlive(Atom.make(false));
+
+/** What was typed to narrow the list (`/`), kept like the tab. */
+export const ticketFilterAtom = Atom.keepAlive(Atom.make(""));

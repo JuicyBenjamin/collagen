@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Ticket } from "@collagen/p2p";
-import { closedLine, fitTabs, relationsOf, relativesOf, tabLabel, TICKET_TABS } from "./ticketTabs";
+import { closedLine, fitTabs, keptByFilter, relationsOf, relativesOf, tabLabel, TICKET_TABS } from "./ticketTabs";
 
 const ticketOf = (over: Partial<Ticket>): Ticket => ({ id: "t", project: "collagen", goal: "g", createdBy: "alice", kind: "task", steps: [], structureAt: 1, updatedAt: 1, ...over });
 
 describe("the ticket list's tabs", () => {
-  it("all tickets, then a tab per kind with its glyph", () => {
-    expect(TICKET_TABS[0]).toBe("all");
+  it("all tickets, what is yours, then a tab per kind with its glyph", () => {
+    expect(TICKET_TABS.slice(0, 2)).toEqual(["all", "yours"]);
+    expect(tabLabel("yours")).toBe("▸ yours");
     expect(tabLabel("all")).toBe("all tickets");
     expect(tabLabel("bug")).toBe("⚑ bugs");
     expect(tabLabel("epic")).toBe("♛ epics");
@@ -45,16 +46,32 @@ describe("the ticket list's tabs", () => {
   });
 });
 
+describe("narrowing the list by typing", () => {
+  const said = ["Exports finish on big files", "Kristian", "bifrost"];
+
+  it("keeps a row that says every word typed, wherever and in whatever case", () => {
+    expect(keptByFilter("", said)).toBe(true);
+    expect(keptByFilter("EXPORT", said)).toBe(true);
+    expect(keptByFilter("kris big", said)).toBe(true);
+    expect(keptByFilter("bifrost  ", said)).toBe(true);
+  });
+
+  it("drops a row missing one of them, and never joins two fields into a word", () => {
+    expect(keptByFilter("export shopify", said)).toBe(false);
+    expect(keptByFilter("filesKristian", said)).toBe(false);
+  });
+});
+
 describe("the tabs in a narrow pane", () => {
   const counts = new Map(TICKET_TABS.map((tab) => [tab, tab === "all" ? 12 : tab === "task" ? 3 : tab === "proposal" ? 9 : 0]));
   const row = (fitted: ReturnType<typeof fitTabs>) => `${fitted.before ? "‹ " : ""}${fitted.tabs.map((drawn) => (drawn.open ? `[${drawn.text}]` : drawn.text)).join(" ")}${fitted.after ? " ›" : ""}`;
 
   it("all of them, when they fit", () => {
-    expect(row(fitTabs("all", counts, 120))).toBe("[all tickets 12] ♛ epics 0 ? investigations 0 ✦ proposals 9 ⚑ bugs 0 ≡ plans 0 ☐ tasks 3 ± reviews 0");
+    expect(row(fitTabs("all", counts, 140))).toBe("[all tickets 12] ▸ yours 0 ♛ epics 0 ? investigations 0 ✦ proposals 9 ⚑ bugs 0 ≡ plans 0 ☐ tasks 3 ± reviews 0");
   });
 
   it("the open one whole, the others by glyph, when they do not", () => {
-    expect(row(fitTabs("epic", counts, 50))).toBe("all 12 [♛ epics 0] ? 0 ✦ 9 ⚑ 0 ≡ 0 ☐ 3 ± 0");
+    expect(row(fitTabs("epic", counts, 56))).toBe("all 12 ▸ 0 [♛ epics 0] ? 0 ✦ 9 ⚑ 0 ≡ 0 ☐ 3 ± 0");
   });
 
   it("a window around the open one, marked where cut — the open one always named", () => {

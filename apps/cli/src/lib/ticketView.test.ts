@@ -40,7 +40,7 @@ describe("a ticket's row in get-tickets", () => {
   it("says where it stands and whose move it is, without its steps", () => {
     const working = ticketOf("work", { title: "Exports finish", goal: "Rows stream", steps: [step("s1", "bob", "settled"), step("s2", "alice", "pending", ["s1"]), step("s3", "bob", "pending", ["s2"])] });
     const all = new Map([[working.id, working]]);
-    expect(ticketRow(working, names, [], all)).toEqual({ id: "work", kind: "task", title: "Exports finish", subtitle: "Rows stream", status: "open", waitingOn: "Alice", epic: "" });
+    expect(ticketRow(working, names, [], all)).toEqual({ id: "work", kind: "task", project: "collagen", title: "Exports finish", subtitle: "Rows stream", status: "open", waitingOn: "Alice", epic: "", changed: "1970-01-01T00:00:00Z" });
     expect(JSON.stringify(ticketRow(working, names, [], all))).not.toMatch(/long description/);
   });
 

@@ -514,7 +514,7 @@ close and reopen with who said so and why.
 | `create-ticket` | goal, project, steps (owner by peer name — or none, open to the room — intent, description, `needs`) — on your word, straight to the room |
 | `settle-step` | settle or fail a step you own, or one nobody has (settling takes it), with the result you want to send |
 | `take-step` | take a task step nobody has: it is yours from then on, as if you had been asked |
-| `get-tickets` | the open tickets in the room you're looking at, a row each: id, kind, title and the line beneath it, status, whose move it is, its epic; `kind` narrows it, `closed: true` lists the closed ones instead |
+| `get-tickets` | the open tickets in the room you're looking at, a row each: id, kind, project, title and the line beneath it, status, whose move it is, its epic, when anything last happened on it (UTC); `kind` narrows it, `closed: true` lists the closed ones instead |
 | `get-ticket` | one ticket in full, by id: its goal, steps with owners resolved to names and their results, what it follows and waits on, its epic; a review ticket also shows its headline |
 | `ask-review` | ask for a review of the code, with the why: summary, branch/base/link, decisions and forks — the record and the reasons in one write. `peers` is 0 to many (none = nobody in particular, the ticket sits in the room); `ticketId` amends it as the code moves |
 | `post-review` | put your user's review on a review ticket — asked or not; it lands on a step of their own, and posting again revises it |
@@ -543,14 +543,19 @@ comes before one that does not. The key line under the list spells out the verdi
 `✓` no changes, `↻` changes asked, `✕` failed — whole, at 120 columns; `?` spells out the
 rest: the kinds, every mark and the states.
 
-Above the list are its **tabs**: `all tickets`, then one per kind with its glyph and how
-many are open (`✦ proposals 4`, `☐ tasks 0`). Hover them and ←→
+Above the list are its **tabs**: `all tickets`, then `▸ yours` — what is yours to act on
+now, whatever its kind, its count orange when there is any — then one per kind with its
+glyph and how many are open (`✦ proposals 4`, `☐ tasks 0`). Hover them and ←→
 switch, as on the room's tab bar; ↓ goes into the list, which shows only that tab's tickets. A kind's tab lists only that
 kind, grouped by project, and a row's last column says what it hangs from: `♛` its epic.
 A ticket that grew out of another (`from`) is drawn under it when both are in one place —
 an epic, or a kind's group — and says `child`. A relative drawn elsewhere, closed, or in
 another epic still shows under the ticket, dim: `parent` or `child`, and `✓` (done) or
-`⊗` (dropped) if it is over; `enter` on one opens it. `e` opens the epic, `p` the parent. `h` lists the **closed** tickets too, set apart below the open ones, dim, each saying how
+`⊗` (dropped) if it is over; `enter` on one opens it. `e` opens the epic, `p` the parent.
+`/` narrows the list by typing: the rows that say every word typed — in their title, who
+filed them or their project — stay, on whichever tab is open; `enter` keeps what was
+typed, `esc` clears it. A ticket nothing has happened on for a day or more says how long
+at the end of its row: `3 d`, from two weeks on `5 w`. `h` lists the **closed** tickets too, set apart below the open ones, dim, each saying how
 it ended: `✓` done or `⊗` dropped, then why.
 
 **Completion and closure are two facts.** A ticket is *finished* when every step is

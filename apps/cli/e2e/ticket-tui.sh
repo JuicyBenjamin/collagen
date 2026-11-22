@@ -14,11 +14,12 @@ rm -f "$PTY" "$MARKS" "$OUT/ticket-tui.go" "$LOG" "$LOG.keys"
 mark() { echo "$1 $(wc -c < "$PTY")" >> "$MARKS"; }
 ( while [ ! -f "$OUT/ticket-tui.go" ]; do sleep 1; done; wait_pty "$PTY" "tickets"; sleep 1
   printf '\033'; sleep 1; printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M0_tabs   # past the people lines
-  printf '\033[C'; sleep 1; mark M0a_epics
+  printf '\033[C'; sleep 1; mark M0a_yours; printf '\033[C'; sleep 1; mark M0a_epics
   for i in 1 2 3 4 5; do printf '\033[C'; sleep 0.4; done; sleep 1; mark M0b_tasks
   printf '\033[B'; sleep 1; printf 'h'; sleep 1; mark M0c_closed; printf 'h'; sleep 0.5
-  printf '\033[A'; sleep 1; for i in 1 2 3 4 5 6; do printf '\033[D'; sleep 0.4; done; sleep 1; mark M0d_all
-  printf '\033[B'; sleep 1; mark M0_tickets
+  printf '\033[A'; sleep 1; for i in 1 2 3 4 5 6 7; do printf '\033[D'; sleep 0.4; done; sleep 1; mark M0d_all
+  printf '\033[B'; sleep 1; printf '/'; sleep 0.5; printf 'zzz'; sleep 1; mark M0f_nothing
+  printf '\177\177\177'; sleep 0.5; printf 'BOB aver'; sleep 1; mark M0g_narrowed; printf '\033'; sleep 1; mark M0_tickets
   printf '\r'; sleep 2; mark M1_opened
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M1a_attachments   # two steps now: s1, s2, then out
   printf '\033[B'; sleep 1; printf '\033[B'; sleep 1; mark M2_diagnostics
@@ -68,7 +69,7 @@ GONE_OUT=$(call $A "$SA" close-ticket "{\"ticketId\":\"$GONE\",\"outcome\":\"dro
 expect "alice closes her spike as dropped" "$GONE_OUT" "as dropped"
 sleep 1
 touch "$OUT/ticket-tui.go"
-await_mark() { local i; for i in $(seq 1 60); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
+await_mark() { local i; for i in $(seq 1 90); do grep -q "$1" "$MARKS" 2>/dev/null && return 0; sleep 1; done; echo "  FAIL TUI never reached $1 (see $PTY)"; FAIL=$((FAIL+1)); return 1; }
 await_mark M9c_down; sleep 1
 # an epic holding bob's ticket: the list opens it first, its page lists the ticket
 EPICJ="{\"action\":\"create\",\"title\":\"Averages\",\"goal\":\"averages that hold\",\"summary\":\"no NaN\",\"ticketIds\":[\"$TICKET\"]}"
@@ -81,8 +82,10 @@ HAVE_PYTE=no; python3 -c "import pyte" 2>/dev/null && HAVE_PYTE=yes
 [ -n "${PYTE_PATH:-}" ] && HAVE_PYTE=yes
 if [ "$HAVE_PYTE" = yes ]; then
   screen() { python3 "$E2E/render.py" "$PTY" "$MARKS" "${ROWS:-45}" 120 "$1"; }
-  expect "above the list, its tabs: every ticket, then a kind each by its glyph, only the one under the cursor named" "$(screen M0_tabs)" "› all tickets 1 +♛ 0 +\? 0 +✦ 0 +⚑ 0 +≡ 0 +☐ 1 +± 0"
-  expect "→: the epics tab, named now, its list empty" "$(screen M0a_epics)" "all 1 +♛ epics 0 +\? 0"
+  expect "above the list, its tabs: every ticket, then a kind each by its glyph, only the one under the cursor named" "$(screen M0_tabs)" "› all tickets 1 +▸ 1 +♛ 0 +\? 0 +✦ 0 +⚑ 0 +≡ 0 +☐ 1 +± 0"
+  expect "→: what is yours, named now, alice's step on bob's ticket under it" "$(screen M0a_yours)" "all 1 +▸ yours 1 +♛ 0"
+  expect "…under its kind, since the tab holds every kind" "$(screen M0a_yours | grep -cE '^ .*│ +tasks +│')" "^1$"
+  expect "→ again: the epics tab, its list empty" "$(screen M0a_epics)" "▸ 1 +♛ epics 0 +\? 0"
   expect "…and says so" "$(screen M0a_epics)" "│ +none +│"
   SHOT=$(screen M0b_tasks)
   expect "→ five more: the tasks tab, only tasks under it" "$SHOT" "☐ bob +explain average"
@@ -90,6 +93,12 @@ if [ "$HAVE_PYTE" = yes ]; then
   expect "h lists the closed ones too, below, each saying how it ended" "$(screen M0c_closed)" "a spike nobody needs +⊗ not needed"
   expect "…and not before h" "$(screen M0b_tasks | grep -c 'a spike nobody needs')" "^0$"
   expect "↑ back onto the tabs, ← to every ticket" "$(screen M0d_all)" "› all tickets 1 "
+  expect "/ and three letters no row says: typed whole under the tabs, the list empty" "$(screen M0f_nothing)" "│ +/ zzz▏ +│"
+  expect "…and says so" "$(screen M0f_nothing)" "│ +none +│"
+  expect "erased, then who filed it and a word of its title, in any case: the row is back" "$(screen M0g_narrowed)" "│ +/ BOB aver▏ +│"
+  expect "…under the cursor" "$(screen M0g_narrowed)" "› ▸ +☐ bob +explain average"
+  expect "esc clears what was typed and stays in the list" "$(screen M0_tickets | grep -c '│ +/ ')" "^0$"
+  expect "…the cursor still on the row" "$(screen M0_tickets)" "› ▸ +☐ bob +explain average"
 else
   echo "  skip the tab screens (no pyte)"
 fi

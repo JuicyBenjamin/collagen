@@ -18,6 +18,8 @@ export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, held
   return {
     id: ticket.id,
     kind: ticket.kind,
+    /** an epic belongs to the room, not to a project */
+    project: ticket.project,
     title: rowTitle(ticket),
     /** a review's summary is the line beneath its title (its goal is most often just its branch) */
     subtitle: ticket.kind === "review" && review?.summary.trim() ? review.summary.trim() : ticket.goal,
@@ -26,6 +28,8 @@ export const ticketRow = (ticket: Ticket, nameFor: (key: string) => string, held
     /** whose move it is: the owners of the steps that are up now — "anyone" for one nobody has taken */
     waitingOn: closed ? "" : [...new Set(readySteps(ticket).map((step) => ownerName(step.owner, nameFor)))].join(", "),
     epic: epicOf(ticket) ?? "",
+    /** when anything last happened on it, UTC: how long it has sat is the reader's to work out */
+    changed: Temporal.Instant.fromEpochMilliseconds(ticket.updatedAt).toString({ smallestUnit: "second" }),
   };
 };
 
