@@ -404,6 +404,7 @@ export class Rooms extends Context.Service<Rooms>()("cli/Rooms", {
                   yield* room.shareTicket({
                     id,
                     project: action.project,
+                    title: action.goal,
                     goal: action.goal,
                     createdBy: identity.pubkey,
                     structureAt: now,
