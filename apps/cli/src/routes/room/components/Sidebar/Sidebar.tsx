@@ -34,7 +34,7 @@ export function Sidebar() {
   return (
     <Focusable
       id="rooms"
-      hint="↑↓ pick room · enter look at it · r rename · d leave · + join or create · → into the room · esc"
+      hint="↑↓ pick room · enter open · r rename · d leave · + join or create · → into the room"
       flexDirection="column"
       flexShrink={0}
       marginRight={1}

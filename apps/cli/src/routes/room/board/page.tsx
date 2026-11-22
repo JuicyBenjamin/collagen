@@ -95,7 +95,7 @@ function Filters({
     <Focusable
       id="board-filters"
       marginBottom={1}
-      hint={`←→ choose · enter ${current === "epic" ? "next epic" : "show or hide this kind"} · ↓ the board`}
+      hint={`←→ choose · enter ${current === "epic" ? "next epic" : "toggle kind"} · ↓ the board`}
       flexDirection="row"
       flexShrink={0}
       onKey={(key) => {
